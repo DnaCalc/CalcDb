@@ -69,4 +69,143 @@ public static class DataPages
     /// <summary>Whether a data page is an LVAL page (bytes 4–7 'LVAL'), so its owner field is not a TableDef page number.</summary>
     public static bool IsLvalPage(ReadOnlySpan<byte> page, FormatDescriptor d) =>
         page.Length >= 8 && page.Slice(d.DataPage.Owner.Offset, 4).SequenceEqual(d.DataPage.LvalSubtype);
+
+    /// <summary>
+    /// Append one ordinary row body at the end of a data page's slot directory (II-03 §1.3; verified across 7,524 user
+    /// data pages in 269 ACE fixtures). Refuses pages that reach <see cref="DataPageRules.WriterSlotLimit"/> (255 slots,
+    /// which clears FreeMap), pages containing deleted slots (ACE's slot-reuse policy on insert is not established), or
+    /// pages without room for <c>rowBytes.Length + 2</c> bytes.
+    /// </summary>
+    public static bool TryAppendRow(Span<byte> page, ReadOnlySpan<byte> rowBytes, FormatDescriptor d, out byte slot, out string? failure)
+    {
+        DataPageRules r = d.DataPage;
+        slot = 0;
+        failure = null;
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        {
+            failure = "page is not an ordinary data page";
+            return false;
+        }
+        if (rowBytes.IsEmpty)
+        {
+            failure = "empty row body";
+            return false;
+        }
+        int count = (int)r.RowCount.Read(page);
+        if (count + 1 >= r.WriterSlotLimit)
+        {
+            failure = $"data page already holds {count} slots: reaching {r.WriterSlotLimit} clears FreeMap (usage-map change)";
+            return false;
+        }
+        int minStart = d.PageSize;
+        for (int i = 0; i < count; i++)
+        {
+            SlotView? existing = CheckedSlot(page, i, d, out string? slotFailure);
+            if (existing is not { } s)
+            {
+                failure = slotFailure;
+                return false;
+            }
+            if (s.Deleted)
+            {
+                failure = "data page has deleted slots: ACE slot-reuse policy on insert is not established";
+                return false;
+            }
+            minStart = s.Start;
+        }
+        int directoryEnd = r.SlotBase + (count * r.SlotEntryBytes);
+        int free = (int)r.FreeCount.Read(page);
+        if (free != minStart - directoryEnd)
+        {
+            failure = $"data page FreeCount {free} does not match free gap {minStart - directoryEnd}";
+            return false;
+        }
+        int needed = rowBytes.Length + r.SlotEntryBytes;
+        if (free < needed)
+        {
+            failure = $"data page has {free} free bytes, fewer than the {needed} bytes needed";
+            return false;
+        }
+        int start = minStart - rowBytes.Length;
+        rowBytes.CopyTo(page.Slice(start, rowBytes.Length));
+        WriteSlotWord(page, r.SlotBase + (count * r.SlotEntryBytes), (ushort)start);
+        r.RowCount.Write(page, (ulong)(count + 1));
+        r.FreeCount.Write(page, (ulong)(free - needed));
+        slot = (byte)count;
+        return true;
+    }
+
+    /// <summary>
+    /// Delete one ordinary (non-overflow) slot in place (II-03 §§1.3, 3.3; verified with 0/4,096 byte diffs against ACE
+    /// on <c>4f42d3fa</c> Au1→Au2 tail deletes and Au1→Au3 middle delete): shifts later rows' bodies up by the deleted
+    /// length, marks the slot <c>0xC000 | end</c> (zero length), shifts every later slot offset up by the deleted length
+    /// while preserving flags, adds the deleted length to <see cref="DataPageRules.FreeCount"/>, keeps
+    /// <see cref="DataPageRules.RowCount"/> and <see cref="DataPageRules.Stamp"/> unchanged, and leaves freed gap bytes
+    /// untouched.
+    /// </summary>
+    public static bool TryDeleteSlot(Span<byte> page, int slot, FormatDescriptor d, out string? failure)
+    {
+        DataPageRules r = d.DataPage;
+        failure = null;
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        {
+            failure = "page is not an ordinary data page";
+            return false;
+        }
+        SlotView? targetView = CheckedSlot(page, slot, d, out failure);
+        if (targetView is not { } target)
+        {
+            return false;
+        }
+        if (target.Deleted)
+        {
+            failure = $"slot {slot} is already deleted";
+            return false;
+        }
+        if (target.Overflow)
+        {
+            failure = $"slot {slot} is an overflow row: overflow-body delete is not written yet";
+            return false;
+        }
+        int count = (int)r.RowCount.Read(page);
+        int minStart = d.PageSize;
+        for (int i = 0; i < count; i++)
+        {
+            SlotView? s = CheckedSlot(page, i, d, out failure);
+            if (s is null)
+            {
+                return false;
+            }
+            minStart = s.Value.Start;
+        }
+        int directoryEnd = r.SlotBase + (count * r.SlotEntryBytes);
+        int free = (int)r.FreeCount.Read(page);
+        if (free != minStart - directoryEnd)
+        {
+            failure = $"data page FreeCount {free} does not match free gap {minStart - directoryEnd}";
+            return false;
+        }
+        int length = target.Length;
+        if (length > 0 && target.Start > minStart)
+        {
+            page.Slice(minStart, target.Start - minStart).CopyTo(page.Slice(minStart + length, target.Start - minStart));
+        }
+        WriteSlotWord(page, r.SlotBase + (slot * r.SlotEntryBytes), (ushort)(r.DeletedFlag | r.OverflowFlag | target.End));
+        ushort flagMask = (ushort)~r.RowOffsetMask;
+        for (int j = slot + 1; j < count; j++)
+        {
+            int pos = r.SlotBase + (j * r.SlotEntryBytes);
+            ushort raw = (ushort)(page[pos] | (page[pos + 1] << 8));
+            int shifted = (raw & r.RowOffsetMask) + length;
+            WriteSlotWord(page, pos, (ushort)((raw & flagMask) | shifted));
+        }
+        r.FreeCount.Write(page, (ulong)(free + length));
+        return true;
+    }
+
+    private static void WriteSlotWord(Span<byte> page, int offset, ushort value)
+    {
+        page[offset] = (byte)value;
+        page[offset + 1] = (byte)(value >> 8);
+    }
 }

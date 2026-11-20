@@ -64,7 +64,10 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     /// <summary>3163, a value longer than its field (qualified.md R-FMT-2 Text grammar, Binary and OLE).</summary>
     public const int FieldTooSmall = 3163;
 
-    /// <summary>3251 "Operation is not supported for this type of object." (Edit, Update, CancelUpdate on a snapshot).</summary>
+    /// <summary>3167 "Record is deleted." (CUR-POS / CUR-ID: reading or deleting a deleted row).</summary>
+    public const int RecordDeleted = 3167;
+
+    /// <summary>3251 "Operation is not supported for this type of object." (Edit, Update, CancelUpdate, Delete on a snapshot).</summary>
     public const int NotSupported = 3251;
 
     /// <summary>3314, a Null in a Required field (edit-validation-order: "You must enter a value in the 'G.T' field.").</summary>
@@ -109,6 +112,7 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
         NoTransaction => "You tried to commit or rollback a transaction without first beginning a transaction.",
         NullInIndex => "Index or primary key cannot contain a Null value.",
         FieldTooSmall => "The field is too small to accept the amount of data you attempted to add. Try inserting or pasting less data.",
+        RecordDeleted => "Record is deleted.",
         LockedBySession => "Could not update; currently locked by another session on this machine.",
         WriteConflict => "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.",
         NotSupported => "Operation is not supported for this type of object.",

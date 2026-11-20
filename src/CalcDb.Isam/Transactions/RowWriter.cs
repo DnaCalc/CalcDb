@@ -13,17 +13,54 @@ public readonly record struct PageEdit(uint Page, IPageDelta Delta, PageRole Rol
 /// closure to the local manager"). The deltas are applied in the change's operation frame and rebuilt over the latest
 /// committed base at publication; they replay no callback, default or ticket.
 /// </summary>
-public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits, IReadOnlyList<LockResource> footprint)
+public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits, IReadOnlyList<LockResource> footprint, RowId? insertedRow = null)
 {
     public PageCache File { get; } = file;
 
     public IReadOnlyList<PageEdit> Edits { get; } = edits;
 
     public IReadOnlyList<LockResource> Footprint { get; } = footprint;
+
+    /// <summary>The landing root of a compiled insert, or null for a modification or delete.</summary>
+    public RowId? InsertedRow { get; } = insertedRow;
 }
 
 /// <summary>A compiled change, or why this slice does not write it (the change is then accepted without a physical form).</summary>
 public readonly record struct CompiledChange(PhysicalChange? Change, string? NotWritten);
+
+/// <summary>Append one encoded row to an existing FreeMap data page at <paramref name="expectedSlot"/> (II-03 §1.3, II-04 §2).</summary>
+public sealed class DataPageAppendDelta(byte[] rowBytes, byte expectedSlot, FormatDescriptor d) : IPageDelta
+{
+    public ReadOnlySpan<byte> RowBytes => rowBytes;
+
+    public byte ExpectedSlot => expectedSlot;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DataPages.TryAppendRow(decodedPage, rowBytes, d, out byte actualSlot, out string? failure))
+        {
+            throw new FormatViolationException($"Data page append: {failure}");
+        }
+        if (actualSlot != expectedSlot)
+        {
+            throw new FormatViolationException($"Data page append: expected slot {expectedSlot}, landed at slot {actualSlot}");
+        }
+    }
+}
+
+/// <summary>Delete one ordinary slot from an existing FreeMap data page in place (II-03 §§1.3, 3.3).</summary>
+public sealed class DataPageDeleteDelta(byte slot, FormatDescriptor d) : IPageDelta
+{
+    public byte Slot => slot;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DataPages.TryDeleteSlot(decodedPage, slot, d, out string? failure))
+        {
+            throw new FormatViolationException($"Data page delete: {failure}");
+        }
+    }
+}
 
 /// <summary>
 /// One index entry replaced by another in the same leaf (II-05 §2, II-08 §12's I90.0 → I90.2): the leaf is rebuilt from
@@ -73,23 +110,121 @@ public sealed class IndexEntryReplacement(byte[] oldEntry, byte[] newEntry, Form
     }
 }
 
+/// <summary>One index entry inserted into an existing leaf whose stored prefix still covers it (II-05 §2, W-05/growth-structural-closure).</summary>
+public sealed class IndexEntryInsert(byte[] newEntry, FormatDescriptor d) : IPageDelta
+{
+    public ReadOnlySpan<byte> NewEntry => newEntry;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!TryApply(decodedPage, newEntry, d, out string? failure))
+        {
+            throw new FormatViolationException($"Index entry insert: {failure}");
+        }
+    }
+
+    internal static bool TryApply(Span<byte> page, ReadOnlySpan<byte> newEntry, FormatDescriptor d, out string? failure)
+    {
+        if (IndexPages.Decode(page, d, out failure) is not { } leaf)
+        {
+            return false;
+        }
+        List<byte[]> entries = [.. IndexPages.Entries(leaf)];
+        if (entries.Count > 0 && leaf.PrefixLength > 0
+            && (newEntry.Length < leaf.PrefixLength || !newEntry[..leaf.PrefixLength].SequenceEqual(entries[0].AsSpan(0, leaf.PrefixLength))))
+        {
+            failure = $"new entry does not start with the leaf's {leaf.PrefixLength}-byte prefix (gqv4)";
+            return false;
+        }
+        byte[] added = newEntry.ToArray();
+        if (entries.Any(e => e.AsSpan().SequenceEqual(added)))
+        {
+            failure = "the entry is already on the leaf";
+            return false;
+        }
+        int to = entries.FindIndex(e => IndexKeys.Compare(e, added) > 0);
+        entries.Insert(to < 0 ? entries.Count : to, added);
+        int prefix = leaf.Count == 0 ? 0 : leaf.PrefixLength;
+        return IndexPages.TryWriteEntries(page, entries, prefix, d, out failure);
+    }
+}
+
+/// <summary>One index entry removed from an existing leaf (II-05 §2, W-05/growth-structural-closure).</summary>
+public sealed class IndexEntryDelete(byte[] oldEntry, FormatDescriptor d) : IPageDelta
+{
+    public ReadOnlySpan<byte> OldEntry => oldEntry;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!TryApply(decodedPage, oldEntry, d, out string? failure))
+        {
+            throw new FormatViolationException($"Index entry delete: {failure}");
+        }
+    }
+
+    internal static bool TryApply(Span<byte> page, ReadOnlySpan<byte> oldEntry, FormatDescriptor d, out string? failure)
+    {
+        if (IndexPages.Decode(page, d, out failure) is not { } leaf)
+        {
+            return false;
+        }
+        List<byte[]> entries = [.. IndexPages.Entries(leaf)];
+        int at = -1;
+        for (int i = 0; i < entries.Count && at < 0; i++)
+        {
+            at = entries[i].AsSpan().SequenceEqual(oldEntry) ? i : -1;
+        }
+        if (at < 0)
+        {
+            failure = "the old entry is not on the leaf";
+            return false;
+        }
+        entries.RemoveAt(at);
+        int prefix = entries.Count == 0 ? 0 : leaf.PrefixLength;
+        return IndexPages.TryWriteEntries(page, entries, prefix, d, out failure);
+    }
+}
+
+/// <summary>In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1).</summary>
+public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d) : IPageDelta
+{
+    public int RowCountDelta => rowCountDelta;
+
+    public uint? AutoNumberFloor => autoNumberFloor;
+
+    public IReadOnlyList<int> IncrementUniqueEntryCounts => incrementUniqueEntryCounts;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, d, out string? failure))
+        {
+            throw new FormatViolationException($"TableDef counts update: {failure}");
+        }
+    }
+}
+
 /// <summary>
-/// The physical compiler of the first same-width mutation (W-05/same-width-mutation; II-07 §16, II-16 §17 "Add one scalar
-/// update with its physical indexes, bookkeeping and native write program"): an accepted Edit of a stored row whose
-/// changed fields are fixed-width, compiled against the committed images into byte patches of the row, mask-bit changes
-/// (a Yes/No value, a Null becoming a value) and one entry replacement per physical index whose key changed (T-ISAM-32:
-/// one delta per tree, however many logical indexes share it). Nothing else of the file changes: a modification keeps the
-/// row count, the maps and the TableDef counters (II-08 §11: "A row update is not permission to rewrite every TableDef
-/// counter"). What the slice does not write is named and the change stays without a physical form: a new row (its
-/// landing page and maps), a variable-length or long-value change, a fixed field becoming Null (the bytes ACE leaves are
-/// not observed), a field absent from an older row, an entry that leaves its leaf or changes the leaf's last key (the
-/// parent's fence), or a leaf whose prefix no longer covers the new entry (W-05/growth-structural-closure).
+/// The physical compiler of row changes (W-05/same-width-mutation, W-05/growth-structural-closure; II-07 §16,
+/// II-16 §17):
+/// <list type="bullet">
+/// <item><b>Same-width Edit</b>: fixed-width byte patches, mask-bit changes and in-leaf index entry replacements.</item>
+/// <item><b>In-page AddNew</b>: encodes a new row into an owned FreeMap data page with free space, inserts each physical
+/// index entry into an existing leaf whose prefix still covers it without changing a non-root leaf's first or last
+/// entry, and updates TableDef RowCount, AutoNumber and UniqueEntryCount (DistinctCount).</item>
+/// <item><b>In-page Delete</b>: marks and compacts an ordinary slot on a FreeMap data page, removes each physical index
+/// entry without emptying or changing the boundaries of a non-root leaf, and decrements TableDef RowCount.</item>
+/// </list>
+/// Every structural or unestablished case (new data page, usage-map change, deleted-slot reuse on insert, leaf split,
+/// non-root boundary change, LVAL Memo/OLE, calculated column, uncovered prefix gqv4, overflow-body delete, dropped
+/// columns, 0-fixed-width tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF, partial-Null
+/// IgnoreNulls key) is refused with a named reason.
 /// </summary>
 public sealed class SameWidthWriter(TableFootprints footprints)
 {
     private readonly PageCache _cache = footprints.File;
     private readonly FormatDescriptor _d = footprints.Format;
     private readonly TableDefinition _table = footprints.Table;
+    private readonly ulong _pageCount = footprints.PageCount;
 
     public PageCache File => _cache;
 
@@ -206,6 +341,387 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             footprint.Add(new LockResource(at.Leaf, LockPurpose.IndexLeaf));
         }
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint), null);
+    }
+
+    /// <summary>
+    /// Compile the insertion of a new row (<paramref name="values"/>, in <see cref="TableDefinition.Columns"/> order)
+    /// into an existing owned FreeMap data page (W-05/growth-structural-closure; II-04 §§1.2, 2, II-05 §2, II-16 §17):
+    /// encodes the row, selects the first owned FreeMap page that accepts it without changing FreeMap or reusing
+    /// deleted slots, inserts one entry per physical index into an existing leaf whose stored prefix still covers it
+    /// without changing a non-root leaf's first or last entry, and updates TableDef RowCount, AutoNumber and each
+    /// physical index's UniqueEntryCount (DistinctCount) when the user key was not already present.
+    /// </summary>
+    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
+    {
+        if (_pageCount == 0)
+        {
+            return NotWritten("file page count is not supplied for insert usage-map traversal");
+        }
+        IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        var encoded = new EncodedField[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor c = columns[i];
+            NativeValue v = values[i];
+            if (ScalarCodecs.IsCalculated(c, _d.Payload))
+            {
+                return NotWritten($"calculated column {c.Name}: calculated-column insert is not written (W-05/growth-structural-closure)");
+            }
+            if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+            {
+                return NotWritten($"long-value column {c.Name} (Memo/OLE): LVAL pages are not written (W-05/growth-structural-closure)");
+            }
+            if (c.IsMaskBoolean)
+            {
+                if (v.Kind != NativeKind.Boolean)
+                {
+                    return NotWritten($"a {v.Kind} value for the Yes/No field {c.Name}");
+                }
+                encoded[i] = EncodedField.OfBoolean(v.Boolean);
+                continue;
+            }
+            if (v.Kind == NativeKind.Null)
+            {
+                encoded[i] = EncodedField.Null;
+                continue;
+            }
+            if (c.IsFixed)
+            {
+                int width = NativeTypes.FixedWidth(c.TypeCode) ?? c.Length;
+                byte[] bytes = new byte[width];
+                if (!FieldEncoder.TryEncodeFixed(v, c, _d, bytes, out string? encodeFailure))
+                {
+                    return NotWritten($"field {c.Name}: {encodeFailure}");
+                }
+                encoded[i] = EncodedField.OfBytes(bytes);
+            }
+            else
+            {
+                if (!FieldEncoder.TryEncodeVariable(v, c, _d, out byte[]? bytes, out string? encodeFailure))
+                {
+                    return NotWritten($"field {c.Name}: {encodeFailure}");
+                }
+                encoded[i] = EncodedField.OfBytes(bytes!);
+            }
+        }
+        if (!RowEncoder.TryEncode(_table, encoded, _d, out byte[]? rowBytes, out string? rowFailure))
+        {
+            return NotWritten($"row encoding: {rowFailure}");
+        }
+        IReadOnlyList<uint>? ownedPages = UsageMaps.Pages(_cache, _d, _table.OwnedMap, _pageCount, out TraversalFailure? ownedFailure);
+        if (ownedPages is null)
+        {
+            return NotWritten($"OwnedMap cannot be read: {ownedFailure?.Predicate}");
+        }
+        IReadOnlyList<uint>? freePagesList = UsageMaps.Pages(_cache, _d, _table.FreeMap, _pageCount, out TraversalFailure? freeFailure);
+        if (freePagesList is null)
+        {
+            return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
+        }
+        HashSet<uint> freePages = [.. freePagesList];
+        RowId? landing = null;
+        string? lastReject = null;
+        // Which of several FreeMap pages ACE fills is not identified (R-LOCK-4 WRITE-ALLOC: an insert into T blocked the
+        // table's last page, not its first): an insert is written only when at most one owned page is in FreeMap.
+        if (ownedPages.Count(freePages.Contains) > 1)
+        {
+            return NotWritten("the table has several FreeMap pages: ACE's landing page among them is not identified (R-LOCK-4 WRITE-ALLOC)");
+        }
+        foreach (uint pageNumber in ownedPages)
+        {
+            if (!freePages.Contains(pageNumber))
+            {
+                continue;
+            }
+            using PagePin? pin = (seen is null ? _cache.Pin(pageNumber) : seen.Pin(pageNumber)).Pin;
+            if (pin is null || pin.Bytes.Length != _d.PageSize || pin.Bytes[_d.DataPage.Kind.Offset] != 0x01
+                || DataPages.IsLvalPage(pin.Bytes, _d) || _d.DataPage.Owner.Read(pin.Bytes) != _table.FirstPage)
+            {
+                continue;
+            }
+            byte[] copy = pin.Bytes.ToArray();
+            if (DataPages.TryAppendRow(copy, rowBytes!, _d, out byte slot, out string? appendFailure))
+            {
+                landing = new RowId(pageNumber, slot);
+                break;
+            }
+            lastReject = appendFailure;
+        }
+        if (landing is not { } root)
+        {
+            return NotWritten($"no owned FreeMap data page can accept the {rowBytes!.Length}-byte row without a new data page, usage-map change, or deleted-slot reuse ({lastReject ?? "FreeMap has no eligible page"}; W-05/growth-structural-closure)");
+        }
+
+        List<PageEdit> edits = [new PageEdit(root.Page, new DataPageAppendDelta(rowBytes!, root.Row, _d), PageRole.Data)];
+        List<LockResource> footprint = [TableFootprints.Row(root)];
+        List<int> incrementUnique = [];
+        foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
+        {
+            IndexCheck index = tree.First();
+            PhysicalIndex physical = index.Physical;
+            NullsInKey(index, values, out bool allNull, out bool anyNull);
+            if (physical.IgnoreNulls(_d.IndexDescriptor))
+            {
+                if (allNull)
+                {
+                    continue;
+                }
+                if (anyNull)
+                {
+                    return NotWritten($"{index.Logical.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is not established)");
+                }
+            }
+            byte[]? newKey = Key(index, values, out string? keyFailure);
+            if (newKey is null)
+            {
+                return NotWritten($"{index.Logical.Name}: {keyFailure}");
+            }
+            byte[] newEntry = EncodeEntry(newKey, root);
+            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            IndexPosition? lb = navigator.LowerBound(KeyBound.Low(newKey));
+            if (navigator.LastFailure is { } navFailure)
+            {
+                return NotWritten($"{index.Logical.Name}: {navFailure.Predicate}");
+            }
+            uint targetLeaf;
+            if (lb is { } hit)
+            {
+                targetLeaf = hit.Leaf;
+            }
+            else
+            {
+                IndexPosition? last = navigator.Last();
+                if (navigator.LastFailure is { } lastFailure)
+                {
+                    return NotWritten($"{index.Logical.Name}: {lastFailure.Predicate}");
+                }
+                targetLeaf = last?.Leaf ?? physical.RootPage;
+            }
+            using PagePin? leafPin = (seen is null ? _cache.Pin(targetLeaf) : seen.Pin(targetLeaf)).Pin;
+            if (leafPin is null)
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {targetLeaf} could not be pinned");
+            }
+            if (IndexPages.Decode(leafPin.Bytes, _d, out string? leafFailure) is not { } leaf || !leaf.IsLeaf)
+            {
+                return NotWritten($"{index.Logical.Name}: page {targetLeaf}: {leafFailure ?? "not an index leaf"}");
+            }
+            byte[][] entries = IndexPages.Entries(leaf);
+            if (targetLeaf != physical.RootPage)
+            {
+                if (entries.Length < 2 || IndexKeys.Compare(entries[0], newEntry) >= 0 || IndexKeys.Compare(newEntry, entries[^1]) >= 0)
+                {
+                    return NotWritten($"{index.Logical.Name}: new entry changes non-root leaf {targetLeaf}'s first or last entry (parent fence or neighbour leaf change; W-05/growth-structural-closure)");
+                }
+            }
+            byte[] leafCopy = leafPin.Bytes.ToArray();
+            if (!IndexEntryInsert.TryApply(leafCopy, newEntry, _d, out string? insertFailure))
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {targetLeaf}: {insertFailure} (leaf split or prefix change; W-05/growth-structural-closure)");
+            }
+            bool keyPresent = entries.Any(e => e.Length == newKey.Length + 4 && e.AsSpan(0, newKey.Length).SequenceEqual(newKey));
+            if (!keyPresent)
+            {
+                incrementUnique.Add(physical.Number);
+            }
+            edits.Add(new PageEdit(targetLeaf, new IndexEntryInsert(newEntry, _d), PageRole.Index));
+            AddUnique(footprint, new LockResource(targetLeaf, LockPurpose.IndexLeaf));
+        }
+
+        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        if (tdefPin is null)
+        {
+            return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+        }
+        byte[] tdefCopy = tdefPin.Bytes.ToArray();
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, autoNumberFloor, incrementUnique, _d, out string? tdefFailure))
+        {
+            return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+        }
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], _d), PageRole.Catalog));
+        AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
+        return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root), null);
+    }
+
+    /// <summary>
+    /// Compile the deletion of <paramref name="root"/> (W-05/growth-structural-closure; II-03 §§1.3, 3.3, II-04 §1.2,
+    /// II-05 §2, II-16 §17): requires <paramref name="root"/>'s data page to already be in FreeMap (avoiding a
+    /// usage-map change), marks and compacts the ordinary slot in place, removes each physical index entry without
+    /// emptying or changing the boundaries of a non-root leaf, and decrements TableDef RowCount (AutoNumber and
+    /// UniqueEntryCount stay unchanged).
+    /// </summary>
+    public CompiledChange CompileDelete(MutationSemantics semantics, RowId root, PrivateOverlay? seen = null)
+    {
+        if (_pageCount == 0)
+        {
+            return NotWritten("file page count is not supplied for delete usage-map check");
+        }
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, _pageCount, out TraversalFailure? freeFailure);
+        if (freePages is null)
+        {
+            return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
+        }
+        if (!freePages.Contains(root.Page))
+        {
+            return NotWritten($"data page {root.Page} is not in FreeMap: deleting a row returns it to FreeMap (usage-map change; W-05/growth-structural-closure)");
+        }
+        using PagePin? dataPin = (seen is null ? _cache.Pin(root.Page) : seen.Pin(root.Page)).Pin;
+        if (dataPin is null)
+        {
+            return NotWritten($"data page {root.Page} could not be pinned");
+        }
+        if (DataPages.CheckedSlot(dataPin.Bytes, root.Row, _d, out string? slotFailure) is not { } slotView)
+        {
+            return NotWritten($"row {root}: {slotFailure}");
+        }
+        if (slotView.Deleted)
+        {
+            return NotWritten($"row {root} is already deleted");
+        }
+        if (slotView.Overflow)
+        {
+            return NotWritten($"row {root} is an overflow row: overflow-body delete is not written (W-05/growth-structural-closure)");
+        }
+        using RowView? resolved = RowResolver.Resolve(_cache, _d, root, out TraversalFailure? resolveFailure);
+        if (resolved is not { } row)
+        {
+            return NotWritten($"row {root} cannot be read: {resolveFailure?.Predicate ?? "deleted"}");
+        }
+        if (!RowEnvelope.TryOpen(row.Body, _d, out RowEnvelope envelope, out string? envelopeFailure))
+        {
+            return NotWritten($"row {root}: {envelopeFailure}");
+        }
+        IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor c = columns[i];
+            if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && c.PhysicalNumber < envelope.ColumnCount && envelope.MaskBit(c.PhysicalNumber))
+            {
+                return NotWritten($"row {root} holds a non-Null long-value field {c.Name} (Memo/OLE): LVAL page deallocation is not written (W-05/growth-structural-closure)");
+            }
+        }
+        byte[] dataCopy = dataPin.Bytes.ToArray();
+        if (!DataPages.TryDeleteSlot(dataCopy, root.Row, _d, out string? deleteFailure))
+        {
+            return NotWritten($"data page {root.Page}: {deleteFailure}");
+        }
+
+        List<PageEdit> edits = [new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d), PageRole.Data)];
+        List<LockResource> footprint = [TableFootprints.Row(root)];
+        var stored = new NativeValue[columns.Count];
+        var decoded = new bool[columns.Count];
+        foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
+        {
+            IndexCheck index = tree.First();
+            PhysicalIndex physical = index.Physical;
+            foreach (ColumnDescriptor c in index.Columns)
+            {
+                if (!decoded[c.Ordinal])
+                {
+                    stored[c.Ordinal] = FieldDecoder.Read(row, _table, c, _cache, _d);
+                    if (stored[c.Ordinal].Kind == NativeKind.Failed)
+                    {
+                        return NotWritten($"field {c.Name} of row {root} cannot be read: {stored[c.Ordinal].Failure}");
+                    }
+                    decoded[c.Ordinal] = true;
+                }
+            }
+            NullsInKey(index, stored, out bool allNull, out bool anyNull);
+            if (physical.IgnoreNulls(_d.IndexDescriptor))
+            {
+                if (allNull)
+                {
+                    continue;
+                }
+                if (anyNull)
+                {
+                    return NotWritten($"{index.Logical.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is not established)");
+                }
+            }
+            byte[]? oldKey = Key(index, stored, out string? keyFailure);
+            if (oldKey is null)
+            {
+                return NotWritten($"{index.Logical.Name}: {keyFailure}");
+            }
+            byte[] oldEntry = EncodeEntry(oldKey, root);
+            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            IndexPosition? found = null;
+            for (IndexPosition? p = navigator.LowerBound(KeyBound.Low(oldKey)); p is { } at && navigator.KeyMatches(at, KeyBound.Low(oldKey)); p = navigator.Next(at))
+            {
+                if (at.Row == root)
+                {
+                    found = at;
+                    break;
+                }
+            }
+            if (found is not { } target)
+            {
+                return NotWritten($"{index.Logical.Name}: the entry of row {root} is not under its stored key{(navigator.LastFailure is { } f ? ": " + f.Predicate : "")}");
+            }
+            using PagePin? leafPin = (seen is null ? _cache.Pin(target.Leaf) : seen.Pin(target.Leaf)).Pin;
+            if (leafPin is null)
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {target.Leaf} could not be pinned");
+            }
+            if (IndexPages.Decode(leafPin.Bytes, _d, out string? leafFailure) is not { } leaf || !leaf.IsLeaf)
+            {
+                return NotWritten($"{index.Logical.Name}: page {target.Leaf}: {leafFailure ?? "not an index leaf"}");
+            }
+            byte[][] entries = IndexPages.Entries(leaf);
+            int ordinal = Array.FindIndex(entries, e => e.AsSpan().SequenceEqual(oldEntry));
+            if (ordinal < 0)
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {target.Leaf} does not hold the row's stored entry");
+            }
+            if (target.Leaf != physical.RootPage && (entries.Length <= 1 || ordinal == 0 || ordinal == entries.Length - 1))
+            {
+                return NotWritten($"{index.Logical.Name}: removing entry from non-root leaf {target.Leaf} empties it or changes its first or last entry (parent fence or leaf merge; W-05/growth-structural-closure)");
+            }
+            byte[] leafCopy = leafPin.Bytes.ToArray();
+            if (!IndexEntryDelete.TryApply(leafCopy, oldEntry, _d, out string? delLeafFailure))
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {target.Leaf}: {delLeafFailure}");
+            }
+            edits.Add(new PageEdit(target.Leaf, new IndexEntryDelete(oldEntry, _d), PageRole.Index));
+            AddUnique(footprint, new LockResource(target.Leaf, LockPurpose.IndexLeaf));
+        }
+
+        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        if (tdefPin is null)
+        {
+            return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+        }
+        byte[] tdefCopy = tdefPin.Bytes.ToArray();
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, -1, null, [], _d, out string? tdefFailure))
+        {
+            return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+        }
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(-1, null, [], _d), PageRole.Catalog));
+        AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
+        return new CompiledChange(new PhysicalChange(_cache, edits, footprint), null);
+    }
+
+    private static byte[] EncodeEntry(byte[] key, RowId root) =>
+        [.. key, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
+
+    private static void NullsInKey(IndexCheck index, IReadOnlyList<NativeValue> values, out bool allNull, out bool anyNull)
+    {
+        allNull = index.Columns.Count > 0;
+        anyNull = false;
+        foreach (ColumnDescriptor c in index.Columns)
+        {
+            bool isNull = values[c.Ordinal].Kind == NativeKind.Null;
+            allNull &= isNull;
+            anyNull |= isNull;
+        }
+    }
+
+    private static void AddUnique(List<LockResource> list, LockResource resource)
+    {
+        if (!list.Contains(resource))
+        {
+            list.Add(resource);
+        }
     }
 
     /// <summary>

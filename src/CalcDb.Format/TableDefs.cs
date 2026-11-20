@@ -451,3 +451,61 @@ public static class TableDefDecoder
         return (physical, logicals);
     }
 }
+
+/// <summary>
+/// In-place TableDef counter updates on the TableDef's first page (II-04 §1.2, II-05 §1.1; verified byte-for-byte on
+/// <c>4f42d3fa</c> Au1/Au2/Au3 and qualified.md lines 442, 449): <see cref="TableDefRules.RowCount"/> (+1 on insert, -1 on
+/// delete), <see cref="TableDefRules.AutoNumber"/> (raised to the new floor on insert, unchanged on delete), and each
+/// physical index's <see cref="IndexDescriptorRules.UniqueEntryCount"/> (+1 on insert of a new user key, unchanged on
+/// duplicate key or delete).
+/// </summary>
+public static class TableDefUpdater
+{
+    public static int UniqueEntryCountOffset(int physicalIndexNumber, FormatDescriptor d) =>
+        d.TableDef.RealIndexRecordsOffset + (physicalIndexNumber * d.TableDef.RealIndexRecordBytes) + d.IndexDescriptor.UniqueEntryCount.Offset;
+
+    public static bool TryUpdateCounts(Span<byte> firstPage, int rowCountDelta, uint? autoNumberFloor, IReadOnlyList<int> incrementUniqueEntryCounts, FormatDescriptor d, out string? failure)
+    {
+        failure = null;
+        if (firstPage.Length != d.PageSize || firstPage[d.DataPage.Kind.Offset] != 0x02)
+        {
+            failure = "page is not a TableDef page";
+            return false;
+        }
+        TableDefRules t = d.TableDef;
+        IndexDescriptorRules ix = d.IndexDescriptor;
+        long nextRows = (long)t.RowCount.Read(firstPage) + rowCountDelta;
+        if (nextRows < 0 || nextRows > uint.MaxValue)
+        {
+            failure = $"TableDef RowCount delta {rowCountDelta} moves count out of range ({nextRows})";
+            return false;
+        }
+        for (int i = 0; i < incrementUniqueEntryCounts.Count; i++)
+        {
+            int idx = incrementUniqueEntryCounts[i];
+            int offset = UniqueEntryCountOffset(idx, d);
+            if (idx < 0 || offset + ix.UniqueEntryCount.Width > d.PageSize)
+            {
+                failure = $"physical index {idx} counter at logical offset {offset} does not lie on the TableDef's first page";
+                return false;
+            }
+        }
+        t.RowCount.Write(firstPage, (ulong)nextRows);
+        if (autoNumberFloor is uint floor)
+        {
+            uint stored = (uint)t.AutoNumber.Read(firstPage);
+            if (floor > stored)
+            {
+                t.AutoNumber.Write(firstPage, floor);
+            }
+        }
+        for (int i = 0; i < incrementUniqueEntryCounts.Count; i++)
+        {
+            int offset = UniqueEntryCountOffset(incrementUniqueEntryCounts[i], d);
+            var field = new FieldRule(ix.UniqueEntryCount.Id, ix.UniqueEntryCount.Structure, offset, ix.UniqueEntryCount.Width, ix.UniqueEntryCount.Order, ix.UniqueEntryCount.Meaning, ix.UniqueEntryCount.Evidence);
+            ulong current = field.Read(firstPage);
+            field.Write(firstPage, current + 1);
+        }
+        return true;
+    }
+}

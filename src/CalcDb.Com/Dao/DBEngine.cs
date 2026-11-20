@@ -345,7 +345,16 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// I2 1, UI1 1, R8 1.0 and "1" are accepted; BOOL True is -1, refused 3001 with the level open; Null 3421 at the
     /// binder). Without a level 3034. An outer commit with changes answers the named publication case (EditPublication).
     /// </summary>
-    public CallResult CommitTrans(nint options) => EditPublication.Of(Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0));
+    public CallResult CommitTrans(nint options)
+    {
+        AcceptedRowChange[]? outermost = Transactions.Depth == 1 ? [.. Transactions.Frames[0].AcceptedChanges] : null;
+        ResolutionOutcome outcome = Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0);
+        if (outermost is not null && outcome.Succeeded)
+        {
+            Engine.Changes.MarkPublished(outermost);
+        }
+        return EditPublication.Of(outcome);
+    }
 
     /// <summary>
     /// Rollback of the current level; without a level 3034 (nest-resolve-without-level). The outermost drops pending edits,

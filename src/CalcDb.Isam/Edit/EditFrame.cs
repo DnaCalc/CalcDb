@@ -49,11 +49,12 @@ public readonly record struct EditOutcome(MutationError? Error = null, MutationO
     public static EditOutcome NotModelled(MutationOpen open, string? detail = null) => new(null, open, detail);
 }
 
-/// <summary>Whether a row is new or a modification of a stored row.</summary>
+/// <summary>Whether a row change is an insert, a modification, or a deletion of a stored row.</summary>
 public enum RowChangeKind : byte
 {
     Insert,
     Modify,
+    Delete,
 }
 
 /// <summary>
@@ -79,6 +80,9 @@ public sealed class AcceptedRowChange
     /// <summary>The change's page deltas and lock closure, or null when this slice does not write it.</summary>
     public PhysicalChange? Physical { get; }
 
+    /// <summary>The landing root of a compiled insert, or null for a modification, delete, or unwritten insert.</summary>
+    public RowId? Inserted => Physical?.InsertedRow;
+
     /// <summary>Why the change has no physical form (null when it has one).</summary>
     public string? NotWritten { get; }
 
@@ -86,7 +90,7 @@ public sealed class AcceptedRowChange
 
     public RowChangeKind Kind { get; }
 
-    /// <summary>The stored row an Edit changed; null for an insert.</summary>
+    /// <summary>The stored row an Edit changed or a Delete removed; null for an insert.</summary>
     public RowId? Original { get; }
 
     /// <summary>The accepted value of every column, in <see cref="TableDefinition.Columns"/> order.</summary>
@@ -98,8 +102,8 @@ public sealed class AcceptedRowChange
     public GeneratedTicket? Ticket { get; }
 }
 
-/// <summary>An Update's outcome: its error or open case, or the accepted change and whether it awaits publication.</summary>
-public readonly record struct UpdateOutcome(MutationError? Error = null, MutationOpen Open = MutationOpen.None, string? Detail = null, AcceptedRowChange? Change = null)
+/// <summary>An Update's or Delete's outcome: its error or open case, or the accepted change and whether it awaits publication.</summary>
+public readonly record struct UpdateOutcome(MutationError? Error = null, MutationOpen Open = MutationOpen.None, string? Detail = null, AcceptedRowChange? Change = null, int? InsertedOrdinal = null)
 {
     public bool Succeeded => Error is null && Open == MutationOpen.None;
 }
@@ -217,6 +221,10 @@ public sealed class EditFrame : IDisposable
         }
         if (_cursor is not IRowPositioned positioned || positioned.CurrentRow is not { } row)
         {
+            if (_table.Semantics.Table.Columns.Count > 0 && _cursor.Read(_table.Semantics.Table.Columns[0]).Failure == CursorFailure.DeletedRecord)
+            {
+                return EditOutcome.Fail(MutationError.RecordDeleted, MutationErrorSource.Recordset);
+            }
             return EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset);
         }
         if (_workspace.HasAcceptedChange(_table.Semantics, row))
@@ -252,9 +260,12 @@ public sealed class EditFrame : IDisposable
                 {
                     _workspace.Unlock(_table.Footprints!.File, [taken], LockLifetime.PendingEdit);
                 }
-                return read.Failure == CursorFailure.NoCurrentRecord
-                    ? EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset)
-                    : EditOutcome.NotModelled(MutationOpen.ColumnType, $"field {columns[i].Name} cannot be read: {read.Detail}");
+                return read.Failure switch
+                {
+                    CursorFailure.NoCurrentRecord => EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset),
+                    CursorFailure.DeletedRecord => EditOutcome.Fail(MutationError.RecordDeleted, MutationErrorSource.Recordset),
+                    _ => EditOutcome.NotModelled(MutationOpen.ColumnType, $"field {columns[i].Name} cannot be read: {read.Detail}"),
+                };
             }
             originals[i] = read.Value;
         }
@@ -463,23 +474,45 @@ public sealed class EditFrame : IDisposable
         GeneratedTicket? used = _ticket is not null && s.AutoNumber is { } numbered && values[numbered.Ordinal] is { Kind: NativeKind.Long } issued && issued.Integer == _ticket.Value ? _ticket : null;
         LockLifetime held = _workspace.ChangeLifetime;
 
-        // 6. The physical form (W-05/same-width-mutation) over the pages as this Workspace sees them, its closure locked
-        // with the footprint's lifetime; then the operation frame of the Workspace and the accepted change (II-08 §3).
-        CompiledChange physical = Mode == EditMode.Edit && _original is { } stored && _table.Writer is { } writer
-            ? writer.Compile(s, stored, values, _workspace.OverlayOf(writer.File))
-            : new CompiledChange(null, Mode == EditMode.AddNew ? "a new row: its landing page, maps and TableDef counts (W-05/growth-structural-closure)" : null);
+        // 6. The physical form (W-05/same-width-mutation, W-05/growth-structural-closure) over the pages as this
+        // Workspace sees them, its closure locked with the footprint's lifetime; then the operation frame of the
+        // Workspace and the accepted change (II-08 §3).
+        EditMode mode = Mode;
+        CompiledChange physical;
+        if (mode == EditMode.Edit && _original is { } stored && _table.Writer is { } editWriter)
+        {
+            physical = editWriter.Compile(s, stored, values, _workspace.OverlayOf(editWriter.File));
+        }
+        else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
+        {
+            uint? autoFloor = null;
+            if (s.AutoNumber is { } autoCol && values[autoCol.Ordinal].Kind == NativeKind.Long)
+            {
+                long assignedValue = values[autoCol.Ordinal].Integer;
+                long floor = Math.Max(_table.Counter?.Last ?? 0, assignedValue);
+                if (floor > 0 && floor <= uint.MaxValue)
+                {
+                    autoFloor = (uint)floor;
+                }
+            }
+            physical = insertWriter.CompileInsert(s, values, autoFloor, _workspace.OverlayOf(insertWriter.File));
+        }
+        else
+        {
+            physical = new CompiledChange(null, "no physical compiler for this table");
+        }
         if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held) is { } refusedClosure)
         {
             return refusedClosure;
         }
-        var change = new AcceptedRowChange(s, Mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used, physical);
+        var change = new AcceptedRowChange(s, mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used, physical);
         AcceptOutcome accepted = _workspace.Accept(change);
         if (!accepted.Accepted)
         {
             UnlockFootprint(footprint, held);
             return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
         }
-        if (s.AutoNumber is { } auto && _table.Counter is { } counter && Mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
+        if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
             counter.Observe(values[auto.Ordinal].Integer);
         }
@@ -489,12 +522,91 @@ public sealed class EditFrame : IDisposable
             _ticket = null;
         }
         Clear();
+        int? insertedOrdinal = null;
+        if (mode == EditMode.AddNew && _workspace.Depth == 0 && accepted.Open == MutationOpen.None && change.Inserted is { } insertedRow && _cursor is IMutableCursor mutable)
+        {
+            insertedOrdinal = mutable.OnRowInserted(insertedRow);
+        }
         // An automatic operation that could not be published is accepted and named (the change set keeps it).
+        return new UpdateOutcome(null, accepted.Open, accepted.Detail, change, insertedOrdinal);
+    }
+
+    /// <summary>
+    /// Delete the current row (W-05/growth-structural-closure; II-07 §16, CUR-EDIT, CUR-POS): discards any pending Edit
+    /// or AddNew, locks the row's data page (pessimistic lock conflict fails 3188 from <see cref="ConflictSource"/>,
+    /// evidence/r-err-1b/lock-pessimistic-delete), compiles the in-page slot delete, index removals and TableDef RowCount
+    /// decrement, locks the closure, accepts and publishes through the Workspace, and moves the cursor into its deleted
+    /// current state (BOF=False, EOF=False, no current row).
+    /// </summary>
+    public UpdateOutcome Delete()
+    {
+        if (!Updatable)
+        {
+            return Fail(MutationError.NotSupported);
+        }
+        // CUR-EDIT (editmode-unusual-transitions): Delete during Edit or AddNew discards the pending edit first.
+        Discard();
+        MutationSemantics s = _table.Semantics;
+        if (_cursor is not IRowPositioned positioned || positioned.CurrentRow is not { } row)
+        {
+            if (s.Table.Columns.Count > 0 && _cursor.Read(s.Table.Columns[0]).Failure == CursorFailure.DeletedRecord)
+            {
+                return Fail(MutationError.RecordDeleted);
+            }
+            return Fail(MutationError.NoCurrentRecord);
+        }
+        if (_table.HasRelationships)
+        {
+            return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
+        }
+        if (_workspace.HasAcceptedChange(s, row))
+        {
+            return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
+        }
+        if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
+        {
+            return Fail(MutationError.TooManyTransactions);
+        }
+        LockLifetime held = _workspace.ChangeLifetime;
+        LockResource[] footprint = [];
+        if (_table.Footprints is { } fp)
+        {
+            LockResource page = TableFootprints.Row(row);
+            LockAcquisition got = _workspace.Lock(fp.File, [page], held);
+            if (got.Conflict is { } conflict)
+            {
+                return ConflictOutcome(conflict, reportLockedBySession: true);
+            }
+            footprint = [page];
+        }
+        if (s.Table.Columns.Count > 0 && _cursor.Read(s.Table.Columns[0]).Failure == CursorFailure.DeletedRecord)
+        {
+            UnlockFootprint(footprint, held);
+            return Fail(MutationError.RecordDeleted);
+        }
+        CompiledChange physical = _table.Writer is { } writer
+            ? writer.CompileDelete(s, row, _workspace.OverlayOf(writer.File))
+            : new CompiledChange(null, "no physical compiler for this table");
+        if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held, reportLockedBySession: true) is { } refusedClosure)
+        {
+            return refusedClosure;
+        }
+        var change = new AcceptedRowChange(s, RowChangeKind.Delete, row, [], [], null, physical);
+        AcceptOutcome accepted = _workspace.Accept(change);
+        if (!accepted.Accepted)
+        {
+            UnlockFootprint(footprint, held);
+            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+        }
+        if (physical.Change is not null && _cursor is IMutableCursor mutable)
+        {
+            mutable.OnRowDeleted();
+        }
         return new UpdateOutcome(null, accepted.Open, accepted.Detail, change);
     }
 
     /// <summary>Lock the pages of the physical closure the footprint does not hold yet (II-09 §24); null when granted.</summary>
-    private UpdateOutcome? LockClosure(PhysicalChange compiled, ref LockResource[] footprint, LockLifetime lifetime)
+    private UpdateOutcome? LockClosure(PhysicalChange compiled, ref LockResource[] footprint, LockLifetime lifetime, bool reportLockedBySession = false)
     {
         if (_table.Footprints is not { } fp)
         {
@@ -511,21 +623,21 @@ public sealed class EditFrame : IDisposable
         {
             UnlockFootprint(footprint, lifetime);
             footprint = [];
-            return ConflictOutcome(conflict);
+            return ConflictOutcome(conflict, reportLockedBySession);
         }
         footprint = [.. footprint, .. extra];
         return null;
     }
 
-    /// <summary>The outcome of a lock conflict at Update (TXN-LOCAL: 3188 from DAO.Database for an action query's row).</summary>
-    private UpdateOutcome ConflictOutcome(LockConflict conflict)
+    /// <summary>The outcome of a lock conflict at Update or Delete (TXN-LOCAL: 3188 from DAO.Database for Execute, DAO.Recordset for Delete).</summary>
+    private UpdateOutcome ConflictOutcome(LockConflict conflict, bool reportLockedBySession = false)
     {
         if (conflict.HolderLifetime == LockLifetime.UntilPublished)
         {
             return new UpdateOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
         }
-        return ConflictSource == MutationErrorSource.Database
-            ? new UpdateOutcome(new MutationError(MutationError.LockedBySession, MutationErrorSource.Database))
+        return reportLockedBySession || ConflictSource == MutationErrorSource.Database
+            ? new UpdateOutcome(new MutationError(MutationError.LockedBySession, ConflictSource))
             : new UpdateOutcome(null, MutationOpen.Conflict, $"a recordset Update meets locker {conflict.Holder.Value} on page {conflict.Resource.Page} ({conflict.Resource.Purpose}): recorded for Execute only");
     }
 

@@ -15,7 +15,7 @@ namespace CalcDb.Isam.Transactions;
 /// key's leaf, so no further leaf is added. A new row's landing page and the maps and descriptors of growth are
 /// W-05/growth-structural-closure's.
 /// </summary>
-public sealed class TableFootprints(PageCache file, FormatDescriptor d, TableDefinition table)
+public sealed class TableFootprints(PageCache file, FormatDescriptor d, TableDefinition table, ulong pageCount = 0)
 {
     public PageCache File { get; } = file;
 
@@ -23,8 +23,14 @@ public sealed class TableFootprints(PageCache file, FormatDescriptor d, TableDef
 
     public TableDefinition Table { get; } = table;
 
+    /// <summary>The file's page count for usage-map traversal during insert and delete compilation (0 when not supplied).</summary>
+    public ulong PageCount { get; } = pageCount;
+
     /// <summary>The data page of <paramref name="row"/>'s root.</summary>
     public static LockResource Row(RowId row) => new(row.Page, LockPurpose.DataPage);
+
+    /// <summary>The TableDef first page whose row count, AutoNumber counter or index counters change on insert/delete.</summary>
+    public LockResource TableDef => new(Table.FirstPage, LockPurpose.TableDef);
 
     /// <summary>The leaf holding <paramref name="row"/>'s entry of <paramref name="index"/>, or null when the tree does not show it.</summary>
     public LockResource? KeyLeaf(IndexCheck index, RowId row)

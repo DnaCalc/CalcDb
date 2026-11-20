@@ -79,7 +79,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
             PropertyBlob? blob = entry.Properties is { } raw ? PropertyBlob.Read(raw, out _) : null;
             var semantics = MutationSemantics.Compile(entry.Name, table, blob, _binder, D.IndexDescriptor);
             bool related = Relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, related, new TableFootprints(_cache, D, table));
+            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, related, new TableFootprints(_cache, D, table, _image.PageCount));
             _contexts.Add(entry.Name, context);
         }
         return (context.Semantics.Table, context);
@@ -623,13 +623,17 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
                 Close(rs);
                 return;
             case "Delete":
-                frame.Discard(); // Delete during Edit or AddNew leaves EditMode 0 (editmode-unusual-transitions)
-                if (e.ExcepInfo is null)
+                UpdateOutcome deleted = frame.Delete();
+                if (deleted.Open != MutationOpen.None)
                 {
-                    // ACE deleted a row the replay does not delete: the table's stored rows are unknown from here.
-                    _unknownTables.Add(rs.Context!.Semantics.TableName);
+                    if (e.ExcepInfo is null)
+                    {
+                        _unknownTables.Add(rs.Context!.Semantics.TableName);
+                    }
+                    Stop(rs, where, $"{deleted.Open}: {deleted.Detail}");
+                    return;
                 }
-                Stop(rs, where, "Delete (W-05/growth-structural-closure)");
+                Check(where, Expected(e), deleted.Error is { } delError ? Actual(delError) : "success");
                 return;
             case "Requery" or "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" or "GetRows" or "Seek" or "Clone" or "OpenRecordset" or "Filter" or "Sort":
                 Stop(rs, where, "a cursor operation outside this slice");
@@ -757,7 +761,13 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
                 }
                 if (e.ExcepInfo is { } x)
                 {
-                    Check(where, $"{x.Scode} {x.Source?.Text}", read.Failure == CursorFailure.NoCurrentRecord ? "0x800A0BCD DAO.Field" : read.Value.ToString());
+                    string actual = read.Failure switch
+                    {
+                        CursorFailure.NoCurrentRecord => "0x800A0BCD DAO.Field",
+                        CursorFailure.DeletedRecord => "0x800A0C5F DAO.Field",
+                        _ => read.Value.ToString(),
+                    };
+                    Check(where, $"{x.Scode} {x.Source?.Text}", actual);
                     return;
                 }
                 CheckValue(where, e, read.Value);

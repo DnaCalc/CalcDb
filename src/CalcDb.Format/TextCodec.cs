@@ -40,6 +40,49 @@ public static class TextCodec
         return new TextDecode(string.Create(shape.Units, encoded, static (dest, bytes) => DecodeInto(bytes, dest)), shape.Compressed, null);
     }
 
+    /// <summary>
+    /// Encode a Text value for row storage (II-04 §6; verified across 126,567 Text fields in 269 retained ACE fixtures).
+    /// Uncompressed columns store empty strings as zero bytes and non-empty strings as exact UTF-16LE units (126,170/126,170
+    /// non-empty and 374/374 empty uncompressed fields). Leading U+FEFF collides with the <c>FF FE</c> compressed marker
+    /// (R-FMT-2 Text grammar) and is refused; columns with Unicode compression (<c>ExtendedFlags &amp; 0x01</c>) are refused
+    /// because ACE's compression threshold is not established from retained fixtures.
+    /// </summary>
+    public static bool TryEncode(ReadOnlySpan<char> text, bool unicodeCompression, out byte[]? encoded, out string? failure)
+    {
+        encoded = null;
+        failure = null;
+        if (unicodeCompression)
+        {
+            failure = "Unicode-compressed Text column (ExtendedFlags bit 01): ACE compression rules are not established";
+            return false;
+        }
+        if (text.IsEmpty)
+        {
+            encoded = [];
+            return true;
+        }
+        if (text[0] == '\uFEFF')
+        {
+            failure = "uncompressed Text starting U+FEFF collides with the FF FE compressed marker (R-FMT-2 Text grammar)";
+            return false;
+        }
+        byte[] bytes = new byte[text.Length * 2];
+        if (BitConverter.IsLittleEndian)
+        {
+            MemoryMarshal.AsBytes(text).CopyTo(bytes);
+        }
+        else
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                bytes[2 * i] = (byte)text[i];
+                bytes[(2 * i) + 1] = (byte)(text[i] >> 8);
+            }
+        }
+        encoded = bytes;
+        return true;
+    }
+
     private static bool IsCompressed(ReadOnlySpan<byte> encoded) => encoded.Length >= 2 && encoded[0] == 0xFF && encoded[1] == 0xFE;
 
     /// <summary>Checks the grammar and counts the units; the destination is sized from this checked scan, not from the byte length.</summary>

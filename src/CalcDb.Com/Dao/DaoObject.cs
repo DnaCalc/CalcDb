@@ -12,6 +12,9 @@ internal static class DaoErrors
     /// <summary>3021 (r-str-ado-act/str-after-eof-close).</summary>
     public const string NoCurrentRecord = "No current record.";
 
+    /// <summary>3167 (R-CURSOR-1 CUR-POS, CUR-ID: reading or editing a deleted row).</summary>
+    public const string RecordDeleted = "Record is deleted.";
+
     /// <summary>3420 (R-ACT-1 ACT-RETAIN).</summary>
     public const string ObjectInvalid = "Object invalid or no longer set.";
 

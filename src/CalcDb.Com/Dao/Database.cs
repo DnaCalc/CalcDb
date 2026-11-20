@@ -308,8 +308,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _ruleBinder ??= new ExpressionRuleBinder(new ExpressionContext(SessionLocale.Lcid, TextCompareMode.Database, Collation, ExpressionUse.Query));
         var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
         bool related = _relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-        // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation).
-        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, related, new TableFootprints(Cache, Format, table));
+        // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, related, new TableFootprints(Cache, Format, table, PageCount));
         Engine.Changes.Register(semantics, Name);
         if (context.Counter is { } counter)
         {

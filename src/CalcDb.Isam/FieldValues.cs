@@ -149,6 +149,39 @@ public static class FieldEncoder
                 return false;
         }
     }
+
+    /// <summary>
+    /// Encode <paramref name="value"/>'s payload for the variable-length <paramref name="column"/> (II-04 §§5–6;
+    /// W-05/growth-structural-closure). Supports in-row Text (via <see cref="TextCodec.TryEncode"/>) and non-empty
+    /// Binary; refuses calculated columns, Memo/OLE (LVAL), Unicode-compressed Text, leading U+FEFF and mismatched kinds.
+    /// </summary>
+    public static bool TryEncodeVariable(in NativeValue value, ColumnDescriptor column, FormatDescriptor d, out byte[]? bytes, out string? failure)
+    {
+        bytes = null;
+        failure = null;
+        if (ScalarCodecs.IsCalculated(column, d.Payload))
+        {
+            failure = "a calculated column";
+            return false;
+        }
+        if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+        {
+            failure = "long-value column (Memo/OLE): LVAL pages are not written yet";
+            return false;
+        }
+        switch (column.TypeCode, value.Kind)
+        {
+            case (NativeTypes.Text, NativeKind.Text):
+                bool compressed = (column.ExtendedFlags & 0x01) != 0;
+                return TextCodec.TryEncode(value.Text ?? "", compressed, out bytes, out failure);
+            case (NativeTypes.Binary, NativeKind.Binary) when value.Bytes is { Length: > 0 } raw:
+                bytes = raw.ToArray();
+                return true;
+            default:
+                failure = $"a {value.Kind} value for variable native type {column.TypeCode}";
+                return false;
+        }
+    }
 }
 
 /// <summary>Reads one field of a row view as a <see cref="NativeValue"/> through the format description and the cache.</summary>

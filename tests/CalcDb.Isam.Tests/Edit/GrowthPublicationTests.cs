@@ -1,0 +1,869 @@
+using System.Buffers.Binary;
+using System.Text;
+
+using CalcDb.Format;
+using CalcDb.Foundation;
+using CalcDb.Isam.Edit;
+using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
+using CalcDb.Values;
+
+namespace CalcDb.Isam.Tests.Edit;
+
+/// <summary>
+/// Growth and structural-closure publication tests (W-05/growth-structural-closure; II-16 §§14–24, T-FMT-15..21/24,
+/// T-IDX-13..23, T-ISAM-33..37/41/44): in-page AddNew and Delete publication in CRASH-ORDER (Data → Index → Catalog),
+/// fresh-reopen verification, Inspector integrity, cursor semantics, transactions, two-locker 3188 conflict on Delete,
+/// and every named out-of-scope refusal.
+/// </summary>
+public sealed class GrowthPublicationTests
+{
+    private const string EditFixture = "71c42e613e63fe3e63f039644361c9de802a35d12605ec28ea0daa75f697f72b";
+    private const string PagesFixture = "640b1893caaa6a8450731932e84ffa0e2a8be91a00a0be188bae767d7a31db34";
+    private const string WAccdbFixture = "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be";
+    private const string T1Fixture = "486e67a3af61f4fedf267d3345b50d0b3dc6e10db7dea76bc93a2aad8fc57b32";
+
+    private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
+
+    private sealed class Rig : IDisposable
+    {
+        private readonly List<IDisposable> _owned = [];
+
+        public Rig(string fixtureSha)
+        {
+            File = new ReplayFixture(fixtureSha);
+            Before = File.Image.Snapshot();
+            A = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler() };
+            B = new TransactionCoordinator(new LockerId(2)) { Publisher = File, Scheduler = new CountingScheduler() };
+        }
+
+        public ReplayFixture File { get; }
+
+        public byte[] Before { get; }
+
+        public TransactionCoordinator A { get; }
+
+        public TransactionCoordinator B { get; }
+
+        public (TableDefinition Table, TableEditContext Context) Table(string name) => File.Table(name)!.Value;
+
+        public (EditFrame Frame, TableCursor Cursor) OpenTable(TransactionCoordinator ws, string table, string? index = null)
+        {
+            (TableDefinition t, TableEditContext ctx) = Table(table);
+            var cursor = (TableCursor)File.Open(t, 1)!;
+            if (index is not null)
+            {
+                Assert.Equal(IndexRefusal.None, cursor.SetIndex(index));
+            }
+            var frame = new EditFrame(ctx, cursor, ws);
+            _owned.Add(frame);
+            _owned.Add(cursor);
+            return (frame, cursor);
+        }
+
+        public (EditFrame Frame, PopulationCursor Cursor) OpenDynaset(TransactionCoordinator ws, string table)
+        {
+            (TableDefinition t, TableEditContext ctx) = Table(table);
+            var cursor = (PopulationCursor)File.Open(t, 2)!;
+            var frame = new EditFrame(ctx, cursor, ws);
+            _owned.Add(frame);
+            _owned.Add(cursor);
+            return (frame, cursor);
+        }
+
+        public void Dispose()
+        {
+            foreach (IDisposable d in Enumerable.Reverse(_owned))
+            {
+                d.Dispose();
+            }
+            A.Dispose();
+            B.Dispose();
+            File.Dispose();
+        }
+    }
+
+    private static NativeVariant I4(int v) => new() { Vt = (ushort)VarType.I4, Int64 = (uint)v };
+
+    private static NativeVariant Bool(bool v) => new() { Vt = (ushort)VarType.Bool, Int64 = v ? -1L : 0L };
+
+    private static NativeVariant Null() => new() { Vt = (ushort)VarType.Null };
+
+    private static void AssignText(EditFrame frame, ColumnDescriptor col, string text)
+    {
+        nint bstr = Bstrs.FromUnits(text.Length, text, static (span, s) => s.AsSpan().CopyTo(span));
+        try
+        {
+            EditOutcome outcome = frame.Assign(col, new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr });
+            Assert.True(outcome.Succeeded, outcome.ToString());
+        }
+        finally
+        {
+            Bstrs.Free(bstr);
+        }
+    }
+
+    private static ColumnDescriptor Col(TableDefinition t, string name) => t.Columns.Single(c => c.Name == name);
+
+    private static void SeekRowById(IRecordCursor cursor, TableDefinition table, long id)
+    {
+        ColumnDescriptor idCol = Col(table, "ID");
+        for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
+        {
+            if (cursor.Read(idCol).Value.Integer == id)
+            {
+                return;
+            }
+        }
+        Assert.Fail($"Row ID={id} not found");
+    }
+
+    private static (PageCache Cache, ulong Pages) Reopen(byte[] image)
+    {
+        var file = new MemoryDatabaseFile(image, D.PageSize, 9);
+        return (new PageCache(file, file.Incarnation, D.PageSize, 256), file.PageCount);
+    }
+
+    private static TableDefinition DecodeTableDef(byte[] image, uint firstPage)
+    {
+        TableDefSegmentView view = TableDefSegmentView.Open(firstPage, p => image.AsMemory((int)(p * D.PageSize), D.PageSize), D, 8, out string? err)!;
+        Assert.Null(err);
+        TableDefinition td = TableDefDecoder.Decode(view, firstPage, D, out err)!;
+        Assert.Null(err);
+        return td;
+    }
+
+    private static void WriteRawPage(ReplayFixture fixture, uint pageNumber, byte[] bytes)
+    {
+        fixture.Image.WriteAt(pageNumber * (ulong)D.PageSize, bytes);
+        fixture.Cache.PublishReuse(pageNumber);
+    }
+
+    private static NativeValue LongVal(long v) => new(NativeKind.Long) { Integer = v };
+
+    private static NativeValue TextVal(string s) => new(NativeKind.Text) { Text = s };
+
+    private static SeekKey IntKey(long v) => new(new KeyValue(KeyValueKind.Integer, Integer: v));
+
+    private static SeekKey TextKey(string s) => new(KeyValue.OfText(s.AsMemory()));
+
+    private sealed class EmptyRuleBinder : IMutationRuleBinder
+    {
+        public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
+
+        public IMutationRule? BindFieldRule(TableDefinition table, ColumnDescriptor column, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
+
+        public IMutationRule? BindTableRule(TableDefinition table, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
+    }
+
+    private static void AssertInspectorClean(byte[] image)
+    {
+        InspectionReport report = Inspector.Inspect(image);
+        Assert.Equal(ProfileRefusal.None, report.Refusal);
+        Assert.Empty(report.Problems);
+    }
+
+    [Fact]
+    public void AddNew_publishes_in_crash_order_and_reopens_cleanly()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
+        (EditFrame dynFrame, PopulationCursor dynCursor) = rig.OpenDynaset(rig.B, "G");
+        Assert.Equal(2, cursor.RecordCount);
+        dynCursor.MoveLast();
+        Assert.Equal(2, dynCursor.RecordCount);
+
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(3, frame.Read(Col(g, "ID")).Value.Integer); // AutoNumber ticket 3
+        AssignText(frame, Col(g, "T"), "gamma");
+        Assert.True(frame.Assign(Col(g, "N"), I4(30)).Succeeded);
+        AssignText(frame, Col(g, "U"), "u3");
+        UpdateOutcome outcome = frame.Update();
+
+        Assert.True(outcome.Succeeded, outcome.ToString());
+        Assert.NotNull(outcome.Change?.Physical);
+        Assert.NotNull(outcome.Change!.Inserted);
+        Assert.Equal([PageRole.Data, PageRole.Index, PageRole.Index, PageRole.Catalog], outcome.Change.Physical!.Edits.Select(e => e.Role));
+        Assert.Empty(rig.A.PendingPublication);
+
+        // Program order: Data -> Index -> Index -> Catalog, 0 flushes on automatic op.
+        PublicationReceipt receipt = Assert.Single(rig.A.Publications);
+        Assert.Equal(4, receipt.Program.Effects.Count);
+        Assert.All(receipt.Program.Effects, e => Assert.Equal(EffectKind.Transfer, e.Kind));
+        uint pkLeaf = g.PhysicalOf(g.FindIndex("PK_G")!)!.RootPage;
+        uint uxLeaf = g.PhysicalOf(g.FindIndex("UX_U")!)!.RootPage;
+        ulong[] writtenPages = [.. receipt.Program.Effects.Select(e => e.PageNumber!.Value)];
+        Assert.Equal((ulong)outcome.Change.Inserted!.Value.Page, writtenPages[0]);
+        Assert.Contains((ulong)pkLeaf, writtenPages[1..3]);
+        Assert.Contains((ulong)uxLeaf, writtenPages[1..3]);
+        Assert.Equal((ulong)g.FirstPage, writtenPages[3]);
+        Assert.Equal(0, rig.File.Image.Flushes);
+
+        // Live cursor count reflects publication.
+        Assert.Equal(3, cursor.RecordCount);
+
+        // Dynaset AddNew also updates PopulationCursor count and returns InsertedOrdinal.
+        Assert.True(dynFrame.AddNew().Succeeded);
+        AssignText(dynFrame, Col(g, "T"), "delta");
+        Assert.True(dynFrame.Assign(Col(g, "N"), Null()).Succeeded);
+        AssignText(dynFrame, Col(g, "U"), "u4");
+        UpdateOutcome dynOut = dynFrame.Update();
+        Assert.True(dynOut.Succeeded, dynOut.ToString());
+        Assert.Equal(2, dynOut.InsertedOrdinal); // 0-based ordinal of 3rd row in B's dynaset (2 existing + 1 own insert)
+        Assert.Equal(3, dynCursor.RecordCount);
+        Assert.Equal(4, cursor.RecordCount);
+
+        byte[] after = rig.File.Image.Snapshot();
+        AssertInspectorClean(after);
+
+        // TableDef counters updated.
+        TableDefinition gAfter = DecodeTableDef(after, g.FirstPage);
+        Assert.Equal(4u, gAfter.RowCount);
+        Assert.Equal(4u, gAfter.AutoNumber);
+        Assert.Equal(g.PhysicalOf(g.FindIndex("PK_G")!)!.UniqueEntryCount + 2, gAfter.PhysicalOf(gAfter.FindIndex("PK_G")!)!.UniqueEntryCount);
+        Assert.Equal(g.PhysicalOf(g.FindIndex("UX_U")!)!.UniqueEntryCount + 2, gAfter.PhysicalOf(gAfter.FindIndex("UX_U")!)!.UniqueEntryCount);
+
+        // Reopen from raw bytes: scan and Seek both indexes.
+        (PageCache cache, ulong pages) = Reopen(after);
+        using TableCursor reopened = TableCursor.Open(cache, D, gAfter, pages, 0, out _)!;
+        List<(long Id, string T, NativeKind NKind, string U)> rows = [];
+        for (reopened.MoveFirst(); !reopened.Eof; reopened.MoveNext())
+        {
+            rows.Add((
+                reopened.Read(Col(gAfter, "ID")).Value.Integer,
+                reopened.Read(Col(gAfter, "T")).Value.Text!,
+                reopened.Read(Col(gAfter, "N")).Value.Kind,
+                reopened.Read(Col(gAfter, "U")).Value.Text!));
+        }
+        Assert.Equal(4, rows.Count);
+        Assert.Contains((3L, "gamma", NativeKind.Long, "u3"), rows);
+        Assert.Contains((4L, "delta", NativeKind.Null, "u4"), rows);
+
+        Assert.Equal(IndexRefusal.None, reopened.SetIndex("PK_G"));
+        Assert.Equal(IndexRefusal.None, reopened.Seek(SeekOperator.Equal, [IntKey(3)], out bool found3));
+        Assert.True(found3);
+        Assert.Equal("gamma", reopened.Read(Col(gAfter, "T")).Value.Text);
+        Assert.Equal(IndexRefusal.None, reopened.SetIndex("UX_U"));
+        Assert.Equal(IndexRefusal.None, reopened.Seek(SeekOperator.Equal, [TextKey("u4")], out bool found4));
+        Assert.True(found4);
+        Assert.Equal(4L, reopened.Read(Col(gAfter, "ID")).Value.Integer);
+    }
+
+    [Fact]
+    public void AddNew_increments_UniqueEntryCount_only_for_a_new_key_on_non_unique_index()
+    {
+        using var rig = new Rig(WAccdbFixture);
+        (TableDefinition ixd, _) = rig.Table("IxD");
+        PhysicalIndex pkBefore = ixd.PhysicalOf(ixd.FindIndex("PK_IxD")!)!;
+        PhysicalIndex gBefore = ixd.PhysicalOf(ixd.FindIndex("IX_IxD_G")!)!;
+
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "IxD");
+        cursor.MoveFirst();
+        long existingG = cursor.Read(Col(ixd, "G")).Value.Integer;
+
+        // 1. Insert with a brand-new G key (999999) -> both PK and IX_IxD_G UniqueEntryCount + 1.
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(Col(ixd, "ID"), I4(90001)).Succeeded);
+        Assert.True(frame.Assign(Col(ixd, "G"), I4(999999)).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+
+        TableDefinition mid = DecodeTableDef(rig.File.Image.Snapshot(), ixd.FirstPage);
+        Assert.Equal(ixd.RowCount + 1, mid.RowCount);
+        Assert.Equal(pkBefore.UniqueEntryCount + 1, mid.PhysicalOf(mid.FindIndex("PK_IxD")!)!.UniqueEntryCount);
+        Assert.Equal(gBefore.UniqueEntryCount + 1, mid.PhysicalOf(mid.FindIndex("IX_IxD_G")!)!.UniqueEntryCount);
+
+        // 2. Insert with a duplicate G key (existingG) -> PK UniqueEntryCount + 1, IX_IxD_G unchanged.
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(Col(ixd, "ID"), I4(90002)).Succeeded);
+        Assert.True(frame.Assign(Col(ixd, "G"), I4((int)existingG)).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+
+        byte[] after = rig.File.Image.Snapshot();
+        AssertInspectorClean(after);
+        TableDefinition end = DecodeTableDef(after, ixd.FirstPage);
+        Assert.Equal(ixd.RowCount + 2, end.RowCount);
+        Assert.Equal(pkBefore.UniqueEntryCount + 2, end.PhysicalOf(end.FindIndex("PK_IxD")!)!.UniqueEntryCount);
+        Assert.Equal(gBefore.UniqueEntryCount + 1, end.PhysicalOf(end.FindIndex("IX_IxD_G")!)!.UniqueEntryCount);
+    }
+
+    [Fact]
+    public void AddNew_and_Delete_between_zero_and_one_row_updates_empty_root_leaf()
+    {
+        // Start from T1 (2 rows on 1 FreeMap data page, PK root leaf), delete both rows -> 0 rows & empty root leaf;
+        // then prepare a clean empty FreeMap page on the same empty root leaf to also test 0 -> 1 -> 0!
+        using var rig = new Rig(T1Fixture);
+        (TableDefinition t1, _) = rig.Table("T1");
+        uint rootLeaf = t1.PhysicalIndexes[0].RootPage;
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "T1");
+        cursor.MoveFirst();
+        uint dataPage = cursor.CurrentRow!.Value.Page;
+
+        // Delete both existing rows: 2 -> 1 -> 0, emptying the root leaf cleanly.
+        Assert.True(frame.Delete().Succeeded);
+        cursor.MoveNext();
+        Assert.False(cursor.Eof);
+        Assert.True(frame.Delete().Succeeded);
+        Assert.Equal(0, cursor.RecordCount);
+
+        byte[] emptyImage = rig.File.Image.Snapshot();
+        AssertInspectorClean(emptyImage);
+        TableDefinition t1Empty = DecodeTableDef(emptyImage, t1.FirstPage);
+        Assert.Equal(0u, t1Empty.RowCount);
+        IndexPage emptyLeaf = IndexPages.Decode(emptyImage.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out string? leafErr)!;
+        Assert.Null(leafErr);
+        Assert.Equal(0, emptyLeaf.Count);
+        Assert.Equal(0, emptyLeaf.PrefixLength);
+        Assert.Equal(D.IndexPage.EntryAreaBytes, emptyLeaf.FreeCount);
+
+        // Now reset the data page to a clean 0-slot empty FreeMap page (no deleted slots) so 0 -> 1 AddNew can run.
+        byte[] cleanEmptyData = new byte[D.PageSize];
+        cleanEmptyData[D.DataPage.Kind.Offset] = 0x01;
+        D.DataPage.Owner.Write(cleanEmptyData, t1.FirstPage);
+        D.DataPage.RowCount.Write(cleanEmptyData, 0);
+        D.DataPage.FreeCount.Write(cleanEmptyData, (ulong)(D.PageSize - D.DataPage.SlotBase));
+        WriteRawPage(rig.File, dataPage, cleanEmptyData);
+
+        // 0 -> 1 insert into empty root leaf (with Boolean, Text, Long).
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(Col(t1, "ID"), I4(7)).Succeeded);
+        Assert.True(frame.Assign(Col(t1, "N"), I4(77)).Succeeded);
+        AssignText(frame, Col(t1, "S"), "sole");
+        Assert.True(frame.Assign(Col(t1, "B"), Bool(true)).Succeeded);
+        UpdateOutcome ins = frame.Update();
+        Assert.True(ins.Succeeded, ins.ToString());
+        Assert.Equal(1, cursor.RecordCount);
+
+        byte[] oneRowImage = rig.File.Image.Snapshot();
+        AssertInspectorClean(oneRowImage);
+        IndexPage oneLeaf = IndexPages.Decode(oneRowImage.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out _)!;
+        Assert.Equal(1, oneLeaf.Count);
+
+        // Verify MoveFirst recovers from empty state and reads the inserted row, then Delete back to 0.
+        cursor.MoveFirst();
+        Assert.False(cursor.Bof);
+        Assert.False(cursor.Eof);
+        Assert.Equal(7L, cursor.Read(Col(t1, "ID")).Value.Integer);
+        Assert.True(cursor.Read(Col(t1, "B")).Value.Boolean);
+        Assert.Equal("sole", cursor.Read(Col(t1, "S")).Value.Text);
+
+        Assert.True(frame.Delete().Succeeded);
+        Assert.Equal(0, cursor.RecordCount);
+        byte[] backToEmpty = rig.File.Image.Snapshot();
+        AssertInspectorClean(backToEmpty);
+        Assert.Equal(0, IndexPages.Decode(backToEmpty.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out _)!.Count);
+    }
+
+    [Fact]
+    public void Delete_publishes_in_crash_order_and_sets_deleted_cursor_semantics()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition r, _) = rig.Table("R");
+        uint pkLeaf = r.PhysicalOf(r.FindIndex("PK_R")!)!.RootPage;
+        uint pkUniqBefore = r.PhysicalOf(r.FindIndex("PK_R")!)!.UniqueEntryCount;
+
+        // 1. Storage-order Delete of row 10 on TableCursor.
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "R");
+        SeekRowById(cursor, r, 10);
+        RowId deletedRow = cursor.CurrentRow!.Value;
+        UpdateOutcome del = frame.Delete();
+        Assert.True(del.Succeeded, del.ToString());
+        Assert.Equal([PageRole.Data, PageRole.Index, PageRole.Catalog], del.Change!.Physical!.Edits.Select(e => e.Role));
+
+        PublicationReceipt receipt = Assert.Single(rig.A.Publications);
+        Assert.Equal([(ulong)deletedRow.Page, pkLeaf, r.FirstPage], receipt.Program.Effects.Select(e => e.PageNumber!.Value));
+        Assert.Equal(0, rig.File.Image.Flushes);
+
+        // Deleted current state on TableCursor: BOF=false, EOF=false, live RecordCount=63, Read/Edit/Delete -> 3167.
+        Assert.False(cursor.Bof);
+        Assert.False(cursor.Eof);
+        Assert.Equal(63, cursor.RecordCount);
+        Assert.Equal(CursorFailure.DeletedRecord, cursor.Read(Col(r, "ID")).Failure);
+        Assert.Equal(MutationError.RecordDeleted, frame.Edit().Error?.Number);
+        Assert.Equal(MutationError.RecordDeleted, frame.Delete().Error?.Number);
+
+        // Navigation off the deleted position in storage order.
+        cursor.MoveNext();
+        Assert.Equal(11L, cursor.Read(Col(r, "ID")).Value.Integer);
+        cursor.MovePrevious();
+        Assert.Equal(9L, cursor.Read(Col(r, "ID")).Value.Integer);
+
+        // 2. Index-order Delete of row 20 under PK_R.
+        Assert.Equal(IndexRefusal.None, cursor.SetIndex("PK_R"));
+        Assert.Equal(IndexRefusal.None, cursor.Seek(SeekOperator.Equal, [IntKey(20)], out bool found20));
+        Assert.True(found20);
+        Assert.True(frame.Delete().Succeeded);
+        Assert.Equal(62, cursor.RecordCount);
+        Assert.Equal(CursorFailure.DeletedRecord, cursor.Read(Col(r, "ID")).Failure);
+        cursor.MoveNext();
+        Assert.Equal(21L, cursor.Read(Col(r, "ID")).Value.Integer);
+        cursor.MovePrevious();
+        Assert.Equal(19L, cursor.Read(Col(r, "ID")).Value.Integer);
+
+        byte[] after = rig.File.Image.Snapshot();
+        AssertInspectorClean(after);
+        TableDefinition rAfter = DecodeTableDef(after, r.FirstPage);
+        Assert.Equal(62u, rAfter.RowCount);
+        Assert.Equal(pkUniqBefore, rAfter.PhysicalOf(rAfter.FindIndex("PK_R")!)!.UniqueEntryCount); // unchanged on Delete
+
+        // Reopen from raw bytes: 62 rows in storage and index order without 10 or 20.
+        (PageCache cache, ulong pages) = Reopen(after);
+        using TableCursor reopened = TableCursor.Open(cache, D, rAfter, pages, 0, out _)!;
+        List<long> ids = [];
+        for (reopened.MoveFirst(); !reopened.Eof; reopened.MoveNext())
+        {
+            ids.Add(reopened.Read(Col(rAfter, "ID")).Value.Integer);
+        }
+        Assert.Equal(62, ids.Count);
+        Assert.DoesNotContain(10L, ids);
+        Assert.DoesNotContain(20L, ids);
+    }
+
+    [Fact]
+    public void Delete_on_PopulationCursor_external_delete_and_pending_edit_discard()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition r, _) = rig.Table("R");
+
+        // 1. PopulationCursor Delete -> Ordinal=null, Read=NoCurrentRecord (3021), RecordCount-1, MoveNext/MovePrevious.
+        (EditFrame dynFrame, PopulationCursor dynCursor) = rig.OpenDynaset(rig.A, "R");
+        SeekRowById(dynCursor, r, 5);
+        Assert.True(dynFrame.Delete().Succeeded);
+        Assert.False(dynCursor.Bof);
+        Assert.False(dynCursor.Eof);
+        Assert.Null(dynCursor.Ordinal);
+        Assert.Equal(63, dynCursor.RecordCount);
+        Assert.Equal(CursorFailure.NoCurrentRecord, dynCursor.Read(Col(r, "ID")).Failure);
+        dynCursor.MoveNext();
+        Assert.Equal(6L, dynCursor.Read(Col(r, "ID")).Value.Integer);
+        dynCursor.MovePrevious();
+        Assert.Equal(4L, dynCursor.Read(Col(r, "ID")).Value.Integer);
+
+        // 2. External delete by A makes B's held TableCursor return DeletedRecord (3167) on Read, Edit, Delete.
+        (EditFrame frameA, TableCursor cursorA) = rig.OpenTable(rig.A, "R");
+        (EditFrame frameB, TableCursor cursorB) = rig.OpenTable(rig.B, "R");
+        SeekRowById(cursorA, r, 15);
+        SeekRowById(cursorB, r, 15);
+        Assert.True(frameA.Delete().Succeeded);
+        Assert.Equal(CursorFailure.DeletedRecord, cursorB.Read(Col(r, "ID")).Failure);
+        Assert.Equal(MutationError.RecordDeleted, frameB.Edit().Error?.Number);
+        Assert.Equal(MutationError.RecordDeleted, frameB.Delete().Error?.Number);
+
+        // 3. Delete while in Edit or AddNew discards the pending edit first (CUR-EDIT).
+        SeekRowById(cursorA, r, 25);
+        Assert.True(frameA.Edit().Succeeded);
+        Assert.Equal(EditMode.Edit, frameA.Mode);
+        Assert.True(frameA.Delete().Succeeded);
+        Assert.Equal(EditMode.None, frameA.Mode);
+
+        SeekRowById(cursorA, r, 26);
+        Assert.True(frameA.AddNew().Succeeded);
+        Assert.Equal(EditMode.AddNew, frameA.Mode);
+        Assert.True(frameA.Delete().Succeeded);
+        Assert.Equal(EditMode.None, frameA.Mode);
+        Assert.Equal(60, cursorA.RecordCount);
+        AssertInspectorClean(rig.File.Image.Snapshot());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Transacted_AddNew_and_Delete_publish_on_outer_commit_with_expected_flushes(int options)
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
+
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frame.AddNew().Succeeded);
+        AssignText(frame, Col(g, "T"), "tx1");
+        Assert.True(frame.Assign(Col(g, "N"), I4(99)).Succeeded);
+        AssignText(frame, Col(g, "U"), "txu1");
+        Assert.True(frame.Update().Succeeded);
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot()); // nothing published yet inside BeginTrans
+
+        ResolutionOutcome commit = rig.A.CommitTrans(options);
+        Assert.True(commit.Succeeded, commit.ToString());
+        Assert.Equal(options, rig.File.Image.Flushes);
+        Assert.Equal(3, cursor.RecordCount);
+        AssertInspectorClean(rig.File.Image.Snapshot());
+    }
+
+    [Fact]
+    public void Rollback_of_AddNew_leaves_file_unchanged_and_keeps_consumed_AutoNumber()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, _) = rig.OpenTable(rig.A, "G");
+
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(3, frame.Read(Col(g, "ID")).Value.Integer);
+        AssignText(frame, Col(g, "T"), "rolled");
+        AssignText(frame, Col(g, "U"), "u-roll");
+        Assert.True(frame.Update().Succeeded);
+        Assert.True(rig.A.Rollback().Succeeded);
+
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+        Assert.Empty(rig.A.Publications);
+
+        // AutoNumber ticket 3 was consumed and stays burned: next AddNew gets 4.
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(4, frame.Read(Col(g, "ID")).Value.Integer);
+        frame.CancelUpdate();
+    }
+
+    [Fact]
+    public void Two_lockers_pessimistic_Edit_blocks_Delete_with_3188()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frameA, TableCursor cursorA) = rig.OpenTable(rig.A, "G");
+        (EditFrame frameB, TableCursor cursorB) = rig.OpenTable(rig.B, "G");
+        SeekRowById(cursorA, g, 1);
+        SeekRowById(cursorB, g, 1);
+
+        Assert.True(frameA.Edit().Succeeded);
+        UpdateOutcome blocked = frameB.Delete();
+        Assert.False(blocked.Succeeded);
+        Assert.Equal(MutationError.LockedBySession, blocked.Error?.Number);
+        Assert.Equal(MutationErrorSource.Recordset, blocked.Error?.Source);
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+    }
+
+    private static void AssertNotWritten(UpdateOutcome outcome, TransactionCoordinator ws, string expectedReason, byte[] expectedImage, MemoryDatabaseFile file)
+    {
+        Assert.True(outcome.Succeeded, outcome.ToString());
+        Assert.Null(outcome.Change!.Physical);
+        Assert.Contains(expectedReason, outcome.Change.NotWritten, StringComparison.Ordinal);
+        Assert.NotEmpty(ws.PendingPublication);
+        Assert.Equal(expectedImage, file.Snapshot());
+    }
+
+    [Fact]
+    public void Refuses_new_data_page_required_on_empty_table_and_full_data_page()
+    {
+        // 1. T0 in T1Fixture has 0 owned pages -> new data page required.
+        using (var rig = new Rig(T1Fixture))
+        {
+            (TableDefinition t0, _) = rig.Table("T0");
+            (EditFrame frame, _) = rig.OpenTable(rig.A, "T0");
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(t0, "ID"), I4(1)).Succeeded);
+            Assert.True(frame.Assign(Col(t0, "B"), Bool(false)).Succeeded);
+            UpdateOutcome out0 = frame.Update();
+            AssertNotWritten(out0, rig.A, "new data page", rig.Before, rig.File.Image);
+        }
+
+        // 2. Full data page: shrink G's data page free gap to 4 bytes so any row overflows it.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, _) = rig.Table("G");
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
+            cursor.MoveFirst();
+            uint dp = cursor.CurrentRow!.Value.Page;
+            byte[] page = rig.File.Image.Snapshot().AsSpan((int)(dp * D.PageSize), D.PageSize).ToArray();
+            int rc = (int)D.DataPage.RowCount.Read(page);
+            int dirEnd = D.DataPage.SlotBase + (rc * 2);
+            BinaryPrimitives.WriteUInt16LittleEndian(page.AsSpan(D.DataPage.SlotBase + ((rc - 1) * 2), 2), (ushort)(dirEnd + 4));
+            D.DataPage.FreeCount.Write(page, 4);
+            WriteRawPage(rig.File, dp, page);
+            byte[] snapshotBefore = rig.File.Image.Snapshot();
+
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), "full");
+            AssignText(frame, Col(g, "U"), "u-full");
+            UpdateOutcome fullOut = frame.Update();
+            AssertNotWritten(fullOut, rig.A, "free bytes", snapshotBefore, rig.File.Image);
+        }
+    }
+
+    [Fact]
+    public void Refuses_usage_map_change_on_non_FreeMap_delete_and_deleted_slot_reuse_on_insert()
+    {
+        // 1. Delete on a page NOT in FreeMap (PagesFixture table M has full data pages absent from FreeMap).
+        using (var rig = new Rig(PagesFixture))
+        {
+            (TableDefinition m, _) = rig.Table("M");
+            HashSet<uint> freePages = [.. UsageMaps.Pages(rig.File.Cache, D, m.FreeMap, rig.File.Image.PageCount, out _)!];
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "M");
+            bool foundNonFree = false;
+            for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
+            {
+                if (!freePages.Contains(cursor.CurrentRow!.Value.Page))
+                {
+                    foundNonFree = true;
+                    break;
+                }
+            }
+            Assert.True(foundNonFree, "expected a row of M on a page outside FreeMap");
+            UpdateOutcome del = frame.Delete();
+            AssertNotWritten(del, rig.A, "not in FreeMap", rig.Before, rig.File.Image);
+        }
+
+        // 2. Deleted-slot reuse on insert: Au2 in WAccdbFixture has deleted slots 7,8,9 on its only data page.
+        using (var rig = new Rig(WAccdbFixture))
+        {
+            (TableDefinition au2, _) = rig.Table("Au2");
+            (EditFrame frame, _) = rig.OpenTable(rig.A, "Au2");
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(au2, "S"), "reuse");
+            UpdateOutcome ins = frame.Update();
+            AssertNotWritten(ins, rig.A, "deleted slots", rig.Before, rig.File.Image);
+        }
+    }
+
+    [Fact]
+    public void Refuses_non_root_leaf_boundary_change_leaf_split_and_uncovered_prefix()
+    {
+        // 1. Non-root leaf boundary change on multi-leaf index IX_K (PagesFixture table DL).
+        using (var rig = new Rig(PagesFixture))
+        {
+            (TableDefinition dl, _) = rig.Table("DL");
+            PhysicalIndex ixk = dl.PhysicalOf(dl.FindIndex("IX_K")!)!;
+            var nav = new IndexNavigator(rig.File.Cache, D, ixk, dl.FirstPage);
+            HashSet<uint> freePages = [.. UsageMaps.Pages(rig.File.Cache, D, dl.FreeMap, rig.File.Image.PageCount, out _)!];
+            IndexPosition last = nav.Last()!.Value;
+            Assert.NotEqual(ixk.RootPage, last.Leaf); // confirms multi-leaf index
+            // Pick a boundary entry (first or last of a non-root leaf) whose data page is in FreeMap so FreeMap check passes first.
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "DL", index: "IX_K");
+            if (freePages.Contains(last.Row.Page))
+            {
+                cursor.MoveLast();
+            }
+            else
+            {
+                // Find any non-root leaf boundary row on a FreeMap page.
+                IndexPosition? boundary = null;
+                for (IndexPosition? p = nav.First(); p is { } at; p = nav.Next(at))
+                {
+                    if (at.Leaf != ixk.RootPage && freePages.Contains(at.Row.Page))
+                    {
+                        using PagePin? pin = rig.File.Cache.Pin(at.Leaf).Pin;
+                        IndexPage leaf = IndexPages.Decode(pin!.Bytes, D, out _)!;
+                        if (at.Ordinal == 0 || at.Ordinal == leaf.Count - 1)
+                        {
+                            boundary = at;
+                            break;
+                        }
+                    }
+                }
+                Assert.NotNull(boundary);
+                for (cursor.MoveFirst(); !cursor.Eof && cursor.CurrentRow != boundary!.Value.Row; cursor.MoveNext())
+                {
+                }
+            }
+            UpdateOutcome del = frame.Delete();
+            AssertNotWritten(del, rig.A, "first or last entry", rig.Before, rig.File.Image);
+
+            // Insert larger than the last leaf's last entry -> changes non-root leaf's last entry.
+            (EditFrame frame2, _) = rig.OpenTable(rig.B, "DL");
+            Assert.True(frame2.AddNew().Succeeded);
+            Assert.True(frame2.Assign(Col(dl, "ID"), I4(9999999)).Succeeded);
+            AssignText(frame2, Col(dl, "K"), new string('z', 60));
+            UpdateOutcome ins = frame2.Update();
+            AssertNotWritten(ins, rig.B, "first or last entry", rig.Before, rig.File.Image);
+        }
+
+        // 2. Leaf split: pack PK_R's root leaf near capacity so one more entry does not fit.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition r, _) = rig.Table("R");
+            uint leafPage = r.PhysicalOf(r.FindIndex("PK_R")!)!.RootPage;
+            byte[] leaf = rig.File.Image.Snapshot().AsSpan((int)(leafPage * D.PageSize), D.PageSize).ToArray();
+            List<byte[]> packed = [];
+            int maxNineByteEntries = D.IndexPage.EntryAreaBytes / 9;
+            for (int i = 1; i <= maxNineByteEntries; i++) // leaves EntryAreaBytes % 9 < 9 free bytes so one more 9-byte entry will not fit
+            {
+                byte[] e = new byte[9];
+                e[0] = 0x7F;
+                BinaryPrimitives.WriteUInt32BigEndian(e.AsSpan(1, 4), (uint)(i ^ int.MinValue));
+                e[5] = 0x00; e[6] = 0x00; e[7] = 0x33; e[8] = (byte)(i & 0xFF);
+                packed.Add(e);
+            }
+            Assert.True(IndexPages.TryWriteEntries(leaf, packed, prefixLength: 0, D, out string? wErr), wErr);
+            WriteRawPage(rig.File, leafPage, leaf);
+            byte[] beforeSplit = rig.File.Image.Snapshot();
+
+            (EditFrame frame, _) = rig.OpenTable(rig.A, "R");
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(r, "ID"), I4(1000)).Succeeded);
+            AssignText(frame, Col(r, "V"), "split");
+            UpdateOutcome splitOut = frame.Update();
+            AssertNotWritten(splitOut, rig.A, "leaf split", beforeSplit, rig.File.Image);
+        }
+
+        // 3. Uncovered prefix (gqv4): set PK_R's root leaf stored prefix to 2 bytes (0x7F, 0x80) for positive IDs,
+        // then insert a negative ID (-5 -> starts with 0x7F, 0x7F), which does not match the 2-byte prefix.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition r, _) = rig.Table("R");
+            uint leafPage = r.PhysicalOf(r.FindIndex("PK_R")!)!.RootPage;
+            byte[] leaf = rig.File.Image.Snapshot().AsSpan((int)(leafPage * D.PageSize), D.PageSize).ToArray();
+            byte[][] entries = IndexPages.Entries(IndexPages.Decode(leaf, D, out _)!);
+            Assert.True(IndexPages.TryWriteEntries(leaf, entries, prefixLength: 2, D, out string? pErr), pErr);
+            WriteRawPage(rig.File, leafPage, leaf);
+            byte[] beforePrefix = rig.File.Image.Snapshot();
+
+            (EditFrame frame, _) = rig.OpenTable(rig.A, "R");
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(r, "ID"), I4(-5)).Succeeded);
+            AssignText(frame, Col(r, "V"), "neg");
+            UpdateOutcome prefOut = frame.Update();
+            AssertNotWritten(prefOut, rig.A, "gqv4", beforePrefix, rig.File.Image);
+        }
+    }
+
+    [Fact]
+    public void Refuses_LVAL_dropped_column_BOM_overflow_and_relationship()
+    {
+        // 1. LVAL Memo (Mm) & OLE (Lo) + Dropped column (Dr) in WAccdbFixture.
+        using (var rig = new Rig(WAccdbFixture))
+        {
+            // Memo insert refused
+            (TableDefinition mm, _) = rig.Table("Mm");
+            (EditFrame mmFrame, TableCursor mmCursor) = rig.OpenTable(rig.A, "Mm");
+            Assert.True(mmFrame.AddNew().Succeeded);
+            Assert.True(mmFrame.Assign(Col(mm, "ID"), I4(999)).Succeeded);
+            AssignText(mmFrame, Col(mm, "M"), "memo-val");
+            AssertNotWritten(mmFrame.Update(), rig.A, "LVAL", rig.Before, rig.File.Image);
+
+            // Non-Null Memo delete refused
+            ColumnDescriptor memoCol = Col(mm, "M");
+            bool foundNonNullMemo = false;
+            for (mmCursor.MoveFirst(); !mmCursor.Eof; mmCursor.MoveNext())
+            {
+                if (mmCursor.Read(memoCol).Value.Kind != NativeKind.Null)
+                {
+                    foundNonNullMemo = true;
+                    break;
+                }
+            }
+            Assert.True(foundNonNullMemo, "expected a row of Mm with non-Null Memo");
+            AssertNotWritten(mmFrame.Delete(), rig.A, "LVAL", rig.Before, rig.File.Image);
+
+            // OLE insert refused
+            (TableDefinition lo, _) = rig.Table("Lo");
+            (EditFrame loFrame, _) = rig.OpenTable(rig.A, "Lo");
+            Assert.True(loFrame.AddNew().Succeeded);
+            Assert.True(loFrame.Assign(Col(lo, "ID"), I4(999)).Succeeded);
+            AssertNotWritten(loFrame.Update(), rig.A, "LVAL", rig.Before, rig.File.Image);
+        }
+
+        // 2. Leading U+FEFF Text, Overflow-body Delete, and Relationship on EditFixture.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, _) = rig.Table("G");
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
+
+            // Leading U+FEFF refused
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), "\uFEFFbom");
+            AssignText(frame, Col(g, "U"), "u-bom");
+            AssertNotWritten(frame.Update(), rig.A, "U+FEFF", rig.Before, rig.File.Image);
+
+            // Relationship table refuses both AddNew and Delete with MutationOpen.Relationship
+            var relCtx = new TableEditContext(
+                frame.Table.Semantics,
+                new StoredUniqueProbe(rig.File.Cache, D, g, rig.File.Image.PageCount),
+                7177,
+                hasRelationships: true,
+                new TableFootprints(rig.File.Cache, D, g, rig.File.Image.PageCount));
+            using var relFrame = new EditFrame(relCtx, cursor, rig.B);
+            Assert.True(relFrame.AddNew().Succeeded);
+            AssignText(relFrame, Col(g, "T"), "rel");
+            AssignText(relFrame, Col(g, "U"), "u-rel");
+            Assert.Equal(MutationOpen.Relationship, relFrame.Update().Open);
+            relFrame.CancelUpdate();
+            cursor.MoveFirst();
+            Assert.Equal(MutationOpen.Relationship, relFrame.Delete().Open);
+
+            // Overflow slot (0x4000 without 0x8000) refused on CompileDelete
+            uint dp = cursor.CurrentRow!.Value.Page;
+            byte rowSlot = cursor.CurrentRow.Value.Row;
+            byte[] page = rig.File.Image.Snapshot().AsSpan((int)(dp * D.PageSize), D.PageSize).ToArray();
+            int slotOff = D.DataPage.SlotBase + (rowSlot * 2);
+            ushort raw = BinaryPrimitives.ReadUInt16LittleEndian(page.AsSpan(slotOff, 2));
+            BinaryPrimitives.WriteUInt16LittleEndian(page.AsSpan(slotOff, 2), (ushort)(raw | D.DataPage.OverflowFlag));
+            WriteRawPage(rig.File, dp, page);
+
+            var writer = new SameWidthWriter(new TableFootprints(rig.File.Cache, D, g, rig.File.Image.PageCount));
+            CompiledChange ovf = writer.CompileDelete(frame.Table.Semantics, new RowId(dp, rowSlot));
+            Assert.Null(ovf.Change);
+            Assert.Contains("overflow", ovf.NotWritten);
+        }
+    }
+
+    [Fact]
+    public void Refuses_calculated_UnicodeCompressed_droppedColumn_zeroFixed_and_partialNull_IgnoreNulls()
+    {
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        PageCache cache = rig.File.Cache;
+        ulong pageCount = rig.File.Image.PageCount;
+        var binder = new EmptyRuleBinder();
+
+        // 1. Calculated column on CompileInsert
+        ColumnDescriptor calcCol = Col(g, "T") with { ExtendedFlags = (byte)(Col(g, "T").ExtendedFlags | D.Payload.CalculatedFlags) };
+        TableDefinition calcTable = g with { Columns = [Col(g, "ID"), calcCol, Col(g, "N"), Col(g, "U")] };
+        var calcSem = MutationSemantics.Compile("G", calcTable, null, binder, D.IndexDescriptor);
+        var calcWriter = new SameWidthWriter(new TableFootprints(cache, D, calcTable, pageCount));
+        CompiledChange calcOut = calcWriter.CompileInsert(calcSem, [LongVal(10), TextVal("a"), NativeValue.Null, NativeValue.Null], 10);
+        Assert.Null(calcOut.Change);
+        Assert.Contains("calculated", calcOut.NotWritten);
+
+        // 2. Unicode-compressed Text column (ExtendedFlags bit 0x01) on CompileInsert
+        ColumnDescriptor compCol = Col(g, "T") with { ExtendedFlags = (byte)(Col(g, "T").ExtendedFlags | 0x01) };
+        TableDefinition compTable = g with { Columns = [Col(g, "ID"), compCol, Col(g, "N"), Col(g, "U")] };
+        var compSem = MutationSemantics.Compile("G", compTable, null, binder, D.IndexDescriptor);
+        var compWriter = new SameWidthWriter(new TableFootprints(cache, D, compTable, pageCount));
+        CompiledChange compOut = compWriter.CompileInsert(compSem, [LongVal(10), TextVal("abc"), NativeValue.Null, NativeValue.Null], 10);
+        Assert.Null(compOut.Change);
+        Assert.Contains("Unicode-compressed", compOut.NotWritten);
+
+        // 3. Dropped-column schema (ColumnCount != MaxColumns) on CompileInsert
+        TableDefinition droppedTable = g with { MaxColumns = g.MaxColumns + 1 };
+        var droppedSem = MutationSemantics.Compile("G", droppedTable, null, binder, D.IndexDescriptor);
+        var droppedWriter = new SameWidthWriter(new TableFootprints(cache, D, droppedTable, pageCount));
+        CompiledChange droppedOut = droppedWriter.CompileInsert(droppedSem, [LongVal(10), TextVal("abc"), NativeValue.Null, NativeValue.Null], 10);
+        Assert.Null(droppedOut.Change);
+        Assert.Contains("dropped-column", droppedOut.NotWritten);
+
+        // 4. Zero-fixed-width table on CompileInsert
+        ColumnDescriptor varOnly = Col(g, "T") with { PhysicalNumber = 0, Ordinal = 0, VariableIndex = 0 };
+        TableDefinition zeroFixedTable = g with { MaxColumns = 1, ColumnCount = 1, VariableColumns = 1, Columns = [varOnly], PhysicalIndexes = [], LogicalIndexes = [], RealIndexCount = 0, LogicalIndexCount = 0 };
+        var zfSem = MutationSemantics.Compile("G", zeroFixedTable, null, binder, D.IndexDescriptor);
+        var zfWriter = new SameWidthWriter(new TableFootprints(cache, D, zeroFixedTable, pageCount));
+        CompiledChange zfOut = zfWriter.CompileInsert(zfSem, [TextVal("abc")], null);
+        Assert.Null(zfOut.Change);
+        Assert.Contains("zero-fixed", zfOut.NotWritten);
+
+        // 5. Partial-Null key in multi-column IgnoreNulls index on CompileInsert
+        PhysicalIndex multiIgnore = new(
+            Number: 0,
+            Columns: [new IndexColumn(Col(g, "N").PhysicalNumber, true, 0x01), new IndexColumn(Col(g, "U").PhysicalNumber, true, 0x01)],
+            OwnedMap: g.PhysicalIndexes[0].OwnedMap,
+            RootPage: g.PhysicalIndexes[0].RootPage,
+            Flags: D.IndexDescriptor.IgnoreNullsFlag,
+            UniqueEntryCount: 0);
+        LogicalIndex multiLogical = new("IX_NU", 0, 0, 0x01, 0, 0, 0);
+        TableDefinition ignTable = g with { PhysicalIndexes = [multiIgnore], LogicalIndexes = [multiLogical], RealIndexCount = 1, LogicalIndexCount = 1 };
+        var ignSem = MutationSemantics.Compile("G", ignTable, null, binder, D.IndexDescriptor);
+        var ignWriter = new SameWidthWriter(new TableFootprints(cache, D, ignTable, pageCount));
+        CompiledChange ignOut = ignWriter.CompileInsert(ignSem, [LongVal(10), TextVal("ok"), LongVal(5), NativeValue.Null], 10);
+        Assert.Null(ignOut.Change);
+        Assert.Contains("partial-Null", ignOut.NotWritten);
+    }
+}

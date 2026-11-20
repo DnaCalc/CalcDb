@@ -172,6 +172,17 @@ public sealed class IndexNavigator
         return at.Ordinal + 1 < p.Count ? At(at.Leaf, at.Ordinal + 1, p) : NextFrom(at.Leaf, p);
     }
 
+    /// <summary>The entry that now sits at <paramref name="deleted"/>'s ordinal (or on the next leaf) after that entry was removed.</summary>
+    public IndexPosition? AtOrAfter(IndexPosition deleted)
+    {
+        LastFailure = null;
+        if (Page(deleted.Leaf) is not { } p)
+        {
+            return null;
+        }
+        return deleted.Ordinal < p.Count ? At(deleted.Leaf, deleted.Ordinal, p) : NextFrom(deleted.Leaf, p);
+    }
+
     public IndexPosition? Previous(IndexPosition at)
     {
         LastFailure = null;

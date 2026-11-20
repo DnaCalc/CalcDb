@@ -22,6 +22,9 @@ public enum CursorFailure
     /// <summary>An assigned position outside the recordset (PercentPosition): DAO 3001.</summary>
     OutOfRange,
 
+    /// <summary>The current row was deleted (own table-type Delete or external Delete): DAO 3167.</summary>
+    DeletedRecord,
+
     /// <summary>A state whose answer ACE has not been asked yet; the caller names it instead of guessing.</summary>
     NotObserved,
 }
@@ -110,6 +113,16 @@ public interface IRowPositioned
     RowId? CurrentRow { get; }
 }
 
+/// <summary>Notifies a cursor when its own Delete or AddNew publishes so its position, count and keyset stay coherent (CUR-POS, CUR-ID).</summary>
+public interface IMutableCursor
+{
+    /// <summary>The current row was deleted by this cursor.</summary>
+    void OnRowDeleted();
+
+    /// <summary>A new row was inserted and published; returns its keyset ordinal on a populated cursor when appended, else null.</summary>
+    int? OnRowInserted(RowId row);
+}
+
 /// <summary>
 /// The current row of a cursor, bound lazily on the first field read after a move and released on the next move
 /// (II-07 §4). Field values are owned copies, so they survive movement and Close (T-ISAM-04). Shared by both cursor
@@ -182,7 +195,9 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
             _bound = RowResolver.Resolve(_hold, d, root, out TraversalFailure? failure);
             if (_bound is null)
             {
-                return new FieldResult(default, CursorFailure.Storage, failure?.Predicate ?? $"row {root} is no longer live");
+                return failure is null
+                    ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
+                    : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
             }
             CostCounters.Current.RowBinds++;
         }
@@ -274,7 +289,7 @@ public enum IndexRefusal
 /// TableDef row count at open (CUR-POP), and gives the root locator as its bookmark in either order (CUR-ID). Changing
 /// the index moves to the first row of the new order (r-cursor-1/id-index-switch). Seek follows CUR-SEEK.
 /// </summary>
-public sealed class TableCursor : IRecordCursor, IRowPositioned
+public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
@@ -287,6 +302,8 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
     private FieldKeyCodec?[] _keyCodecs = []; // their codecs, chosen once per index (II-05 §6.1); null with the refusal below
     private KeyCodecRefusal[] _keyRefusals = [];
     private byte[] _keyScratch = []; // the Seek key, sized for the index's widest fields: no allocation per Seek
+    private long _rowCount;
+    private ulong _rowCountSerial;
 
     private TableCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
@@ -299,6 +316,8 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
         _row = new RowBinding(cache, d, table);
         _order = new StorageOrder(source);
         _position = new PositionState<TableOccurrence>(_order, forwardOnly: false);
+        _rowCount = table.RowCount;
+        _rowCountSerial = cache.PublishedSerial;
     }
 
     public TableDefinition Table { get; }
@@ -322,8 +341,24 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
 
     public bool NoMatch => _position.NoMatch;
 
-    /// <summary>The table-type RecordCount: the exact count at open, from the TableDef (CUR-POP).</summary>
-    public long RecordCount => Table.RowCount;
+    /// <summary>The table-type RecordCount: live TableDef RowCount, refreshed when the cache publishes (CUR-POP).</summary>
+    public long RecordCount
+    {
+        get
+        {
+            ulong serial = _cache.PublishedSerial;
+            if (serial != _rowCountSerial)
+            {
+                using PagePin? pin = _cache.Pin(Table.FirstPage).Pin;
+                if (pin is not null && pin.Bytes.Length == _d.PageSize && pin.Bytes[_d.DataPage.Kind.Offset] == 0x02)
+                {
+                    _rowCount = (long)_d.TableDef.RowCount.Read(pin.Bytes);
+                }
+                _rowCountSerial = serial;
+            }
+            return _rowCount;
+        }
+    }
 
     private RowId? CurrentRoot => _position.Current?.Root;
 
@@ -639,9 +674,23 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
         return column is null ? new FieldResult(default, CursorFailure.UnknownField, fieldName) : Read(column);
     }
 
-    public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
+    public FieldResult Read(ColumnDescriptor column) =>
+        _position.Tag == PositionTag.Deleted
+            ? new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted")
+            : _row.Read(CurrentRoot, column);
 
-    public TextFieldRead ReadText(ColumnDescriptor column) => _row.ReadText(CurrentRoot, column);
+    public TextFieldRead ReadText(ColumnDescriptor column) =>
+        _position.Tag == PositionTag.Deleted
+            ? new TextFieldRead(new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted"))
+            : _row.ReadText(CurrentRoot, column);
+
+    public void OnRowDeleted()
+    {
+        _row.Unbind();
+        _position.MarkDeleted();
+    }
+
+    public int? OnRowInserted(RowId row) => null;
 
     public void Dispose()
     {
@@ -669,6 +718,12 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
 
         public TableOccurrence? Previous(TableOccurrence? before) =>
             (before?.Entry is { } e ? index.Previous(index.Revalidate(e) ?? e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
+
+        public TableOccurrence? NextAfterDeleted(TableOccurrence deleted) =>
+            (deleted.Entry is { } e ? index.AtOrAfter(e) : index.First()) is { } p ? new TableOccurrence(p.Row, p) : null;
+
+        public TableOccurrence? PreviousBeforeDeleted(TableOccurrence deleted) =>
+            (deleted.Entry is { } e ? index.Previous(e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
     }
 }
 
@@ -729,7 +784,7 @@ internal static class StoragePercentLanding
 /// (<see cref="KeysetBookmark"/>, CUR-ID). With no writer in the session, a snapshot and a dynaset read the same rows;
 /// the retained-view policies of a snapshot under change are W-03/private-images-coherence's.
 /// </summary>
-public sealed class PopulationCursor : IRecordCursor, IRowPositioned
+public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
     private readonly OccurrenceStore<RowId> _store;
     private readonly ScanSource _source;
@@ -778,6 +833,24 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
 
     /// <summary>The zero-based ordinal of the current occurrence (DAO AbsolutePosition), or null without a current row.</summary>
     public int? Ordinal => _position.Current;
+
+    public void OnRowDeleted()
+    {
+        if (_position.Current is int ordinal)
+        {
+            _row.Unbind();
+            _store.RemoveAt(ordinal);
+            _position.MarkDeleted();
+        }
+    }
+
+    public int? OnRowInserted(RowId row) => _store.AppendIfComplete(row);
+
+    /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base.</summary>
+    public byte[]? BookmarkForOrdinal(int ordinal) =>
+        _bookmarkBase is uint @base && ordinal >= 0 && ordinal < _store.ObservedCount
+            ? KeysetBookmark.Encode(@base, ordinal)
+            : null;
 
     /// <summary>
     /// PercentPosition on a dynaset or snapshot (R-CURSOR-1 CUR-POP, qualified): 100 * ordinal / the populated count, so a
@@ -854,10 +927,9 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
     /// Position on the occurrence a bookmark names (CUR-ID). Only populated occurrences are named: validity follows
     /// population, and an assignment populates nothing (q2/id-bookmark-requery-populated: after Requery with one row
     /// populated, the earlier bookmark of the third row is 3159; after MoveLast or Move 2 it is accepted). An occurrence
-    /// whose row another session deleted is still named, as on ACE (q/id-bookmark-assign-deleted-and-beyond); ACE then
-    /// reads its fields as 3167, which the row binding does not model (it answers Storage, "no longer live"). An empty
-    /// array succeeds and moves nothing (c1/id-bookmark-shape, fix/id-bookmark-assign-fresh: the Bookmark read after it
-    /// is unchanged).
+    /// whose row another session deleted is still named, as on ACE (q/id-bookmark-assign-deleted-and-beyond); reading its
+    /// fields then answers <see cref="CursorFailure.DeletedRecord"/> (DAO 3167). An empty array succeeds and moves nothing
+    /// (c1/id-bookmark-shape, fix/id-bookmark-assign-fresh: the Bookmark read after it is unchanged).
     /// </summary>
     public CursorFailure? SetBookmark(ReadOnlySpan<byte> bookmark)
     {

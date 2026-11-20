@@ -8,6 +8,12 @@ public interface IOrderedSource<T> where T : struct
 
     /// <summary>The occurrence before <paramref name="before"/> (last when null), or null at the start.</summary>
     T? Previous(T? before);
+
+    /// <summary>The first live occurrence after <paramref name="deleted"/> once that occurrence was removed.</summary>
+    T? NextAfterDeleted(T deleted) => Next(deleted);
+
+    /// <summary>The last live occurrence before <paramref name="deleted"/> once that occurrence was removed.</summary>
+    T? PreviousBeforeDeleted(T deleted) => Previous(deleted);
 }
 
 /// <summary>Where a cursor is (II-07 §1, position_tag).</summary>
@@ -26,6 +32,12 @@ public enum PositionTag
 
     /// <summary>After a Seek that found nothing in the after-direction (`=`, `>=`, `>`): no current row, after the last row.</summary>
     SeekMissAfter,
+
+    /// <summary>
+    /// After deleting the current row through this cursor (CUR-POS: BOF and EOF stay false, no current row, MoveNext and
+    /// MovePrevious step to the deleted row's neighbours or boundary).
+    /// </summary>
+    Deleted,
 }
 
 /// <summary>
@@ -56,6 +68,7 @@ public enum MoveOutcome
 public sealed class PositionState<T> where T : struct
 {
     private readonly IOrderedSource<T> _source;
+    private T? _deletedAnchor;
 
     public PositionState(IOrderedSource<T> source, bool forwardOnly)
     {
@@ -89,6 +102,17 @@ public sealed class PositionState<T> where T : struct
     private bool _missEof;
 
     public bool NoMatch { get; private set; }
+
+    /// <summary>Record that the current row was deleted by this cursor (CUR-POS: BOF/EOF false, no current row).</summary>
+    public void MarkDeleted()
+    {
+        if (Tag == PositionTag.At && Current is { } at)
+        {
+            _deletedAnchor = at;
+            Current = null;
+            Tag = PositionTag.Deleted;
+        }
+    }
 
     /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS, CUR-FIND).</summary>
     public void FindFailed() => NoMatch = true;
@@ -140,7 +164,7 @@ public sealed class PositionState<T> where T : struct
     /// </summary>
     public bool Seek(T occurrence)
     {
-        if (Tag == PositionTag.Empty)
+        if (Tag == PositionTag.Empty && _source.Next(null) is null)
         {
             return false;
         }
@@ -157,7 +181,15 @@ public sealed class PositionState<T> where T : struct
         }
         if (Tag == PositionTag.Empty)
         {
-            return MoveOutcome.NoCurrentRecord;
+            T? first = _source.Next(null);
+            if (first is null)
+            {
+                return MoveOutcome.NoCurrentRecord;
+            }
+            NoMatch = false;
+            Tag = PositionTag.At;
+            Current = first;
+            return MoveOutcome.Moved;
         }
         return Land(_source.Next(null), PositionTag.Before);
     }
@@ -170,7 +202,15 @@ public sealed class PositionState<T> where T : struct
         }
         if (Tag == PositionTag.Empty)
         {
-            return MoveOutcome.NoCurrentRecord;
+            T? last = _source.Previous(null);
+            if (last is null)
+            {
+                return MoveOutcome.NoCurrentRecord;
+            }
+            NoMatch = false;
+            Tag = PositionTag.At;
+            Current = last;
+            return MoveOutcome.Moved;
         }
         return Land(_source.Previous(null), PositionTag.After);
     }
@@ -185,7 +225,12 @@ public sealed class PositionState<T> where T : struct
         {
             return AwayFromRows(ref _missEof);
         }
-        T? next = Tag is PositionTag.Before or PositionTag.SeekMissBefore ? _source.Next(null) : _source.Next(Current);
+        T? next = Tag switch
+        {
+            PositionTag.Before or PositionTag.SeekMissBefore => _source.Next(null),
+            PositionTag.Deleted when _deletedAnchor is { } a => _source.NextAfterDeleted(a),
+            _ => _source.Next(Current),
+        };
         return Step(next, PositionTag.After);
     }
 
@@ -203,7 +248,12 @@ public sealed class PositionState<T> where T : struct
         {
             return AwayFromRows(ref _missBof);
         }
-        T? previous = Tag is PositionTag.After or PositionTag.SeekMissAfter ? _source.Previous(null) : _source.Previous(Current);
+        T? previous = Tag switch
+        {
+            PositionTag.After or PositionTag.SeekMissAfter => _source.Previous(null),
+            PositionTag.Deleted when _deletedAnchor is { } a => _source.PreviousBeforeDeleted(a),
+            _ => _source.Previous(Current),
+        };
         return Step(previous, PositionTag.Before);
     }
 
@@ -305,6 +355,27 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
 
     public T this[int ordinal] => _occurrences[ordinal];
 
+    /// <summary>Remove a deleted occurrence from the populated keyset (CUR-POS: RecordCount drops by 1).</summary>
+    public void RemoveAt(int ordinal)
+    {
+        if (ordinal >= 0 && ordinal < _occurrences.Count)
+        {
+            _occurrences.RemoveAt(ordinal);
+        }
+    }
+
+    /// <summary>Append a newly inserted occurrence when this store is already complete; returns its ordinal if appended.</summary>
+    public int? AppendIfComplete(T occurrence)
+    {
+        if (!_complete)
+        {
+            return null;
+        }
+        int ordinal = _occurrences.Count;
+        _occurrences.Add(occurrence);
+        return ordinal;
+    }
+
     /// <summary>Ordinals are the cursor's positions; the store produces on demand.</summary>
     public int? Next(int? after)
     {
@@ -327,6 +398,20 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
         }
         return before.Value > 0 ? before.Value - 1 : null;
     }
+
+    /// <summary>After removing ordinal <paramref name="deleted"/>, the next live row shifts into ordinal <paramref name="deleted"/>.</summary>
+    public int? NextAfterDeleted(int deleted)
+    {
+        if (!_firstMoveDone)
+        {
+            _firstMoveDone = true;
+            Produce(deleted + 1 + FirstMoveChunk - 1);
+        }
+        Produce(deleted + 1);
+        return deleted < _occurrences.Count ? deleted : null;
+    }
+
+    public int? PreviousBeforeDeleted(int deleted) => deleted > 0 ? deleted - 1 : null;
 
     public void ProduceAll() => Produce(int.MaxValue);
 

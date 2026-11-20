@@ -614,24 +614,40 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return unpublished;
         }
         EditMode mode = frame.Mode;
-        CallResult result = EditPublication.Of(frame.Update(type, force));
+        UpdateOutcome outcome = frame.Update(type, force);
+        CallResult result = EditPublication.Of(outcome);
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
-            Modified(mode);
+            if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
+            {
+                Database.Engine.Changes.MarkPublished([change]);
+            }
+            Modified(mode, outcome);
         }
         return result;
     }
 
     /// <summary>
     /// LastModified after an accepted Update: an Edit's row is the current row, which Update keeps (CUR-EDIT), so its
-    /// bookmark is the current one (r-cursor-1/edit-cancel-rollback: LastModified equals Bookmark after the Update). The
-    /// new row of an AddNew is not current; its bookmark is not identified here (new rows are W-05/growth-structural-closure).
+    /// bookmark is the current one (r-cursor-1/edit-cancel-rollback: LastModified equals Bookmark after the Update). A
+    /// published AddNew row gets its landing root bookmark on a table-type cursor, or its appended keyset bookmark on a
+    /// fully populated dynaset; otherwise LastModified stays named.
     /// </summary>
-    private void Modified(EditMode mode)
+    private void Modified(EditMode mode, UpdateOutcome outcome)
     {
         if (mode == EditMode.Edit && Cursor.GetBookmark(out _) is { } bookmark)
         {
             (_lastModified, _lastModifiedRow) = (LastModifiedMark.Row, bookmark);
+        }
+        else if (mode == EditMode.AddNew && outcome.Change?.Inserted is { } inserted)
+        {
+            byte[]? added = Cursor switch
+            {
+                TableCursor => TableBookmark.Encode(inserted),
+                PopulationCursor pop when outcome.InsertedOrdinal is int ord => pop.BookmarkForOrdinal(ord),
+                _ => null,
+            };
+            (_lastModified, _lastModifiedRow) = added is not null ? (LastModifiedMark.Row, added) : (LastModifiedMark.NewRow, null);
         }
         else
         {
@@ -758,11 +774,18 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         return Frame(out CallResult refused) is { } frame ? EditPublication.Of(frame.CancelUpdate()) : refused;
     }
 
-    /// <summary>Delete: a pending Edit or AddNew is discarded (editmode-unusual-transitions: EditMode 0); deleting a row is W-05/growth-structural-closure.</summary>
+    /// <summary>Delete: discards any pending Edit or AddNew and removes the current row (W-05/growth-structural-closure; CUR-EDIT, CUR-POS).</summary>
     private CallResult Delete()
     {
-        _frame?.Discard();
-        return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.Delete", "Recordset.Delete: removing a row is W-05/growth-structural-closure"));
+        if (Frame(out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        if (frame.Updatable && UnpublishedRead("Delete", frame.Table.Semantics) is { } unpublished)
+        {
+            return unpublished;
+        }
+        return EditPublication.Of(frame.Delete());
     }
 
     /// <summary>The movement outcome as DAO publishes it: NoCurrentRecord is 3021 (CUR-POS).</summary>
@@ -776,14 +799,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     };
 
     /// <summary>
-    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot; forward-only refuses it with 3219 and table-type
-    /// with 3251 (r-cursor-1/pos-moves-dynaset, pos-moves-forwardonly, pop-count-table). Without a current row: not observed.
+    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, or -1 at BOF, EOF, empty, or after own Delete
+    /// (CUR-POS); forward-only refuses it with 3219 and table-type with 3251 (r-cursor-1/pos-moves-dynaset,
+    /// pos-moves-forwardonly, pop-count-table).
     /// </summary>
     private CallResult AbsolutePosition() => Cursor switch
     {
         TableCursor => Fail(3251, DaoErrors.NotSupportedForType),
         PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
         PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
+        PopulationCursor => Int32(-1),
         _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition without a current row")),
     };
 
@@ -1159,6 +1184,10 @@ internal sealed unsafe class FieldObject : DaoObject
         if (read.Failure == CursorFailure.NoCurrentRecord)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord, publishesErrorInfo: true);
+        }
+        if (read.Failure == CursorFailure.DeletedRecord)
+        {
+            return Fail(3167, DaoErrors.RecordDeleted, publishesErrorInfo: true);
         }
         if (!read.Succeeded)
         {

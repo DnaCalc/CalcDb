@@ -119,15 +119,16 @@ internal sealed class UnpublishedChanges
 
     /// <summary>
     /// Whether an AutoNumber counter of <paramref name="table"/> in <paramref name="file"/> other than
-    /// <paramref name="own"/> has issued values: the TableDef counter in the file has not reached them (a new row and its
-    /// counter are W-05/growth-structural-closure's), so a counter compiled from the file would reissue them (CUR-EDIT: a value is never
-    /// reused, also after the Database is closed and reopened).
+    /// <paramref name="own"/> has issued values beyond what the TableDef in the file holds: a counter compiled from the
+    /// file would reissue them (CUR-EDIT: a value is never reused, also after the Database is closed and reopened).
     /// </summary>
     public bool CounterAhead(string file, string table, AutoNumberCounter own)
     {
-        foreach ((string f, string t, AutoNumberCounter c, uint stored) in _counters)
+        foreach (CounterEntry entry in _counters)
         {
-            if (!ReferenceEquals(c, own) && c.Last != stored && string.Equals(f, file, StringComparison.OrdinalIgnoreCase) && string.Equals(t, table, StringComparison.OrdinalIgnoreCase))
+            if (!ReferenceEquals(entry.Counter, own) && entry.Counter.Last > entry.Stored
+                && string.Equals(entry.File, file, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(entry.Table, table, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -135,11 +136,46 @@ internal sealed class UnpublishedChanges
         return false;
     }
 
+    /// <summary>Advance stored AutoNumber floors after accepted changes publish to disk.</summary>
+    public void MarkPublished(IReadOnlyList<AcceptedRowChange> changes)
+    {
+        foreach (AcceptedRowChange change in changes)
+        {
+            if (change.Physical is not { } physical || !_files.TryGetValue(change.Table, out string? file))
+            {
+                continue;
+            }
+            foreach (PageEdit edit in physical.Edits)
+            {
+                if (edit.Delta is TableDefCountsDelta { AutoNumberFloor: uint floor })
+                {
+                    foreach (CounterEntry entry in _counters)
+                    {
+                        if (string.Equals(entry.File, file, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(entry.Table, change.Table.TableName, StringComparison.OrdinalIgnoreCase)
+                            && floor > entry.Stored)
+                        {
+                            entry.Stored = floor;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private sealed class CounterEntry(string file, string table, AutoNumberCounter counter, uint stored)
+    {
+        public string File { get; } = file;
+        public string Table { get; } = table;
+        public AutoNumberCounter Counter { get; } = counter;
+        public uint Stored { get; set; } = stored;
+    }
+
     // Kept for the engine's lifetime, after the Database that made a counter closes, so a reopen sees what it issued.
-    private readonly List<(string File, string Table, AutoNumberCounter Counter, uint Stored)> _counters = [];
+    private readonly List<CounterEntry> _counters = [];
 
     /// <summary>Record a table's counter with the stored value it started from.</summary>
-    public void Register(string file, string table, AutoNumberCounter counter, uint stored) => _counters.Add((file, table, counter, stored));
+    public void Register(string file, string table, AutoNumberCounter counter, uint stored) => _counters.Add(new CounterEntry(file, table, counter, stored));
 }
 
 /// <summary>

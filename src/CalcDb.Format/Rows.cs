@@ -151,3 +151,178 @@ public readonly ref struct RowEnvelope
         return end;
     }
 }
+
+/// <summary>One column's encoded value for <see cref="RowEncoder.TryEncode"/>: Null, a Yes/No mask bit, or its exact payload bytes.</summary>
+public readonly record struct EncodedField(bool IsNull, bool Boolean = false, byte[]? Bytes = null)
+{
+    public static EncodedField Null { get; } = new(true);
+
+    public static EncodedField OfBoolean(bool value) => new(false, Boolean: value);
+
+    public static EncodedField OfBytes(byte[] bytes) => new(false, Bytes: bytes);
+}
+
+/// <summary>
+/// Ordinary row encoder (II-04 §2; verified byte-for-byte across 382,187 live rows in 269 retained ACE fixtures).
+/// Writes <c>C = MaxColumns</c>, zero-initialized fixed area (5,140/5,140 newly inserted Null fixed fields are zero),
+/// contiguous variable payloads in <see cref="ColumnDescriptor.VariableIndex"/> order with immediately adjacent trailer
+/// (120,238/120,238 rows have zero padding), and the <c>ceil(C/8)</c>-byte mask with zero unused high bits. Refuses
+/// schemas or values whose ACE byte rules are not established (dropped columns, 0-fixed-width tables, trailing Null
+/// fixed Decimal, or rows past 4,060 bytes).
+/// </summary>
+public static class RowEncoder
+{
+    /// <summary>Maximum ordinary in-page row body length (II-04 §2).</summary>
+    public const int MaxOrdinaryRowBytes = 4060;
+
+    public static bool TryEncode(TableDefinition table, IReadOnlyList<EncodedField> fields, FormatDescriptor d, out byte[]? body, out string? failure)
+    {
+        body = null;
+        failure = null;
+        IReadOnlyList<ColumnDescriptor> columns = table.Columns;
+        if (fields.Count != columns.Count)
+        {
+            failure = $"expected {columns.Count} fields, got {fields.Count}";
+            return false;
+        }
+        int c = table.MaxColumns;
+        if (c <= 0 || columns.Count != c)
+        {
+            failure = $"table has ColumnCount={columns.Count} and MaxColumns={c}: dropped-column row layout is not established";
+            return false;
+        }
+        int fixedEnd = table.KnownFixedEnd(c, d);
+        if (fixedEnd <= d.Row.FixedBase)
+        {
+            failure = "table has no non-Boolean fixed storage: ACE's 2-byte prefix padding on zero-fixed tables is not established";
+            return false;
+        }
+        int v = table.VariableColumns;
+        var variableSlots = v > 0 ? new (ColumnDescriptor Column, EncodedField Field)?[v] : null;
+        var seenPhysical = new bool[c];
+        long variableBytes = 0;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor col = columns[i];
+            EncodedField field = fields[i];
+            if (col.PhysicalNumber < 0 || col.PhysicalNumber >= c || seenPhysical[col.PhysicalNumber])
+            {
+                failure = $"column {col.Name} has invalid or duplicate physical number {col.PhysicalNumber}";
+                return false;
+            }
+            seenPhysical[col.PhysicalNumber] = true;
+            if (col.IsMaskBoolean)
+            {
+                if (field.IsNull)
+                {
+                    failure = $"Yes/No column {col.Name} cannot be Null";
+                    return false;
+                }
+                continue;
+            }
+            if (col.IsFixed)
+            {
+                if (field.IsNull)
+                {
+                    if (col.TypeCode == NativeTypes.Numeric && col.PhysicalNumber == c - 1)
+                    {
+                        failure = $"trailing Null fixed Decimal column {col.Name}: ACE trims C on some fixtures";
+                        return false;
+                    }
+                    continue;
+                }
+                int width = NativeTypes.FixedWidth(col.TypeCode) ?? col.Length;
+                if (field.Bytes is not { } bytes || bytes.Length != width)
+                {
+                    failure = $"fixed column {col.Name} expects {width} bytes, got {field.Bytes?.Length ?? 0}";
+                    return false;
+                }
+                if (d.Row.FixedBase + col.FixedOffset + width > fixedEnd)
+                {
+                    failure = $"fixed column {col.Name} extends past fixedEnd {fixedEnd}";
+                    return false;
+                }
+            }
+            else
+            {
+                if (variableSlots is null || col.VariableIndex < 0 || col.VariableIndex >= v || variableSlots[col.VariableIndex] is not null)
+                {
+                    failure = $"variable column {col.Name} has invalid or duplicate variable index {col.VariableIndex} of {v}";
+                    return false;
+                }
+                variableSlots[col.VariableIndex] = (col, field);
+                if (!field.IsNull)
+                {
+                    variableBytes += field.Bytes?.Length ?? 0;
+                }
+            }
+        }
+        int maskBytes = (c + 7) / 8;
+        long eod = fixedEnd + variableBytes;
+        long trailerBytes = v > 0 ? 4L + (2L * v) : 0L;
+        long total = eod + trailerBytes + maskBytes;
+        if (total > MaxOrdinaryRowBytes || eod > ushort.MaxValue)
+        {
+            failure = $"encoded row of {total} bytes exceeds the {MaxOrdinaryRowBytes}-byte ordinary row limit (overflow row)";
+            return false;
+        }
+        byte[] row = new byte[(int)total];
+        d.Row.ColumnCount.Write(row, (ulong)c);
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor col = columns[i];
+            EncodedField field = fields[i];
+            if (col.IsFixed && !col.IsMaskBoolean && !field.IsNull)
+            {
+                field.Bytes!.CopyTo(row, d.Row.FixedBase + col.FixedOffset);
+            }
+        }
+        if (v > 0 && variableSlots is not null)
+        {
+            Span<int> starts = stackalloc int[v];
+            int pos = fixedEnd;
+            for (int j = 0; j < v; j++)
+            {
+                if (variableSlots[j] is not { } entry)
+                {
+                    failure = $"missing variable column at index {j} of {v}";
+                    return false;
+                }
+                starts[j] = pos;
+                if (!entry.Field.IsNull && entry.Field.Bytes is { Length: > 0 } bytes)
+                {
+                    bytes.CopyTo(row, pos);
+                    pos += bytes.Length;
+                }
+            }
+            int trailerAt = pos;
+            WriteWord(row, trailerAt, pos); // EOD
+            trailerAt += 2;
+            for (int j = v - 1; j >= 0; j--)
+            {
+                WriteWord(row, trailerAt, starts[j]);
+                trailerAt += 2;
+            }
+            WriteWord(row, trailerAt, v);
+        }
+        int maskStart = (int)total - maskBytes;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor col = columns[i];
+            EncodedField field = fields[i];
+            bool bit = col.IsMaskBoolean ? field.Boolean : !field.IsNull;
+            if (bit)
+            {
+                row[maskStart + (col.PhysicalNumber / 8)] |= (byte)(1 << (col.PhysicalNumber % 8));
+            }
+        }
+        body = row;
+        return true;
+    }
+
+    private static void WriteWord(byte[] buffer, int offset, int value)
+    {
+        buffer[offset] = (byte)value;
+        buffer[offset + 1] = (byte)(value >> 8);
+    }
+}

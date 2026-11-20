@@ -12,6 +12,9 @@ public enum LockPurpose : byte
 
     /// <summary>The index leaf holding a row's entry of an index whose key the change replaces.</summary>
     IndexLeaf,
+
+    /// <summary>The table's TableDef first page whose row count, AutoNumber counter or index counters change.</summary>
+    TableDef,
 }
 
 /// <summary>One page of a lock footprint.</summary>
