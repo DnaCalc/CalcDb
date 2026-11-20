@@ -166,6 +166,10 @@ internal static unsafe partial class Native
     [LibraryImport("kernel32.dll")]
     public static partial int GetThreadLocale();
 
+    /// <summary>Nonzero on success.</summary>
+    [LibraryImport("kernel32.dll")]
+    public static partial int SetThreadLocale(int locale);
+
     [LibraryImport("kernel32.dll")]
     public static partial uint GetACP();
 

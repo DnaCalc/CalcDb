@@ -328,7 +328,10 @@ public sealed record ThreadEvent : CaptureEvent
     public required int ThreadId { get; init; }
 }
 
-/// <summary>A barrier step: <c>signal</c>, or <c>await</c> with how long it waited and whether it timed out.</summary>
+/// <summary>
+/// A barrier or control step: <c>signal</c>, <c>await</c> with how long it waited and whether it timed out, <c>pause</c>, or
+/// <c>setThreadLocale</c> (Name: the requested LCID, the call's result and the thread locale read back).
+/// </summary>
 public sealed record SyncEvent : CaptureEvent
 {
     public required string Kind { get; init; }

@@ -313,6 +313,10 @@ internal sealed unsafe partial class Run : IDisposable
                     Thread.Sleep(pause.Ms);
                     _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "pause", Name = pause.Ms.ToString(CultureInfo.InvariantCulture) + " ms", AtUtc = DateTimeOffset.UtcNow });
                     break;
+                case SetThreadLocale locale:
+                    int set = Native.SetThreadLocale(locale.Lcid);
+                    _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "setThreadLocale", Name = string.Create(CultureInfo.InvariantCulture, $"{locale.Lcid} result={set} now={Native.GetThreadLocale()}"), AtUtc = DateTimeOffset.UtcNow });
+                    break;
                 case TerminateSelf terminate:
                     TerminateNow(path, terminate.ExitCode);
                     break;

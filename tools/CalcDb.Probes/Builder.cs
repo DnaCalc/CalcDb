@@ -32,6 +32,9 @@ public sealed record Probe(string Card, string Name, string[] Refs, string Descr
     /// should await the others' last signal before it ends.
     /// </summary>
     public (string Name, Action<P> Program)[] Participants { get; init; } = [];
+
+    /// <summary>The LCID passed to GetIDsOfNames and Invoke (part of the question key); 1033 unless a probe asks a locale.</summary>
+    public int InvokeLcid { get; init; } = 1033;
 }
 
 /// <summary>Typed arguments. Every argument carries its VARIANT tag (T-EVID-01).</summary>
@@ -226,6 +229,9 @@ public sealed class P
 
     /// <summary>QueryInterface a bound object for each IID and record which succeed.</summary>
     public P QueryInterfaces(string target, params string[] iids) => Add(new QueryInterfaces(target, iids));
+
+    /// <summary>SetThreadLocale on the program's thread (R-EXPR-1 applicable locale); the result and the locale read back are recorded.</summary>
+    public P ThreadLocale(int lcid) => Add(new SetThreadLocale(lcid));
 
     /// <summary>Wait a fixed time, for example to let a killed participant's process settle.</summary>
     public P Pause(int ms) => Add(new Pause(ms));

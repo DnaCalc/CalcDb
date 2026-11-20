@@ -277,6 +277,7 @@ public static class PooledAdmission
                 Signal or Await => "signal and await order further participants",
                 WriteFileBytes => "writeFileBytes changes a file",
                 SetReadOnly => "setReadOnly changes a file's attributes",
+                SetThreadLocale => "setThreadLocale changes the worker thread's locale",
                 NativeOpen open when (open.Access & (GenericWrite | GenericAll)) != 0 => "a native open for writing",
                 Invoke invoke when invoke.Args.Concat(invoke.Named?.Select(n => n.Value) ?? []).Any(WritesOutput) => $"{invoke.Member} names an output file",
                 LoopUntil loop => Walk(loop.Body),

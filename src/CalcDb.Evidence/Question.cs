@@ -211,6 +211,7 @@ public enum DispatchKind
 [JsonDerivedType(typeof(NativeClose), "nativeClose")]
 [JsonDerivedType(typeof(NativeLockScan), "nativeLockScan")]
 [JsonDerivedType(typeof(Pause), "pause")]
+[JsonDerivedType(typeof(SetThreadLocale), "setThreadLocale")]
 [JsonDerivedType(typeof(TerminateSelf), "terminateSelf")]
 [JsonDerivedType(typeof(SetReadOnly), "setReadOnly")]
 [JsonDerivedType(typeof(WriteFileBytes), "writeFile")]
@@ -433,6 +434,16 @@ public sealed record NativeClose(string Handle) : Operation
 public sealed record Pause(int Ms) : Operation
 {
     internal override void Write(CanonicalWriter w) => w.Begin("pause").Int32("ms", Ms);
+}
+
+/// <summary>
+/// <c>SetThreadLocale</c> on the program's thread (R-EXPR-1 Branch A, applicable locale; task 5zh9). With the question's
+/// Invoke LCID it separates the three locales a conversion could take: the Invoke LCID, the thread locale and the user
+/// default. The worker records the call's result and the thread locale read back.
+/// </summary>
+public sealed record SetThreadLocale(int Lcid) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("setThreadLocale").Int32("lcid", Lcid);
 }
 
 /// <summary>
