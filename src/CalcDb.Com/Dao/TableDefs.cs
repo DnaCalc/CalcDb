@@ -245,11 +245,14 @@ internal sealed unsafe class TableDefObject : DaoObject
             LogicalIndex[] listed = [];
             if (!IsSystem)
             {
-                if (_owner.Database.Collation is not { } order)
+                LogicalIndex[]? sorted = _owner.Database.Collation is { } order
+                    ? ListedIndexes.Of(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor, order)
+                    : ListedIndexes.OfPlainNames(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor);
+                if (sorted is null)
                 {
-                    return CallResult.Fail(Failure.NotModelled("NotModelled.IndexNameOrder", $"the Indexes of '{_entry.Name}' in a sort order outside the General family (FMT1-INDEX-ENUM was asked under General)"));
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.IndexNameOrder", $"the Indexes of '{_entry.Name}' in a sort order outside the General family, with names whose order depends on it (FMT1-INDEX-ENUM was asked under General)"));
                 }
-                listed = ListedIndexes.Of(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor, order);
+                listed = sorted;
             }
             _indexes = new DefinitionCollection(DaoTypes.Indexes, "DAO.Indexes", _owner.Database, [.. listed.Select(i => i.Name)],
                 (c, i) => new IndexObject(c, d, listed[i]))
@@ -285,10 +288,38 @@ internal static class ListedIndexes
 
     public static LogicalIndex[] Of(IReadOnlyList<LogicalIndex> stored, IndexDescriptorRules rules, CalcDb.Values.Scalar.TextCollation order)
     {
-        LogicalIndex[] listed = [.. stored.Where(i => !(i.IndexType == rules.ForeignKeyType && i.RelatedTableType == PrimarySide))];
         // A stable sort: two names equal in the text order keep their stored order (not recorded).
-        return [.. listed.OrderBy(i => i.Name, Comparer<string>.Create((a, b) => order.Compare(a, b)))];
+        return [.. Visible(stored, rules).OrderBy(i => i.Name, Comparer<string>.Create((a, b) => order.Compare(a, b)))];
     }
+
+    /// <summary>
+    /// The listed indexes in a sort order CalcDb has no collation for (outside the General family): in name order when no
+    /// name pair's order can depend on the sort order, that is, when each adjacent pair first differs at two ASCII letters
+    /// or digits, compared case-insensitively (r-sort-3b/lu-unique-survivors, CollatingOrder 2057: IX_K, IX_KD, PK_T and
+    /// PK_UQ, UX_K in name order). Null when a pair first differs elsewhere (an underscore, punctuation, a non-ASCII unit).
+    /// </summary>
+    public static LogicalIndex[]? OfPlainNames(IReadOnlyList<LogicalIndex> stored, IndexDescriptorRules rules)
+    {
+        LogicalIndex[] listed = [.. Visible(stored, rules).OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)];
+        for (int k = 1; k < listed.Length; k++)
+        {
+            string a = listed[k - 1].Name, b = listed[k].Name;
+            int at = 0;
+            while (at < a.Length && at < b.Length && char.ToUpperInvariant(a[at]) == char.ToUpperInvariant(b[at]))
+            {
+                at++;
+            }
+            // One name a prefix of the other orders the same in every sort order; two equal names keep their stored order.
+            if (at < a.Length && at < b.Length && !(char.IsAsciiLetterOrDigit(a[at]) && char.IsAsciiLetterOrDigit(b[at])))
+            {
+                return null;
+            }
+        }
+        return listed;
+    }
+
+    private static IEnumerable<LogicalIndex> Visible(IReadOnlyList<LogicalIndex> stored, IndexDescriptorRules rules) =>
+        stored.Where(i => !(i.IndexType == rules.ForeignKeyType && i.RelatedTableType == PrimarySide));
 }
 
 /// <summary>
