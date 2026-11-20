@@ -1,3 +1,4 @@
+using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Expressions;
@@ -44,17 +45,78 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Method("FindLast", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Last, args[0]))
         .Method("FindNext", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Next, args[0]))
         .Method("FindPrevious", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Previous, args[0]))
-        .Method("Close", (self, args) => Live(self, r => r.Close()));
+        .Method("Close", (self, args) => Live(self, r => r.Close()))
+        .Get("Updatable", (self, args) => Live(self, r => Bool(r.Updatable)))
+        .Get("Bookmarkable", (self, args) => Live(self, r => Bool(r.Bookmarkable)))
+        .Get("LockEdits", (self, args) => Live(self, r => r.RecordsetType is 1 or 2 ? Bool(r._pessimistic) : r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Transactions", (self, args) => Live(self, r => Bool(r.RecordsetType == 1)))
+        .Get("Restartable", (self, args) => Live(self, r => r.RecordsetType == 2 ? Bool(true) : r.RecordsetType == 1 ? Bool(false) : CallResult.Fail(Failure.NotImplemented("Recordset.Restartable of a snapshot or forward-only recordset (not observed)"))))
+        .Get("EditMode", (self, args) => Live(self, r => Int16(0)))
+        .Get("Filter", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Text("") : CallResult.Fail(Failure.NotImplemented("Recordset.Filter of a snapshot or forward-only recordset (not observed)"))))
+        .Get("Sort", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Text("") : CallResult.Fail(Failure.NotImplemented("Recordset.Sort of a snapshot or forward-only recordset (not observed)"))))
+        .Get("CacheSize", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Int32(0) : CallResult.Fail(Failure.NotImplemented("Recordset.CacheSize of a snapshot or forward-only recordset (not observed)"))))
+        .Get("DateCreated", (self, args) => Live(self, r => r.RecordsetType == 1 ? CatalogDates.Date(r._entry.DateCreateBits) : r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("LastUpdated", (self, args) => Live(self, r => r.RecordsetType == 1 ? CatalogDates.Date(r._entry.DateUpdateBits) : r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("ValidationRule", (self, args) => Live(self, r => r.TableStored("ValidationRule")))
+        .Get("ValidationText", (self, args) => Live(self, r => r.TableStored("ValidationText")))
+        .Get("StillExecuting", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Connection", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("BatchCollisionCount", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("BatchCollisions", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("BatchSize", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("RecordStatus", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("UpdateOptions", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()));
 
     private FieldsObject? _fields;
+    private PropertiesObject? _properties;
+    private readonly CatalogEntry _entry;
+    private readonly int _options;
+    private readonly bool _pessimistic;
 
-    public RecordsetObject(DatabaseObject database, string tableName, IRecordCursor cursor, int recordsetType) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
+    /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
-        TableName = tableName;
+        _entry = entry;
+        TableName = entry.Name;
         Cursor = cursor;
         RecordsetType = recordsetType;
+        _options = options;
+        _pessimistic = pessimistic;
         database.AddRef(); // a recordset keeps its Database object alive
+    }
+
+    /// <summary>Updatable (R-CURSOR-1 CUR-PROV with the option matrix of r-fix-cursor-dao/option-flags-rw): <see cref="RecordsetOptions.Updatable"/>.</summary>
+    private bool Updatable => RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
+
+    private bool Bookmarkable => RecordsetOptions.Bookmarkable(RecordsetType, _options);
+
+    public override bool Invalid => Closed;
+
+    /// <summary>ValidationRule and ValidationText: the table's stored value (CAT-P), "" when none is stored (r-dao-1b/recordset-properties-*).</summary>
+    private CallResult TableStored(string name)
+    {
+        PropertyMap? stored = Database.StoredProperties(_entry, out string? failure);
+        if (failure is not null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Recordset member when the table's property blob cannot be read: " + failure));
+        }
+        StoredProperty? p = stored?.Properties.FirstOrDefault(p => p.Name == name);
+        return p is null ? Text("") : PropertyObject.StoredValue(p);
+    }
+
+    /// <summary>The 32 built-ins, then the table's own stored properties (r-dao-1b/recordset-properties-table and -dynaset: Description).</summary>
+    private CallResult PropertiesCollection()
+    {
+        PropertyMap? stored = Database.StoredProperties(_entry, out string? failure);
+        if (failure is not null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Recordset.Properties when the table's property blob cannot be read: " + failure));
+        }
+        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.Recordset, stored));
+        return Object(_properties);
     }
 
     public DatabaseObject Database { get; }
@@ -476,6 +538,10 @@ internal sealed unsafe class RecordsetObject : DaoObject
 
     private CallResult GetBookmark()
     {
+        if (!Bookmarkable && RecordsetType != 8)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Bookmark of a recordset opened with dbForwardOnly (its cursor is not modelled)"));
+        }
         byte[]? bookmark = Cursor.GetBookmark(out CursorFailure? failure);
         if (bookmark is null)
         {
@@ -652,16 +718,9 @@ internal sealed unsafe class FieldObject : DaoObject
     }
 
     /// <summary>DataTypeEnum: the native codes 1-12 and 15 are DAO's own numbers (dbBoolean … dbMemo, dbGUID).</summary>
-    private int? DaoType() => Column.TypeCode is >= 1 and <= 12 or 15 ? Column.TypeCode : null;
+    private int? DaoType() => ColumnFacts.DaoType(Column);
 
-    /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length.</summary>
-    private int? Size() => Column.TypeCode switch
-    {
-        NativeTypes.Text => Column.Length / 2,
-        NativeTypes.Ole or NativeTypes.Memo => 0,
-        >= 1 and <= 9 or 15 => Column.Length,
-        _ => null,
-    };
+    private int? Size() => ColumnFacts.Size(Column);
 
     private CallResult Value()
     {
@@ -813,4 +872,73 @@ internal sealed unsafe class ErrorObject : DaoObject
     }
 
     protected override OperationTable Table => Operations;
+}
+
+/// <summary>How OpenRecordset admits an Options value.</summary>
+internal enum OptionAdmission
+{
+    Admitted,
+
+    /// <summary>ACE refuses it with 3001 "Invalid argument." (no IErrorInfo).</summary>
+    InvalidArgument,
+
+    /// <summary>ACE accepts it with an effect CalcDb does not model yet.</summary>
+    NotModelled,
+}
+
+/// <summary>
+/// OpenRecordset Options (RecordsetOptionEnum) as ACE answers them on a local table, each bit asked alone and in the
+/// combinations 3, 12, 48 and 260, on all four types, read-only and read-write (r-cursor-1b/option-flags-by-type,
+/// r-fix-cursor-dao/option-flags-rw; R-CURSOR-1 CUR-PROV):
+/// <list type="bullet">
+/// <item>3001: dbRunAsync 1024, dbExecDirect 2048 and dbInconsistent|dbConsistent 48 on every type; dbSQLPassThrough 64
+/// on dynaset, snapshot and forward-only (accepted on table-type, read-only open);</item>
+/// <item>Updatable: False on a read-only open; table-type False with dbReadOnly 4; dynaset False with 4 or dbForwardOnly
+/// 256; snapshot and forward-only always False;</item>
+/// <item>Bookmarkable: forward-only False; dynaset and snapshot False with 256; table-type True;</item>
+/// <item>dbAppendOnly 8 empties a dynaset (EOF, RecordCount 0) and changes nothing on the other types: that empty
+/// population is not modelled yet.</item>
+/// </list>
+/// dbDenyWrite 1, dbDenyRead 2, dbInconsistent 16, dbConsistent 32, dbFailOnError 128 and dbSeeChanges 512 change none of
+/// the members those records read (Type, Updatable, Bookmarkable, EOF, RecordCount); their effects on other sessions and
+/// on writes are not modelled here (W-10, W-05).
+/// </summary>
+internal static class RecordsetOptions
+{
+    private const int DenyWrite = 1, DenyRead = 2, ReadOnly = 4, AppendOnly = 8, Inconsistent = 16, Consistent = 32, SqlPassThrough = 64,
+        FailOnError = 128, ForwardOnly = 256, SeeChanges = 512, RunAsync = 1024, ExecDirect = 2048;
+
+    private const int Known = DenyWrite | DenyRead | ReadOnly | AppendOnly | Inconsistent | Consistent | SqlPassThrough | FailOnError | ForwardOnly | SeeChanges | RunAsync | ExecDirect;
+
+    public static OptionAdmission Admit(int type, int options)
+    {
+        if ((options & ~Known) != 0)
+        {
+            return OptionAdmission.NotModelled;
+        }
+        if ((options & (RunAsync | ExecDirect)) != 0 || (options & (Inconsistent | Consistent)) == (Inconsistent | Consistent)
+            || (type != 1 && (options & SqlPassThrough) != 0))
+        {
+            return OptionAdmission.InvalidArgument;
+        }
+        if (type == 1 && (options & SqlPassThrough) != 0)
+        {
+            return OptionAdmission.NotModelled; // accepted read-only; not asked on a writable open
+        }
+        return type == 2 && (options & AppendOnly) != 0 ? OptionAdmission.NotModelled : OptionAdmission.Admitted;
+    }
+
+    public static bool Updatable(int type, int options, bool readOnlyDatabase) => !readOnlyDatabase && type switch
+    {
+        1 => (options & ReadOnly) == 0,
+        2 => (options & (ReadOnly | ForwardOnly)) == 0,
+        _ => false,
+    };
+
+    public static bool Bookmarkable(int type, int options) => type switch
+    {
+        1 => true,
+        8 => false,
+        _ => (options & ForwardOnly) == 0,
+    };
 }

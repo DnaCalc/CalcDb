@@ -48,6 +48,11 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// <summary>The failure every member gives instead of an answer (number and text), or null.</summary>
     public (int Number, string Text)? Denied { get; init; }
 
+    /// <summary>A named gap: when set, Count and Item give it as not implemented (a membership CalcDb cannot yet decide).</summary>
+    public string? Gap { get; init; }
+
+    public override bool Invalid => _database.Closed;
+
     public DatabaseObject Database => _database;
 
     protected override OperationTable Table => _shape.Operations;
@@ -59,8 +64,8 @@ internal sealed unsafe class DefinitionCollection : DaoObject
             if (!Shapes.TryGetValue(decl, out (nint, OperationTable) shape))
             {
                 shape = (DualEntries.Build(decl), new OperationTable(decl)
-                    .Get("Count", (self, args) => Live(self, c => Int16(c._names.Count)))
-                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => c.Item(index)); })
+                    .Get("Count", (self, args) => Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : Int16(c._names.Count)))
+                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : c.Item(index)); })
                     .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing)));
                 Shapes[decl] = shape;
             }
@@ -135,12 +140,13 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Attributes", (self, args) => Live(self, t => Int32(t._entry.Flags)))
         .Get("Connect", (self, args) => Live(self, t => Text("")))
         .Get("SourceTableName", (self, args) => Live(self, t => Text("")))
-        .Get("Updatable", (self, args) => Live(self, t => Bool(false)))
-        .Get("DateCreated", (self, args) => Live(self, t => Date(t._entry.DateCreateBits)))
-        .Get("LastUpdated", (self, args) => Live(self, t => Date(t._entry.DateUpdateBits)))
+        .Get("Updatable", (self, args) => Live(self, t => Bool(!t._owner.Database.ReadOnly)))
+        .Get("DateCreated", (self, args) => Live(self, t => CatalogDates.Date(t._entry.DateCreateBits)))
+        .Get("LastUpdated", (self, args) => Live(self, t => CatalogDates.Date(t._entry.DateUpdateBits)))
         .Get("RecordCount", (self, args) => Live(self, t => t.Definition is { } d ? Int32((int)d.RowCount) : t.DefinitionFailure()))
-        .Get("ValidationRule", (self, args) => Live(self, t => t.NoProperties()))
-        .Get("ValidationText", (self, args) => Live(self, t => t.NoProperties()))
+        .Get("ValidationRule", (self, args) => Live(self, t => t.StoredText("ValidationRule")))
+        .Get("ValidationText", (self, args) => Live(self, t => t.StoredText("ValidationText")))
+        .Get("Properties", (self, args) => Live(self, t => t.PropertiesCollection()))
         .Get("ConflictTable", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
         .Get("ReplicaFilter", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
         .Get("Fields", (self, args) => Live(self, t => t.FieldsCollection()))
@@ -150,6 +156,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     private readonly CatalogEntry _entry;
     private DefinitionCollection? _fields;
     private DefinitionCollection? _indexes;
+    private PropertiesObject? _properties;
 
     public TableDefObject(DefinitionCollection owner, CatalogEntry entry) : base(Decl, Vtable, owner.Engine, "DAO.TableDef")
     {
@@ -157,9 +164,18 @@ internal sealed unsafe class TableDefObject : DaoObject
         _entry = entry;
         owner.AddRef();
         Definition = owner.Database.Definition(entry, out _definitionFailure);
+        Blob = owner.Database.Blob(entry, out _blobFailure);
     }
 
     private readonly string? _definitionFailure;
+    private readonly string? _blobFailure;
+
+    /// <summary>The table's MR2 property blob (CAT-P): its own map and one map per column with stored properties.</summary>
+    public PropertyBlob? Blob { get; }
+
+    public string Name => _entry.Name;
+
+    public override bool Invalid => _owner.Database.Closed;
 
     public TableDefinition? Definition { get; }
 
@@ -175,12 +191,29 @@ internal sealed unsafe class TableDefObject : DaoObject
 
     private CallResult DefinitionFailure() => CallResult.Fail(Failure.NotImplemented("TableDef member when the TableDef cannot be read: " + _definitionFailure));
 
-    private static CallResult Date(ulong? bits) => bits is ulong b
-        ? CallResult.Of(Values.OwnedVariant.FromDate(BitConverter.Int64BitsToDouble((long)b)))
-        : CallResult.Fail(Failure.NotImplemented("TableDef date of a catalog row without that field"));
+    private CallResult BlobFailure() => CallResult.Fail(Failure.NotImplemented("TableDef member when the property blob cannot be read: " + _blobFailure));
 
-    /// <summary>ValidationRule and ValidationText are "" for a table without stored properties; reading them from a property blob is CAT-P (W-04/row-catalog-algorithms).</summary>
-    private CallResult NoProperties() => _entry.Properties is null ? Text("") : CallResult.Fail(Failure.NotImplemented("TableDef validation properties from an MR2 property blob (CAT-P)"));
+    /// <summary>ValidationRule and ValidationText: the stored value of the table's own map (CAT-P), "" when none is stored.</summary>
+    private CallResult StoredText(string name)
+    {
+        if (_blobFailure is not null)
+        {
+            return BlobFailure();
+        }
+        StoredProperty? stored = Blob?.ObjectMap?.Properties.FirstOrDefault(p => p.Name == name);
+        return stored is null ? Text("") : PropertyObject.StoredValue(stored);
+    }
+
+    /// <summary>The 12 built-ins, then the table's own stored properties (r-dao-1b/tabledef-properties-enumerated: Description).</summary>
+    private CallResult PropertiesCollection()
+    {
+        if (_blobFailure is not null)
+        {
+            return BlobFailure();
+        }
+        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDef, Blob?.ObjectMap));
+        return Object(_properties);
+    }
 
     private CallResult FieldsCollection()
     {
@@ -190,7 +223,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         IReadOnlyList<ColumnDescriptor> columns = IsSystem ? [] : d.Columns;
         _fields ??= new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, [.. columns.Select(c => c.Name)],
-            (c, i) => new DefinitionFieldObject(c, columns[i], null, i));
+            (c, i) => new DefinitionFieldObject(c, this, columns[i], null, i));
         return Object(_fields);
     }
 
@@ -212,6 +245,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     {
         _fields?.Release();
         _indexes?.Release();
+        _properties?.Release();
         _owner.Released(this);
         _owner.Release();
     }
@@ -235,13 +269,17 @@ internal sealed unsafe class IndexObject : DaoObject
         .Get("Required", (self, args) => Live(self, x => Bool(x._physical.Required(x.Rules))))
         .Get("Clustered", (self, args) => Live(self, x => Bool(false)))
         .Get("DistinctCount", (self, args) => Live(self, x => Int32((int)x._physical.UniqueEntryCount)))
-        .Get("Fields", (self, args) => Live(self, x => x.FieldsCollection()));
+        .Get("Fields", (self, args) => Live(self, x => x.FieldsCollection()))
+        .Get("Properties", (self, args) => Live(self, x => Object(x._properties ??= new PropertiesObject(x, BuiltInProperties.Index))));
 
     private readonly DefinitionCollection _owner;
     private readonly TableDefinition _table;
     private readonly LogicalIndex _logical;
     private readonly PhysicalIndex _physical;
     private DefinitionCollection? _fields;
+    private PropertiesObject? _properties;
+
+    public override bool Invalid => _owner.Database.Closed;
 
     public IndexObject(DefinitionCollection owner, TableDefinition table, LogicalIndex logical) : base(Decl, Vtable, owner.Engine, "DAO.Index")
     {
@@ -266,13 +304,14 @@ internal sealed unsafe class IndexObject : DaoObject
     {
         ColumnDescriptor[] columns = [.. _physical.Columns.Select(ic => _table.Columns.First(c => c.PhysicalNumber == ic.PhysicalNumber))];
         _fields ??= new DefinitionCollection(DaoTypes.IndexFields, "DAO.IndexFields", _owner.Database, [.. columns.Select(c => c.Name)],
-            (c, i) => new DefinitionFieldObject(c, columns[i], _physical.Columns[i], i));
+            (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i));
         return Object(_fields);
     }
 
     protected override void OnFinalRelease()
     {
         _fields?.Release();
+        _properties?.Release();
         _owner.Released(this);
         _owner.Release();
     }
@@ -281,7 +320,13 @@ internal sealed unsafe class IndexObject : DaoObject
 /// <summary>
 /// A Field of a definition (a TableDef's or an Index's Fields; Field3): Name, Type, Size and OrdinalPosition from the
 /// column; an index field's Attributes is dbDescending (1) for a descending column, else 0 (r-cat-1b/index-members-ddl).
-/// A TableDef field's Attributes (fixed, variable, AutoNumber, updatable bits) is not yet derived.
+/// A TableDef field (r-dao-1b/field-properties-enumerated, read-only open) also answers: its stored column properties
+/// (CAT-P: DefaultValue, ValidationRule, ValidationText as "" and Required, AllowZeroLength as False when none is
+/// stored), SourceTable and SourceField (its own table and name), AppendOnly False, Expression "", Scale 0 outside
+/// Decimal, CollatingOrder the database's; Value, ValidateOnSet and ForeignName 3219, FieldSize 3267, OriginalValue and
+/// VisibleValue 3251 (members of a recordset field only). Not yet: the TableDef field's Attributes bits; Precision
+/// (1033 for Long and Text in that record, a value no probe has separated from the collating order) and DataUpdatable
+/// on a writable open (False read-only).
 /// </summary>
 internal sealed unsafe class DefinitionFieldObject : DaoObject
 {
@@ -289,35 +334,102 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, f => Text(f._column.Name)))
-        .Get("Type", (self, args) => Live(self, f => f._column.TypeCode is >= 1 and <= 12 or 15 ? Int16(f._column.TypeCode) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {f._column.TypeCode}"))))
+        .Get("Type", (self, args) => Live(self, f => ColumnFacts.DaoType(f._column) is int t ? Int16(t) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {f._column.TypeCode}"))))
+        .Get("Size", (self, args) => Live(self, f => ColumnFacts.Size(f._column) is int s ? Int32(s) : CallResult.Fail(Failure.NotImplemented($"Field.Size of native type {f._column.TypeCode}"))))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
-        .Get("Attributes", (self, args) => Live(self, f => f._indexColumn is { } ic ? Int32(ic.Ascending ? 0 : 1) : CallResult.Fail(Failure.NotImplemented("TableDef Field.Attributes"))));
+        .Get("Attributes", (self, args) => Live(self, f => f._indexColumn is { } ic ? Int32(ic.Ascending ? 0 : 1) : CallResult.Fail(Failure.NotImplemented("TableDef Field.Attributes"))))
+        .Get("SourceTable", (self, args) => Live(self, f => f.OfTable(t => Text(t.Name))))
+        .Get("SourceField", (self, args) => Live(self, f => f.OfTable(t => Text(f._column.Name))))
+        .Get("CollatingOrder", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.Run(DaoTypes.Database.Member("CollatingOrder", InvokeKind.PropertyGet), []))))
+        .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
+        .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
+        .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
+        .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
+        .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
+        .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
+        .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
+        .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.TypeCode == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a Decimal TableDef field")) : Int16(0))))
+        .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
+        .Get("Value", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true))))
+        .Get("ValidateOnSet", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation))))
+        .Get("ForeignName", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation))))
+        .Get("FieldSize", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3267, DaoErrors.RecordsetFieldOnly))))
+        .Get("OriginalValue", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3251, DaoErrors.NotSupportedForType))))
+        .Get("VisibleValue", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3251, DaoErrors.NotSupportedForType))))
+        .Get("Properties", (self, args) => Live(self, f => f.OfTable(t => f.PropertiesCollection(t))));
 
     private readonly DefinitionCollection _owner;
+    private readonly TableDefObject? _table;
     private readonly ColumnDescriptor _column;
     private readonly IndexColumn? _indexColumn;
     private readonly int _ordinal;
+    private PropertiesObject? _properties;
 
-    public DefinitionFieldObject(DefinitionCollection owner, ColumnDescriptor column, IndexColumn? indexColumn, int ordinal) : base(Decl, Vtable, owner.Engine, "DAO.Field")
+    /// <param name="table">The TableDef of a TableDef field; null for an index field, whose further members are not yet built.</param>
+    public DefinitionFieldObject(DefinitionCollection owner, TableDefObject? table, ColumnDescriptor column, IndexColumn? indexColumn, int ordinal) : base(Decl, Vtable, owner.Engine, "DAO.Field")
     {
         _owner = owner;
+        _table = table;
         _column = column;
         _indexColumn = indexColumn;
         _ordinal = ordinal;
         owner.AddRef();
+        table?.AddRef();
     }
+
+    public override bool Invalid => _owner.Database.Closed;
 
     protected override OperationTable Table => Operations;
 
     private static CallResult Live(ComObject self, Func<DefinitionFieldObject, CallResult> op)
     {
         var f = (DefinitionFieldObject)self;
-        return f._owner.Database.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+    }
+
+    private CallResult OfTable(Func<TableDefObject, CallResult> op) =>
+        _table is { } t ? op(t) : CallResult.Fail(Failure.NotImplemented("this member of an index field"));
+
+    /// <summary>The column's stored map in the table's blob (CAT-P), by the column's exact name.</summary>
+    private PropertyMap? ColumnMap(TableDefObject t) => t.Blob?.Map(PropertySectionKind.ColumnValues, _column.Name);
+
+    private CallResult Stored(string name, CallResult unset) => OfTable(t =>
+    {
+        StoredProperty? stored = ColumnMap(t)?.Properties.FirstOrDefault(p => p.Name == name);
+        return stored is null ? unset : PropertyObject.StoredValue(stored);
+    });
+
+    /// <summary>The 24 built-ins, then the column's other stored properties (r-dao-1b/field-properties-enumerated: Parent.Name lists Description, 25).</summary>
+    private CallResult PropertiesCollection(TableDefObject t)
+    {
+        if (ColumnFacts.DaoType(_column) is not int type)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.Properties of native type {_column.TypeCode}"));
+        }
+        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), ColumnMap(t)));
+        return Object(_properties);
     }
 
     protected override void OnFinalRelease()
     {
+        _properties?.Release();
+        _table?.Release();
         _owner.Released(this);
         _owner.Release();
     }
+}
+
+/// <summary>The DAO Type and Size of a column, shared by recordset and definition fields (R-FMT-1 FMT1-FAMILIES).</summary>
+internal static class ColumnFacts
+{
+    public static int? DaoType(ColumnDescriptor column) => column.TypeCode is >= 1 and <= 12 or 15 ? column.TypeCode : null;
+
+    /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length.</summary>
+    public static int? Size(ColumnDescriptor column) => column.TypeCode switch
+    {
+        NativeTypes.Text => column.Length / 2,
+        NativeTypes.Ole or NativeTypes.Memo => 0,
+        >= 1 and <= 9 or 15 => column.Length,
+        _ => null,
+    };
 }

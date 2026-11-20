@@ -23,7 +23,7 @@ public sealed unsafe class FactoryHostCoreTests
     private static readonly Guid OwnClsid = new("D44A3A3E-4FD9-4426-A7B7-8351E8421EBF");
     private static readonly Guid CompatClsid = new("CD7791B9-43FD-42C5-AE42-8DD2811F0419");
     private const int VersionDispId = 1610809344;
-    private const int IniPathDispId = 1610809345;
+    private const int FreeLocksDispId = 1610809360;
 
     [Fact]
     public void The_published_module_serves_its_classes_through_the_real_caller_route()
@@ -118,14 +118,13 @@ public sealed unsafe class FactoryHostCoreTests
         // Named failures: an unknown name, and a declared member not implemented yet (never a native match).
         Assert.Equal(HResults.DISP_E_UNKNOWNNAME, GetIds(engine, "Versoin", out int unknownId));
         Assert.Equal(-1, unknownId);
-        Assert.Null(InvokeGetText(engine, IniPathDispId, out ExcepInfo info));
+        Assert.Null(InvokeGetText(engine, FreeLocksDispId, out ExcepInfo info, flags: 1));
         Assert.Equal(HResults.E_NOTIMPL, info.Scode);
         Assert.Equal("CalcDb", Marshal.PtrToStringBSTR(info.Source));
-        Assert.Contains("_DBEngine.IniPath", Marshal.PtrToStringBSTR(info.Description), StringComparison.Ordinal);
+        Assert.Contains("_DBEngine.FreeLocks", Marshal.PtrToStringBSTR(info.Description), StringComparison.Ordinal);
         FreeExcepInfo(info);
-        nint systemDb = 1234;
-        Assert.Equal(HResults.E_NOTIMPL, ((delegate* unmanaged<nint, nint*, int>)Vtable(dual)[248 / 8])(dual, &systemDb));
-        Assert.Equal(0, systemDb); // the output is cleared on failure
+        // FreeLocks through its vtable slot (offset 192): every DBEngine getter is implemented now (task v8qw).
+        Assert.Equal(HResults.E_NOTIMPL, ((delegate* unmanaged<nint, int>)Vtable(dual)[192 / 8])(dual));
         Assert.Equal(0, GetErrorInfo(0, out nint errorInfo));
         Assert.NotEqual(0, errorInfo); // the vtable channel carries IErrorInfo
         Release(errorInfo);
@@ -292,9 +291,9 @@ public sealed unsafe class FactoryHostCoreTests
         // The runtime maps CalcDb's named not-implemented outcome (E_NOTIMPL) to NotImplementedException, not to
         // COMException (ACT-PROJECT: a projection fact of this lane, no ACE outcome). It reads the IErrorInfo only
         // because the object answers ISupportErrorInfo, as every ACE DAO object does (r-act-1-meta support-dao-objects).
-        var notImplemented = Assert.Throws<NotImplementedException>(() => managed.IniPath);
+        var notImplemented = Assert.Throws<NotImplementedException>(() => managed.FreeLocks());
         Assert.Equal(HResults.E_NOTIMPL, notImplemented.HResult);
-        Assert.Contains("_DBEngine.IniPath", notImplemented.Message, StringComparison.Ordinal);
+        Assert.Contains("_DBEngine.FreeLocks", notImplemented.Message, StringComparison.Ordinal);
         Assert.Equal("CalcDb", notImplemented.Source);
         var absent = Assert.Throws<COMException>(() => managed.OpenDatabase(Path.Combine(Path.GetTempPath(), "calcdb-absent", "absent.accdb")));
         Assert.Equal(unchecked((int)0x800A0BE4), absent.HResult); // 3044 (absent path, as ACE: qualified ENGINE-IDENTITY), through the vtable channel

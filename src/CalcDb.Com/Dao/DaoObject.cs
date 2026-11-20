@@ -18,6 +18,18 @@ internal static class DaoErrors
     /// <summary>3219 (r-cursor-1/pos-moves-forwardonly).</summary>
     public const string InvalidOperation = "Invalid operation.";
 
+    /// <summary>3267 (r-dao-1b/field-properties-enumerated: FieldSize of a TableDef field).</summary>
+    public const string RecordsetFieldOnly = "Property can be set only when the Field is part of a Recordset object's Fields collection.";
+
+    /// <summary>3270 (R-DAO-1 DAO-COLL: a missing name in Properties.Item; r-dao-1-err-1/prop-enumerate-and-context).</summary>
+    public const string PropertyNotFound = "Property not found.";
+
+    /// <summary>3271 (r-dao-1-err-1/boot-createworkspace: Workspaces.Append of a Workspace named "").</summary>
+    public const string InvalidPropertyValue = "Invalid property value.";
+
+    /// <summary>3358 (R-DAO-1 DAO-META: Container and Document Permissions before a put; r-dao-1b/containers-members-each).</summary>
+    public const string NoWorkgroupFile = "Cannot open the Microsoft Access database engine workgroup information file.";
+
     /// <summary>3265 (R-DAO-1 DAO-COLL).</summary>
     public const string ItemNotFound = "Item not found in this collection.";
 
@@ -79,6 +91,9 @@ internal abstract unsafe class DaoObject : DispatchObject
     public string Source { get; }
 
     protected abstract OperationTable Table { get; }
+
+    /// <summary>True when every member answers 3420 (a closed Database or Recordset, or a child of one: R-ACT-1 ACT-RETAIN).</summary>
+    public virtual bool Invalid => false;
 
     protected override Operation? Find(MemberDecl member) => Table.Find(member);
 

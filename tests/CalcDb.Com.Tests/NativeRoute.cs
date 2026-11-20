@@ -153,15 +153,15 @@ internal static unsafe partial class NativeRoute
         return hr;
     }
 
-    /// <summary>A property get through IDispatch::Invoke; the text, or null with the EXCEPINFO of a failure.</summary>
-    public static string? InvokeGetText(nint dispatch, int dispId, out Com.ExcepInfo info)
+    /// <summary>A property get (or, with <paramref name="flags"/> 1, a method call) through IDispatch::Invoke; the text, or null with the EXCEPINFO of a failure.</summary>
+    public static string? InvokeGetText(nint dispatch, int dispId, out Com.ExcepInfo info, ushort flags = 2)
     {
         Guid none = Guid.Empty;
         Com.DispParams parameters = default;
         Values.NativeVariant result = default;
         Com.ExcepInfo exception = default;
         uint argError = 0;
-        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, Com.DispParams*, Values.NativeVariant*, Com.ExcepInfo*, uint*, int>)Vtable(dispatch)[6])(dispatch, dispId, &none, 0x0409, 2, &parameters, &result, &exception, &argError);
+        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, Com.DispParams*, Values.NativeVariant*, Com.ExcepInfo*, uint*, int>)Vtable(dispatch)[6])(dispatch, dispId, &none, 0x0409, flags, &parameters, &result, &exception, &argError);
         info = exception;
         if (hr == Com.HResults.DISP_E_EXCEPTION)
         {

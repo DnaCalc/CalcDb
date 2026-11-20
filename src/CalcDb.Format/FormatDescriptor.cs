@@ -179,7 +179,12 @@ public sealed record FormatDescriptor
             TablesContainerName = "Tables",
             LocalTableType = 1,
             RequiredFields = [("Id", NativeTypes.Long), ("ParentId", NativeTypes.Long), ("Name", NativeTypes.Text), ("Type", NativeTypes.Integer), ("Flags", NativeTypes.Long)],
-            Evidence = "S-JACK-CATDB-PIN; II-06 §§1-2",
+            QueryObjectType = 5,
+            QueryTableName = "MSysQueries",
+            QueryFields = [("ObjectId", NativeTypes.Long), ("Attribute", NativeTypes.Byte), ("Expression", NativeTypes.Memo), ("Flag", NativeTypes.Integer), ("LvExtra", NativeTypes.Long), ("Name1", NativeTypes.Text), ("Name2", NativeTypes.Text), ("Order", NativeTypes.Binary)],
+            RelationshipTableName = "MSysRelationships",
+            RelationshipFields = [("szRelationship", NativeTypes.Text), ("szObject", NativeTypes.Text), ("szColumn", NativeTypes.Text), ("szReferencedObject", NativeTypes.Text), ("szReferencedColumn", NativeTypes.Text), ("grbit", NativeTypes.Long), ("icolumn", NativeTypes.Long), ("ccolumn", NativeTypes.Long)],
+            Evidence = "S-JACK-CATDB-PIN; II-06 §§1-3, §8",
         },
     };
 }
@@ -380,6 +385,23 @@ public sealed record CatalogRules
     public required short LocalTableType { get; init; }
 
     public required IReadOnlyList<(string Name, byte Type)> RequiredFields { get; init; }
+
+    /// <summary>Object type 5: a saved query, whose role rows are in <see cref="QueryTableName"/> by ObjectId (II-06 §8).</summary>
+    public required short QueryObjectType { get; init; }
+
+    public required string QueryTableName { get; init; }
+
+    /// <summary>
+    /// The query role-row projection (II-06 §8 table), bound by name and native type. The types are the ones the
+    /// retained ACE files declare (Attribute Byte, Expression Memo, Flag Integer, LvExtra Long, Name1 and Name2 Text,
+    /// Order Binary), confirmed on the r-cat-1 query fixture by <c>SavedQueryTests</c>.
+    /// </summary>
+    public required IReadOnlyList<(string Name, byte Type)> QueryFields { get; init; }
+
+    public required string RelationshipTableName { get; init; }
+
+    /// <summary>The relationship projection (II-06 §3): one row per relation column, bound by name and native type.</summary>
+    public required IReadOnlyList<(string Name, byte Type)> RelationshipFields { get; init; }
 
     public required string Evidence { get; init; }
 }

@@ -194,7 +194,7 @@ public static class CatalogBootstrap
         return new CatalogSnapshot(objectTable, entries, containers.Length == 1 ? containers[0].Id : null, anomalies);
     }
 
-    private static ReadOnlyMemory<byte>? Page(PageCache cache, uint page)
+    internal static ReadOnlyMemory<byte>? Page(PageCache cache, uint page)
     {
         using PagePin? pin = cache.Pin(page).Pin;
         return pin?.Bytes.ToArray();

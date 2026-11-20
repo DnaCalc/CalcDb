@@ -26,6 +26,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("CollatingOrder", (self, args) => Live(self, d => d.CollatingOrder()))
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
+        .Get("QueryDefs", (self, args) => Live(self, d => d.QueryDefsCollection()))
+        .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
+        .Get("Relations", (self, args) => Live(self, d => d.RelationsCollection()))
+        .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()))
+        .Get("Updatable", (self, args) => Live(self, d => Bool(!d.ReadOnly)))
+        .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
+        .Get("Connect", (self, args) => Live(self, d => Text("")))
+        .Get("QueryTimeout", (self, args) => Live(self, d => Int16(60)))
+        .Get("RecordsAffected", (self, args) => Live(self, d => Int32(0)))
+        .Get("ReplicaID", (self, args) => Live(self, d => NullBstr()))
+        .Get("DesignMasterID", (self, args) => Live(self, d => NullBstr()))
+        .Get("Connection", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType)))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
 
     /// <summary>The databases open on this thread, whose caches' live work the cost counters add (W-01/dao-cost).</summary>
@@ -37,14 +49,22 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private WindowsFile? _file;
     private LockFile? _lockFile;
     private DefinitionCollection? _tableDefs;
+    private DefinitionCollection? _queryDefs;
+    private DefinitionCollection? _containers;
+    private DefinitionCollection? _relations;
+    private PropertiesObject? _properties;
+    private QueryCatalog? _queries;
+    private string? _queriesFailure;
 
-    private const int HiddenFromTableDefs = 0x0003_0000;
+    /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
+    public const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
         Name = name;
+        ReadOnly = readOnly;
         _file = file;
         _lockFile = lockFile;
         Cache = cache;
@@ -132,6 +152,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     public bool Closed => _file is null;
 
+    public override bool Invalid => Closed;
+
+    /// <summary>
+    /// Whether the session was opened read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE: ReadOnly counts
+    /// only when Options is given). CalcDb reads either way (W-10/native-readers-only); writes are W-05.
+    /// </summary>
+    public bool ReadOnly { get; }
+
+    public WorkspaceObject Workspace => _workspace;
+
     protected override OperationTable Table => Operations;
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
@@ -148,7 +178,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// RO-NATIVE, RO-PAIR); an exclusive open has no lock file (R-LOCK-1 EX-PROBE). Not yet: writable sessions (W-05),
     /// reading beside a writer (W-11), encrypted files (W-L1) and other format profiles.
     /// </summary>
-    public static CallResult Open(WorkspaceObject workspace, string name, bool exclusive, out DatabaseObject? database)
+    public static CallResult Open(WorkspaceObject workspace, string name, bool exclusive, bool readOnly, out DatabaseObject? database)
     {
         database = null;
         string full;
@@ -206,7 +236,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
             }
         }
-        database = new DatabaseObject(workspace, full, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
+        database = new DatabaseObject(workspace, full, readOnly, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
         return CallResult.Nothing;
     }
 
@@ -226,9 +256,20 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with a null source"));
         }
         int? type = Args.Int32(args.Length > 1 ? args[1] : 0, omitted: null);
-        if ((args.Length > 2 && args[2] != 0) || (args.Length > 3 && args[3] != 0))
+        int? options = Args.Int32(args.Length > 2 ? args[2] : 0, omitted: 0);
+        int? lockEdit = Args.Int32(args.Length > 3 ? args[3] : 0, omitted: null);
+        if (options is null)
         {
-            return CallResult.Fail(Failure.NotImplemented("OpenRecordset with Options or LockEdit"));
+            return CallResult.Fail(Failure.NotImplemented("OpenRecordset with an Options argument that is not numeric"));
+        }
+        if (lockEdit is not (null or 2 or 3))
+        {
+            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset with LockEdit {lockEdit?.ToString() ?? "not numeric"}"));
+        }
+        if (type is null && options != 0)
+        {
+            // CUR-PROV: with the Type cell omitted, option 4 opens a writable table-type recordset (an ACE quirk, open).
+            return CallResult.Fail(Failure.NotImplemented("OpenRecordset with Options and no Type (CUR-PROV's omitted-Type rule)"));
         }
         CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
         if (entry is null)
@@ -252,6 +293,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // A local table opens table-type when no type is given (dbOpenTable 1); dynaset 2, snapshot 4 and forward-only 8
         // populate through the occurrence store (CUR-POP).
         int recordsetType = type ?? 1;
+        switch (RecordsetOptions.Admit(recordsetType, options.Value))
+        {
+            case OptionAdmission.InvalidArgument:
+                return Fail(3001, DaoErrors.InvalidArgument);
+            case OptionAdmission.NotModelled:
+                return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {options} (an accepted option whose effect is not modelled: RecordsetOptions)"));
+        }
         TraversalFailure? traversal;
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
@@ -260,7 +308,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
         }
-        var recordset = new RecordsetObject(this, entry.Name, cursor, recordsetType);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();
@@ -288,6 +336,131 @@ internal sealed unsafe class DatabaseObject : DaoObject
             _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, [.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), holdsDatabase: false);
         }
         return _tableDefs;
+    }
+
+    /// <summary>The saved queries (II-06 §8), read once per Database at first use; null with the reason when they cannot be.</summary>
+    public QueryCatalog? Queries
+    {
+        get
+        {
+            if (_queries is null && _queriesFailure is null)
+            {
+                _queries = QueryCatalog.Read(Cache, Format, Catalog, PageCount, out _queriesFailure);
+            }
+            return _queries;
+        }
+    }
+
+    /// <summary>
+    /// QueryDefs: the saved queries in name order, case-insensitively, as ACE lists them (r-cat-1/querydefs: QAlias,
+    /// QAppend, … QUpdate). One collection object per Database.
+    /// </summary>
+    private CallResult QueryDefsCollection()
+    {
+        if (_queryDefs is null)
+        {
+            if (Queries is not { } catalog)
+            {
+                return CallResult.Fail(Failure.NotImplemented("QueryDefs when MSysQueries cannot be read: " + _queriesFailure));
+            }
+            SavedQuery[] queries = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
+            _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, [.. queries.Select(q => q.Name)], (c, i) => new QueryDefObject(c, queries[i]), holdsDatabase: false);
+        }
+        return Object(_queryDefs);
+    }
+
+    /// <summary>Containers: the catalog's container rows under the top-level parent, in name order (DAO-META: Databases, Relationships, Tables).</summary>
+    private DefinitionCollection ContainersCollection()
+    {
+        if (_containers is null)
+        {
+            CatalogEntry[] containers = [.. Catalog.Entries.Where(e => e.ParentId == Format.Catalog.TopLevelParent).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+            _containers = new DefinitionCollection(DaoTypes.Containers, "DAO.Containers", this, [.. containers.Select(c => c.Name)], (c, i) => new ContainerObject(c, containers[i]), holdsDatabase: false);
+        }
+        return _containers;
+    }
+
+    /// <summary>Relations: MSysRelationships in name order (r-dao-1b/relation-members-each: FK_Grand, RelMain). One collection per Database.</summary>
+    private CallResult RelationsCollection()
+    {
+        if (_relations is null)
+        {
+            IReadOnlyList<Relationship>? read = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out string? failure);
+            if (read is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented("Relations when MSysRelationships cannot be read: " + failure));
+            }
+            Relationship[] relations = [.. read.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)];
+            _relations = new DefinitionCollection(DaoTypes.Relations, "DAO.Relations", this, [.. relations.Select(r => r.Name)], (c, i) => new RelationObject(c, relations[i]), holdsDatabase: false);
+        }
+        return Object(_relations);
+    }
+
+    /// <summary>A catalog object's MR2 property blob (CAT-P), or null when it stores none; a blob that does not frame is a failure.</summary>
+    public PropertyBlob? Blob(CatalogEntry entry, out string? failure)
+    {
+        failure = null;
+        return entry.Properties is { Length: > 0 } raw ? PropertyBlob.Read(raw, out failure) : null;
+    }
+
+    /// <summary>The object's own stored map (kind 0000), or null.</summary>
+    public PropertyMap? StoredProperties(CatalogEntry entry, out string? failure) => Blob(entry, out failure)?.ObjectMap;
+
+    /// <summary>
+    /// The MSysDb row: the Databases container's document whose blob holds the Database's own stored properties
+    /// (r-dao-1b rich fixture: UPText … UPMemo on MSysDb, type 2, under Databases).
+    /// </summary>
+    private CatalogEntry? DatabaseDocument()
+    {
+        CatalogEntry? container = Catalog.Entries.FirstOrDefault(e => e.ParentId == Format.Catalog.TopLevelParent && e.Name == "Databases");
+        return container is null ? null : Catalog.Entries.FirstOrDefault(e => e.ParentId == container.Id && e.Name == "MSysDb");
+    }
+
+    /// <summary>The 11 built-ins and the MSysDb stored properties (R-DAO-1 DAO-PROP; r-dao-1b/db-properties-enumerated-accdb).</summary>
+    private CallResult PropertiesCollection()
+    {
+        if (_properties is null)
+        {
+            PropertyMap? stored = null;
+            if (DatabaseDocument() is { } document)
+            {
+                stored = StoredProperties(document, out string? failure);
+                if (failure is not null)
+                {
+                    return CallResult.Fail(Failure.NotImplemented("Database.Properties when the MSysDb property blob cannot be read: " + failure));
+                }
+            }
+            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.Database, stored));
+        }
+        return Object(_properties);
+    }
+
+    /// <summary>ReplicaID and DesignMasterID of an unreplicated database: VT_BSTR with a null pointer (r-dao-1b/db-properties-enumerated-accdb and -mdb).</summary>
+    private static CallResult NullBstr() => CallResult.Of(Values.OwnedVariant.NullBstr());
+
+    /// <summary>
+    /// Whether a saved query is a row-returning single-table query (SELECT or crosstab) over a table that stores
+    /// properties of its own: ACE then lists the table's properties among the query's with Inherited True (R-PRESERVE-1
+    /// PRES-QUERY-PROPS; r-dao-1b/querydef-properties-enumerated: QCross over Parent shows Description), not modelled yet.
+    /// </summary>
+    public bool InheritsTableProperties(SavedQuery query)
+    {
+        if (query.Family is not (QueryFamily.Select or QueryFamily.Crosstab) || query.Role(QueryAttributes.Join).Any())
+        {
+            return false;
+        }
+        QueryRow[] sources = [.. query.Role(QueryAttributes.Source)];
+        if (sources is not [{ Name1: { } table }])
+        {
+            return false;
+        }
+        CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, table, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            return false;
+        }
+        PropertyMap? stored = StoredProperties(entry, out string? failure);
+        return failure is not null || stored is { Properties.Count: > 0 };
     }
 
     private static ReadOnlyMemory<byte> Copy(PagePin pin)
@@ -322,6 +495,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _lockFile?.Dispose();
         _lockFile = null;
         _workspace.Forget(this);
+        _tableDefs?.Release();
+        _tableDefs = null;
+        _queryDefs?.Release();
+        _queryDefs = null;
+        _containers?.Release();
+        _containers = null;
+        _relations?.Release();
+        _relations = null;
+        _properties?.Release();
+        _properties = null;
         return CallResult.Nothing;
     }
 

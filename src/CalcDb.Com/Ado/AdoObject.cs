@@ -110,36 +110,12 @@ internal static unsafe class AdoArgs
     public static bool? Bool(nint arg) => arg == 0 ? null : Args.Bool(arg, false);
 
     /// <summary>The CalcDb object an argument holds, or null for anything else (a foreign object, a string, Nothing).</summary>
-    public static T? ObjectOf<T>(nint arg) where T : ComObject
-    {
-        if (arg == 0)
-        {
-            return null;
-        }
-        NativeVariant* v = Args.Cell(arg);
-        VarType vt = (VarType)v->Vt;
-        nint unknown = vt switch
-        {
-            VarType.Dispatch or VarType.Unknown => v->Pointer,
-            VarType.Dispatch | VarType.ByRef or VarType.Unknown | VarType.ByRef => *(nint*)v->Pointer,
-            _ => 0,
-        };
-        return unknown == 0 ? null : Owned<T>(unknown);
-    }
+    public static T? ObjectOf<T>(nint arg) where T : ComObject => Args.ObjectOf<T>(arg);
 
     /// <summary>Whether an argument is an object reference (of any implementation, or Nothing).</summary>
     public static bool IsObject(nint arg) => arg != 0 && ((VarType)Args.Cell(arg)->Vt & ~VarType.ByRef) is VarType.Dispatch or VarType.Unknown;
 
-    /// <summary>The CalcDb wrapper behind an interface pointer, when its vtable entries are CalcDb's own.</summary>
-    private static T? Owned<T>(nint unknown) where T : ComObject
-    {
-        nint* vtable = *(nint**)unknown;
-        if (vtable[0] != DualEntries.QueryInterfaceEntry)
-        {
-            return null;
-        }
-        return ComObject.Recover<ComObject>(unknown) as T;
-    }
+
 }
 
 /// <summary>
