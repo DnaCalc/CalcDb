@@ -235,6 +235,43 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
         Assert.True(general > 0 && longKeys > 0);
     }
 
+    /// <summary>
+    /// R-SORT-3 SORT-CHECK, the designed values of task b999 (r-sort-3c: kana prolonged sound mark in context, leading
+    /// modifiers, expansions before an accent, case flags against positions, secondary sums), ACCDB and MDB under General.
+    /// </summary>
+    [Fact]
+    public void Designed_b999_entries_equal_the_encoder()
+    {
+        (string Record, string Sha)[] designed =
+        [
+            ("r-sort-3c/create-accdb", "3cffa138123fa7b1623eab0a240fa3dbc11542f4ef633f17a5406db4f00509cc"),
+            ("r-sort-3c/create-mdb", "cf56c817542e7be094d055719aeff989c02afc24d9ff2709d70693f6f360b962"),
+        ];
+        int entries = 0, matched = 0, residual = 0;
+        foreach ((string record, string sha) in designed)
+        {
+            foreach (IndexTally t in CompareFile(record, Fixture(sha), includeSystem: false))
+            {
+                Assert.Null(t.Failure);
+                Assert.False(t.Refused);
+                entries += t.Entries;
+                matched += t.Matched;
+                foreach ((string[] values, string? detail) in t.Mismatches)
+                {
+                    output.WriteLine($"{t.Fixture} {t.Table}.{t.Index} [{t.Orders}] ({string.Join(", ", values.Select(v => string.Join(" ", v.Select(c => ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)))))}) {detail}");
+                    // The named residual: the prolonged sound mark, alone or in context (SORT-DERIVE open; these entries are its data).
+                    Assert.Single(values);
+                    Assert.True(values[0].AsSpan().IndexOfAny(KanaProlongedMarks[0][0], KanaProlongedMarks[1][0]) >= 0, $"not the kana residual: {values[0]}");
+                    residual++;
+                }
+            }
+        }
+        output.WriteLine($"{matched} of {entries} designed entries equal the encoder; {residual} are the kana prolonged-mark residual");
+        // Pass means matched the native bytes: the residual is counted apart, never as matched.
+        Assert.Equal(entries - matched, residual);
+        Assert.Equal(146, matched);
+    }
+
     [Fact]
     public void Shortened_long_keys_include_their_final_byte_in_the_digest()
     {

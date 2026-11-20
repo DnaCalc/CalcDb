@@ -291,8 +291,11 @@ internal static class TextKeys
         }
         int flagged = (units + FlagsPerByte - 1) / FlagsPerByte;
         int suffix = 3 + (2 * ((units + FlagsPerSuffixUnit - 1) / FlagsPerSuffixUnit));
-        return (units * (sort.MaxInlineBytes + sort.MaxExtraBytes + 3 + sort.MaxUnprintableBytes)) + flagged + suffix + 8;
+        return (units * (sort.MaxInlineBytes + SecondaryPerUnit(sort) + 3 + sort.MaxUnprintableBytes)) + flagged + suffix + 8;
     }
+
+    /// <summary>The most secondary bytes one unit writes: its own secondary, or one placeholder per primary weight.</summary>
+    private static int SecondaryPerUnit(SortDescriptor sort) => Math.Max(Math.Max(sort.MaxExtraBytes, sort.MaxInlineBytes), 1);
 
     /// <summary>
     /// Write the payload of <paramref name="text"/> (after the field marker) at the start of <paramref name="dest"/>, at
@@ -317,7 +320,7 @@ internal static class TextKeys
     /// </summary>
     private static int EncodeGeneral(SortDescriptor sort, ReadOnlySpan<char> units, bool ascending, Span<byte> dest)
     {
-        int secondaryBytes = units.Length * Math.Max(sort.MaxExtraBytes, 1), positionalBytes = units.Length * (3 + sort.MaxUnprintableBytes);
+        int secondaryBytes = units.Length * SecondaryPerUnit(sort), positionalBytes = units.Length * (3 + sort.MaxUnprintableBytes);
         int scratchBytes = secondaryBytes + units.Length + positionalBytes;
         byte[]? rented = scratchBytes > StackScratchBytes ? ArrayPool<byte>.Shared.Rent(scratchBytes) : null;
         Span<byte> scratch = rented is null ? stackalloc byte[scratchBytes] : rented.AsSpan(0, scratchBytes);
@@ -349,7 +352,13 @@ internal static class TextKeys
                 case TextRecordClass.Simple:
                     sort.Payload(r.InlineStart, r.InlineLength).CopyTo(dest[p..]);
                     p += r.InlineLength;
-                    secondary[s++] = Placeholder;
+                    // General – Legacy writes one placeholder per primary byte (R-SORT-3 SORT-CHECK, b999: Æé, æé, Œé, ße and
+                    // ĳé keep two before é's 0E in ACE's entries, r-sort-3c/create-accdb and create-mdb, both 1033/0);
+                    // trailing placeholders are removed later, so an expansion with no accent after it is unchanged.
+                    // General (1033/1) writes one: its two-byte é record is one weight (r-sort-3/create-version-256).
+                    int placeholders = sort.Family == TextSortFamily.GeneralLegacy ? r.InlineLength : 1;
+                    secondary.Slice(s, placeholders).Fill(Placeholder);
+                    s += placeholders;
                     offset++;
                     break;
                 case TextRecordClass.International:
