@@ -207,9 +207,13 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   MTA-CREATE): ACE's ADO Connection, Recordset, Command and Stream answer IMarshal on every apartment and are never
   proxied from an MTA, also the Apartment-registered classes; `CoCreateInstance` for IMarshal succeeds
   (`r-q2-wire/act-ado-clsctx-iids`). §18 says "Do not advertise Both, Free, agility or a free-threaded marshaler". CalcDb
-  follows the book, so all ADO thread questions keep this first difference. Decision needed: keep §18 and name the
-  difference, or admit ADO's observed free-threaded marshaling as ACE's own behaviour (with the retained-reference
-  obligations §18 lists). No change was made.
+  follows the book, so all ADO thread questions keep this first difference. **Decided (owner, 2026-11-20): keep §18.**
+  CalcDb's ADO talks to CalcDb directly, not through OLE DB, and is apartment-threaded; for the initial use (CalcVBA in
+  DNA Calc, Excel/VBA, single-threaded scripting) it behaves as ACE's ADO does. Proposed text for §18, after the
+  registration paragraph: "ACE's ADO objects aggregate the free-threaded marshaler although registered Apartment
+  (ACT-THREAD MTA-CREATE). CalcDb's ADO is deliberately Apartment: a cross-apartment caller gets a COM proxy to the
+  owner STA. This is a named difference; a later version may add OLE DB interfaces with an ADO layer over them, or
+  free-threaded ADO where real use requires it."
 - **II-13 §20, ISupportErrorInfo.** Evidence: every ACE DAO and ADO object answers ISupportErrorInfo
   (`r-act-1-meta/support-dao-objects`, `support-ado-objects`). Without it the .NET runtime discarded CalcDb's
   IErrorInfo (the PIA lane's exception had the runtime's generic text). Implemented on every CalcDb dispatch object.
