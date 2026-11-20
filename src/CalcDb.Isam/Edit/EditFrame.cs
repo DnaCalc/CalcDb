@@ -122,9 +122,12 @@ public interface IUniqueProbe
 /// The shared edit state of one table of one open file (II-07 §14): its compiled <see cref="MutationSemantics"/>, its
 /// AutoNumber counter and the unique probe over its stored trees. One per table, shared by every recordset over it.
 /// </summary>
-public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? probe, bool hasRelationships = false, TableFootprints? footprints = null)
+public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? probe, uint lcid, bool hasRelationships = false, TableFootprints? footprints = null)
 {
     public MutationSemantics Semantics { get; } = semantics;
+
+    /// <summary>The session LCID for assignment text conversions (R-EXPR-1 EXPR-LOCALE, task 5zh9; II-10 §14).</summary>
+    public uint Lcid { get; } = lcid;
 
     /// <summary>
     /// The lock footprints over the table's file (W-05/local-lockers-rebase). Without them (a constructed table with no
@@ -310,7 +313,7 @@ public sealed class EditFrame : IDisposable
                 // record shows AddNew meeting one.
                 return EditOutcome.NotModelled(MutationOpen.Default, $"the default of {c.QualifiedName} failed: {failure}");
             }
-            ConversionResult converted = AssignmentConversion.Convert(sampled, c.Column);
+            ConversionResult converted = AssignmentConversion.Convert(sampled, c.Column, _table.Lcid);
             if (!converted.Succeeded)
             {
                 return EditOutcome.NotModelled(MutationOpen.Default, $"the default of {c.QualifiedName} does not convert to the field ({converted.Error?.Number}, {converted.Open})");
@@ -367,7 +370,7 @@ public sealed class EditFrame : IDisposable
         {
             return EditOutcome.NotModelled(MutationOpen.ConversionNotRecorded, "a put into an AutoNumber field during Edit is not recorded");
         }
-        ConversionResult converted = AssignmentConversion.Convert(value, column);
+        ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid);
         if (converted.Error is { } error)
         {
             return new EditOutcome(error);

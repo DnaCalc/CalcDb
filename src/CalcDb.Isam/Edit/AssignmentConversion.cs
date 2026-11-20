@@ -13,20 +13,21 @@ public readonly record struct ConversionResult(NativeValue Value, MutationError?
 /// <summary>
 /// Assignment conversion of an incoming Automation value into a column's native type (II-07 §14, II-10 §21 "Assignment
 /// conversion"): into a temporary owned candidate, never into the edit cell, which only <see cref="EditFrame"/>'s
-/// AcceptCell replaces. Numeric targets convert through oleaut32's VariantChangeType, the one allocation-free scalar
-/// conversion of CalcDb.Values (<see cref="OwnedVariant.TryChangeScalar"/>, II-02); it reads a text under the process
-/// locale, where DAO reads it under the session's (an open item of W-05/edit-frames). Its rounding is the qualified one (qualified.md R-FMT-2 Scalar
-/// boundaries: a VT_R8 put rounds half to even, Byte 0.5 stores 0, 2.5 stores 2; the VT_R8 Currency route rounds the
-/// binary value, 0.00005 stores 0.0001) and its overflow is ACE's refusal 3421 at the put (r-q-fmt-sort/scalar-bounds-accdb:
-/// Byte 255.5, Integer 32767.5, a BSTR "1e309" into Double). A scalar converts without allocating (The Plan §3.2); a text
-/// candidate is the owned copy the cell keeps.
+/// AcceptCell replaces. Numeric targets convert through oleaut32's VariantChangeTypeEx under the explicit session LCID
+/// (<see cref="OwnedVariant.TryChangeScalar"/>, II-02, II-10 §14, qualified.md R-EXPR-1 EXPR-LOCALE, task 5zh9). Its
+/// rounding is the qualified one (qualified.md R-FMT-2 Scalar boundaries: a VT_R8 put rounds half to even, Byte 0.5
+/// stores 0, 2.5 stores 2; the VT_R8 Currency route rounds the binary value, 0.00005 stores 0.0001) and its overflow or
+/// text mismatch is ACE's refusal 3421 at the put (r-q-fmt-sort/scalar-bounds-accdb: Byte 255.5, Integer 32767.5, a BSTR
+/// "1e309" into Double; r-expr-locale: "1,5" into Double, Currency and Bit, "4.3.2020" into Date/Time). A scalar
+/// converts without allocating (The Plan §3.2); a text candidate is the owned copy the cell keeps.
 /// </summary>
 public static unsafe class AssignmentConversion
 {
+    private const int DispTypeMismatch = unchecked((int)0x80020005);
     private const int DispOverflow = unchecked((int)0x8002000A);
 
-    /// <summary>Convert <paramref name="incoming"/>, borrowed from the caller, into <paramref name="column"/>'s type.</summary>
-    public static ConversionResult Convert(in NativeVariant incoming, ColumnDescriptor column)
+    /// <summary>Convert <paramref name="incoming"/>, borrowed from the caller, into <paramref name="column"/>'s type under <paramref name="lcid"/>.</summary>
+    public static ConversionResult Convert(in NativeVariant incoming, ColumnDescriptor column, uint lcid)
     {
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
@@ -48,37 +49,39 @@ public static unsafe class AssignmentConversion
             case NativeTypes.Guid:
                 return Guid(incoming);
             case NativeTypes.Boolean:
-                return Scalar(incoming, VarType.Bool);
+                return Scalar(incoming, VarType.Bool, lcid);
             case NativeTypes.Byte:
-                return Scalar(incoming, VarType.UI1);
+                return Scalar(incoming, VarType.UI1, lcid);
             case NativeTypes.Integer:
-                return Scalar(incoming, VarType.I2);
+                return Scalar(incoming, VarType.I2, lcid);
             case NativeTypes.Long:
-                return Scalar(incoming, VarType.I4);
+                return Scalar(incoming, VarType.I4, lcid);
             case NativeTypes.Single:
-                return Scalar(incoming, VarType.R4);
+                return Scalar(incoming, VarType.R4, lcid);
             case NativeTypes.Double:
-                return Scalar(incoming, VarType.R8);
+                return Scalar(incoming, VarType.R8, lcid);
             case NativeTypes.Currency:
-                return Scalar(incoming, VarType.Currency);
+                return Scalar(incoming, VarType.Currency, lcid);
             case NativeTypes.DateTime:
-                return Scalar(incoming, VarType.Date);
+                return Scalar(incoming, VarType.Date, lcid);
             default:
                 return Open(MutationOpen.ColumnType);
         }
     }
 
-    private static ConversionResult Scalar(in NativeVariant incoming, VarType target)
+    private static ConversionResult Scalar(in NativeVariant incoming, VarType target, uint lcid)
     {
         NativeVariant source = incoming;
-        OwnedVariant.TryChangeScalar(&source, target, out NativeVariant result, out int hr);
-        if (hr == DispOverflow)
+        OwnedVariant.TryChangeScalar(&source, target, lcid, out NativeVariant result, out int hr);
+        // A text that does not convert is 3421 from DAO.Field for the targets r-expr-locale records (Double, Currency, Bit,
+        // Date/Time); for Byte, Integer, Long and Single no record shows it, so it stays named below.
+        if (hr == DispOverflow || (hr == DispTypeMismatch && incoming.Type == VarType.Bstr
+            && target is VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date))
         {
             return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
         }
         if (hr != 0)
         {
-            // A text that is no number (DISP_E_TYPEMISMATCH) has no DAO record yet; the ADO lane gives 0x80020005.
             return Open(MutationOpen.ConversionNotRecorded);
         }
         return new ConversionResult(target switch

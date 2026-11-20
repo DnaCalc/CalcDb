@@ -50,7 +50,6 @@ internal unsafe struct OleAutTable
     public delegate* unmanaged<NativeVariant*, int> VariantClear;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VariantCopy;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VariantCopyInd;
-    public delegate* unmanaged<NativeVariant*, NativeVariant*, ushort, ushort, int> VariantChangeType;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, uint, ushort, ushort, int> VariantChangeTypeEx;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarAdd;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarSub;
@@ -88,12 +87,14 @@ internal unsafe struct OleAutTable
     public delegate* unmanaged<uint, nint, int> SetErrorInfo;
     public delegate* unmanaged<int, char*, nint*, int> CreateTypeLib2;
     public delegate* unmanaged<char*, int, nint*, int> LoadTypeLibEx;
+    public delegate* unmanaged<uint> GetUserDefaultLCID;
 
-    /// <summary>The platform oleaut32's exports, or false when this process cannot load it.</summary>
+    /// <summary>The platform oleaut32 (and kernel32 GetUserDefaultLCID) exports, or false when this process cannot load them.</summary>
     public static bool TryPlatform(out OleAutTable table)
     {
         table = default;
-        if (!NativeLibrary.TryLoad("oleaut32.dll", typeof(OleAutTable).Assembly, DllImportSearchPath.System32, out nint module))
+        if (!NativeLibrary.TryLoad("oleaut32.dll", typeof(OleAutTable).Assembly, DllImportSearchPath.System32, out nint module)
+            || !NativeLibrary.TryLoad("kernel32.dll", typeof(OleAutTable).Assembly, DllImportSearchPath.System32, out nint kernel32))
         {
             return false;
         }
@@ -102,7 +103,6 @@ internal unsafe struct OleAutTable
         table.VariantClear = (delegate* unmanaged<NativeVariant*, int>)E("VariantClear");
         table.VariantCopy = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VariantCopy");
         table.VariantCopyInd = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VariantCopyInd");
-        table.VariantChangeType = (delegate* unmanaged<NativeVariant*, NativeVariant*, ushort, ushort, int>)E("VariantChangeType");
         table.VariantChangeTypeEx = (delegate* unmanaged<NativeVariant*, NativeVariant*, uint, ushort, ushort, int>)E("VariantChangeTypeEx");
         table.VarAdd = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarAdd");
         table.VarSub = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarSub");
@@ -140,6 +140,7 @@ internal unsafe struct OleAutTable
         table.SetErrorInfo = (delegate* unmanaged<uint, nint, int>)E("SetErrorInfo");
         table.CreateTypeLib2 = (delegate* unmanaged<int, char*, nint*, int>)E("CreateTypeLib2");
         table.LoadTypeLibEx = (delegate* unmanaged<char*, int, nint*, int>)E("LoadTypeLibEx");
+        table.GetUserDefaultLCID = (delegate* unmanaged<uint>)NativeLibrary.GetExport(kernel32, "GetUserDefaultLCID");
         return true;
     }
 }
@@ -195,9 +196,7 @@ internal static unsafe class OleAut
 
     public static int VariantCopyInd(NativeVariant* dest, NativeVariant* src) => T.VariantCopyInd(dest, src);
 
-    public static int VariantChangeType(NativeVariant* dest, NativeVariant* src, ushort flags, ushort vt) => T.VariantChangeType(dest, src, flags, vt);
-
-    /// <summary>VariantChangeTypeEx: a conversion under an explicit locale (II-10 §14), never the thread's.</summary>
+    /// <summary>VariantChangeTypeEx: a conversion under an explicit locale (II-10 §14, R-EXPR-1 EXPR-LOCALE), never the thread's.</summary>
     public static int VariantChangeTypeEx(NativeVariant* dest, NativeVariant* src, uint lcid, ushort flags, ushort vt) => T.VariantChangeTypeEx(dest, src, lcid, flags, vt);
 
     public static int VarAdd(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarAdd(left, right, result);
@@ -332,6 +331,9 @@ internal static unsafe class OleAut
         typeLib = value;
         return hr;
     }
+
+    /// <summary>kernel32!GetUserDefaultLCID: the session LCID under which ACE converts text (II-10 §14, R-EXPR-1 EXPR-LOCALE); 0 off Windows.</summary>
+    public static uint GetUserDefaultLCID() => T.GetUserDefaultLCID();
 
     /// <summary>IUnknown::AddRef through the reference's own vtable (a foreign call).</summary>
     public static uint AddRef(nint unknown) => ((delegate* unmanaged<nint, uint>)(*(nint**)unknown)[1])(unknown);

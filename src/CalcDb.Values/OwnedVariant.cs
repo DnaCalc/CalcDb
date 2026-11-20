@@ -244,34 +244,35 @@ public sealed unsafe class OwnedVariant : IDisposable
         return result;
     }
 
-    /// <summary>Move the payload to an empty destination without copying it; this owner becomes empty.</summary>
     /// <summary>
-    /// VariantChangeType of a borrowed value into a new owned one (a VT_BYREF source is read through its reference), or
-    /// null with the failing HRESULT (DISP_E_TYPEMISMATCH, DISP_E_OVERFLOW).
+    /// VariantChangeTypeEx to a type that owns no resource (a number, a date, a Boolean), into a caller's stack cell
+    /// under an explicit <paramref name="lcid"/> (R-EXPR-1 EXPR-LOCALE, task 5zh9; II-10 §14): no object and no native
+    /// cell (task v4n6). False with the HRESULT when the conversion fails.
     /// </summary>
-    /// <summary>
-    /// VariantChangeType to a type that owns no resource (a number, a date, a Boolean), into a caller's stack cell: no
-    /// object and no native cell (task v4n6). False with the HRESULT when the conversion fails.
-    /// </summary>
-    public static bool TryChangeScalar(NativeVariant* source, VarType target, out NativeVariant result, out int hr)
+    public static bool TryChangeScalar(NativeVariant* source, VarType target, uint lcid, out NativeVariant result, out int hr)
     {
         if (target is not (VarType.I2 or VarType.I4 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Bool or VarType.UI1))
         {
             throw new ArgumentOutOfRangeException(nameof(target), "a scalar target that owns no resource");
         }
         NativeVariant cell = default;
-        hr = OleAut.VariantChangeType(&cell, source, 0, (ushort)target);
+        hr = OleAut.VariantChangeTypeEx(&cell, source, lcid, 0, (ushort)target);
         result = cell;
         return hr >= 0;
     }
 
-    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, out int hr) => ChangeType(source, target, 0, out hr);
+    /// <summary>
+    /// VariantChangeTypeEx of a borrowed value into a new owned one under an explicit <paramref name="lcid"/> (a
+    /// VT_BYREF source is read through its reference), or null with the failing HRESULT (DISP_E_TYPEMISMATCH,
+    /// DISP_E_OVERFLOW).
+    /// </summary>
+    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, uint lcid, out int hr) => ChangeType(source, target, lcid, 0, out hr);
 
-    /// <summary>VariantChangeType with its <paramref name="flags"/> (VARIANT_ALPHABOOL 0x2: a VT_BOOL reads as "True"/"False").</summary>
-    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, ushort flags, out int hr)
+    /// <summary>VariantChangeTypeEx under <paramref name="lcid"/> with <paramref name="flags"/> (VARIANT_ALPHABOOL 0x2: a VT_BOOL reads as "True"/"False").</summary>
+    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, uint lcid, ushort flags, out int hr)
     {
         var result = new OwnedVariant();
-        hr = OleAut.VariantChangeType(result._cell, source, flags, (ushort)target);
+        hr = OleAut.VariantChangeTypeEx(result._cell, source, lcid, flags, (ushort)target);
         if (hr < 0)
         {
             result.Dispose();

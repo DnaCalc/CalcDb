@@ -38,7 +38,7 @@ public sealed unsafe class WindowsX64DeclarationTests
         using OwnedVariant text = OwnedVariant.FromText("42");
         NativeVariant result;
         OleAut.VariantInit(&result);
-        Assert.Equal(OleAut.S_OK, OleAut.VariantChangeType(&result, text.Pointer, 0, (ushort)VarType.I4));
+        Assert.Equal(OleAut.S_OK, OleAut.VariantChangeTypeEx(&result, text.Pointer, 1033, 0, (ushort)VarType.I4));
         byte* b = (byte*)&result;
         Assert.Equal((ushort)VarType.I4, *(ushort*)(b + X64.Variant.TagOffset));
         Assert.Equal(42, *(int*)(b + X64.Variant.PayloadOffset));
@@ -52,7 +52,7 @@ public sealed unsafe class WindowsX64DeclarationTests
         using OwnedVariant text = OwnedVariant.FromText(Text);
         NativeVariant result;
         OleAut.VariantInit(&result);
-        Assert.Equal(OleAut.S_OK, OleAut.VariantChangeType(&result, text.Pointer, 0, (ushort)VarType.Decimal));
+        Assert.Equal(OleAut.S_OK, OleAut.VariantChangeTypeEx(&result, text.Pointer, 1033, 0, (ushort)VarType.Decimal));
         byte* b = (byte*)&result;
         DecimalValue expected = DecimalValue.FromDecimal(decimal.Parse(Text, System.Globalization.CultureInfo.InvariantCulture));
         Assert.Equal((ushort)VarType.Decimal, *(ushort*)(b + X64.Variant.TagOffset));

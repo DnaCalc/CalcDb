@@ -328,4 +328,76 @@ public sealed unsafe class DaoWiringTests : IDisposable
     }
 
     private static readonly string[] CreationOrder = ["PK_T", "Z_ix", "M_ix", "a_ix", "B_ix", "_first", "0_ix"];
+
+    [Fact]
+    public void SessionLocale_reads_GetUserDefaultLCID_and_ignores_thread_culture()
+    {
+        nint kernel32 = NativeLibrary.Load("kernel32.dll", typeof(DaoWiringTests).Assembly, DllImportSearchPath.System32);
+        uint expected = ((delegate* unmanaged<uint>)NativeLibrary.GetExport(kernel32, "GetUserDefaultLCID"))();
+        uint lcid = SessionLocale.Lcid;
+        Assert.NotEqual(0u, lcid);
+        Assert.Equal(expected, lcid);
+
+        var previous = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+            Assert.Equal(lcid, SessionLocale.Lcid);
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
+    public void Text_put_Find_and_SQL_use_the_user_default_LCID_when_thread_culture_is_de_DE()
+    {
+        // qualified.md R-EXPR-1 EXPR-LOCALE (5zh9): under user default 7177 (en-ZA, '.' decimal separator) with the
+        // thread culture set to de-DE (1031), text puts, Find criteria and SQL expressions still convert under the
+        // user default locale, never Thread.CurrentCulture.
+        var previous = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+
+            DatabaseObject db = Open(RichFixture);
+
+            // 1. Text put into a Double field: "1.5" puts and reads 1.5; "1,5" fails 3421 from DAO.Field and leaves 1.5.
+            RecordsetObject typed = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "Typed", 2)));
+            FieldObject tDouble = Object<FieldObject>(Object<FieldsObject>(typed, "Fields"), "Item", "TDouble");
+            Ok(Method(typed, "Edit"));
+            Ok(Put(tDouble, "Value", "1.5"));
+            NativeVariant read = Value(Ok(Get(tDouble, "Value")));
+            Assert.Equal(VarType.R8, (VarType)read.Vt);
+            Assert.Equal(1.5, read.Double);
+            Fails(Put(tDouble, "Value", "1,5"), 3421, "DAO.Field", errorInfo: true);
+            read = Value(Ok(Get(tDouble, "Value")));
+            Assert.Equal(VarType.R8, (VarType)read.Vt);
+            Assert.Equal(1.5, read.Double);
+            Ok(Method(typed, "CancelUpdate"));
+
+            // 2. FindFirst criterion: CDbl('1.5') finds Parent ID 1 (Value = 1.5); CDbl('1,5') and '1,5' fail 3464.
+            RecordsetObject parent = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "Parent", 2)));
+            FieldObject parentId = Object<FieldObject>(Object<FieldsObject>(parent, "Fields"), "Item", "ID");
+            Ok(Method(parent, "FindFirst", "[Value] = CDbl('1.5')"));
+            Assert.Equal((VarType.Bool, 0L), Scalar(Get(parent, "NoMatch")));
+            Assert.Equal((VarType.I4, 1L), Scalar(Get(parentId, "Value")));
+            Fails(Method(parent, "FindFirst", "[Value] = CDbl('1,5')"), 3464, "DAO.Recordset", errorInfo: false);
+            Fails(Method(parent, "FindFirst", "[Value] = '1,5'"), 3464, "DAO.Recordset", errorInfo: false);
+
+            // 3. SQL expression: CDbl('1.5') = 1.5 and CStr(1.5) = "1.5"; CDbl('1,5') fails 3464 from DAO.Database.
+            SelectRecordsetObject sql = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT CDbl('1.5') AS N, CStr(1.5) AS S FROM Parent WHERE ID = 1", 4)));
+            SelectFieldsObject sqlFields = Object<SelectFieldsObject>(sql, "Fields");
+            NativeVariant sqlNum = Value(Ok(Get(Object<SelectFieldObject>(sqlFields, "Item", "N"), "Value")));
+            Assert.Equal(VarType.R8, (VarType)sqlNum.Vt);
+            Assert.Equal(1.5, sqlNum.Double);
+            Assert.Equal("1.5", Text(Get(Object<SelectFieldObject>(sqlFields, "Item", "S"), "Value")));
+            Fails(Method(db, "OpenRecordset", "SELECT CDbl('1,5') AS N FROM Parent WHERE ID = 1", 4), 3464, "DAO.Database", errorInfo: false);
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = previous;
+        }
+    }
 }

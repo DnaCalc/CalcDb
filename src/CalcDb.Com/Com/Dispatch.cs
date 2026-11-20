@@ -353,10 +353,10 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                     }
                     continue;
                 }
-                // Declared scalar parameters are coerced as DispInvoke does; a failure names the argument.
+                // Declared scalar parameters are coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's); a failure names the argument.
                 if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt && ((NativeVariant*)args[k])->Vt != (ushort)vt)
                 {
-                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, CoercionFlags(member, k), out int hr);
+                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
                     if (c is null)
                     {
                         // The argument's position is reported on both routes (r-cursor-1b/seek-operator-spelling: puArgErr 1 with 3421).

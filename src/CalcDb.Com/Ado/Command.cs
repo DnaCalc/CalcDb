@@ -301,7 +301,7 @@ internal sealed unsafe class ParameterObject : AdoObject
     /// <summary>
     /// The Value assignment of CreateParameter and Parameter.Value (the failure carries <paramref name="source"/>'s
     /// source: CreateParameter's is ADODB.Command). Type 0 keeps the value as given; a type the records convert
-    /// converts with VariantChangeType (a mismatch is 0x800A0D5D, the old value kept); other types are not built.
+    /// converts under the session LCID (a mismatch is 0x800A0D5D, the old value kept); other types are not built.
     /// </summary>
     public CallResult SetValue(nint arg, AdoObject source)
     {
@@ -309,7 +309,7 @@ internal sealed unsafe class ParameterObject : AdoObject
         VarType given = (VarType)cell->Vt & ~VarType.ByRef;
         if (Type == 0)
         {
-            OwnedVariant? copy = OwnedVariant.ChangeType(cell, given, out _);
+            OwnedVariant? copy = OwnedVariant.ChangeType(cell, given, SessionLocale.Lcid, out _);
             if (copy is null)
             {
                 return NotImplemented("Parameter.Value of an untyped parameter with this value (not asked)");
@@ -325,7 +325,7 @@ internal sealed unsafe class ParameterObject : AdoObject
         {
             return NotImplemented("Parameter.Value = Null or Empty (not asked)");
         }
-        OwnedVariant? converted = OwnedVariant.ChangeType(cell, target, out int hr);
+        OwnedVariant? converted = OwnedVariant.ChangeType(cell, target, SessionLocale.Lcid, out int hr);
         if (converted is null)
         {
             return hr == unchecked((int)0x8002000A)

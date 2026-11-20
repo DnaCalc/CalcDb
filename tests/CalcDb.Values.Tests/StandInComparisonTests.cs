@@ -237,10 +237,12 @@ public sealed unsafe class StandInComparisonTests
     [Fact]
     public void The_scalar_kernels_entry_points_are_not_available_in_the_stand_ins()
     {
-        // W-02/shared-scalar-services: VariantChangeTypeEx and the Var* arithmetic and comparison have no stand-in yet.
+        // W-02/shared-scalar-services: locale-dependent VariantChangeTypeEx, GetUserDefaultLCID, and the Var* arithmetic and comparison have no stand-in yet.
         NativeVariant a = default, b = default, r = default;
         a.Vt = b.Vt = (ushort)VarType.I4;
-        Assert.Equal(OleAut.NotAvailableOnPlatform, Stand.VariantChangeTypeEx(&r, &a, 7177, 0, (ushort)VarType.Bstr));
+        NativeVariant d = D(1.5);
+        Assert.Equal(OleAut.NotAvailableOnPlatform, Stand.VariantChangeTypeEx(&r, &d, 7177, 0, (ushort)VarType.Bstr));
+        Assert.Equal(0u, Stand.GetUserDefaultLCID());
         foreach (nint f in new[] { (nint)Stand.VarAdd, (nint)Stand.VarSub, (nint)Stand.VarMul, (nint)Stand.VarDiv, (nint)Stand.VarIdiv, (nint)Stand.VarMod, (nint)Stand.VarPow })
         {
             Assert.Equal(OleAut.NotAvailableOnPlatform, ((delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)f)(&a, &b, &r));
@@ -255,38 +257,95 @@ public sealed unsafe class StandInComparisonTests
     }
 
     [WindowsFact]
-    public void VariantChangeType_matches_where_the_stand_in_answers()
+    public void VariantChangeTypeEx_matches_where_the_stand_in_answers()
     {
         OleAutTable real = Real();
         VarType[] targets = [VarType.I2, VarType.I4, VarType.UI1, VarType.R4, VarType.R8, VarType.Currency, VarType.Bool, VarType.Bstr];
+        uint[] lcids = [7177, 1033, 1031];
         int compared = 0, unavailable = 0;
-        foreach (NativeVariant source in Sources())
+        foreach (uint lcid in lcids)
         {
-            foreach (VarType target in targets)
+            foreach (NativeVariant source in Sources())
             {
-                NativeVariant src = source;
-                NativeVariant a = default, b = default;
-                int hb = Stand.VariantChangeType(&b, &src, 0, (ushort)target);
-                if (hb == OleAut.NotAvailableOnPlatform)
+                foreach (VarType target in targets)
                 {
-                    unavailable++;
-                    continue;
+                    NativeVariant src = source;
+                    NativeVariant a = default, b = default;
+                    int hb = Stand.VariantChangeTypeEx(&b, &src, lcid, 0, (ushort)target);
+                    if (hb == OleAut.NotAvailableOnPlatform)
+                    {
+                        unavailable++;
+                        continue;
+                    }
+                    int ha = real.VariantChangeTypeEx(&a, &src, lcid, 0, (ushort)target);
+                    string label = $"lcid={lcid} {(VarType)source.Vt} {Payload(&src, real)} -> {target}";
+                    Assert.Equal((label, OleAut.Hr(ha), Payload(&a, real)), (label, OleAut.Hr(hb), Payload(&b, Stand)));
+                    if (ha == 0)
+                    {
+                        _ = real.VariantClear(&a);
+                    }
+                    if (hb == 0)
+                    {
+                        _ = Stand.VariantClear(&b);
+                    }
+                    compared++;
                 }
-                int ha = real.VariantChangeType(&a, &src, 0, (ushort)target);
-                string label = $"{(VarType)source.Vt} {Payload(&src, real)} -> {target}";
-                Assert.Equal((label, OleAut.Hr(ha), Payload(&a, real)), (label, OleAut.Hr(hb), Payload(&b, Stand)));
-                if (ha == 0)
-                {
-                    _ = real.VariantClear(&a);
-                }
-                if (hb == 0)
-                {
-                    _ = Stand.VariantClear(&b);
-                }
-                compared++;
             }
         }
-        Assert.True(compared >= 200, $"compared {compared}, not available {unavailable}");
+        Assert.True(compared >= 600, $"compared {compared}, not available {unavailable}");
+    }
+
+    [WindowsFact]
+    public void GetUserDefaultLCID_matches_platform_and_ignores_thread_culture()
+    {
+        OleAutTable real = Real();
+        uint lcid = OleAut.GetUserDefaultLCID();
+        Assert.NotEqual(0u, lcid);
+        Assert.Equal(real.GetUserDefaultLCID(), lcid);
+
+        var previous = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+            Assert.Equal(lcid, OleAut.GetUserDefaultLCID());
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = previous;
+        }
+    }
+
+    [WindowsFact]
+    public void OwnedVariant_conversions_follow_explicit_lcid_not_thread_culture()
+    {
+        var previous = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+
+            using OwnedVariant dot = OwnedVariant.FromText("1.5");
+            using OwnedVariant comma = OwnedVariant.FromText("1,5");
+
+            Assert.True(OwnedVariant.TryChangeScalar(dot.Pointer, VarType.R8, 1033, out NativeVariant usDot, out _));
+            Assert.Equal(1.5, usDot.Double);
+            Assert.True(OwnedVariant.TryChangeScalar(comma.Pointer, VarType.R8, 1033, out NativeVariant usComma, out _));
+            Assert.Equal(15.0, usComma.Double); // in 1033 (en-US), ',' is the grouping separator
+
+            Assert.True(OwnedVariant.TryChangeScalar(comma.Pointer, VarType.R8, 1031, out NativeVariant deComma, out _));
+            Assert.Equal(1.5, deComma.Double);
+            Assert.True(OwnedVariant.TryChangeScalar(dot.Pointer, VarType.R8, 1031, out NativeVariant deDot, out _));
+            Assert.Equal(15.0, deDot.Double); // in 1031 (de-DE), '.' is the grouping separator
+
+            NativeVariant num = D(1.5);
+            using OwnedVariant? usText = OwnedVariant.ChangeType(&num, VarType.Bstr, 1033, out _);
+            using OwnedVariant? deText = OwnedVariant.ChangeType(&num, VarType.Bstr, 1031, out _);
+            Assert.Equal("1.5", Marshal.PtrToStringBSTR(usText!.Pointer->Pointer));
+            Assert.Equal("1,5", Marshal.PtrToStringBSTR(deText!.Pointer->Pointer));
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = previous;
+        }
     }
 
     private static NativeVariant V(VarType t, long bits) => new() { Vt = (ushort)t, Int64 = bits };

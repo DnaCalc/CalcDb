@@ -32,7 +32,6 @@ internal static unsafe class StandIns
         VariantClear = &VariantClear,
         VariantCopy = &VariantCopy,
         VariantCopyInd = &VariantCopyInd,
-        VariantChangeType = &VariantChangeType,
         VariantChangeTypeEx = &VariantChangeTypeEx,
         VarAdd = &Binary,
         VarSub = &Binary,
@@ -70,6 +69,7 @@ internal static unsafe class StandIns
         SetErrorInfo = &SetErrorInfo,
         CreateTypeLib2 = &CreateTypeLib2,
         LoadTypeLibEx = &LoadTypeLibEx,
+        GetUserDefaultLCID = &GetUserDefaultLCID,
     };
 
     // ---- BSTR -----------------------------------------------------------------------------------------------------------
@@ -612,10 +612,11 @@ internal static unsafe class StandIns
 
     // ---- Conversions ----------------------------------------------------------------------------------------------------
     // Only the numeric family (I2, I4, UI1, R4, R8, CY, BOOL), Empty to a number, and integers to and from text in the one
-    // form every locale writes alike (an optional '-' then decimal digits). Everything else is not available here.
+    // form every locale writes alike (an optional '-' then decimal digits). Locale-dependent conversions (decimal separator,
+    // dates, currency, flags) return NotAvailableOnPlatform.
 
     [UnmanagedCallersOnly]
-    private static int VariantChangeType(NativeVariant* dest, NativeVariant* src, ushort flags, ushort vt)
+    private static int VariantChangeTypeEx(NativeVariant* dest, NativeVariant* src, uint lcid, ushort flags, ushort vt)
     {
         var target = (VarType)vt;
         var from = (VarType)src->Vt;
@@ -830,12 +831,9 @@ internal static unsafe class StandIns
     // ---- Not available here ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Locale-dependent conversion (text forms, dates) and the Var* arithmetic and comparison the scalar kernel calls
-    /// (W-02/shared-scalar-services): not available on this platform until the cross-platform library exists.
+    /// The Var* arithmetic and comparison the scalar kernel calls (W-02/shared-scalar-services): not available on this
+    /// platform until the cross-platform library exists.
     /// </summary>
-    [UnmanagedCallersOnly]
-    private static int VariantChangeTypeEx(NativeVariant* dest, NativeVariant* src, uint lcid, ushort flags, ushort vt) => OleAut.NotAvailableOnPlatform;
-
     [UnmanagedCallersOnly]
     private static int Binary(NativeVariant* left, NativeVariant* right, NativeVariant* result) => OleAut.NotAvailableOnPlatform;
 
@@ -877,6 +875,10 @@ internal static unsafe class StandIns
         *typeLib = 0;
         return OleAut.NotAvailableOnPlatform;
     }
+
+    /// <summary>No Windows user-default LCID off Windows; portable hosts pass their session LCID as a value.</summary>
+    [UnmanagedCallersOnly]
+    private static uint GetUserDefaultLCID() => 0;
 
     /// <summary>The element size of a SAFEARRAY or VARIANT arm of this type, 0 for a type that has none here.</summary>
     private static int ElementSize(VarType vt) => vt switch

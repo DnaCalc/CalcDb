@@ -362,7 +362,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             failure = KeyArgumentFailure.NotEncoded;
             return null;
         }
-        if (!OwnedVariant.TryChangeScalar(v, target.Value, out NativeVariant changed, out _))
+        if (!OwnedVariant.TryChangeScalar(v, target.Value, SessionLocale.Lcid, out NativeVariant changed, out _))
         {
             failure = KeyArgumentFailure.Conversion;
             return null;
@@ -457,7 +457,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return kept;
         }
         _schema ??= new ExpressionSchema(Cursor.Table);
-        _context ??= new ExpressionContext((uint)System.Globalization.CultureInfo.CurrentCulture.LCID, TextCompareMode.Database, Database.Collation, ExpressionUse.Find);
+        _context ??= new ExpressionContext(SessionLocale.Lcid, TextCompareMode.Database, Database.Collation, ExpressionUse.Find);
         FindCriteria? bound = FindCriteria.Bind(text.ToString(), _schema, _context, out failure);
         if (bound is not null)
         {
@@ -818,7 +818,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if (!OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.R4, out NativeVariant changed, out _))
+        if (!OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.R4, SessionLocale.Lcid, out NativeVariant changed, out _))
         {
             return Fail(3421, DaoErrors.ConversionError);
         }

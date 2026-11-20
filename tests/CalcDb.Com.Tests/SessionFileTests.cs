@@ -58,7 +58,7 @@ public sealed class SessionFileTests : IDisposable
         CatalogEntry g = catalog.LocalTables(D).Single(e => e.Name == "G");
         TableDefinition table = TableDefDecoder.Decode(TableDefSegmentView.Open((uint)g.Id, p => cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)g.Id, D, out _)!;
         var semantics = MutationSemantics.Compile("G", table, null, new NoRules(), D.IndexDescriptor);
-        var context = new TableEditContext(semantics, null, false, new TableFootprints(cache, D, table));
+        var context = new TableEditContext(semantics, null, CalcDb.Com.Com.SessionLocale.Lcid, false, new TableFootprints(cache, D, table));
         using var workspace = new TransactionCoordinator(new LockerId(77)) { Publisher = new Target(file) };
         using TableCursor cursor = TableCursor.Open(cache, D, table, pages, 0, out _)!;
         cursor.MoveFirst();

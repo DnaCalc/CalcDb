@@ -79,7 +79,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
             PropertyBlob? blob = entry.Properties is { } raw ? PropertyBlob.Read(raw, out _) : null;
             var semantics = MutationSemantics.Compile(entry.Name, table, blob, _binder, D.IndexDescriptor);
             bool related = Relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), related, new TableFootprints(_cache, D, table));
+            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, related, new TableFootprints(_cache, D, table));
             _contexts.Add(entry.Name, context);
         }
         return (context.Semantics.Table, context);

@@ -200,7 +200,7 @@ internal static unsafe class CollectionLookup
         {
             return null;
         }
-        if (!OwnedVariant.TryChangeScalar(v, VarType.R8, out NativeVariant number, out _))
+        if (!OwnedVariant.TryChangeScalar(v, VarType.R8, SessionLocale.Lcid, out NativeVariant number, out _))
         {
             return null;
         }

@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Format;
@@ -30,7 +28,7 @@ internal sealed class DatabaseSql(DatabaseObject database) : ISqlDatabase
 {
     private readonly Dictionary<string, TableDefinition?> _tables = new(StringComparer.OrdinalIgnoreCase);
 
-    public ExpressionContext Context { get; } = new((uint)CultureInfo.CurrentCulture.LCID, TextCompareMode.Database, database.Collation, ExpressionUse.Query);
+    public ExpressionContext Context { get; } = new(SessionLocale.Lcid, TextCompareMode.Database, database.Collation, ExpressionUse.Query);
 
     public TableDefinition? Table(string name)
     {

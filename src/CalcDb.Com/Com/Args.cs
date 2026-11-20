@@ -21,7 +21,7 @@ internal static unsafe class Args
         {
             return Cell(arg)->Pointer == 0 ? null : System.Runtime.InteropServices.Marshal.PtrToStringBSTR(Cell(arg)->Pointer);
         }
-        using OwnedVariant? text = OwnedVariant.ChangeType(Cell(arg), VarType.Bstr, out _);
+        using OwnedVariant? text = OwnedVariant.ChangeType(Cell(arg), VarType.Bstr, SessionLocale.Lcid, out _);
         return text is null ? null : System.Runtime.InteropServices.Marshal.PtrToStringBSTR(text.Pointer->Pointer);
     }
 
@@ -50,7 +50,7 @@ internal static unsafe class Args
         {
             return omitted;
         }
-        using OwnedVariant? b = OwnedVariant.ChangeType(Cell(arg), VarType.Bool, out _);
+        using OwnedVariant? b = OwnedVariant.ChangeType(Cell(arg), VarType.Bool, SessionLocale.Lcid, out _);
         return b is null ? null : (short)b.Pointer->Int64 != 0;
     }
 
@@ -61,7 +61,7 @@ internal static unsafe class Args
         {
             return omitted;
         }
-        using OwnedVariant? i = OwnedVariant.ChangeType(Cell(arg), VarType.I4, out _);
+        using OwnedVariant? i = OwnedVariant.ChangeType(Cell(arg), VarType.I4, SessionLocale.Lcid, out _);
         return i is null ? null : (int)i.Pointer->Int64;
     }
 }

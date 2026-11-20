@@ -579,7 +579,7 @@ internal sealed unsafe class PropertyObject : AdoObject
             return NotImplemented("Property.Value = Missing");
         }
         VarType target = AdoValues.VarTypeOf(_slot.Descriptor.Type) ?? VarType.Empty;
-        OwnedVariant? converted = target == VarType.Empty ? null : OwnedVariant.ChangeType(Args.Cell(arg), target, out _);
+        OwnedVariant? converted = target == VarType.Empty ? null : OwnedVariant.ChangeType(Args.Cell(arg), target, SessionLocale.Lcid, out _);
         if (converted is null)
         {
             return NotImplemented($"Property.Value = a value that does not convert to type {_slot.Descriptor.Type} (not asked)");
