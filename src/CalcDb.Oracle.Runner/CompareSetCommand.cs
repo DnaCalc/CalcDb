@@ -23,8 +23,17 @@ internal static partial class Program
     /// baseline as committed at REV, or <c>none</c>; the default is the committed baseline. <c>--diff RUN</c> diffs a written
     /// run without running anything. Batch output per question is shown with <c>--verbose</c>.
     /// </summary>
+    private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store"];
+
     private static int CompareSetCommand(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
     {
+        // A name it does not know is refused before anything runs: compare-set starts up to a thousand attempts, and an
+        // ignored --help once started all of them (2026-11-20).
+        if (options.Names.FirstOrDefault(n => !CompareSetOptions.Contains(n)) is { } unknown)
+        {
+            Console.Error.WriteLine($"compare-set: unknown option --{unknown}; options: {string.Join(" ", CompareSetOptions.Select(o => "--" + o))} (see docs/work/oracle-runner.md)");
+            return 2;
+        }
         string runsDir = Path.Combine(store.Root, "compare-sets");
         if (options.Get("diff") is { } diffName)
         {

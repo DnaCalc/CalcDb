@@ -781,6 +781,9 @@ internal sealed class Options
 
     public bool Has(string name) => _values.ContainsKey(name);
 
+    /// <summary>The option names given, for a command that refuses names it does not know.</summary>
+    public IEnumerable<string> Names => _values.Keys;
+
     public string? Get(string name) => _values.GetValueOrDefault(name);
 
     public string Require(string name) => Get(name) ?? throw new ArgumentException($"--{name} is required.");
