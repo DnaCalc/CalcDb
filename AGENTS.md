@@ -30,7 +30,10 @@ scope or design, the book wins.
 - A follow-up task you find goes into the register and out of the CodeAlta Inbox (`alta task later`, or
   `start` when you do it now). The implementing agent takes it in register order, itself or as a sub-session; the
   owner does not schedule it.
-- MIT licence. Record third-party exact material (the Jackcess ports) in a licence
+- A work item is in progress only while it is being worked on. At the end of a stretch a partial slice goes back to
+  the Backlog (`alta task later`); its register row keeps what it delivered and its open branches. Complete it when
+  its row says done. A self-contained open branch becomes a task of its own.
+- MIT licence. Record third-party exact material (the Jackcess sort resources) in a licence
   ledger as it enters. GitHub CI stays disabled.
 
 ## Tool practice
