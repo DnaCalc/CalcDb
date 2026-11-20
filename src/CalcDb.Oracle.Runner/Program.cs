@@ -15,6 +15,8 @@ namespace CalcDb.Oracle.Runner;
 /// facts, bytes only for the kinds <see cref="ArtifactStore.RetainsKind"/> names.</item>
 /// <item><c>prune [--days N]</c>: remove the file copies of sealed attempts older than N days from the runner store.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
+/// <item><c>inspect (--attempt ID --file NAME | --path FILE) [--table NAME] [--index-pages] [--data-pages] [--page N]</c>: the
+/// structure of a database file (<see cref="InspectCommand"/>).</item>
 /// <item><c>fixtures [--failed-only]</c>: every named fixture of <c>probes/fixtures.json</c> with the creating attempt
 /// and each creation call that returned an error (member, error code, first text argument).</item>
 /// <item><c>seal --token T</c>: seal an attempt whose runner exited before sealing it. Refused while any worker
@@ -50,7 +52,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -77,6 +79,7 @@ internal static partial class Program
                 "freeze" => Freeze(store, options),
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
+                "inspect" => InspectCommand.Run(store, options),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "compare-set" => CompareSetCommand(store, options, repo, evidenceDir, artifactsDir),
                 "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),

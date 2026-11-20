@@ -12,7 +12,7 @@ this runner is tier 2, for owned experiments with effects.
 | Component | Platform | Role |
 | --- | --- | --- |
 | [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
-| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`, `batch`, `compare-set`, `reduce`. |
+| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `inspect`, `freeze`, `retain`, `batch`, `compare-set`, `reduce`. |
 | [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt, or with `--serve` a long-lived worker that answers several questions (below). Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
 | [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
@@ -101,6 +101,22 @@ $oracle = "src/CalcDb.Oracle.Runner/bin/Debug/net11.0/calcdb-oracle.exe"
 & $oracle freeze --attempt <id> --artifact output:<file> --role main --file-name <file>  # output -> fixture
 src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe build
 src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe verify
+```
+
+**Inspecting a database file.** `calcdb-oracle inspect (--attempt ID --file NAME | --path FILE) [--table NAME] [--index-pages]
+[--data-pages] [--page N]` reads the structure of a database file an attempt produced or consumed (`inputs/`, `work/`,
+`artifacts/`; a NAME that matches none lists the candidates), read-only, over `Inspector` in CalcDb.Format. The default
+summary gives the profile, page count and kinds, and each table (names from the catalog; system tables only with
+`--table`) with first page, rows, columns, and physical and logical indexes. `--index-pages` gives each index page of
+the table (all tables without `--table`, or page N): tree and index, leaf or intermediate, entries, the **stored prefix**
+length and bytes next to the **common prefix** of the entries' stored bytes (trailer included, so the two compare),
+free bytes, previous and next leaf, and the first and last entry's key bytes and row locator (every entry with
+`--page`). `--data-pages` gives per page its owner, slot count and free count, and per slot offset, length and
+deleted or overflow flags. `--page N` alone picks by the page's kind. One line per page or entry:
+
+```text
+index page 44: T1 (tdef 42) physical 0 (PK_T1) leaf level=0 entries=2 prefix=0 [] common=4 [7f800000] free=3598 prev=0 next=0
+  first key[5]=7f80000001 -> data 48 slot 0
 ```
 
 To compare CalcDb with ACE, publish CalcDb.dll to `artifacts/native` (`dotnet publish src/CalcDb.Com -r win-x64 -c
