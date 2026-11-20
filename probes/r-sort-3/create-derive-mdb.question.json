@@ -10,6 +10,7 @@
     "Text levels"
   ],
   "description": "Fixture (MDB), CreateDatabase(path, dbLangGeneral, 64). D(ID Long primary key, K TEXT(10)) with 1,536 rows: for each code unit c in U+0000..U+00FF the six contexts c, a+c, c+a, a+c+b, c+c, a+c+c+b (ID = 6*c + context + 1; counted BSTR units through the Field route). Nonunique index IX_K built after the rows, image kept. Reads the IDs whose stored K is Null or whose LEN differs from the inserted length (the public disposition of each unit), closes, reopens the output read-only and reads the SQL ORDER BY K and the IX_K traversal. Asks how every unit orders in context, kept as separate public-order and physical-traversal observations; keys are not interpreted here.",
+  "createsFixture": true,
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

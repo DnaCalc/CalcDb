@@ -13,6 +13,7 @@
     "UTF-16 boundaries"
   ],
   "description": "Fixture (MDB), CreateDatabase(path, dbLangGeneral, 64). LK(ID, K TEXT(255), N Long, D Double, M Currency, DT Date, GU Guid): 18 long K values (General A x253/254/255, B+A x254, A x254+B, a change at the middle, e-acute x127/128/255, sharp-s x64/128/255, decomposed acute x127, ligature x127, a x255, Han x255, supplementary x127) each with tails N=1/D=1.5 and N=2/D=2.5, plus Null-K rows and an all-Null row; compound indexes (K,N), (K,N DESC), (K,D), (K,M), (K,DT), (K,GU), (N,K), (N DESC,K) built after the rows; LK2 has the first two created before its rows, added by INSERT..SELECT. LU, LU2, LU3 are unique indexes (K,N), (K,N DESC), (K) filled by one INSERT per row from LK, with repeats, so each refusal is recorded. FR: 60 rows of K x N x D over Null, empty, marker-like and embedded-null values with seven compound indexes of mixed direction. NP1..NP10: unique, ignore-null, disallow-null, primary, required and DAO-created Required/IgnoreNulls index variants over twelve Null/empty/nonnull tuples, one INSERT per row. NS and NSC: logically identical and foreign-key indexes sharing columns. Whole-file images are kept at each stage.",
+  "createsFixture": true,
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

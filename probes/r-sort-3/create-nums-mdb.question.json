@@ -10,6 +10,7 @@
     "Null policy / aliases"
   ],
   "description": "Fixture (MDB), CreateDatabase(path, dbLangGeneral, 64). NU(ID Long primary key, B Byte, I2 Integer, L Long, S Single, D Double, C Currency, DT Date, GU Guid, X Decimal added by TableDef.CreateField(\"X\", 20), DX DATETIME2 by ALTER TABLE); every value is stored in its own row (other columns Null) through a table-type recordset: byte 0/1/127/128/255 and refused out-of-range inputs; integer and long extrema and zero; single and double extrema, +-0, subnormals and attempted NaN and infinities by bit pattern; Currency from Cy, Double, string and Long projections of one amount; negative DATE fractions and Double projection of the same instant; component-distinct GUIDs; Decimal magnitude, sign and scale; extended-date neighbors. One index per column is built after the rows (images kept). Then closes, reopens the output read-only and reads the stored rows (ID order) and the forward traversal of every column index, backward for D and C. Asks the stored value, key order and Null placement of each type, and what the public path admits.",
+  "createsFixture": true,
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

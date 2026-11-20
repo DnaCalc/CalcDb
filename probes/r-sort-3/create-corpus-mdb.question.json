@@ -13,6 +13,7 @@
     "Traversal consequences"
   ],
   "description": "Fixture (MDB), CreateDatabase(path, dbLangGeneral, 64). Table T(ID Long primary key, K TEXT(255), G TEXT(16)) holds 203 designed values (groups ascii, latin1, combining, ligature, han, width, space, pair, one Null) stored as exact BSTR code units through a table-type recordset; indexes IX_K (K) and IX_KD (K DESC) are built after the rows (fresh build). Table T2 has the same indexes created first and the rows added by INSERT..SELECT (incremental build). Table U holds 37 embedded-null, lone-surrogate and length-boundary values (a refused value leaves an ID-only row), indexed after the rows. Unique-index tables W (from T) and W2 (from U) receive one INSERT per row so each refusal is recorded. Table C stores a compressed and an uncompressed copy of one subset, each indexed. Table DG has 1,536 rows over three repeated 100-character keys. Whole-file images are kept before and after each index build and after close.",
+  "createsFixture": true,
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [
