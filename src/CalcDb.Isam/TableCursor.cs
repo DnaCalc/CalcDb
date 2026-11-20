@@ -791,10 +791,20 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     private readonly PositionState<int> _position;
     private readonly RowBinding _row;
     private readonly uint? _bookmarkBase;
+    private readonly PageCache _cache;
 
-    private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase)
+    /// <summary>
+    /// A snapshot's published serial at open. ACE's snapshot is a fixed view: a change published after it opened does not
+    /// show (r-cursor-1/pop-visibility-snapshot: K read 10 after a dynaset set it to 111). CalcDb reads the current pages,
+    /// so once the file has had a publication since the open, a snapshot's value reads and Finds are NotObserved.
+    /// </summary>
+    private readonly ulong? _viewSerial;
+
+    private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
     {
         Table = table;
+        _cache = cache;
+        _viewSerial = snapshot ? cache.PublishedSerial : null;
         _row = new RowBinding(cache, d, table);
         _source = source;
         _bookmarkBase = bookmarkBase;
@@ -810,10 +820,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// Open a dynaset, snapshot or forward-only cursor. <paramref name="bookmarkBase"/> numbers its bookmarks
     /// (<see cref="KeysetBookmark"/>); null where ACE's base is not identified, and the bookmarks are then NotObserved.
     /// </summary>
-    public static PopulationCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase)
+    public static PopulationCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false)
     {
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, bookmarkBase);
+        return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, bookmarkBase, snapshot);
     }
 
     public bool Bof => _position.Bof;
@@ -949,9 +959,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         return _position.Seek(ordinal) ? null : CursorFailure.InvalidBookmark;
     }
 
-    public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
+    private bool ViewStale => _viewSerial is ulong serial && _cache.PublishedSerial != serial;
 
-    public TextFieldRead ReadText(ColumnDescriptor column) => _row.ReadText(CurrentRoot, column);
+    private static readonly FieldResult StaleView = new(default, CursorFailure.NotObserved, "a snapshot whose file had a publication after it opened: its fixed view is not modelled");
+
+    public FieldResult Read(ColumnDescriptor column) => ViewStale ? StaleView : _row.Read(CurrentRoot, column);
+
+    public TextFieldRead ReadText(ColumnDescriptor column) => ViewStale ? new TextFieldRead(StaleView) : _row.ReadText(CurrentRoot, column);
 
     /// <summary>
     /// Find (R-CURSOR-1 CUR-FIND, qualified.md): FindFirst tests from the first occurrence forward, FindLast from the last
@@ -963,6 +977,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public FindResult Find(FindDirection direction, IRowPredicate predicate)
     {
+        if (ViewStale)
+        {
+            return new FindResult(FindOutcome.NotModelled, FindOpen.StaleSnapshotView);
+        }
         PositionTag tag = _position.Tag;
         int? current = _position.Current;
         if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))

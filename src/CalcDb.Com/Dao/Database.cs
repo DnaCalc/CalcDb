@@ -394,7 +394,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
-                bookmarkBase: Engine.KeysetRecordsetsOpened != 0 ? null : recordsetType == 2 ? KeysetBookmark.FirstBase : recordsetType == 4 ? FirstSnapshotBase(table) : null);
+                bookmarkBase: Engine.KeysetRecordsetsOpened != 0 ? null : recordsetType == 2 ? KeysetBookmark.FirstBase : recordsetType == 4 ? FirstSnapshotBase(table) : null,
+                snapshot: recordsetType == 4);
         if (cursor is not null && recordsetType is 2 or 4)
         {
             Engine.KeysetRecordsetsOpened++;
