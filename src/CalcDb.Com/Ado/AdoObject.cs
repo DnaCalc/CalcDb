@@ -92,19 +92,12 @@ internal abstract class AdoObject : DispatchObject
     public static CallResult NotImplemented(string what) => CallResult.Fail(Failure.NotImplemented(what));
 
     /// <summary>
-    /// A creatable ADO class's factory body: no aggregation (open: ADO's answer to an outer unknown was not asked, so
-    /// CalcDb refuses it as COM permits), then the new object for <paramref name="iid"/>.
+    /// The factory body of the ADO classes ACE's ADO aggregates, Connection, Recordset, Command and Stream (qualified
+    /// R-ACT-1 ACT-AGGREGATE: r-q2-wire/act-aggregate-ado-cocreate, act-aggregate-classobject): without an outer the new
+    /// object for <paramref name="iid"/>; under one its nondelegating IUnknown, or CLASS_E_NOAGGREGATION for any other IID.
     /// </summary>
-    public static unsafe int Publish(AdoObject created, nint outer, in Guid iid, nint* result)
-    {
-        if (outer != 0)
-        {
-            created.Release();
-            *result = 0;
-            return HResults.CLASS_E_NOAGGREGATION;
-        }
-        return created.Publish(iid, result);
-    }
+    public static unsafe int Publish(AdoObject created, nint outer, in Guid iid, nint* result) =>
+        outer == 0 ? created.Publish(iid, result) : created.Aggregate(outer, iid, result);
 }
 
 /// <summary>Argument reading for ADO members (the borrowed VARIANTs of an operation).</summary>

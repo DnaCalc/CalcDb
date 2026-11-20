@@ -118,5 +118,17 @@ internal sealed class RecordObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
-    public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new RecordObject(), outer, iid, result);
+    /// <summary>
+    /// No aggregation: ACT-AGGREGATE asked Connection, Recordset, Command and Stream, not Record, so an outer is refused
+    /// as COM permits (II-13 §4: no aggregation for an unobserved class; open).
+    /// </summary>
+    public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result)
+    {
+        if (outer != 0)
+        {
+            *result = 0;
+            return HResults.CLASS_E_NOAGGREGATION;
+        }
+        return new RecordObject().Publish(iid, result);
+    }
 }

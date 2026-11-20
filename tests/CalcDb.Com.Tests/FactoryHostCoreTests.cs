@@ -402,14 +402,6 @@ public sealed unsafe class FactoryHostCoreTests
         return bootstrap(&offer, answer);
     }
 
-    private static ModuleCounts Counts()
-    {
-        var counts = (delegate* unmanaged<ModuleCounts*, int>)Export("CalcDb.dll", "CalcDbModuleCounts");
-        ModuleCounts c;
-        Assert.Equal(0, counts(&c));
-        return c;
-    }
-
     /// <summary>A property get through IDispatch::Invoke; the text, or null with the EXCEPINFO of a failure.</summary>
     private static string? InvokeGetText(nint dispatch, int dispId, out ExcepInfo info)
     {

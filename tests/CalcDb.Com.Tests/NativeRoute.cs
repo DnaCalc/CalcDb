@@ -64,7 +64,18 @@ internal static unsafe partial class NativeRoute
         return hr;
     }
 
+    public static uint AddRef(nint unknown) => ((delegate* unmanaged<nint, uint>)Vtable(unknown)[1])(unknown);
+
     public static uint Release(nint unknown) => ((delegate* unmanaged<nint, uint>)Vtable(unknown)[2])(unknown);
+
+    /// <summary>The published module's object, lock and host counts (CalcDbModuleCounts).</summary>
+    public static ModuleCounts Counts()
+    {
+        var counts = (delegate* unmanaged<ModuleCounts*, int>)Export("CalcDb.dll", "CalcDbModuleCounts");
+        ModuleCounts c;
+        Assert.Equal(0, counts(&c));
+        return c;
+    }
 
     public static int Create(Guid clsid, nint outer, uint context, Guid iid, out nint result) => CoCreateInstance(&clsid, outer, context, &iid, out result);
 
