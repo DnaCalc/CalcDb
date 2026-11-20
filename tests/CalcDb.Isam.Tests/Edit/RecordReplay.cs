@@ -87,7 +87,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
 
     public IRecordCursor? Open(TableDefinition table, int type) => type == 1
         ? TableCursor.Open(_cache, D, table, _image.PageCount, 0, out _)
-        : PopulationCursor.Open(_cache, D, table, _image.PageCount, forwardOnly: type == 8, out _);
+        : PopulationCursor.Open(_cache, D, table, _image.PageCount, forwardOnly: type == 8, out _, snapshot: type == 4);
 
     private static ReadOnlyMemory<byte> Copy(PagePin pin)
     {

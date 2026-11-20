@@ -393,7 +393,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         TraversalFailure? traversal;
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
-            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal);
+            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal, snapshot: recordsetType == 4,
+                bookmarkBaseKnown: !_recordsets.Any(r => r is SelectRecordsetObject or RecordsetObject { RecordsetType: 2 or 4 }));
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
