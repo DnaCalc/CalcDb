@@ -593,7 +593,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UnpublishedCounter", $"another Database of this engine issued AutoNumber values of '{_entry.Name}' that the file's counter does not hold yet (new rows are W-05/growth-structural-closure)"));
         }
-        return EditPublication.Of(frame.AddNew());
+        EditOutcome outcome = frame.AddNew();
+        if (outcome.Succeeded && frame.Table.Counter is { Last: > 0 and <= uint.MaxValue } publishedCounter)
+        {
+            Database.Engine.Changes.MarkAutoNumberPublished(Database.Name, _entry.Name, (uint)publishedCounter.Last);
+        }
+        return EditPublication.Of(outcome);
     }
 
     /// <summary>
@@ -616,6 +621,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         EditMode mode = frame.Mode;
         UpdateOutcome outcome = frame.Update(type, force);
         CallResult result = EditPublication.Of(outcome);
+        if (outcome.Error?.Number == MutationError.Duplicate && mode == EditMode.AddNew && frame.Table.Counter is { Last: > 0 and <= uint.MaxValue } refusedCounter)
+        {
+            Database.Engine.Changes.MarkAutoNumberPublished(Database.Name, _entry.Name, (uint)refusedCounter.Last);
+        }
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)

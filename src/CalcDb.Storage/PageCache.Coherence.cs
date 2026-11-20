@@ -55,9 +55,16 @@ public sealed class ReadView : IDisposable
 }
 
 /// <summary>
+/// A page and byte span transferred twice per publication — once before the unit's other existing pages (after any
+/// appended pages) and once after them — when that page is part of the publication (R-CRASH-1 CRASH-ORDER; the cache
+/// stays format-agnostic and takes the coordinates from the caller).
+/// </summary>
+public readonly record struct PageBracket(ulong PageNumber, PageSpan Span);
+
+/// <summary>
 /// How a publication writes its final images (W-03/native-program-executor): the program policy, the page roles the
-/// caller knows (the cache knows none), and the cancellation classifier and request the executor observes at its
-/// checkpoints.
+/// caller knows (the cache knows none), an optional page-span bracket, and the cancellation classifier and request the
+/// executor observes at its checkpoints.
 /// </summary>
 public sealed record PublicationOptions
 {
@@ -66,6 +73,8 @@ public sealed record PublicationOptions
     public ProgramPolicy Policy { get; init; } = ProgramPolicy.CrashOrderData;
 
     public IReadOnlyDictionary<ulong, PageRole>? Roles { get; init; }
+
+    public PageBracket? Bracket { get; init; }
 
     public CancellationClassifier? Classify { get; init; }
 
@@ -801,14 +810,63 @@ public sealed partial class PageCache
             return SettleStopped(attempt, null, "The file extent could not be read: " + exception.Message);
         }
         List<PreparedRevision> revisions = [];
+        List<Dependency> dependencies = [];
+        PageBracket? bracket = options.Bracket;
+        int? bracketBeforeId = null;
+        int? bracketAfterId = null;
+        int nextId = 0;
         for (int i = 0; i < attempt.Pages.Count; i++)
         {
             AttemptPage page = attempt.Pages[i];
+            ReadOnlyMemory<byte> image = _slots[page.FinalSlot!.Value].Backing;
+            if (bracket is { } b && page.PageNumber == b.PageNumber)
+            {
+                int beforeId = nextId++;
+                int afterId = nextId++;
+                bracketBeforeId = beforeId;
+                bracketAfterId = afterId;
+                revisions.Add(new PreparedRevision(beforeId, page.PageNumber, image)
+                {
+                    Role = PageRole.NativeState,
+                    Purpose = WritePurpose.NativeState,
+                    Spans = [b.Span],
+                    TransferSeparately = true,
+                });
+                revisions.Add(new PreparedRevision(afterId, page.PageNumber, image)
+                {
+                    Previous = beforeId,
+                    Role = PageRole.NativeState,
+                    Purpose = WritePurpose.NativeState,
+                    Spans = [b.Span],
+                    TransferSeparately = true,
+                });
+                continue;
+            }
             PageRole role = options.Roles is { } roles && roles.TryGetValue(page.PageNumber, out PageRole r) ? r : PageRole.Unclassified;
             // The reserved final frame is exclusive to the attempt until publication or resolution: immutable from here.
-            revisions.Add(new PreparedRevision(i, page.PageNumber, _slots[page.FinalSlot!.Value].Backing) { Role = role });
+            revisions.Add(new PreparedRevision(nextId++, page.PageNumber, image) { Role = role });
         }
-        ProgramCompilation compiled = NativeProgram.Compile(new PreparedUnit(PageSize, revisions), options.Policy, FileIncarnation, extent);
+        if (bracketBeforeId is int before && bracketAfterId is int after)
+        {
+            foreach (PreparedRevision rev in revisions)
+            {
+                if (rev.Id == before || rev.Id == after)
+                {
+                    continue;
+                }
+                bool isAppend = checked(((ulong)PageSize * rev.PageNumber) + (ulong)PageSize) > extent;
+                if (isAppend)
+                {
+                    dependencies.Add(new Dependency(rev.Id, before, DependencyKind.Transfer));
+                }
+                else
+                {
+                    dependencies.Add(new Dependency(before, rev.Id, DependencyKind.Transfer));
+                    dependencies.Add(new Dependency(rev.Id, after, DependencyKind.Transfer));
+                }
+            }
+        }
+        ProgramCompilation compiled = NativeProgram.Compile(new PreparedUnit(PageSize, revisions) { Dependencies = dependencies }, options.Policy, FileIncarnation, extent);
         if (compiled.Program is not { } program)
         {
             return SettleStopped(attempt, null, $"The program could not be compiled: {compiled.Failure}");

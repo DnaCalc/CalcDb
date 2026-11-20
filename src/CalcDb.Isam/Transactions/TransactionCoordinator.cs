@@ -1,7 +1,30 @@
+using System.Diagnostics;
+
+using CalcDb.Format;
 using CalcDb.Isam.Edit;
 using CalcDb.Storage;
 
 namespace CalcDb.Isam.Transactions;
+
+/// <summary>
+/// How a publication interacts with the ACCDB page-0 commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER;
+/// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits).
+/// </summary>
+public enum CommitMode : byte
+{
+    /// <summary>
+    /// Automatic recordset write or AddNew AutoNumber consumption: starts a lazy burst (+1 on page 0) when none is
+    /// active or at least 1 s after the previous burst write; joins the active burst (no page-0 change) below 500 ms;
+    /// refuses with <see cref="MutationOpen.CommitBurstGap"/> in the window [500 ms, 1 s), where ACE's deferred write decides.
+    /// </summary>
+    LazyBurst,
+
+    /// <summary>
+    /// Explicit outer CommitTrans with changes, refused 3022 unique insert on AddNew, or action Execute: ends any
+    /// active lazy burst and increments page 0 offset 3586 by +1 on its own.
+    /// </summary>
+    Immediate,
+}
 
 /// <summary>A CommitTrans or Rollback outcome: ACE's error, or a named case, with what was resolved.</summary>
 public readonly record struct ResolutionOutcome(MutationError? Error = null, MutationOpen Open = MutationOpen.None, string? Detail = null, int ResolvedChanges = 0)
@@ -37,7 +60,8 @@ public interface IPublicationTarget
 }
 
 /// <summary>
-/// How a publication is written (W-05/same-width-mutation), with what the records decide and what they leave open:
+/// How a publication is written (W-05/same-width-mutation, W-05/growth-structural-closure), with what the records decide
+/// and what they leave open:
 /// <list type="bullet">
 /// <item><b>Timing</b>: an outer CommitTrans publishes before it returns (R-TXN-1 TXN-FLUSH-COMMIT: ACE issues the
 /// transaction's writes on the calling thread before the return), and so does an automatic operation at its end
@@ -46,9 +70,9 @@ public interface IPublicationTarget
 /// (TXN-FLUSH-OP, TXN-FLUSH-BEHIND): CalcDb's file is final earlier, which is never worse for an opener after a crash,
 /// and the write-behind owner is W-05/resolution-live-rollback's.</item>
 /// <item><b>Order</b> (R-CRASH-1 CRASH-ORDER): one final image per page in CRASH-ORDER-DATA with MAP-AFTER, data pages
-/// before index leaves; a modification writes no new page and no map. ACE brackets a statement's pages with a 2-byte
-/// write at page 0 offset 3586 (shared sessions) before and after; its meaning is not established (W-04), so CalcDb does
-/// not write it.</item>
+/// before index leaves; a modification writes no new page and no map. When a publication increments the ACCDB page-0
+/// commit counter at offset 3586 (new lazy burst or immediate commit), page 0 is transferred as a 2-byte
+/// <c>[3586, 3588)</c> bracket before and after the statement's existing pages (after any appended pages).</item>
 /// <item><b>Flush</b>: ACE's own calls never flush; one FlushFileBuffers comes from its timer thread 2.33 to 2.89 s after
 /// the burst. CalcDb issues none for an ordinary commit; dbForceOSFlush (not yet traced) requests a final flush barrier.
 /// The timer's flush is a background owner CalcDb does not have yet.</item>
@@ -174,11 +198,27 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// </summary>
     public const int MaxWriteDepth = 5;
 
+    /// <summary>
+    /// Below this gap two lazy writes stay in one commit-counter burst: ACE's deferred write of an automatic operation comes
+    /// 500–545 ms after it (TXN-FLUSH-OP), and a write before it joins it. Paused 100 to 485 ms apart, three runs each, two
+    /// Deletes counted once; with call overhead those gaps measure just under 500 ms (evidence/r-q8-header-counter
+    /// two-deletes-*ms-apart; qualified.md the page-0 commit counter).
+    /// </summary>
+    public static readonly TimeSpan ObservedSameBurstMax = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// The shortest gap observed always to start a new burst: 1 s (1 to 4 s, two runs each). At 500 ms ACE split the burst
+    /// in three runs of four, its deferred write of an automatic operation coming 500–545 ms after it (TXN-FLUSH-OP); a gap
+    /// in [500 ms, 1 s) is named <see cref="MutationOpen.CommitBurstGap"/>.
+    /// </summary>
+    public static readonly TimeSpan ObservedNewBurstMin = TimeSpan.FromSeconds(1);
+
     private readonly List<ExplicitFrame> _frames = [];
     private readonly Dictionary<PageCache, FileParticipant> _participants = [];
     private readonly List<EditFrame> _edits = [];
     private readonly List<AcceptedRowChange> _pending = [];
     private readonly HashSet<PageCache> _locked = [];
+    private readonly Dictionary<PageCache, TimeSpan> _lazyBursts = [];
     private OperationFrame? _operation;
 
     public LockerId Locker { get; } = locker;
@@ -188,6 +228,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>The time and scheduling seam of this locker's conflict waits.</summary>
     public ILockScheduler Scheduler { get; set; } = ThreadLockScheduler.System;
+
+    /// <summary>Monotonic clock for ACCDB page-0 commit-counter lazy-burst decisions; injectable by tests.</summary>
+    public Func<TimeSpan> Clock { get; set; } = static () => Stopwatch.GetElapsedTime(0);
 
     /// <summary>Where publications write; without one, accepted changes wait unpublished (an outer commit names it).</summary>
     public IPublicationTarget? Publisher { get; set; }
@@ -200,6 +243,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     // Files whose publication stopped after a native effect: the attempt owns the overlay as resolution owner
     // (W-05/resolution-live-rollback), so this Workspace neither edits nor disposes it.
     private readonly HashSet<PageCache> _unresolved = [];
+
+    /// <summary>
+    /// End any active lazy-burst window for <paramref name="cache"/> (evidence/r-q10-commit-counter-edits: opening a
+    /// Snapshot recordset ends the current burst so the next lazy write increments page 0 offset 3586).
+    /// </summary>
+    public void EndLazyBurst(PageCache cache) => _lazyBursts.Remove(cache);
 
     /// <summary>This Workspace's private overlay of <paramref name="cache"/>, if it has changed the file.</summary>
     public PrivateOverlay? OverlayOf(PageCache cache) => _participants.TryGetValue(cache, out FileParticipant? p) ? p.Overlay : null;
@@ -295,8 +344,190 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             file.Locks.Convert(Locker, LockLifetime.Transaction, LockLifetime.UntilPublished);
         }
         // The outer commit publishes the change set before it returns (TXN-FLUSH-COMMIT; PublicationPolicy).
-        (MutationOpen open, string? detail) = Publish(forceFlush: options == 1);
+        (MutationOpen open, string? detail) = Publish(forceFlush: options == 1, CommitMode.Immediate);
         return new ResolutionOutcome(null, open, detail, resolved);
+    }
+
+    /// <summary>
+    /// Decide whether a publication on <paramref name="cache"/> under <paramref name="mode"/> increments the ACCDB
+    /// page-0 commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter,
+    /// evidence/r-q10-commit-counter-edits). Non-ACCDB files and synthetic caches without a database header leave
+    /// page 0 untouched.
+    /// </summary>
+    private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out TimeSpan? burstNow)
+    {
+        incrementPage0 = false;
+        burstNow = null;
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        using PagePin? page0 = cache.Pin(0).Pin;
+        if (page0 is null || !DatabaseHeader.IsAccdb(page0.Bytes, d))
+        {
+            return (MutationOpen.None, null);
+        }
+        if (mode == CommitMode.Immediate)
+        {
+            incrementPage0 = true;
+        }
+        else
+        {
+            TimeSpan now = Clock();
+            burstNow = now;
+            if (!_lazyBursts.TryGetValue(cache, out TimeSpan last))
+            {
+                incrementPage0 = true;
+            }
+            else
+            {
+                TimeSpan elapsed = now - last;
+                if (elapsed < ObservedSameBurstMax)
+                {
+                    incrementPage0 = false;
+                }
+                else if (elapsed >= ObservedNewBurstMin)
+                {
+                    incrementPage0 = true;
+                }
+                else
+                {
+                    return (MutationOpen.CommitBurstGap, $"elapsed {elapsed.TotalSeconds:F3} s since the previous lazy write falls in the unobserved [{ObservedSameBurstMax.TotalSeconds:F2} s, {ObservedNewBurstMin.TotalSeconds:F1} s) commit-counter burst gap (evidence/r-q8-header-counter)");
+                }
+            }
+        }
+        if (incrementPage0 && d.Header.CommitCounter.Read(page0.Bytes) >= byte.MaxValue)
+        {
+            return (MutationOpen.Publication, "ACCDB page-0 commit counter at offset 3586 is already 255: wrap or multi-byte carry is not observed (evidence/r-q8-header-counter)");
+        }
+        return (MutationOpen.None, null);
+    }
+
+    private void RecordBurst(PageCache cache, CommitMode mode, TimeSpan? burstNow)
+    {
+        if (mode == CommitMode.Immediate)
+        {
+            _lazyBursts.Remove(cache);
+        }
+        else if (burstNow is TimeSpan ts)
+        {
+            _lazyBursts[cache] = ts;
+        }
+    }
+
+    /// <summary>
+    /// Publish a non-transactional side effect directly to <paramref name="cache"/> outside the Workspace's explicit
+    /// transaction overlay (AddNew AutoNumber TableDef persistence, and refused 3022 unique-insert UniqueEntryCount /
+    /// page-0 commit-counter persistence; R-FMT-2 Generated values, II-05, evidence/r-q10-commit-counter-edits). Such
+    /// writes survive CancelUpdate, subsequent refusals, and explicit Rollback.
+    /// </summary>
+    internal (MutationOpen Open, string? Detail) PublishNonTransactional(
+        PageCache cache,
+        IReadOnlyList<PageEdit> edits,
+        IReadOnlyList<LockResource> footprint,
+        CommitMode mode,
+        MutationErrorSource conflictSource,
+        out MutationError? error)
+    {
+        error = null;
+        if (Publisher is not { } publisher)
+        {
+            return (MutationOpen.None, null);
+        }
+        if (_unresolved.Contains(cache))
+        {
+            return (MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+        }
+        (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out TimeSpan? burstNow);
+        if (counterOpen != MutationOpen.None)
+        {
+            return (counterOpen, counterDetail);
+        }
+        if (edits.Count == 0 && !incrementPage0)
+        {
+            RecordBurst(cache, mode, burstNow);
+            return (MutationOpen.None, null);
+        }
+        LockResource[] lockResources = footprint.Count > 0 ? [.. footprint] : [];
+        if (lockResources.Length > 0)
+        {
+            LockAcquisition got = Lock(cache, lockResources, LockLifetime.UntilPublished);
+            if (got.Conflict is { } conflict)
+            {
+                if (conflict.HolderLifetime == LockLifetime.UntilPublished)
+                {
+                    return (MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
+                }
+                error = new MutationError(MutationError.LockedBySession, conflictSource);
+                return (MutationOpen.None, null);
+            }
+        }
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        PrivateOverlay overlay = cache.CreateOverlay(Locker);
+        bool keepOverlay = false;
+        try
+        {
+            Dictionary<ulong, PageRole> roles = [];
+            foreach (PageEdit e in edits)
+            {
+                EditResult edited = overlay.Edit(e.Page, e.Delta);
+                if (!edited.Succeeded)
+                {
+                    return (MutationOpen.Publication, $"page {e.Page} could not take the non-transactional revision: {edited.Failure} {edited.Detail}");
+                }
+                roles[e.Page] = e.Role;
+            }
+            PageBracket? bracket = null;
+            if (incrementPage0)
+            {
+                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d));
+                if (!p0Edit.Succeeded)
+                {
+                    return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
+                }
+                roles[0] = PageRole.NativeState;
+                bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
+            }
+            if (publisher.Writable(cache, overlay.ChangedPages, out string? leaseFailure) is not { } file)
+            {
+                return (MutationOpen.Publication, "the file cannot be written: " + leaseFailure);
+            }
+            PublicationStart start = cache.BeginPublication(overlay);
+            if (start.Attempt is not { } attempt)
+            {
+                return (MutationOpen.Publication, "the publication could not start: " + start.Failure);
+            }
+            using (attempt)
+            {
+                PublicationOutcome outcome = attempt.Run(file, new PublicationOptions
+                {
+                    Policy = PublicationPolicy.Ordinary,
+                    Roles = roles,
+                    Bracket = bracket,
+                });
+                if (!outcome.Succeeded)
+                {
+                    if (attempt.Step == PublicationStep.NeedsResolution)
+                    {
+                        _unresolved.Add(cache);
+                        keepOverlay = true;
+                        return (MutationOpen.Publication, $"the publication stopped after a native effect and needs resolution (W-05/resolution-live-rollback): {outcome.Failure}");
+                    }
+                    return (MutationOpen.Publication, $"the publication stopped before any native effect: {outcome.Failure}");
+                }
+                _publications.Add(new PublicationReceipt(0, attempt.Program!));
+            }
+            RecordBurst(cache, mode, burstNow);
+            return (MutationOpen.None, null);
+        }
+        finally
+        {
+            if (!keepOverlay)
+            {
+                overlay.Dispose();
+                if (lockResources.Length > 0)
+                {
+                    Unlock(cache, lockResources, LockLifetime.UntilPublished);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -307,7 +538,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// native effect leaves the set as it was; one that stops after an effect keeps the attempt as resolution owner
     /// (the cache restricts admission) and is named.
     /// </summary>
-    private (MutationOpen Open, string? Detail) Publish(bool forceFlush)
+    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode)
     {
         if (_pending.Find(c => c.Physical is null) is { } unwritten)
         {
@@ -325,7 +556,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (written.Length == 1 && Publisher is { } publisher)
         {
             FileParticipant p = written[0];
-            IReadOnlyCollection<ulong> pages = p.Overlay.ChangedPages;
+            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out TimeSpan? burstNow);
+            if (counterOpen != MutationOpen.None)
+            {
+                return (counterOpen, counterDetail);
+            }
+            FormatDescriptor d = FormatDescriptor.Jet4Family;
+            IReadOnlyCollection<ulong> pages = incrementPage0 && !p.Overlay.ChangedPages.Contains(0UL)
+                ? [.. p.Overlay.ChangedPages, 0UL]
+                : p.Overlay.ChangedPages;
             if (publisher.Writable(p.Cache, pages, out string? leaseFailure) is not { } file)
             {
                 return (MutationOpen.Publication, "the file cannot be written: " + leaseFailure);
@@ -338,6 +577,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     roles[e.Page] = e.Role;
                 }
             }
+            PageBracket? bracket = null;
+            if (incrementPage0)
+            {
+                if (!p.Overlay.ChangedPages.Contains(0UL))
+                {
+                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d));
+                    if (!p0Edit.Succeeded)
+                    {
+                        return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
+                    }
+                }
+                roles[0] = PageRole.NativeState;
+                bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
+            }
             PublicationStart start = p.Cache.BeginPublication(p.Overlay);
             if (start.Attempt is not { } attempt)
             {
@@ -345,7 +598,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             using (attempt)
             {
-                PublicationOutcome outcome = attempt.Run(file, new PublicationOptions { Policy = forceFlush ? PublicationPolicy.Forced : PublicationPolicy.Ordinary, Roles = roles });
+                PublicationOutcome outcome = attempt.Run(file, new PublicationOptions
+                {
+                    Policy = forceFlush ? PublicationPolicy.Forced : PublicationPolicy.Ordinary,
+                    Roles = roles,
+                    Bracket = bracket,
+                });
                 if (!outcome.Succeeded)
                 {
                     if (attempt.Step == PublicationStep.NeedsResolution)
@@ -359,6 +617,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _publications.Add(new PublicationReceipt(_pending.Count, attempt.Program!));
             }
+            RecordBurst(p.Cache, mode, burstNow);
         }
         foreach (PageCache f in _locked)
         {
@@ -421,6 +680,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             e.DropForRollback();
         }
+        _lazyBursts.Clear();
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
     }
@@ -489,7 +749,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(true);
         }
-        (MutationOpen open, string? detail) = Publish(forceFlush: false);
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.LazyBurst);
         return new AcceptOutcome(true, null, open, detail);
     }
 

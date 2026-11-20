@@ -136,6 +136,20 @@ internal sealed class UnpublishedChanges
         return false;
     }
 
+    /// <summary>Advance stored AutoNumber floors after a non-transactional AutoNumber write publishes to disk.</summary>
+    public void MarkAutoNumberPublished(string file, string table, uint floor)
+    {
+        foreach (CounterEntry entry in _counters)
+        {
+            if (string.Equals(entry.File, file, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(entry.Table, table, StringComparison.OrdinalIgnoreCase)
+                && floor > entry.Stored)
+            {
+                entry.Stored = floor;
+            }
+        }
+    }
+
     /// <summary>Advance stored AutoNumber floors after accepted changes publish to disk.</summary>
     public void MarkPublished(IReadOnlyList<AcceptedRowChange> changes)
     {
@@ -149,15 +163,7 @@ internal sealed class UnpublishedChanges
             {
                 if (edit.Delta is TableDefCountsDelta { AutoNumberFloor: uint floor })
                 {
-                    foreach (CounterEntry entry in _counters)
-                    {
-                        if (string.Equals(entry.File, file, StringComparison.OrdinalIgnoreCase)
-                            && string.Equals(entry.Table, change.Table.TableName, StringComparison.OrdinalIgnoreCase)
-                            && floor > entry.Stored)
-                        {
-                            entry.Stored = floor;
-                        }
-                    }
+                    MarkAutoNumberPublished(file, change.Table.TableName, floor);
                 }
             }
         }

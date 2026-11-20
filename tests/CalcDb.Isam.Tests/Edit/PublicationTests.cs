@@ -156,22 +156,24 @@ public sealed class PublicationTests
         byte[] after = rig.File.Image.Snapshot();
         Dictionary<int, List<int>> changed = Changed(rig.Before, after);
         uint leaf = r.PhysicalOf(r.FindIndex("PK_R")!)!.RootPage;
-        Assert.Equal(new[] { (int)row.Page, (int)leaf }.Order(), changed.Keys.Order());
+        Assert.Equal(new[] { 0, (int)row.Page, (int)leaf }.Order(), changed.Keys.Order());
+        Assert.Equal([D.Header.CommitCounter.Offset], changed[0]);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
         Assert.True(changed[(int)row.Page].Count is >= 1 and <= 4); // only bytes of the 4-byte ID field
         Assert.All(changed[(int)leaf], o => Assert.True(o >= D.IndexPage.EntryMaskOffset, $"leaf byte {o} is a header byte")); // the entry area and its mask
         (List<long> stored, List<long> indexed) = ReadR(after, r);
         Assert.Equal(Enumerable.Range(1, 64).Where(i => i != 10).Append(100).Order(), stored.Order().Select(i => (int)i));
         Assert.Equal(stored.Order(), indexed); // PK_R's entry order is ascending and names every row once
 
-        // The program: one final image per page, data before index (CRASH-ORDER-DATA), no growth, no flush.
+        // The program: page-0 2-byte [3586, 3588) bracket before and after data-before-index (CRASH-ORDER-DATA), no growth, no flush.
         PublicationReceipt receipt = Assert.Single(rig.A.Publications);
         NativeProgram program = receipt.Program;
-        Assert.Equal([EffectKind.Transfer, EffectKind.Transfer], program.Effects.Select(e => e.Kind));
-        Assert.Equal([(ulong)row.Page, leaf], program.Effects.Select(e => e.PageNumber!.Value));
-        Assert.Equal(8192UL, (ulong)program.Effects.Sum(e => (long)e.FileRange.Length));
+        Assert.Equal([EffectKind.Transfer, EffectKind.Transfer, EffectKind.Transfer, EffectKind.Transfer], program.Effects.Select(e => e.Kind));
+        Assert.Equal([0UL, (ulong)row.Page, leaf, 0UL], program.Effects.Select(e => e.PageNumber!.Value));
+        Assert.Equal(8196UL, (ulong)program.Effects.Sum(e => (long)e.FileRange.Length));
         Assert.Empty(program.Persistence);
         Assert.Equal(0, rig.File.Image.Flushes);
-        Assert.Equal(2, rig.File.Image.Writes);
+        Assert.Equal(4, rig.File.Image.Writes);
     }
 
     [Fact]
@@ -208,11 +210,17 @@ public sealed class PublicationTests
         Assert.Equal(rig.Before, rig.File.Image.Snapshot()); // nothing is written inside the level
         ResolutionOutcome commit = rig.A.CommitTrans(options);
         Assert.True(commit.Succeeded, commit.ToString());
-        Dictionary<int, List<int>> changed = Changed(rig.Before, rig.File.Image.Snapshot());
-        Assert.Single(changed); // G's data page: N is unindexed
+        byte[] after = rig.File.Image.Snapshot();
+        Dictionary<int, List<int>> changed = Changed(rig.Before, after);
+        Assert.Equal(2, changed.Count); // page 0 commit counter + G's data page (N is unindexed)
+        Assert.Equal([D.Header.CommitCounter.Offset], changed[0]);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
         Assert.Equal(options, rig.File.Image.Flushes);
         NativeProgram program = Assert.Single(rig.A.Publications).Program;
-        Assert.Equal(options == 1 ? [EffectKind.Transfer, EffectKind.Flush] : [EffectKind.Transfer], program.Effects.Select(e => e.Kind));
+        EffectKind[] expectedKinds = options == 1
+            ? [EffectKind.Transfer, EffectKind.Transfer, EffectKind.Transfer, EffectKind.Flush]
+            : [EffectKind.Transfer, EffectKind.Transfer, EffectKind.Transfer];
+        Assert.Equal(expectedKinds, program.Effects.Select(e => e.Kind));
         Assert.Empty(rig.File.Cache.Locks.HeldBy(rig.A.Locker)); // the published pages are released (ReleasePublished)
     }
 
@@ -257,7 +265,10 @@ public sealed class PublicationTests
         (List<long> stored, List<long> indexed) = ReadR(after, rig.Table("R").Table);
         Assert.Contains(640L, stored);
         Assert.Equal(640L, indexed[^1]);
-        Assert.Equal(3, Changed(rig.Before, after).Count); // G's data page, R's data page, PK_R's leaf
+        Dictionary<int, List<int>> changed = Changed(rig.Before, after);
+        Assert.Equal(4, changed.Count); // page 0 commit counter (+2), G's data page, R's data page, PK_R's leaf
+        Assert.Equal([D.Header.CommitCounter.Offset], changed[0]);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 2, after[D.Header.CommitCounter.Offset]);
     }
 
     [Fact]

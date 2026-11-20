@@ -285,11 +285,14 @@ public sealed class NativeRowAndDataPageTests
         Assert.False(DataPages.TryAppendRow(page, tooBig, D, out _, out string? fullErr));
         Assert.Contains("free bytes", fullErr);
 
-        // Deleted-slot page refusal
+        // Deleted-slot page: appends a new slot after deleted slots without reusing them (R-LOCK-4 WRITE-ALLOC)
         byte[] deletedPage = (byte[])page.Clone();
         Assert.True(DataPages.TryDeleteSlot(deletedPage, 0, D, out err), err);
-        Assert.False(DataPages.TryAppendRow(deletedPage, row1, D, out _, out string? delErr));
-        Assert.Contains("deleted slots", delErr);
+        Assert.True(DataPages.TryAppendRow(deletedPage, row1, D, out byte slot2, out err), err);
+        Assert.Equal(2, slot2);
+        Assert.True(DataPages.CheckedSlot(deletedPage, 0, D, out _)!.Value.Deleted);
+        SlotView s2 = DataPages.CheckedSlot(deletedPage, 2, D, out _)!.Value;
+        Assert.Equal(row1, deletedPage.AsSpan(s2.Start, s2.Length).ToArray());
 
         // WriterSlotLimit (255) refusal: 254 rows succeed, 255th refuses (would clear FreeMap)
         byte[] dense = EmptyDataPage(owner: 50);
@@ -399,6 +402,129 @@ public sealed class NativeRowAndDataPageTests
         Assert.Equal(0, empty.Count);
         Assert.Equal(0, empty.PrefixLength);
         Assert.Equal(D.IndexPage.EntryAreaBytes, empty.FreeCount);
+    }
+
+    [Fact]
+    public void TableDefUpdater_TryUpdateCounts_applies_empty_built_and_bulk_built_statistics_word_rules()
+    {
+        // R-FMT-2 II-05 (evidence/r-q-fmt-sort/dc-rules-accdb, evidence/r-q10-statistics-words):
+        // word0=0 (empty-built): word1 rises on new key and never falls.
+        // word0>0 (bulk-built): removals lower word0 by 1; inserts never raise word0; new key raises word1;
+        // while word0>0, word1 is clamped at most word0 (delete-two-unique (8,7)->(6,6), insert-new (8,7)->(8,8), delete-all -> (0,0)).
+        byte[] MakeTableDefWithIndex(uint rowCount, uint w0, uint w1)
+        {
+            byte[] td = new byte[D.PageSize];
+            td[0] = 0x02;
+            D.TableDef.RowCount.Write(td, rowCount);
+            D.TableDef.RealIndexCount.Write(td, 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(td.AsSpan(TableDefUpdater.EntryCountOffset(0, D), 4), w0);
+            BinaryPrimitives.WriteUInt32LittleEndian(td.AsSpan(TableDefUpdater.UniqueEntryCountOffset(0, D), 4), w1);
+            return td;
+        }
+
+        // Empty-built (0, 2): insert new -> (0, 3); delete -> (0, 3) unchanged; key-changing edit -> (0, 3) unchanged.
+        byte[] emptyBuilt = MakeTableDefWithIndex(2, w0: 0, w1: 2);
+        Assert.True(TableDefUpdater.TryUpdateCounts(emptyBuilt, +1, null, [0], [], D, out string? err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(emptyBuilt, 0, D, out uint w0) && w0 == 0);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(emptyBuilt, 0, D, out uint w1) && w1 == 3);
+        Assert.True(TableDefUpdater.TryUpdateCounts(emptyBuilt, -1, null, [], [0], D, out err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(emptyBuilt, 0, D, out w0) && w0 == 0);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(emptyBuilt, 0, D, out w1) && w1 == 3);
+
+        // Bulk-built (8, 7): delete-two-unique -> (7,7) -> (6,6)
+        byte[] bulkDelTwo = MakeTableDefWithIndex(8, w0: 8, w1: 7);
+        Assert.True(TableDefUpdater.TryUpdateCounts(bulkDelTwo, -1, null, [], [0], D, out err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkDelTwo, 0, D, out w0) && w0 == 7);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkDelTwo, 0, D, out w1) && w1 == 7);
+        Assert.True(TableDefUpdater.TryUpdateCounts(bulkDelTwo, -1, null, [], [0], D, out err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkDelTwo, 0, D, out w0) && w0 == 6);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkDelTwo, 0, D, out w1) && w1 == 6);
+
+        // Bulk-built (8, 7): delete-all -> (0, 0)
+        byte[] bulkDelAll = MakeTableDefWithIndex(8, w0: 8, w1: 7);
+        for (int i = 0; i < 8; i++)
+        {
+            Assert.True(TableDefUpdater.TryUpdateCounts(bulkDelAll, -1, null, [], [0], D, out err), err);
+        }
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkDelAll, 0, D, out w0) && w0 == 0);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkDelAll, 0, D, out w1) && w1 == 0);
+
+        // Bulk-built (8, 7): insert-new -> (8, 8); second insert-new stays clamped at (8, 8)
+        byte[] bulkIns = MakeTableDefWithIndex(8, w0: 8, w1: 7);
+        Assert.True(TableDefUpdater.TryUpdateCounts(bulkIns, +1, null, [0], [], D, out err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkIns, 0, D, out w0) && w0 == 8);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkIns, 0, D, out w1) && w1 == 8);
+        Assert.True(TableDefUpdater.TryUpdateCounts(bulkIns, +1, null, [0], [], D, out err), err);
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkIns, 0, D, out w0) && w0 == 8);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkIns, 0, D, out w1) && w1 == 8);
+
+        // Bulk-built (8, 7): update-key -> (7, 7), RowCount unchanged
+        byte[] bulkUpd = MakeTableDefWithIndex(8, w0: 8, w1: 7);
+        Assert.True(TableDefUpdater.TryUpdateCounts(bulkUpd, 0, null, [], [0], D, out err), err);
+        Assert.Equal(8UL, D.TableDef.RowCount.Read(bulkUpd));
+        Assert.True(TableDefUpdater.TryReadEntryCount(bulkUpd, 0, D, out w0) && w0 == 7);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkUpd, 0, D, out w1) && w1 == 7);
+    }
+
+    [Fact]
+    public void DatabaseHeader_TryIncrementCommitCounter_increments_accdb_and_refuses_overflow_or_non_accdb()
+    {
+        byte[] accdb = new byte[D.PageSize];
+        D.Header.MagicBytes.CopyTo(accdb);
+        D.Header.AceSignature.CopyTo(accdb.AsSpan(D.Header.SignatureOffset));
+        D.Header.Version.Write(accdb, 2);
+        Assert.True(DatabaseHeader.IsAccdb(accdb, D));
+
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out string? err), err);
+        Assert.Equal(1, accdb[D.Header.CommitCounter.Offset]);
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out err), err);
+        Assert.Equal(2, accdb[D.Header.CommitCounter.Offset]);
+
+        accdb[D.Header.CommitCounter.Offset] = 254;
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out err), err);
+        Assert.Equal(255, accdb[D.Header.CommitCounter.Offset]);
+
+        // Overflow past 255 is refused and never wraps to 0
+        Assert.False(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out string? overflowErr));
+        Assert.Contains("255", overflowErr);
+        Assert.Equal(255, accdb[D.Header.CommitCounter.Offset]);
+
+        // Jet 4 MDB is not ACCDB and is refused without modifying offset 3586
+        byte[] mdb = new byte[D.PageSize];
+        D.Header.MagicBytes.CopyTo(mdb);
+        D.Header.JetSignature.CopyTo(mdb.AsSpan(D.Header.SignatureOffset));
+        D.Header.Version.Write(mdb, 1);
+        Assert.False(DatabaseHeader.IsAccdb(mdb, D));
+        Assert.False(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out string? mdbErr));
+        Assert.NotNull(mdbErr);
+        Assert.Equal(0, mdb[D.Header.CommitCounter.Offset]);
+    }
+
+    [Fact]
+    public void DataPages_TryAppendRow_preserves_multiple_deleted_slots_without_reuse()
+    {
+        byte[] page = EmptyDataPage(owner: 50);
+        byte[] row = [0xAA, 0xBB, 0xCC, 0xDD];
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.True(DataPages.TryAppendRow(page, row, D, out byte s, out string? err), err);
+            Assert.Equal((byte)i, s);
+        }
+        Assert.True(DataPages.TryDeleteSlot(page, 0, D, out string? delErr), delErr);
+        Assert.True(DataPages.TryDeleteSlot(page, 2, D, out delErr), delErr);
+
+        byte[] rowNew1 = [1, 2, 3, 4, 5, 6];
+        byte[] rowNew2 = [7, 8, 9, 10, 11, 12];
+        Assert.True(DataPages.TryAppendRow(page, rowNew1, D, out byte slot4, out string? err1), err1);
+        Assert.True(DataPages.TryAppendRow(page, rowNew2, D, out byte slot5, out string? err2), err2);
+        Assert.Equal((byte)4, slot4);
+        Assert.Equal((byte)5, slot5);
+        Assert.True(DataPages.CheckedSlot(page, 0, D, out _)!.Value.Deleted);
+        Assert.True(DataPages.CheckedSlot(page, 2, D, out _)!.Value.Deleted);
+        SlotView s4 = DataPages.CheckedSlot(page, 4, D, out _)!.Value;
+        SlotView s5 = DataPages.CheckedSlot(page, 5, D, out _)!.Value;
+        Assert.Equal(rowNew1, page.AsSpan(s4.Start, s4.Length).ToArray());
+        Assert.Equal(rowNew2, page.AsSpan(s5.Start, s5.Length).ToArray());
     }
 
     private static byte[] EmptyDataPage(uint owner)

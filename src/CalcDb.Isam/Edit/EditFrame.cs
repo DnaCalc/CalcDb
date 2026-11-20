@@ -331,6 +331,37 @@ public sealed class EditFrame : IDisposable
             }
             defaults[i] = converted.Value;
         }
+        GeneratedTicket? newTicket = null;
+        if (s.AutoNumber is not null && _table.Counter is { } counter)
+        {
+            newTicket = counter.Issue();
+            if (_table.Writer is { } writer && _workspace.Publisher is not null && newTicket.Value > 0 && newTicket.Value <= uint.MaxValue)
+            {
+                CompiledChange advance = writer.CompileAutoNumberAdvance((uint)newTicket.Value, _workspace.OverlayOf(writer.File));
+                if (advance.Change is not { } compiled)
+                {
+                    newTicket.Disposition = TicketDisposition.ConsumedWithoutRow;
+                    return EditOutcome.NotModelled(MutationOpen.Publication, advance.NotWritten);
+                }
+                (MutationOpen open, string? detail) = _workspace.PublishNonTransactional(
+                    writer.File,
+                    compiled.Edits,
+                    compiled.Footprint,
+                    CommitMode.LazyBurst,
+                    ConflictSource,
+                    out MutationError? pubError);
+                if (pubError is not null)
+                {
+                    newTicket.Disposition = TicketDisposition.ConsumedWithoutRow;
+                    return new EditOutcome(pubError);
+                }
+                if (open != MutationOpen.None)
+                {
+                    newTicket.Disposition = TicketDisposition.ConsumedWithoutRow;
+                    return EditOutcome.NotModelled(open, detail);
+                }
+            }
+        }
         ReleaseTicket();
         // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
         ReleaseEditLock();
@@ -340,9 +371,9 @@ public sealed class EditFrame : IDisposable
         {
             _cells[i] = defaults[i] is { } d ? new EditCell { State = CellState.Accepted, Value = d } : new EditCell { State = CellState.Unset, Value = NativeValue.Null };
         }
-        if (s.AutoNumber is { } auto && _table.Counter is { } counter)
+        if (s.AutoNumber is { } auto && newTicket is not null)
         {
-            _ticket = counter.Issue();
+            _ticket = newTicket;
             _cells[auto.Ordinal] = new EditCell { State = CellState.Accepted, Value = new NativeValue(NativeKind.Long) { Integer = _ticket.Value, Bits = (uint)(int)_ticket.Value } };
         }
         _original = null;
@@ -442,13 +473,64 @@ public sealed class EditFrame : IDisposable
         // chain decides when every other failing class comes after it in the chain; any other combination is named, as
         // is a failing check at depth 6 or 7, where the order of 3003 against the checks is not recorded.
         Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), default, default];
-        (stages[4], stages[5]) = IndexChecks();
+        (stages[4], stages[5], int? refusingPhysical) = IndexChecks();
         UpdateOutcome? decided = Decide(stages);
         if (decided is { } failure)
         {
-            return failure.Succeeded || _workspace.Depth <= TransactionCoordinator.MaxWriteDepth
-                ? failure
-                : new UpdateOutcome(null, MutationOpen.CheckOrder, $"a check fails ({failure.Error?.Number}) at depth {_workspace.Depth}, where an Update also meets 3003");
+            if (!failure.Succeeded && _workspace.Depth > TransactionCoordinator.MaxWriteDepth)
+            {
+                return new UpdateOutcome(null, MutationOpen.CheckOrder, $"a check fails ({failure.Error?.Number}) at depth {_workspace.Depth}, where an Update also meets 3003");
+            }
+            // R-FMT-2 II-05 & R-CRASH-1 CRASH-ORDER (evidence/r-q-fmt-sort/dc-rules-accdb, evidence/r-q10-commit-counter-edits):
+            // a refused 3022 unique insert on AddNew persists UniqueEntryCount increments of physical indexes strictly
+            // before the refusing index, any higher explicit AutoNumber floor, and an immediate +1 on ACCDB page 0 offset 3586.
+            if (failure.Error?.Number == MutationError.Duplicate
+                && Mode == EditMode.AddNew
+                && refusingPhysical is int refPhys
+                && _table.Writer is { } refuseWriter
+                && _workspace.Publisher is not null)
+            {
+                var candidateValues = new NativeValue[_cells.Length];
+                for (int i = 0; i < candidateValues.Length; i++)
+                {
+                    candidateValues[i] = CandidateValue(i);
+                }
+                uint? autoFloor = null;
+                if (s.AutoNumber is { } autoCol && candidateValues[autoCol.Ordinal].Kind == NativeKind.Long)
+                {
+                    long assignedValue = candidateValues[autoCol.Ordinal].Integer;
+                    long floor = Math.Max(_table.Counter?.Last ?? 0, assignedValue);
+                    if (floor > 0 && floor <= uint.MaxValue)
+                    {
+                        autoFloor = (uint)floor;
+                    }
+                }
+                CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File));
+                if (sideEffect.Change is not { } sideCompiled)
+                {
+                    return new UpdateOutcome(null, MutationOpen.Publication, sideEffect.NotWritten);
+                }
+                (MutationOpen open, string? detail) = _workspace.PublishNonTransactional(
+                    refuseWriter.File,
+                    sideCompiled.Edits,
+                    sideCompiled.Footprint,
+                    CommitMode.Immediate,
+                    ConflictSource,
+                    out MutationError? pubError);
+                if (pubError is not null)
+                {
+                    return new UpdateOutcome(pubError);
+                }
+                if (open != MutationOpen.None)
+                {
+                    return new UpdateOutcome(null, open, detail);
+                }
+                if (s.AutoNumber is { } autoCol2 && _table.Counter is { } refuseCounter && candidateValues[autoCol2.Ordinal].Kind == NativeKind.Long)
+                {
+                    refuseCounter.Observe(candidateValues[autoCol2.Ordinal].Integer);
+                }
+            }
+            return failure;
         }
 
         // 4. The lock footprint and, for an optimistic edit, the stored image (W-05/local-lockers-rebase).
@@ -888,7 +970,7 @@ public sealed class EditFrame : IDisposable
     }
 
     /// <summary>The Null-in-index check (3058) and the unique check (3022), each its first failure in index order.</summary>
-    private (UpdateOutcome NullIndex, UpdateOutcome Unique) IndexChecks()
+    private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical) IndexChecks()
     {
         UpdateOutcome nullIndex = default;
         foreach (IndexCheck index in _table.Semantics.Indexes)
@@ -904,7 +986,7 @@ public sealed class EditFrame : IDisposable
                 break;
             }
         }
-        foreach (IndexCheck index in _table.Semantics.Indexes)
+        foreach (IndexCheck index in _table.Semantics.Indexes.OrderBy(x => x.Physical.Number))
         {
             if (!index.Unique)
             {
@@ -928,19 +1010,19 @@ public sealed class EditFrame : IDisposable
             }
             if (_workspace.HasAcceptedChanges(_table.Semantics))
             {
-                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} are not published"));
+                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} are not published"), null);
             }
             UniqueAnswer answer = _table.Probe?.Probe(index, key, _original) ?? UniqueAnswer.NotModelled;
             if (answer == UniqueAnswer.Taken)
             {
-                return (nullIndex, Fail(MutationError.Duplicate));
+                return (nullIndex, Fail(MutationError.Duplicate), index.Physical.Number);
             }
             if (answer == UniqueAnswer.NotModelled)
             {
-                return (nullIndex, new UpdateOutcome(null, MutationOpen.UniqueIndex, index.Logical.Name));
+                return (nullIndex, new UpdateOutcome(null, MutationOpen.UniqueIndex, index.Logical.Name), null);
             }
         }
-        return (nullIndex, default);
+        return (nullIndex, default, null);
     }
 
     private bool KeyChanged(IndexCheck index)

@@ -100,6 +100,10 @@ internal static class SelectRoute
             plan.Dispose();
             return Published(database, failure!);
         }
+        if (recordsetType == 4)
+        {
+            database.Workspace.Transactions.EndLazyBurst(database.Cache);
+        }
         return database.Adopt(new SelectRecordsetObject(database, plan, cursor, recordsetType));
     }
 

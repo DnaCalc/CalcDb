@@ -32,7 +32,7 @@ public sealed class InspectCommandTests
         Assert.Equal("t1.accdb: Ace2007 version=02 length=200704 pages=49 trailing=0 problems=0", lines[0]);
         Assert.Equal("kinds: data(01)=20 tabledef(02)=16 index-leaf(04)=12", lines[1]);
         Assert.Contains("table T1 first=42 rows=2 columns=ID:Long, N:Long, S:Text(100), B:Boolean", lines);
-        Assert.Contains("physical 0: columns=ID root=44 flags=89 unique entries=2", lines);
+        Assert.Contains("physical 0: columns=ID root=44 flags=89 unique entries=2 counter=(0, 2, 0)", lines);
         Assert.Contains("logical 0 'PK_T1': physical=0 type=01", lines);
         Assert.Contains("table T0 first=45 rows=0 columns=ID:Long, N:Long, S:Text(100), B:Boolean", lines);
         Assert.DoesNotContain(lines, l => l.StartsWith("table MSys", StringComparison.Ordinal));

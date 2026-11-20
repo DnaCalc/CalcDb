@@ -72,9 +72,10 @@ public static class DataPages
 
     /// <summary>
     /// Append one ordinary row body at the end of a data page's slot directory (II-03 §1.3; verified across 7,524 user
-    /// data pages in 269 ACE fixtures). Refuses pages that reach <see cref="DataPageRules.WriterSlotLimit"/> (255 slots,
-    /// which clears FreeMap), pages containing deleted slots (ACE's slot-reuse policy on insert is not established), or
-    /// pages without room for <c>rowBytes.Length + 2</c> bytes.
+    /// data pages in 269 ACE fixtures and <c>evidence/r-q9-insert-landing</c>). A page with deleted slots appends a new
+    /// slot (<c>slot = RowCount</c>) without reusing deleted slots (R-LOCK-4 WRITE-ALLOC). Refuses pages that reach
+    /// <see cref="DataPageRules.WriterSlotLimit"/> (255 slots, which clears FreeMap), pages whose FreeCount does not
+    /// match the contiguous gap, or pages without room for <c>rowBytes.Length + 2</c> bytes.
     /// </summary>
     public static bool TryAppendRow(Span<byte> page, ReadOnlySpan<byte> rowBytes, FormatDescriptor d, out byte slot, out string? failure)
     {
@@ -104,11 +105,6 @@ public static class DataPages
             if (existing is not { } s)
             {
                 failure = slotFailure;
-                return false;
-            }
-            if (s.Deleted)
-            {
-                failure = "data page has deleted slots: ACE slot-reuse policy on insert is not established";
                 return false;
             }
             minStart = s.Start;

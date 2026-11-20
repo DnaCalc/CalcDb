@@ -88,7 +88,11 @@ public sealed class SessionFileTests : IDisposable
         byte[] after = ReadThrough(file);
         int[] changed = [.. Enumerable.Range(0, before.Length).Where(i => before[i] != after[i])];
         Assert.NotEmpty(changed);
-        Assert.Single(changed.Select(i => i / D.PageSize).Distinct()); // G's data page only: N is unindexed
+        int[] changedPages = [.. changed.Select(i => i / D.PageSize).Distinct().Order()];
+        Assert.Equal(2, changedPages.Length); // page 0 commit counter + G's data page (N is unindexed)
+        Assert.Equal(0, changedPages[0]);
+        Assert.Equal([D.Header.CommitCounter.Offset], changed.Where(i => i < D.PageSize).ToArray());
+        Assert.Equal(before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
         Assert.Equal(0, after.Length % D.PageSize);
     }
 

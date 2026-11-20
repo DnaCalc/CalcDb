@@ -88,6 +88,16 @@ public sealed class RQ8HeaderCounter : ICard
                 p.OpenRs("rs", "db", "T", Dao.OpenDynaset).Call("rs", "MoveFirst").Call("rs", "Delete").Pause(4000);
                 p.Call("rs", "MoveFirst").Call("rs", "Delete").Call("rs", "Close").Release("rs");
             });
+        // Round 3: the gap between two recordset Deletes that starts a new burst, between 2.33 s (one burst) and 4 s (two).
+        foreach (int ms in new[] { 100, 250, 300, 350, 400, 450, 470, 485, 500, 1000, 1500, 2000, 2500, 2800, 3000, 3300, 3600 })
+        {
+            yield return Make($"two-deletes-{ms}ms-apart", $"One dynaset over T, MoveFirst, Delete, a {ms} ms pause, MoveFirst, Delete, Close.",
+                p =>
+                {
+                    p.OpenRs("rs", "db", "T", Dao.OpenDynaset).Call("rs", "MoveFirst").Call("rs", "Delete").Pause(ms);
+                    p.Call("rs", "MoveFirst").Call("rs", "Delete").Call("rs", "Close").Release("rs");
+                });
+        }
         yield return Make("two-statements-4s-apart", "db.Execute UPDATE of ID 1, a 4 s pause, db.Execute UPDATE of ID 2.",
             p =>
             {

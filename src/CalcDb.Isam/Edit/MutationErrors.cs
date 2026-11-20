@@ -191,4 +191,11 @@ public enum MutationOpen : byte
 
     /// <summary>A Rollback of an inner level with an edit pending: only the outermost level's case is recorded (TXN-CLOSE).</summary>
     PendingEditAtInnerRollback,
+
+    /// <summary>
+    /// Two lazy recordset writes fell in the window between the same-burst bound (500 ms, ACE's deferred write) and the shortest
+    /// gap always observed to start a new burst (1 s) for the ACCDB page-0 commit counter (R-CRASH-1;
+    /// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits): CalcDb does not guess silently.
+    /// </summary>
+    CommitBurstGap,
 }

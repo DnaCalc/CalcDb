@@ -579,6 +579,44 @@ public sealed class NativeProgramTests
         Conservation.Settled(cache);
     }
 
+    [Fact]
+    public void PageBracket_emits_two_byte_header_bracket_around_existing_pages_and_after_appends()
+    {
+        // R-CRASH-1 CRASH-ORDER (evidence/r-q8-header-counter): page 0 offset [3586, 3588) is transferred as two
+        // separate 2-byte effects bracketing the statement's existing pages (after any appended pages).
+        var file = new ControlledFile(PageSize) { Extent = 20UL * PageSize };
+        var cache = new PageCache(file, 1, PageSize, 16);
+        PrivateOverlay overlay = cache.CreateOverlay(new LockerId(1));
+        Assert.True(overlay.Edit(0, new BytePatch(3586, [0x01])).Succeeded);
+        Assert.True(overlay.Edit(10, new BytePatch(0, [0xDD])).Succeeded);
+        Assert.True(overlay.Edit(12, new BytePatch(0, [0x11])).Succeeded);
+        Assert.True(overlay.Edit(20, new BytePatch(0, [0xAA])).Succeeded); // append beyond extent
+
+        PublicationOptions options = new()
+        {
+            Policy = ProgramPolicy.CrashOrderData with { FinalFlush = true },
+            Roles = new Dictionary<ulong, PageRole>
+            {
+                [0] = PageRole.NativeState,
+                [10] = PageRole.Data,
+                [12] = PageRole.Index,
+                [20] = PageRole.Data,
+            },
+            Bracket = new PageBracket(0, new PageSpan(3586, 3588)),
+        };
+        PublicationAttempt attempt = cache.BeginPublication(overlay).Attempt!;
+        using (attempt)
+        {
+            PublicationOutcome outcome = attempt.Run(file, options);
+            Assert.True(outcome.Succeeded, outcome.Failure);
+            NativeProgram program = attempt.Program!;
+            Assert.Equal(["extent", "20", "0", "10", "12", "0", "flush"], Shape(program));
+            Assert.Equal(new ByteRange(3586, 3588), program.Effects[2].FileRange);
+            Assert.Equal(new ByteRange(3586, 3588), program.Effects[5].FileRange);
+            Assert.Equal(0x01, file.Page(0)[3586]);
+        }
+    }
+
     // ---- helpers ----
 
     /// <summary>Run, then check the program's conservation: no receipt is left Started and every request is captured.</summary>

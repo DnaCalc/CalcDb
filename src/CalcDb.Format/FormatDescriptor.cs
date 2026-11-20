@@ -61,6 +61,10 @@ public sealed record FormatDescriptor
             SortIdentifier = new("jet4.header.sort_identifier", "header (decoded)", 0x6E, 2, ByteOrder.Little, "Database sort identifier (LANGID), the value of Database.CollatingOrder.", Reference + "; II-03 §1.2; R-FMT-1 FMT1-COLLATING"),
             SortReserved = new("jet4.header.sort_reserved", "header (decoded)", 0x70, 1, ByteOrder.Little, "Sort descriptor byte +2, not interpreted, preserved (zero in every fixture HeaderFieldTests decodes).", Reference + "; II-05 §4"),
             SortVersion = new("jet4.header.sort_version", "header (decoded)", 0x71, 1, ByteOrder.Little, "Signed sort version, the column descriptor's shape (1 General, 0 General - Legacy, -1 General 97); 1 only in the option-256 fixture, 0 in the others decoded.", Reference + "; II-05 §4"),
+            // R-CRASH-1 CRASH-ORDER (evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits): ACCDB page-0
+            // commit counter at offset 3586 (0x0E02), bracketed by 2-byte writes at [3586, 3588).
+            CommitCounter = new("jet4.header.commit_counter", "header", 3586, 1, ByteOrder.Little, "ACCDB commit counter: +1 per lazy burst or immediate commit, transferred as a 2-byte [3586, 3588) bracket.", "R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter; evidence/r-q10-commit-counter-edits"),
+            CommitCounterBracketBytes = 2,
         },
         DataPage = new DataPageRules
         {
@@ -183,7 +187,8 @@ public sealed record FormatDescriptor
             UniqueFlag = 0x01,
             IgnoreNullsFlag = 0x02,
             RequiredFlag = 0x08,
-            UniqueEntryCount = new("jet4.index.unique_entry_count", "index counter block", 4, 4, ByteOrder.Little, "Source name uniqueEntryCount; not a current cardinality.", "S-JACK-INDEX-PIN; II-05 §1.1"),
+            EntryCount = new("jet4.index.entry_count", "index counter block", 0, 4, ByteOrder.Little, "Counter block word0: 0 when built on an empty table; entry count when bulk-built by CREATE INDEX on a populated table, lowered by 1 on entry removal and never raised on insert.", "R-FMT-2 II-05; evidence/r-q10-statistics-words"),
+            UniqueEntryCount = new("jet4.index.unique_entry_count", "index counter block", 4, 4, ByteOrder.Little, "Counter block word1 (DAO DistinctCount): +1 on insert of a new key, clamped at word0 while word0 > 0; never falls when word0 == 0.", "S-JACK-INDEX-PIN; II-05 §1.1; R-FMT-2 II-05; evidence/r-q10-statistics-words"),
             LogicalBlockBytes = 28,
             LogicalNumber = new("jet4.index.logical_number", "logical index descriptor", 4, 4, ByteOrder.Little, "Logical index number.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
             PhysicalNumber = new("jet4.index.physical_number", "logical index descriptor", 8, 4, ByteOrder.Little, "Physical index data number: the shared tree.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
@@ -244,7 +249,11 @@ public sealed record HeaderRules
     public required FieldRule SortReserved { get; init; }
     public required FieldRule SortVersion { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion];
+    /// <summary>The ACCDB commit counter at page 0 offset 3586 (R-CRASH-1 CRASH-ORDER) and its 2-byte transfer bracket width.</summary>
+    public required FieldRule CommitCounter { get; init; }
+    public required int CommitCounterBracketBytes { get; init; }
+
+    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion, CommitCounter];
 }
 
 /// <summary>The ordinary data page envelope and slot directory (II-03 §§1.3, 3.3).</summary>
@@ -320,6 +329,7 @@ public sealed record IndexDescriptorRules
     public required byte UniqueFlag { get; init; }
     public required byte IgnoreNullsFlag { get; init; }
     public required byte RequiredFlag { get; init; }
+    public required FieldRule EntryCount { get; init; }
     public required FieldRule UniqueEntryCount { get; init; }
     public required int LogicalBlockBytes { get; init; }
     public required FieldRule LogicalNumber { get; init; }
@@ -331,7 +341,7 @@ public sealed record IndexDescriptorRules
     public required byte PrimaryKeyType { get; init; }
     public required byte ForeignKeyType { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [ColumnNumber, ColumnFlags, OwnedMap, RootPage, Flags, UniqueEntryCount, LogicalNumber, PhysicalNumber, RelatedTableType, RelatedIndex, RelatedTable, IndexType];
+    public IEnumerable<FieldRule> Rules => [ColumnNumber, ColumnFlags, OwnedMap, RootPage, Flags, EntryCount, UniqueEntryCount, LogicalNumber, PhysicalNumber, RelatedTableType, RelatedIndex, RelatedTable, IndexType];
 }
 
 /// <summary>The 25-byte column-definition block (II-04 §1.3).</summary>

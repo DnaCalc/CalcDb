@@ -199,8 +199,10 @@ public sealed class GrowthPublicationTests
         Assert.Equal([PageRole.Data, PageRole.Index, PageRole.Index, PageRole.Catalog], outcome.Change.Physical!.Edits.Select(e => e.Role));
         Assert.Empty(rig.A.PendingPublication);
 
-        // Program order: Data -> Index -> Index -> Catalog, 0 flushes on automatic op.
-        PublicationReceipt receipt = Assert.Single(rig.A.Publications);
+        // AutoNumber AddNew starts the lazy burst ([0 (2B), TableDef, 0 (2B)]), then Update joins it (Data -> Index -> Index -> Catalog), 0 flushes.
+        Assert.Equal(2, rig.A.Publications.Count);
+        Assert.Equal([0UL, g.FirstPage, 0UL], rig.A.Publications[0].Program.Effects.Select(e => e.PageNumber!.Value));
+        PublicationReceipt receipt = rig.A.Publications[1];
         Assert.Equal(4, receipt.Program.Effects.Count);
         Assert.All(receipt.Program.Effects, e => Assert.Equal(EffectKind.Transfer, e.Kind));
         uint pkLeaf = g.PhysicalOf(g.FindIndex("PK_G")!)!.RootPage;
@@ -383,7 +385,7 @@ public sealed class GrowthPublicationTests
         Assert.Equal([PageRole.Data, PageRole.Index, PageRole.Catalog], del.Change!.Physical!.Edits.Select(e => e.Role));
 
         PublicationReceipt receipt = Assert.Single(rig.A.Publications);
-        Assert.Equal([(ulong)deletedRow.Page, pkLeaf, r.FirstPage], receipt.Program.Effects.Select(e => e.PageNumber!.Value));
+        Assert.Equal([0UL, (ulong)deletedRow.Page, pkLeaf, r.FirstPage, 0UL], receipt.Program.Effects.Select(e => e.PageNumber!.Value));
         Assert.Equal(0, rig.File.Image.Flushes);
 
         // Deleted current state on TableCursor: BOF=false, EOF=false, live RecordCount=63, Read/Edit/Delete -> 3167.
@@ -488,11 +490,17 @@ public sealed class GrowthPublicationTests
 
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.AddNew().Succeeded);
+        // AddNew immediately persists the consumed AutoNumber and starts its own burst (evidence/r-q10-commit-counter-edits).
+        byte[] afterAddNew = rig.File.Image.Snapshot();
+        Assert.Equal(3u, DecodeTableDef(afterAddNew, g.FirstPage).AutoNumber);
+        Assert.Equal(2u, DecodeTableDef(afterAddNew, g.FirstPage).RowCount);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, afterAddNew[D.Header.CommitCounter.Offset]);
+
         AssignText(frame, Col(g, "T"), "tx1");
         Assert.True(frame.Assign(Col(g, "N"), I4(99)).Succeeded);
         AssignText(frame, Col(g, "U"), "txu1");
         Assert.True(frame.Update().Succeeded);
-        Assert.Equal(rig.Before, rig.File.Image.Snapshot()); // nothing published yet inside BeginTrans
+        Assert.Equal(afterAddNew, rig.File.Image.Snapshot()); // row insert stays unpublished inside BeginTrans
 
         ResolutionOutcome commit = rig.A.CommitTrans(options);
         Assert.True(commit.Succeeded, commit.ToString());
@@ -502,7 +510,7 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void Rollback_of_AddNew_leaves_file_unchanged_and_keeps_consumed_AutoNumber()
+    public void Rollback_of_AddNew_persists_consumed_AutoNumber_and_leaves_row_uninserted()
     {
         using var rig = new Rig(EditFixture);
         (TableDefinition g, _) = rig.Table("G");
@@ -516,8 +524,14 @@ public sealed class GrowthPublicationTests
         Assert.True(frame.Update().Succeeded);
         Assert.True(rig.A.Rollback().Succeeded);
 
-        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
-        Assert.Empty(rig.A.Publications);
+        // R-FMT-2 Generated values & evidence/r-q10-commit-counter-edits/rolled-back-addnew:
+        // AddNew's AutoNumber advance and its page-0 commit-counter burst survive Rollback while RowCount stays 2.
+        byte[] after = rig.File.Image.Snapshot();
+        TableDefinition gAfter = DecodeTableDef(after, g.FirstPage);
+        Assert.Equal(2u, gAfter.RowCount);
+        Assert.Equal(3u, gAfter.AutoNumber);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
+        Assert.Single(rig.A.Publications); // only the non-transactional AddNew AutoNumber publication
 
         // AutoNumber ticket 3 was consumed and stays burned: next AddNew gets 4.
         Assert.True(frame.AddNew().Succeeded);
@@ -580,9 +594,10 @@ public sealed class GrowthPublicationTests
             BinaryPrimitives.WriteUInt16LittleEndian(page.AsSpan(D.DataPage.SlotBase + ((rc - 1) * 2), 2), (ushort)(dirEnd + 4));
             D.DataPage.FreeCount.Write(page, 4);
             WriteRawPage(rig.File, dp, page);
-            byte[] snapshotBefore = rig.File.Image.Snapshot();
 
             Assert.True(frame.AddNew().Succeeded);
+            // AutoNumber AddNew persists TableDef.AutoNumber and page 0; Update itself must write nothing further.
+            byte[] snapshotBefore = rig.File.Image.Snapshot();
             AssignText(frame, Col(g, "T"), "full");
             AssignText(frame, Col(g, "U"), "u-full");
             UpdateOutcome fullOut = frame.Update();
@@ -591,7 +606,7 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void Refuses_usage_map_change_on_non_FreeMap_delete_and_deleted_slot_reuse_on_insert()
+    public void Refuses_usage_map_change_on_non_FreeMap_delete_and_appends_new_slot_past_deleted_slots_on_insert()
     {
         // 1. Delete on a page NOT in FreeMap (PagesFixture table M has full data pages absent from FreeMap).
         using (var rig = new Rig(PagesFixture))
@@ -613,15 +628,26 @@ public sealed class GrowthPublicationTests
             AssertNotWritten(del, rig.A, "not in FreeMap", rig.Before, rig.File.Image);
         }
 
-        // 2. Deleted-slot reuse on insert: Au2 in WAccdbFixture has deleted slots 7,8,9 on its only data page.
+        // 2. Deleted-slot page on insert (R-LOCK-4 WRITE-ALLOC, evidence/r-q9-insert-landing): Au2 in WAccdbFixture has
+        // deleted slots 7,8,9 on its only data page; AddNew appends a new slot 10 without reusing slots 7,8,9.
         using (var rig = new Rig(WAccdbFixture))
         {
             (TableDefinition au2, _) = rig.Table("Au2");
             (EditFrame frame, _) = rig.OpenTable(rig.A, "Au2");
             Assert.True(frame.AddNew().Succeeded);
-            AssignText(frame, Col(au2, "S"), "reuse");
+            AssignText(frame, Col(au2, "S"), "appended");
             UpdateOutcome ins = frame.Update();
-            AssertNotWritten(ins, rig.A, "deleted slots", rig.Before, rig.File.Image);
+            Assert.True(ins.Succeeded, ins.ToString());
+            Assert.NotNull(ins.Change?.Inserted);
+            RowId inserted = ins.Change!.Inserted!.Value;
+            Assert.Equal((byte)10, inserted.Row);
+            byte[] after = rig.File.Image.Snapshot();
+            ReadOnlySpan<byte> dp = after.AsSpan((int)(inserted.Page * D.PageSize), D.PageSize);
+            Assert.True(DataPages.CheckedSlot(dp, 7, D, out _)!.Value.Deleted);
+            Assert.True(DataPages.CheckedSlot(dp, 8, D, out _)!.Value.Deleted);
+            Assert.True(DataPages.CheckedSlot(dp, 9, D, out _)!.Value.Deleted);
+            Assert.False(DataPages.CheckedSlot(dp, 10, D, out _)!.Value.Deleted);
+            AssertInspectorClean(after);
         }
     }
 
@@ -770,9 +796,10 @@ public sealed class GrowthPublicationTests
 
             // Leading U+FEFF refused
             Assert.True(frame.AddNew().Succeeded);
+            byte[] afterBomAddNew = rig.File.Image.Snapshot();
             AssignText(frame, Col(g, "T"), "\uFEFFbom");
             AssignText(frame, Col(g, "U"), "u-bom");
-            AssertNotWritten(frame.Update(), rig.A, "U+FEFF", rig.Before, rig.File.Image);
+            AssertNotWritten(frame.Update(), rig.A, "U+FEFF", afterBomAddNew, rig.File.Image);
 
             // Relationship table refuses both AddNew and Delete with MutationOpen.Relationship
             var relCtx = new TableEditContext(

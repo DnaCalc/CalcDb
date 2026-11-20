@@ -192,7 +192,7 @@ public sealed record IndexColumn(int PhysicalNumber, bool Ascending, byte Flags)
 /// A physical index (II-05 §1.2): one tree with its ordered columns, owner map, root page and flags. Logical indexes
 /// name it by <see cref="Number"/>; two logical indexes can share one tree.
 /// </summary>
-public sealed record PhysicalIndex(int Number, IReadOnlyList<IndexColumn> Columns, RowLocator OwnedMap, uint RootPage, byte Flags, uint UniqueEntryCount)
+public sealed record PhysicalIndex(int Number, IReadOnlyList<IndexColumn> Columns, RowLocator OwnedMap, uint RootPage, byte Flags, uint UniqueEntryCount, uint EntryCount = 0)
 {
     public bool Unique(IndexDescriptorRules r) => (Flags & r.UniqueFlag) != 0;
 
@@ -415,7 +415,7 @@ public static class TableDefDecoder
                     columns.Add(new IndexColumn(number, (flags & r.AscendingFlag) != 0, flags));
                 }
             }
-            physical.Add(new PhysicalIndex(i, columns, RowLocator.FromWord((uint)r.OwnedMap.Read(block)), (uint)r.RootPage.Read(block), (byte)r.Flags.Read(block), (uint)r.UniqueEntryCount.Read(counter)));
+            physical.Add(new PhysicalIndex(i, columns, RowLocator.FromWord((uint)r.OwnedMap.Read(block)), (uint)r.RootPage.Read(block), (byte)r.Flags.Read(block), (uint)r.UniqueEntryCount.Read(counter), (uint)r.EntryCount.Read(counter)));
             position += r.PhysicalBlockBytes;
         }
         var raw = new List<byte[]>(logicalIndexes);
@@ -454,17 +454,55 @@ public static class TableDefDecoder
 
 /// <summary>
 /// In-place TableDef counter updates on the TableDef's first page (II-04 §1.2, II-05 §1.1; verified byte-for-byte on
-/// <c>4f42d3fa</c> Au1/Au2/Au3 and qualified.md lines 442, 449): <see cref="TableDefRules.RowCount"/> (+1 on insert, -1 on
-/// delete), <see cref="TableDefRules.AutoNumber"/> (raised to the new floor on insert, unchanged on delete), and each
-/// physical index's <see cref="IndexDescriptorRules.UniqueEntryCount"/> (+1 on insert of a new user key, unchanged on
-/// duplicate key or delete).
+/// <c>4f42d3fa</c> Au1/Au2/Au3, <c>evidence/r-q-fmt-sort/dc-rules-accdb</c>, and <c>evidence/r-q10-statistics-words</c>):
+/// <see cref="TableDefRules.RowCount"/> (+1 on insert, -1 on delete), <see cref="TableDefRules.AutoNumber"/> (raised to
+/// the new floor on AddNew/insert), and each physical index's counter block <c>(word0, word1, word2)</c>:
+/// <list type="bullet">
+/// <item>Empty-built (<c>word0 == 0</c>): <c>word1</c> (<see cref="IndexDescriptorRules.UniqueEntryCount"/>, DAO
+/// DistinctCount) rises by 1 on insert of a new user key and never falls on delete or key-changing update.</item>
+/// <item>Bulk-built (<c>word0 &gt; 0</c>, from CREATE INDEX on a populated table): each entry removal (delete or
+/// key-changing update) lowers <c>word0</c> by 1 and clamps <c>word1 &lt;= word0</c>; an insert never raises
+/// <c>word0</c>, raises <c>word1</c> by 1 for a new key, and clamps <c>word1 &lt;= word0</c> while <c>word0 &gt; 0</c>.</item>
+/// </list>
 /// </summary>
 public static class TableDefUpdater
 {
+    public static int EntryCountOffset(int physicalIndexNumber, FormatDescriptor d) =>
+        d.TableDef.RealIndexRecordsOffset + (physicalIndexNumber * d.TableDef.RealIndexRecordBytes) + d.IndexDescriptor.EntryCount.Offset;
+
     public static int UniqueEntryCountOffset(int physicalIndexNumber, FormatDescriptor d) =>
         d.TableDef.RealIndexRecordsOffset + (physicalIndexNumber * d.TableDef.RealIndexRecordBytes) + d.IndexDescriptor.UniqueEntryCount.Offset;
 
-    public static bool TryUpdateCounts(Span<byte> firstPage, int rowCountDelta, uint? autoNumberFloor, IReadOnlyList<int> incrementUniqueEntryCounts, FormatDescriptor d, out string? failure)
+    public static bool TryReadEntryCount(ReadOnlySpan<byte> firstPage, int physicalIndexNumber, FormatDescriptor d, out uint value)
+    {
+        value = 0;
+        int offset = EntryCountOffset(physicalIndexNumber, d);
+        FieldRule rule = d.IndexDescriptor.EntryCount;
+        if (physicalIndexNumber < 0 || firstPage.Length != d.PageSize || offset + rule.Width > d.PageSize)
+        {
+            return false;
+        }
+        value = (uint)new FieldRule(rule.Id, rule.Structure, offset, rule.Width, rule.Order, rule.Meaning, rule.Evidence).Read(firstPage);
+        return true;
+    }
+
+    public static bool TryReadUniqueEntryCount(ReadOnlySpan<byte> firstPage, int physicalIndexNumber, FormatDescriptor d, out uint value)
+    {
+        value = 0;
+        int offset = UniqueEntryCountOffset(physicalIndexNumber, d);
+        FieldRule rule = d.IndexDescriptor.UniqueEntryCount;
+        if (physicalIndexNumber < 0 || firstPage.Length != d.PageSize || offset + rule.Width > d.PageSize)
+        {
+            return false;
+        }
+        value = (uint)new FieldRule(rule.Id, rule.Structure, offset, rule.Width, rule.Order, rule.Meaning, rule.Evidence).Read(firstPage);
+        return true;
+    }
+
+    public static bool TryUpdateCounts(Span<byte> firstPage, int rowCountDelta, uint? autoNumberFloor, IReadOnlyList<int> incrementUniqueEntryCounts, FormatDescriptor d, out string? failure) =>
+        TryUpdateCounts(firstPage, rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d, out failure);
+
+    public static bool TryUpdateCounts(Span<byte> firstPage, int rowCountDelta, uint? autoNumberFloor, IReadOnlyList<int> incrementUniqueEntryCounts, IReadOnlyList<int> decrementEntryCounts, FormatDescriptor d, out string? failure)
     {
         failure = null;
         if (firstPage.Length != d.PageSize || firstPage[d.DataPage.Kind.Offset] != 0x02)
@@ -483,10 +521,22 @@ public static class TableDefUpdater
         for (int i = 0; i < incrementUniqueEntryCounts.Count; i++)
         {
             int idx = incrementUniqueEntryCounts[i];
-            int offset = UniqueEntryCountOffset(idx, d);
-            if (idx < 0 || offset + ix.UniqueEntryCount.Width > d.PageSize)
+            int w0Off = EntryCountOffset(idx, d);
+            int w1Off = UniqueEntryCountOffset(idx, d);
+            if (idx < 0 || w0Off + ix.EntryCount.Width > d.PageSize || w1Off + ix.UniqueEntryCount.Width > d.PageSize)
             {
-                failure = $"physical index {idx} counter at logical offset {offset} does not lie on the TableDef's first page";
+                failure = $"physical index {idx} counter at logical offset {w1Off} does not lie on the TableDef's first page";
+                return false;
+            }
+        }
+        for (int i = 0; i < decrementEntryCounts.Count; i++)
+        {
+            int idx = decrementEntryCounts[i];
+            int w0Off = EntryCountOffset(idx, d);
+            int w1Off = UniqueEntryCountOffset(idx, d);
+            if (idx < 0 || w0Off + ix.EntryCount.Width > d.PageSize || w1Off + ix.UniqueEntryCount.Width > d.PageSize)
+            {
+                failure = $"physical index {idx} counter at logical offset {w0Off} does not lie on the TableDef's first page";
                 return false;
             }
         }
@@ -499,12 +549,35 @@ public static class TableDefUpdater
                 t.AutoNumber.Write(firstPage, floor);
             }
         }
+        for (int i = 0; i < decrementEntryCounts.Count; i++)
+        {
+            int idx = decrementEntryCounts[i];
+            var w0Field = new FieldRule(ix.EntryCount.Id, ix.EntryCount.Structure, EntryCountOffset(idx, d), ix.EntryCount.Width, ix.EntryCount.Order, ix.EntryCount.Meaning, ix.EntryCount.Evidence);
+            var w1Field = new FieldRule(ix.UniqueEntryCount.Id, ix.UniqueEntryCount.Structure, UniqueEntryCountOffset(idx, d), ix.UniqueEntryCount.Width, ix.UniqueEntryCount.Order, ix.UniqueEntryCount.Meaning, ix.UniqueEntryCount.Evidence);
+            ulong w0 = w0Field.Read(firstPage);
+            if (w0 > 0)
+            {
+                w0--;
+                w0Field.Write(firstPage, w0);
+                ulong w1 = w1Field.Read(firstPage);
+                if (w1 > w0)
+                {
+                    w1Field.Write(firstPage, w0);
+                }
+            }
+        }
         for (int i = 0; i < incrementUniqueEntryCounts.Count; i++)
         {
-            int offset = UniqueEntryCountOffset(incrementUniqueEntryCounts[i], d);
-            var field = new FieldRule(ix.UniqueEntryCount.Id, ix.UniqueEntryCount.Structure, offset, ix.UniqueEntryCount.Width, ix.UniqueEntryCount.Order, ix.UniqueEntryCount.Meaning, ix.UniqueEntryCount.Evidence);
-            ulong current = field.Read(firstPage);
-            field.Write(firstPage, current + 1);
+            int idx = incrementUniqueEntryCounts[i];
+            var w0Field = new FieldRule(ix.EntryCount.Id, ix.EntryCount.Structure, EntryCountOffset(idx, d), ix.EntryCount.Width, ix.EntryCount.Order, ix.EntryCount.Meaning, ix.EntryCount.Evidence);
+            var w1Field = new FieldRule(ix.UniqueEntryCount.Id, ix.UniqueEntryCount.Structure, UniqueEntryCountOffset(idx, d), ix.UniqueEntryCount.Width, ix.UniqueEntryCount.Order, ix.UniqueEntryCount.Meaning, ix.UniqueEntryCount.Evidence);
+            ulong w0 = w0Field.Read(firstPage);
+            ulong nextW1 = w1Field.Read(firstPage) + 1;
+            if (w0 > 0 && nextW1 > w0)
+            {
+                nextW1 = w0;
+            }
+            w1Field.Write(firstPage, nextW1);
         }
         return true;
     }

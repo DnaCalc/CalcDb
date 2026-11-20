@@ -68,6 +68,13 @@ public sealed record PreparedRevision(int Id, ulong PageNumber, ReadOnlyMemory<b
 
     /// <summary>The changed ranges, for a policy that transfers declared spans; null means the complete page.</summary>
     public IReadOnlyList<PageSpan>? Spans { get; init; }
+
+    /// <summary>
+    /// Keep this revision as its own transfer even under <see cref="ProgramShape.OneFinalImage"/> and expand its
+    /// <see cref="Spans"/> (R-CRASH-1 CRASH-ORDER: a page-0 bracket transfers the same 2-byte span before and after a
+    /// publication's existing pages).
+    /// </summary>
+    public bool TransferSeparately { get; init; }
 }
 
 /// <summary>
@@ -488,10 +495,11 @@ internal static class ProgramCompiler
         foreach ((ulong page, List<PreparedRevision> chain) in chains.OrderBy(c => c.Key))
         {
             bool append = PageEnd(page, pageSize) > extent;
-            IEnumerable<(PreparedRevision Revision, int Index, IReadOnlyList<PreparedRevision> Covers)> selected = repeated
+            bool keepAll = repeated || chain.Any(r => r.TransferSeparately);
+            IEnumerable<(PreparedRevision Revision, int Index, IReadOnlyList<PreparedRevision> Covers)> selected = keepAll
                 ? chain.Select((r, i) => (r, i, (IReadOnlyList<PreparedRevision>)[r]))
                 : [(chain[^1], chain.Count - 1, chain)];
-            if (!repeated)
+            if (!keepAll)
             {
                 coalesced.AddRange(chain.Take(chain.Count - 1).Select(r => r.Id));
             }
@@ -528,15 +536,16 @@ internal static class ProgramCompiler
             }
         }
         // Chain edges: a later revision of a page is submitted only after the earlier one settled.
-        if (repeated)
+        foreach (List<PreparedRevision> chain in chains.Values)
         {
-            foreach (List<PreparedRevision> chain in chains.Values)
+            if (!repeated && !chain.Any(r => r.TransferSeparately))
             {
-                for (int i = 1; i < chain.Count; i++)
-                {
-                    Edge(nodeOf[chain[i - 1].Id], nodeOf[chain[i].Id]);
-                    transfers.Add(new Dependency(chain[i - 1].Id, chain[i].Id, DependencyKind.Transfer));
-                }
+                continue;
+            }
+            for (int i = 1; i < chain.Count; i++)
+            {
+                Edge(nodeOf[chain[i - 1].Id], nodeOf[chain[i].Id]);
+                transfers.Add(new Dependency(chain[i - 1].Id, chain[i].Id, DependencyKind.Transfer));
             }
         }
         List<Dependency> build = [];
@@ -681,7 +690,7 @@ internal static class ProgramCompiler
                     PreparedRevision r = n.Revision!;
                     selectedRevisions.Add(r);
                     ulong pageStart = (ulong)pageSize * r.PageNumber;
-                    foreach (PageSpan span in Spans(n.Chain, policy.UseDeclaredSpans, pageSize))
+                    foreach (PageSpan span in Spans(n.Chain, policy.UseDeclaredSpans || r.TransferSeparately, pageSize))
                     {
                         n.Steps.Add(effects.Count);
                         effects.Add(new NativeEffect(effects.Count, EffectKind.Transfer)

@@ -323,9 +323,10 @@ internal static class ListedIndexes
 }
 
 /// <summary>
-/// An Index of a TableDef (II-05 §1; r-cat-1b/index-members-ddl): Primary and Foreign from the logical index type,
-/// Unique, IgnoreNulls and Required from the physical tree's flags, Clustered False, DistinctCount the tree's stored
-/// counter (II-05 §1.1: not a current cardinality; 0 in every observed index), and its Fields.
+/// An Index of a TableDef (II-05 §1; r-cat-1b/index-members-ddl, evidence/r-q-fmt-sort/dc-rules-accdb,
+/// evidence/r-q10-statistics-words): Primary and Foreign from the logical index type, Unique, IgnoreNulls and Required
+/// from the physical tree's flags, Clustered False, DistinctCount the physical index's stored UniqueEntryCount word
+/// (word1), and its Fields.
 /// </summary>
 internal sealed unsafe class IndexObject : DaoObject
 {
@@ -339,7 +340,7 @@ internal sealed unsafe class IndexObject : DaoObject
         .Get("IgnoreNulls", (self, args) => Live(self, x => Bool(x._physical.IgnoreNulls(x.Rules))))
         .Get("Required", (self, args) => Live(self, x => Bool(x._physical.Required(x.Rules))))
         .Get("Clustered", (self, args) => Live(self, x => Bool(false)))
-        .Get("DistinctCount", (self, args) => Live(self, x => Int32((int)x._physical.UniqueEntryCount)))
+        .Get("DistinctCount", (self, args) => Live(self, x => x.DistinctCount()))
         .Get("Fields", (self, args) => Live(self, x => x.FieldsCollection()))
         .Get("Properties", (self, args) => Live(self, x => Object(x._properties ??= new PropertiesObject(x, BuiltInProperties.Index))));
 
@@ -369,6 +370,16 @@ internal sealed unsafe class IndexObject : DaoObject
     {
         var x = (IndexObject)self;
         return x._owner.Database.Closed ? x.Fail(3420, DaoErrors.ObjectInvalid) : op(x);
+    }
+
+    private CallResult DistinctCount()
+    {
+        using Storage.PagePin? pin = _owner.Database.Cache.Pin(_table.FirstPage).Pin;
+        if (pin is not null && TableDefUpdater.TryReadUniqueEntryCount(pin.Bytes, _physical.Number, _owner.Database.Format, out uint current))
+        {
+            return Int32((int)current);
+        }
+        return Int32((int)_physical.UniqueEntryCount);
     }
 
     private CallResult FieldsCollection()

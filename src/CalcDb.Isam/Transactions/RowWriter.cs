@@ -185,20 +185,47 @@ public sealed class IndexEntryDelete(byte[] oldEntry, FormatDescriptor d) : IPag
     }
 }
 
-/// <summary>In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1).</summary>
-public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d) : IPageDelta
+/// <summary>In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1, R-FMT-2).</summary>
+public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, int[] decrementEntryCounts, FormatDescriptor d) : IPageDelta
 {
+    public TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d)
+        : this(rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d)
+    {
+    }
+
     public int RowCountDelta => rowCountDelta;
 
     public uint? AutoNumberFloor => autoNumberFloor;
 
     public IReadOnlyList<int> IncrementUniqueEntryCounts => incrementUniqueEntryCounts;
 
+    public IReadOnlyList<int> DecrementEntryCounts => decrementEntryCounts;
+
+    /// <summary>
+    /// TableDef lock excludes other lockers, and counter updates compose cleanly over a same-locker non-transactional
+    /// AutoNumber or refused-unique advance (II-09 §23–24).
+    /// </summary>
+    public DeltaFootprint Footprint => DeltaFootprint.None;
+
     public void Apply(Span<byte> decodedPage)
     {
-        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, d, out string? failure))
+        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, decrementEntryCounts, d, out string? failure))
         {
             throw new FormatViolationException($"TableDef counts update: {failure}");
+        }
+    }
+}
+
+/// <summary>Increment the ACCDB page-0 commit counter at offset 3586 by 1 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits).</summary>
+public sealed class CommitCounterDelta(FormatDescriptor d) : IPageDelta
+{
+    public DeltaFootprint Footprint => DeltaFootprint.None;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, out string? failure))
+        {
+            throw new FormatViolationException($"Page 0 commit counter: {failure}");
         }
     }
 }
@@ -207,17 +234,21 @@ public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor
 /// The physical compiler of row changes (W-05/same-width-mutation, W-05/growth-structural-closure; II-07 §16,
 /// II-16 §17):
 /// <list type="bullet">
-/// <item><b>Same-width Edit</b>: fixed-width byte patches, mask-bit changes and in-leaf index entry replacements.</item>
-/// <item><b>In-page AddNew</b>: encodes a new row into an owned FreeMap data page with free space, inserts each physical
-/// index entry into an existing leaf whose prefix still covers it without changing a non-root leaf's first or last
-/// entry, and updates TableDef RowCount, AutoNumber and UniqueEntryCount (DistinctCount).</item>
+/// <item><b>Same-width Edit</b>: fixed-width byte patches, mask-bit changes, in-leaf index entry replacements, and
+/// bulk-built index statistics-word decrements when <c>word0 &gt; 0</c>.</item>
+/// <item><b>In-page AddNew</b>: encodes a new row into the first owned FreeMap data page in storage order with room
+/// (appending a new slot after any deleted slots without reuse), inserts each physical index entry into an existing
+/// leaf whose prefix still covers it without changing a non-root leaf's first or last entry, and updates TableDef
+/// RowCount, AutoNumber and each physical index's UniqueEntryCount (DistinctCount, clamped to <c>word0</c> while
+/// <c>word0 &gt; 0</c>).</item>
 /// <item><b>In-page Delete</b>: marks and compacts an ordinary slot on a FreeMap data page, removes each physical index
-/// entry without emptying or changing the boundaries of a non-root leaf, and decrements TableDef RowCount.</item>
+/// entry without emptying or changing the boundaries of a non-root leaf, decrements TableDef RowCount, and decrements
+/// <c>word0</c> (clamping <c>word1 &lt;= word0</c>) for bulk-built indexes.</item>
 /// </list>
-/// Every structural or unestablished case (new data page, usage-map change, deleted-slot reuse on insert, leaf split,
-/// non-root boundary change, LVAL Memo/OLE, calculated column, uncovered prefix gqv4, overflow-body delete, dropped
-/// columns, 0-fixed-width tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF, partial-Null
-/// IgnoreNulls key) is refused with a named reason.
+/// Every structural or unestablished case (new data page, usage-map change, leaf split, non-root boundary change,
+/// LVAL Memo/OLE, calculated column, uncovered prefix gqv4, overflow-body delete, dropped columns, 0-fixed-width
+/// tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF, partial-Null IgnoreNulls key) is
+/// refused with a named reason.
 /// </summary>
 public sealed class SameWidthWriter(TableFootprints footprints)
 {
@@ -323,6 +354,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             footprint.Add(TableFootprints.Row(row.Data));
         }
+        List<int> changedPhysical = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
         {
             if (Entry(tree.First(), root, stored, values, out byte[]? oldEntry, out byte[]? newEntry, out string? keyFailure) is not { } at)
@@ -339,17 +371,45 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(new PageEdit(at.Leaf, new IndexEntryReplacement(oldEntry!, newEntry!, _d), PageRole.Index));
             footprint.Add(new LockResource(at.Leaf, LockPurpose.IndexLeaf));
+            changedPhysical.Add(tree.First().Physical.Number);
+        }
+        if (changedPhysical.Count > 0)
+        {
+            using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+            if (tdefPin is null)
+            {
+                return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+            }
+            List<int> decrementBulk = [];
+            foreach (int physNum in changedPhysical)
+            {
+                if (TableDefUpdater.TryReadEntryCount(tdefPin.Bytes, physNum, _d, out uint w0) && w0 > 0)
+                {
+                    decrementBulk.Add(physNum);
+                }
+            }
+            if (decrementBulk.Count > 0)
+            {
+                byte[] tdefCopy = tdefPin.Bytes.ToArray();
+                if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, null, [], decrementBulk, _d, out string? tdefFailure))
+                {
+                    return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+                }
+                edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, null, [], [.. decrementBulk], _d), PageRole.Catalog));
+                AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
+            }
         }
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint), null);
     }
 
     /// <summary>
     /// Compile the insertion of a new row (<paramref name="values"/>, in <see cref="TableDefinition.Columns"/> order)
-    /// into an existing owned FreeMap data page (W-05/growth-structural-closure; II-04 §§1.2, 2, II-05 §2, II-16 §17):
-    /// encodes the row, selects the first owned FreeMap page that accepts it without changing FreeMap or reusing
-    /// deleted slots, inserts one entry per physical index into an existing leaf whose stored prefix still covers it
-    /// without changing a non-root leaf's first or last entry, and updates TableDef RowCount, AutoNumber and each
-    /// physical index's UniqueEntryCount (DistinctCount) when the user key was not already present.
+    /// into an existing owned FreeMap data page (W-05/growth-structural-closure; II-04 §§1.2, 2, II-05 §2, II-16 §17;
+    /// R-LOCK-4 WRITE-ALLOC, evidence/r-q9-insert-landing): encodes the row, selects the first owned FreeMap page in
+    /// storage order that has room (appending a new slot after any deleted slots without reuse), inserts one entry per
+    /// physical index into an existing leaf whose stored prefix still covers it without changing a non-root leaf's first
+    /// or last entry, and updates TableDef RowCount, AutoNumber and each physical index's UniqueEntryCount (DistinctCount)
+    /// when the user key was not already present (clamped to word0 while word0 &gt; 0).
     /// </summary>
     public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
     {
@@ -421,12 +481,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         HashSet<uint> freePages = [.. freePagesList];
         RowId? landing = null;
         string? lastReject = null;
-        // Which of several FreeMap pages ACE fills is not identified (R-LOCK-4 WRITE-ALLOC: an insert into T blocked the
-        // table's last page, not its first): an insert is written only when at most one owned page is in FreeMap.
-        if (ownedPages.Count(freePages.Contains) > 1)
-        {
-            return NotWritten("the table has several FreeMap pages: ACE's landing page among them is not identified (R-LOCK-4 WRITE-ALLOC)");
-        }
+        // R-LOCK-4 WRITE-ALLOC (evidence/r-q9-insert-landing): pick the first owned FreeMap page in ascending storage
+        // order that has room; append a new slot after any deleted slots without reusing deleted slots.
         foreach (uint pageNumber in ownedPages)
         {
             if (!freePages.Contains(pageNumber))
@@ -449,7 +505,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         if (landing is not { } root)
         {
-            return NotWritten($"no owned FreeMap data page can accept the {rowBytes!.Length}-byte row without a new data page, usage-map change, or deleted-slot reuse ({lastReject ?? "FreeMap has no eligible page"}; W-05/growth-structural-closure)");
+            return NotWritten($"no owned FreeMap data page can accept the {rowBytes!.Length}-byte row without a new data page or usage-map change ({lastReject ?? "FreeMap has no eligible page"}; W-05/growth-structural-closure)");
         }
 
         List<PageEdit> edits = [new PageEdit(root.Page, new DataPageAppendDelta(rowBytes!, root.Row, _d), PageRole.Data)];
@@ -608,6 +664,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
         List<PageEdit> edits = [new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d), PageRole.Data)];
         List<LockResource> footprint = [TableFootprints.Row(root)];
+        List<int> removedPhysical = [];
         var stored = new NativeValue[columns.Count];
         var decoded = new bool[columns.Count];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
@@ -684,6 +741,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(new PageEdit(target.Leaf, new IndexEntryDelete(oldEntry, _d), PageRole.Index));
             AddUnique(footprint, new LockResource(target.Leaf, LockPurpose.IndexLeaf));
+            removedPhysical.Add(physical.Number);
         }
 
         using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
@@ -692,13 +750,109 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, -1, null, [], _d, out string? tdefFailure))
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, -1, null, [], removedPhysical, _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(-1, null, [], _d), PageRole.Catalog));
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(-1, null, [], [.. removedPhysical], _d), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint), null);
+    }
+
+    /// <summary>
+    /// Compile the non-transactional TableDef AutoNumber persistence when <c>AddNew</c> consumes a generated ticket
+    /// (R-FMT-2 Generated values; evidence/r-q-fmt-sort/auto-cancel-fail-accdb, evidence/r-q10-commit-counter-edits):
+    /// advances TableDef AutoNumber at offset 20 without changing RowCount or index counters, so CancelUpdate, refused
+    /// Update, and Rollback all leave the consumed counter on disk.
+    /// </summary>
+    public CompiledChange CompileAutoNumberAdvance(uint autoNumberFloor, PrivateOverlay? seen = null)
+    {
+        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        if (tdefPin is null)
+        {
+            return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+        }
+        byte[] tdefCopy = tdefPin.Bytes.ToArray();
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, autoNumberFloor, [], [], _d, out string? tdefFailure))
+        {
+            return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+        }
+        if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
+        {
+            return new CompiledChange(new PhysicalChange(_cache, [], []), null);
+        }
+        return new CompiledChange(new PhysicalChange(
+            _cache,
+            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [], [], _d), PageRole.Catalog)],
+            [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
+    }
+
+    /// <summary>
+    /// Compile the TableDef side effects of an <c>AddNew</c> whose <c>Update</c> is refused 3022 by unique physical
+    /// index <paramref name="refusingPhysicalNumber"/> (R-FMT-2 II-05, evidence/r-q-fmt-sort/dc-rules-accdb,
+    /// evidence/r-q10-commit-counter-edits): each physical index strictly before <paramref name="refusingPhysicalNumber"/>
+    /// whose candidate key is not already present increments its UniqueEntryCount (word1, clamped to word0 while
+    /// word0 &gt; 0), and any explicit AutoNumber floor above the stored AutoNumber is persisted. Returns empty edits
+    /// when no TableDef word changes so the caller still commits the refused 3022's page-0 counter increment.
+    /// </summary>
+    public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null)
+    {
+        List<int> incrementUnique = [];
+        foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number).OrderBy(g => g.Key))
+        {
+            if (tree.Key >= refusingPhysicalNumber)
+            {
+                break;
+            }
+            IndexCheck index = tree.First();
+            PhysicalIndex physical = index.Physical;
+            NullsInKey(index, values, out bool allNull, out bool anyNull);
+            if (physical.IgnoreNulls(_d.IndexDescriptor))
+            {
+                if (allNull)
+                {
+                    continue;
+                }
+                if (anyNull)
+                {
+                    return NotWritten($"{index.Logical.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is not established)");
+                }
+            }
+            byte[]? newKey = Key(index, values, out string? keyFailure);
+            if (newKey is null)
+            {
+                return NotWritten($"{index.Logical.Name}: {keyFailure}");
+            }
+            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            IndexPosition? lb = navigator.LowerBound(KeyBound.Low(newKey));
+            if (navigator.LastFailure is { } navFailure)
+            {
+                return NotWritten($"{index.Logical.Name}: {navFailure.Predicate}");
+            }
+            bool keyPresent = lb is { } hit && navigator.KeyMatches(hit, KeyBound.Low(newKey));
+            if (!keyPresent)
+            {
+                incrementUnique.Add(physical.Number);
+            }
+        }
+        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        if (tdefPin is null)
+        {
+            return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+        }
+        byte[] tdefCopy = tdefPin.Bytes.ToArray();
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, autoNumberFloor, incrementUnique, [], _d, out string? tdefFailure))
+        {
+            return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+        }
+        if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
+        {
+            return new CompiledChange(new PhysicalChange(_cache, [], []), null);
+        }
+        return new CompiledChange(new PhysicalChange(
+            _cache,
+            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [.. incrementUnique], [], _d), PageRole.Catalog)],
+            [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
     }
 
     private static byte[] EncodeEntry(byte[] key, RowId root) =>

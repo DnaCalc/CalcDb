@@ -403,6 +403,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
         }
+        if (recordsetType == 4)
+        {
+            _workspace.Transactions.EndLazyBurst(Cache);
+        }
         var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
@@ -645,6 +649,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             r.CloseCursor();
         }
         _recordsets.Clear();
+        _workspace.Transactions.EndLazyBurst(Cache);
         if (_openOnThread?.Remove(this) == true)
         {
             CacheCounters c = Cache.Counters;

@@ -84,4 +84,22 @@ public sealed unsafe class DaoEditWiringTests
         Assert.Null(reader.BeginTrans());
         Assert.False(changes.Visible(reader, @"C:\f.accdb", "G"));
     }
+
+    [Fact]
+    public void MarkAutoNumberPublished_clears_CounterAhead_and_CommitBurstGap_is_named_refusal()
+    {
+        var changes = new UnpublishedChanges();
+        var first = new AutoNumberCounter(2);
+        changes.Register(@"C:\f.accdb", "G", first, 2);
+        var reopened = new AutoNumberCounter(2);
+        changes.Register(@"C:\F.ACCDB", "g", reopened, 2);
+        first.Issue(); // 3
+        Assert.True(changes.CounterAhead(@"C:\f.accdb", "G", reopened));
+        changes.MarkAutoNumberPublished(@"C:\f.accdb", "G", 3);
+        Assert.False(changes.CounterAhead(@"C:\f.accdb", "G", reopened));
+
+        Failure gap = EditPublication.Of(new UpdateOutcome(null, MutationOpen.CommitBurstGap, "in [500 ms, 1 s)")).Failure!;
+        Assert.Equal(FailureKind.NotModelled, gap.Kind);
+        Assert.StartsWith("NotModelled.Edit.CommitBurstGap:", gap.Description, StringComparison.Ordinal);
+    }
 }

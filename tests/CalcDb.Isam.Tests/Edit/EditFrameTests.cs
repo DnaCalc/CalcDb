@@ -179,12 +179,19 @@ public sealed unsafe class EditFrameTests(ITestOutputHelper output)
         {
             rig.Frame.Assign(n, I4(i));
         }
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 10_000; i++)
+        // The least of three passes: a GC that another thread triggers mid-pass can add one allocation quantum to this
+        // thread's count (AllocationBudgets; it failed about one full run in ten on 2026-11-20). A put that allocates shows
+        // in every pass, so the minimum still catches it.
+        double perPut = double.MaxValue;
+        for (int pass = 0; pass < 3; pass++)
         {
-            rig.Frame.Assign(n, I4(i));
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 10_000; i++)
+            {
+                rig.Frame.Assign(n, I4(i));
+            }
+            perPut = Math.Min(perPut, (GC.GetAllocatedBytesForCurrentThread() - before) / 10_000d);
         }
-        double perPut = (GC.GetAllocatedBytesForCurrentThread() - before) / 10_000d;
         output.WriteLine($"{perPut} B per put");
         Assert.Equal(0d, perPut);
     }
