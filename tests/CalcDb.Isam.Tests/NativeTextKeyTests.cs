@@ -140,13 +140,9 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
             }
             else
             {
-                string? detail = null;
-                if (mismatches.Count < 6)
-                {
-                    int diff = native.AsSpan().CommonPrefixLength(key.AsSpan(0, length));
-                    int from = Math.Max(0, diff - 4);
-                    detail = $"differ at {diff}; native {native.Length} B …{Convert.ToHexString(native.AsSpan(from))} encoder {length} B …{Convert.ToHexString(key.AsSpan(from, length - from))}";
-                }
+                // Whole keys, for every mismatch: a named residual is derived from these bytes.
+                int diff = native.AsSpan().CommonPrefixLength(key.AsSpan(0, length));
+                string detail = $"differ at {diff}; native {Convert.ToHexString(native)} encoder {Convert.ToHexString(key.AsSpan(0, length))}";
                 mismatches.Add(([.. shown.Select(v => v.Kind == NativeKind.Text ? v.Text! : v.ToString())], detail));
             }
         }
@@ -190,21 +186,12 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
     private const string TextIndexFixture = "47f8fa36bfcd0df6185061dc39e47fd46cdac20f372942f9a8ff3a177a8bfbf6";
     private const string PagesFixture = "640b1893caaa6a8450731932e84ffa0e2a8be91a00a0be188bae767d7a31db34";
 
-    /// <summary>
-    /// The named table residual (SORT-DERIVE, open): ACE keys U+30FC KATAKANA-HIRAGANA PROLONGED SOUND MARK and U+FF70
-    /// HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK, alone, with primary FF FF under General - Legacy (1033/0), where
-    /// the pinned resource gives S4A (the weight of A). r-sort-3/create-corpus-accdb and its compactions. They stay
-    /// mismatches: the table is not patched until SORT-DERIVE has their contexts.
-    /// </summary>
-    private static readonly string[] KanaProlongedMarks = ["\u30FC", "\uFF70"];
-
     private static byte[] Fixture(string sha) => CalcDb.Evidence.ArtifactStore.ForRepository(Root()).ReadAll(sha);
 
     [Fact]
-    public void Native_General_family_entries_equal_the_encoder_except_the_named_kana_residual()
+    public void Native_General_family_entries_equal_the_encoder()
     {
         int entries = 0, matched = 0, longKeys = 0, general = 0;
-        var residual = new List<string>();
         foreach ((string record, string sha) in GeneralFamily)
         {
             foreach (IndexTally t in CompareFile(record, Fixture(sha), includeSystem: true))
@@ -223,21 +210,19 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
                 foreach ((string[] values, string? detail) in t.Mismatches)
                 {
                     output.WriteLine($"{t.Fixture} {t.Table}.{t.Index} [{t.Orders}] ({string.Join(", ", values)}) {detail}");
-                    Assert.Single(values);
-                    Assert.Contains(values[0], KanaProlongedMarks);
-                    residual.Add(values[0]);
                 }
             }
         }
-        output.WriteLine($"{matched} of {entries} native Text-bearing entries equal the encoder ({general} under General 1033/1); {residual.Count} are the kana residual");
-        // Every mismatch is the residual, counted: pass means matched the native bytes, and these do not.
-        Assert.Equal(entries - matched, residual.Count);
+        output.WriteLine($"{matched} of {entries} native Text-bearing entries equal the encoder ({general} under General 1033/1)");
+        // Pass means matched the native bytes: every entry, the prolonged sound mark included since b999.
+        Assert.Equal(entries, matched);
         Assert.True(general > 0 && longKeys > 0);
     }
 
     /// <summary>
-    /// R-SORT-3 SORT-CHECK, the designed values of task b999 (r-sort-3c: kana prolonged sound mark in context, leading
-    /// modifiers, expansions before an accent, case flags against positions, secondary sums), ACCDB and MDB under General.
+    /// R-SORT-3 SORT-CHECK and SORT-DERIVE, the designed values of task b999 (r-sort-3c: kana prolonged sound mark in context,
+    /// leading modifiers, expansions before an accent, case flags against positions, secondary sums, ACCDB and MDB; r-sort-3d:
+    /// the prolonged mark after each kana row, small, voiced, hiragana and halfwidth kana, twice, and after Latin and digits).
     /// </summary>
     [Fact]
     public void Designed_b999_entries_equal_the_encoder()
@@ -246,8 +231,9 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
         [
             ("r-sort-3c/create-accdb", "3cffa138123fa7b1623eab0a240fa3dbc11542f4ef633f17a5406db4f00509cc"),
             ("r-sort-3c/create-mdb", "cf56c817542e7be094d055719aeff989c02afc24d9ff2709d70693f6f360b962"),
+            ("r-sort-3d/create-accdb", "409bbac328a36b2261d5bc0449a5e9ca9ae784044c7aed1adf95ef0d7592aa7d"),
         ];
-        int entries = 0, matched = 0, residual = 0;
+        int entries = 0, matched = 0;
         foreach ((string record, string sha) in designed)
         {
             foreach (IndexTally t in CompareFile(record, Fixture(sha), includeSystem: false))
@@ -259,17 +245,11 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
                 foreach ((string[] values, string? detail) in t.Mismatches)
                 {
                     output.WriteLine($"{t.Fixture} {t.Table}.{t.Index} [{t.Orders}] ({string.Join(", ", values.Select(v => string.Join(" ", v.Select(c => ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)))))}) {detail}");
-                    // The named residual: the prolonged sound mark, alone or in context (SORT-DERIVE open; these entries are its data).
-                    Assert.Single(values);
-                    Assert.True(values[0].AsSpan().IndexOfAny(KanaProlongedMarks[0][0], KanaProlongedMarks[1][0]) >= 0, $"not the kana residual: {values[0]}");
-                    residual++;
                 }
             }
         }
-        output.WriteLine($"{matched} of {entries} designed entries equal the encoder; {residual} are the kana prolonged-mark residual");
-        // Pass means matched the native bytes: the residual is counted apart, never as matched.
-        Assert.Equal(entries - matched, residual);
-        Assert.Equal(146, matched);
+        output.WriteLine($"{matched} of {entries} designed entries equal the encoder");
+        Assert.Equal(entries, matched);
     }
 
     [Fact]

@@ -344,9 +344,54 @@ internal static class TextKeys
         // II-05 §5.2: a position counts the character records that emitted primary bytes before it (one per record,
         // however many weights its expansion has), plus any secondary prefix a leading modifier created.
         int offset = 0;
+        // The last primary written (its start and length in dest) and, when it was a kana, its first-level flag, for the
+        // prolonged sound mark (SORT-DERIVE, b999).
+        int lastPrimary = -1, lastPrimaryLength = 0;
+        bool lastKana = false;
+        byte lastKanaFlag = 0;
+        bool kanaLevel = false;
         foreach (char c in units)
         {
+            if (sort.Family == TextSortFamily.GeneralLegacy && c is ProlongedMark or HalfwidthProlongedMark)
+            {
+                // R-SORT-3 SORT-DERIVE (b999; qualified.md "SORT-CHECK key bytes (b999)"; r-sort-3c, r-sort-3d): the mark
+                // has no weight of its own. At the start it is FF FF; after a kana it takes the primary of that kana's
+                // vowel (kana primaries run in rows of eight from 02: 7F 0B キ gives 7F 03 イ; ン 7F 80 gives itself),
+                // copies the kana's later flag and marks the kana level 3; after anything else it repeats the last
+                // primary. Its secondary is a placeholder.
+                int at = p;
+                if (lastPrimary < 0)
+                {
+                    dest[p++] = 0xFF;
+                    dest[p++] = 0xFF;
+                }
+                else if (lastKana)
+                {
+                    byte row = dest[lastPrimary + 1];
+                    dest[p++] = dest[lastPrimary];
+                    dest[p++] = row is >= 0x02 and < 0x80 ? (byte)(0x02 + ((row - 0x02) & 7)) : row;
+                    flags[f++] = (byte)(lastKanaFlag | (KanaLevelMark << KanaLevelShift));
+                    kanaLevel = true;
+                }
+                else
+                {
+                    dest.Slice(lastPrimary, lastPrimaryLength).CopyTo(dest[p..]);
+                    p += lastPrimaryLength;
+                }
+                lastPrimary = at;
+                lastPrimaryLength = p - at;
+                secondary[s++] = Placeholder;
+                offset++;
+                continue;
+            }
             ref readonly TextRecord r = ref sort.RecordOf(c);
+            if (r.Class is TextRecordClass.Simple or TextRecordClass.International or TextRecordClass.InternationalFlagged)
+            {
+                lastPrimary = p;
+                lastPrimaryLength = r.InlineLength;
+                lastKana = r.Class == TextRecordClass.InternationalFlagged && r.InlineLength == 2 && sort.Payload(r.InlineStart, 1)[0] == KanaScript;
+                lastKanaFlag = r.Flag;
+            }
             switch (r.Class)
             {
                 case TextRecordClass.Simple:
@@ -376,7 +421,7 @@ internal static class TextKeys
                     }
                     if (r.Class == TextRecordClass.InternationalFlagged)
                     {
-                        flags[f++] = r.Flag;
+                        flags[f++] = (byte)(r.Flag | (KanaLevelDefault << KanaLevelShift));
                     }
                     offset++;
                     break;
@@ -416,7 +461,7 @@ internal static class TextKeys
             dest[p++] = Level;
             if (f > 0)
             {
-                p += WriteLaterFlags(flags[..f], dest[p..]);
+                p += WriteLaterFlags(flags[..f], kanaLevel, dest[p..]);
                 if (u > 0)
                 {
                     dest[p++] = 0xFF;
@@ -440,13 +485,35 @@ internal static class TextKeys
 
     /// <summary>
     /// The Z later material (II-05 §5): the flags without their trailing 3s, three to a byte under the high bits 10,
-    /// first flag highest, a partial byte padded with zero bits; then FF 02, r × 80, FF, r × 80 with r = ceil(n/7) over
-    /// all n flagged characters.
+    /// first flag highest, a partial byte padded with zero bits; then FF, the kana level when a prolonged sound mark
+    /// follows a kana (the same packing of each flagged character's level, 1 for a character and 3 for the mark, trailing
+    /// 1s removed: r-sort-3d キー 9C, キイー 97, キーー 9F), then 02, r × 80, FF, r × 80 with r = ceil(n/7) over all n
+    /// flagged characters. Each flags entry holds the later flag in its low two bits and the kana level above
+    /// <see cref="KanaLevelShift"/>.
     /// </summary>
-    private static int WriteLaterFlags(ReadOnlySpan<byte> flags, Span<byte> dest)
+    private static int WriteLaterFlags(ReadOnlySpan<byte> flags, bool kanaLevel, Span<byte> dest)
     {
-        int n = flags.Length, kept = n;
-        while (kept > 0 && flags[kept - 1] == SortTableCompiler.FlagDefault)
+        int n = flags.Length;
+        int p = Pack(flags, 0, SortTableCompiler.FlagDefault, dest);
+        int r = (n + FlagsPerSuffixUnit - 1) / FlagsPerSuffixUnit;
+        dest[p++] = 0xFF;
+        if (kanaLevel)
+        {
+            p += Pack(flags, KanaLevelShift, KanaLevelDefault, dest[p..]);
+        }
+        dest[p++] = 0x02;
+        dest.Slice(p, r).Fill(0x80);
+        p += r;
+        dest[p++] = 0xFF;
+        dest.Slice(p, r).Fill(0x80);
+        return p + r;
+    }
+
+    /// <summary>Two-bit values (at <paramref name="shift"/> in each entry) without their trailing defaults, three to a byte under the high bits 10.</summary>
+    private static int Pack(ReadOnlySpan<byte> entries, int shift, int fallback, Span<byte> dest)
+    {
+        int kept = entries.Length;
+        while (kept > 0 && ((entries[kept - 1] >> shift) & 3) == fallback)
         {
             kept--;
         }
@@ -456,20 +523,22 @@ internal static class TextKeys
             int packed = PackedFlagBits;
             for (int j = 0; j < FlagsPerByte; j++)
             {
-                int flag = i + j < kept ? flags[i + j] : 0;
-                packed |= flag << (2 * (FlagsPerByte - 1 - j));
+                int value = i + j < kept ? (entries[i + j] >> shift) & 3 : 0;
+                packed |= value << (2 * (FlagsPerByte - 1 - j));
             }
             dest[p++] = (byte)packed;
         }
-        int r = (n + FlagsPerSuffixUnit - 1) / FlagsPerSuffixUnit;
-        dest[p++] = 0xFF;
-        dest[p++] = 0x02;
-        dest.Slice(p, r).Fill(0x80);
-        p += r;
-        dest[p++] = 0xFF;
-        dest.Slice(p, r).Fill(0x80);
-        return p + r;
+        return p;
     }
+
+    /// <summary>U+30FC KATAKANA-HIRAGANA PROLONGED SOUND MARK and its halfwidth form U+FF70.</summary>
+    private const char ProlongedMark = '\u30FC', HalfwidthProlongedMark = '\uFF70';
+
+    /// <summary>The first primary byte of a kana record (r-sort-3d: ア 7F 02, カ 7F 0A, ン 7F 80).</summary>
+    private const byte KanaScript = 0x7F;
+
+    /// <summary>Where a flags entry keeps the kana level, the level of a character (1) and of a prolonged mark after a kana (3).</summary>
+    private const int KanaLevelShift = 4, KanaLevelDefault = 1, KanaLevelMark = 3;
 
     /// <summary>
     /// General 97 (II-05 §5.3): primary bytes with no end-primary marker, then the secondary nibbles (2 for a
