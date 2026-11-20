@@ -51,6 +51,20 @@ internal unsafe struct OleAutTable
     public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VariantCopy;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VariantCopyInd;
     public delegate* unmanaged<NativeVariant*, NativeVariant*, ushort, ushort, int> VariantChangeType;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, uint, ushort, ushort, int> VariantChangeTypeEx;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarAdd;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarSub;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarMul;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarDiv;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarIdiv;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarMod;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int> VarPow;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VarNeg;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VarAbs;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VarInt;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, int> VarFix;
+    public delegate* unmanaged<NativeVariant*, int, NativeVariant*, int> VarRound;
+    public delegate* unmanaged<NativeVariant*, NativeVariant*, uint, uint, int> VarCmp;
     public delegate* unmanaged<byte*, uint, nint> SysAllocStringByteLen;
     public delegate* unmanaged<nint, uint> SysStringByteLen;
     public delegate* unmanaged<nint, uint> SysStringLen;
@@ -89,6 +103,20 @@ internal unsafe struct OleAutTable
         table.VariantCopy = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VariantCopy");
         table.VariantCopyInd = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VariantCopyInd");
         table.VariantChangeType = (delegate* unmanaged<NativeVariant*, NativeVariant*, ushort, ushort, int>)E("VariantChangeType");
+        table.VariantChangeTypeEx = (delegate* unmanaged<NativeVariant*, NativeVariant*, uint, ushort, ushort, int>)E("VariantChangeTypeEx");
+        table.VarAdd = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarAdd");
+        table.VarSub = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarSub");
+        table.VarMul = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarMul");
+        table.VarDiv = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarDiv");
+        table.VarIdiv = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarIdiv");
+        table.VarMod = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarMod");
+        table.VarPow = (delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)E("VarPow");
+        table.VarNeg = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VarNeg");
+        table.VarAbs = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VarAbs");
+        table.VarInt = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VarInt");
+        table.VarFix = (delegate* unmanaged<NativeVariant*, NativeVariant*, int>)E("VarFix");
+        table.VarRound = (delegate* unmanaged<NativeVariant*, int, NativeVariant*, int>)E("VarRound");
+        table.VarCmp = (delegate* unmanaged<NativeVariant*, NativeVariant*, uint, uint, int>)E("VarCmp");
         table.SysAllocStringByteLen = (delegate* unmanaged<byte*, uint, nint>)E("SysAllocStringByteLen");
         table.SysStringByteLen = (delegate* unmanaged<nint, uint>)E("SysStringByteLen");
         table.SysStringLen = (delegate* unmanaged<nint, uint>)E("SysStringLen");
@@ -168,6 +196,36 @@ internal static unsafe class OleAut
     public static int VariantCopyInd(NativeVariant* dest, NativeVariant* src) => T.VariantCopyInd(dest, src);
 
     public static int VariantChangeType(NativeVariant* dest, NativeVariant* src, ushort flags, ushort vt) => T.VariantChangeType(dest, src, flags, vt);
+
+    /// <summary>VariantChangeTypeEx: a conversion under an explicit locale (II-10 §14), never the thread's.</summary>
+    public static int VariantChangeTypeEx(NativeVariant* dest, NativeVariant* src, uint lcid, ushort flags, ushort vt) => T.VariantChangeTypeEx(dest, src, lcid, flags, vt);
+
+    public static int VarAdd(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarAdd(left, right, result);
+
+    public static int VarSub(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarSub(left, right, result);
+
+    public static int VarMul(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarMul(left, right, result);
+
+    public static int VarDiv(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarDiv(left, right, result);
+
+    public static int VarIdiv(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarIdiv(left, right, result);
+
+    public static int VarMod(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarMod(left, right, result);
+
+    public static int VarPow(NativeVariant* left, NativeVariant* right, NativeVariant* result) => T.VarPow(left, right, result);
+
+    public static int VarNeg(NativeVariant* input, NativeVariant* result) => T.VarNeg(input, result);
+
+    public static int VarAbs(NativeVariant* input, NativeVariant* result) => T.VarAbs(input, result);
+
+    public static int VarInt(NativeVariant* input, NativeVariant* result) => T.VarInt(input, result);
+
+    public static int VarFix(NativeVariant* input, NativeVariant* result) => T.VarFix(input, result);
+
+    public static int VarRound(NativeVariant* input, int decimals, NativeVariant* result) => T.VarRound(input, decimals, result);
+
+    /// <summary>VarCmp: VARCMP_LT 0, VARCMP_EQ 1, VARCMP_GT 2, VARCMP_NULL 3, or a failure HRESULT.</summary>
+    public static int VarCmp(NativeVariant* left, NativeVariant* right, uint lcid, uint flags) => T.VarCmp(left, right, lcid, flags);
 
     public static nint SysAllocStringByteLen(byte* psz, uint len) => T.SysAllocStringByteLen(psz, len);
 

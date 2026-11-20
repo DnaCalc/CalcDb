@@ -234,6 +234,26 @@ public sealed unsafe class StandInComparisonTests
         }
     }
 
+    [Fact]
+    public void The_scalar_kernels_entry_points_are_not_available_in_the_stand_ins()
+    {
+        // W-02/shared-scalar-services: VariantChangeTypeEx and the Var* arithmetic and comparison have no stand-in yet.
+        NativeVariant a = default, b = default, r = default;
+        a.Vt = b.Vt = (ushort)VarType.I4;
+        Assert.Equal(OleAut.NotAvailableOnPlatform, Stand.VariantChangeTypeEx(&r, &a, 7177, 0, (ushort)VarType.Bstr));
+        foreach (nint f in new[] { (nint)Stand.VarAdd, (nint)Stand.VarSub, (nint)Stand.VarMul, (nint)Stand.VarDiv, (nint)Stand.VarIdiv, (nint)Stand.VarMod, (nint)Stand.VarPow })
+        {
+            Assert.Equal(OleAut.NotAvailableOnPlatform, ((delegate* unmanaged<NativeVariant*, NativeVariant*, NativeVariant*, int>)f)(&a, &b, &r));
+        }
+        foreach (nint f in new[] { (nint)Stand.VarNeg, (nint)Stand.VarAbs, (nint)Stand.VarInt, (nint)Stand.VarFix })
+        {
+            Assert.Equal(OleAut.NotAvailableOnPlatform, ((delegate* unmanaged<NativeVariant*, NativeVariant*, int>)f)(&a, &r));
+        }
+        Assert.Equal(OleAut.NotAvailableOnPlatform, Stand.VarRound(&a, 0, &r));
+        Assert.Equal(OleAut.NotAvailableOnPlatform, Stand.VarCmp(&a, &b, 7177, 0));
+        Assert.Equal(VarType.Empty, (VarType)r.Vt);
+    }
+
     [WindowsFact]
     public void VariantChangeType_matches_where_the_stand_in_answers()
     {

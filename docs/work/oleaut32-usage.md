@@ -10,7 +10,7 @@ interface for Automation values and conversions in CalcDb's C# reference impleme
   DateDiff, Pmt, …). ACE's rules never go inside the oleaut32 layer.
 - The conversion code and the oleaut32 declarations live together in one portable project (`CalcDb.Values`).
 - No Rust or C in CalcDb, and no oleaut32 of CalcDb's own. Temporary C# stand-ins are allowed only as below.
-- When the scope is understood, CalcDb writes a brief for the CalcVBA project: extract an oleaut32-compatible subset,
+- CalcDb's brief for the CalcVBA project is [calcvba-oleaut32-brief.md](calcvba-oleaut32-brief.md): extract an oleaut32-compatible subset,
   bit-compatible and of the same big-O cost as Windows oleaut32, for Windows, Linux and wasm. On Windows it would be
   swappable, probably for tests only. A later Rust CalcDb consolidates the conversion code above oleaut32 that it
   shares with CalcVBA.
@@ -58,6 +58,12 @@ cross-platform replacement: P1 is on every DAO call, P2 on common paths, P3 on r
 | Function | Priority | What CalcDb relies on | Used by | Stand-in |
 | --- | --- | --- | --- | --- |
 | `VariantChangeType` | P1 | Flags 0, the thread locale; DISP_E_TYPEMISMATCH and DISP_E_OVERFLOW as failure signals; Null to a scalar fails; Empty to a number is 0; digit strings convert | IDispatch binder (coercion of typed parameters), Seek keys, PercentPosition, ADO Command parameters (all through `OwnedVariant.ChangeType`/`TryChangeScalar`) | among I2, I4, UI1, R4, R8, CY, BOOL; Empty to a number; I2/I4/UI1 to text and a plain digit string to a number; flags 0 only |
+| `VariantChangeTypeEx` | P1 | An explicit LCID (the context's, never the thread's), flags 0; text grammar of numbers (`'(12)'`, `'&H10'`, `'1 2'` in en-ZA), dates and Booleans (`'FALSE'`); halves to even; the text forms of numbers and dates (`CStr(1/3)` "0.333333333333333", `#2024-03-05#` "2024/03/05"); DISP_E_TYPEMISMATCH and DISP_E_OVERFLOW as failure signals | scalar kernel: conversions, `&`, Len, Sgn, Round digits, logical truth of text, the Decimal–float compare | not available |
+| `VarCmp` | P1 | VARCMP_LT/EQ/GT over two numbers or dates, LCID of the context, flags 0; never called with a text operand (ACE's text rules are the kernel's) | scalar kernel: = <> < <= > >= | not available |
+| `VarAdd`, `VarSub`, `VarMul` | P1 | Result types (Byte → Integer → Long widening, Long overflow → Double, Single+Long → Double, Currency+Double → Currency, Date+Decimal → Decimal), text + text concatenation, numeric text as Double, Null propagation | scalar kernel: + - * (ACE fails 6 where a typed Long overflows) | not available |
+| `VarDiv`, `VarIdiv`, `VarMod`, `VarPow` | P2 | Double results except Single / Single; operand rounding of `\` and Mod (half to even), integer overflow of `\` (Integer → Long, Long fails); 0/0 DISP_E_OVERFLOW, x/0 DISP_E_DIVBYZERO; VarPow's E_INVALIDARG for a negative base or zero to a negative power | scalar kernel: / \ Mod ^ | not available |
+| `VarNeg`, `VarAbs`, `VarInt`, `VarFix` | P2 | The operand's type kept (text gives Double, Date stays Date, Decimal stays Decimal), Abs widening Integer → Long → Double at the minimum; Null propagation | scalar kernel: unary minus (ACE fails 6 where VarNeg widens), Abs, Int, Fix | not available |
+| `VarRound` | P2 | Half to even at any digit count (15 and 16 asked), the operand's type kept | scalar kernel: Round (negative digits are refused before the call) | not available |
 | `VarDecFromStr`, `VarBstrFromDec` | P3 | Exact 96-bit magnitude and scale | Decimal declaration checks, DECIMAL capture | not available |
 
 ## COM platform services also in oleaut32 (not conversions)
@@ -72,7 +78,7 @@ oleaut32 replacement must decide whether it carries them.
 
 ## Next additions
 
-W-02/shared-scalar-services adds the conversion and arithmetic functions as they are used: `VariantChangeTypeEx`,
-`VarParseNumFromStr`/`VarNumFromParseNum`, `VarDateFromStr`, the `Var*From*` family, `VarAdd`/`VarSub`/`VarMul`/
-`VarDiv`/`VarIdiv`/`VarMod`/`VarPow`, `VarCmp`, `VarCat`, the logical operators, `VarRound`/`VarFix`/`VarInt`, the
-Currency and Decimal arithmetic and `VarFormat*`. Each gets its row when CalcDb code first calls it.
+The scalar kernel does not call `VarCat` (it formats under the thread's locale; the kernel converts each operand with
+`VariantChangeTypeEx` and joins the texts) nor `VarAnd`/`VarOr`/`VarXor`/`VarEqv`/`VarImp`/`VarNot` (bitwise; ACE's
+operators are logical, qualified.md "logical and bitwise operators"). Later functions (`VarParseNumFromStr`,
+`VarFormat*`, the date functions of W-06) get their row when CalcDb code first calls them.

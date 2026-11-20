@@ -33,6 +33,20 @@ internal static unsafe class StandIns
         VariantCopy = &VariantCopy,
         VariantCopyInd = &VariantCopyInd,
         VariantChangeType = &VariantChangeType,
+        VariantChangeTypeEx = &VariantChangeTypeEx,
+        VarAdd = &Binary,
+        VarSub = &Binary,
+        VarMul = &Binary,
+        VarDiv = &Binary,
+        VarIdiv = &Binary,
+        VarMod = &Binary,
+        VarPow = &Binary,
+        VarNeg = &Unary,
+        VarAbs = &Unary,
+        VarInt = &Unary,
+        VarFix = &Unary,
+        VarRound = &VarRound,
+        VarCmp = &VarCmp,
         SysAllocStringByteLen = &SysAllocStringByteLen,
         SysStringByteLen = &SysStringByteLen,
         SysStringLen = &SysStringLen,
@@ -814,6 +828,25 @@ internal static unsafe class StandIns
     }
 
     // ---- Not available here ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Locale-dependent conversion (text forms, dates) and the Var* arithmetic and comparison the scalar kernel calls
+    /// (W-02/shared-scalar-services): not available on this platform until the cross-platform library exists.
+    /// </summary>
+    [UnmanagedCallersOnly]
+    private static int VariantChangeTypeEx(NativeVariant* dest, NativeVariant* src, uint lcid, ushort flags, ushort vt) => OleAut.NotAvailableOnPlatform;
+
+    [UnmanagedCallersOnly]
+    private static int Binary(NativeVariant* left, NativeVariant* right, NativeVariant* result) => OleAut.NotAvailableOnPlatform;
+
+    [UnmanagedCallersOnly]
+    private static int Unary(NativeVariant* input, NativeVariant* result) => OleAut.NotAvailableOnPlatform;
+
+    [UnmanagedCallersOnly]
+    private static int VarRound(NativeVariant* input, int decimals, NativeVariant* result) => OleAut.NotAvailableOnPlatform;
+
+    [UnmanagedCallersOnly]
+    private static int VarCmp(NativeVariant* left, NativeVariant* right, uint lcid, uint flags) => OleAut.NotAvailableOnPlatform;
 
     [UnmanagedCallersOnly]
     private static int VarDecFromStr(char* text, uint lcid, uint flags, byte* decimalOut) => OleAut.NotAvailableOnPlatform;
