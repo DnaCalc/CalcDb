@@ -217,4 +217,23 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   IErrorInfo only from an object that answers ISupportErrorInfo for the interface called; every DAO and ADO object
   answers it." Open: ACE's per-IID InterfaceSupportsErrorInfo answers (a vtable call the harness cannot make).
 
+## README charter, II-02 §8 and II-16 §7: the conversion service of the C# reference (owner decision, 685w, 2026-11-20)
+
+- **Book.** README: "Conversions, scalar behaviour and the VBA function library come from shared foundation services";
+  II-16 §7: W-02 connects the shared conversions and functions, and CalcDb "neither silently implements a second value
+  system". CalcVBA keeps coercion, arithmetic, comparison and dates in its Rust runtime with no C interface, so the C#
+  reference has no shared service to consume.
+- **Decision.** Windows `oleaut32.dll` is the formal interface for Automation values and conversions in the C#
+  reference: called directly through one declarations class, no abstraction layer, with everything above it (ACE's
+  typing, promotion, error mapping and context rules; the functions oleaut32 lacks) in CalcDb's C#. A cross-platform,
+  oleaut32-compatible library (bit-compatible, same big-O cost; Windows, Linux, wasm) is to be extracted by CalcVBA
+  from a brief CalcDb writes; until then small, marked C# stand-ins cover allocators, VARIANT lifetime, SAFEARRAY access
+  and a few conversions where no oleaut32 loads. A later Rust CalcDb consolidates the code above oleaut32 it shares with
+  CalcVBA. Usage list: docs/work/oleaut32-usage.md.
+- **Proposed text.** II-16 §7, after "the missing service and consuming slices remain explicit": "The C# reference
+  consumes the platform Automation service (oleaut32) as that interface on Windows and records what it relies on; the
+  shared foundation's oleaut32-compatible subset replaces it on other targets. ACE's own scalar rules are CalcDb's,
+  above that interface." README, Values and expressions: add "(for the C# reference, through the oleaut32 interface;
+  see II-16 §7)".
+
 
