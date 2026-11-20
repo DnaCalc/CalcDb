@@ -103,12 +103,12 @@ public sealed class ArtifactStore
         }
         try
         {
-            File.Move(temp, cached, overwrite: true);
+            // Never replace a cached copy: a reader (a parallel test run or thread) may have it open.
+            File.Move(temp, cached, overwrite: false);
         }
         catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(cached))
         {
-            // Another process decompressed the same artifact first and holds it open (a parallel test run): its copy has
-            // the same digest, so this one is dropped instead of replacing a file in use.
+            // Another process or thread decompressed the same artifact first: its copy has the same digest, so this one goes.
             File.Delete(temp);
         }
         return cached;
