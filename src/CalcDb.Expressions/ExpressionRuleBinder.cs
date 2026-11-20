@@ -1,16 +1,16 @@
-using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Foundation;
+using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
 
-namespace CalcDb.Isam.Tests.Edit;
+namespace CalcDb.Expressions;
 
 /// <summary>
 /// The default and validation adapters of II-10 §21 over the one expression service (<see cref="BoundExpression"/>), as
-/// the ISAM's <see cref="IMutationRuleBinder"/> asks for them. <b>Staged here until it moves into CalcDb.Expressions</b>
-/// beside <see cref="FindCriteria"/> (an API addition the W-05/edit-frames report asks for); it adds no evaluator.
+/// the ISAM's <see cref="IMutationRuleBinder"/> asks for them (W-05/edit-frames). Beside <see cref="FindCriteria"/>, the
+/// Find adapter: it adds no evaluator. The DAO adapter compiles a table's <see cref="MutationSemantics"/> through it.
 /// <list type="bullet">
 /// <item>A default binds with no field in scope (II-10 §21 "restricted builtin environment") and is evaluated once per
 /// AddNew.</item>
@@ -23,7 +23,7 @@ namespace CalcDb.Isam.Tests.Edit;
 /// And Null</c> rejects only V &lt;= 0); an evaluation failure is 3802; any other value is not modelled.</item>
 /// </list>
 /// </summary>
-internal sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRuleBinder
+public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRuleBinder
 {
     private readonly ExpressionContext _default = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.DefaultValue);
     private readonly ExpressionContext _rule = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.ValidationRule);

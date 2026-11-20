@@ -11,6 +11,9 @@ public enum MutationErrorSource : byte
 
     /// <summary>"DAO.Workspace": BeginTrans, CommitTrans, Rollback.</summary>
     Workspace,
+
+    /// <summary>"DAO.Database": an action query's row change (Execute; qualified.md R-TXN-1 TXN-LOCAL).</summary>
+    Database,
 }
 
 /// <summary>
@@ -44,6 +47,20 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     /// <summary>3058, a Null in a primary key or an index that disallows Nulls (editmode-unusual-transitions: AddNew, Update on F).</summary>
     public const int NullInIndex = 3058;
 
+    /// <summary>
+    /// 3188 "Could not update; currently locked by another session on this machine.": another Workspace of this process
+    /// holds the page (r-fix-cursor-dao/edit-conflict-pessimistic-second-workspace from DAO.Recordset at Edit;
+    /// r-q-cat-txn-lock/txn-local-inproc-far-rows-and-orders from DAO.Database at Execute). Another process's holder
+    /// gives 3260 instead (W-12).
+    /// </summary>
+    public const int LockedBySession = 3188;
+
+    /// <summary>
+    /// 3197, an optimistic Update over a row whose stored image is no longer the one Edit read (r-err-1b/lock-optimistic-conflict,
+    /// r-fix-cursor-dao/edit-conflict-optimistic-readback; qualified.md R-CURSOR-1 CUR-EDIT conflicts).
+    /// </summary>
+    public const int WriteConflict = 3197;
+
     /// <summary>3163, a value longer than its field (qualified.md R-FMT-2 Text grammar, Binary and OLE).</summary>
     public const int FieldTooSmall = 3163;
 
@@ -76,6 +93,7 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     {
         MutationErrorSource.Field => "DAO.Field",
         MutationErrorSource.Workspace => "DAO.Workspace",
+        MutationErrorSource.Database => "DAO.Database",
         _ => "DAO.Recordset",
     };
 
@@ -91,6 +109,8 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
         NoTransaction => "You tried to commit or rollback a transaction without first beginning a transaction.",
         NullInIndex => "Index or primary key cannot contain a Null value.",
         FieldTooSmall => "The field is too small to accept the amount of data you attempted to add. Try inserting or pasting less data.",
+        LockedBySession => "Could not update; currently locked by another session on this machine.",
+        WriteConflict => "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.",
         NotSupported => "Operation is not supported for this type of object.",
         Required => $"You must enter a value in the '{Argument}' field.",
         ZeroLength => $"Field '{Argument}' cannot be a zero-length string.",
@@ -136,8 +156,17 @@ public enum MutationOpen : byte
     /// <summary>A uniqueness check the index layer could not answer (an unencodable key, a sort order outside the General family).</summary>
     UniqueIndex,
 
-    /// <summary>The optimistic or pessimistic conflict check (3197/3188): W-05/local-lockers-rebase.</summary>
+    /// <summary>
+    /// A conflict whose public result no record shows: a recordset Update meeting another Workspace's page (an optimistic
+    /// edit, or a pessimistic edit whose Update needs an index leaf); TXN-LOCAL records it for Execute only.
+    /// </summary>
     Conflict,
+
+    /// <summary>
+    /// The page is held by a committed change not yet written to the committed images (<c>LockLifetime.UntilPublished</c>):
+    /// ACE had published and released it, so its outcome is W-05/same-width-mutation's.
+    /// </summary>
+    UnpublishedChange,
 
     /// <summary>An Edit of a row this locker changed and did not publish: its stored image is not the one the locker sees.</summary>
     PrivateRow,

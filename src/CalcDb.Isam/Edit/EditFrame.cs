@@ -112,9 +112,15 @@ public interface IUniqueProbe
 /// The shared edit state of one table of one open file (II-07 §14): its compiled <see cref="MutationSemantics"/>, its
 /// AutoNumber counter and the unique probe over its stored trees. One per table, shared by every recordset over it.
 /// </summary>
-public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? probe, bool hasRelationships = false)
+public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? probe, bool hasRelationships = false, TableFootprints? footprints = null)
 {
     public MutationSemantics Semantics { get; } = semantics;
+
+    /// <summary>
+    /// The lock footprints over the table's file (W-05/local-lockers-rebase). Without them (a constructed table with no
+    /// file) edits take no locks: no second locker can reach such a table.
+    /// </summary>
+    public TableFootprints? Footprints { get; } = footprints;
 
     /// <summary>The table's counter, when it has an AutoNumber column.</summary>
     public AutoNumberCounter? Counter { get; } = semantics.AutoNumber is null ? null : new AutoNumberCounter(semantics.Table.AutoNumber);
@@ -144,6 +150,9 @@ public sealed class EditFrame : IDisposable
     private readonly bool[] _validateOnSet;
     private readonly CandidateRow _candidate;
     private RowId? _original;
+    private NativeValue[]? _originals;
+    private LockResource? _editLock;
+    private bool _conflictReported;
     private GeneratedTicket? _ticket;
 
     /// <param name="updatable">False for a snapshot or forward-only recordset (CUR-EDIT: Edit, AddNew, Update and CancelUpdate 3251, a put 3027).</param>
@@ -161,6 +170,15 @@ public sealed class EditFrame : IDisposable
     }
 
     public bool Updatable { get; }
+
+    /// <summary>
+    /// DAO LockEdits: True (pessimistic, the default) locks the row's page at Edit; False (optimistic) locks at Update and
+    /// refuses 3197 when the stored row changed since Edit read it (qualified.md R-CURSOR-1 CUR-EDIT conflicts).
+    /// </summary>
+    public bool LockEdits { get; set; } = true;
+
+    /// <summary>The object a lock conflict is reported from: DAO.Recordset, or DAO.Database for an action query's row (TXN-LOCAL).</summary>
+    public MutationErrorSource ConflictSource { get; init; } = MutationErrorSource.Recordset;
 
     public EditMode Mode { get; private set; }
 
@@ -189,21 +207,52 @@ public sealed class EditFrame : IDisposable
         {
             return EditOutcome.NotModelled(MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
         }
+        // A pessimistic Edit locks the row's page before it reads the originals (CUR-EDIT conflicts: another Workspace's
+        // Edit of the row or of another row of the page fails 3188 from DAO.Recordset and leaves EditMode 0).
+        LockResource? editLock = null;
+        if (LockEdits && _table.Footprints is { } footprints)
+        {
+            LockResource page = TableFootprints.Row(row);
+            if (_editLock != page)
+            {
+                LockAcquisition got = _workspace.Lock(footprints.File, [page], LockLifetime.PendingEdit);
+                if (got.Conflict is { } conflict)
+                {
+                    return conflict.HolderLifetime == LockLifetime.UntilPublished
+                        ? EditOutcome.NotModelled(MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} holds locker {conflict.Holder.Value}'s committed change, not yet published")
+                        : EditOutcome.Fail(MutationError.LockedBySession, ConflictSource);
+                }
+                editLock = page;
+            }
+        }
         IReadOnlyList<ColumnDescriptor> columns = _table.Semantics.Table.Columns;
         var originals = new NativeValue[columns.Count];
         for (int i = 0; i < originals.Length; i++)
         {
             FieldResult read = _cursor.Read(columns[i]);
-            if (read.Failure == CursorFailure.NoCurrentRecord)
+            if (read.Failure == CursorFailure.NoCurrentRecord || !read.Succeeded)
             {
-                return EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset);
-            }
-            if (!read.Succeeded)
-            {
-                return EditOutcome.NotModelled(MutationOpen.ColumnType, $"field {columns[i].Name} cannot be read: {read.Detail}");
+                if (editLock is { } taken)
+                {
+                    _workspace.Unlock(_table.Footprints!.File, [taken], LockLifetime.PendingEdit);
+                }
+                return read.Failure == CursorFailure.NoCurrentRecord
+                    ? EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset)
+                    : EditOutcome.NotModelled(MutationOpen.ColumnType, $"field {columns[i].Name} cannot be read: {read.Detail}");
             }
             originals[i] = read.Value;
         }
+        if (editLock is not null)
+        {
+            ReleaseEditLock();
+            _editLock = editLock;
+        }
+        else if (!LockEdits)
+        {
+            ReleaseEditLock();
+        }
+        _conflictReported = false;
+        _originals = originals;
         ReleaseTicket();
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -256,6 +305,10 @@ public sealed class EditFrame : IDisposable
             defaults[i] = converted.Value;
         }
         ReleaseTicket();
+        // A new row's landing page is chosen at publication (W-05/same-width-mutation), so AddNew locks nothing here.
+        ReleaseEditLock();
+        _originals = null;
+        _conflictReported = false;
         for (int i = 0; i < _cells.Length; i++)
         {
             _cells[i] = defaults[i] is { } d ? new EditCell { State = CellState.Accepted, Value = d } : new EditCell { State = CellState.Unset, Value = NativeValue.Null };
@@ -371,7 +424,18 @@ public sealed class EditFrame : IDisposable
                 : new UpdateOutcome(null, MutationOpen.CheckOrder, $"a check fails ({failure.Error?.Number}) at depth {_workspace.Depth}, where an Update also meets 3003");
         }
 
-        // 4. The operation frame of the Workspace and the accepted change (II-08 §3).
+        // 4. The lock footprint and, for an optimistic edit, the stored image (W-05/local-lockers-rebase).
+        if (Mode == EditMode.Edit && _original is { } edited && _workspace.HasAcceptedChange(s, edited))
+        {
+            return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {edited} was changed by this Workspace after Edit read it and is not published");
+        }
+        UpdateOutcome? locked = LockForUpdate(out LockResource[] footprint);
+        if (locked is { } refusedLock)
+        {
+            return refusedLock;
+        }
+
+        // 5. The operation frame of the Workspace and the accepted change (II-08 §3).
         var values = new NativeValue[_cells.Length];
         var assigned = new bool[_cells.Length];
         for (int i = 0; i < values.Length; i++)
@@ -382,9 +446,11 @@ public sealed class EditFrame : IDisposable
         // An explicit AutoNumber value replaces the issued one: the ticket is then consumed with no row (R-FMT-2 Generated values).
         GeneratedTicket? used = _ticket is not null && s.AutoNumber is { } numbered && values[numbered.Ordinal] is { Kind: NativeKind.Long } issued && issued.Integer == _ticket.Value ? _ticket : null;
         var change = new AcceptedRowChange(s, Mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used);
+        LockLifetime held = _workspace.ChangeLifetime;
         MutationError? refused = _workspace.Accept(change);
         if (refused is { } error)
         {
+            UnlockFootprint(footprint, held);
             return new UpdateOutcome(error);
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && Mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
@@ -439,6 +505,106 @@ public sealed class EditFrame : IDisposable
     }
 
     private UpdateOutcome Fail(int number, string? argument = null) => new(new MutationError(number, MutationErrorSource.Recordset, argument));
+
+    /// <summary>
+    /// Acquire the Update's footprint with the lifetime its change will hold (II-09 §24; TXN-LOCAL): the edited row's data
+    /// page and the leaf of each index whose key the change replaces. An optimistic edit then compares the stored row with
+    /// the originals Edit read: a difference is 3197 with EditMode and the buffer kept, and the next Update overwrites
+    /// (CUR-EDIT conflicts; R-LOCK-4 WRITE-ORIGINAL). Null when granted; the outcome otherwise, holding nothing new.
+    /// </summary>
+    private UpdateOutcome? LockForUpdate(out LockResource[] footprint)
+    {
+        footprint = [];
+        if (Mode != EditMode.Edit || _original is not { } row || _table.Footprints is not { } fp)
+        {
+            return null;
+        }
+        List<LockResource> pages = [TableFootprints.Row(row)];
+        foreach (IndexCheck index in _table.Semantics.Indexes)
+        {
+            if (!KeyChanged(index))
+            {
+                continue;
+            }
+            if (fp.KeyLeaf(index, row) is not { } leaf)
+            {
+                return new UpdateOutcome(null, MutationOpen.Conflict, $"the leaf holding row {row} in {index.Logical.Name} was not found");
+            }
+            if (!pages.Contains(leaf))
+            {
+                pages.Add(leaf);
+            }
+        }
+        footprint = [.. pages];
+        LockLifetime lifetime = _workspace.ChangeLifetime;
+        LockAcquisition got = _workspace.Lock(fp.File, footprint, lifetime);
+        if (got.Conflict is { } conflict)
+        {
+            footprint = [];
+            if (conflict.HolderLifetime == LockLifetime.UntilPublished)
+            {
+                return new UpdateOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
+            }
+            return ConflictSource == MutationErrorSource.Database
+                ? new UpdateOutcome(new MutationError(MutationError.LockedBySession, MutationErrorSource.Database))
+                : new UpdateOutcome(null, MutationOpen.Conflict, $"a recordset Update meets locker {conflict.Holder.Value} on page {conflict.Resource.Page} ({conflict.Resource.Purpose}): recorded for Execute only");
+        }
+        if (!LockEdits && !_conflictReported && !StoredRowUnchanged(out string? unread))
+        {
+            UnlockFootprint(footprint, lifetime);
+            footprint = [];
+            if (unread is not null)
+            {
+                return new UpdateOutcome(null, MutationOpen.ColumnType, unread);
+            }
+            _conflictReported = true;
+            return new UpdateOutcome(new MutationError(MutationError.WriteConflict, MutationErrorSource.Recordset));
+        }
+        return null;
+    }
+
+    /// <summary>Whether the stored row still equals the originals Edit read: the row image, not a counter (CUR-EDIT: a restored value is no conflict).</summary>
+    private bool StoredRowUnchanged(out string? unread)
+    {
+        unread = null;
+        IReadOnlyList<ColumnDescriptor> columns = _table.Semantics.Table.Columns;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            FieldResult now = _cursor.Read(columns[i]);
+            if (!now.Succeeded)
+            {
+                unread = $"field {columns[i].Name} cannot be read again: {now.Detail}";
+                return false;
+            }
+            if (!SameStored(now.Value, _originals![i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool SameStored(in NativeValue a, in NativeValue b) =>
+        a.Kind == b.Kind && a.Integer == b.Integer && a.Bits == b.Bits && a.Boolean == b.Boolean && a.Scale == b.Scale
+        && string.Equals(a.Text, b.Text, StringComparison.Ordinal)
+        && (a.Bytes is null ? b.Bytes is null : b.Bytes is not null && a.Bytes.AsSpan().SequenceEqual(b.Bytes));
+
+    private void UnlockFootprint(LockResource[] footprint, LockLifetime lifetime)
+    {
+        if (footprint.Length > 0)
+        {
+            _workspace.Unlock(_table.Footprints!.File, footprint, lifetime);
+        }
+    }
+
+    private void ReleaseEditLock()
+    {
+        if (_editLock is { } page)
+        {
+            _workspace.Unlock(_table.Footprints!.File, [page], LockLifetime.PendingEdit);
+            _editLock = null;
+        }
+    }
 
     private NativeValue CandidateValue(int ordinal) => _cells[ordinal].State == CellState.Unset ? NativeValue.Null : _cells[ordinal].Value;
 
@@ -634,10 +800,14 @@ public sealed class EditFrame : IDisposable
         }
     }
 
+    /// <summary>End the edit: its pending-edit lock ends with it (WRITE-TIMING: Update, CancelUpdate, a move, Close).</summary>
     private void Clear()
     {
         Array.Clear(_cells);
         _original = null;
+        _originals = null;
+        _conflictReported = false;
+        ReleaseEditLock();
         Mode = EditMode.None;
     }
 

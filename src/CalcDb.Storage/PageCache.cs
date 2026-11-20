@@ -799,6 +799,12 @@ public sealed partial class PageCache
     private bool Reclaimable(int slot)
     {
         FrameSlot f = _slots[slot];
+        if (f.State == FrameState.MutablePrivate)
+        {
+            // A private revision whose overlay let it go (a rollback, a publication, Dispose) that no pin sealed: nothing
+            // can reach it again. Left out, each such revision held its frame for the life of the cache.
+            return f.Pins == 0 && f.IoReferences == 0 && f.Handoff == 0 && f.Record is { Owners: 0 };
+        }
         if (f.State != FrameState.Immutable || f.Pins != 0 || f.IoReferences != 0 || f.Handoff != 0 || f.Record is not { } r)
         {
             return false;

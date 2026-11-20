@@ -24,7 +24,7 @@ public sealed unsafe class EditFrameTests(ITestOutputHelper output)
     {
         public Rig()
         {
-            var db = new EditReplayTests.Fixture(EditFixture);
+            var db = new ReplayFixture(EditFixture);
             (TableDefinition table, TableEditContext context) = db.Table("G")!.Value;
             Table = table;
             Context = context;

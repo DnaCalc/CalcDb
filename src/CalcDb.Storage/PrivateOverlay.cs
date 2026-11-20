@@ -15,12 +15,64 @@ public interface IPageDelta
     /// <summary>Whether the delta defines the whole page, so the result does not depend on the base it applies to.</summary>
     bool ReplacesPage => false;
 
+    /// <summary>
+    /// The bytes and bits whose value in the base the delta was accepted over (W-05/local-lockers-rebase, II-09 §23
+    /// "revalidate the affected native conflict conditions"). A rebase over a newer committed page is valid only where
+    /// another locker's publication left them as they were; otherwise the publication stops before any effect with a
+    /// <see cref="RebaseConflict"/>. A delta that does not say is checked over the whole page.
+    /// </summary>
+    DeltaFootprint Footprint => DeltaFootprint.WholePage;
+
     void Apply(Span<byte> decodedPage);
 }
+
+/// <summary>
+/// The part of a decoded page a delta depends on (<see cref="IPageDelta.Footprint"/>): <see cref="Length"/> bytes at
+/// <see cref="Offset"/>, and within a single byte only the bits of <see cref="Mask"/>. A length of -1 is the whole page;
+/// <see cref="None"/> reads nothing of the base.
+/// </summary>
+public readonly record struct DeltaFootprint(int Offset, int Length, byte Mask = 0xFF)
+{
+    public static DeltaFootprint WholePage { get; } = new(0, -1);
+
+    public static DeltaFootprint None { get; } = new(0, 0);
+
+    public bool IsNone => Length == 0;
+
+    internal int LengthIn(int pageSize) => Length < 0 ? pageSize : Length;
+
+    /// <summary>Whether the footprint's bytes (masked) are equal in the two images.</summary>
+    internal bool Same(ReadOnlySpan<byte> captured, ReadOnlySpan<byte> current)
+    {
+        ReadOnlySpan<byte> now = current.Slice(Offset, captured.Length);
+        if (Mask == 0xFF)
+        {
+            return now.SequenceEqual(captured);
+        }
+        for (int i = 0; i < captured.Length; i++)
+        {
+            if (((now[i] ^ captured[i]) & Mask) != 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Why a publication refused to rebase (II-09 §23): another locker's commit changed bytes that
+/// <paramref name="Delta"/> was accepted over, so writing it over the newer page would lose that commit or apply a stale
+/// decision. The local lock footprint (II-09 §24) normally excludes this; reaching it means a footprint missed the page.
+/// </summary>
+public readonly record struct RebaseConflict(ulong Page, int DeltaIndex, DeltaFootprint Footprint);
 
 /// <summary>Write <see cref="Bytes"/> at <see cref="Offset"/>: a field whose new value does not depend on the base (a row's Long, F-76).</summary>
 public sealed record BytePatch(int Offset, byte[] Bytes) : IPageDelta
 {
+    /// <summary>The bytes it overwrites: a sibling's change of the same bytes would be lost (F-76 compares by row, not by page).</summary>
+    public DeltaFootprint Footprint => new(Offset, Bytes.Length);
+
     public void Apply(Span<byte> decodedPage) => Bytes.CopyTo(decodedPage[Offset..]);
 }
 
@@ -30,13 +82,21 @@ public sealed record BytePatch(int Offset, byte[] Bytes) : IPageDelta
 /// </summary>
 public sealed record BitDelta(int Offset, byte Set, byte Clear) : IPageDelta
 {
+    /// <summary>Only its own bits: a sibling that changed the same bits allocated or freed the same page (II-09 §23).</summary>
+    public DeltaFootprint Footprint => new(Offset, 1, (byte)(Set | Clear));
+
     public void Apply(Span<byte> decodedPage) => decodedPage[Offset] = (byte)((decodedPage[Offset] & ~Clear) | Set);
 }
 
-/// <summary>A complete decoded page (for example a page rewritten whole after reuse): the base is not read.</summary>
+/// <summary>
+/// A complete decoded page (for example a page rewritten whole after reuse): the base is not read. The allocation claim
+/// that made the page this locker's excludes other lockers from it (II-09 §24), so the rebase checks nothing.
+/// </summary>
 public sealed record WholePage(byte[] Bytes) : IPageDelta
 {
     public bool ReplacesPage => true;
+
+    public DeltaFootprint Footprint => DeltaFootprint.None;
 
     public void Apply(Span<byte> decodedPage)
     {
@@ -145,8 +205,12 @@ internal sealed class OverlayPage(ImageId baseImage, ImageId current)
 
     public ImageId Current { get; set; } = current;
 
-    /// <summary>Accepted deltas in acceptance order, tagged with the scope that accepted them.</summary>
-    public List<(int Scope, IPageDelta Delta)> Deltas { get; } = [];
+    /// <summary>
+    /// Accepted deltas in acceptance order, tagged with the scope that accepted them, each with the bytes of its footprint
+    /// as it saw them when accepted (null for an empty footprint): the publication's revalidation compares them with the
+    /// rebuilt page at that delta (II-09 §23).
+    /// </summary>
+    public List<(int Scope, IPageDelta Delta, byte[]? Seen)> Deltas { get; } = [];
 
     /// <summary>
     /// For each scope that first touched the page after the transaction scope: the revision before it (null when the
@@ -234,12 +298,12 @@ public sealed partial class PageCache
 
         if (lease is { } inPlace)
         {
-            ApplyDelta(pageNumber, inPlace.Span, delta);
+            byte[]? seenInPlace = AcceptDelta(pageNumber, inPlace.Span, delta);
             lock (_latch)
             {
                 OverlayPage page = overlay.Pages[pageNumber];
                 ReturnLease(page.Current);
-                page.Deltas.Add((overlay.Depth, delta));
+                page.Deltas.Add((overlay.Depth, delta, seenInPlace));
                 return new EditResult(page.Current, null);
             }
         }
@@ -271,7 +335,7 @@ public sealed partial class PageCache
         {
             output.Clear();
         }
-        ApplyDelta(pageNumber, output, delta);
+        byte[]? seen = AcceptDelta(pageNumber, output, delta);
         lock (_latch)
         {
             if (_closed)
@@ -287,7 +351,7 @@ public sealed partial class PageCache
                 {
                     page.Befores.Add((overlay.Depth, null));
                 }
-                page.Deltas.Add((overlay.Depth, delta));
+                page.Deltas.Add((overlay.Depth, delta, seen));
                 overlay.Pages[pageNumber] = page;
             }
             else
@@ -295,7 +359,7 @@ public sealed partial class PageCache
                 OverlayPage page = overlay.Pages[pageNumber];
                 ReleaseOwner(page.Current);
                 page.Current = revision;
-                page.Deltas.Add((overlay.Depth, delta));
+                page.Deltas.Add((overlay.Depth, delta, seen));
             }
             return new EditResult(revision, null);
         }
@@ -437,7 +501,7 @@ public sealed partial class PageCache
             {
                 if (page.Deltas[i].Scope == scope)
                 {
-                    page.Deltas[i] = (parent, page.Deltas[i].Delta);
+                    page.Deltas[i] = page.Deltas[i] with { Scope = parent };
                 }
             }
             int at = page.Befores.FindIndex(b => b.Scope == scope);
@@ -472,27 +536,55 @@ public sealed partial class PageCache
         }
     }
 
-    /// <summary>Apply a decoded-domain delta to a stored-domain frame: decode into owned scratch, apply, encode back (T-PAGER-14).</summary>
-    private void ApplyDelta(ulong pageNumber, Span<byte> stored, IPageDelta delta)
+    /// <summary>Accept a delta: keep the footprint's bytes as the delta sees them, then apply it (II-09 §23).</summary>
+    private byte[]? AcceptDelta(ulong pageNumber, Span<byte> stored, IPageDelta delta)
     {
+        byte[]? seen = null;
+        ApplyDelta(pageNumber, stored, delta, (decoded, footprint) =>
+        {
+            seen = decoded.Slice(footprint.Offset, footprint.LengthIn(decoded.Length)).ToArray();
+            return true;
+        });
+        return seen;
+    }
+
+    /// <summary>
+    /// Apply a decoded-domain delta to a stored-domain frame: decode into owned scratch, apply, encode back (T-PAGER-14).
+    /// <paramref name="before"/>, when given, sees the decoded page and the delta's footprint first; false leaves the frame
+    /// as it was and is returned.
+    /// </summary>
+    private bool ApplyDelta(ulong pageNumber, Span<byte> stored, IPageDelta delta, FootprintCheck? before = null)
+    {
+        DeltaFootprint footprint = delta.Footprint;
         if (!Codec.Transforms(pageNumber))
         {
+            if (before is not null && !footprint.IsNone && !before(stored, footprint))
+            {
+                return false;
+            }
             delta.Apply(stored);
-            return;
+            return true;
         }
         byte[] rented = ArrayPool<byte>.Shared.Rent(PageSize);
         try
         {
             Span<byte> decoded = rented.AsSpan(0, PageSize);
             Codec.Decode(pageNumber, stored, decoded);
+            if (before is not null && !footprint.IsNone && !before(decoded, footprint))
+            {
+                return false;
+            }
             delta.Apply(decoded);
             Codec.Encode(pageNumber, decoded, stored);
+            return true;
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(rented);
         }
     }
+
+    private delegate bool FootprintCheck(Span<byte> decoded, DeltaFootprint footprint);
 
     /// <summary>Bind a reserved, filled frame as a new private revision owned by its overlay. Under the latch.</summary>
     private ImageId BindPrivate(int slot, PageObject page, LockerId locker)

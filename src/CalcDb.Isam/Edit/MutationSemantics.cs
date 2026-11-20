@@ -86,7 +86,10 @@ public sealed class ColumnSemantics
     public required string QualifiedName { get; init; }
 }
 
-/// <summary>A unique or Null-refusing index the Update checks, with its key columns in index order.</summary>
+/// <summary>
+/// A physical index of the table with its key columns in index order: the Update checks a unique or Null-refusing one
+/// (3022, 3058), and a change of any one's key locks the leaf holding the row's entry (TXN-LOCAL; <c>TableFootprints</c>).
+/// </summary>
 public sealed record IndexCheck(LogicalIndex Logical, PhysicalIndex Physical, IReadOnlyList<ColumnDescriptor> Columns, bool Unique, bool RefusesNull);
 
 /// <summary>
@@ -175,10 +178,6 @@ public sealed class MutationSemantics : IDisposable
             }
             bool unique = physical.Unique(indexRules);
             bool refusesNull = physical.Required(indexRules);
-            if (!unique && !refusesNull)
-            {
-                continue;
-            }
             var keyColumns = new List<ColumnDescriptor>();
             foreach (IndexColumn ic in physical.Columns)
             {

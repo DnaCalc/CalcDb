@@ -96,6 +96,12 @@ public sealed class OperationFrame : IDisposable
 /// Rollback discards the change set; accepted generated tickets stay consumed (CUR-EDIT, R-FMT-2 Generated values).
 /// Publication of an outer commit, or of an automatic operation outside any level, is W-05/same-width-mutation and
 /// W-05/resolution-live-rollback: the accepted changes are handed out as <see cref="PendingPublication"/>.
+/// The Workspace is one local locker (W-05/local-lockers-rebase; II-09 §28, R-TXN-1 TXN-LOCAL): it takes page grants
+/// on each file's <see cref="LocalLockManager"/> with its <see cref="WaitPolicy"/> through its <see cref="Scheduler"/>.
+/// A change accepted inside a level holds its pages until the outermost resolution (<see cref="LockLifetime.Transaction"/>;
+/// an inner Rollback keeps them, as the records resolve only the outermost level: TXN-LOCAL, TXN-RANGE "Open: lock
+/// release at an inner level"); an outer Rollback or Close releases them; an outer CommitTrans or an operation outside
+/// every level holds them until the publication releases them (<see cref="ReleasePublished"/>).
 /// </summary>
 public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 {
@@ -116,9 +122,36 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, FileParticipant> _participants = [];
     private readonly List<EditFrame> _edits = [];
     private readonly List<AcceptedRowChange> _pending = [];
+    private readonly HashSet<PageCache> _locked = [];
     private OperationFrame? _operation;
 
     public LockerId Locker { get; } = locker;
+
+    /// <summary>The effective dbLockRetry × dbLockDelay of the engine (the adapter sets it from SetOption; TXN-LOCAL).</summary>
+    public LockWaitPolicy WaitPolicy { get; set; } = LockWaitPolicy.Default;
+
+    /// <summary>The time and scheduling seam of this locker's conflict waits.</summary>
+    public ILockScheduler Scheduler { get; set; } = ThreadLockScheduler.System;
+
+    /// <summary>The lifetime an accepted change holds its pages with: the transaction inside a level, else until published.</summary>
+    public LockLifetime ChangeLifetime => _frames.Count > 0 ? LockLifetime.Transaction : LockLifetime.UntilPublished;
+
+    /// <summary>Acquire <paramref name="footprint"/> on <paramref name="file"/> for this locker with its wait policy.</summary>
+    public LockAcquisition Lock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime)
+    {
+        _locked.Add(file);
+        return file.Locks.Acquire(Locker, footprint, lifetime, WaitPolicy, Scheduler);
+    }
+
+    /// <summary>Release one count of <paramref name="lifetime"/> on <paramref name="footprint"/>.</summary>
+    public void Unlock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime) => file.Locks.Release(Locker, footprint, lifetime);
+
+    /// <summary>
+    /// The publication of this locker's committed changes of <paramref name="file"/> is in the committed images: their
+    /// pages are released (W-05/same-width-mutation calls this; ACE releases at the commit, TXN-LOCAL "after the
+    /// holder's resolution the retried write succeeds").
+    /// </summary>
+    public void ReleasePublished(PageCache file) => file.Locks.ReleaseAll(Locker, LockLifetime.UntilPublished);
 
     /// <summary>The number of open BeginTrans levels.</summary>
     public int Depth => _frames.Count;
@@ -181,8 +214,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         bool pages = _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0);
         if (!pages && top.Changes.Count == 0)
         {
+            ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
             return new ResolutionOutcome();
+        }
+        // The level's pages stay held until its publication writes them (LockLifetime.UntilPublished).
+        foreach (PageCache file in _locked)
+        {
+            file.Locks.Convert(Locker, LockLifetime.Transaction, LockLifetime.UntilPublished);
         }
         // The outer commit publishes the change set through one PublicationAttempt per file (W-03); writing rows to pages
         // and the commit program are W-05/same-width-mutation and W-05/resolution-live-rollback.
@@ -221,6 +260,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 e.DropForRollback();
             }
+            // Purely private changes: no native restore, only this locker's grants end (II-09 §25, T-TXN-31).
+            ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
         }
         return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
@@ -239,6 +280,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             e.DropForRollback();
         }
+        ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
     }
 
@@ -361,6 +403,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 ticket.Disposition = TicketDisposition.ConsumedWithoutRow;
             }
+        }
+    }
+
+    private void ReleaseLocks(LockLifetime lifetime)
+    {
+        foreach (PageCache file in _locked)
+        {
+            file.Locks.ReleaseAll(Locker, lifetime);
         }
     }
 

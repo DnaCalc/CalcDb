@@ -95,7 +95,8 @@ public enum PublicationStep
     NeedsResolution,
 }
 
-public readonly record struct PublicationOutcome(bool Succeeded, string? Failure = null)
+/// <summary>A publication step's outcome; <see cref="Conflict"/> names a revalidation refusal of the rebase (settled before any effect).</summary>
+public readonly record struct PublicationOutcome(bool Succeeded, string? Failure = null, RebaseConflict? Conflict = null)
 {
     public static PublicationOutcome Ok { get; } = new(true);
 }
@@ -580,9 +581,22 @@ public sealed partial class PageCache
             {
                 final.Clear();
             }
-            foreach ((int _, IPageDelta delta) in attempt.Overlay.Pages[page.PageNumber].Deltas)
+            // Revalidation (W-05/local-lockers-rebase, II-09 §23): over a base another publication changed, each delta's
+            // footprint must read in the rebuilt page as it did when the delta was accepted. Deltas before the last
+            // whole-page delta are overwritten by it and are not checked.
+            OverlayPage overlayPage = attempt.Overlay.Pages[page.PageNumber];
+            bool rebased = overlayPage.Base != page.Old;
+            int checkFrom = overlayPage.Deltas.FindLastIndex(d => d.Delta.ReplacesPage);
+            for (int i = 0; i < overlayPage.Deltas.Count; i++)
             {
-                ApplyDelta(page.PageNumber, final, delta);
+                (int _, IPageDelta delta, byte[]? seen) = overlayPage.Deltas[i];
+                bool check = rebased && i >= checkFrom && seen is not null;
+                if (!ApplyDelta(page.PageNumber, final, delta, check ? (decoded, footprint) => footprint.Same(seen, decoded) : null))
+                {
+                    var conflict = new RebaseConflict(page.PageNumber, i, delta.Footprint);
+                    Abandon(attempt, $"Rebase conflict on page {page.PageNumber}: delta {i} ({delta.GetType().Name}, footprint {delta.Footprint}) was accepted over bytes another publication changed.");
+                    return new PublicationOutcome(false, attempt.Failure, conflict);
+                }
             }
         }
         lock (_latch)
@@ -943,6 +957,13 @@ public sealed partial class PageCache
                         entry.Versions = null;
                         _historyPages.Remove(page.PageNumber);
                     }
+                }
+                // The file no longer holds the old image's bytes: a resident copy is ResidentOnly, kept by its owners and
+                // pins, and reclaimable once they leave. Left Native, an unowned old frame could never be evicted (it
+                // is not the file's image any more), and every publication of the page leaked one frame.
+                if (_directory.TryGetValue(old, out ImageRecord? superseded) && superseded.Source == ImageSource.Native)
+                {
+                    superseded.Source = ImageSource.ResidentOnly;
                 }
                 entry.Current = image;
                 entry.CurrentFrom = serial;
