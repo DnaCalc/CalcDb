@@ -15,7 +15,7 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 4,
+        Revision = 5,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -32,7 +32,7 @@ public static class CallTraceComparison
                 "The returned count of a release event, and of an activation step's Release (\"Release N\"), is not compared (revision 4, task 2nqn: ACE's activation Release gives 2, then 0 at the next Release).",
                 "A missing, extra or misplaced release still differs.", ["COM IUnknown::Release"]),
             new("module-observations", "Module lists are environment; provenance is checked separately.",
-                "Module events are not compared as events.", "A candidate run that loaded the native engine, or not the candidate module, is a provenance mismatch.", ["II-13 §15"]),
+                "Module events are not compared as events.", "A candidate run that loaded the native engine (ACE's DAO, core or OLE DB provider, or system ADO: revision 5, W-09/construction-policy), or not the candidate module, is a provenance mismatch.", ["II-13 §15", "R-ACT-1 ACT-ADO-SCOPE"]),
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
@@ -44,8 +44,12 @@ public static class CallTraceComparison
         "atUtc", "lastWriteUtc", "startedUtc", "waitedMs", "threadId", "processId", "fileId", "volumeSerial", "registration",
     };
 
-    /// <summary>Modules whose presence in a candidate run means the native engine answered (II-13 §15).</summary>
-    private static readonly string[] NativeEngineModules = ["ACEDAO.DLL", "ACECORE.DLL"];
+    /// <summary>
+    /// Modules whose presence in a candidate run means the native engine answered (II-13 §15): ACE's DAO and core, its OLE
+    /// DB provider, and system ADO, which the compatibility ADODB classes replace (a connectionless Recordset or Stream
+    /// loads no ACE module, R-ACT-1 ACT-ADO-SCOPE).
+    /// </summary>
+    private static readonly string[] NativeEngineModules = ["ACEDAO.DLL", "ACECORE.DLL", "ACEOLEDB.DLL", "MSADO15.DLL"];
 
     public static ComparisonRecord Compare(string caseId, string oracleId, Capture oracle, string candidateId, Capture candidate, string candidateModule, int maxDifferences = 16)
     {

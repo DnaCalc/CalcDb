@@ -20,6 +20,9 @@ namespace CalcDb.Oracle.Worker;
 /// program, otherwise. Under it <c>CLSIDFromProgID</c> returns a CLSID that Windows derives from the manifest
 /// (docs/work/activation-routes.md), not the reference CLSID.</item>
 /// </list>
+/// The compatibility manifest lists DAO.DBEngine.120 and the ADODB classes CalcDb provides (W-09/construction-policy), so
+/// an unchanged ADO question reaches CalcDb's ADO, never system ADO or ACE's provider (a run that loads them is a
+/// provenance difference, calls.trace revision 5).
 /// The performance driver (calcdb-perf, W-01/dao-cost) compiles this same file, so both activate a candidate the same way.
 /// </summary>
 internal sealed unsafe partial class CandidateDeployment : IDisposable

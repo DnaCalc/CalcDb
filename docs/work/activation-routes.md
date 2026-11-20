@@ -42,7 +42,9 @@ refused in a process that already has a default context (`14011`).
 
 - The candidate worker ([CandidateDeployment.cs](../../src/CalcDb.Oracle.Worker/CandidateDeployment.cs)) uses host
   registration when the registry already names every class of the compatibility manifest under its ProgID, and the
-  context otherwise. Its environment description names the route.
+  context otherwise. Its environment description names the route. Since W-09/construction-policy the manifest also
+  lists ADODB.Connection, .Recordset, .Command, .Stream and .Record, which the registry names with msado15.dll's
+  CLSIDs, so ADO questions take the same route; a run that loads msado15.dll or ACEOLEDB.DLL is a provenance difference.
 - [FactoryHostCoreTests](../../tests/CalcDb.Com.Tests/FactoryHostCoreTests.cs) asserts both routes: the configured
   CLSID under a context (and its dependence on the manifest path), the context's precedence, and the reference CLSID
   and CalcDb provenance under host registration.

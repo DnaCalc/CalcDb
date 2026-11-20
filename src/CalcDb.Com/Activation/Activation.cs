@@ -1,3 +1,4 @@
+using CalcDb.Com.Ado;
 using CalcDb.Com.Com;
 using CalcDb.Com.Dao;
 using CalcDb.Com.Host;
@@ -17,9 +18,12 @@ internal unsafe delegate int CreateInstance(HostBinding binding, nint outer, in 
 internal sealed record ClassDescriptor(Guid Clsid, string ProgId, ActivationRole Role, CreateInstance Create);
 
 /// <summary>
-/// The activation profile (II-13 §2, §15): which class identities map to which CalcDb factories. CalcDb's own
-/// DBEngine is served standalone at any time (T-INT-49); the compatibility identity DAO.DBEngine.120 only under an
-/// Active host binding, and otherwise refused, never served standalone (T-INT-48).
+/// The activation profile (II-13 §2, §15): which class identities map to which CalcDb factories. CalcDb's own classes
+/// (CalcDb.DBEngine and the ADO classes CalcDb.Connection, .Recordset, .Command, .Stream, .Record) are served standalone
+/// at any time (T-INT-49); the compatibility identities (DAO.DBEngine.120 and the version-independent ADODB names R-ACT-1
+/// ACT-NAME resolved) only under an Active host binding, and otherwise refused, never served standalone and never
+/// forwarded to ACE or system ADO (T-INT-48, ACT-ADO-SCOPE). Which ADODB uses reach CalcDb is the host's decision
+/// (II-12 §15): a host binds the compatibility names only where it routes them.
 /// </summary>
 internal static unsafe class ActivationProfile
 {
@@ -29,7 +33,34 @@ internal static unsafe class ActivationProfile
     /// <summary>DAO.DBEngine.120 as R-ACT-1 ACT-NAME captured it on the reference build.</summary>
     public static readonly ClassDescriptor CompatibilityDBEngine = new(new Guid("CD7791B9-43FD-42C5-AE42-8DD2811F0419"), "DAO.DBEngine.120", ActivationRole.Compatibility, DBEngineObject.Create);
 
-    public static IReadOnlyList<ClassDescriptor> Classes { get; } = [OwnDBEngine, CompatibilityDBEngine];
+    /// <summary>CalcDb's own ADO classes (W-09/construction-policy).</summary>
+    public static readonly ClassDescriptor OwnConnection = new(new Guid("B29F5595-8BF1-4AA8-9397-1F2F10F3A101"), "CalcDb.Connection", ActivationRole.Own, ConnectionObject.Create);
+
+    public static readonly ClassDescriptor OwnRecordset = new(new Guid("892D19AC-84CA-4F73-8A3E-00B7C066245A"), "CalcDb.Recordset", ActivationRole.Own, Ado.RecordsetObject.Create);
+
+    public static readonly ClassDescriptor OwnCommand = new(new Guid("7AF35BF5-1686-4FB7-AA3E-9DC4EF68ECD5"), "CalcDb.Command", ActivationRole.Own, CommandObject.Create);
+
+    public static readonly ClassDescriptor OwnStream = new(new Guid("95C5FB19-3B72-4FFA-868F-12A68495FF37"), "CalcDb.Stream", ActivationRole.Own, StreamObject.Create);
+
+    public static readonly ClassDescriptor OwnRecord = new(new Guid("2CA37905-9986-469E-8E8D-8E14E85E606E"), "CalcDb.Record", ActivationRole.Own, RecordObject.Create);
+
+    /// <summary>The ADODB classes as R-ACT-1 ACT-NAME captured them on the reference build (msado15.dll's CLSIDs).</summary>
+    public static readonly ClassDescriptor CompatibilityConnection = new(new Guid("00000514-0000-0010-8000-00AA006D2EA4"), "ADODB.Connection", ActivationRole.Compatibility, ConnectionObject.Create);
+
+    public static readonly ClassDescriptor CompatibilityRecordset = new(new Guid("00000535-0000-0010-8000-00AA006D2EA4"), "ADODB.Recordset", ActivationRole.Compatibility, Ado.RecordsetObject.Create);
+
+    public static readonly ClassDescriptor CompatibilityCommand = new(new Guid("00000507-0000-0010-8000-00AA006D2EA4"), "ADODB.Command", ActivationRole.Compatibility, CommandObject.Create);
+
+    public static readonly ClassDescriptor CompatibilityStream = new(new Guid("00000566-0000-0010-8000-00AA006D2EA4"), "ADODB.Stream", ActivationRole.Compatibility, StreamObject.Create);
+
+    public static readonly ClassDescriptor CompatibilityRecord = new(new Guid("00000560-0000-0010-8000-00AA006D2EA4"), "ADODB.Record", ActivationRole.Compatibility, RecordObject.Create);
+
+    public static IReadOnlyList<ClassDescriptor> Classes { get; } =
+    [
+        OwnDBEngine, CompatibilityDBEngine,
+        OwnConnection, OwnRecordset, OwnCommand, OwnStream, OwnRecord,
+        CompatibilityConnection, CompatibilityRecordset, CompatibilityCommand, CompatibilityStream, CompatibilityRecord,
+    ];
 
     /// <summary>The descriptor and the binding a factory for <paramref name="clsid"/> captures now, or the refusal.</summary>
     public static int Resolve(in Guid clsid, out ClassDescriptor? descriptor, out HostBinding? binding)

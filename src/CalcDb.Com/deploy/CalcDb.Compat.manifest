@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- The DAO compatibility profile (II-13 §§15-16): the original identity DAO.DBEngine.120 mapped to CalcDb.dll, with
-     Apartment threading as PRD-02 decides. CalcDb serves it only under an Active host binding (I-HOST-1 HOST-BOOT). -->
+<!-- The compatibility profile (II-13 §§15-16): the original identities DAO.DBEngine.120 and the ADODB classes mapped to
+     CalcDb.dll, with Apartment threading as PRD-02 decides (system ADO registers Recordset and Command as Both).
+     CalcDb serves them only under an Active host binding (I-HOST-1 HOST-BOOT). -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity type="win32" name="CalcDb.Compat" version="0.1.0.0" processorArchitecture="amd64" />
   <file name="CalcDb.dll">
     <comClass clsid="{CD7791B9-43FD-42C5-AE42-8DD2811F0419}" progid="DAO.DBEngine.120" threadingModel="Apartment" description="CalcDb DBEngine (DAO compatibility)" />
+    <comClass clsid="{00000514-0000-0010-8000-00AA006D2EA4}" progid="ADODB.Connection" threadingModel="Apartment" description="CalcDb Connection (ADO compatibility)" />
+    <comClass clsid="{00000535-0000-0010-8000-00AA006D2EA4}" progid="ADODB.Recordset" threadingModel="Apartment" description="CalcDb Recordset (ADO compatibility)" />
+    <comClass clsid="{00000507-0000-0010-8000-00AA006D2EA4}" progid="ADODB.Command" threadingModel="Apartment" description="CalcDb Command (ADO compatibility)" />
+    <comClass clsid="{00000566-0000-0010-8000-00AA006D2EA4}" progid="ADODB.Stream" threadingModel="Apartment" description="CalcDb Stream (ADO compatibility)" />
+    <comClass clsid="{00000560-0000-0010-8000-00AA006D2EA4}" progid="ADODB.Record" threadingModel="Apartment" description="CalcDb Record (ADO compatibility)" />
   </file>
 </assembly>

@@ -9,8 +9,17 @@ internal enum FailureKind
     /// <summary>An ACE-equivalent DAO error: its number, source and text as the oracle gives them.</summary>
     Dao,
 
+    /// <summary>An ACE-equivalent ADO error: its HRESULT, ADODB source, text and ADO help context as the oracle gives them.</summary>
+    Ado,
+
     /// <summary>A declared member CalcDb has not implemented yet: a named gap, counted as a failure, never a native match.</summary>
     NotImplemented,
+
+    /// <summary>
+    /// A route outside CalcDb's scope, refused by name (NotModelled.AdoProvider: II-12 §15, II-16 W-09). Counted apart
+    /// from native-matching errors and from not-implemented gaps; it never matches ACE and has no ACE HRESULT.
+    /// </summary>
+    NotModelled,
 
     /// <summary>A CalcDb defect caught at the boundary (an exception that must not cross a native entry, II-13 §3).</summary>
     Defect,
@@ -26,6 +35,9 @@ internal sealed record Failure(FailureKind Kind, int Scode, string Source, strin
 {
     public bool PublishesErrorInfo { get; init; }
 
+    /// <summary>The GUID of the IErrorInfo the dispatch lane publishes: zero for DAO, the interface's IID for ADO.</summary>
+    public Guid ErrorInfoIid { get; init; }
+
     /// <summary>The DAO error number (Error.Number): the scode's low word.</summary>
     public int Number => Scode & 0xFFFF;
 
@@ -35,6 +47,10 @@ internal sealed record Failure(FailureKind Kind, int Scode, string Source, strin
 
     public static Failure NotImplemented(string member) =>
         new(FailureKind.NotImplemented, HResults.E_NOTIMPL, "CalcDb", $"CalcDb has not implemented {member} yet.");
+
+    /// <summary>A named refusal of a route outside scope: <paramref name="name"/> is its disposition key, such as NotModelled.AdoProvider.</summary>
+    public static Failure NotModelled(string name, string detail) =>
+        new(FailureKind.NotModelled, HResults.E_NOTIMPL, "CalcDb", $"{name}: {detail}");
 
     public static Failure Defect(Exception e) =>
         new(FailureKind.Defect, HResults.E_UNEXPECTED, "CalcDb defect", e.GetType().Name + ": " + e.Message);
@@ -66,7 +82,7 @@ internal static unsafe partial class ErrorPublication
     {
         if (failure.PublishesErrorInfo)
         {
-            ToErrorInfo(failure, Guid.Empty);
+            ToErrorInfo(failure, failure.ErrorInfoIid);
         }
         if (info is not null)
         {

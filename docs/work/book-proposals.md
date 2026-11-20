@@ -151,4 +151,17 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   ACE's observable order, not semantic text order." II-05 §7.3, beside the explicit-Null paragraph: "A Null or Empty
   argument for a Yes/No component is refused (3162) before the key count is checked."
 
+## II-12 §16 and II-13 §§2, 11: ADO construction (gw6c, 2026-11-20)
+
+- **II-13 §11, in-memory type library.** Proposed: "An in-memory library reports LIBFLAGS 0; ACE's libraries report
+  FHASDISKIMAGE (8). This is a named difference while CalcDb's type library is never saved." Saving and loading a
+  `.tlb` instead is the alternative (task 77wt).
+- **II-13 §2 / ACT-DECL, live DISPIDs.** Proposed: "A live IDispatch can answer DISPIDs that differ from its type
+  library: ADO's Parameters answers Append 3 and Delete 4 against the declared 1610809344/1610809345. The manifest
+  records the live DISPID where the two differ." The describe capture does not record an alias's target type; the
+  generator takes them from the public adoint.h (`ADO_LONGPTR` = LONGLONG on x64) and says so.
+- **II-12 §16, Properties pinning.** Proposed: "A Properties read pins only an admitted provider. Under the default
+  provider it is the NotModelled.AdoProvider refusal and pins nothing, so a later ACE Provider assignment succeeds where
+  ACE fails `0x800A0C94`." A deliberate, named difference.
+
 

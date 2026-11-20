@@ -7,14 +7,13 @@ namespace CalcDb.Com.Com;
 /// CalcDb's own type information (II-13 §§2, 11): an in-memory type library built through ICreateTypeLib2 from the
 /// generated declarations, never saved or registered. Dual interfaces are created as TKIND_INTERFACE with their captured
 /// flags on IDispatch (stdole2), so each has its dispatch view and, through GetRefTypeOfImplType(-1), its vtable view.
-/// The library keeps the compatibility identity the clients consume (DAO 12.0). Built once, on first use, and retained
-/// for the module's lifetime.
+/// Each library keeps the compatibility identity the clients consume (DAO 12.0, ADODB 6.1). Each is built once, on first
+/// use, and retained for the module's lifetime.
 /// </summary>
 internal static unsafe partial class TypeLibrary
 {
     private static readonly Lock Gate = new();
-    private static nint _library;
-    private static int _buildFailure;
+    private static readonly Dictionary<LibraryDecl, (nint Library, int Failure)> Built = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>The step that failed when the library could not be built (diagnostics), or null.</summary>
     public static string? BuildFailureStep { get; private set; }
@@ -23,7 +22,7 @@ internal static unsafe partial class TypeLibrary
     public static int TypeInfoOf(InterfaceDecl declaration, nint* result)
     {
         *result = 0;
-        nint library = Library(out int failure);
+        nint library = Library(DeclarationIndex.LibraryOf(declaration), out int failure);
         if (library == 0)
         {
             return failure;
@@ -32,16 +31,17 @@ internal static unsafe partial class TypeLibrary
         return ((delegate* unmanaged<nint, Guid*, nint*, int>)Vt(library)[6])(library, &iid, result); // ITypeLib::GetTypeInfoOfGuid
     }
 
-    private static nint Library(out int failure)
+    private static nint Library(LibraryDecl decl, out int failure)
     {
         lock (Gate)
         {
-            if (_library == 0 && _buildFailure == 0)
+            if (!Built.TryGetValue(decl, out (nint Library, int Failure) built))
             {
-                _buildFailure = Build(DaoTypes.Library, out _library);
+                built.Failure = Build(decl, out built.Library);
+                Built[decl] = built;
             }
-            failure = _buildFailure;
-            return _library;
+            failure = built.Failure;
+            return built.Library;
         }
     }
 
@@ -88,8 +88,34 @@ internal static unsafe partial class TypeLibrary
             {
                 infos[c.Name] = NewType(create, c.Name, 5 /* TKIND_COCLASS */, c.Guid, c.TypeFlags);
             }
+            foreach (AliasDecl a in decl.AliasList)
+            {
+                infos[a.Name] = NewType(create, a.Name, 6 /* TKIND_ALIAS */, a.Guid, a.TypeFlags);
+            }
 
             // Pass 2: members and relations.
+            foreach (AliasDecl a in decl.AliasList)
+            {
+                nint ti = infos[a.Name];
+                var arena = new List<nint>();
+                try
+                {
+                    TypeDesc target = TypeOf(a.Target, ti, infos, bytes =>
+                    {
+                        nint block = (nint)NativeMemory.AllocZeroed((nuint)bytes);
+                        arena.Add(block);
+                        return block;
+                    });
+                    Check(((delegate* unmanaged<nint, TypeDesc*, int>)Vt(ti)[17])(ti, &target), a.Name + " SetTypeDescAlias");
+                }
+                finally
+                {
+                    foreach (nint block in arena)
+                    {
+                        NativeMemory.Free((void*)block);
+                    }
+                }
+            }
             foreach (EnumDecl e in decl.Enums)
             {
                 nint ti = infos[e.Name];
@@ -124,6 +150,10 @@ internal static unsafe partial class TypeLibrary
             foreach (EnumDecl e in decl.Enums)
             {
                 LayOut(infos[e.Name], e.Name, laidOut);
+            }
+            foreach (AliasDecl a in decl.AliasList)
+            {
+                LayOutAlias(a, decl, infos, laidOut);
             }
             foreach (InterfaceDecl i in decl.Interfaces)
             {
@@ -173,6 +203,20 @@ internal static unsafe partial class TypeLibrary
             LayOutInterface(decl.Interfaces.Single(b => b.Name == i.BaseName), decl, infos, laidOut);
         }
         LayOut(infos[i.Name], i.Name, laidOut);
+    }
+
+    /// <summary>An alias after the alias it names (ADO: PositionEnum_Param names ADO_LONGPTR).</summary>
+    private static void LayOutAlias(AliasDecl a, LibraryDecl decl, Dictionary<string, nint> infos, HashSet<string> laidOut)
+    {
+        if (laidOut.Contains(a.Name))
+        {
+            return;
+        }
+        if (a.Target.StartsWith("USERDEFINED ", StringComparison.Ordinal) && decl.AliasList.FirstOrDefault(x => x.Name == a.Target[12..]) is { } inner)
+        {
+            LayOutAlias(inner, decl, infos, laidOut);
+        }
+        LayOut(infos[a.Name], a.Name, laidOut);
     }
 
     private static void LayOut(nint createInfo, string name, HashSet<string> laidOut)

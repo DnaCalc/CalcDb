@@ -120,6 +120,14 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
     /// </summary>
     protected virtual Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => null;
 
+    /// <summary>
+    /// The DISPID a class's live IDispatch gives a member where it differs from the captured type library, or null.
+    /// ADO's Parameters answers Append 3 and Delete 4 although its library declares 1610809344 and 1610809345
+    /// (every r-ado-1b, r-fix-wire-ado and r-str-ado-act record that appends a parameter). GetIDsOfNames returns it and
+    /// Invoke accepts it; the declared DISPID is still accepted (not asked).
+    /// </summary>
+    protected virtual int? LiveDispatchId(MemberDecl member) => null;
+
     private int ArgumentCount(MemberDecl member, int standard, ExcepInfo* info)
     {
         if (ArgumentCountFailure(member) is not { } failure)
@@ -176,7 +184,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         }
         MemberDecl[] members = Declaration.MembersNamed(MemoryMarshal.CreateReadOnlySpanFromNullTerminated(names[0]));
         int hr = HResults.S_OK;
-        ids[0] = members.Length == 0 ? -1 : members[0].MemberId;
+        ids[0] = members.Length == 0 ? -1 : LiveDispatchId(members[0]) ?? members[0].MemberId;
         if (members.Length == 0)
         {
             hr = HResults.DISP_E_UNKNOWNNAME;
@@ -216,7 +224,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 
     public int Invoke(int dispId, ushort flags, DispParams* parameters, NativeVariant* result, ExcepInfo* info, uint* argError)
     {
-        MemberDecl? member = Choose(dispId, flags);
+        MemberDecl? member = Choose(dispId, flags) ?? ChooseLive(dispId, flags);
         if (member is null)
         {
             return HResults.DISP_E_MEMBERNOTFOUND;
@@ -350,6 +358,26 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         }
     }
 
+    /// <summary>A member by its live DISPID (<see cref="LiveDispatchId"/>), searched only when the declared one names none.</summary>
+    private MemberDecl? ChooseLive(int dispId, ushort flags)
+    {
+        foreach (InvokeKind kind in ChoiceOrder)
+        {
+            if ((flags & (ushort)kind) == 0)
+            {
+                continue;
+            }
+            foreach (MemberDecl m in Declaration.Members)
+            {
+                if (m.Kind == kind && LiveDispatchId(m) == dispId)
+                {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
     private static ReadOnlySpan<InvokeKind> ChoiceOrder => [InvokeKind.Method, InvokeKind.PropertyGet, InvokeKind.PropertyPut, InvokeKind.PropertyPutRef];
 
     /// <summary>The member a DISPID and its invoke flags select: method first, then get, put, putref (no allocation per call).</summary>
@@ -377,6 +405,9 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 /// <summary>The IUnknown and IDispatch entries every dual wrapper shares, and vtable construction from a declaration.</summary>
 internal static unsafe class DualEntries
 {
+    /// <summary>The QueryInterface entry of every CalcDb vtable: a pointer whose vtable starts with it is a CalcDb wrapper.</summary>
+    public static readonly nint QueryInterfaceEntry = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterface;
+
     /// <summary>
     /// The vtable of a dual interface: IUnknown and IDispatch, then the generated typed entry of every declared slot,
     /// each reaching its operation through <see cref="TypedCall"/>. Built once per interface, kept for the module's lifetime.
@@ -385,7 +416,7 @@ internal static unsafe class DualEntries
     {
         nint* table = (nint*)NativeMemory.AllocZeroed((nuint)(declaration.SlotCount * sizeof(nint)));
         declaration.FillEntries(table);
-        table[0] = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterface;
+        table[0] = QueryInterfaceEntry;
         table[1] = (nint)(delegate* unmanaged<nint, uint>)&AddRef;
         table[2] = (nint)(delegate* unmanaged<nint, uint>)&Release;
         table[3] = (nint)(delegate* unmanaged<nint, uint*, int>)&GetTypeInfoCount;
@@ -496,7 +527,7 @@ internal static unsafe class TypedCall
         MemberDecl? member = declaration.BySlot(slot);
         if (member is not null && retval != 0)
         {
-            Clear(member.ReturnType, retval);
+            Clear(DeclarationIndex.Scalar(declaration, member.ReturnType), retval);
         }
         try
         {
@@ -510,7 +541,7 @@ internal static unsafe class TypedCall
             for (int k = 0; k < count && k < args.Length; k++)
             {
                 cells[k] = default;
-                string type = member.Parameters[k].Type;
+                string type = DeclarationIndex.Scalar(declaration, member.Parameters[k].Type);
                 if (type == "VT_VARIANT")
                 {
                     args[k] = IsMissing((NativeVariant*)raw[k]) ? 0 : (nint)raw[k];
@@ -531,7 +562,7 @@ internal static unsafe class TypedCall
             {
                 if (retval != 0)
                 {
-                    StoreScalar(member.ReturnType, outcome, retval);
+                    StoreScalar(declaration, DeclarationIndex.Scalar(declaration, member.ReturnType), outcome, retval);
                     CostCounters.Current.ResultValues++;
                 }
                 else
@@ -545,7 +576,7 @@ internal static unsafe class TypedCall
                 {
                     if (retval != 0)
                     {
-                        Store(member.ReturnType, value, retval);
+                        Store(declaration, DeclarationIndex.Scalar(declaration, member.ReturnType), value, retval);
                         CostCounters.Current.ResultValues++;
                     }
                 }
@@ -573,6 +604,7 @@ internal static unsafe class TypedCall
         "VT_DATE" => VarType.Date,
         "VT_CY" => VarType.Currency,
         "VT_UI1" => VarType.UI1,
+        "VT_I8" => VarType.I8,
         _ => null,
     };
 
@@ -628,7 +660,7 @@ internal static unsafe class TypedCall
     /// An inline VARIANT written by the declared return type: a scalar is copied, an owned BSTR moves to the caller as a
     /// VARIANT or a BSTR (and is freed under any other declared type, which is then a defect).
     /// </summary>
-    private static void StoreScalar(string returnType, in CallResult outcome, nint retval)
+    private static void StoreScalar(InterfaceDecl declaration, string returnType, in CallResult outcome, nint retval)
     {
         NativeVariant v = outcome.Scalar;
         if (outcome.OwnsScalar && returnType == "VT_BSTR" && (VarType)v.Vt == VarType.Bstr)
@@ -644,7 +676,7 @@ internal static unsafe class TypedCall
         if (outcome.OwnsScalar && (VarType)v.Vt == VarType.Dispatch && returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
         {
             // The declared interface is queried from the owned reference, which is then released.
-            StoreObject(returnType, v.Pointer, retval);
+            StoreObject(declaration, returnType, v.Pointer, retval);
             outcome.ReleaseUntaken();
             return;
         }
@@ -652,6 +684,11 @@ internal static unsafe class TypedCall
         {
             outcome.ReleaseUntaken();
             throw new InvalidOperationException($"no typed return rule for an owned {(VarType)v.Vt} as {returnType}");
+        }
+        if ((VarType)v.Vt == VarType.Dispatch && v.Pointer == 0 && returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
+        {
+            *(nint*)retval = 0; // a null object (Results.NullObject)
+            return;
         }
         switch (returnType)
         {
@@ -667,11 +704,15 @@ internal static unsafe class TypedCall
             case "VT_R8" or "VT_DATE" or "VT_CY":
                 *(long*)retval = v.Int64;
                 return;
+            case "VT_I8":
+                // An ADO_LONGPTR on Windows x64: an I4 result widens with its sign.
+                *(long*)retval = (VarType)v.Vt == VarType.I4 ? (int)v.Int64 : v.Int64;
+                return;
         }
         throw new InvalidOperationException($"no typed return rule for a scalar as {returnType}");
     }
 
-    private static void Store(string returnType, OwnedVariant value, nint retval)
+    private static void Store(InterfaceDecl declaration, string returnType, OwnedVariant value, nint retval)
     {
         NativeVariant* v = value.Pointer;
         switch (returnType)
@@ -691,25 +732,27 @@ internal static unsafe class TypedCall
             case "VT_I4" or "VT_R4":
                 *(int*)retval = (int)v->Int64;
                 return;
-            case "VT_R8" or "VT_DATE" or "VT_CY":
-                *(long*)retval = v->Int64;
+            case "VT_R8" or "VT_DATE" or "VT_CY" or "VT_I8":
+                *(long*)retval = (VarType)v->Vt == VarType.I4 ? (int)v->Int64 : v->Int64;
                 return;
         }
         if (returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
         {
-            StoreObject(returnType, v->Pointer, retval);
+            StoreObject(declaration, returnType, v->Pointer, retval);
             return;
         }
         throw new InvalidOperationException($"no typed return rule for {returnType}");
     }
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?> DeclaredReturns = new(StringComparer.Ordinal);
+    private static readonly Dictionary<LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?>> DeclaredReturns =
+        DeclarationIndex.Libraries.ToDictionary<LibraryDecl, LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?>>(l => l, _ => new(StringComparer.Ordinal), ReferenceEqualityComparer.Instance);
 
     /// <summary>The declared interface of a returned object (a coclass name stands for its default interface), queried from <paramref name="unknown"/>.</summary>
-    private static void StoreObject(string returnType, nint unknown, nint retval)
+    private static void StoreObject(InterfaceDecl declaration, string returnType, nint unknown, nint retval)
     {
-        // Resolved once per declared return type, not per call (task hdw6).
-        InterfaceDecl? declared = DeclaredReturns.GetOrAdd(returnType, static t => DeclarationIndex.Interface(t[16..]));
+        // Resolved once per declared return type in the declaring library, not per call (task hdw6).
+        LibraryDecl library = DeclarationIndex.LibraryOf(declaration);
+        InterfaceDecl? declared = DeclaredReturns[library].GetOrAdd(returnType, static (t, l) => DeclarationIndex.Interface(l, t[16..]), library);
         nint result = 0;
         Guid iid = declared?.Iid ?? ComIids.IDispatch;
         int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)(*(nint**)unknown)[0])(unknown, &iid, &result);

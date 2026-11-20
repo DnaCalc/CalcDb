@@ -110,5 +110,11 @@ internal sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Na
 
 internal sealed record CoclassDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Interface, int ImplFlags)> Implements);
 
+/// <summary>A type alias (TKIND_ALIAS) and the captured type text it stands for.</summary>
+internal sealed record AliasDecl(string Name, Guid Guid, int TypeFlags, string Target);
+
 /// <summary>The captured library identity and its types (II-13 F-138 TypeLibraryImage).</summary>
-internal sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses);
+internal sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses, IReadOnlyList<AliasDecl>? Aliases = null)
+{
+    public IReadOnlyList<AliasDecl> AliasList => Aliases ?? [];
+}

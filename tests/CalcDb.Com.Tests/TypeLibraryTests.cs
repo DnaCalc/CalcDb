@@ -7,9 +7,9 @@ namespace CalcDb.Com.Tests;
 public sealed unsafe class TypeLibraryTests
 {
     [Fact]
-    public void Every_dual_interface_has_its_dispatch_view()
+    public void Every_dual_interface_of_both_libraries_has_its_dispatch_view()
     {
-        foreach (InterfaceDecl i in DaoTypes.Library.Interfaces)
+        foreach (InterfaceDecl i in DeclarationIndex.Libraries.SelectMany(l => l.Interfaces))
         {
             nint ti = 0;
             int hr = TypeLibrary.TypeInfoOf(i, &ti);

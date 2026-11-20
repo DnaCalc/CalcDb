@@ -5,11 +5,19 @@ using static CalcDb.Com.Tests.NativeRoute;
 
 namespace CalcDb.Com.Tests;
 
+/// <summary>The tests that load the published CalcDb.dll share its module-wide object and lock counts: they run one at a time.</summary>
+[CollectionDefinition(Name)]
+public sealed class PublishedModuleTests
+{
+    public const string Name = "published CalcDb.dll";
+}
+
 /// <summary>
 /// W-08/factory-host-core through the real caller route: the published CalcDb.dll activated by ordinary COM creation
 /// under a deployment manifest's activation context, called through raw IDispatch and vtable entries on an STA.
 /// The module loads once per process, so the route runs as one ordered scenario.
 /// </summary>
+[Collection(PublishedModuleTests.Name)]
 public sealed unsafe class FactoryHostCoreTests
 {
     private static readonly Guid OwnClsid = new("D44A3A3E-4FD9-4426-A7B7-8351E8421EBF");
@@ -188,6 +196,14 @@ public sealed unsafe class FactoryHostCoreTests
         Assert.Equal(Path.GetFullPath(PublishedModule), ModuleOf(Vtable(engine)[6]), ignoreCase: true);
         Assert.Equal("16.0", InvokeGetText(engine, VersionDispId, out _));
         Assert.False(IsLoaded("ACEDAO.DLL"));
+        // The ADODB compatibility classes are CalcDb's too under the binding (W-09/construction-policy, ACT-ADO-SCOPE):
+        // ADODB.Connection's CLSID gives CalcDb's Connection ("10.0"), and system ADO never loads.
+        Assert.Equal(0, Create(new Guid("00000514-0000-0010-8000-00AA006D2EA4"), 0, ClsctxInprocServer, IidIDispatch, out nint connection));
+        Assert.Equal(Path.GetFullPath(PublishedModule), ModuleOf(Vtable(connection)[6]), ignoreCase: true);
+        Assert.Equal(0, GetIds(connection, "Version", out int connectionVersion));
+        Assert.Equal("10.0", InvokeGetText(connection, connectionVersion, out _));
+        Assert.False(IsLoaded("msado15.dll"));
+        Release(connection);
         HostRegistration(engine, ref scope);
 
         // A factory retained across shutdown keeps its captured binding (T-INT-09); new creation stops (Stopping).

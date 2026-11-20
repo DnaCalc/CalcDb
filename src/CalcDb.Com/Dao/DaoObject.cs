@@ -6,26 +6,6 @@ using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Dao;
 
-/// <summary>The operations a DAO class implements, by declared member (one table per class).</summary>
-internal sealed class OperationTable(InterfaceDecl declaration)
-{
-    private readonly Dictionary<MemberDecl, Operation> _operations = new(ReferenceEqualityComparer.Instance);
-
-    public OperationTable Get(string name, Operation op) => Add(name, InvokeKind.PropertyGet, op);
-
-    public OperationTable Put(string name, Operation op) => Add(name, InvokeKind.PropertyPut, op);
-
-    public OperationTable Method(string name, Operation op) => Add(name, InvokeKind.Method, op);
-
-    private OperationTable Add(string name, InvokeKind kind, Operation op)
-    {
-        _operations[declaration.Member(name, kind)] = op;
-        return this;
-    }
-
-    public Operation? Find(MemberDecl member) => _operations.GetValueOrDefault(member);
-}
-
 /// <summary>The DAO errors the read path raises, with ACE's exact texts (records named at each use).</summary>
 internal static class DaoErrors
 {
@@ -116,23 +96,15 @@ internal abstract unsafe class DaoObject : DispatchObject
     public CallResult Fail(int number, string description, bool publishesErrorInfo = false) =>
         CallResult.Fail(Failure.Dao(number, Source, description) with { PublishesErrorInfo = publishesErrorInfo });
 
-    /// <summary>A returned object: a new reference to its IDispatch head, owned by the result.</summary>
-    public static CallResult Object(ComObject target)
-    {
-        nint head;
-        target.QueryInterface(ComIids.IDispatch, &head);
-        return CallResult.OfOwnedObject(head);
-    }
+    public static CallResult Object(ComObject target) => Results.Object(target);
 
-    /// <summary>A string result as an inline owned BSTR of its exact units (no OwnedVariant; task hdw6).</summary>
-    public static CallResult Text(string text) => CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Length, text, static (dest, s) => s.AsSpan().CopyTo(dest)));
+    public static CallResult Text(string text) => Results.Text(text);
 
-    public static CallResult Int16(int value) => CallResult.OfScalar(VarType.I2, (short)value);
+    public static CallResult Int16(int value) => Results.Int16(value);
 
-    public static CallResult Int32(int value) => CallResult.OfScalar(VarType.I4, (uint)value);
+    public static CallResult Int32(int value) => Results.Int32(value);
 
-    /// <summary>VT_BOOL: VARIANT_TRUE is -1 in the low 16 bits.</summary>
-    public static CallResult Bool(bool value) => CallResult.OfScalar(VarType.Bool, value ? 0xFFFF : 0);
+    public static CallResult Bool(bool value) => Results.Bool(value);
 }
 
 /// <summary>

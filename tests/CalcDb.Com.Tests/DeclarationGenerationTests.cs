@@ -5,14 +5,35 @@ using CalcDb.Evidence;
 namespace CalcDb.Com.Tests;
 
 /// <summary>
-/// The DAO declarations CalcDb.dll lays out and publishes as type information are generated from the captured type
-/// library (II-13 §2: one reconciled manifest, R-ACT-1 ACT-DECL). This test renders them and requires the checked-in
-/// file to match; with CALCDB_REGENERATE=1 it rewrites the file instead. Every dual interface, enum and coclass of the
-/// library is generated; the one module of constants (LanguageConstants) is not, as no declaration references it.
+/// The DAO and ADO declarations CalcDb.dll lays out and publishes as type information are generated from the captured
+/// type libraries (II-13 §2: one reconciled manifest, R-ACT-1 ACT-DECL). This test renders them and requires the
+/// checked-in files to match; with CALCDB_REGENERATE=1 it rewrites them instead. Every dual interface, enum, alias and
+/// coclass of a library is generated. Not generated: DAO's one module of constants (LanguageConstants), which no
+/// declaration references, and ADO's pure dispinterfaces (the event sources ConnectionEvents and RecordsetEvents) and
+/// vtable-only interfaces (the *EventsVt sinks and the ADO*Construction interfaces), which CalcDb does not implement
+/// yet (ADO-EVENT and the OLE DB construction route; W-09/events-persistence-inventory). A coclass lists only the
+/// generated interfaces it implements.
 /// </summary>
 public sealed class DeclarationGenerationTests
 {
     internal const string Record = "evidence/r-dao-1-err-1/manifest-library/r-dao-1-err-1.manifest-library.bab1b7935f.a2.json";
+
+    /// <summary>ADO's library as ADODB.Connection's type information gives it (R-ADO-1, R-ACT-1 ACT-DECL; W-09/construction-policy).</summary>
+    internal const string AdoRecord = "evidence/r-str-ado-act/ado-describe/r-str-ado-act.ado-describe.1e70c0bee6.a1.json";
+
+    /// <summary>
+    /// The aliased type of each ADO alias. The capture records an alias's name, GUID and flags but not its TYPEATTR
+    /// tdescAlias (a capture gap of describeType); the targets are the public SDK header's (adoint.h, Windows x64:
+    /// <c>typedef LONGLONG ADO_LONGPTR</c>, <c>typedef ADO_LONGPTR PositionEnum_Param</c>, and SearchDirection is the
+    /// enum SearchDirectionEnum). Through IDispatch ADO answers these members as VT_I4 (every RecordCount, Size and
+    /// AbsolutePosition the ADO records show), which this table does not change.
+    /// </summary>
+    private static readonly Dictionary<string, string> AdoAliasTargets = new(StringComparer.Ordinal)
+    {
+        ["ADO_LONGPTR"] = "VT_I8",
+        ["PositionEnum_Param"] = "USERDEFINED ADO_LONGPTR",
+        ["SearchDirection"] = "USERDEFINED SearchDirectionEnum",
+    };
 
     internal static string Root()
     {
@@ -25,13 +46,20 @@ public sealed class DeclarationGenerationTests
     }
 
     [Fact]
-    public void The_generated_declarations_match_the_captured_type_library()
+    public void The_generated_declarations_match_the_captured_type_library() =>
+        Check(Record, "DAO", "DaoTypes", "Dao.g.cs", new Dictionary<string, string>());
+
+    [Fact]
+    public void The_generated_ADO_declarations_match_the_captured_type_library() =>
+        Check(AdoRecord, "ADO", "AdoTypes", "Ado.g.cs", AdoAliasTargets);
+
+    private static void Check(string recordPath, string title, string className, string file, IReadOnlyDictionary<string, string> aliasTargets)
     {
         string root = Root();
-        EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(Path.Combine(root, Record));
-        TypeEvent types = record.Capture!.Events.OfType<TypeEvent>().Single();
-        string rendered = Render(types);
-        string target = Path.Combine(root, "src", "CalcDb.Com", "Declarations", "Dao.g.cs");
+        EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(Path.Combine(root, recordPath));
+        TypeEvent types = record.Capture!.Events.OfType<TypeEvent>().Single(t => t.Library is not null && t.Types.Count > 1);
+        string rendered = Render(types, recordPath, title, className, aliasTargets);
+        string target = Path.Combine(root, "src", "CalcDb.Com", "Declarations", file);
         if (Environment.GetEnvironmentVariable("CALCDB_REGENERATE") == "1")
         {
             File.WriteAllText(target, rendered);
@@ -68,19 +96,31 @@ public sealed class DeclarationGenerationTests
         return $", new({v.Vt}, {integer}, {bits}, {text})";
     }
 
-    private static string Render(TypeEvent types)
+    private static string Render(TypeEvent types, string recordPath, string title, string className, IReadOnlyDictionary<string, string> aliasTargets)
     {
         TypeLibraryInfo lib = types.Library!;
-        TypeView[] duals = types.Types.Where(t => t.TypeKind == 4).ToArray();
-        Assert.All(duals, d => Assert.NotNull(d.DualInterface)); // every dispinterface of DAO is dual
+        TypeView[] dispatches = types.Types.Where(t => t.TypeKind == 4).ToArray();
+        TypeView[] duals = dispatches.Where(d => d.DualInterface is not null).ToArray();
+        string[] skipped = [.. dispatches.Where(d => d.DualInterface is null).Select(d => d.Name),
+            .. types.Types.Where(t => t.TypeKind == 3 && !duals.Any(d => d.Name == t.Name)).Select(t => t.Name)];
+        if (title == "DAO")
+        {
+            Assert.Empty(skipped); // every dispinterface of DAO is dual
+        }
+        TypeView[] aliases = types.Types.Where(t => t.TypeKind == 6).ToArray();
+        var generated = new HashSet<string>(duals.Select(d => d.Name), StringComparer.Ordinal);
         var sb = new StringBuilder();
         sb.Append("// <auto-generated/>\n");
-        sb.Append("// Generated by DeclarationGenerationTests from the captured DAO type library (R-ACT-1 ACT-DECL):\n");
-        sb.Append($"// {Record}\n");
+        sb.Append($"// Generated by DeclarationGenerationTests from the captured {title} type library (R-ACT-1 ACT-DECL):\n");
+        sb.Append($"// {recordPath}\n");
         sb.Append($"// library {lib.Name} {lib.Guid} {lib.Major}.{lib.Minor}. Do not edit; regenerate with CALCDB_REGENERATE=1.\n");
+        if (skipped.Length > 0)
+        {
+            sb.Append($"// Not generated (not dual): {string.Join(", ", skipped.Distinct())}.\n");
+        }
         sb.Append("using System.Runtime.InteropServices;\n\nnamespace CalcDb.Com.Declarations;\n\n");
         sb.Append("#pragma warning disable CA1707, IDE1006\n");
-        sb.Append("internal static unsafe partial class DaoTypes\n{\n");
+        sb.Append($"internal static unsafe partial class {className}\n{{\n");
         var stubs = new StringBuilder();
         foreach (TypeView dispatch in duals)
         {
@@ -125,16 +165,22 @@ public sealed class DeclarationGenerationTests
             string constants = string.Join(", ", e.Variables.Select(v => $"({Str(v.Name)}, {v.MemberId}, {int.Parse(v.Value!.Integer!, CultureInfo.InvariantCulture)})"));
             sb.Append($"    public static readonly EnumDecl {Id(e.Name)}Decl = new({Str(e.Name)}, new Guid({Str(e.Guid.Trim('{', '}'))}), [{constants}]);\n");
         }
+        foreach (TypeView a in aliases)
+        {
+            string target = aliasTargets.TryGetValue(a.Name, out string? t) ? t : throw new InvalidOperationException("no aliased type for " + a.Name);
+            sb.Append($"    public static readonly AliasDecl {Id(a.Name)}Alias = new({Str(a.Name)}, new Guid({Str(a.Guid.Trim('{', '}'))}), 0x{a.TypeFlags:X}, {Str(target)});\n");
+        }
         sb.Append('\n');
         foreach (TypeView c in types.Types.Where(t => t.TypeKind == 5))
         {
-            string impls = string.Join(", ", c.Implements.Select(Impl).Select(i => $"({Str(i.Name)}, {i.Flags})"));
+            string impls = string.Join(", ", c.Implements.Select(Impl).Where(i => generated.Contains(i.Name)).Select(i => $"({Str(i.Name)}, {i.Flags})"));
             sb.Append($"    public static readonly CoclassDecl {c.Name}Class = new({Str(c.Name)}, new Guid({Str(c.Guid.Trim('{', '}'))}), 0x{c.TypeFlags:X}, [{impls}]);\n");
         }
         sb.Append($"\n    public static readonly LibraryDecl Library = new({Str(lib.Name!)}, new Guid({Str(lib.Guid.Trim('{', '}'))}), {lib.Major}, {lib.Minor}, {lib.Lcid},\n");
         sb.Append($"        [{string.Join(", ", duals.Select(d => Id(d.Name)))}],\n");
         sb.Append($"        [{string.Join(", ", types.Types.Where(t => t.TypeKind == 0).Select(e => Id(e.Name) + "Decl"))}],\n");
-        sb.Append($"        [{string.Join(", ", types.Types.Where(t => t.TypeKind == 5).Select(c => c.Name + "Class"))}]);\n\n");
+        sb.Append($"        [{string.Join(", ", types.Types.Where(t => t.TypeKind == 5).Select(c => c.Name + "Class"))}]");
+        sb.Append(aliases.Length == 0 ? ");\n\n" : $",\n        [{string.Join(", ", aliases.Select(a => Id(a.Name) + "Alias"))}]);\n\n");
         sb.Append(stubs.ToString().TrimEnd('\n')).Append('\n');
         sb.Append("}\n");
         return sb.ToString();
