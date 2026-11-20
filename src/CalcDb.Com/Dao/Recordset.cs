@@ -862,7 +862,13 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     private CallResult GetBookmark()
     {
-        if (!Bookmarkable && RecordsetType != 8)
+        // A forward-only recordset is not bookmarkable: 3219 from DAO.Recordset with no IErrorInfo
+        // (r-dao-1b/recordset-members-forward-only, recordset-properties-forward-only; qualified.md CUR-ID).
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!Bookmarkable)
         {
             return CallResult.Fail(Failure.NotImplemented("Bookmark of a recordset opened with dbForwardOnly (its cursor is not modelled)"));
         }
