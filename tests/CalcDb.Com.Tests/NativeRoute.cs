@@ -71,7 +71,14 @@ internal static unsafe partial class NativeRoute
     /// <summary>The published module's object, lock and host counts (CalcDbModuleCounts).</summary>
     public static ModuleCounts Counts()
     {
-        var counts = (delegate* unmanaged<ModuleCounts*, int>)Export("CalcDb.dll", "CalcDbModuleCounts");
+        // By full path: a process that loaded the managed CalcDb assembly has another module of that name.
+        nint module;
+        fixed (char* path = Path.GetFullPath(PublishedModule))
+        {
+            module = GetModuleHandleW(path);
+        }
+        var counts = (delegate* unmanaged<ModuleCounts*, int>)Export(module, "CalcDbModuleCounts");
+        Assert.True(counts is not null, "CalcDb.dll is not loaded from " + PublishedModule);
         ModuleCounts c;
         Assert.Equal(0, counts(&c));
         return c;
@@ -121,6 +128,9 @@ internal static unsafe partial class NativeRoute
         return handle == 0 ? 0 : GetProcAddress(handle, name);
     }
 
+    /// <summary>An export of a module by its handle (when another module of the same name may be loaded).</summary>
+    public static nint Export(nint module, string name) => module == 0 ? 0 : GetProcAddress(module, name);
+
     public static nint Pin(string path)
     {
         fixed (char* p = path)
@@ -142,6 +152,41 @@ internal static unsafe partial class NativeRoute
         id = result;
         return hr;
     }
+
+    /// <summary>A property get through IDispatch::Invoke; the text, or null with the EXCEPINFO of a failure.</summary>
+    public static string? InvokeGetText(nint dispatch, int dispId, out Com.ExcepInfo info)
+    {
+        Guid none = Guid.Empty;
+        Com.DispParams parameters = default;
+        Values.NativeVariant result = default;
+        Com.ExcepInfo exception = default;
+        uint argError = 0;
+        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, Com.DispParams*, Values.NativeVariant*, Com.ExcepInfo*, uint*, int>)Vtable(dispatch)[6])(dispatch, dispId, &none, 0x0409, 2, &parameters, &result, &exception, &argError);
+        info = exception;
+        if (hr == Com.HResults.DISP_E_EXCEPTION)
+        {
+            Assert.Equal(0, result.Vt);
+            return null;
+        }
+        Assert.Equal(0, hr);
+        Assert.Equal((ushort)Foundation.VarType.Bstr, result.Vt);
+        string text = Marshal.PtrToStringBSTR(result.Pointer);
+        Marshal.FreeBSTR(result.Pointer);
+        return text;
+    }
+
+    /// <summary>A text property by name through IDispatch (GetIDsOfNames, then Invoke).</summary>
+    public static string? GetText(nint dispatch, string name)
+    {
+        Assert.Equal(0, GetIds(dispatch, name, out int id));
+        return InvokeGetText(dispatch, id, out _);
+    }
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoMarshalInterThreadInterfaceInStream(in Guid iid, nint unknown, out nint stream);
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoGetInterfaceAndReleaseStream(nint stream, in Guid iid, out nint result);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct ActCtx

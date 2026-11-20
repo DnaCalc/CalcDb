@@ -402,28 +402,6 @@ public sealed unsafe class FactoryHostCoreTests
         return bootstrap(&offer, answer);
     }
 
-    /// <summary>A property get through IDispatch::Invoke; the text, or null with the EXCEPINFO of a failure.</summary>
-    private static string? InvokeGetText(nint dispatch, int dispId, out ExcepInfo info)
-    {
-        Guid none = Guid.Empty;
-        DispParams parameters = default;
-        NativeVariant result = default;
-        ExcepInfo exception = default;
-        uint argError = 0;
-        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)Vtable(dispatch)[6])(dispatch, dispId, &none, 0x0409, 2, &parameters, &result, &exception, &argError);
-        info = exception;
-        if (hr == HResults.DISP_E_EXCEPTION)
-        {
-            Assert.Equal(0, result.Vt);
-            return null;
-        }
-        Assert.Equal(0, hr);
-        Assert.Equal((ushort)Foundation.VarType.Bstr, result.Vt);
-        string text = Marshal.PtrToStringBSTR(result.Pointer);
-        Marshal.FreeBSTR(result.Pointer);
-        return text;
-    }
-
     private static int TypeInfo(nint dispatch, out nint typeInfo)
     {
         nint ti = 0;

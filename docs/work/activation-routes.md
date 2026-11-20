@@ -82,6 +82,59 @@ activation's steps (`2nqn`).
   the parent pops it. From an MTA the object is a proxy whose calls reach CalcDb.dll; from a second STA it is direct. A
   thread started after the pop finds no class.
 - **Open.** Threads the host does not own see no registration (a native worker pool, a managed Task). Marshaling
-  CalcDb's interfaces across apartments uses the interface registration of the installed DAO and ADO. On a machine
-  without ACE it needs CalcDb's own proxy and type-library entries in the manifest
-  (`comInterfaceExternalProxyStub`, `typelib`), which the saved images now make possible. Neither is tried yet.
+  CalcDb's interfaces across apartments uses the interface registration of the installed DAO and ADO (shown below
+  under per-user registration). On a machine without ACE it needs CalcDb's own proxy and type-library entries, in the
+  manifest (`comInterfaceExternalProxyStub`, `typelib`) or per user; neither is tried there yet.
+
+## Per-user registration (gs33, 2026-11-20)
+
+The third route, beside the manifests and host registration: CalcDb's own classes registered for the current user,
+so CalcDb and ACE run in one process (Excel/VBA, .NET, PowerShell) with no activation context, for testing (R-ACT-1
+ACT-COEXIST, ACT-NAME, ACT-CLSID; README "COM identity and platforms": an explicit per-user opt-in).
+
+```
+rundll32 artifacts\native\CalcDb.dll,CalcDbRegisterPerUser
+rundll32 artifacts\native\CalcDb.dll,CalcDbUnregisterPerUser
+```
+
+`CalcDbPerUserRegistration(int register)` is the same with an HRESULT, for tests and tooling (1 registers, 0
+unregisters; S_FALSE when nothing was registered). One code path, [PerUserRegistration.cs](../../src/CalcDb.Com/Activation/PerUserRegistration.cs),
+through `Microsoft.Win32.Registry`; no oleaut32 registration call.
+
+- **Written, under HKCU\Software\Classes only.** For each own class of `ActivationProfile` (CalcDb.DBEngine,
+  CalcDb.Connection, .Recordset, .Command, .Stream, .Record): `CLSID\{clsid}`, its `InprocServer32` (the full path of
+  the CalcDb.dll that registers itself, `ThreadingModel=Apartment`) and `ProgID`, the ProgID key and its `CLSID`.
+  Never a compatibility name (DAO.DBEngine.120, ADODB.*) or its CLSID, never HKLM, policy or Trust Center.
+- **Skipped where the merged view (HKCR) has a registration.** CalcDb.DAO.tlb and CalcDb.ADODB.tlb share DAO's and
+  ADODB's LIBIDs and IIDs, so a key of CalcDb's would shadow ACE's for this user. A library is skipped when HKCR has
+  any version of its LIBID with the same major, because `LoadRegTypeLib` picks a higher minor of the same major
+  (II-13 §2): ADODB 6.1 would shadow the registered 6.0. An `Interface` key is written only for a library CalcDb
+  registers (type-library marshaler for dual and oleautomation interfaces, PSDispatch for dispinterfaces).
+- **On this machine** both libraries are skipped (DAO `c.0`, ADODB `6.0` and `6.1` registered), and with them the interfaces
+  HKCR does not register (DAO `{00000057-…}`, ten ADO event, sink and construction interfaces): 30 keys are
+  written, all class and ProgID keys, and the record lists 13 skips with their reasons. On a machine without ACE the
+  type library and interface keys are CalcDb's own.
+- **Recorded.** Each key CalcDb creates carries the value `CalcDb.Registration` (the registration's id) and is listed
+  in creation order under `HKCU\Software\CalcDb\Registration` (`Keys`, `Skipped`, `Module`, `Id`) before its values
+  are written. A conflicting own class key that CalcDb did not create refuses the registration (`0x800700B7`) before
+  anything is written. Registering again first removes the recorded registration. Unregister deletes exactly the
+  listed keys that still carry the id and have no subkeys; anything else stays listed (`0x80070091`).
+
+**Observed** ([PerUserRegistrationTests](../../tests/CalcDb.Com.Tests/PerUserRegistrationTests.cs), a fresh client
+process, `CoexistenceClient`, no context):
+
+- `CLSIDFromProgID("CalcDb.DBEngine")` gives the own CLSID `{D44A3A3E-…}` (not a configured one, as under a
+  context), and `CoCreateInstance` reaches CalcDb.dll with ACEDAO.DLL not loaded. In the same process
+  `DAO.DBEngine.120` gives `{CD7791B9-…}` and ACEDAO.DLL. Through the DAO PIA both give Version 16.0 and read
+  `T1.S` = `alpha` from the r-oracle-1 table-read fixture opened read-only; the fixture bytes are unchanged.
+- From an MTA, CalcDb.DBEngine and CalcDb.Connection are proxies whose `_DBEngine` and `_Connection` calls are
+  marshaled through the registered DAO and ADODB type libraries (ACE's interface keys). An interface marshaled
+  from the STA and released last on an MTA frees the object (module count), and the STA answers afterwards.
+  msado15.dll and ACEOLEDB.DLL never load.
+- The final Release reached the owner STA while it ran a message loop. Blocked in `Thread.Join(TimeSpan)` (.NET 11),
+  the STA did not deliver the MTA's call within 60 s. That is a fact of the test client, not of CalcDb.
+- After unregister, every key under HKCU that the registration could touch is as before (snapshot compared).
+
+**Open.** ACT-NAME for the compatibility names without ACE stays open (this route registers only CalcDb's names).
+The Framework 4.8 and .NET 10 lanes, real VBA in Excel and PowerShell against this registration are not run yet; the
+client here is the .NET 11 diagnostic lane.

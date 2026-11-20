@@ -86,26 +86,8 @@ internal static unsafe partial class TypeLibrary
         }
     }
 
-    /// <summary>
-    /// The directory of the native CalcDb.dll that contains this code (an export's address names it). Under a managed
-    /// host the export is a runtime stub in no CalcDb.dll, and the application's base directory is used.
-    /// </summary>
-    private static string ModuleDirectory()
-    {
-        nint module = 0;
-        char* path = stackalloc char[1024];
-        delegate* unmanaged<int> inModule = &Exports.DllCanUnloadNow;
-        if (GetModuleHandleExW(6 /* FROM_ADDRESS | UNCHANGED_REFCOUNT */, (nint)inModule, &module) && module != 0)
-        {
-            uint length = GetModuleFileNameW(module, path, 1024);
-            string file = length is > 0 and < 1024 ? new string(path, 0, (int)length) : "";
-            if (string.Equals(Path.GetFileName(file), "CalcDb.dll", StringComparison.OrdinalIgnoreCase))
-            {
-                return Path.GetDirectoryName(file)!;
-            }
-        }
-        return AppContext.BaseDirectory;
-    }
+    /// <summary>The directory of the native CalcDb.dll; under a managed host, the application's base directory.</summary>
+    private static string ModuleDirectory() => NativeModule.File is { } file ? Path.GetDirectoryName(file)! : AppContext.BaseDirectory;
 
     private static nint* Vt(nint unknown) => *(nint**)unknown;
 
@@ -648,13 +630,6 @@ internal static unsafe partial class TypeLibrary
         public ushort VarFlags;
         public int VarKind;
     }
-
-    [LibraryImport("kernel32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetModuleHandleExW(uint flags, nint address, nint* module);
-
-    [LibraryImport("kernel32.dll")]
-    private static partial uint GetModuleFileNameW(nint module, char* buffer, uint size);
 }
 
 /// <summary>A failed step of building the type library: the step and its HRESULT, published as the GetTypeInfo failure.</summary>

@@ -85,6 +85,43 @@ internal static unsafe class Exports
         }
     }
 
+    /// <summary>
+    /// Per-user side-by-side registration of CalcDb's own classes for testing (R-ACT-1 ACT-COEXIST, ACT-NAME; gs33;
+    /// docs/work/activation-routes.md): <c>rundll32 CalcDb.dll,CalcDbRegisterPerUser</c>. HKCU only. rundll32's entry
+    /// signature reports nothing: the outcome is the record under HKCU\Software\CalcDb\Registration, or
+    /// <see cref="CalcDbPerUserRegistration"/>'s HRESULT.
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "CalcDbRegisterPerUser")]
+    public static void CalcDbRegisterPerUser(nint window, nint instance, byte* commandLine, int show) => _ = PerUserRegistrationCall(1);
+
+    /// <summary><c>rundll32 CalcDb.dll,CalcDbUnregisterPerUser</c>: removes exactly what the recorded registration created.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "CalcDbUnregisterPerUser")]
+    public static void CalcDbUnregisterPerUser(nint window, nint instance, byte* commandLine, int show) => _ = PerUserRegistrationCall(0);
+
+    /// <summary>
+    /// The same registration with its HRESULT, for tests and tooling: <paramref name="register"/> 1 registers, 0
+    /// unregisters (S_FALSE: nothing was registered).
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "CalcDbPerUserRegistration")]
+    public static int CalcDbPerUserRegistration(int register) => PerUserRegistrationCall(register);
+
+    private static int PerUserRegistrationCall(int register)
+    {
+        try
+        {
+            return register switch
+            {
+                1 => PerUserRegistration.Register(),
+                0 => PerUserRegistration.Unregister(),
+                _ => HResults.E_INVALIDARG,
+            };
+        }
+        catch (Exception e)
+        {
+            return e.HResult < 0 ? e.HResult : HResults.E_UNEXPECTED;
+        }
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "CalcDbModuleCounts")]
     public static int CalcDbModuleCounts(ModuleCounts* counts)
     {
