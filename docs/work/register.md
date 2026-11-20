@@ -160,6 +160,8 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 | One file session per engine: Databases on one file share a cache, a lock manager and the writer lease (today each gets its own, so their Workspaces do not conflict and the second handle blocks the first's lease; II-09, W-05) | P2 | — | not started (found by mpvx, 2026-11-20) | `6xzx` |
 | A dynaset's Bookmark bytes follow ACE's: LastModified, which equals Bookmark, answers `002f0000` where ACE gives `00020000` (r-cursor-1/edit-cancel-rollback and three TXN-CLOSE discriminators, compare-set dao-1; R-CURSOR-1 CUR-ID) | P2 | — | not started (found 2026-11-20) | `hr7t` |
 | A snapshot reads the file as it was at its open: ACE's snapshot is a fixed view (r-cursor-1/pop-visibility-snapshot reads K = 10 after a dynaset set 111); CalcDb reads current pages and names a snapshot's reads and Finds after a later publication (b665bbd5) (R-CURSOR-1 CUR-POP; W-03 revisions) | P2 | — | not started (found in compare-set growth-2, 2026-11-21) | `52qh` |
+| `batch --compare` runs candidate attempts in parallel, so a full compare set takes minutes, not 15 (W-01/corpus-comparison; process round 2026-11-21, change 3) | P2 | — | not started (found 2026-11-21) | `mvgk` |
+| Eight ADO candidate questions wait out timeouts in every compare run, 140 s of 896 (r-q-ado-misc/resync-affect-matrix 32.5 s, async-execute-polled 20.8 s; W-01/corpus-comparison; process round 2026-11-21, change 4) | P2 | — | not started (found 2026-11-21) | `6zkg` |
 
 ### W-01/capture-core branches (R-ORACLE-1)
 

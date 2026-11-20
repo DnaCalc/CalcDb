@@ -36,12 +36,26 @@ scope or design, the book wins.
 - MIT licence. Record third-party exact material (the Jackcess sort resources) in a licence
   ledger as it enters. GitHub CI stays disabled.
 
+## Sub-sessions
+
+- Run code writers in parallel, one per project at a time. A brief names the projects or files the child owns, its
+  build limits, and the book rows and records it relies on.
+- Set the model and reasoning of every child: Opus high where behaviour is still being found, for concurrency and
+  write publication; Gemini 4 Neon (`antigravity-acp:gemini-4-neon@high`) or Opus medium for record-backed
+  implementation; Sonnet medium for routine tooling.
+- A child stops and reports when a record contradicts a note or no record decides a byte. The organizer then probes.
+- Before landing, check every rule the child wrote against a record. Expect one generalization beyond the records
+  in a larger task.
+- Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md).
+- An organizer hands over to a fresh session at about 300 tool calls or 5 hours. The register, the process log and
+  a handoff prompt carry the state; rules that must outlast the handoff go into this file, not the handoff.
+
 ## Tool practice
 
 - Edit files with the editing tools, not with ad-hoc scripts. Python is not project tooling.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
-  every shell.
+  every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
 - Inspect oracle results with `calcdb-oracle show`, not with one-off scripts.
 - About 15% of effort goes to reviewing and improving how we work (The Plan §4). Log each round
   in [docs/work/process-log.md](docs/work/process-log.md).
@@ -65,8 +79,12 @@ scope or design, the book wins.
   Commit as the batch progresses.
 - After a batch, run one large check (tests, oracle comparisons, analyzers), then fix
   and re-check until clean.
-- The per-commit check stays light: build plus fast unit tests. Full corpus and oracle
-  runs belong to the batch check.
+- The per-commit check stays light: build plus the test projects the change touches, from an
+  export of HEAD plus the change, never skipped. Full corpus and oracle runs belong to the
+  batch check.
+- A sub-session's landing ends a batch. Its full compare set runs as a background job from a
+  snapshot of the export's binaries, and it blocks no build and no next child
+  ([docs/work/landing-check.md](docs/work/landing-check.md)).
 
 ## Oracle conduct (ACE, Access and DAO on Windows)
 

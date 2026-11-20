@@ -514,3 +514,85 @@ Not a process round (none was called); observations made during the work, each w
 | Two processes decompressing one fixture into the shared artifact cache | A Format test failed with access denied on the rename | `ArtifactStore.Locate` keeps the winner's copy (the same digest) |
 | A note's claim contradicted its own record (Mid's start) | Found by the implementing child, not at qualification | When a note is written, check each claimed value against the record it cites |
 | A probe over all retained fixtures before writing the leaf writer (mpvx) | Found that ACE's stored prefix is not the common prefix before any page was written | Run such a fixture-wide probe before every format writer |
+
+## 2026-11-21 · Process round: velocity without quality loss (krnv, 6v2c; sub-session of the organizer, Claude Opus 5.5)
+
+**Work observed.** All of 2026-11-20 (UTC): the organizers `01a1f844` (09:24–15:23, Opus medium) and `01a1f97d`
+(15:04–22:58, Opus high) and their 27 children, 20 Claude and 5 Gemini 4 Neon of them finished. The day made 84
+commits, and compared questions matching or accepted went from 78 to 178 of 1,043. The numbers come from
+`alta session report --scope session --include=metrics`, `alta session events` (each tool call's request and
+completion), `alta job list --all`, and the attempt folders of the growth-2 compare run. Timing an export used
+`git archive` into `%TEMP%`; nothing was built.
+
+**Where the time and the tokens went.**
+
+| Activity | Measure |
+| --- | --- |
+| Organizer `01a1f97d` | 474 min wall: 202 min in turns (43 %), the rest waiting on children and jobs. 644 tool calls, 264.8M input tokens (99.7 % cached), $67.8. |
+| Its tool time (141 min) | export, build and test 45 calls / 50 min; probes and records 144 / 32 min; git 47 / 31 min (chained with exports); compare-set launches and diffs 30 / 7 min; edits 95; register and tasks 33; code reads 73; qualified.md 28 (0.2 min) |
+| Organizer context | 411k input tokens per call (`01a1f97d`), 558k (`01a1f844`); the two organizers were $120.8 of the day's $326 Claude cost (37 %) |
+| Claude children | 20 sessions, $205.6. Opus: 9–59 min, 44–227 calls, 4.8–66M input, 130–290k per call |
+| Neon children | trials 1–4: 26–81 min, 149–380 calls, 12–34M input, 90–112k per call, no cost reported. Trial 5's session totals (1,678M in, 17.7M out in 99 min) are a metrics fault (codealta-work-items.md, item 10) |
+| Child orientation | first code edit after 2–42 min (median 10) and 12–181 calls (median 44), spent reading the code to be changed. Book 0–19 calls, qualified.md 0–18 calls (at most 2 min). Briefs 465–1,477 tokens |
+| Export per landing | 1.4–4.0 min. Extracting HEAD is 48 s and deleting it 15 s (7,917 files, 753 MB; `evidence/` and `probes/` are 699 MB); the code alone extracts in 2.8 s. Then a full build and a NativeAOT publish every time |
+| Full compare set | 11 runs by `01a1f97d` (180 min; 2 failed, 18 min), about 17 on the day (about 270 min). One run: 1,043 attempts one after another, 896 s, 0.86 s each, 87 % inside workers. 8 ADO questions waiting out timeouts take 140 s |
+| Writer occupancy, 15:04–22:53 | 76 min without any code writer, in six gaps of 7–21 min (review, then the compare during which nothing may build). From 17:37 to 22:53 one code writer at a time |
+
+**What caused rework on 2026-11-20.**
+
+| Cause | Cost | Caught by |
+| --- | --- | --- |
+| Eight qualified notes contradicted by their records (Mid's start, comma-join order, the snapshot bookmark base, the literal 2147483648, four r-q3-sql notes) | a discriminator round each, after a child had started | children that stop on a contradiction; replay tests |
+| Two Neon rules generalized beyond the records (3421 for every numeric target; the landing page among several FreeMap pages), in 5 trials | narrowed in review | the reviewer checking each rule against a record |
+| A change that lost an untouched question (6fsf → `r-sort-3b/lu-unique-survivors`) | fixed in the same commit | the full compare set, its only out-of-scope loss in about 14 runs |
+| An inspector change committed without its Evidence tests (316105cf) | a broken test on master until the next commit | nothing: the export test was skipped |
+| `cmp -l` octal read as decimal | a wrong statement to a child | the child (Neon trial 5) |
+| A stale fixed-name message file; an export copy of another child's files | a wrong message before push; a broken export build | the organizer, at once |
+| A crashed compare and the job-file race | 2 failed runs, 18 min | fixed in the runner |
+
+**Gates that earned their place, kept unchanged:** the record check of every rule in review, stop-on-contradiction
+briefs, the per-question diff of a full compare after every landing, tests from an export before a commit, and the
+candidate check of a child's target questions.
+
+**Changes, ranked by gain against risk to quality.**
+
+| # | Change | Expected gain | Risk | State |
+| --- | --- | --- | --- | --- |
+| 1 | Run compare-set from a snapshot of the export's runner, worker and deployment, with its own store ([landing-check.md](landing-check.md)) | the 15–21 min run no longer blocks builds or the next child: about 1.5 h of writer time a day | none: same set, comparer and diff | proposed; try at the next landing |
+| 2 | Two code writers again, on disjoint projects (storage and format: Format, Storage, Isam, Catalog; SQL: Sql, Expressions, Values), with Com wiring by the organizer or a short follow-up; Neon and Claude on separate quotas | up to twice the writer throughput | the organizer's review load; keep one review per landing | allowed today; do it |
+| 3 | `batch --compare` runs candidate attempts in parallel (task `mvgk`) | a full set in about 3 min instead of 15 with six workers (estimate) | store races, 12 two-participant questions | task |
+| 4 | Find why eight ADO candidate questions wait out timeouts (task `6zkg`) | 140 s of every full run | none | task |
+| 5 | One landing-check command over a persistent check clone ([landing-check.md](landing-check.md)) | about 1–2.5 min and five calls per landing; removes the wrong-file-list and skipped-test slips | a second checkout: the owner's word | proposed |
+| 6 | Organizer: hand over at about 300 calls or 5 h (`01a1f97d` reached 644); try one probe round in an Opus high prober child | its 144 probe calls were about 22 % of its input at 411k per call | the prober lacks the organizer's view; the brief names the gap the child stopped on | proposed, one trial |
+| 7 | The handoff's working rules go into AGENTS.md and landing-check.md, not scratchpads (CodeAlta deletes those after a week) | rules survive handovers | none | diff proposed |
+| 8 | Model by task class: Neon by default for record-backed implementation with replay or byte acceptance; Opus high where behaviour is still being found; Sonnet for tooling | a second quota; Neon uses a third of Opus high's tokens per call at a similar time | one unrecorded generalization per larger task; the review catches it | adopt (the memory note already says so) |
+
+**Rejected from measurement.** Leaner briefs (they are 465–1,477 tokens already). A qualified.md index (children spend
+at most 18 calls and 2 min on it). A scoped compare per landing (with change 1 the full set blocks nothing, and it
+caught the day's one out-of-scope loss). The medium against high comparison found no matched pair of tasks in the data
+and draws no conclusion; a matched trial costs more than the choice is worth.
+
+**For the owner.** Worktrees: AGENTS.md forbids them. The Plan §2.1 asks for isolation chosen deliberately, once
+concurrent writers are worthwhile. The next items in order, W-07 DDL and actions and zfrp stretch 3, share Storage
+and Format, so changes 1 and 2 cannot run them side by side. A trial of one worktree child for one such pair would
+measure the merge cost. The tracker (6v2c) needs two decisions: keep completed tasks, and commit `.alta/tasks/`
+([codealta-work-items.md](codealta-work-items.md)).
+
+**Change tried.** The 6v2c experiment: register fields in the frontmatter of five tasks, a tag proposed (`p1`), and the
+three tracker questions answered from CodeAlta alone in one 254 ms script. It works, but completed tasks are deleted,
+`.alta/` is not in git and in progress is not in the file, so the register stays for now. The export anatomy and the
+compare-run anatomy above were measured without building.
+
+**Measure next time.** For change 1: the gap from a child's report to the next writer's start (7–21 min today) and
+whether the snapshot run's verdicts equal a normal run's. For change 2: landings per day and review findings per
+landing, against 2026-11-20. For the organizer: input tokens per call after a handover at 300 calls.
+
+**Organizer's review (session 01a1fb2e-5624, 2026-11-21).** Checked against the tree: `compare-set` takes `--worker`,
+`--store` and `--deployment` as common options (Program.cs), so change 1 needs no code. Adopted: 1 (trial at the next
+landing; until its verdicts are confirmed equal to a normal run's, the earlier serial rule is the fallback), 2 (two
+writers on disjoint projects, from the next pair whose projects do not overlap), 6 (handover at about 300 calls or
+5 h; the prober-child trial when the next probe round is larger than one card), 7 and 8, all as written into
+AGENTS.md and landing-check.md. 3 and 4 are register rows (`mvgk`, `6zkg`) taken in register order. Left for the
+owner: 5 (a persistent check clone is a second checkout) and the two 6v2c decisions (keep completed tasks, commit
+`.alta/tasks/`). The probe round beside the children this morning (r-q11-ddl-closure, eac88c49: about 25 calls, one card)
+stayed with the organizer.
