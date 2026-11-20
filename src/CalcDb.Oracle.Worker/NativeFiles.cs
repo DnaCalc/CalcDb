@@ -88,7 +88,7 @@ internal sealed partial class NativeFiles(string attemptDir, Question question)
         try
         {
             int got = RandomAccess.Read(h.Handle, buffer, read.Offset);
-            return new HandleEvent { Seq = seq, ProgramPath = path, Op = "read", Handle = read.Handle, RelativePath = h.Relative, Offset = read.Offset, Success = true, BytesRead = got, BytesSha256 = Hashing.Sha256Hex(buffer.AsSpan(0, got)), AtUtc = DateTimeOffset.UtcNow };
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = "read", Handle = read.Handle, RelativePath = h.Relative, Offset = read.Offset, Success = true, BytesRead = got, BytesSha256 = Hashing.Sha256Hex(buffer.AsSpan(0, got)), Bytes = read.Keep ? Convert.ToHexStringLower(buffer.AsSpan(0, got)) : null, AtUtc = DateTimeOffset.UtcNow };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

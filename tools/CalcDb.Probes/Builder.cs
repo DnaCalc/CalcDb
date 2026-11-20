@@ -162,7 +162,7 @@ public sealed class P
     public P NativeOpen(string bind, string file, uint access, uint share, uint disposition = Win.OpenExisting) =>
         Add(new NativeOpen(bind, file, access, share, disposition));
 
-    public P NativeRead(string handle, long offset, int count) => Add(new NativeRead(handle, offset, count));
+    public P NativeRead(string handle, long offset, int count, bool keep = false) => Add(new NativeRead(handle, offset, count) { Keep = keep });
 
     public P NativeClose(string handle) => Add(new NativeClose(handle));
 

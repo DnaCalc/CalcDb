@@ -413,7 +413,21 @@ public sealed record NativeOpen(string Bind, string File, uint Access, uint Shar
 /// <summary>W-PROBE: <c>ReadFile</c> of <see cref="Count"/> bytes at <see cref="Offset"/> through a native handle.</summary>
 public sealed record NativeRead(string Handle, long Offset, int Count) : Operation
 {
-    internal override void Write(CanonicalWriter w) => w.Begin("nativeRead").Text("handle", Handle).Int64("offset", Offset).Int32("count", Count);
+    /// <summary>
+    /// Keep the bytes read in the record, as hex (a question whose answer is the bytes: docs/work/evidence-storage.md keeps
+    /// exactly those bytes inline). Written to the key only when set, so earlier question keys are unchanged.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Keep { get; init; }
+
+    internal override void Write(CanonicalWriter w)
+    {
+        w.Begin("nativeRead").Text("handle", Handle).Int64("offset", Offset).Int32("count", Count);
+        if (Keep)
+        {
+            w.Bool("keep", true);
+        }
+    }
 }
 
 /// <summary>

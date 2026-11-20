@@ -376,6 +376,9 @@ public sealed record HandleEvent : CaptureEvent
 
     public string? BytesSha256 { get; init; }
 
+    /// <summary>The bytes read, as lowercase hex, when the read asked to keep them (NativeRead.Keep).</summary>
+    public string? Bytes { get; init; }
+
     /// <summary>A lock scan: the locked byte ranges another handle holds, as <c>0xSTART+LENGTH</c>, merged and in order.</summary>
     public IReadOnlyList<string>? LockedRanges { get; init; }
 
