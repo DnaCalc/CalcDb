@@ -143,6 +143,12 @@ public sealed class StaticFieldTypeTests
             return null;
         }
 
+        public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+        {
+            failure = "stub";
+            return null;
+        }
+
         private static TableDefinition BuildTable()
         {
             (string Name, byte Type, int Length, bool Fixed)[] specs =

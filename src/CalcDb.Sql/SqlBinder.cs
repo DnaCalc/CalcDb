@@ -23,14 +23,10 @@ public interface ISqlDatabase
     RowReader? OpenRows(TableDefinition table, out string? failure);
 
     /// <summary>
-    /// A navigator over one physical index of <paramref name="table"/>, or null when the database adapter does not expose
-    /// indexes (with <paramref name="failure"/> null) or when opening the index fails (with <paramref name="failure"/> set).
+    /// A navigator over one physical index of <paramref name="table"/>, or null with <paramref name="failure"/> set when
+    /// opening it fails.
     /// </summary>
-    IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
-    {
-        failure = null;
-        return null;
-    }
+    IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure);
 
     ExpressionContext Context { get; }
 }

@@ -347,5 +347,12 @@ public sealed class JoinOrderTests(ITestOutputHelper output)
         public bool IsQuery(string name) => inner.IsQuery(name);
 
         public RowReader? OpenRows(TableDefinition table, out string? failure) => inner.OpenRows(table, out failure);
+
+        /// <summary>No index is exposed: an indexed inner side's order stays named.</summary>
+        public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+        {
+            failure = null;
+            return null;
+        }
     }
 }

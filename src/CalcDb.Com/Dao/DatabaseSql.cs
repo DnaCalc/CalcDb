@@ -51,6 +51,13 @@ internal sealed class DatabaseSql(DatabaseObject database) : ISqlDatabase
         failure = f?.Predicate;
         return reader;
     }
+
+    /// <summary>A navigator over one physical index of the table, for a join's indexed inner side (R-SQL-1 SQL-J).</summary>
+    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+    {
+        failure = null;
+        return new IndexNavigator(database.Cache, database.Format, index, table.FirstPage);
+    }
 }
 
 /// <summary>
