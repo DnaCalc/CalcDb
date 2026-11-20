@@ -224,8 +224,8 @@ public static class FieldDecoder
         return true;
     }
 
-    /// <summary>The exact payload of a Memo or OLE field's long value, or null with the failure.</summary>
-    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageCache cache, FormatDescriptor d, long longValueBudget, out string? failure)
+    /// <summary>The exact payload of a Memo or OLE field's long value, under the row's read view, or null with the failure.</summary>
+    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageCache cache, ReadView? view, FormatDescriptor d, long longValueBudget, out string? failure)
     {
         LongValuePlan? plan = LongValuePlan.Inspect(bytes, out string? planFailure);
         if (plan is null)
@@ -233,7 +233,7 @@ public static class FieldDecoder
             failure = planFailure!;
             return null;
         }
-        byte[]? payload = LongValueReader.Read(plan, bytes, cache, d, longValueBudget, out TraversalFailure? lvFailure);
+        byte[]? payload = LongValueReader.Read(plan, bytes, cache, d, longValueBudget, out TraversalFailure? lvFailure, view);
         if (payload is null)
         {
             failure = lvFailure!.Predicate;
@@ -271,7 +271,7 @@ public static class FieldDecoder
         }
         if (column.TypeCode == NativeTypes.Memo)
         {
-            byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
+            byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out string? failure);
             if (payload is null)
             {
                 return new TextFieldRead(FieldResult.Of(NativeValue.Fail(failure!)));
@@ -296,13 +296,13 @@ public static class FieldDecoder
         }
         if (ScalarCodecs.IsCalculated(column, d.Payload))
         {
-            return ReadCalculated(bytes, column, cache, d, longValueBudget);
+            return ReadCalculated(bytes, column, cache, row.View, d, longValueBudget);
         }
         switch (column.TypeCode)
         {
             case NativeTypes.Memo or NativeTypes.Ole:
             {
-                byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
+                byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out string? failure);
                 if (payload is null)
                 {
                     return NativeValue.Fail(failure!);
@@ -326,7 +326,7 @@ public static class FieldDecoder
     /// Yes/No is a payload byte (nonzero True), not the row-mask bit; a calculated Decimal has its own scale and sign.
     /// Without a bound result type the value is NotModelled.CalculatedResultType.
     /// </summary>
-    private static NativeValue ReadCalculated(ReadOnlySpan<byte> bytes, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget)
+    private static NativeValue ReadCalculated(ReadOnlySpan<byte> bytes, ColumnDescriptor column, PageCache cache, ReadView? view, FormatDescriptor d, long longValueBudget)
     {
         if (column.CalculatedResultType is not byte type)
         {
@@ -335,7 +335,7 @@ public static class FieldDecoder
         byte[]? content = null;
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            content = LongValue(bytes, cache, d, longValueBudget, out string? lvFailure);
+            content = LongValue(bytes, cache, view, d, longValueBudget, out string? lvFailure);
             if (content is null)
             {
                 return NativeValue.Fail(lvFailure!);

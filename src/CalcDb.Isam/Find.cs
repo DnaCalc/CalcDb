@@ -58,8 +58,8 @@ public enum FindOpen
     /// <summary>Whether a criteria failure is reported on an empty recordset, or at BOF or EOF where FindNext and FindPrevious do not search.</summary>
     FailureWithoutSearch,
 
-    /// <summary>A snapshot whose file had a publication after it opened: its fixed view is not modelled (PopulationCursor).</summary>
-    StaleSnapshotView,
+    /// <summary>A snapshot's Find tested a value no record decides after a later publication (<see cref="SnapshotValues"/>, CUR-POP Open F).</summary>
+    UndecidedSnapshotValue,
 }
 
 /// <summary>A Find's outcome and, for <see cref="FindOutcome.NotModelled"/>, the case.</summary>

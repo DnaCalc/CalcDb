@@ -13,7 +13,11 @@ public static class LongValueReader
 {
     private const int ChainOnStack = 16;
 
-    public static byte[]? Read(LongValuePlan plan, ReadOnlySpan<byte> field, PageCache cache, FormatDescriptor d, long budgetBytes, out TraversalFailure? failure)
+    /// <summary>
+    /// Read the long value <paramref name="plan"/> names; its LVAL rows are the current images, or under
+    /// <paramref name="view"/> the images that view's serial selects (a row resolved under a view, <see cref="RowView.View"/>).
+    /// </summary>
+    public static byte[]? Read(LongValuePlan plan, ReadOnlySpan<byte> field, PageCache cache, FormatDescriptor d, long budgetBytes, out TraversalFailure? failure, ReadView? view = null)
     {
         failure = null;
         if (plan.Length > budgetBytes)
@@ -37,7 +41,7 @@ public static class LongValueReader
                 failure = new TraversalFailure("long-value chain cycle", at);
                 return null;
             }
-            using PagePin? pin = cache.Pin(at.Page).Pin;
+            using PagePin? pin = (view is null ? cache.Pin(at.Page) : view.Pin(at.Page)).Pin;
             if (pin is null)
             {
                 failure = new TraversalFailure($"LVAL page {at.Page} could not be pinned", at);

@@ -24,14 +24,21 @@ public readonly struct RowView : IDisposable
     private readonly PagePin _pin;
     private readonly bool _borrowed;
 
-    internal RowView(RowId root, RowId data, PagePin pin, SlotView slot, bool borrowed)
+    internal RowView(RowId root, RowId data, PagePin pin, SlotView slot, bool borrowed, ReadView? view)
     {
         Root = root;
         Data = data;
         _pin = pin;
         Slot = slot;
         _borrowed = borrowed;
+        View = view;
     }
+
+    /// <summary>
+    /// The registered read view whose images this row was resolved from, or null for the current images. The row's long
+    /// values are read under the same view (<see cref="FieldDecoder"/>), so a row and its LV chains come from one serial.
+    /// </summary>
+    public ReadView? View { get; }
 
     /// <summary>The stable root locator: the row's identity, even when its data has moved to an overflow target.</summary>
     public RowId Root { get; }
@@ -63,15 +70,23 @@ public static class RowResolver
     /// a row). An overflow root's first four bytes are the target locator; the target may carry the deleted bit and
     /// still be live data. Hops are bounded and (page, row) cycles detected.
     /// </summary>
-    public static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(cache, d, root, null, out failure);
+    public static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(cache, null, null, d, root, out failure);
 
     /// <summary>
     /// Resolve through a page hold (task 6p9q): the pages come from the hold, and the view borrows the hold's pin, valid
     /// until the hold moves to another page.
     /// </summary>
-    public static RowView? Resolve(PageHold hold, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(hold.Cache, d, root, hold, out failure);
+    public static RowView? Resolve(PageHold hold, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(null, hold, null, d, root, out failure);
 
-    private static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, PageHold? hold, out TraversalFailure? failure)
+    /// <summary>
+    /// Resolve under a registered read view (II-03 §3.1): every page of the chain is the image the view's serial selects,
+    /// and the view owns its pin. A snapshot reads a row it fixed at an earlier publication serial this way (R-CURSOR-1
+    /// CUR-POP, <see cref="SnapshotValues"/>).
+    /// </summary>
+    public static RowView? Resolve(ReadView view, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(null, null, view, d, root, out failure);
+
+    /// <summary>Exactly one of <paramref name="cache"/>, <paramref name="hold"/> and <paramref name="view"/> supplies the pages.</summary>
+    private static RowView? Resolve(PageCache? cache, PageHold? hold, ReadView? view, FormatDescriptor d, RowId root, out TraversalFailure? failure)
     {
         failure = null;
         // The visited set of a bounded chain: at most MaxOverflowHops + 1 locators, kept on the stack.
@@ -86,7 +101,7 @@ public static class RowResolver
                 return null;
             }
             seen[hop] = at;
-            PinResult pinned = hold is null ? cache.Pin(at.Page) : hold.Get(at.Page);
+            PinResult pinned = hold is not null ? hold.Get(at.Page) : view is not null ? view.Pin(at.Page) : cache!.Pin(at.Page);
             if (pinned.Pin is not { } pin)
             {
                 failure = new TraversalFailure($"page {at.Page}: {pinned.Failure} {pinned.Detail}", at);
@@ -113,7 +128,7 @@ public static class RowResolver
             }
             if (!s.Overflow)
             {
-                return new RowView(root, at, pin, s, borrowed: hold is not null);
+                return new RowView(root, at, pin, s, borrowed: hold is not null, view);
             }
             if (s.Length < 4)
             {

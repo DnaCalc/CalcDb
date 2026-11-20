@@ -126,13 +126,15 @@ public interface IMutableCursor
 /// <summary>
 /// The current row of a cursor, bound lazily on the first field read after a move and released on the next move
 /// (II-07 §4). Field values are owned copies, so they survive movement and Close (T-ISAM-04). Shared by both cursor
-/// policies, with the bookmark validation they share.
+/// policies, with the bookmark validation they share. A row binds over the current images, or under a registered read
+/// view when a snapshot reads the values it fixed at an earlier serial (<see cref="SnapshotValues"/>).
 /// </summary>
 internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefinition table) : IDisposable
 {
     private readonly PageHold _hold = new(cache);
     private RowView? _bound;
     private ulong _boundSerial;
+    private ReadView? _boundView;
 
     // Where the bound row's Text fields lie once read (D-STRING-1 bounded scratch, task n7mw): one entry per column,
     // allocated once per binding, valid while its generation is the binding's. A repeated read borrows the bytes
@@ -142,9 +144,9 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
 
     private readonly record struct TextLocation(long Generation, Range At, TextShape Shape);
 
-    public FieldResult Read(RowId? current, ColumnDescriptor column)
+    public FieldResult Read(RowId? current, ColumnDescriptor column, ReadView? view = null)
     {
-        if (Bind(current) is { } unbound)
+        if (Bind(current, view) is { } unbound)
         {
             return unbound;
         }
@@ -153,9 +155,9 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         return FieldResult.Of(value);
     }
 
-    public TextFieldRead ReadText(RowId? current, ColumnDescriptor column)
+    public TextFieldRead ReadText(RowId? current, ColumnDescriptor column, ReadView? view = null)
     {
-        if (Bind(current) is { } unbound)
+        if (Bind(current, view) is { } unbound)
         {
             return new TextFieldRead(unbound);
         }
@@ -174,25 +176,29 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         return read;
     }
 
-    /// <summary>Binds the current row if needed; null when it is bound, else the failure.</summary>
-    private FieldResult? Bind(RowId? current)
+    /// <summary>Binds the current row under <paramref name="view"/> (null: the current images) if needed; null when it is bound, else the failure.</summary>
+    private FieldResult? Bind(RowId? current, ReadView? view)
     {
         if (current is not { } root)
         {
             return new FieldResult(default, CursorFailure.NoCurrentRecord);
         }
-        // A publication since the row was bound (W-05/same-width-mutation): the bound view borrows the old image, so the
-        // row binds again over the current one. One volatile read per field read.
+        // A publication since the row was bound over the current images (W-05/same-width-mutation): the bound row borrows
+        // the old image, so it binds again over the current one. One volatile read per field read. A row bound under a
+        // registered view stays: the view's images do not change.
         ulong serial = cache.PublishedSerial;
-        if (_bound is not null && serial != _boundSerial)
+        if (_bound is not null && (!ReferenceEquals(view, _boundView) || (view is null && serial != _boundSerial)))
         {
             Unbind();
         }
         if (_bound is null)
         {
             _boundSerial = serial;
-            // The bound row borrows the binding's page hold: consecutive rows on one page share one pin (task 6p9q).
-            _bound = RowResolver.Resolve(_hold, d, root, out TraversalFailure? failure);
+            _boundView = view;
+            // Over the current images the bound row borrows the binding's page hold: consecutive rows on one page share
+            // one pin (task 6p9q). Under a view the row owns its pin until the next move.
+            TraversalFailure? failure;
+            _bound = view is null ? RowResolver.Resolve(_hold, d, root, out failure) : RowResolver.Resolve(view, d, root, out failure);
             if (_bound is null)
             {
                 return failure is null
@@ -208,7 +214,33 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     {
         _bound?.Dispose();
         _bound = null;
+        _boundView = null;
         _generation++;
+    }
+
+    /// <summary>
+    /// One field of <paramref name="root"/> under <paramref name="view"/> (null: the current images), read without
+    /// touching the binding: an owned value for a comparison (<see cref="SnapshotValues"/>).
+    /// </summary>
+    public FieldResult ReadDetached(RowId root, ColumnDescriptor column, ReadView? view)
+    {
+        TraversalFailure? failure;
+        using RowView? row = view is null ? RowResolver.Resolve(cache, d, root, out failure) : RowResolver.Resolve(view, d, root, out failure);
+        if (row is not { } bound)
+        {
+            return failure is null
+                ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
+                : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
+        }
+        CostCounters.Current.FieldDecodes++;
+        return FieldResult.Of(FieldDecoder.Read(bound, table, column, cache, d));
+    }
+
+    /// <summary>Whether <paramref name="root"/> is a live row in the current images (false when deleted or unreadable).</summary>
+    public bool IsLive(RowId root)
+    {
+        using RowView? row = RowResolver.Resolve(cache, d, root, out TraversalFailure? failure);
+        return row is not null && failure is null;
     }
 
     /// <summary>Unbind and release the held page (cursor Close).</summary>
@@ -781,8 +813,8 @@ internal static class StoragePercentLanding
 /// observed population frontier over the storage-order scan (R-CURSOR-1 CUR-POP: 1 at open, 501 after the first MoveNext,
 /// exactly to a row reached beyond the frontier, complete after MoveLast), the qualified movement rules (CUR-POS), and
 /// forward-only's restricted subset. Its bookmark is the occurrence's keyset ordinal on the dynaset or snapshot base
-/// (<see cref="KeysetBookmark"/>, CUR-ID). With no writer in the session, a snapshot and a dynaset read the same rows;
-/// the retained-view policies of a snapshot under change are W-03/private-images-coherence's.
+/// (<see cref="KeysetBookmark"/>, CUR-ID). A dynaset reads its rows' current values; what a snapshot shows of a change
+/// published after it opened is <see cref="SnapshotValues"/>' (qualified.md CUR-POP).
 /// </summary>
 public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
@@ -791,20 +823,16 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     private readonly PositionState<int> _position;
     private readonly RowBinding _row;
     private readonly uint? _bookmarkBase;
-    private readonly PageCache _cache;
 
-    /// <summary>
-    /// A snapshot's published serial at open. ACE's snapshot is a fixed view: a change published after it opened does not
-    /// show (r-cursor-1/pop-visibility-snapshot: K read 10 after a dynaset set it to 111). CalcDb reads the current pages,
-    /// so once the file has had a publication since the open, a snapshot's value reads and Finds are NotObserved.
-    /// </summary>
-    private readonly ulong? _viewSerial;
+    /// <summary>A snapshot's values under later publications (CUR-POP); null on a dynaset or forward-only cursor.</summary>
+    private readonly SnapshotValues? _snapshot;
+
+    /// <summary>A Find is testing rows: its reads fix no snapshot value (<see cref="SnapshotValues"/>).</summary>
+    private bool _finding;
 
     private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
     {
         Table = table;
-        _cache = cache;
-        _viewSerial = snapshot ? cache.PublishedSerial : null;
         _row = new RowBinding(cache, d, table);
         _source = source;
         _bookmarkBase = bookmarkBase;
@@ -812,6 +840,8 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
         _position = new PositionState<int>(_store, forwardOnly);
+        _snapshot = snapshot ? new SnapshotValues(cache) : null;
+        _snapshot?.Stamp(_store.ObservedCount);
     }
 
     public TableDefinition Table { get; }
@@ -849,6 +879,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         if (_position.Current is int ordinal)
         {
             _row.Unbind();
+            _snapshot?.Remove(ordinal);
             _store.RemoveAt(ordinal);
             _position.MarkDeleted();
         }
@@ -910,6 +941,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     private MoveOutcome Moved(MoveOutcome outcome)
     {
         _row.Unbind();
+        _snapshot?.Stamp(_store.ObservedCount); // the move's population, at the serial it read
         return outcome;
     }
 
@@ -959,13 +991,25 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         return _position.Seek(ordinal) ? null : CursorFailure.InvalidBookmark;
     }
 
-    private bool ViewStale => _viewSerial is ulong serial && _cache.PublishedSerial != serial;
+    public FieldResult Read(ColumnDescriptor column)
+    {
+        if (_snapshot is not { } snapshot || _position.Current is not int ordinal)
+        {
+            return _row.Read(CurrentRoot, column);
+        }
+        snapshot.Stamp(_store.ObservedCount);
+        return snapshot.Read(_row, ordinal, _store[ordinal], column, _finding);
+    }
 
-    private static readonly FieldResult StaleView = new(default, CursorFailure.NotObserved, "a snapshot whose file had a publication after it opened: its fixed view is not modelled");
-
-    public FieldResult Read(ColumnDescriptor column) => ViewStale ? StaleView : _row.Read(CurrentRoot, column);
-
-    public TextFieldRead ReadText(ColumnDescriptor column) => ViewStale ? new TextFieldRead(StaleView) : _row.ReadText(CurrentRoot, column);
+    public TextFieldRead ReadText(ColumnDescriptor column)
+    {
+        if (_snapshot is not { } snapshot || _position.Current is not int ordinal)
+        {
+            return _row.ReadText(CurrentRoot, column);
+        }
+        snapshot.Stamp(_store.ObservedCount);
+        return snapshot.ReadText(_row, ordinal, _store[ordinal], column, _finding);
+    }
 
     /// <summary>
     /// Find (R-CURSOR-1 CUR-FIND, qualified.md): FindFirst tests from the first occurrence forward, FindLast from the last
@@ -973,14 +1017,26 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// wrap. A match becomes current and clears NoMatch. A miss sets NoMatch: FindFirst leaves the first row current,
     /// FindNext and FindPrevious the row that was current; where a FindLast miss leaves the cursor is not recorded. At
     /// BOF or EOF FindNext and FindPrevious test nothing; an empty recordset sets NoMatch. A failing test is
-    /// <see cref="CriteriaFailed"/>'s rule. A forward-only cursor does not Find (the adapter refuses it, 3219).
+    /// <see cref="CriteriaFailed"/>'s rule. A forward-only cursor does not Find (the adapter refuses it, 3219). A snapshot
+    /// tests its rows through its own reads; a tested value the records do not decide stops the Find where it was
+    /// (<see cref="FindOpen.UndecidedSnapshotValue"/>).
     /// </summary>
     public FindResult Find(FindDirection direction, IRowPredicate predicate)
     {
-        if (ViewStale)
+        _finding = true;
+        try
         {
-            return new FindResult(FindOutcome.NotModelled, FindOpen.StaleSnapshotView);
+            return Search(direction, predicate);
         }
+        finally
+        {
+            _finding = false;
+            _snapshot?.Stamp(_store.ObservedCount); // a FindLast populates rows it may not test
+        }
+    }
+
+    private FindResult Search(FindDirection direction, IRowPredicate predicate)
+    {
         PositionTag tag = _position.Tag;
         int? current = _position.Current;
         if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))
@@ -1000,7 +1056,18 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             _row.Unbind();
             _position.Seek(ordinal);
-            switch (predicate.Test(this))
+            if (_snapshot is { } snapshot)
+            {
+                snapshot.UndecidedRead = false;
+            }
+            RowTest test = predicate.Test(this);
+            if (_snapshot is { UndecidedRead: true })
+            {
+                _row.Unbind();
+                _position.Return(tag, current);
+                return new FindResult(FindOutcome.NotModelled, FindOpen.UndecidedSnapshotValue);
+            }
+            switch (test)
             {
                 case RowTest.Match:
                     _position.FindFound(ordinal);
@@ -1064,5 +1131,6 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     {
         _row.Dispose();
         _source.Dispose();
+        _snapshot?.Dispose();
     }
 }
