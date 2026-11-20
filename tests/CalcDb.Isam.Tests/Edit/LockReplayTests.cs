@@ -46,7 +46,7 @@ public sealed class LockReplayTests(ITestOutputHelper output)
     {
         using var replay = new RecordReplay(record);
         replay.Run();
-        output.WriteLine($"{record}: {replay.Checked} checks matched, {replay.Mismatches.Count} mismatched, {replay.Open.Count} not modelled, {replay.Waits} conflict waits");
+        output.WriteLine($"{record}: {replay.Checked} checks matched, {replay.Mismatches.Count} mismatched, {replay.Open.Count} not modelled, {replay.Waits} conflict waits, {replay.Publications} publications");
         foreach (string open in replay.Open)
         {
             output.WriteLine("  open: " + open);

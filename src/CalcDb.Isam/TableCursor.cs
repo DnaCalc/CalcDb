@@ -119,6 +119,7 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
 {
     private readonly PageHold _hold = new(cache);
     private RowView? _bound;
+    private ulong _boundSerial;
 
     // Where the bound row's Text fields lie once read (D-STRING-1 bounded scratch, task n7mw): one entry per column,
     // allocated once per binding, valid while its generation is the binding's. A repeated read borrows the bytes
@@ -167,8 +168,16 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         {
             return new FieldResult(default, CursorFailure.NoCurrentRecord);
         }
+        // A publication since the row was bound (W-05/same-width-mutation): the bound view borrows the old image, so the
+        // row binds again over the current one. One volatile read per field read.
+        ulong serial = cache.PublishedSerial;
+        if (_bound is not null && serial != _boundSerial)
+        {
+            Unbind();
+        }
         if (_bound is null)
         {
+            _boundSerial = serial;
             // The bound row borrows the binding's page hold: consecutive rows on one page share one pin (task 6p9q).
             _bound = RowResolver.Resolve(_hold, d, root, out TraversalFailure? failure);
             if (_bound is null)
@@ -648,14 +657,18 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned
         public TableOccurrence? Previous(TableOccurrence? before) => scan.Previous(before?.Root) is { } r ? new TableOccurrence(r, null) : null;
     }
 
-    /// <summary>Index entry order as table occurrences.</summary>
+    /// <summary>
+    /// Index entry order as table occurrences. A move starts from the current entry revalidated: a publication can have
+    /// moved the row's entry within its leaf (W-05/same-width-mutation; the edited row stays current and the move goes
+    /// from its new place).
+    /// </summary>
     private sealed class IndexOrder(IndexNavigator index) : IOrderedSource<TableOccurrence>
     {
         public TableOccurrence? Next(TableOccurrence? after) =>
-            (after?.Entry is { } e ? index.Next(e) : index.First()) is { } p ? new TableOccurrence(p.Row, p) : null;
+            (after?.Entry is { } e ? index.Next(index.Revalidate(e) ?? e) : index.First()) is { } p ? new TableOccurrence(p.Row, p) : null;
 
         public TableOccurrence? Previous(TableOccurrence? before) =>
-            (before?.Entry is { } e ? index.Previous(e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
+            (before?.Entry is { } e ? index.Previous(index.Revalidate(e) ?? e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
     }
 }
 

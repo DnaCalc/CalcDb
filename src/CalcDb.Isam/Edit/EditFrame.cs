@@ -58,11 +58,13 @@ public enum RowChangeKind : byte
 
 /// <summary>
 /// An accepted row change (II-08 §3 OperationFrame's accepted-input receipt): the complete candidate after Update's checks,
-/// with its generated ticket. Writing it to pages is W-05/same-width-mutation; until then the change set keeps it.
+/// with its generated ticket and, when the slice writes it, its physical form (W-05/same-width-mutation), whose deltas
+/// are in the Workspace's private overlay from the change's operation frame on. A change without one stays in the change
+/// set and its publication is named (<see cref="NotWritten"/>).
 /// </summary>
 public sealed class AcceptedRowChange
 {
-    internal AcceptedRowChange(MutationSemantics table, RowChangeKind kind, RowId? original, NativeValue[] values, bool[] assigned, GeneratedTicket? ticket)
+    internal AcceptedRowChange(MutationSemantics table, RowChangeKind kind, RowId? original, NativeValue[] values, bool[] assigned, GeneratedTicket? ticket, CompiledChange physical = default)
     {
         Table = table;
         Kind = kind;
@@ -70,7 +72,15 @@ public sealed class AcceptedRowChange
         Values = values;
         Assigned = assigned;
         Ticket = ticket;
+        Physical = physical.Change;
+        NotWritten = physical.Change is null ? physical.NotWritten ?? "no physical compiler for this table" : null;
     }
+
+    /// <summary>The change's page deltas and lock closure, or null when this slice does not write it.</summary>
+    public PhysicalChange? Physical { get; }
+
+    /// <summary>Why the change has no physical form (null when it has one).</summary>
+    public string? NotWritten { get; }
 
     public MutationSemantics Table { get; }
 
@@ -121,6 +131,9 @@ public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? 
     /// file) edits take no locks: no second locker can reach such a table.
     /// </summary>
     public TableFootprints? Footprints { get; } = footprints;
+
+    /// <summary>The physical compiler of the table's row changes (W-05/same-width-mutation); none without a file.</summary>
+    public SameWidthWriter? Writer { get; } = footprints is null ? null : new SameWidthWriter(footprints);
 
     /// <summary>The table's counter, when it has an AutoNumber column.</summary>
     public AutoNumberCounter? Counter { get; } = semantics.AutoNumber is null ? null : new AutoNumberCounter(semantics.Table.AutoNumber);
@@ -305,7 +318,7 @@ public sealed class EditFrame : IDisposable
             defaults[i] = converted.Value;
         }
         ReleaseTicket();
-        // A new row's landing page is chosen at publication (W-05/same-width-mutation), so AddNew locks nothing here.
+        // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
         ReleaseEditLock();
         _originals = null;
         _conflictReported = false;
@@ -435,7 +448,7 @@ public sealed class EditFrame : IDisposable
             return refusedLock;
         }
 
-        // 5. The operation frame of the Workspace and the accepted change (II-08 §3).
+        // 5. The candidate row and its generated ticket.
         var values = new NativeValue[_cells.Length];
         var assigned = new bool[_cells.Length];
         for (int i = 0; i < values.Length; i++)
@@ -445,13 +458,23 @@ public sealed class EditFrame : IDisposable
         }
         // An explicit AutoNumber value replaces the issued one: the ticket is then consumed with no row (R-FMT-2 Generated values).
         GeneratedTicket? used = _ticket is not null && s.AutoNumber is { } numbered && values[numbered.Ordinal] is { Kind: NativeKind.Long } issued && issued.Integer == _ticket.Value ? _ticket : null;
-        var change = new AcceptedRowChange(s, Mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used);
         LockLifetime held = _workspace.ChangeLifetime;
-        MutationError? refused = _workspace.Accept(change);
-        if (refused is { } error)
+
+        // 6. The physical form (W-05/same-width-mutation) over the pages as this Workspace sees them, its closure locked
+        // with the footprint's lifetime; then the operation frame of the Workspace and the accepted change (II-08 §3).
+        CompiledChange physical = Mode == EditMode.Edit && _original is { } stored && _table.Writer is { } writer
+            ? writer.Compile(s, stored, values, _workspace.OverlayOf(writer.File))
+            : new CompiledChange(null, Mode == EditMode.AddNew ? "a new row: its landing page, maps and TableDef counts (W-05/growth-structural-closure)" : null);
+        if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held) is { } refusedClosure)
+        {
+            return refusedClosure;
+        }
+        var change = new AcceptedRowChange(s, Mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used, physical);
+        AcceptOutcome accepted = _workspace.Accept(change);
+        if (!accepted.Accepted)
         {
             UnlockFootprint(footprint, held);
-            return new UpdateOutcome(error);
+            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && Mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
@@ -463,7 +486,44 @@ public sealed class EditFrame : IDisposable
             _ticket = null;
         }
         Clear();
-        return new UpdateOutcome(Change: change);
+        // An automatic operation that could not be published is accepted and named (the change set keeps it).
+        return new UpdateOutcome(null, accepted.Open, accepted.Detail, change);
+    }
+
+    /// <summary>Lock the pages of the physical closure the footprint does not hold yet (II-09 §24); null when granted.</summary>
+    private UpdateOutcome? LockClosure(PhysicalChange compiled, ref LockResource[] footprint, LockLifetime lifetime)
+    {
+        if (_table.Footprints is not { } fp)
+        {
+            return null;
+        }
+        LockResource[] held = footprint;
+        LockResource[] extra = [.. compiled.Footprint.Where(r => !held.Contains(r))];
+        if (extra.Length == 0)
+        {
+            return null;
+        }
+        LockAcquisition got = _workspace.Lock(fp.File, extra, lifetime);
+        if (got.Conflict is { } conflict)
+        {
+            UnlockFootprint(footprint, lifetime);
+            footprint = [];
+            return ConflictOutcome(conflict);
+        }
+        footprint = [.. footprint, .. extra];
+        return null;
+    }
+
+    /// <summary>The outcome of a lock conflict at Update (TXN-LOCAL: 3188 from DAO.Database for an action query's row).</summary>
+    private UpdateOutcome ConflictOutcome(LockConflict conflict)
+    {
+        if (conflict.HolderLifetime == LockLifetime.UntilPublished)
+        {
+            return new UpdateOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
+        }
+        return ConflictSource == MutationErrorSource.Database
+            ? new UpdateOutcome(new MutationError(MutationError.LockedBySession, MutationErrorSource.Database))
+            : new UpdateOutcome(null, MutationOpen.Conflict, $"a recordset Update meets locker {conflict.Holder.Value} on page {conflict.Resource.Page} ({conflict.Resource.Purpose}): recorded for Execute only");
     }
 
     /// <summary>CancelUpdate (II-07 §13): drops the pending edit without moving and without Rollback; an AddNew's ticket is consumed. 3020 without an edit.</summary>
@@ -541,13 +601,7 @@ public sealed class EditFrame : IDisposable
         if (got.Conflict is { } conflict)
         {
             footprint = [];
-            if (conflict.HolderLifetime == LockLifetime.UntilPublished)
-            {
-                return new UpdateOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
-            }
-            return ConflictSource == MutationErrorSource.Database
-                ? new UpdateOutcome(new MutationError(MutationError.LockedBySession, MutationErrorSource.Database))
-                : new UpdateOutcome(null, MutationOpen.Conflict, $"a recordset Update meets locker {conflict.Holder.Value} on page {conflict.Resource.Page} ({conflict.Resource.Purpose}): recorded for Execute only");
+            return ConflictOutcome(conflict);
         }
         if (!LockEdits && !_conflictReported && !StoredRowUnchanged(out string? unread))
         {
@@ -576,18 +630,13 @@ public sealed class EditFrame : IDisposable
                 unread = $"field {columns[i].Name} cannot be read again: {now.Detail}";
                 return false;
             }
-            if (!SameStored(now.Value, _originals![i]))
+            if (!NativeValue.SameStored(now.Value, _originals![i]))
             {
                 return false;
             }
         }
         return true;
     }
-
-    private static bool SameStored(in NativeValue a, in NativeValue b) =>
-        a.Kind == b.Kind && a.Integer == b.Integer && a.Bits == b.Bits && a.Boolean == b.Boolean && a.Scale == b.Scale
-        && string.Equals(a.Text, b.Text, StringComparison.Ordinal)
-        && (a.Bytes is null ? b.Bytes is null : b.Bytes is not null && a.Bytes.AsSpan().SequenceEqual(b.Bytes));
 
     private void UnlockFootprint(LockResource[] footprint, LockLifetime lifetime)
     {
@@ -919,14 +968,11 @@ public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, Table
         return UniqueAnswer.Free;
     }
 
+    /// <summary>A Seek key of the candidate's value: Text up to the 255 units an entry keeps; Null and Decimal are not probed.</summary>
     private static KeyValue? KeyOf(in NativeValue v) => v.Kind switch
     {
-        NativeKind.Byte or NativeKind.Integer or NativeKind.Long => new KeyValue(KeyValueKind.Integer, Integer: v.Integer),
-        NativeKind.Currency => new KeyValue(KeyValueKind.ScaledCurrency, Integer: v.Integer),
-        NativeKind.Single or NativeKind.Double or NativeKind.DateTime => new KeyValue(KeyValueKind.FloatBits, Bits: v.Bits),
-        NativeKind.Boolean => new KeyValue(KeyValueKind.Boolean, Boolean: v.Boolean),
-        NativeKind.Text when v.Text is { Length: <= 255 } text => KeyValue.OfText(text.AsMemory()),
-        NativeKind.Guid when v.Bytes is { } bytes => KeyValue.OfBytes(bytes),
-        _ => null,
+        NativeKind.Null or NativeKind.Decimal or NativeKind.Binary or NativeKind.ExtendedDateTime => null,
+        NativeKind.Text when v.Text is not { Length: <= 255 } => null,
+        _ => EntryKeys.ValueOf(v),
     };
 }

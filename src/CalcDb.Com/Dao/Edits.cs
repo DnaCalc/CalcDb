@@ -33,20 +33,24 @@ internal static class EditPublication
         : CallResult.Nothing;
 
     /// <summary>
-    /// A resolution's outcome. An outer CommitTrans that has accepted changes to publish answers the ISAM's named
-    /// <see cref="MutationOpen.Publication"/>: writing rows to the file is W-05/same-width-mutation, so CalcDb does not
-    /// report a commit it has not made.
+    /// A resolution's outcome. An outer CommitTrans publishes its change set before it returns (W-05/same-width-mutation;
+    /// TXN-FLUSH-COMMIT) and then answers as ACE does. One whose change set the slice cannot write (a new row, a
+    /// variable-length or structural change: W-05/growth-structural-closure), or whose file the session cannot take the
+    /// writer lease on, answers the ISAM's named <see cref="MutationOpen.Publication"/>: CalcDb does not report a commit
+    /// it has not made.
     /// </summary>
     public static CallResult Of(ResolutionOutcome outcome) => outcome.Error is { } error ? Published(error)
         : outcome.Open != MutationOpen.None ? Open(outcome.Open, outcome.Detail)
         : CallResult.Nothing;
 
     /// <summary>
-    /// <b>Unpublished changes are not readable yet.</b> A read of a table that an accepted change touches answers this
-    /// named refusal, never the stored rows the change has not reached (W-05/same-width-mutation publishes them).
+    /// <b>Unpublished changes are not readable yet.</b> A read of a table that an accepted, unpublished change touches
+    /// answers this named refusal, never the stored rows the change has not reached: the Workspace's own change inside a
+    /// level (reads go to the committed images; reading through the Workspace's overlay is not built), or a committed
+    /// change the slice did not write. A published change is read from the file (W-05/same-width-mutation).
     /// </summary>
     public static CallResult Unpublished(string table, string member) => CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UnpublishedRows",
-        $"{member}: '{table}' has accepted changes that are not published to the file (W-05/same-width-mutation)"));
+        $"{member}: '{table}' has accepted changes that are not published to the file"));
 }
 
 /// <summary>
@@ -112,8 +116,8 @@ internal sealed class UnpublishedChanges
 
     /// <summary>
     /// Whether an AutoNumber counter of <paramref name="table"/> in <paramref name="file"/> other than
-    /// <paramref name="own"/> has issued values: the TableDef counter in the file has not reached them (publication is
-    /// W-05/same-width-mutation), so a counter compiled from the file would reissue them (CUR-EDIT: a value is never
+    /// <paramref name="own"/> has issued values: the TableDef counter in the file has not reached them (a new row and its
+    /// counter are W-05/growth-structural-closure's), so a counter compiled from the file would reissue them (CUR-EDIT: a value is never
     /// reused, also after the Database is closed and reopened).
     /// </summary>
     public bool CounterAhead(string file, string table, AutoNumberCounter own)

@@ -60,6 +60,9 @@ public readonly ref struct IndexEntryView
 
     public uint? ChildPage => _leaf ? null : (uint)((At(4) << 24) | (At(5) << 16) | (At(6) << 8) | At(7));
 
+    /// <summary>The entry's complete bytes, key and trailer, copied (the prefix and the stored suffix joined).</summary>
+    public byte[] FullBytes() => [.. _head, .. _tail];
+
     private byte At(int trailerOffset)
     {
         int i = _keyLength + trailerOffset;
@@ -195,6 +198,72 @@ public static class IndexPages
             TailChild = (uint)r.TailChild.Read(page),
             Level = (int)r.Level.Read(page),
         };
+    }
+
+    /// <summary>
+    /// The complete stored bytes of every entry of a decoded page, in order (II-05 §2: the first entry whole, each later
+    /// one the page prefix and its suffix), for a writer that rebuilds the page from its full entry set (II-08 §12: "Build
+    /// every fallback leaf independently from its full entry set").
+    /// </summary>
+    public static byte[][] Entries(IndexPage page)
+    {
+        var entries = new byte[page.Count][];
+        for (int i = 0; i < entries.Length; i++)
+        {
+            IndexEntryView e = page.Entry(i);
+            entries[i] = e.FullBytes();
+        }
+        return entries;
+    }
+
+    /// <summary>
+    /// Write an entry set into a decoded index page in place (II-05 §2; W-05/same-width-mutation): the prefix length, the
+    /// free count (the entry area less the used payload), the boundary bitmap and the packed entry area. Every other
+    /// header byte is kept, and so are the area bytes past the new payload: ACE leaves earlier bytes there, and every
+    /// index page of the retained fixtures rebuilds byte for byte this way (NativeLeafEncodingTests: 5,006 pages).
+    /// <b>The prefix is the caller's, not derived.</b> ACE's stored prefix is often shorter than the entries' common
+    /// prefix (0 where all entries share 4 bytes), so the rule that chose it is not known; a writer keeps the page's
+    /// prefix. False, with the page unchanged, when the entries do not fit, are unordered, or do not share the prefix.
+    /// </summary>
+    public static bool TryWriteEntries(Span<byte> page, IReadOnlyList<byte[]> entries, int prefixLength, FormatDescriptor d, out string? failure)
+    {
+        IndexPageRules r = d.IndexPage;
+        failure = null;
+        int used = 0;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            byte[] e = entries[i];
+            if (i > 0 && IndexKeys.Compare(entries[i - 1], e) >= 0)
+            {
+                failure = $"entry {i} does not follow entry {i - 1}";
+                return false;
+            }
+            if (e.Length < prefixLength || (i > 0 && !e.AsSpan(0, prefixLength).SequenceEqual(entries[0].AsSpan(0, prefixLength))))
+            {
+                failure = $"entry {i} does not start with the {prefixLength}-byte prefix";
+                return false;
+            }
+            used += i == 0 ? e.Length : e.Length - prefixLength;
+        }
+        if (used > r.EntryAreaBytes)
+        {
+            failure = $"{used} payload bytes do not fit the {r.EntryAreaBytes}-byte entry area";
+            return false;
+        }
+        Span<byte> mask = page.Slice(r.EntryMaskOffset, r.EntryMaskBytes);
+        Span<byte> area = page.Slice(r.EntryAreaOffset, r.EntryAreaBytes);
+        mask.Clear();
+        int end = 0;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            ReadOnlySpan<byte> stored = i == 0 ? entries[0] : entries[i].AsSpan(prefixLength);
+            stored.CopyTo(area[end..]);
+            end += stored.Length;
+            mask[end / 8] |= (byte)(1 << (end % 8));
+        }
+        r.PrefixLength.Write(page, (ulong)(entries.Count == 0 ? 0 : prefixLength));
+        r.FreeCount.Write(page, (ulong)(r.EntryAreaBytes - used));
+        return true;
     }
 }
 

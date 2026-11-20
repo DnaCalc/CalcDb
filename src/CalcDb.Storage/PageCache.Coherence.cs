@@ -234,17 +234,8 @@ public sealed partial class PageCache
     /// </summary>
     internal bool OmitViewAdmissionHoldForTest { get; set; }
 
-    /// <summary>The latest publication serial.</summary>
-    public ulong PublishedSerial
-    {
-        get
-        {
-            lock (_latch)
-            {
-                return _published;
-            }
-        }
-    }
+    /// <summary>The latest publication serial: written under the latch, read without it (a holder's cheap staleness check).</summary>
+    public ulong PublishedSerial => Interlocked.Read(ref _published);
 
     /// <summary>
     /// SelectAndRegisterReadView (II-09 §12): register a view of the published bindings. While a publication holds the
@@ -919,7 +910,7 @@ public sealed partial class PageCache
         lock (_latch)
         {
             Expect(attempt, PublicationStep.Written);
-            ulong serial = ++_published;
+            ulong serial = Interlocked.Increment(ref _published);
             _publications++;
             foreach (AttemptPage page in attempt.Pages)
             {

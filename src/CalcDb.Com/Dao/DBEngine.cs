@@ -11,9 +11,30 @@ namespace CalcDb.Com.Dao;
 /// (R-ACT-1 ACT-RETAIN: a DBEngine created again still reports the earlier Errors), the Errors list (R-ORACLE-1 OR-OBS)
 /// and the default session, created at its first touch (R-DAO-1 DAO-BOOT).
 /// </summary>
-internal sealed class EngineState(HostBinding binding)
+internal sealed class EngineState(HostBinding binding) : IPublicationTarget
 {
     private WorkspaceObject? _defaultWorkspace;
+
+    /// <summary>The open Database sessions of this engine, whose caches its Workspaces publish into (W-05/same-width-mutation).</summary>
+    public List<DatabaseObject> Sessions { get; } = [];
+
+    /// <summary>
+    /// The writable file of the open Database whose cache a Workspace publishes (II-08 §19): that session's writer lease
+    /// (<see cref="DatabaseObject.Writable"/>). A cache with no open Database (closed while its level stayed open,
+    /// TXN-CLOSE) is not written.
+    /// </summary>
+    public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
+    {
+        foreach (DatabaseObject d in Sessions)
+        {
+            if (ReferenceEquals(d.Cache, cache))
+            {
+                return d.Writable(pages, out failure);
+            }
+        }
+        failure = "no open Database of this engine caches the file";
+        return null;
+    }
 
     public HostBinding Binding { get; } = binding;
 
@@ -225,7 +246,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         Name = name;
         UserName = userName;
         _isDefault = isDefault;
-        Transactions = new TransactionCoordinator(EngineState.NextLocker());
+        Transactions = new TransactionCoordinator(EngineState.NextLocker()) { Publisher = engine };
         engine.Changes.Add(Transactions);
     }
 

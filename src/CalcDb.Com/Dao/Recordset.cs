@@ -556,7 +556,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         if (frame.Updatable && frame.Table.Counter is { } counter && Database.Engine.Changes.CounterAhead(Database.Name, _entry.Name, counter))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UnpublishedCounter", $"another Database of this engine issued AutoNumber values of '{_entry.Name}' that the file's counter does not hold yet (W-05/same-width-mutation)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UnpublishedCounter", $"another Database of this engine issued AutoNumber values of '{_entry.Name}' that the file's counter does not hold yet (new rows are W-05/growth-structural-closure)"));
         }
         return EditPublication.Of(frame.AddNew());
     }
@@ -587,11 +587,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         return Frame(out CallResult refused) is { } frame ? EditPublication.Of(frame.CancelUpdate()) : refused;
     }
 
-    /// <summary>Delete: a pending Edit or AddNew is discarded (editmode-unusual-transitions: EditMode 0); deleting a row is W-05/same-width-mutation.</summary>
+    /// <summary>Delete: a pending Edit or AddNew is discarded (editmode-unusual-transitions: EditMode 0); deleting a row is W-05/growth-structural-closure.</summary>
     private CallResult Delete()
     {
         _frame?.Discard();
-        return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.Delete", "Recordset.Delete: removing a row is W-05/same-width-mutation"));
+        return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.Delete", "Recordset.Delete: removing a row is W-05/growth-structural-closure"));
     }
 
     /// <summary>The movement outcome as DAO publishes it: NoCurrentRecord is 3021 (CUR-POS).</summary>

@@ -68,6 +68,12 @@ public readonly record struct NativeValue(NativeKind Kind)
 
     public static NativeValue Fail(string why) => new(NativeKind.Failed) { Failure = why };
 
+    /// <summary>Whether two values are the same stored value: equal kinds and exact payloads, bytes compared by content.</summary>
+    public static bool SameStored(in NativeValue a, in NativeValue b) =>
+        a.Kind == b.Kind && a.Integer == b.Integer && a.Bits == b.Bits && a.Boolean == b.Boolean && a.Scale == b.Scale
+        && string.Equals(a.Text, b.Text, StringComparison.Ordinal)
+        && (a.Bytes is null ? b.Bytes is null : b.Bytes is not null && a.Bytes.AsSpan().SequenceEqual(b.Bytes));
+
     public override string ToString() => Kind switch
     {
         NativeKind.Null => "Null",
@@ -78,6 +84,71 @@ public readonly record struct NativeValue(NativeKind Kind)
         NativeKind.Failed => "failed: " + Failure,
         _ => $"{Kind} bits={Bits:x16}{(Bytes is null ? "" : " bytes=" + Convert.ToHexStringLower(Bytes))}",
     };
+}
+
+/// <summary>
+/// The row bytes of a fixed-width field value (II-04 §5; W-05/same-width-mutation): the inverse of
+/// <see cref="FieldDecoder"/>'s fixed payloads, one place for the writer. Calculated columns and Extended Date/Time
+/// (whose ACE layout is not modelled) have no encoder.
+/// </summary>
+public static class FieldEncoder
+{
+    /// <summary>
+    /// Write <paramref name="value"/>'s payload for the fixed <paramref name="column"/> into <paramref name="bytes"/> (its
+    /// exact width); false with the reason when the kind does not match the column's type or the type has no encoder.
+    /// </summary>
+    public static bool TryEncodeFixed(in NativeValue value, ColumnDescriptor column, FormatDescriptor d, Span<byte> bytes, out string? failure)
+    {
+        failure = null;
+        if (ScalarCodecs.IsCalculated(column, d.Payload))
+        {
+            failure = "a calculated column";
+            return false;
+        }
+        if (NativeTypes.FixedWidth(column.TypeCode) != bytes.Length)
+        {
+            failure = $"native type {column.TypeCode} has no fixed width of {bytes.Length}";
+            return false;
+        }
+        switch (column.TypeCode, value.Kind)
+        {
+            case (NativeTypes.Byte, NativeKind.Byte):
+                bytes[0] = (byte)value.Integer;
+                return true;
+            case (NativeTypes.Integer, NativeKind.Integer):
+                BinaryPrimitives.WriteInt16LittleEndian(bytes, (short)value.Integer);
+                return true;
+            case (NativeTypes.Long, NativeKind.Long):
+                BinaryPrimitives.WriteInt32LittleEndian(bytes, (int)value.Integer);
+                return true;
+            case (NativeTypes.Currency, NativeKind.Currency):
+                BinaryPrimitives.WriteInt64LittleEndian(bytes, value.Integer);
+                return true;
+            case (NativeTypes.Single, NativeKind.Single):
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes, (uint)value.Bits);
+                return true;
+            case (NativeTypes.Double, NativeKind.Double) or (NativeTypes.DateTime, NativeKind.DateTime):
+                BinaryPrimitives.WriteUInt64LittleEndian(bytes, value.Bits);
+                return true;
+            case (NativeTypes.Guid, NativeKind.Guid) when value.Bytes is { Length: 16 } guid:
+                guid.CopyTo(bytes);
+                return true;
+            case (NativeTypes.Numeric, NativeKind.Decimal) when value.Scale == column.NumericScale:
+                ScalarPayloadRules p = d.Payload;
+                bytes.Clear();
+                p.NumericSign.Write(bytes, value.Boolean ? p.NumericNegative : 0u);
+                UInt128 magnitude = value.Decimal.Magnitude;
+                for (int i = p.NumericWords.Length - 1; i >= 0; i--)
+                {
+                    p.NumericWords[i].Write(bytes, (uint)magnitude);
+                    magnitude >>= 32;
+                }
+                return true;
+            default:
+                failure = $"a {value.Kind} value for native type {column.TypeCode}";
+                return false;
+        }
+    }
 }
 
 /// <summary>Reads one field of a row view as a <see cref="NativeValue"/> through the format description and the cache.</summary>

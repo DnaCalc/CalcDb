@@ -164,14 +164,19 @@ public enum MutationOpen : byte
 
     /// <summary>
     /// The page is held by a committed change not yet written to the committed images (<c>LockLifetime.UntilPublished</c>):
-    /// ACE had published and released it, so its outcome is W-05/same-width-mutation's.
+    /// ACE had published and released it. Since W-05/same-width-mutation only a change the slice does not write (or whose
+    /// publication failed) still holds its pages so.
     /// </summary>
     UnpublishedChange,
 
     /// <summary>An Edit of a row this locker changed and did not publish: its stored image is not the one the locker sees.</summary>
     PrivateRow,
 
-    /// <summary>Publication of an outer commit or an automatic operation: W-05/same-width-mutation and W-05/resolution-live-rollback.</summary>
+    /// <summary>
+    /// A change set that was not published: a change without a physical form (a new row, a variable-length or structural
+    /// change: W-05/growth-structural-closure), a file whose writer lease or page revision could not be had, several
+    /// files, or a publication that stopped (W-05/resolution-live-rollback).
+    /// </summary>
     Publication,
 
     /// <summary>AddNew during AddNew: whether the first ticket is consumed and the defaults are sampled again is not recorded.</summary>

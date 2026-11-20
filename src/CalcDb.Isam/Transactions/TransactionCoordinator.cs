@@ -10,6 +10,60 @@ public readonly record struct ResolutionOutcome(MutationError? Error = null, Mut
 }
 
 /// <summary>
+/// An Update's acceptance by the Workspace: whether the change joined the change set, and the error or named case. An
+/// accepted automatic operation whose publication did not happen carries <see cref="MutationOpen.Publication"/>.
+/// </summary>
+public readonly record struct AcceptOutcome(bool Accepted, MutationError? Error = null, MutationOpen Open = MutationOpen.None, string? Detail = null);
+
+/// <summary>
+/// A completed publication (T-TXN-54): how many accepted changes it carried and the native program it ran, whose
+/// effects and receipts distinguish final images, unique pages, transferred bytes and flushes.
+/// </summary>
+public sealed record PublicationReceipt(int Changes, NativeProgram Program);
+
+/// <summary>
+/// Where a Workspace's publication writes (II-08 §19; W-05/same-width-mutation): the file session's positioned handle
+/// for a cache, under the session's writer lease (II-09 §3 Step 1, taken on the explicit reopen path when the session
+/// was admitted as a reader). The platform adapter supplies it; the ISAM decides no admission of its own.
+/// </summary>
+public interface IPublicationTarget
+{
+    /// <summary>
+    /// The writable handle of the file <paramref name="cache"/> caches, whose committed images of
+    /// <paramref name="pages"/> must still be the file's (another writer may have used a gap in the lease); null with
+    /// the reason, before any native effect, when it cannot be had.
+    /// </summary>
+    IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure);
+}
+
+/// <summary>
+/// How a publication is written (W-05/same-width-mutation), with what the records decide and what they leave open:
+/// <list type="bullet">
+/// <item><b>Timing</b>: an outer CommitTrans publishes before it returns (R-TXN-1 TXN-FLUSH-COMMIT: ACE issues the
+/// transaction's writes on the calling thread before the return), and so does an automatic operation at its end
+/// (II-08 §12: "Commit-time explicit and operation-end implicit publication are the initial construction choices"). ACE
+/// returns from an implicit statement first and its background writer issues the burst 500 to 545 ms later
+/// (TXN-FLUSH-OP, TXN-FLUSH-BEHIND): CalcDb's file is final earlier, which is never worse for an opener after a crash,
+/// and the write-behind owner is W-05/resolution-live-rollback's.</item>
+/// <item><b>Order</b> (R-CRASH-1 CRASH-ORDER): one final image per page in CRASH-ORDER-DATA with MAP-AFTER, data pages
+/// before index leaves; a modification writes no new page and no map. ACE brackets a statement's pages with a 2-byte
+/// write at page 0 offset 3586 (shared sessions) before and after; its meaning is not established (W-04), so CalcDb does
+/// not write it.</item>
+/// <item><b>Flush</b>: ACE's own calls never flush; one FlushFileBuffers comes from its timer thread 2.33 to 2.89 s after
+/// the burst. CalcDb issues none for an ordinary commit; dbForceOSFlush (not yet traced) requests a final flush barrier.
+/// The timer's flush is a background owner CalcDb does not have yet.</item>
+/// </list>
+/// </summary>
+public static class PublicationPolicy
+{
+    /// <summary>The program policy of an ordinary commit or automatic operation.</summary>
+    public static ProgramPolicy Ordinary { get; } = ProgramPolicy.CrashOrderData;
+
+    /// <summary>CommitTrans with dbForceOSFlush: the same images, then one flush barrier.</summary>
+    public static ProgramPolicy Forced { get; } = ProgramPolicy.CrashOrderData with { Name = "CRASH-ORDER-DATA/MAP-AFTER+FLUSH", FinalFlush = true };
+}
+
+/// <summary>
 /// One explicit BeginTrans level (II-08 §§1–2 <c>ExplicitFrame</c>): its logical deltas, here the accepted row changes in
 /// acceptance order. Its page before-images are the participants' <see cref="PrivateOverlay"/> scope-before images, one
 /// overlay scope per level, so a level owns no page copies of its own.
@@ -94,8 +148,10 @@ public sealed class OperationFrame : IDisposable
 /// Resolution acts on the current level only: an inner CommitTrans merges the level into its parent (the overlay keeps
 /// the parent's earliest before-image, II-08 F-54), an inner Rollback restores the level's scope-before images, an outer
 /// Rollback discards the change set; accepted generated tickets stay consumed (CUR-EDIT, R-FMT-2 Generated values).
-/// Publication of an outer commit, or of an automatic operation outside any level, is W-05/same-width-mutation and
-/// W-05/resolution-live-rollback: the accepted changes are handed out as <see cref="PendingPublication"/>.
+/// An outer commit, or an automatic operation outside any level, publishes the change set through one
+/// <see cref="PublicationAttempt"/> on the file (W-05/same-width-mutation, <see cref="PublicationPolicy"/>) when every
+/// change has a physical form and a <see cref="Publisher"/> is set; otherwise the changes wait as
+/// <see cref="PendingPublication"/> and the outcome names why.
 /// The Workspace is one local locker (W-05/local-lockers-rebase; II-09 §28, R-TXN-1 TXN-LOCAL): it takes page grants
 /// on each file's <see cref="LocalLockManager"/> with its <see cref="WaitPolicy"/> through its <see cref="Scheduler"/>.
 /// A change accepted inside a level holds its pages until the outermost resolution (<see cref="LockLifetime.Transaction"/>;
@@ -132,6 +188,21 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>The time and scheduling seam of this locker's conflict waits.</summary>
     public ILockScheduler Scheduler { get; set; } = ThreadLockScheduler.System;
+
+    /// <summary>Where publications write; without one, accepted changes wait unpublished (an outer commit names it).</summary>
+    public IPublicationTarget? Publisher { get; set; }
+
+    /// <summary>Publications this Workspace completed (W-05/same-width-mutation cost and replay reports, T-TXN-54).</summary>
+    public IReadOnlyList<PublicationReceipt> Publications => _publications;
+
+    private readonly List<PublicationReceipt> _publications = [];
+
+    // Files whose publication stopped after a native effect: the attempt owns the overlay as resolution owner
+    // (W-05/resolution-live-rollback), so this Workspace neither edits nor disposes it.
+    private readonly HashSet<PageCache> _unresolved = [];
+
+    /// <summary>This Workspace's private overlay of <paramref name="cache"/>, if it has changed the file.</summary>
+    public PrivateOverlay? OverlayOf(PageCache cache) => _participants.TryGetValue(cache, out FileParticipant? p) ? p.Overlay : null;
 
     /// <summary>The lifetime an accepted change holds its pages with: the transaction inside a level, else until published.</summary>
     public LockLifetime ChangeLifetime => _frames.Count > 0 ? LockLifetime.Transaction : LockLifetime.UntilPublished;
@@ -223,9 +294,79 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             file.Locks.Convert(Locker, LockLifetime.Transaction, LockLifetime.UntilPublished);
         }
-        // The outer commit publishes the change set through one PublicationAttempt per file (W-03); writing rows to pages
-        // and the commit program are W-05/same-width-mutation and W-05/resolution-live-rollback.
-        return new ResolutionOutcome(null, MutationOpen.Publication, $"{top.Changes.Count} accepted row changes and the participants' private pages await publication", resolved);
+        // The outer commit publishes the change set before it returns (TXN-FLUSH-COMMIT; PublicationPolicy).
+        (MutationOpen open, string? detail) = Publish(forceFlush: options == 1);
+        return new ResolutionOutcome(null, open, detail, resolved);
+    }
+
+    /// <summary>
+    /// Publish the change set awaiting publication (II-08 §19; W-05/same-width-mutation): one PublicationAttempt on the
+    /// file through the native-program executor, then the published pages are released (<see cref="ReleasePublished"/>)
+    /// and the changes leave the set. Nothing is written unless every change has a physical form; a change set over
+    /// several files is W-05/resolution-live-rollback's (its partial outcomes). A publication that stops before any
+    /// native effect leaves the set as it was; one that stops after an effect keeps the attempt as resolution owner
+    /// (the cache restricts admission) and is named.
+    /// </summary>
+    private (MutationOpen Open, string? Detail) Publish(bool forceFlush)
+    {
+        if (_pending.Find(c => c.Physical is null) is { } unwritten)
+        {
+            return (MutationOpen.Publication, $"{_pending.Count} accepted changes await publication: {unwritten.NotWritten}");
+        }
+        FileParticipant[] written = [.. _participants.Values.Where(p => p.Overlay.ChangedPages.Count > 0)];
+        if (written.Length > 1)
+        {
+            return (MutationOpen.Publication, $"the change set writes {written.Length} files: multi-file resolution is W-05/resolution-live-rollback's");
+        }
+        if (written.Length == 1 && Publisher is null)
+        {
+            return (MutationOpen.Publication, $"{_pending.Count} accepted changes await publication: no publication target");
+        }
+        if (written.Length == 1 && Publisher is { } publisher)
+        {
+            FileParticipant p = written[0];
+            IReadOnlyCollection<ulong> pages = p.Overlay.ChangedPages;
+            if (publisher.Writable(p.Cache, pages, out string? leaseFailure) is not { } file)
+            {
+                return (MutationOpen.Publication, "the file cannot be written: " + leaseFailure);
+            }
+            Dictionary<ulong, PageRole> roles = [];
+            foreach (AcceptedRowChange c in _pending)
+            {
+                foreach (PageEdit e in c.Physical!.Edits)
+                {
+                    roles[e.Page] = e.Role;
+                }
+            }
+            PublicationStart start = p.Cache.BeginPublication(p.Overlay);
+            if (start.Attempt is not { } attempt)
+            {
+                return (MutationOpen.Publication, "the publication could not start: " + start.Failure);
+            }
+            using (attempt)
+            {
+                PublicationOutcome outcome = attempt.Run(file, new PublicationOptions { Policy = forceFlush ? PublicationPolicy.Forced : PublicationPolicy.Ordinary, Roles = roles });
+                if (!outcome.Succeeded)
+                {
+                    if (attempt.Step == PublicationStep.NeedsResolution)
+                    {
+                        // The attempt keeps the overlay as resolution owner: it leaves this Workspace's participants.
+                        _unresolved.Add(p.Cache);
+                        _participants.Remove(p.Cache);
+                        return (MutationOpen.Publication, $"the publication stopped after a native effect and needs resolution (W-05/resolution-live-rollback): {outcome.Failure}");
+                    }
+                    return (MutationOpen.Publication, $"the publication stopped before any native effect: {outcome.Failure}");
+                }
+                _publications.Add(new PublicationReceipt(_pending.Count, attempt.Program!));
+            }
+        }
+        foreach (PageCache f in _locked)
+        {
+            ReleasePublished(f);
+        }
+        _pending.Clear();
+        ReleaseParticipants();
+        return (MutationOpen.None, null);
     }
 
     /// <summary>
@@ -309,16 +450,47 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return _operation;
     }
 
-    /// <summary>Accept an Update's change through its own operation frame (an Update writes no pages yet: its frame merges at once).</summary>
-    internal MutationError? Accept(AcceptedRowChange change)
+    /// <summary>
+    /// Accept an Update's change through its own operation frame (II-08 §3): its page deltas enter the Workspace's private
+    /// overlay in the frame's scope, and the frame merges into the current level. Outside every level the operation is
+    /// automatic and publishes at its end (TXN-FLUSH-OP; <see cref="PublicationPolicy"/>) when it can: a change set with
+    /// a change this slice does not write (a new row), or a Workspace without a <see cref="Publisher"/>, keeps the change
+    /// pending and the Update succeeds as ACE's does, the reads that would see it being the named cases (W-05/edit-frames'
+    /// rule). A publication that runs and fails is named at the Update. A page edit that cannot be made abandons the frame
+    /// and accepts nothing.
+    /// </summary>
+    internal AcceptOutcome Accept(AcceptedRowChange change)
     {
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
         {
-            return refused;
+            return new AcceptOutcome(false, refused);
+        }
+        if (change.Physical is { } physical)
+        {
+            if (_unresolved.Contains(physical.File))
+            {
+                op.Abandon();
+                return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+            }
+            FileParticipant p = op.Enlist(physical.File);
+            foreach (PageEdit e in physical.Edits)
+            {
+                EditResult edited = p.Edit(e.Page, e.Delta);
+                if (!edited.Succeeded)
+                {
+                    op.Abandon();
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, $"page {e.Page} could not take the change's private revision: {edited.Failure} {edited.Detail}");
+                }
+            }
         }
         op.Complete(change);
-        return null;
+        if (_frames.Count > 0 || Publisher is null || _pending.Exists(c => c.Physical is null))
+        {
+            return new AcceptOutcome(true);
+        }
+        (MutationOpen open, string? detail) = Publish(forceFlush: false);
+        return new AcceptOutcome(true, null, open, detail);
     }
 
     internal FileParticipant EnlistFor(OperationFrame operation, PageCache cache)

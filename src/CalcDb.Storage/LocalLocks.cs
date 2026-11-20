@@ -40,7 +40,8 @@ public enum LockLifetime : byte
     /// <summary>
     /// A committed change (an outer CommitTrans, or an operation outside every transaction) whose pages are not yet
     /// written to the committed images. ACE releases at the commit, which publishes in its own cache; CalcDb holds the
-    /// pages until the publication (W-05/same-width-mutation), so no locker reads or edits the row from the older image.
+    /// pages until its publication writes them (W-05/same-width-mutation publishes at the commit; a change it does not
+    /// write keeps them), so no locker reads or edits the row from the older image.
     /// A conflict with this lifetime is CalcDb's, not ACE's, and callers name it.
     /// </summary>
     UntilPublished,

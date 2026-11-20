@@ -46,8 +46,8 @@ public readonly ref struct KeyBound(ReadOnlySpan<byte> key, bool high)
 /// Bounded traversal of one physical index (II-05 §§3.1, 7.2): descent by high fences (the first stored high key at
 /// or after the bound, else the tail child, else the last stored child), leaf order by peer links, both directions.
 /// Every page is checked as an index page owned by the table, every descent keeps a visited set and a page budget, and
-/// a malformed page is a typed failure, never a NoMatch. Decoded pages are kept per navigator; the file is read-only
-/// in this slice, so a leaf and ordinal are a stable position (the writer refresh policy is W-05's). The visited sets
+/// a malformed page is a typed failure, never a NoMatch. Decoded pages are kept per navigator until the cache publishes
+/// again; a leaf and ordinal are a position a holder revalidates after a publication (<see cref="Revalidate"/>). The visited sets
 /// are on the stack: the descent's is bounded by its budget, a peer walk's by a first stretch, past which it moves to
 /// the heap (task x8d9).
 /// </summary>
@@ -61,6 +61,7 @@ public sealed class IndexNavigator
     private readonly FormatDescriptor _d;
     private readonly uint _owner;
     private readonly Dictionary<uint, IndexPage> _decoded = [];
+    private ulong _serial;
 
     public IndexNavigator(PageCache cache, FormatDescriptor d, PhysicalIndex index, uint tableDefPage)
     {
@@ -260,8 +261,32 @@ public sealed class IndexNavigator
         return new(leaf, ordinal, new RowId(e.DataPage, e.RowSlot));
     }
 
+    /// <summary>
+    /// <paramref name="at"/> if its entry still names its row, else the row's entry found again (a publication moved it
+    /// within its leaf: W-05/same-width-mutation), or null when the index no longer holds the row.
+    /// </summary>
+    public IndexPosition? Revalidate(IndexPosition at)
+    {
+        if (Page(at.Leaf) is { } p && at.Ordinal < p.Count)
+        {
+            IndexEntryView e = p.Entry(at.Ordinal);
+            if (e.DataPage == at.Row.Page && e.RowSlot == at.Row.Row)
+            {
+                return at;
+            }
+        }
+        return Find(at.Row);
+    }
+
     private IndexPage? Page(uint page)
     {
+        // A publication may have changed any page this navigator decoded (W-05/same-width-mutation).
+        ulong serial = _cache.PublishedSerial;
+        if (serial != _serial)
+        {
+            _decoded.Clear();
+            _serial = serial;
+        }
         if (_decoded.TryGetValue(page, out IndexPage? kept))
         {
             return kept;

@@ -43,7 +43,7 @@ public sealed class EditReplayTests(ITestOutputHelper output)
     {
         using var replay = new RecordReplay(record);
         replay.Run();
-        output.WriteLine($"{record}: {replay.Checked} checks matched, {replay.Mismatches.Count} mismatched, {replay.Open.Count} not modelled");
+        output.WriteLine($"{record}: {replay.Checked} checks matched, {replay.Mismatches.Count} mismatched, {replay.Open.Count} not modelled, {replay.Publications} publications");
         foreach (string open in replay.Open)
         {
             output.WriteLine("  open: " + open);

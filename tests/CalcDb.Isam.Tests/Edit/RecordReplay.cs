@@ -15,12 +15,16 @@ using CalcDb.Values.Scalar;
 
 namespace CalcDb.Isam.Tests.Edit;
 
-/// <summary>A record's fixture: its cache (with the file's local lock manager), catalog, the edit context of each table and the rule binder.</summary>
-internal sealed class ReplayFixture
+/// <summary>
+/// A record's fixture: its file held in memory and written by publications (W-05/same-width-mutation), its cache (with the
+/// file's local lock manager), catalog, the edit context of each table and the rule binder. It is the publication target
+/// of its own cache.
+/// </summary>
+internal sealed class ReplayFixture : IPublicationTarget, IDisposable
 {
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
     private readonly PageCache _cache;
-    private readonly ImagePageSource _image;
+    private readonly MemoryDatabaseFile _image;
     private readonly CatalogSnapshot _catalog;
     private readonly ExpressionRuleBinder _binder;
     private readonly Dictionary<string, TableEditContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
@@ -28,8 +32,8 @@ internal sealed class ReplayFixture
     public ReplayFixture(string sha256)
     {
         byte[] file = ArtifactStore.ForRepository(Root()).ReadAll(sha256);
-        _image = new ImagePageSource(file, D.PageSize);
-        _cache = new PageCache(_image, 1, D.PageSize, 256);
+        _image = new MemoryDatabaseFile(file, D.PageSize);
+        _cache = new PageCache(_image, _image.Incarnation, D.PageSize, 256);
         _catalog = CatalogBootstrap.Open(_cache, D, _image.PageCount, out _, readProperties: true)!;
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _binder = new ExpressionRuleBinder(new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query));
@@ -38,7 +42,19 @@ internal sealed class ReplayFixture
 
     public PageCache Cache => _cache;
 
+    /// <summary>The file as publications left it.</summary>
+    public MemoryDatabaseFile Image => _image;
+
+    public void Dispose() => _image.Dispose();
+
     public IReadOnlyList<Relationship> Relationships { get; }
+
+    /// <summary>The fixture's own file, for its own cache (a memory file has no lease to take and no other writer).</summary>
+    public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
+    {
+        failure = ReferenceEquals(cache, _cache) ? null : "another file's cache";
+        return failure is null ? _image : null;
+    }
 
     public static string Root()
     {
@@ -96,8 +112,10 @@ internal sealed class CountingScheduler : ILockScheduler
 /// file's local lock manager. Every expected value is read from the record: EditMode, a field's value, each call's error
 /// number, source and message, RecordsAffected. A case the ISAM names (a <see cref="MutationOpen"/>) or a call outside the
 /// modelled slices ends the replay of that recordset, or of the record when the shared state is then unknown, and is
-/// counted, never matched. A stored row a Workspace does not see as stored (its own accepted change, or any Workspace's
-/// committed change not yet published: W-05/same-width-mutation) is read as not modelled.
+/// counted, never matched. An outer commit and an automatic operation publish into the record's fixture through the one
+/// publication path (W-05/same-width-mutation), so later reads of every Workspace read the published rows and are
+/// checked. A stored row a Workspace does not see as stored (its own accepted change inside a level, or a committed change
+/// the slice does not write yet) is read as not modelled.
 /// <para>
 /// Two statement shapes are replayed as the ISAM row change they name, through the one edit frame: <c>UPDATE t SET c = n
 /// WHERE ID = k</c> and <c>UPDATE t SET c = c ± n WHERE ID = k</c> (an action query's row, its conflict from DAO.Database);
@@ -106,7 +124,7 @@ internal sealed class CountingScheduler : ILockScheduler
 /// named (W-06, W-07).
 /// </para>
 /// </summary>
-internal sealed unsafe partial class RecordReplay(string record) : IDisposable
+internal sealed unsafe partial class RecordReplay(string record) : IDisposable, IPublicationTarget
 {
     private readonly Dictionary<string, ReplayRecordset> _recordsets = [];
     private readonly Dictionary<string, ReplayRecordset> _fieldCollections = [];
@@ -169,9 +187,26 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable
         }
     }
 
+    /// <summary>Every locker publishes into the fixture whose cache it changed (W-05/same-width-mutation).</summary>
+    public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
+    {
+        foreach (ReplayFixture f in _files.Values)
+        {
+            if (f.Writable(cache, pages, out failure) is { } file)
+            {
+                return file;
+            }
+        }
+        failure = "no fixture of the record caches these pages";
+        return null;
+    }
+
+    /// <summary>Publications the record's lockers completed.</summary>
+    public int Publications => _lockers.Sum(l => l.Publications.Count);
+
     private TransactionCoordinator NewLocker()
     {
-        var locker = new TransactionCoordinator(new LockerId((ulong)_lockers.Count + 1)) { WaitPolicy = _policy, Scheduler = _scheduler };
+        var locker = new TransactionCoordinator(new LockerId((ulong)_lockers.Count + 1)) { WaitPolicy = _policy, Scheduler = _scheduler, Publisher = this };
         _lockers.Add(locker);
         return locker;
     }
@@ -586,7 +621,12 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable
                 return;
             case "Delete":
                 frame.Discard(); // Delete during Edit or AddNew leaves EditMode 0 (editmode-unusual-transitions)
-                Stop(rs, where, "Delete (W-05/same-width-mutation)");
+                if (e.ExcepInfo is null)
+                {
+                    // ACE deleted a row the replay does not delete: the table's stored rows are unknown from here.
+                    _unknownTables.Add(rs.Context!.Semantics.TableName);
+                }
+                Stop(rs, where, "Delete (W-05/growth-structural-closure)");
                 return;
             case "Requery" or "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" or "GetRows" or "Seek" or "Clone" or "OpenRecordset" or "Filter" or "Sort":
                 Stop(rs, where, "a cursor operation outside this slice");
@@ -811,7 +851,8 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable
             StopRecord(where, $"{outcome.Open}: {outcome.Detail}");
             return;
         }
-        // An outer commit's publication is not modelled: its public result is the call's, its rows are not readable.
+        // An outer commit that the slice cannot publish (MutationOpen.Publication) keeps its public result, the call's;
+        // its rows stay unreadable (Hidden). A published one makes them readable to every Workspace.
         Check(where, Expected(e), outcome.Error is { } error ? Actual(error) : "success");
     }
 

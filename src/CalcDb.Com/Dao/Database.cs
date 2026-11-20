@@ -6,6 +6,7 @@ using CalcDb.Foundation.Diagnostics;
 using CalcDb.Expressions;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
+using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
 using CalcDb.Values.Scalar;
@@ -50,7 +51,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     private readonly WorkspaceObject _workspace;
     private readonly List<IDatabaseRecordset> _recordsets = [];
-    private WindowsFile? _file;
+    private SessionFile? _file;
     private LockFile? _lockFile;
     private DefinitionCollection? _tableDefs;
     private DefinitionCollection? _queryDefs;
@@ -67,7 +68,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, SessionFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
@@ -82,6 +83,28 @@ internal sealed unsafe class DatabaseObject : DaoObject
         PageCount = pageCount;
         Catalog = catalog;
         (_openOnThread ??= []).Add(this);
+        workspace.Engine.Sessions.Add(this);
+    }
+
+    /// <summary>
+    /// The session's writable file for a publication of this Database's cache (W-05/same-width-mutation;
+    /// <see cref="SessionFile.TakeWriterLease"/>): a read-only session never writes; otherwise the writer lease is taken
+    /// on the explicit reopen path at the first publication and kept until Close.
+    /// </summary>
+    public IPositionedFile? Writable(IReadOnlyCollection<ulong> pages, out string? failure)
+    {
+        if (_file is not { } file)
+        {
+            failure = "the Database is closed";
+            return null;
+        }
+        if (ReadOnly)
+        {
+            failure = "the Database was opened read-only";
+            return null;
+        }
+        failure = file.TakeWriterLease(Cache, pages);
+        return failure is null ? file : null;
     }
 
     /// <summary>The live caches' probes, hits, misses and loads on this thread, not yet folded into the cost counters.</summary>
@@ -181,10 +204,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// Open a file read-only under W-10/native-readers-only: the database with reader-only admission (writers are
-    /// excluded while it is held), and for a shared open the lock-file slot ACE's shared sessions use (R-LOCK-2
-    /// RO-NATIVE, RO-PAIR); an exclusive open has no lock file (R-LOCK-1 EX-PROBE). Not yet: writable sessions (W-05),
-    /// reading beside a writer (W-11), encrypted files (W-L1) and other format profiles.
+    /// Open a file under W-10/native-readers-only: the database with reader-only admission (writers are excluded while
+    /// it is held), and for a shared open the lock-file slot ACE's shared sessions use (R-LOCK-2 RO-NATIVE, RO-PAIR); an
+    /// exclusive open has no lock file (R-LOCK-1 EX-PROBE). A session that is not read-only takes the writer lease at its
+    /// first publication (<see cref="SessionFile"/>, W-05/same-width-mutation). Not yet: reading beside a writer (W-11),
+    /// encrypted files (W-L1) and other format profiles.
     /// </summary>
     public static CallResult Open(WorkspaceObject workspace, string name, bool exclusive, bool readOnly, out DatabaseObject? database)
     {
@@ -206,8 +230,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return workspace.Fail(3024, DaoErrors.FileNotFound(name));
         }
-        OpenResult opened = WindowsFile.Open(full, Admission.ReaderOnly);
-        if (opened.File is not { } file)
+        if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})"));
         }
@@ -285,7 +308,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _ruleBinder ??= new ExpressionRuleBinder(new ExpressionContext((uint)System.Globalization.CultureInfo.CurrentCulture.LCID, TextCompareMode.Database, Collation, ExpressionUse.Query));
         var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
         bool related = _relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), related);
+        // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation).
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), related, new TableFootprints(Cache, Format, table));
         Engine.Changes.Register(semantics, Name);
         if (context.Counter is { } counter)
         {
@@ -601,6 +625,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _file?.Dispose();
         _file = null;
+        Engine.Sessions.Remove(this);
         _lockFile?.Dispose();
         _lockFile = null;
         _workspace.Forget(this);
