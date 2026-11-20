@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Access SQL (W-06/parser-binder-scan; II-11 §§1-4, 11-14; D-SQL-1): the SELECT grammar over the one expression parser,
+       the binder (scope, names, result metadata) and a simple scan executor over the ISAM's rows and the one evaluator
+       (CalcDb.Expressions). No optimizer: the plan shown is the plan run. Portable: no I/O of its own. -->
+  <PropertyGroup>
+    <RootNamespace>CalcDb.Sql</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalcDb.Sql.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
+    <ProjectReference Include="..\CalcDb.Values\CalcDb.Values.csproj" />
+    <ProjectReference Include="..\CalcDb.Format\CalcDb.Format.csproj" />
+    <ProjectReference Include="..\CalcDb.Isam\CalcDb.Isam.csproj" />
+    <ProjectReference Include="..\CalcDb.Expressions\CalcDb.Expressions.csproj" />
+  </ItemGroup>
+</Project>

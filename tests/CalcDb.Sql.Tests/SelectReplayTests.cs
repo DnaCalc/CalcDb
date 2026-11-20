@@ -1,0 +1,489 @@
+using System.Globalization;
+
+using CalcDb.Corpus;
+using CalcDb.Evidence;
+using CalcDb.Isam;
+using CalcDb.Foundation;
+using CalcDb.Values;
+using Xunit.Abstractions;
+
+namespace CalcDb.Sql.Tests;
+
+/// <summary>
+/// The retained SELECT records replayed on the SQL executor over their own fixtures (W-06/parser-binder-scan; T-SQL-01..11,
+/// 13, 19, 20 scan and binding cases; T-EXPR-01..08, 38..50). The replay follows the record's own DAO calls on the
+/// objects it bound: <c>Database.OpenRecordset</c> with SELECT text, the recordset's moves, EOF, BOF and RecordCount, its
+/// Fields' Count and Item, and each Field's Name, Type, Size, SourceTable, SourceField and Value. Every expected value is
+/// read from the record (names, types, values, error numbers and texts). An observation CalcDb names as not modelled, or
+/// one on a recordset whose replay stopped at a not-modelled outcome, is counted apart, never matched. After the record
+/// changes the database (Execute, Update, Delete, Append) the database is no longer the fixture: the rest is counted as
+/// not modelled. Recordsets of a table name, QueryDef routes and members of other objects are not this slice's.
+/// </summary>
+public sealed class SelectReplayTests(ITestOutputHelper output)
+{
+    /// <summary>The record folders whose SELECTs this slice replays (the literal lane, single-table SQL, the cursor folders).</summary>
+    private static readonly string[] Folders = ["r-expr-1", "r-expr-1b", "r-sql-1", "r-sql-13b", "r-cursor-1", "r-q-cursor-dao", "r-sql-2-3", "r-par-1", "r-q-expr-sql"];
+
+    public static TheoryData<string> Records()
+    {
+        var data = new TheoryData<string>();
+        string evidence = Path.Combine(SqlFixture.Root(), "evidence");
+        foreach (string folder in Folders)
+        {
+            foreach (string file in Directory.EnumerateFiles(Path.Combine(evidence, folder), "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                data.Add(Path.GetRelativePath(evidence, file).Replace('\\', '/'));
+            }
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(Records))]
+    public void Select_record_replays_on_the_executor(string record)
+    {
+        var replay = new Replay(record);
+        replay.Run();
+        output.WriteLine($"{record}: {replay.Matched} matched, {replay.Mismatches.Count} mismatched, {replay.Open.Count} not modelled");
+        foreach (IGrouping<string, string> open in replay.Open.GroupBy(o => o[(o.IndexOf(": ", StringComparison.Ordinal) + 2)..].Split(':')[0]).OrderByDescending(g => g.Count()))
+        {
+            output.WriteLine($"  open x{open.Count()}: {open.First()}");
+        }
+        foreach (string m in replay.Mismatches)
+        {
+            output.WriteLine("  MISMATCH: " + m);
+        }
+        Assert.Empty(replay.Mismatches);
+    }
+
+    internal sealed class Replay(string record)
+    {
+        private readonly Dictionary<string, object> _objects = new(StringComparer.Ordinal);
+        private string? _changed;
+
+        public int Matched { get; private set; }
+
+        public List<string> Mismatches { get; } = [];
+
+        public List<string> Open { get; } = [];
+
+        /// <summary>A database the record opened, with its input file's hash (null when it is not one of the inputs).</summary>
+        private sealed class DatabaseObject(string? fixture)
+        {
+            public string? Fixture { get; } = fixture;
+
+            public SqlFixture? Image { get; set; }
+        }
+
+        private sealed class RecordsetObject(string sql)
+        {
+            public string Sql { get; } = sql;
+
+            public BoundSelect? Plan { get; set; }
+
+            public SelectCursor? Cursor { get; set; }
+
+            /// <summary>Why the replay of this recordset stopped, when it did.</summary>
+            public string? Stopped { get; set; }
+        }
+
+        private sealed record FieldsObject(RecordsetObject Recordset);
+
+        private sealed record FieldObject(RecordsetObject Recordset, int Column);
+
+        public void Run()
+        {
+            EvidenceRecord r = EvidenceJson.Read<EvidenceRecord>(Path.Combine(SqlFixture.Root(), "evidence", record));
+            if (r.Capture is not { } capture)
+            {
+                return;
+            }
+            IReadOnlyList<CaptureEvent> events = capture.Events;
+            IReadOnlyList<FileObservation> inputs = events.OfType<FilesEvent>().FirstOrDefault()?.Files ?? [];
+            foreach (InvokeEvent e in events.OfType<InvokeEvent>())
+            {
+                if (e.Member == "OpenDatabase" && e.Bind is { } dbName && e.ExcepInfo is null)
+                {
+                    // The database is the input file the path names (by file name; the attempt directory differs per run).
+                    string? file = e.Args.Count > 0 && e.Args[0].Text is { } path ? Path.GetFileName(path) : null;
+                    string? sha = inputs.FirstOrDefault(f => file is not null && string.Equals(Path.GetFileName(f.RelativePath), file, StringComparison.OrdinalIgnoreCase))?.Sha256;
+                    _objects[dbName] = new DatabaseObject(sha);
+                    continue;
+                }
+                if (e.Bind is { } rebound && _objects.Remove(rebound, out object? previous) && previous is RecordsetObject held)
+                {
+                    // The name now holds whatever this call returns (a recordset of a route not replayed, say).
+                    Close(held);
+                }
+                if (e.Member is "Execute" or "Update" or "Delete" or "Append" or "CompactDatabase")
+                {
+                    // On any object, a recordset of this replay's included: from here the database is not the fixture.
+                    Changed($"#{e.Seq} {e.Target}.{e.Member}");
+                    continue;
+                }
+                if (!_objects.TryGetValue(e.Target, out object? target))
+                {
+                    continue;
+                }
+                string where = $"#{e.Seq} {e.Target}.{e.Member}";
+                switch (target)
+                {
+                    case DatabaseObject db:
+                        if (e.Member == "OpenRecordset" && e.Args.Count > 0 && e.Args[0].Text is { } sql && sql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (db.Fixture is not { } fixture || !SqlFixture.Retained(fixture))
+                            {
+                                Bind(e, Stopped(sql, where, "NotModelled.Fixture: the database is not a retained input of the record"));
+                                continue;
+                            }
+                            db.Image ??= new SqlFixture(fixture);
+                            OpenRecordset(e, db.Image, sql, where);
+                        }
+                        break;
+                    case RecordsetObject rs:
+                        OnRecordset(e, rs, where);
+                        break;
+                    case FieldsObject fields:
+                        OnFields(e, fields, where);
+                        break;
+                    case FieldObject field:
+                        OnField(e, field, where);
+                        break;
+                }
+            }
+            foreach (RecordsetObject rs in _objects.Values.OfType<RecordsetObject>().Distinct())
+            {
+                Close(rs);
+            }
+        }
+
+        /// <summary>The record changed the database: from here on it is not the fixture, for new and open recordsets alike.</summary>
+        private void Changed(string where)
+        {
+            _changed ??= where;
+            foreach (RecordsetObject rs in _objects.Values.OfType<RecordsetObject>())
+            {
+                if (rs.Stopped is null)
+                {
+                    rs.Stopped = $"NotModelled.DatabaseChanged: the record changed the database at {where}";
+                    Close(rs);
+                }
+            }
+        }
+
+        private RecordsetObject Stopped(string sql, string where, string why)
+        {
+            Open.Add($"{where}: {why}");
+            return new RecordsetObject(sql) { Stopped = why };
+        }
+
+        private void Bind(InvokeEvent e, object o)
+        {
+            if (e.Bind is { } name && e.ExcepInfo is null)
+            {
+                _objects[name] = o;
+            }
+        }
+
+        private static void Close(RecordsetObject rs)
+        {
+            rs.Cursor?.Dispose();
+            rs.Cursor = null;
+            rs.Plan?.Dispose();
+            rs.Plan = null;
+        }
+
+        private void OpenRecordset(InvokeEvent e, SqlFixture image, string sql, string where)
+        {
+            where += $"(\"{(sql.Length > 90 ? sql[..90] + "…" : sql)}\")";
+            if (_changed is { } changed)
+            {
+                Bind(e, Stopped(sql, where, $"NotModelled.DatabaseChanged: the record changed the database at {changed}"));
+                return;
+            }
+            int type = e.Args.Count > 1 && e.Args[1].Integer is { } t ? int.Parse(t, CultureInfo.InvariantCulture) : 2;
+            if (type is not (2 or 4 or 8))
+            {
+                Bind(e, Stopped(sql, where, $"NotModelled.RecordsetType: type {type}"));
+                return;
+            }
+            var rs = new RecordsetObject(sql);
+            BoundSelect? plan = BoundSelect.Prepare(sql, image, out SqlFailure? failure);
+            SelectCursor? cursor = null;
+            if (plan is not null)
+            {
+                if (type == 2 && plan.Order.Count == 0 && !plan.Grouped && plan.Predicate == SelectPredicate.All && plan.Top is null)
+                {
+                    // R-PAR-1 PAR-ORDER: a dynaset of a table returns primary-key order; whether a plain SELECT's does is not identified.
+                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder", "the row order of an unordered dynaset");
+                }
+                else
+                {
+                    cursor = SelectCursor.Open(plan, image, forwardOnly: type == 8, out failure);
+                }
+            }
+            if (Outcome(where, e.ExcepInfo, failure))
+            {
+                rs.Plan = plan;
+                rs.Cursor = cursor;
+                Bind(e, rs);
+                return;
+            }
+            cursor?.Dispose();
+            plan?.Dispose();
+            rs.Stopped = failure?.NotModelled ?? "a failed open";
+            Bind(e, rs);
+        }
+
+        /// <summary>Compare a call's outcome: ACE's EXCEPINFO or success against CalcDb's failure or success. True when both succeeded.</summary>
+        private bool Outcome(string where, ExcepInfoObservation? ace, SqlFailure? mine)
+        {
+            if (mine is { IsNotModelled: true })
+            {
+                Open.Add($"{where}: {mine.NotModelled}: {mine.Message}");
+                return false;
+            }
+            if (ace is null && mine is null)
+            {
+                Matched++;
+                return true;
+            }
+            if (ace is null || mine is null)
+            {
+                Mismatches.Add($"{where}: ACE {(ace is null ? "success" : Render(ace))}, CalcDb {(mine is null ? "success" : Render(mine))}");
+                return false;
+            }
+            string expected = ace.Description?.Text ?? "";
+            string actual = mine.Message;
+            string scode = $"0x{unchecked((uint)(int)0x800A0000 | (uint)mine.Number):X8}";
+            if (!mine.ExcerptExact)
+            {
+                int ai = expected.IndexOf(mine.Quote, StringComparison.Ordinal);
+                int mi = actual.IndexOf(mine.Quote, StringComparison.Ordinal);
+                if (ai >= 0 && mi >= 0)
+                {
+                    Open.Add($"{where}: NotModelled.QueryExpressionExcerpt: ACE '{expected[(ai + mine.Quote.Length)..]}', CalcDb '{actual[(mi + mine.Quote.Length)..]}");
+                    expected = expected[..ai];
+                    actual = actual[..mi];
+                }
+            }
+            Check(where, $"{ace.Scode} {expected}", $"{scode} {actual}");
+            return false;
+        }
+
+        private static string Render(ExcepInfoObservation x) => $"{x.Scode} {x.Description?.Text}";
+
+        private static string Render(SqlFailure f) => f.IsNotModelled ? f.ToString() : $"0x{unchecked((uint)(int)0x800A0000 | (uint)f.Number):X8} {f.Message}";
+
+        private bool Live(RecordsetObject rs, string where)
+        {
+            if (rs.Stopped is { } why)
+            {
+                Open.Add($"{where}: {why}");
+                return false;
+            }
+            return rs.Cursor is not null;
+        }
+
+        private void OnRecordset(InvokeEvent e, RecordsetObject rs, string where)
+        {
+            if (e.Member == "Close")
+            {
+                Close(rs);
+                rs.Stopped = "NotModelled.ClosedRecordset: a call after Close";
+                return;
+            }
+            if (!Live(rs, where))
+            {
+                return;
+            }
+            SelectCursor c = rs.Cursor!;
+            switch (e.Member)
+            {
+                case "EOF":
+                    Check(where, Bool(e), c.Eof);
+                    break;
+                case "BOF":
+                    Check(where, Bool(e), c.Bof);
+                    break;
+                case "RecordCount" when e.ExcepInfo is null:
+                    Check(where, long.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), c.RecordCount);
+                    break;
+                case "MoveNext" or "MoveFirst" or "MoveLast" or "MovePrevious":
+                    Move(e, rs, where);
+                    break;
+                case "Fields" when e.Args.Count == 0:
+                    Bind(e, new FieldsObject(rs));
+                    break;
+                default:
+                    rs.Stopped = $"NotModelled.RecordsetMember: {e.Member}";
+                    Open.Add($"{where}: {rs.Stopped}");
+                    break;
+            }
+        }
+
+        private void Move(InvokeEvent e, RecordsetObject rs, string where)
+        {
+            SelectCursor c = rs.Cursor!;
+            MoveOutcome outcome = e.Member switch
+            {
+                "MoveNext" => c.MoveNext(),
+                "MoveFirst" => c.MoveFirst(),
+                "MoveLast" => c.MoveLast(),
+                _ => c.MovePrevious(),
+            };
+            if (c.FetchFailure is { } fetch)
+            {
+                rs.Stopped = fetch.NotModelled ?? fetch.ToString();
+                Open.Add($"{where}: {fetch}");
+                return;
+            }
+            SqlFailure? mine = outcome switch
+            {
+                MoveOutcome.NoCurrentRecord => SqlFailure.Ace(SqlPhase.Fetch, 3021, "No current record."),
+                MoveOutcome.NotSupported => SqlFailure.Open(SqlPhase.Fetch, "NotModelled.ForwardOnlyMove", "a move a forward-only cursor refuses (the DAO adapter's 3219)"),
+                _ => null,
+            };
+            Outcome(where, e.ExcepInfo, mine);
+        }
+
+        private void OnFields(InvokeEvent e, FieldsObject fields, string where)
+        {
+            RecordsetObject rs = fields.Recordset;
+            if (!Live(rs, where))
+            {
+                return;
+            }
+            IReadOnlyList<ResultColumn> columns = rs.Cursor!.Columns;
+            switch (e.Member)
+            {
+                case "Count":
+                    Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), columns.Count);
+                    break;
+                case "Item":
+                    CapturedValue arg = e.Args[0];
+                    int index = arg.Text is { } name
+                        ? columns.ToList().FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+                        : int.Parse(arg.Integer!, CultureInfo.InvariantCulture);
+                    bool found = index >= 0 && index < columns.Count;
+                    if (found != (e.ExcepInfo is null))
+                    {
+                        Mismatches.Add($"{where}({arg.Text ?? arg.Integer}): ACE {(e.ExcepInfo is null ? "a field" : Render(e.ExcepInfo))}, CalcDb {(found ? "a field" : "no field")}");
+                        break;
+                    }
+                    Matched++;
+                    if (found)
+                    {
+                        Bind(e, new FieldObject(rs, index));
+                    }
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.FieldsMember: {e.Member}");
+                    break;
+            }
+        }
+
+        private void OnField(InvokeEvent e, FieldObject field, string where)
+        {
+            RecordsetObject rs = field.Recordset;
+            if (!Live(rs, where))
+            {
+                return;
+            }
+            SelectCursor c = rs.Cursor!;
+            ResultColumn column = c.Columns[field.Column];
+            where += $"[{column.Name}]";
+            switch (e.Member)
+            {
+                case "Name":
+                    Check(where, e.Result?.Text ?? "", column.Name);
+                    break;
+                case "Type" when e.ExcepInfo is null:
+                    if (c.FieldType(field.Column, out string? open) is int type)
+                    {
+                        Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), type);
+                    }
+                    else
+                    {
+                        Open.Add($"{where}: {open}: ACE {e.Result!.Integer}");
+                    }
+                    break;
+                case "Size" when e.ExcepInfo is null:
+                    if (column.Size is int size)
+                    {
+                        Check(where, long.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), size);
+                    }
+                    else
+                    {
+                        Open.Add($"{where}: NotModelled.FieldSize: ACE {e.Result!.Integer}");
+                    }
+                    break;
+                case "SourceTable" or "SourceField" when e.ExcepInfo is null:
+                    string? mine = e.Member == "SourceTable" ? column.SourceTable : column.SourceField;
+                    if (mine is null)
+                    {
+                        Open.Add($"{where}: NotModelled.FieldSource: ACE {e.Result?.Text}");
+                    }
+                    else
+                    {
+                        Check(where, e.Result?.Text ?? "", mine);
+                    }
+                    break;
+                case "Value":
+                    Value(e, c, field.Column, where);
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.FieldMember: {e.Member}");
+                    break;
+            }
+        }
+
+        private void Value(InvokeEvent e, SelectCursor c, int column, string where)
+        {
+            bool read = c.Read(column, out NativeVariant value, out SqlFailure? failure);
+            if (!read || e.ExcepInfo is not null)
+            {
+                Outcome(where, e.ExcepInfo, read ? null : failure);
+                return;
+            }
+            ResultColumn rc = c.Columns[column];
+            CapturedValue mine = SqlFixture.Capture(value);
+            if (rc.TypeRule == ColumnTypeRule.NotModelled && e.Result is { } ace && ace.Vt != mine.Vt && value.Vt != (ushort)VarType.Null)
+            {
+                // qualified.md "the DAO Field.Type of a projected column": DAO converts a computed column's inner value to
+                // the column's static type, which is not identified; compare the value converted to ACE's type, and count
+                // the conversion as the open item.
+                if (SqlFixture.Convert(value, (VarType)ace.Vt, c.Context) is not { } converted)
+                {
+                    Mismatches.Add($"{where}: ACE {ValueComparer.Render(ace)}, CalcDb {ValueComparer.Render(mine)} does not convert to {ace.VtName}");
+                    return;
+                }
+                Open.Add($"{where}: NotModelled.ExpressionFieldType: inner {mine.VtName} converted to {ace.VtName}");
+                mine = converted;
+            }
+            Difference? d = new ValueComparer().Compare(e.Result, mine, where);
+            if (d is null)
+            {
+                Matched++;
+            }
+            else
+            {
+                Mismatches.Add($"{where}: ACE {d.Expected}, CalcDb {d.Actual}");
+            }
+        }
+
+        private void Check<T>(string where, T expected, T actual)
+        {
+            if (EqualityComparer<T>.Default.Equals(expected, actual))
+            {
+                Matched++;
+            }
+            else
+            {
+                Mismatches.Add($"{where}: ACE {expected}, CalcDb {actual}");
+            }
+        }
+
+        private static bool Bool(InvokeEvent e) => e.Result!.Integer != "0";
+    }
+}

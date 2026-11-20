@@ -24,8 +24,33 @@ public enum StaticType : byte
     Unknown,
 }
 
-/// <summary>The fields an expression may name, with the facts its binding needs (II-10 §2 BoundName.Field).</summary>
-public sealed class ExpressionSchema
+/// <summary>A name bound to a field: the row source it is read from (0 for a single table) and its column.</summary>
+public readonly record struct ColumnBinding(int Source, ColumnDescriptor Column);
+
+/// <summary>
+/// A node the row supplies as a value instead of computing it (a SQL group key or aggregate result, W-06/parser-binder-scan):
+/// its slot in <see cref="IExpressionRow.Slot"/>, its declared type and its static type.
+/// </summary>
+public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type);
+
+/// <summary>
+/// The row an expression is evaluated on (II-10 §4: a native row reaches the evaluator without a second value system):
+/// the cursor of each source, positioned on the row's occurrence, and the values a SQL plan supplies directly.
+/// </summary>
+public interface IExpressionRow
+{
+    /// <summary>The cursor of <paramref name="source"/>, or null when the source contributes a Null-extended row.</summary>
+    IRecordCursor? Source(int source);
+
+    /// <summary>The value of a slot, borrowed for the evaluation (its owner keeps it alive and releases it).</summary>
+    NativeVariant Slot(int slot);
+}
+
+/// <summary>
+/// The names an expression may use, with the facts its binding needs (II-10 §2 BoundName.Field). The table form serves a
+/// Find criteria; the SQL binder derives its scope of several sources, aliases and group slots from it.
+/// </summary>
+public class ExpressionSchema
 {
     private readonly Dictionary<string, ColumnDescriptor> _columns;
     private readonly HashSet<int> _indexedFirst;
@@ -38,13 +63,43 @@ public sealed class ExpressionSchema
         {
             _columns.TryAdd(c.Name, c);
         }
-        _indexedFirst = [.. table.PhysicalIndexes.Where(p => p.Columns.Count > 0).Select(p => p.Columns[0].PhysicalNumber)];
+        _indexedFirst = IndexLeaders(table);
     }
+
+    /// <summary>A scope that resolves its names itself.</summary>
+    protected ExpressionSchema()
+    {
+        _columns = [];
+        _indexedFirst = [];
+    }
+
+    /// <summary>The physical numbers of the columns that lead an index of <paramref name="table"/>.</summary>
+    public static HashSet<int> IndexLeaders(TableDefinition table) =>
+        [.. table.PhysicalIndexes.Where(p => p.Columns.Count > 0).Select(p => p.Columns[0].PhysicalNumber)];
 
     public ColumnDescriptor? Find(string name) => _columns.GetValueOrDefault(name);
 
-    /// <summary>Whether an index of the table has this column first.</summary>
-    public bool LeadsIndex(ColumnDescriptor column) => _indexedFirst.Contains(column.PhysicalNumber);
+    /// <summary>
+    /// Resolve a name to a field. Null with a failure is the name's error; null with no failure means the scope takes the
+    /// name as a parameter (SQL: an unresolved name, R-SQL-1 SQL-B), bound as a Null placeholder. The table scope fails a
+    /// name that is not one of its fields with 3070, as Find does.
+    /// </summary>
+    public virtual ColumnBinding? Resolve(string name, out ExpressionFailure? failure)
+    {
+        if (Find(name) is { } column)
+        {
+            failure = null;
+            return new ColumnBinding(0, column);
+        }
+        failure = ExpressionFailure.Ace(ExpressionPhase.Bind, 3070, ExpressionMessages.UnknownName(name)) with { Subject = name };
+        return null;
+    }
+
+    /// <summary>A node the row supplies as a slot value; consulted before the node is bound (none in the table scope).</summary>
+    public virtual SlotBinding? Substitute(SyntaxNode node) => null;
+
+    /// <summary>Whether an index of the field's table has this column first.</summary>
+    public virtual bool LeadsIndex(ColumnBinding field) => _indexedFirst.Contains(field.Column.PhysicalNumber);
 }
 
 /// <summary>
@@ -61,8 +116,10 @@ public sealed unsafe class BoundExpression : IDisposable
     private readonly NativeVariant[] _constants;
     private readonly LikePattern?[] _patterns;
     private readonly ScalarDescriptor[] _descriptors;
-    private readonly ColumnDescriptor[] _fields;
+    private readonly ColumnBinding[] _fields;
+    private readonly bool _usesSlots;
     private readonly Slot[] _stack;
+    private bool _holdsResult;
     private nint[] _ownedTexts;
     private readonly nint[] _scratch;
     private readonly int[] _scratchUnits;
@@ -74,6 +131,7 @@ public sealed unsafe class BoundExpression : IDisposable
         _patterns = [.. b.Patterns];
         _descriptors = [.. b.Descriptors];
         _fields = [.. b.Fields];
+        _usesSlots = b.UsesSlots;
         _stack = new Slot[Math.Max(1, b.MaxDepth)];
         _ownedTexts = ownedTexts;
         _scratch = new nint[_fields.Length];
@@ -89,6 +147,24 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>The static type of the whole expression.</summary>
     public StaticType Type { get; }
 
+    /// <summary>Whether the expression reads no field and no slot: its value is the same on every row.</summary>
+    public bool IsConstant => _fields.Length == 0 && !_usesSlots;
+
+    /// <summary>The field when the whole expression is one field reference.</summary>
+    public ColumnBinding? BareField => _program.Length == 1 && _program[0].Op == Op.LoadField ? _fields[_program[0].Operand] : null;
+
+    /// <summary>The slot when the whole expression is one slot value.</summary>
+    public int? BareSlot => _program.Length == 1 && _program[0].Op == Op.LoadSlot ? _program[0].Operand : null;
+
+    /// <summary>The fields the expression reads, in first-use order.</summary>
+    public IReadOnlyList<ColumnBinding> Fields => _fields;
+
+    /// <summary>
+    /// The value of the last successful <see cref="Evaluate"/>, borrowed from the program until its next evaluation or
+    /// Dispose (a text read straight from a field lies in the program's scratch).
+    /// </summary>
+    public NativeVariant Value => _stack[0].Value;
+
     /// <summary>The failure of the last evaluation, set only on its failure path.</summary>
     public ExpressionFailure? LastFailure { get; private set; }
 
@@ -96,6 +172,9 @@ public sealed unsafe class BoundExpression : IDisposable
     {
         LoadField,
         LoadConstant,
+
+        /// <summary>A value the row supplies (<see cref="IExpressionRow.Slot"/>), borrowed.</summary>
+        LoadSlot,
         Unary,
         Binary,
         Ternary,
@@ -107,7 +186,7 @@ public sealed unsafe class BoundExpression : IDisposable
         /// <summary>x In (n values): Equal per value, combined with Or.</summary>
         In,
 
-        /// <summary>x Between low And high: GreaterOrEqual, LessOrEqual, And.</summary>
+        /// <summary>x Between low And high: GreaterOrEqual, LessOrEqual, And; the same with the bounds exchanged; Or.</summary>
         Between,
     }
 
@@ -133,7 +212,7 @@ public sealed unsafe class BoundExpression : IDisposable
         {
             return null;
         }
-        var b = new Builder(schema);
+        var b = new Builder(schema, context.Use);
         StaticType type;
         try
         {
@@ -148,6 +227,27 @@ public sealed unsafe class BoundExpression : IDisposable
         return new BoundExpression(b, context, type, syntax.TakeTexts());
     }
 
+    /// <summary>
+    /// Bind one node of a parsed expression (a SQL clause, an aggregate's argument; W-06/parser-binder-scan). The program
+    /// borrows the literal texts, so the syntax must outlive it.
+    /// </summary>
+    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, out ExpressionFailure? failure)
+    {
+        var b = new Builder(schema, context.Use);
+        StaticType type;
+        try
+        {
+            type = b.Bind(root, 0).Type;
+        }
+        catch (BindError e)
+        {
+            failure = e.Failure;
+            return null;
+        }
+        failure = null;
+        return new BoundExpression(b, context, type, []);
+    }
+
     /// <summary>Parse and bind <paramref name="source"/>.</summary>
     public static BoundExpression? Compile(ReadOnlySpan<char> source, ExpressionSchema schema, ExpressionContext context, out ExpressionFailure? failure)
     {
@@ -159,9 +259,25 @@ public sealed unsafe class BoundExpression : IDisposable
     /// Evaluate on the cursor's current row as a predicate (II-10 §9: Boolean operators precede predicate acceptance):
     /// True when the value is -1, False for 0 and Null, Failed with <see cref="LastFailure"/> otherwise.
     /// </summary>
-    public RowTest Test(IRecordCursor cursor)
+    public RowTest Test(IRecordCursor cursor) => Verdict(Run(cursor, null));
+
+    /// <summary>Evaluate on a SQL row as a predicate (WHERE, HAVING), by the same rule as <see cref="Test(IRecordCursor)"/>.</summary>
+    public RowTest Test(IExpressionRow row) => Verdict(Run(null, row));
+
+    /// <summary>Evaluate on a row; the result is <see cref="Value"/>. False with <see cref="LastFailure"/>.</summary>
+    public bool Evaluate(IExpressionRow row)
     {
-        if (!Run(cursor))
+        if (!Run(null, row))
+        {
+            return false;
+        }
+        _holdsResult = true;
+        return true;
+    }
+
+    private RowTest Verdict(bool ran)
+    {
+        if (!ran)
         {
             return RowTest.Failed;
         }
@@ -189,9 +305,17 @@ public sealed unsafe class BoundExpression : IDisposable
         return RowTest.Failed;
     }
 
-    /// <summary>Run the program; the result is in stack slot 0. False with <see cref="LastFailure"/> and an empty stack.</summary>
-    private bool Run(IRecordCursor cursor)
+    /// <summary>
+    /// Run the program over one cursor or a SQL row; the result is in stack slot 0. False with <see cref="LastFailure"/>
+    /// and an empty stack. The result an earlier <see cref="Evaluate"/> left is released first.
+    /// </summary>
+    private bool Run(IRecordCursor? cursor, IExpressionRow? row)
     {
+        if (_holdsResult)
+        {
+            Release(ref _stack[0]);
+            _holdsResult = false;
+        }
         int sp = 0;
         Slot[] stack = _stack;
         for (int pc = 0; pc < _program.Length; pc++)
@@ -201,11 +325,16 @@ public sealed unsafe class BoundExpression : IDisposable
             switch (ins.Op)
             {
                 case Op.LoadField:
-                    if (!Load(cursor, ins.Operand, ref stack[sp]))
+                    if (!Load(row is null ? cursor : row.Source(_fields[ins.Operand].Source), ins.Operand, ref stack[sp]))
                     {
                         Unwind(sp);
                         return false;
                     }
+                    sp++;
+                    continue;
+                case Op.LoadSlot:
+                    stack[sp].Value = row!.Slot(ins.Operand);
+                    stack[sp].Owned = false;
                     sp++;
                     continue;
                 case Op.LoadConstant:
@@ -291,16 +420,18 @@ public sealed unsafe class BoundExpression : IDisposable
         return acc;
     }
 
-    /// <summary>x Between a And b: (x &gt;= a) And (x &lt;= b) through the kernel.</summary>
+    /// <summary>
+    /// x Between a And b, with the bounds in either order (qualified.md "R-EXPR-1 Branch D: Between"): ((x &gt;= a) And
+    /// (x &lt;= b)) Or ((x &gt;= b) And (x &lt;= a)) through the kernel's Kleene operators; a failing comparison fails it.
+    /// </summary>
     private ScalarOutcome Between(ref int sp, Instruction ins)
     {
         int x = sp - 3;
-        ScalarOutcome ge = ScalarKernel.Apply(_descriptors[ins.Descriptor], _stack[x].Value, _stack[x + 1].Value, Context);
-        ScalarOutcome result = ge;
-        if (ge.Succeeded)
+        ScalarOutcome result = Within(ins.Descriptor, x, x + 1, x + 2);
+        if (result.Succeeded)
         {
-            ScalarOutcome le = ScalarKernel.Apply(_descriptors[ins.Descriptor + 1], _stack[x].Value, _stack[x + 2].Value, Context);
-            result = le.Succeeded ? ScalarKernel.Apply(_descriptors[ins.Descriptor + 2], ge.Value, le.Value, Context) : le;
+            ScalarOutcome reversed = Within(ins.Descriptor + 3, x, x + 2, x + 1);
+            result = reversed.Succeeded ? ScalarKernel.Apply(_descriptors[ins.Descriptor + 6], result.Value, reversed.Value, Context) : reversed;
         }
         for (int i = x; i < sp; i++)
         {
@@ -308,6 +439,18 @@ public sealed unsafe class BoundExpression : IDisposable
         }
         sp = x;
         return result;
+    }
+
+    /// <summary>(x &gt;= low) And (x &lt;= high), with the three descriptors from <paramref name="d"/>.</summary>
+    private ScalarOutcome Within(int d, int x, int low, int high)
+    {
+        ScalarOutcome ge = ScalarKernel.Apply(_descriptors[d], _stack[x].Value, _stack[low].Value, Context);
+        if (!ge.Succeeded)
+        {
+            return ge;
+        }
+        ScalarOutcome le = ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, Context);
+        return le.Succeeded ? ScalarKernel.Apply(_descriptors[d + 2], ge.Value, le.Value, Context) : le;
     }
 
     /// <summary>CUR-FIND indexed Text: a non-ASCII subject under an indexed Like may take a collation range (R-SORT-3 LIKE-RANGE-01/05).</summary>
@@ -324,12 +467,18 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>
     /// The current row's value of field <paramref name="index"/>, as the DAO read path projects it (R-ORACLE-1
     /// FMT1-FAMILIES): Null, Yes/No as VT_BOOL, Byte UI1, Integer I2, Long I4, Currency CY, Single R4, Double R8, Date
-    /// DATE, Text and Memo as text. GUID, Binary, OLE and Decimal fields are refused when bound.
+    /// DATE, Text and Memo as text. GUID, Binary, OLE and Decimal fields are refused when bound. A source with no cursor is a
+    /// Null-extended row: every field reads Null.
     /// </summary>
-    private bool Load(IRecordCursor cursor, int index, ref Slot slot)
+    private bool Load(IRecordCursor? cursor, int index, ref Slot slot)
     {
-        ColumnDescriptor column = _fields[index];
+        ColumnDescriptor column = _fields[index].Column;
         slot.Owned = false;
+        if (cursor is null)
+        {
+            slot.Value = new NativeVariant { Vt = (ushort)VarType.Null };
+            return true;
+        }
         FieldResult read;
         if (column.TypeCode is NativeTypes.Text or NativeTypes.Memo)
         {
@@ -423,6 +572,11 @@ public sealed unsafe class BoundExpression : IDisposable
 
     private void Release()
     {
+        if (_holdsResult)
+        {
+            Release(ref _stack[0]);
+            _holdsResult = false;
+        }
         foreach (nint b in _ownedTexts)
         {
             Bstrs.Free(b);
@@ -446,7 +600,7 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>A bound node's result: its static type, its operand contract and the stack depth it needs.</summary>
     private readonly record struct Bound(StaticType Type, OperandContract Contract, int Depth);
 
-    private sealed class Builder(ExpressionSchema schema)
+    private sealed class Builder(ExpressionSchema schema, ExpressionUse use)
     {
         public List<Instruction> Program { get; } = [];
 
@@ -456,9 +610,13 @@ public sealed unsafe class BoundExpression : IDisposable
 
         public List<ScalarDescriptor> Descriptors { get; } = [];
 
-        public List<ColumnDescriptor> Fields { get; } = [];
+        public List<ColumnBinding> Fields { get; } = [];
+
+        public bool UsesSlots { get; private set; }
 
         public int MaxDepth { get; private set; }
+
+        private bool Query => use == ExpressionUse.Query;
 
         private static BindError Fail(int number, string message) => new(ExpressionFailure.Ace(ExpressionPhase.Bind, number, message));
 
@@ -467,6 +625,13 @@ public sealed unsafe class BoundExpression : IDisposable
         /// <summary>Bind <paramref name="node"/>, its value landing at stack position <paramref name="at"/>.</summary>
         public Bound Bind(SyntaxNode node, int at)
         {
+            if (schema.Substitute(node) is { } slot)
+            {
+                Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0));
+                UsesSlots = true;
+                MaxDepth = Math.Max(MaxDepth, at + 1);
+                return new Bound(slot.Type, OperandContract.Field(slot.Declared), 1);
+            }
             Bound result = node.Kind switch
             {
                 SyntaxKind.Literal => Literal(node),
@@ -477,7 +642,8 @@ public sealed unsafe class BoundExpression : IDisposable
                 SyntaxKind.Like => Like(node, at),
                 SyntaxKind.IsNull => IsNull(node.Left!, node.Negated, node.Offset, at),
                 SyntaxKind.In => In(node, at),
-                _ => Between(node, at),
+                SyntaxKind.Between => Between(node, at),
+                _ => throw Open("NotModelled.Star", "* outside Count(*)"),
             };
             MaxDepth = Math.Max(MaxDepth, at + Math.Max(result.Depth, 1));
             return result;
@@ -495,10 +661,23 @@ public sealed unsafe class BoundExpression : IDisposable
             };
         }
 
-        /// <summary>A field by name (case-insensitive; a qualified name such as F.N is not resolved: 3070 with the name as written).</summary>
+        /// <summary>
+        /// A field by name, as the schema resolves it (the table scope: case-insensitive, a qualified name such as F.N is not
+        /// resolved: 3070 with the name as written). A name the scope takes as a parameter binds as a Null placeholder.
+        /// </summary>
         private Bound Field(SyntaxNode node)
         {
-            ColumnDescriptor column = Column(node);
+            if (schema.Resolve(node.Text!, out ExpressionFailure? failure) is not { } binding)
+            {
+                if (failure is not null)
+                {
+                    throw new BindError(failure with { Site = node.Offset });
+                }
+                Program.Add(new Instruction(Op.LoadConstant, Constants.Count, 0));
+                Constants.Add(ScalarLiterals.Null);
+                return new Bound(StaticType.Unknown, OperandContract.Parameter(VarType.Empty), 1);
+            }
+            ColumnDescriptor column = binding.Column;
             VarType declared = column.TypeCode switch
             {
                 NativeTypes.Boolean => VarType.Bool,
@@ -512,22 +691,34 @@ public sealed unsafe class BoundExpression : IDisposable
                 NativeTypes.Text or NativeTypes.Memo => VarType.Bstr,
                 _ => throw Open("NotModelled.FieldType", $"field {column.Name} of native type {column.TypeCode} in an expression (W-04/private-codecs)"),
             };
-            Program.Add(new Instruction(Op.LoadField, Fields.Count, 0));
-            Fields.Add(column);
+            int index = Fields.IndexOf(binding);
+            if (index < 0)
+            {
+                index = Fields.Count;
+                Fields.Add(binding);
+            }
+            Program.Add(new Instruction(Op.LoadField, index, 0));
             return new Bound(declared == VarType.Bool ? StaticType.Boolean : StaticType.Value, OperandContract.Field(declared), 1);
         }
-
-        private ColumnDescriptor Column(SyntaxNode node) => schema.Find(node.Text!) ?? throw Fail(3070, ExpressionMessages.UnknownName(node.Text!));
 
         private int Descriptor(ScalarOperation op, int site, int arity, OperandContract first, OperandContract second)
         {
             if (!ScalarDescriptor.TryBind(op, site, arity, first, second, out ScalarDescriptor d, out _))
             {
-                throw Open("NotModelled.FunctionArity", $"{op} with {arity} arguments in a criteria (ACE's message there is not recorded)");
+                throw WrongArity(op.ToString(), arity, site);
             }
             Descriptors.Add(d);
             return Descriptors.Count - 1;
         }
+
+        /// <summary>
+        /// A call with an argument count its function does not take: in a query 3075 "Wrong number of arguments used with
+        /// function in query expression" (r-expr-1b, r-fix-expr-sql cdec-argument-forms: one-argument CDec, IIf(), Choose(1));
+        /// in a Find criteria ACE's message is not recorded.
+        /// </summary>
+        private BindError WrongArity(string name, int arity, int site) => Query
+            ? new BindError(ExpressionFailure.Ace(ExpressionPhase.Bind, 3075, ExpressionMessages.WrongArgumentCount) with { Site = site, Subject = name })
+            : Open("NotModelled.FunctionArity", $"{name} with {arity} arguments in a criteria (ACE's message there is not recorded)");
 
         private Bound Unary(SyntaxNode node, int at)
         {
@@ -567,7 +758,13 @@ public sealed unsafe class BoundExpression : IDisposable
         {
             SyntaxNode pattern = node.Right!;
             CheckIndexedText(node.Left!, pattern, like: true);
-            bool indexed = node.Left is { Kind: SyntaxKind.Name } name && schema.Find(name.Text!) is { } column && IsIndexedText(column);
+            bool indexed = node.Left is { Kind: SyntaxKind.Name } name && Indexed(name) is { } column && IsIndexedText(column);
+            if (indexed && Query)
+            {
+                // qualified.md R-SORT-3 LIKE-RANGE-01/05: with an ascending index on the column a query's LIKE row set is a
+                // collation-order range, not the unit-by-unit match; which patterns take the range is not identified.
+                throw Open("NotModelled.IndexedLike", "LIKE on a Text field that leads an index, in a query");
+            }
             Bound subject = Bind(node.Left!, at);
             int depth = subject.Depth;
             if (pattern is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text })
@@ -590,6 +787,12 @@ public sealed unsafe class BoundExpression : IDisposable
 
         private Bound In(SyntaxNode node, int at)
         {
+            if (node.Items.Any(i => i is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Null }))
+            {
+                // r-sql-13b/sub-in-list-null-forms: a NOT IN (1, Null) keeps the non-1, non-Null rows, which Kleene Or over
+                // = does not give; the binding rule behind it is not identified.
+                throw Open("NotModelled.InListNull", "a Null literal in an In list");
+            }
             Bound x = Bind(node.Left!, at);
             int depth = x.Depth;
             var contracts = new List<OperandContract>();
@@ -622,6 +825,10 @@ public sealed unsafe class BoundExpression : IDisposable
             Descriptor(ScalarOperation.GreaterOrEqual, node.Offset, 2, x.Contract, low.Contract);
             Descriptor(ScalarOperation.LessOrEqual, node.Offset, 2, x.Contract, high.Contract);
             Descriptor(ScalarOperation.And, node.Offset, 2, OperandContract.Expression, OperandContract.Expression);
+            Descriptor(ScalarOperation.GreaterOrEqual, node.Offset, 2, x.Contract, high.Contract);
+            Descriptor(ScalarOperation.LessOrEqual, node.Offset, 2, x.Contract, low.Contract);
+            Descriptor(ScalarOperation.And, node.Offset, 2, OperandContract.Expression, OperandContract.Expression);
+            Descriptor(ScalarOperation.Or, node.Offset, 2, OperandContract.Expression, OperandContract.Expression);
             Program.Add(new Instruction(Op.Between, 0, first));
             if (node.Negated)
             {
@@ -635,8 +842,13 @@ public sealed unsafe class BoundExpression : IDisposable
             FunctionInventory.Entry entry = FunctionInventory.Resolve(node.Text!) is { } e ? e : throw Open("NotModelled.Function", $"function {node.Text} is not in CalcDb's inventory yet");
             switch (entry.Availability)
             {
+                case FunctionAvailability.Unknown when Query:
+                    // qualified.md "function availability": in a query 3085 "Undefined function 'Nz' in expression."
+                    throw new BindError(ExpressionFailure.Ace(ExpressionPhase.Bind, 3085, ExpressionMessages.UndefinedFunction(node.Text!)) with { Site = node.Offset, Subject = node.Text });
                 case FunctionAvailability.Unknown:
                     throw Fail(3072, ExpressionMessages.UnknownFunction);
+                case FunctionAvailability.Domain when Query:
+                    throw Open("NotModelled.DomainFunction", $"{node.Text}: a domain aggregate is a child query (II-10 §27), not built yet");
                 case FunctionAvailability.Domain:
                     throw Fail(3072, ExpressionMessages.FunctionNotAvailable);
             }
@@ -651,14 +863,17 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             if (n is < 1 or > 3)
             {
-                throw Open("NotModelled.FunctionArity", $"{node.Text} with {n} arguments in a criteria (ACE's message there is not recorded)");
+                throw WrongArity(node.Text!, n, node.Offset);
             }
             int d = Descriptor(entry.Operation, node.Offset, n, contracts[0], contracts[1]);
             Program.Add(new Instruction(n switch { 1 => Op.Unary, 2 => Op.Binary, _ => Op.Ternary }, 0, d));
             return new Bound(entry.Type, OperandContract.FunctionResult, depth);
         }
 
-        private bool IsIndexedText(ColumnDescriptor column) => column.TypeCode is NativeTypes.Text or NativeTypes.Memo && schema.LeadsIndex(column);
+        private bool IsIndexedText(ColumnBinding field) => field.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo && schema.LeadsIndex(field);
+
+        /// <summary>The field a name resolves to, without raising its failure (the indexed-Text checks only look).</summary>
+        private ColumnBinding? Indexed(SyntaxNode name) => schema.Substitute(name) is null ? schema.Resolve(name.Text!, out _) : null;
 
         /// <summary>
         /// CUR-FIND indexed Text (qualified.md): a field leading an index compared with, or matched against, a literal
@@ -673,13 +888,13 @@ public sealed unsafe class BoundExpression : IDisposable
                 ({ Kind: SyntaxKind.Literal, Literal: LiteralKind.Text }, { Kind: SyntaxKind.Name }) when !like => (right, left),
                 _ => ((SyntaxNode?)null, (SyntaxNode?)null),
             };
-            if (field is null || literal is null || schema.Find(field.Text!) is not { } column || !IsIndexedText(column))
+            if (field is null || literal is null || Indexed(field) is not { } column || !IsIndexedText(column))
             {
                 return;
             }
             if (literal.DoubledDelimiter || (like && (literal.Text == "*" || !System.Text.Ascii.IsValid(literal.Text))))
             {
-                throw Open("NotModelled.FindIndexedText", $"{column.Name} leads an index: a literal with a doubled delimiter, Like '*' or a non-ASCII pattern is answered by a rule not identified (qualified.md CUR-FIND indexed Text)");
+                throw Open("NotModelled.FindIndexedText", $"{column.Column.Name} leads an index: a literal with a doubled delimiter, Like '*' or a non-ASCII pattern is answered by a rule not identified (qualified.md CUR-FIND indexed Text)");
             }
         }
     }

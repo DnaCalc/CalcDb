@@ -8,7 +8,8 @@ namespace CalcDb.Values.Scalar;
 /// The values of an expression's literal spellings (II-10 §2: the binder converts a literal through the literal grammar,
 /// not through the locale's text conversion). The types are ACE's (r-expr-1b/meta-conversion-field-types and
 /// info-result-vartype-numeric, as the kernel catalog uses them): an integer that fits a Long is VT_I4; a decimal point,
-/// an exponent or a larger integer is VT_DECIMAL; a value beyond Decimal's range is VT_R8 (Abs(-1E308) is Double); True
+/// an exponent or a larger integer is VT_DECIMAL; a value beyond Decimal's range or below its scale is VT_R8 (Abs(-1E308)
+/// is Double, 4.94065645841247E-324 is not 0); True
 /// and False are VT_I2 -1 and 0 with a Boolean contract. A date literal reads with the US convention whatever the
 /// locale (qualified.md "R-EXPR-1 EXPR-BIND, EXPR-INVENTORY (Find criteria)": #15/1/2020# and #1/15/2020# are one
 /// date, #1/32/2020# is a syntax error).
@@ -32,7 +33,10 @@ public static class ScalarLiterals
             value.Int64 = i;
             return true;
         }
-        if (decimal.TryParse(spelling, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal d))
+        // A value too small for Decimal's scale reads as Decimal 0 in .NET; ACE keeps it a Double (r-expr-1b/op-concat-number-forms
+        // and conv-cstr-forms: 4.94065645841247E-324 & '' is "4.94065645841247E-324").
+        if (decimal.TryParse(spelling, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal d)
+            && (d != 0 || !HasNonZeroDigit(spelling)))
         {
             value = Decimal(d);
             return true;
@@ -44,6 +48,12 @@ public static class ScalarLiterals
             return true;
         }
         return false;
+    }
+
+    private static bool HasNonZeroDigit(ReadOnlySpan<char> spelling)
+    {
+        int exponent = spelling.IndexOfAny('e', 'E');
+        return (exponent < 0 ? spelling : spelling[..exponent]).IndexOfAnyInRange('1', '9') >= 0;
     }
 
     /// <summary>The DATE of a <c>#…#</c> literal's inner text through VariantChangeTypeEx under <see cref="LiteralLocale"/>; false when it is not a date.</summary>

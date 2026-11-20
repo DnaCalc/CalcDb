@@ -19,6 +19,12 @@ public sealed record ExpressionFailure(ExpressionPhase Phase, int Number, string
 {
     public bool IsNotModelled => NotModelled is not null;
 
+    /// <summary>The source offset where a parse or bind failure was detected, or -1 (the SQL layer quotes the text up to it).</summary>
+    public int Site { get; init; } = -1;
+
+    /// <summary>The name a failure is about (an unknown function, an unresolved name), when it has one.</summary>
+    public string? Subject { get; init; }
+
     /// <summary>ACE's error with its message (3077, 3070, 3072, 3001, 3464, …).</summary>
     public static ExpressionFailure Ace(ExpressionPhase phase, int number, string message) => new(phase, number, message);
 
@@ -48,6 +54,15 @@ public static class ExpressionMessages
     /// <summary>3077 for an unterminated string (find-text-quotes "S = 'beta", "S = '''").</summary>
     public const string StringSyntax = "Syntax error in string in expression.";
 
+    /// <summary>A number literal that is no number (r-expr-1b/conv-range-edges, a query: CDbl(1.8E308)).</summary>
+    public const string NumberSyntax = "Syntax error in number in expression.";
+
+    /// <summary>A comma where a closing parenthesis is due (r-sql-13b/sub-in-list-null-forms, a query).</summary>
+    public const string CommaSyntax = "Syntax error (comma) in expression.";
+
+    /// <summary>A call applied again, <c>f(x)(1)</c> (r-expr-1b/route-mdb-battery, a query).</summary>
+    public const string InvalidQualifier = "Invalid use of '.', '!', or '()'. in expression.";
+
     /// <summary>3077 for a date literal that is not a date (find-date-forms "#1/32/2020#").</summary>
     public const string DateSyntax = "Syntax error in date in expression.";
 
@@ -56,6 +71,15 @@ public static class ExpressionMessages
 
     /// <summary>3072 for a domain aggregate (find-expression-forms DMax).</summary>
     public const string FunctionNotAvailable = "Function is not available in expressions";
+
+    /// <summary>
+    /// A call with an argument count its function does not take, in a query (3075; the SQL layer says "in query expression
+    /// '…'" for "in expression", as for every 3077 text: r-fix-expr-sql/cdec-argument-forms, r-expr-1b).
+    /// </summary>
+    public const string WrongArgumentCount = "Wrong number of arguments used with function in expression.";
+
+    /// <summary>3085 for a function standalone ACE lacks, in a query (qualified.md "function availability": Nz, CVErr, Eval).</summary>
+    public static string UndefinedFunction(string name) => $"Undefined function '{name}' in expression.";
 
     /// <summary>3001 for a criteria that is not Boolean (findfirst-fresh-recordset; find-expression-forms "N").</summary>
     public const string InvalidArgument = "Invalid argument.";

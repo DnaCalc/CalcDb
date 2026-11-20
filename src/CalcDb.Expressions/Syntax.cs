@@ -32,6 +32,9 @@ public enum SyntaxKind : byte
 
     /// <summary><c>x [Not] Between a And b</c>.</summary>
     Between,
+
+    /// <summary><c>*</c> as the whole argument list of a call (SQL <c>Count(*)</c>; W-06/parser-binder-scan).</summary>
+    Star,
 }
 
 /// <summary>What a literal is, which decides its operand contract and its static type.</summary>
@@ -99,7 +102,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
     /// </summary>
     public static ExpressionSyntax Parse(ReadOnlySpan<char> source)
     {
-        var parser = new Parser(source.ToString());
+        var parser = new Parser(source.ToString(), 0);
         try
         {
             SyntaxNode root = parser.Expression();
@@ -108,11 +111,39 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         }
         catch (SyntaxError e)
         {
-            foreach (nint b in parser.Texts)
-            {
-                Bstrs.Free(b);
-            }
-            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message), []);
+            return parser.Failed(e);
+        }
+        catch (NotModelledSyntax e)
+        {
+            return parser.Failed(e);
+        }
+    }
+
+    /// <summary>
+    /// Parse one expression of a larger text (W-06/parser-binder-scan, II-11 §2: the SQL grammar's expressions are this
+    /// grammar), from <paramref name="start"/> up to the first token that cannot continue it: a SQL word such as
+    /// <c>FROM</c> or <c>AS</c>, a comma, <c>;</c>, a closing parenthesis it did not open, or the end. <paramref name="end"/>
+    /// is that token's offset. On a syntax error the failure is the Find context's 3077 with <see cref="ExpressionFailure.Site"/>
+    /// at the offset where it was detected; the SQL layer reports it in its own words (3075).
+    /// </summary>
+    public static ExpressionSyntax ParseFragment(string source, int start, out int end)
+    {
+        var parser = new Parser(source, start);
+        try
+        {
+            SyntaxNode root = parser.Expression();
+            end = parser.Position;
+            return new ExpressionSyntax(root, null, parser.Texts);
+        }
+        catch (SyntaxError e)
+        {
+            end = parser.ErrorPosition;
+            return parser.Failed(e);
+        }
+        catch (NotModelledSyntax e)
+        {
+            end = parser.ErrorPosition;
+            return parser.Failed(e);
         }
     }
 
@@ -134,7 +165,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         return taken;
     }
 
-    private sealed class SyntaxError(string message) : Exception(message);
+    internal sealed class SyntaxError(string message) : Exception(message);
+
+    /// <summary>A form of the grammar CalcDb does not parse yet (a subquery, ALIKE, a parameter marker): named, never guessed.</summary>
+    internal sealed class NotModelledSyntax(string name, string detail) : Exception(detail)
+    {
+        public string Name { get; } = name;
+    }
 
     private enum TokenKind : byte
     {
@@ -150,7 +187,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
     private readonly record struct Token(TokenKind Kind, int Start, int Length, string Text, bool Doubled = false);
 
     /// <summary>The recursive-descent form of the precedence table; nesting depth is bounded by <see cref="MaxDepth"/>.</summary>
-    private sealed class Parser(string source)
+    private sealed class Parser(string source, int start)
     {
         private const int MaxDepth = 200;
 
@@ -159,11 +196,44 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             "And", "Or", "Not", "Xor", "Eqv", "Imp", "Mod", "Like", "Is", "Null", "In", "Between", "True", "False",
         };
 
-        private int _position;
+        private int _position = start;
         private Token? _peeked;
         private int _depth;
 
         public List<nint> Texts { get; } = [];
+
+        /// <summary>The offset of the first token not consumed.</summary>
+        public int Position => _peeked?.Start ?? SkipSpace(_position);
+
+        /// <summary>Where the lexer stood when an error was raised: the end of the token it had read last.</summary>
+        public int ErrorPosition => _peeked is { } t ? t.Start + t.Length : _position;
+
+        private int SkipSpace(int p)
+        {
+            while (p < source.Length && char.IsWhiteSpace(source[p]))
+            {
+                p++;
+            }
+            return p;
+        }
+
+        public ExpressionSyntax Failed(SyntaxError e)
+        {
+            foreach (nint b in Texts)
+            {
+                Bstrs.Free(b);
+            }
+            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = ErrorPosition }, []);
+        }
+
+        public ExpressionSyntax Failed(NotModelledSyntax e)
+        {
+            foreach (nint b in Texts)
+            {
+                Bstrs.Free(b);
+            }
+            return new ExpressionSyntax(null, ExpressionFailure.Open(ExpressionPhase.Parse, e.Name, e.Message) with { Site = ErrorPosition }, []);
+        }
 
         private Token Peek() => _peeked ??= Lex();
 
@@ -252,6 +322,10 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             while (true)
             {
                 Token t = Peek();
+                if (t.Kind == TokenKind.Name && t.Text.Equals("ALike", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new NotModelledSyntax("NotModelled.Alike", "ALIKE, the ANSI-92 pattern operator (R-EXPR-1 PAT-01)");
+                }
                 if (t.Kind == TokenKind.Symbol && t.Text is "=" or "<>" or "<" or ">" or "<=" or ">=")
                 {
                     Next();
@@ -342,12 +416,17 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             return items;
         }
 
+        /// <summary>
+        /// The closing parenthesis; at the end "Missing ), ], or Item", at a comma "Syntax error (comma)" (r-sql-13b/
+        /// sub-in-list-null-forms: <c>(a, g) IN ((1, 'x'))</c>), else "missing operator".
+        /// </summary>
         private void CloseParenthesis()
         {
             if (!IsSymbol(")"))
             {
                 Token t = Peek();
-                throw new SyntaxError(t.Kind == TokenKind.End ? ExpressionMessages.MissingParenthesis : ExpressionMessages.MissingOperator);
+                throw new SyntaxError(t.Kind == TokenKind.End ? ExpressionMessages.MissingParenthesis
+                    : t.Kind == TokenKind.Symbol && t.Text == "," ? ExpressionMessages.CommaSyntax : ExpressionMessages.MissingOperator);
             }
             Next();
         }
@@ -369,7 +448,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
 
         private SyntaxNode IntegerDivision() => Binary(Multiplicative, "\\");
 
-        private SyntaxNode Multiplicative() => Binary(Negation, "*", "/");
+        private SyntaxNode Multiplicative() => Binary(Power, "*", "/");
 
         private SyntaxNode Binary(Func<SyntaxNode> operand, params ReadOnlySpan<string> symbols)
         {
@@ -391,7 +470,23 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             return left;
         }
 
-        /// <summary>Unary minus (and plus), below ^: <c>-2 ^ 2</c> is -(2 ^ 2), as in VBA; <c>20 -- c</c> is 20 - (-c).</summary>
+        /// <summary>
+        /// ^ over unary operands: ACE binds unary minus tighter than ^, unlike VBA (qualified.md "R-EXPR-1 Branch B, EXPR-RUNTIME":
+        /// <c>-2 ^ 2</c> is 4, r-expr-1b/op-precedence); <c>2 ^ -2</c> takes the minus on its right operand.
+        /// </summary>
+        private SyntaxNode Power()
+        {
+            SyntaxNode left = Negation();
+            while (IsSymbol("^"))
+            {
+                Token t = Next();
+                SyntaxNode right = Negation();
+                left = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = ScalarOperation.Power, Left = left, Right = right, Offset = t.Start };
+            }
+            return left;
+        }
+
+        /// <summary>Unary minus (and plus): <c>20 -- c</c> is 20 - (-c).</summary>
         private SyntaxNode Negation()
         {
             if (IsSymbol("-") || IsSymbol("+"))
@@ -402,19 +497,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 _depth--;
                 return t.Text == "+" ? operand : new SyntaxNode { Kind = SyntaxKind.Unary, Operation = ScalarOperation.Negate, Left = operand, Offset = t.Start };
             }
-            return Power();
-        }
-
-        private SyntaxNode Power()
-        {
-            SyntaxNode left = Primary();
-            while (IsSymbol("^"))
-            {
-                Token t = Next();
-                SyntaxNode right = IsSymbol("-") || IsSymbol("+") ? Negation() : Primary();
-                left = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = ScalarOperation.Power, Left = left, Right = right, Offset = t.Start };
-            }
-            return left;
+            return Primary();
         }
 
         private unsafe SyntaxNode Primary()
@@ -425,7 +508,8 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 case TokenKind.Number:
                     if (!ScalarLiterals.TryNumber(t.Text, out NativeVariant number))
                     {
-                        throw new SyntaxError(ExpressionMessages.MissingOperator);
+                        // r-expr-1b/conv-range-edges: CDbl(1.8E308) is "Syntax error in number".
+                        throw new SyntaxError(ExpressionMessages.NumberSyntax);
                     }
                     return new SyntaxNode { Kind = SyntaxKind.Literal, Literal = LiteralKind.Number, Value = number, Text = t.Text, Offset = t.Start };
                 case TokenKind.Text:
@@ -450,9 +534,25 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 case TokenKind.Keyword when t.Text.Equals("Null", StringComparison.OrdinalIgnoreCase):
                     return new SyntaxNode { Kind = SyntaxKind.Literal, Literal = LiteralKind.Null, Value = ScalarLiterals.Null, Text = t.Text, Offset = t.Start };
                 case TokenKind.Name:
+                    if (t.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
+                        || (IsSymbol("(") && (t.Text.Equals("EXISTS", StringComparison.OrdinalIgnoreCase) || t.Text.Equals("ANY", StringComparison.OrdinalIgnoreCase)
+                            || t.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase) || t.Text.Equals("SOME", StringComparison.OrdinalIgnoreCase))))
+                    {
+                        throw new NotModelledSyntax("NotModelled.Subquery", $"a subquery ({t.Text}): R-SQL-1 SQL-SUB, W-06/relational-spill");
+                    }
+                    if (t.Text.Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new NotModelledSyntax("NotModelled.Subquery", "EXISTS: R-SQL-1 SQL-SUB, W-06/relational-spill");
+                    }
                     if (IsSymbol("("))
                     {
-                        return new SyntaxNode { Kind = SyntaxKind.Call, Text = t.Text, Items = Arguments(), Offset = t.Start };
+                        var call = new SyntaxNode { Kind = SyntaxKind.Call, Text = t.Text, Items = Arguments(), Offset = t.Start };
+                        if (IsSymbol("("))
+                        {
+                            // r-expr-1b/route-mdb-battery: Split('a b', ' ')(1).
+                            throw new SyntaxError(ExpressionMessages.InvalidQualifier);
+                        }
+                        return call;
                     }
                     return new SyntaxNode { Kind = SyntaxKind.Name, Text = t.Text, Offset = t.Start };
                 case TokenKind.Symbol when t.Text == "(":
@@ -463,12 +563,15 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     }
                 case TokenKind.Symbol when t.Text == ";":
                     throw new SyntaxError(ExpressionMessages.SyntaxError);
+                case TokenKind.Symbol when t.Text == ")":
+                    // r-sql-13b/agg-distinct-forms: Count(DISTINCT *) is "Extra )"; the rule for a ) where an operand is due is not identified.
+                    throw new NotModelledSyntax("NotModelled.ExtraParenthesis", "a ) where an operand is due");
                 default:
                     throw new SyntaxError(ExpressionMessages.MissingOperator);
             }
         }
 
-        /// <summary>A call's arguments: <c>()</c> or a list.</summary>
+        /// <summary>A call's arguments: <c>()</c>, <c>(*)</c> (SQL Count; the binder admits it only there) or a list.</summary>
         private List<SyntaxNode> Arguments()
         {
             Next(); // (
@@ -476,6 +579,12 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             {
                 Next();
                 return [];
+            }
+            if (IsSymbol("*"))
+            {
+                Token star = Next();
+                CloseParenthesis();
+                return [new SyntaxNode { Kind = SyntaxKind.Star, Offset = star.Start }];
             }
             var items = new List<SyntaxNode> { Expression() };
             while (IsSymbol(","))
@@ -522,6 +631,10 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             if (c == '[' || char.IsLetter(c) || c == '_')
             {
                 return LexName(start);
+            }
+            if (c is '`' or '?' or '@' or ':')
+            {
+                throw new NotModelledSyntax(c == '`' ? "NotModelled.BacktickName" : "NotModelled.ParameterMarker", $"'{c}' in an expression (r-sql-1/b-brackets, r-def-expr-sql/sql-foreign-identifier-quoting)");
             }
             if (c is '<' or '>')
             {
@@ -628,11 +741,16 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     {
                         throw new SyntaxError(ExpressionMessages.MissingOperator);
                     }
+                    if (_position < source.Length && source[_position] == '$')
+                    {
+                        _position++; // VBA's string form of a function name (Left$, Mid$, ChrW$)
+                    }
                     name.Append(source, s, _position - s);
                 }
-                if (_position + 1 < source.Length && source[_position] == '.' && (source[_position + 1] == '[' || char.IsLetter(source[_position + 1]) || source[_position + 1] == '_'))
+                if (_position + 1 < source.Length && source[_position] is '.' or '!' && (source[_position + 1] == '[' || char.IsLetter(source[_position + 1]) || source[_position + 1] == '_'))
                 {
-                    name.Append('.');
+                    // T.F, and the bang form Forms!F!x, which a query takes as one name (r-expr-1b/sandbox-access-hosted-names: 3061).
+                    name.Append(source[_position]);
                     _position++;
                     bracketed = false;
                     continue;
