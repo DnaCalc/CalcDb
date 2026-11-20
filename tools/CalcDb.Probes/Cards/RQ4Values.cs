@@ -55,6 +55,14 @@ public sealed class RQ4Values : ICard
         "InStr(1073741824, 'abcd', 'a')", "InStr(2147483647, 'abcd', 'a')", "Left('abcd', ID * 1073741824) & ''", "Left('abcd', 1073741823 + ID)",
     ];
 
+    /// <summary>Round 3 of left-bounds: Mid's start between 2^30 and 2^31 − 1, bisected, with and without a length.</summary>
+    private static readonly string[] Bounds3 =
+    [
+        "Mid('abcd', 1073741825)", "Mid('abcd', 1073741827)", "Mid('abcd', 1073741828)", "Mid('abcd', 1610612736)", "Mid('abcd', 2147483644)",
+        "Mid('abcd', 2147483645)", "Mid('abcd', 2147483646)", "Mid('abcd', 2147483646, 1)", "Mid('abcd', 2147483645, 1)", "Mid('', 2147483646)",
+        "Mid('', 2147483647)", "Mid('abcd', 2147483648)", "Mid('abcd', 1610612736, 1073741823)", "Mid('abcd', 2147483646, 0)",
+    ];
+
     /// <summary>Round 2 of like-ranges: units whose lowercase or uppercase mapping is not a Latin-1 case pair.</summary>
     private static readonly string[] Units2 = ["i", "I", "\u0130", "\u0131", "k", "\u212A", "s", "\u017F", "\u01C5", "\u01C6", "\u01C4", "\u2126", "\u03C9", "\u00B5", "\u039C"];
 
@@ -76,6 +84,18 @@ public sealed class RQ4Values : ICard
             p =>
             {
                 foreach (string e in Bounds2)
+                {
+                    Select(p, $"SELECT {e} FROM One", 1);
+                }
+            });
+
+        yield return Make("bounds-3", ["R-EXPR-1", "EXPR-INVENTORY", "W-02/shared-scalar-services"],
+            $"For each expression [{string.Join(" ;; ", Bounds3)}]: SELECT e FROM One as a snapshot, the value read. bounds-2 found Mid's start " +
+            "1073741824 answering \"\" and left-bounds a start of 2147483647 failing 5: asks where between them the start is refused, with and " +
+            "without a length, on a short and an empty text.",
+            p =>
+            {
+                foreach (string e in Bounds3)
                 {
                     Select(p, $"SELECT {e} FROM One", 1);
                 }

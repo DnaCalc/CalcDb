@@ -62,6 +62,8 @@ public enum ScalarOperation : byte
     Chr,
     Val,
     Left,
+    Right,
+    Mid,
     DateSerial,
 
     /// <summary>IsError: -1 for VT_ERROR, else 0 (qualified.md R-EXPR-1 Branch B, corrected: r-q3-sql/iserror-forms).</summary>
@@ -106,7 +108,8 @@ public readonly record struct ScalarDescriptor
         ScalarOperation.Negate or ScalarOperation.Not => (1, 1),
         <= ScalarOperation.Imp => (2, 2),
         ScalarOperation.Round or ScalarOperation.Nz => (1, 2),
-        ScalarOperation.Left or ScalarOperation.Like => (2, 2),
+        ScalarOperation.Left or ScalarOperation.Right or ScalarOperation.Like => (2, 2),
+        ScalarOperation.Mid => (2, 3),
         ScalarOperation.DateSerial => (3, 3),
         _ => (1, 1),
     };

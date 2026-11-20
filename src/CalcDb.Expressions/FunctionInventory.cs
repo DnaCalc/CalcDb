@@ -61,6 +61,8 @@ public static class FunctionInventory
         Available("Chr", ScalarOperation.Chr);
         Available("Val", ScalarOperation.Val);
         Available("Left", ScalarOperation.Left);
+        Available("Right", ScalarOperation.Right);
+        Available("Mid", ScalarOperation.Mid);
         Available("DateSerial", ScalarOperation.DateSerial);
 
         foreach (string name in new[]

@@ -55,7 +55,12 @@ public static unsafe partial class ScalarKernel
         fixed (NativeVariant* b = &second)
         fixed (NativeVariant* t = &third)
         {
-            return d.Operation == ScalarOperation.DateSerial ? DateSerial(d, a, b, t, context) : throw new ArgumentOutOfRangeException(nameof(d));
+            return d.Operation switch
+            {
+                ScalarOperation.DateSerial => DateSerial(d, a, b, t, context),
+                ScalarOperation.Mid => MidPart(d, a, b, t, context),
+                _ => throw new ArgumentOutOfRangeException(nameof(d)),
+            };
         }
     }
 
@@ -89,7 +94,8 @@ public static unsafe partial class ScalarKernel
         ScalarOperation.UCase => UpperCase(d, a, c),
         ScalarOperation.Chr => Character(d, a, c),
         ScalarOperation.Val => Value(d, a),
-        ScalarOperation.Left => LeftPart(d, a, b, c),
+        ScalarOperation.Left or ScalarOperation.Right => EdgePart(d, a, b, c),
+        ScalarOperation.Mid => MidPart(d, a, b, null, c),
         _ => throw new ArgumentOutOfRangeException(nameof(d)),
     };
 

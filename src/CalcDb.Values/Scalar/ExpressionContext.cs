@@ -35,24 +35,6 @@ public abstract class TextCollation
 
     /// <summary>Negative, zero or positive, as <paramref name="left"/> sorts before, with or after <paramref name="right"/>.</summary>
     public abstract int Compare(ReadOnlySpan<char> left, ReadOnlySpan<char> right);
-
-    /// <summary>
-    /// Whether one text unit of a Like pattern matches one unit of the subject (qualified.md PAT-07, PAT-12/14: Like is
-    /// case-insensitive and unit by unit): the same unit, or two units the sort order holds equal where the unit is not
-    /// ignorable (a unit with no weight, such as U+0000, equals no other unit). An implementation may answer from a table.
-    /// </summary>
-    public virtual bool UnitEquals(char pattern, char subject)
-    {
-        if (pattern == subject)
-        {
-            return true;
-        }
-        ReadOnlySpan<char> p = [pattern], s = [subject];
-        return Compare(p, s) == 0 && Compare(p, default) != 0;
-    }
-
-    /// <summary>The order of two single units, for a Like range <c>[a-c]</c>.</summary>
-    public virtual int UnitCompare(char left, char right) => Compare([left], [right]);
 }
 
 /// <summary>

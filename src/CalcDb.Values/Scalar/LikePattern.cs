@@ -13,11 +13,17 @@ public sealed class LikePattern
     private readonly Instruction[] _program;
     private readonly ClassMember[] _members;
 
-    private LikePattern(Instruction[] program, ClassMember[] members)
+    private LikePattern(Instruction[] program, ClassMember[] members, bool isStarOnly)
     {
         _program = program;
         _members = members;
+        IsStarOnly = isStarOnly;
     }
+
+    /// <summary>
+    /// The pattern is exactly <c>*</c>: a Null subject is False against it, not Null (PAT-06; <c>**</c> and <c>?*</c> over Null are Null).
+    /// </summary>
+    internal bool IsStarOnly { get; }
 
     private enum Kind : byte
     {
@@ -83,7 +89,7 @@ public sealed class LikePattern
             }
             fault |= program[k].Kind == Kind.Fault;
         }
-        return new LikePattern([.. program], [.. members]);
+        return new LikePattern([.. program], [.. members], pattern is "*");
     }
 
     /// <summary>
@@ -225,19 +231,22 @@ public sealed class LikePattern
                         }
                         else
                         {
-                            int? order = UnitOrder(range.Low, range.High, context, out open);
-                            if (order is null)
+                            if (context.Compare is not (TextCompareMode.Binary or TextCompareMode.Database))
                             {
+                                open = NotModelledCase.PatternUnitCompare;
                                 return null;
                             }
-                            if (order > 0)
+                            // PAT-03: under the database order both bounds and the unit are lowercased and compared as code
+                            // units (collation plays no part); under Binary the units themselves.
+                            bool fold = context.Compare == TextCompareMode.Database;
+                            char low = fold ? Lower(range.Low) : range.Low, high = fold ? Lower(range.High) : range.High, unit = fold ? Lower(u) : u;
+                            if (low > high)
                             {
-                                // PAT-02: a reversed range ([C-A], [z-a]) is an invalid pattern where it is tried.
+                                // PAT-02: a reversed range ([C-A], [z-a], and [Z-a] once lowercased) is an invalid pattern where it is tried.
                                 fault = true;
                                 return null;
                             }
-                            int? low = UnitOrder(range.Low, u, context, out open), high = UnitOrder(u, range.High, context, out open);
-                            hit = low is null || high is null ? null : low <= 0 && high <= 0;
+                            hit = low <= unit && unit <= high;
                         }
                         if (hit is null)
                         {
@@ -250,7 +259,7 @@ public sealed class LikePattern
         }
     }
 
-    /// <summary>Unit equality under the context: identity, else the database sort order's (Like is case-insensitive there).</summary>
+    /// <summary>Unit equality under the context: identity, else the same lowercase mapping under the database order (Like is case-insensitive there).</summary>
     private static bool? UnitEquals(char pattern, char subject, ExpressionContext context, out NotModelledCase open)
     {
         open = NotModelledCase.None;
@@ -262,32 +271,22 @@ public sealed class LikePattern
         {
             case TextCompareMode.Binary:
                 return false;
-            case TextCompareMode.Database when context.DatabaseOrder is { } order:
-                return order.UnitEquals(pattern, subject);
             case TextCompareMode.Database:
-                open = NotModelledCase.DatabaseCollationMissing;
-                return null;
+                // PAT-03: a literal unit is mapped like a range's, so ä and Ä match each other and ǅ does not match ǆ.
+                return Lower(pattern) == Lower(subject);
             default:
                 open = NotModelledCase.PatternUnitCompare;
                 return null;
         }
     }
 
-    private static int? UnitOrder(char left, char right, ExpressionContext context, out NotModelledCase open)
+    /// <summary>
+    /// The one-to-one lowercase mapping of a range bound and unit (PAT-03): the simple Unicode lower case of the unit, which
+    /// leaves İ, the Kelvin and Ohm signs, µ and the titlecase digraphs as they are.
+    /// </summary>
+    private static char Lower(char u) => u switch
     {
-        open = NotModelledCase.None;
-        switch (context.Compare)
-        {
-            case TextCompareMode.Binary:
-                return left.CompareTo(right);
-            case TextCompareMode.Database when context.DatabaseOrder is { } order:
-                return order.UnitCompare(left, right);
-            case TextCompareMode.Database:
-                open = NotModelledCase.DatabaseCollationMissing;
-                return null;
-            default:
-                open = NotModelledCase.PatternUnitCompare;
-                return null;
-        }
-    }
+        'İ' or 'K' or 'Ω' or 'ǅ' or 'ǈ' or 'ǋ' or 'ǲ' => u,
+        _ => char.ToLowerInvariant(u),
+    };
 }

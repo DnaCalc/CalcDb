@@ -12,7 +12,7 @@ namespace CalcDb.Values.Scalar;
 public static unsafe partial class ScalarKernel
 {
     /// <summary>
-    /// Like (II-10 §§16–18): Null when the subject is Null (PAT-06); a number or date subject matches through its text
+    /// Like (II-10 §§16–18): Null when the subject is Null, except against the pattern <c>*</c> alone, which is False (PAT-06); a number or date subject matches through its text
     /// under the context's locale (Find <c>N Like '4*'</c> finds 40, <c>D Like '*2020*'</c> the 2020 dates); then the
     /// compiled pattern, whose failures are error 93 or a named case.
     /// </summary>
@@ -30,7 +30,7 @@ public static unsafe partial class ScalarKernel
         fixed (NativeVariant* a = &subject)
         fixed (NativeVariant* p = &pattern)
         {
-            if (Tag(a) == VarType.Null || Tag(p) == VarType.Null)
+            if (Tag(p) == VarType.Null)
             {
                 return Null();
             }
@@ -55,7 +55,7 @@ public static unsafe partial class ScalarKernel
     {
         if (Tag(a) == VarType.Null)
         {
-            return Null();
+            return pattern.IsStarOnly ? Boolean(false) : Null();
         }
         NativeVariant text = default;
         try
@@ -220,11 +220,17 @@ public static unsafe partial class ScalarKernel
     }
 
     /// <summary>
-    /// Left (Find <c>S = Left('alphabet', 5)</c>): Null text gives Null; the count converts as a Long, a negative count
-    /// fails 5 (the VBA reference), and the first units of the text (or of a number's or date's text form) are taken.
-    /// A Null count is <see cref="NotModelledCase.NullArgument"/>.
+    /// The largest length ACE's Left, Right and Mid accept: a length above 2^30 − 1 fails 5 whatever the text, even an empty
+    /// one (qualified.md "R-EXPR-1 EXPR-INVENTORY: length and start arguments of the text functions", card r-q4-values).
     /// </summary>
-    private static ScalarOutcome LeftPart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
+    private const int MaxTextLength = 1073741823;
+
+    /// <summary>
+    /// Left and Right (Find <c>S = Left('alphabet', 5)</c>): Null text gives Null; the count converts as a Long (beyond
+    /// Long fails 6), a count below 0 or above <see cref="MaxTextLength"/> fails 5 for any text, and the first (last) units
+    /// of the text, or of a number's or date's text form, are taken. A Null count is <see cref="NotModelledCase.NullArgument"/>.
+    /// </summary>
+    private static ScalarOutcome EdgePart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
     {
         if (Tag(b) == VarType.Null)
         {
@@ -238,10 +244,50 @@ public static unsafe partial class ScalarKernel
         {
             return refusedCount;
         }
-        if (count < 0)
+        if (count is < 0 or > MaxTextLength)
         {
             return Fail(d, AceError.InvalidProcedureCall);
         }
+        return TakeUnits(d, a, c, d.Operation == ScalarOperation.Right ? -count : 0, count);
+    }
+
+    /// <summary>
+    /// Mid (qualified.md EXPR-INVENTORY, same note): the start converts as a Long and must be 1 to 2^30 (0 and 1073741825
+    /// fail 5; a start past the text gives ""); the optional length is bounded as in <see cref="EdgePart"/>. Null text
+    /// gives Null; a Null start or length is <see cref="NotModelledCase.NullArgument"/>.
+    /// </summary>
+    private static ScalarOutcome MidPart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* start, NativeVariant* length, ExpressionContext c)
+    {
+        if (Tag(start) == VarType.Null || (length is not null && Tag(length) == VarType.Null))
+        {
+            return Open(d, NotModelledCase.NullArgument);
+        }
+        if (Tag(a) == VarType.Null)
+        {
+            return Null();
+        }
+        if (IntegerOf(d, start, c, VarType.I4, out int from) is { } refusedStart)
+        {
+            return refusedStart;
+        }
+        int count = MaxTextLength;
+        if (length is not null && IntegerOf(d, length, c, VarType.I4, out count) is { } refusedLength)
+        {
+            return refusedLength;
+        }
+        if (from is < 1 or > MaxTextLength + 1 || count is < 0 or > MaxTextLength)
+        {
+            return Fail(d, AceError.InvalidProcedureCall);
+        }
+        return TakeUnits(d, a, c, from - 1, count);
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> units of the text of <paramref name="a"/> from <paramref name="from"/>; a negative
+    /// <paramref name="from"/> counts back from the end (Right takes the last <paramref name="count"/>).
+    /// </summary>
+    private static ScalarOutcome TakeUnits(in ScalarDescriptor d, NativeVariant* a, ExpressionContext c, int from, int count)
+    {
         NativeVariant text = default;
         try
         {
@@ -250,7 +296,8 @@ public static unsafe partial class ScalarKernel
                 return refused;
             }
             ReadOnlySpan<char> units = Tag(a) == VarType.Bstr ? Bstrs.Chars(a->Pointer) : Bstrs.Chars(text.Pointer);
-            ReadOnlySpan<char> part = units[..Math.Min(count, units.Length)];
+            int begin = from < 0 ? Math.Max(0, units.Length + from) : Math.Min(from, units.Length);
+            ReadOnlySpan<char> part = units.Slice(begin, Math.Min(count, units.Length - begin));
             return Bstr(Bstrs.FromUnits(part.Length, part, static (span, source) => source.CopyTo(span)));
         }
         finally
