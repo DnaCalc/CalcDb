@@ -431,3 +431,36 @@ started the same way. `685w` stopped on an owner decision: no shared conversion 
 
 **Next candidates.** A `--dirs` list in the repository for the standard compare set, instead of a script in temp; the
 compare script's diff as a `calcdb-oracle` command (it reads the comparison ledger, so it is tooling, not analysis).
+
+## 2026-11-20 · Eight items through sub-sessions; one brief that contradicted the book (same session, Claude Opus 5.5)
+
+**Work observed.** After the last round this session delegated each slice to a sub-session and kept review, the
+compare and the commits: `bfsh`, `n764` (Sonnet), `73vf` (two children), Database.Version, `58sc`, CollatingOrder,
+`nksv`, `gw6c`, `6w9p`/`77wt`, with `tdt9` running. Compared questions matching ACE: 38 → 69, of 527 → 965 as the
+sort-order, ADO and activation folders joined the compare set. Two owner decisions are open (`685w`, ADO threading).
+
+**What worked.**
+- *A child that says no.* The first `73vf` child flagged that the brief's port of Jackcess code contradicted A-01;
+  a fresh child that had never seen the port wrote the encoder from II-05 and the data, and matched the same native
+  entries. The book caught the parent's mistake because the child read it.
+- *Native bytes as the acceptance test.* 15,133 index entries from ACE's own files decided every rule the book left
+  open, and named the one residual instead of patching it.
+- *A first-difference census after each compare* (which member each mismatch stops at) chose the next item:
+  Database.Version, then CollatingOrder, then the Seek differences, each found that way.
+- *Flaky test, measured.* `58sc` was a measurement artefact (a parallel GC adding an allocation quantum), found by
+  repeating runs under one change at a time, not by loosening the budget.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The parent's brief asked for a port the book forbids | One child's encoder discarded; a second child rewrote it | Before briefing a slice that brings in third-party material, read its A-01 rows' permitted use |
+| Child reports re-sent as progress while their own compare ran | Several empty turns in the parent | None needed; children now report once, after their compare |
+| A partial line in a mid-session snapshot hid the change of several questions | One diff showed "no change" for work the child had already compared | The diff compares against the last committed run, not the latest ledger |
+| An accidental `python3 -c 1` in a shell line | Against AGENTS.md; no effect | Read a command before running it |
+
+**Rule.** A brief cites the book rows it relies on; a child that finds a contradiction stops and reports it.
+
+**Next candidates.** The compare set and the diff script belong in the repository (a `calcdb-oracle compare-set`
+with the folder list and the per-question diff against a named run); the session is long: hand over to a fresh
+session after `tdt9`, with the two owner decisions in the handoff.
