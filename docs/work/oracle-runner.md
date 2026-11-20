@@ -226,6 +226,37 @@ with the fresh one under `calls.trace` revision 6 (native against native: module
 environment, another engine or a candidate is provenance). Comparisons go to `reuse/<run>.jsonl` in the store; `--retain`
 writes the records to `evidence/r-oracle-1/or-reuse/`, apart from the cards' own folders.
 
+## The broker (oracle service step 2)
+
+`calcdb-oracle broker [--workers 2] [--batch 8] [--cool-down 30] [--timeout 300] [--pipe calcdb-oracle] [--qualified-cards A,B]`
+runs the broker of [oracle-service.md](oracle-service.md) ([`OracleBroker`](../../src/CalcDb.Evidence/Broker/OracleBroker.cs))
+on the named pipe `\\.\pipe\calcdb-oracle` (current user only) until `broker --stop` or Ctrl+C. `calcdb-oracle status`
+(no `--token`) prints its one line: OK (every pool worker up), DEGRADED (some) or DOWN (none, or no broker).
+`calcdb-oracle ask --via broker (--question F | --files A,B | --dir DIR) [--id ID --seq N] [--effects none] [--isolation
+pooled|fresh-worker|fresh-attempt] [--purpose or-reuse] [--priority bulk] [--capture record] [--no-cache] [--compare-fresh DIR]`
+is its client; `batch`, `compare-set` and `run` stay on the one-attempt path.
+
+- **Each question is still a job and an attempt** in this store: question i of request (id, seq) is job
+  `<id>.s<seq>.q<i>`, run by the step-1 pooled worker or by `RunAttempt` (tier 2), sealed by the one sealer. The
+  request is persisted under `broker/requests/` before anything runs. A resent (id, seq) gets the answers the first
+  produced, also after a broker restart; with other questions it is a conflict (T-EVID-02). A job left prepared or
+  running by a broker that died is answered `uncertain` and never run again.
+- **Admission** ([`BrokerAdmission`](../../src/CalcDb.Evidence/Broker/BrokerAdmission.cs)): questions declare `effects`
+  and `isolation` (key fields, written only when present, so undeclared keys are unchanged). Pooled only when
+  `effects: none`, no tier-2 shape, and the reset is qualified for the card (`--qualified-cards`, none yet) or the request
+  is the OR-REUSE experiment (`--purpose or-reuse`); everything else, undeclared included, goes to tier 2. A declared
+  effect-free question that calls a function of the deny list (`Shell`, `CreateObject`, ...) is refused by name.
+- **Answer cache.** A complete answer without a prehistory (tier 2), or after a qualified reset, answers a later
+  request for the same question key when the environment base (the receipt, `EnvironmentEntry.BaseId`) is the same and
+  no module it names has another identity now. `--no-cache` asks for a new attempt.
+- **Pool.** Slots share the queue (interactive first), each taking its share up to the batch size. A lost worker (death,
+  deadline, malformed frame, failed reset, no pong to the idle health ping every 5 s) cools down, then restarts; later
+  starts count, at most three an hour, except for the last slot with no other worker up. Unstarted questions of its
+  batch go back to the head of the queue.
+- **Logs** under `broker/log/`: `YYYY-MM-DD.jsonl.gz` (one line per evaluated answer: key, envId, worker, batch, the
+  capture's events without module lists) and `waits.jsonl` (queue, worker-start, worker-down, tier2-route, refused,
+  answer-slow, shutdown). Captures travel by `get` on the digest an answer names; fixtures and large questions by `put`.
+
 ## Linux-controlled operation
 
 The proposed service design, with Windows-opened ssh relays to Linux hosts, a fast tier of

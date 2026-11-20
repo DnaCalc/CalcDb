@@ -82,7 +82,11 @@ public sealed class PooledRun(JobStore store, Func<string, IWorkerConnection> la
         return results;
     }
 
-    private PooledResult AskOne(string token)
+    /// <summary>
+    /// Ask one submitted job in this run's worker, starting one when there is none (the broker's pool slots call this per
+    /// question, keeping the worker across batches).
+    /// </summary>
+    public PooledResult AskOne(string token)
     {
         JobRecord job = store.GetJob(token);
         if (PooledAdmission.Refusal(store.GetQuestion(job.QuestionKey), job.RequestedEnvironment) is { } refusal)
@@ -190,6 +194,60 @@ public sealed class PooledRun(JobStore store, Func<string, IWorkerConnection> la
     private PooledResult Settle(AttemptRecord attempt, WorkerSession? session, OwnerReport report) =>
         new(attempt.Token, null, attempt.AttemptId, store.Seal(attempt, report), session);
 
+    /// <summary>True while this run holds a live worker; false after it was lost, retired or never started.</summary>
+    public bool HasWorker => _worker is not null;
+
+    /// <summary>The session id and process of the worker held now, if any.</summary>
+    public (string SessionId, int ProcessId)? Current => _worker is { } w ? (_sessionId!, w.ProcessId) : null;
+
+    /// <summary>How many workers this run has started.</summary>
+    public int WorkersStarted => _workers;
+
+    /// <summary>Start a worker now when there is none (the broker's warm start and restart).</summary>
+    /// <returns>Null when a worker is ready; otherwise why none could be started.</returns>
+    public string? Warm() => EnsureWorker();
+
+    /// <summary>
+    /// Health check of an idle worker: ping, and a pong with the same sequence within <paramref name="wait"/>. A worker that
+    /// does not answer, answers anything else or has exited is ended and dropped; nothing was running in it.
+    /// </summary>
+    public bool Ping(TimeSpan wait)
+    {
+        if (_worker is not { } worker)
+        {
+            return false;
+        }
+        int seq = ++_seq;
+        try
+        {
+            worker.Send(Frame.Of(FrameType.Ping, new SeqBody(seq)));
+            var clock = Stopwatch.StartNew();
+            while (clock.Elapsed < wait)
+            {
+                Received r = worker.Receive(Poll);
+                if (r.Status == ReceiveStatus.Timeout)
+                {
+                    continue;
+                }
+                if (r.Status == ReceiveStatus.Frame && r.Frame.Type == FrameType.Pong && r.Frame.Parse<SeqBody>().Seq == seq)
+                {
+                    return true;
+                }
+                break;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or OracleProtocolException)
+        {
+            // Falls through: the worker is ended below.
+        }
+        if (!worker.WaitExit(TimeSpan.Zero))
+        {
+            worker.Kill();
+        }
+        Drop();
+        return false;
+    }
+
     /// <returns>Null when a worker is ready; otherwise why none could be started.</returns>
     private string? EnsureWorker()
     {
@@ -244,7 +302,7 @@ public sealed class PooledRun(JobStore store, Func<string, IWorkerConnection> la
     }
 
     /// <summary>A normal recycle (II-15 §4): done, then the process is given its grace to exit before it is ended.</summary>
-    private void Retire()
+    public void Retire()
     {
         if (_worker is not { } worker)
         {

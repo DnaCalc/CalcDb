@@ -8,7 +8,7 @@ namespace CalcDb.Oracle.Runner;
 /// <list type="bullet">
 /// <item><c>submit --question FILE --token T [--env LABEL]</c>: admit or query a job (T-EVID-02).</item>
 /// <item><c>run --token T [--timeout SECONDS] [--new-attempt] [--desktop private|main]</c>: prepare an attempt, run an owned worker, seal it.</item>
-/// <item><c>status --token T</c>: the job and its latest manifest.</item>
+/// <item><c>status --token T</c>: the job and its latest manifest; without <c>--token</c>, the broker's status line.</item>
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture
 /// (kept as bytes in <c>evidence/artifacts/</c>).</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: write a sealed attempt's answer record into <c>evidence/</c>; artifacts as
@@ -37,6 +37,9 @@ namespace CalcDb.Oracle.Runner;
 /// under <c>reductions/</c> in the store and prints the reduced program (W-01/reduction, II-15 §23).</item>
 /// <item><c>reuse (--files F1,F2 | --dir DIR) [--retain]</c>: ask read-only questions of long-lived workers, fresh and
 /// reused in two orders, and compare the answers (R-ORACLE-1 OR-REUSE; <see cref="Reuse"/>).</item>
+/// <item><c>broker [--workers N] ... | broker --stop</c>: run or stop the oracle service broker (step 2; <see cref="BrokerCommand"/>);
+/// <c>status</c> without <c>--token</c> prints its one line, OK, DEGRADED or DOWN.</item>
+/// <item><c>ask --via broker ...</c>: ask questions of the broker (<see cref="AskCommand"/>).</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
@@ -47,7 +50,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|compare-set|reuse|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -77,6 +80,8 @@ internal static partial class Program
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "compare-set" => CompareSetCommand(store, options, repo, evidenceDir, artifactsDir),
                 "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),
+                "broker" => OperatingSystem.IsWindows() ? BrokerCommand(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The broker runs only on a Windows oracle host."),
+                "ask" => AskCommand(store, options),
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
                 "prune" => Prune(store, options),
@@ -471,6 +476,10 @@ internal static partial class Program
 
     private static int Status(JobStore store, Options options)
     {
+        if (!options.Has("token"))
+        {
+            return BrokerStatusLine(options);
+        }
         JobRecord job = store.GetJob(options.Require("token"));
         Console.WriteLine(EvidenceJson.Serialize(job));
         if (job.Attempts.Count > 0 && store.GetManifest(job.Attempts[^1]) is { } manifest)

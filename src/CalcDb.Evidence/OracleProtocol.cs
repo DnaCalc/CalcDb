@@ -6,8 +6,8 @@ namespace CalcDb.Evidence;
 
 /// <summary>
 /// Frame types of <c>calcdb-oracle/1</c> (docs/work/oracle-service.md, Protocol; D-ORACLE-1). The long-lived worker of
-/// step 1 uses hello, submit, answer, error, ping/pong and done on its stdin and stdout; the other types belong to the
-/// broker and its clients (step 2 and later) and are reserved here so the numbering is fixed once.
+/// step 1 uses hello, submit, answer, error, ping/pong and done on its stdin and stdout; the broker's endpoint (step 2)
+/// uses all of them with the bodies of <see cref="BrokerFrames"/>, plus status and shutdown.
 /// </summary>
 public enum FrameType : byte
 {
@@ -22,6 +22,12 @@ public enum FrameType : byte
     Ping = 9,
     Pong = 10,
     Wait = 11,
+
+    /// <summary>Client to broker with an empty body; the broker answers with a <see cref="BrokerStatus"/>.</summary>
+    Status = 12,
+
+    /// <summary>Client to broker: stop accepting, finish the question each worker is on, retire the workers, exit.</summary>
+    Shutdown = 13,
 }
 
 /// <summary>One frame: its type and its compact UTF-8 JSON body.</summary>
@@ -149,10 +155,16 @@ public sealed record SubmitBody(int Seq, string AttemptDirectory, string Attempt
 /// <summary>answer, worker to runner: the question settled, its capture's digest, and the reset that followed it.</summary>
 public sealed record AnswerBody(int Seq, string AttemptId, int WorkerGeneration, string Execution, string CaptureSha256, long CaptureLength, ResetReport Reset);
 
-/// <summary>error, either way. Codes: <c>refused</c>, <c>malformed</c>, <c>protocol</c>, <c>worker-down</c>.</summary>
+/// <summary>
+/// error, either way. Codes: <c>refused</c>, <c>malformed</c>, <c>protocol</c>, <c>worker-down</c>; from the broker also
+/// <c>conflict</c> (a resent request id and sequence with other questions), <c>shutdown</c>, <c>not-found</c>.
+/// </summary>
 public sealed record ErrorBody(string Code, string Message)
 {
     public int? Seq { get; init; }
+
+    /// <summary>The client request id the error is about (broker endpoint).</summary>
+    public string? Id { get; init; }
 }
 
 /// <summary>ping, pong and done.</summary>

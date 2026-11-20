@@ -69,6 +69,23 @@ public sealed record Question
     /// </summary>
     public IReadOnlyList<DialogRule>? DialogPolicy { get; init; }
 
+    /// <summary>
+    /// The question's declared effects (docs/work/oracle-service.md, Two tiers; D-ORACLE-1): <c>none</c> (read-only opens
+    /// of immutable fixtures; may run again), <c>fixture</c> (changes its own input copies) or <c>external</c> (anything
+    /// else). Null is undeclared, which the broker treats as not <c>none</c>. Part of the key when present.
+    /// </summary>
+    public string? Effects { get; init; }
+
+    /// <summary>
+    /// The isolation the question asks for: <c>pooled</c> (a tier-1 worker after its declared reset), <c>fresh-worker</c>
+    /// (a new tier-1 worker) or <c>fresh-attempt</c> (tier 2). Null is undeclared. Part of the key when present.
+    /// </summary>
+    public string? Isolation { get; init; }
+
+    public static readonly IReadOnlyList<string> EffectsValues = ["none", "fixture", "external"];
+
+    public static readonly IReadOnlyList<string> IsolationValues = ["pooled", "fresh-worker", "fresh-attempt"];
+
     public string Key()
     {
         var w = new CanonicalWriter(KeyEncoding);
@@ -90,6 +107,15 @@ public sealed record Question
             // Written only when present, so the keys of questions without a policy are unchanged.
             w.List("dialogPolicy", rules, (cw, r) => cw.Begin("dialogRule").Text("title", r.Title).Text("text", r.Text ?? "").Text("press", r.Press));
         }
+        // The tier declarations are written only when present, so the keys of undeclared questions are unchanged.
+        if (Effects is not null)
+        {
+            w.Text("effects", Effects);
+        }
+        if (Isolation is not null)
+        {
+            w.Text("isolation", Isolation);
+        }
         return "qk1-" + w.Sha256Hex();
     }
 
@@ -99,6 +125,14 @@ public sealed record Question
         if (Schema != CurrentSchema)
         {
             throw new EvidenceFormatException($"Unsupported question schema '{Schema}'.");
+        }
+        if (Effects is not null && !EffectsValues.Contains(Effects))
+        {
+            throw new EvidenceFormatException($"effects '{Effects}': use {string.Join(", ", EffectsValues)}.");
+        }
+        if (Isolation is not null && !IsolationValues.Contains(Isolation))
+        {
+            throw new EvidenceFormatException($"isolation '{Isolation}': use {string.Join(", ", IsolationValues)}.");
         }
         var roles = new HashSet<string>(StringComparer.Ordinal);
         foreach (FixtureInput input in Inputs)

@@ -154,7 +154,10 @@ Each step is a CalcDb slice with its own test, and the existing tasks attach whe
    [oracle-runner.md](oracle-runner.md#long-lived-worker-oracle-service-step-1-or-reuse).
 2. **Broker on Windows**: queue, priorities, batcher, answer cache, named-pipe endpoint, worker
    pool with restart caps, waits and daily logs, `status`. Tier 2 jobs submitted through the same
-   broker run on the existing owned-attempt runner.
+   broker run on the existing owned-attempt runner. Built: `calcdb-oracle broker`, `ask --via broker` and `status`, as
+   described in [oracle-runner.md](oracle-runner.md#the-broker-oracle-service-step-2). A question of a card whose reset is
+   not qualified runs in tier 2 (not `fresh-worker`, which only an explicit `isolation: fresh-worker` asks for), unless
+   the request's purpose is the OR-REUSE experiment.
 3. **Crash bisection, isolation worker, crash budget.** (Feeds `npmg`, OR-JOB, for tier 2.)
 4. **Relay and Linux client**: broker-opened ssh, relay shipped by hash, Unix socket, a C#
    client in a platform-neutral assembly. Measure a single question from a Linux host.
