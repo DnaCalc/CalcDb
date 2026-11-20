@@ -1,7 +1,10 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Foundation;
 using CalcDb.Format;
+using CalcDb.Sql;
+using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
 
@@ -10,8 +13,9 @@ namespace CalcDb.Com.Dao;
 /// role rows. Name, Type (the masked flag class), SQL (rendered as ACE renders it at open, <see cref="QuerySql"/>),
 /// Connect (the pass-through type row's Name1, else ""), ReturnsRecords (True for every saved family in
 /// r-cat-1/querydefs), Updatable (the session's: True on a read-write open, False read-only; r-fix-cursor-dao/updatable-members-rw),
-/// the dates, the stored ODBCTimeout and MaxRecords, Parameters and Properties. Its Fields and the implicit parameters
-/// need the binder (W-06/parser-binder-scan) and are named gaps. Close of a saved QueryDef changes nothing (DAO-LIFE:
+/// the dates, the stored ODBCTimeout and MaxRecords, Parameters and Properties. A select query's Parameters, their
+/// values, its Fields before an open and its OpenRecordset come from its SQL bound by the binder (W-06/parser-binder-scan;
+/// qualified.md R-DAO-1 DAO-QUERY, R-SQL-3 SQL-META parameters). Close of a saved QueryDef changes nothing (DAO-LIFE:
 /// its recordsets survive and SQL still reads).
 /// </summary>
 internal sealed unsafe class QueryDefObject : DaoObject
@@ -34,7 +38,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Get("CacheSize", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("Prepare", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("Parameters", (self, args) => Live(self, q => Object(q.ParametersCollection())))
-        .Get("Fields", (self, args) => Live(self, q => CallResult.Fail(Failure.NotImplemented("QueryDef.Fields (the output columns need the binder, W-06/parser-binder-scan)"))))
+        .Get("Fields", (self, args) => Live(self, q => q.FieldsCollection()))
         .Get("Properties", (self, args) => Live(self, q => q.PropertiesCollection()))
         .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, q => q.OpenRecordset(type, options)); })
         .Method("Execute", (self, args) => Live(self, q => q.Execute()))
@@ -45,6 +49,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private readonly PropertyMap? _stored;
     private DefinitionCollection? _parameters;
     private PropertiesObject? _properties;
+    private BoundSelect? _plan;
+    private SqlFailure? _planFailure;
+    private bool _planMade;
+    private NativeVariant?[] _values = [];
 
     public QueryDefObject(DefinitionCollection owner, SavedQuery query) : base(Decl, Vtable, owner.Engine, "DAO.QueryDef")
     {
@@ -74,7 +82,11 @@ internal sealed unsafe class QueryDefObject : DaoObject
         return sql.Text is { } text ? Text(text) : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"QueryDef.SQL of '{_query.Name}': {sql.NotModelled}"));
     }
 
-    /// <summary>OpenRecordset(Type, Options): the saved query's recordset, as Database.OpenRecordset opens it by name (W-06/parser-binder-scan).</summary>
+    /// <summary>
+    /// OpenRecordset(Type, Options): the saved query's recordset, as Database.OpenRecordset opens it by name, with this
+    /// QueryDef's parameter values (DAO-QUERY: without values 3061; d1e/query-parameter-values: pId = "2" opens the row 2).
+    /// The cursor keeps copies of the values, so a later assignment does not reach it (EXPR-BIND).
+    /// </summary>
     private CallResult OpenRecordset(nint typeArg, nint optionsArg)
     {
         int? type = Args.Int32(typeArg, omitted: null);
@@ -83,7 +95,63 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.OpenRecordset with a Type or Options argument that is not numeric"));
         }
-        return Database.OpenSaved(_query, type, options.Value);
+        CallResult result = Plan() is not null && QuerySql.Render(_query).Text is { } text
+            ? SelectRoute.Open(Database, text, type, options.Value, _values)
+            : Database.OpenSaved(_query, type, options.Value);
+        Opened |= result.Failure is null;
+        return result;
+    }
+
+    /// <summary>Whether a recordset of this QueryDef was opened: QueryDef.Fields is recorded before an open only (SQL-META).</summary>
+    public bool Opened { get; private set; }
+
+    /// <summary>
+    /// The select query's SQL as ACE renders it (QuerySql), bound once (W-06/parser-binder-scan); null for the other
+    /// families, and when the SQL does not render or bind (<see cref="_planFailure"/> holds the binder's failure).
+    /// </summary>
+    public BoundSelect? Plan()
+    {
+        if (!_planMade)
+        {
+            _planMade = true;
+            if (_query.Family == QueryFamily.Select && QuerySql.Render(_query).Text is { } text)
+            {
+                _plan = BoundSelect.Prepare(text, Database.Sql, out _planFailure);
+                _values = _plan is null ? [] : new NativeVariant?[_plan.Parameters.Count];
+            }
+        }
+        return _plan;
+    }
+
+    /// <summary>The value assigned to parameter <paramref name="index"/>, or null (DAO-QUERY: an untouched Parameter reads Empty).</summary>
+    public NativeVariant? ParameterValue(int index) => _values[index];
+
+    /// <summary>Keep an adapted value (owned by this QueryDef), freeing the one it replaces.</summary>
+    public void SetParameterValue(int index, NativeVariant adapted)
+    {
+        if (_values[index] is { } old)
+        {
+            SqlParameters.Release(ref old);
+        }
+        _values[index] = adapted;
+    }
+
+    /// <summary>
+    /// QueryDef.Fields of a select query before an open: the bound columns (qualified.md SQL-META: readable before any
+    /// value is assigned). The other families, an unbound SQL and Fields after an open are named.
+    /// </summary>
+    private CallResult FieldsCollection()
+    {
+        if (Plan() is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented(_planFailure is { } f
+                ? $"QueryDef.Fields of '{_query.Name}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
+                : $"QueryDef.Fields of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-06, W-07)"));
+        }
+        var fields = new QueryFieldsObject(this);
+        CallResult result = Object(fields);
+        fields.Release();
+        return result;
     }
 
     /// <summary>
@@ -106,23 +174,45 @@ internal sealed unsafe class QueryDefObject : DaoObject
     }
 
     /// <summary>
-    /// The declared parameters in declaration order (DAO-QUERY: Name and Type). A local query may also have implicit
-    /// parameters (r-cat-1/querydefs QImplicit: pMin, Type 10, from an unresolved identifier); only the binder can say
-    /// there are none, so the membership of a local query is a named gap. A pass-through query has none (QPass: Count 0).
+    /// Parameters (qualified.md R-DAO-1 DAO-QUERY, R-SQL-3 SQL-META parameters): a select query's are its bound statement's
+    /// (<see cref="BoundSelect.Parameters"/>: the declared ones in declaration order, then the implicit ones in order of
+    /// first use; r-cat-1/querydefs QImplicit: pMin, Type 10); Item finds a name without the brackets it was declared
+    /// with. One name declared with two types fails Count with 3060 from DAO.Parameters (r-sql-1/b-parameters); Item is
+    /// then not recorded. A pass-through query has none (QPass: Count 0). The other families' parameters need a binder
+    /// of their statements (W-07) and are named.
     /// </summary>
     private DefinitionCollection ParametersCollection()
     {
-        if (_parameters is null)
+        if (_parameters is not null)
         {
-            IReadOnlyList<QueryParameter> declared = _query.DeclaredParameters;
-            _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. declared.Select(p => p.Name)],
-                (c, i) => new ParameterObject(c, declared[i]))
+            return _parameters;
+        }
+        if (_query.Family == QueryFamily.PassThrough)
+        {
+            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("a pass-through query has no parameters"));
+        }
+        if (Plan() is not { } plan)
+        {
+            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
-                Gap = _query.Family == QueryFamily.PassThrough ? null : "the Parameters of a local QueryDef (implicit parameters need the binder, W-06/parser-binder-scan)",
+                Gap = _planFailure is { } f
+                    ? $"the Parameters of '{_query.Name}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
+                    : $"the Parameters of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
             };
         }
+        SqlFailure? declarations = plan.ParametersFailure;
+        _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. plan.Parameters.Select(p => Unbracketed(p.Name))],
+            (c, i) => new ParameterObject(c, this, i))
+        {
+            Gap = declarations is { IsNotModelled: true } open ? $"{open.NotModelled}: {open.Message}" : null,
+            CountDenied = declarations is { IsNotModelled: false } ace ? (ace.Number, ace.Message) : null,
+            ItemGap = declarations is { IsNotModelled: false } ? "Parameters.Item of a statement declaring one name with two types (Count fails 3060; Item is not recorded)" : null,
+        };
         return _parameters;
     }
+
+    /// <summary>The name a parameter is looked up by: without the brackets it was declared with (the binder's QueryParameter key).</summary>
+    private static string Unbracketed(string name) => name is ['[', .., ']'] ? name[1..^1] : name;
 
     /// <summary>
     /// The 14 built-ins, then the stored ones (r-cat-1/querydefs QProp: Description, Text, after Prepare). A row-returning
@@ -147,28 +237,63 @@ internal sealed unsafe class QueryDefObject : DaoObject
     {
         _parameters?.Release();
         _properties?.Release();
+        for (int i = 0; i < _values.Length; i++)
+        {
+            if (_values[i] is { } value)
+            {
+                SqlParameters.Release(ref value);
+                _values[i] = null;
+            }
+        }
+        _plan?.Dispose();
         _owner.Released(this);
         _owner.Release();
     }
 }
 
-/// <summary>A declared Parameter (DAO-QUERY): Name and Type (the declaration's native type code, which is its DAO type).</summary>
+/// <summary>
+/// A Parameter of a select QueryDef (qualified.md R-DAO-1 DAO-QUERY; d1e/query-parameter-values): Name as declared, Type
+/// its DAO type, Direction 1 (dbParamInput) for a declared one, and Value: VT_EMPTY until assigned, then the value as
+/// <see cref="SqlParameters.Adapt"/> converts it to the declared type (Empty reads VT_I4 0 for a Long, Null VT_NULL, "2"
+/// VT_I4 2). A value the type refuses is 3421 "Data type conversion error." from DAO.Parameter without an IErrorInfo and
+/// keeps the old value; a value Adapt does not model is named.
+/// </summary>
 internal sealed unsafe class ParameterObject : DaoObject
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Parameter;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Live(self, p => Text(p._parameter.Name)))
-        .Get("Type", (self, args) => Live(self, p => Int16(p._parameter.NativeType)));
+        .Get("Name", (self, args) => Live(self, p => Text(p.Parameter.Name)))
+        .Get("Type", (self, args) => Live(self, p => Int16(p.Parameter.DaoType)))
+        .Get("Direction", (self, args) => Live(self, p => p.Parameter.Declared ? Int16(1) : CallResult.Fail(Failure.NotModelled("NotModelled.ParameterDirection", "Direction of an implicit parameter (not recorded)"))))
+        .Get("Value", (self, args) => Live(self, p => p._query.ParameterValue(p._index) is { } value ? SqlResults.Of(value, "Parameter.Value") : CallResult.OfScalar(VarType.Empty, 0)))
+        .Put("Value", (self, args) => { nint value = args[^1]; return Live(self, p => p.Assign(value)); });
 
     private readonly DefinitionCollection _owner;
-    private readonly QueryParameter _parameter;
+    private readonly QueryDefObject _query;
+    private readonly int _index;
 
-    public ParameterObject(DefinitionCollection owner, QueryParameter parameter) : base(Decl, Vtable, owner.Engine, "DAO.Parameter")
+    public ParameterObject(DefinitionCollection owner, QueryDefObject query, int index) : base(Decl, Vtable, owner.Engine, "DAO.Parameter")
     {
         _owner = owner;
-        _parameter = parameter;
+        _query = query;
+        _index = index;
         owner.AddRef();
+        query.AddRef(); // its value lives on the QueryDef (CAT-V: one instance's values are shared by its Parameters)
+    }
+
+    private Sql.QueryParameter Parameter => _query.Plan()!.Parameters[_index];
+
+    private CallResult Assign(nint value)
+    {
+        NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
+        SqlFailure? refused = SqlParameters.Adapt(Parameter, incoming, _owner.Database.Sql.Context, out NativeVariant adapted);
+        if (refused is not null)
+        {
+            return refused.IsNotModelled ? CallResult.Fail(Failure.NotModelled(refused.NotModelled!, refused.Message)) : Fail(refused.Number, refused.Message);
+        }
+        _query.SetParameterValue(_index, adapted);
+        return CallResult.Nothing;
     }
 
     public override bool Invalid => _owner.Database.Closed;
@@ -185,7 +310,110 @@ internal sealed unsafe class ParameterObject : DaoObject
     {
         _owner.Released(this);
         _owner.Release();
+        _query.Release();
     }
+}
+
+/// <summary>
+/// QueryDef.Fields of a select query before an open (qualified.md R-SQL-3 SQL-META: readable before assignment): the
+/// bound columns in select-list order, Item by name or ordinal (3265 otherwise). After an open of the QueryDef its members
+/// are named: the records read them before one.
+/// </summary>
+internal sealed unsafe class QueryFieldsObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.Fields;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Count", (self, args) => Live(self, f => Int16(f.Columns.Count)))
+        .Get("Item", (self, args) => { nint index = args[0]; return Live(self, f => f.Item(index)); })
+        .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
+
+    private CollectionNames? _names;
+
+    /// <summary>A collection per Fields get (its identity is not recorded); it holds its QueryDef, whose plan its columns are.</summary>
+    public QueryFieldsObject(QueryDefObject query) : base(Decl, Vtable, query.Engine, "DAO.Fields")
+    {
+        Query = query;
+        query.AddRef();
+    }
+
+    protected override void OnFinalRelease() => Query.Release();
+
+    public QueryDefObject Query { get; }
+
+    public IReadOnlyList<ResultColumn> Columns => Query.Plan()!.Columns;
+
+    public override bool Invalid => Query.Invalid;
+
+    protected override OperationTable Table => Operations;
+
+    public static CallResult Live<T>(T self, Func<T, CallResult> op, QueryDefObject query) where T : DaoObject =>
+        query.Invalid ? self.Fail(3420, DaoErrors.ObjectInvalid)
+        : query.Opened ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefFieldsAfterOpen", "QueryDef.Fields after an OpenRecordset of the QueryDef (SQL-META records it before one)"))
+        : op(self);
+
+    private static CallResult Live(ComObject self, Func<QueryFieldsObject, CallResult> op)
+    {
+        var f = (QueryFieldsObject)self;
+        return Live(f, op, f.Query);
+    }
+
+    private CallResult Item(nint index)
+    {
+        _names ??= new CollectionNames([.. Columns.Select(c => c.Name)]);
+        int? ordinal = CollectionLookup.Find(index, _names, out bool objectIndex);
+        if (objectIndex)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.Fields.Item with an object index"));
+        }
+        if (ordinal is not int i)
+        {
+            return Fail(3265, DaoErrors.ItemNotFound);
+        }
+        var field = new QueryFieldObject(this, i);
+        CallResult result = Object(field);
+        field.Release();
+        return result;
+    }
+}
+
+/// <summary>
+/// A column of a select QueryDef before an open: Name, and Type where the binder fixes it (<see cref="ColumnTypeRule.Bound"/>);
+/// a type known only at open or not identified is named with the binder's reason.
+/// </summary>
+internal sealed unsafe class QueryFieldObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.Field3;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Name", (self, args) => Live(self, f => Text(f.Column.Name)))
+        .Get("Type", (self, args) => Live(self, f => f.Column is { TypeRule: ColumnTypeRule.Bound, FieldType: int type }
+            ? Int16(type)
+            : CallResult.Fail(Failure.NotModelled(f.Column.TypeOpen ?? "NotModelled.ExpressionFieldType", $"QueryDef Field.Type of the column {f.Column.Name} before an open"))));
+
+    private readonly QueryFieldsObject _fields;
+    private readonly int _ordinal;
+
+    public QueryFieldObject(QueryFieldsObject fields, int ordinal) : base(Decl, Vtable, fields.Engine, "DAO.Field")
+    {
+        _fields = fields;
+        _ordinal = ordinal;
+        fields.AddRef();
+    }
+
+    private ResultColumn Column => _fields.Columns[_ordinal];
+
+    public override bool Invalid => _fields.Invalid;
+
+    protected override OperationTable Table => Operations;
+
+    private static CallResult Live(ComObject self, Func<QueryFieldObject, CallResult> op)
+    {
+        var f = (QueryFieldObject)self;
+        return QueryFieldsObject.Live(f, op, f._fields.Query);
+    }
+
+    protected override void OnFinalRelease() => _fields.Release();
 }
 
 /// <summary>The catalog DateCreate and DateUpdate bits as VT_DATE, exactly (TableDef, QueryDef, Document dates).</summary>

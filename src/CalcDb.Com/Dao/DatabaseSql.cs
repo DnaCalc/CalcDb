@@ -6,6 +6,7 @@ using CalcDb.Format;
 using CalcDb.Isam;
 using CalcDb.Sql;
 using CalcDb.Storage;
+using CalcDb.Values;
 using CalcDb.Values.Scalar;
 
 namespace CalcDb.Com.Dao;
@@ -14,6 +15,9 @@ namespace CalcDb.Com.Dao;
 internal interface IDatabaseRecordset
 {
     void CloseCursor();
+
+    /// <summary>The Workspace rolled back <paramref name="level"/> (the outermost one when <paramref name="outermost"/>): qualified.md R-TXN-1 TXN-CLOSE.</summary>
+    void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost);
 }
 
 /// <summary>
@@ -65,8 +69,10 @@ internal static class SelectRoute
     /// <summary>
     /// Open <paramref name="sql"/> as a recordset of <paramref name="type"/> (omitted: a dynaset, as DAO opens a query).
     /// Table-type and Options other than none are not modelled for a query (the option matrix was asked on tables).
+    /// <paramref name="values"/> are a QueryDef's parameter values, one per parameter of the statement in its order, null
+    /// where none was assigned (SelectCursor.Open fails 3061 then); the cursor keeps copies.
     /// </summary>
-    public static CallResult Open(DatabaseObject database, string sql, int? type, int options)
+    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null)
     {
         int recordsetType = type ?? 2;
         if (recordsetType is not (2 or 4 or 8))
@@ -83,7 +89,7 @@ internal static class SelectRoute
             return Published(database, failure!);
         }
         ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
-        SelectCursor? cursor = SelectCursor.Open(plan, database.Sql, kind, out failure);
+        SelectCursor? cursor = SelectCursor.Open(plan, database.Sql, kind, values, out failure);
         if (cursor is null)
         {
             plan.Dispose();

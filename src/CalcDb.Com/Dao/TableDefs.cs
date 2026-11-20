@@ -51,6 +51,12 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// <summary>A named gap: when set, Count and Item give it as not implemented (a membership CalcDb cannot yet decide).</summary>
     public string? Gap { get; init; }
 
+    /// <summary>ACE's failure of Count alone (Parameters.Count 3060, r-sql-1/b-parameters), or null.</summary>
+    public (int Number, string Text)? CountDenied { get; init; }
+
+    /// <summary>A named gap of Item alone, when Count answers (or fails as ACE does) and Item is not recorded.</summary>
+    public string? ItemGap { get; init; }
+
     public override bool Invalid => _database.Closed;
 
     public DatabaseObject Database => _database;
@@ -64,8 +70,9 @@ internal sealed unsafe class DefinitionCollection : DaoObject
             if (!Shapes.TryGetValue(decl, out (nint, OperationTable) shape))
             {
                 shape = (DualEntries.Build(decl), new OperationTable(decl)
-                    .Get("Count", (self, args) => Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : Int16(c._names.Count)))
-                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : c.Item(index)); })
+                    .Get("Count", (self, args) => Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
+                        : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
+                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : c.Item(index)); })
                     .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing)));
                 Shapes[decl] = shape;
             }
@@ -233,11 +240,23 @@ internal sealed unsafe class TableDefObject : DaoObject
         {
             return DefinitionFailure();
         }
-        _indexes ??= new DefinitionCollection(DaoTypes.Indexes, "DAO.Indexes", _owner.Database, IsSystem ? [] : [.. d.LogicalIndexes.Select(i => i.Name)],
-            (c, i) => new IndexObject(c, d, d.LogicalIndexes[i]))
+        if (_indexes is null)
         {
-            Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
-        };
+            LogicalIndex[] listed = [];
+            if (!IsSystem)
+            {
+                if (_owner.Database.Collation is not { } order)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.IndexNameOrder", $"the Indexes of '{_entry.Name}' in a sort order outside the General family (FMT1-INDEX-ENUM was asked under General)"));
+                }
+                listed = ListedIndexes.Of(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor, order);
+            }
+            _indexes = new DefinitionCollection(DaoTypes.Indexes, "DAO.Indexes", _owner.Database, [.. listed.Select(i => i.Name)],
+                (c, i) => new IndexObject(c, d, listed[i]))
+            {
+                Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
+            };
+        }
         return Object(_indexes);
     }
 
@@ -248,6 +267,27 @@ internal sealed unsafe class TableDefObject : DaoObject
         _properties?.Release();
         _owner.Released(this);
         _owner.Release();
+    }
+}
+
+/// <summary>
+/// The logical indexes a TableDef lists (qualified.md R-FMT-1 FMT1-INDEX-ENUM; task 6fsf): in name order under the
+/// database's text order (General: underscore before digits before letters, upper and lower case together:
+/// r-q-fmt-sort/index-enum-order-accdb), without the foreign-key entries on a relationship's primary side. Those entries
+/// (index type 2, related-table type 1; named ".rF" and ".rB" in r-dao-1b-rich, three characters stored and decoded in
+/// full) are never listed: r-dao-1b/index-members-each lists Parent's five indexes without ".rF" and Child's PK_Child and
+/// RelMain (type 2, related-table type 2, the secondary side) without ".rB".
+/// </summary>
+internal static class ListedIndexes
+{
+    /// <summary>The related-table type of a relationship's primary side (II-05 §1.3: 1 primary, 2 secondary).</summary>
+    private const byte PrimarySide = 1;
+
+    public static LogicalIndex[] Of(IReadOnlyList<LogicalIndex> stored, IndexDescriptorRules rules, CalcDb.Values.Scalar.TextCollation order)
+    {
+        LogicalIndex[] listed = [.. stored.Where(i => !(i.IndexType == rules.ForeignKeyType && i.RelatedTableType == PrimarySide))];
+        // A stable sort: two names equal in the text order keep their stored order (not recorded).
+        return [.. listed.OrderBy(i => i.Name, Comparer<string>.Create((a, b) => order.Compare(a, b)))];
     }
 }
 

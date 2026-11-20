@@ -1,6 +1,7 @@
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
 
@@ -59,6 +60,23 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     /// <summary>The accepted, unpublished changes of this engine's Workspaces, as its reads ask for them (W-05/edit-frames).</summary>
     public UnpublishedChanges Changes { get; } = new();
 
+    /// <summary>
+    /// The conflict wait every Workspace of this engine uses: dbLockRetry × dbLockDelay as SetOption last set them, ACE's
+    /// 20 × 100 ms until then (qualified.md R-TXN-1 TXN-LOCAL; W-05/local-lockers-rebase). Several DBEngine objects of one
+    /// process are one engine (TXN-LOCAL), as they are one engine state here.
+    /// </summary>
+    public LockWaitPolicy LockWait { get; private set; } = LockWaitPolicy.Default;
+
+    /// <summary>Set the wait of this engine and of each of its Workspaces' coordinators, those made later included.</summary>
+    public void SetLockWait(LockWaitPolicy policy)
+    {
+        LockWait = policy;
+        foreach (TransactionCoordinator w in Changes.Workspaces)
+        {
+            w.WaitPolicy = policy;
+        }
+    }
+
     private static long s_lockers;
 
     /// <summary>A locker identity for a new Workspace: each Workspace is a locker of its own (II-09; D-TXN-1), unique in the process.</summary>
@@ -87,6 +105,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Get("DefaultType", (self, args) => Int32(2))
         .Get("SystemDB", (self, args) => Text(((DBEngineObject)self).Engine.Touched ? "system.mdb" : ""))
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
+        .Method("SetOption", (self, args) => ((DBEngineObject)self).SetOption(args[0], args[1]))
         .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args))
         // DBEngine's transaction members are the default Workspace's: the first touch creates it (DAO-BOOT) and its
         // failures come from DAO.Workspace (r-dao-1-err-1/boot-first-begintrans: eng.Rollback 3034 "DAO.Workspace").
@@ -161,6 +180,33 @@ internal sealed unsafe class DBEngineObject : DaoObject
         CallResult result = Object(workspace);
         workspace.Release();
         return result;
+    }
+
+    /// <summary>dbLockRetry and dbLockDelay (SetOptionEnum 57 and 63).</summary>
+    private const int LockRetryOption = 57, LockDelayOption = 63;
+
+    /// <summary>
+    /// SetOption(Option, Value): dbLockRetry (57) and dbLockDelay (63, milliseconds) set the finite conflict wait of every
+    /// Workspace of the engine (qualified.md R-TXN-1 TXN-LOCAL: the refusal comes after dbLockRetry × dbLockDelay; recorded
+    /// with retry 1 × delay 1, 3 × 300, 5 × 100 and 20 × 250, r-txn-1/local-option-retry, r-lock-3-4-txn/txn-local-xproc-
+    /// conflict-settings). A value below 1 or one that is not a number, and every other option (dbPageTimeout,
+    /// dbUserCommitSync, dbImplicitCommitSync, dbFlushTransactionTimeout and the rest change visibility and write timing
+    /// CalcDb does not model by them), are named.
+    /// </summary>
+    private CallResult SetOption(nint optionArg, nint valueArg)
+    {
+        int? option = Args.Int32(optionArg, omitted: null);
+        if (option is not (LockRetryOption or LockDelayOption))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.EngineOption", $"DBEngine.SetOption {option?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(not a number)"}: only dbLockRetry (57) and dbLockDelay (63) are modelled"));
+        }
+        if (Args.Int32(valueArg, omitted: null) is not int value || value < 1)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.EngineOptionValue", $"DBEngine.SetOption {option} with a value that is not a number of at least 1 (not recorded)"));
+        }
+        LockWaitPolicy current = Engine.LockWait;
+        Engine.SetLockWait(option == LockRetryOption ? current with { Retries = value } : current with { Delay = TimeSpan.FromMilliseconds(value) });
+        return CallResult.Nothing;
     }
 
     /// <summary>The engines and engine states of one apartment thread, by binding.</summary>
@@ -246,7 +292,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         Name = name;
         UserName = userName;
         _isDefault = isDefault;
-        Transactions = new TransactionCoordinator(EngineState.NextLocker()) { Publisher = engine };
+        Transactions = new TransactionCoordinator(EngineState.NextLocker()) { Publisher = engine, WaitPolicy = engine.LockWait };
         engine.Changes.Add(Transactions);
     }
 
@@ -295,8 +341,24 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// </summary>
     public CallResult CommitTrans(nint options) => EditPublication.Of(Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0));
 
-    /// <summary>Rollback of the current level; without a level 3034 (nest-resolve-without-level). The outermost drops pending edits (TXN-CLOSE).</summary>
-    public CallResult Rollback() => EditPublication.Of(Transactions.Rollback());
+    /// <summary>
+    /// Rollback of the current level; without a level 3034 (nest-resolve-without-level). The outermost drops pending edits,
+    /// and each recordset of the Workspace's Databases learns which level ended (TXN-CLOSE, the recordset after the
+    /// resolution). A Rollback the coordinator refused or named changes no recordset.
+    /// </summary>
+    public CallResult Rollback()
+    {
+        ExplicitFrame? level = Transactions.Depth > 0 ? Transactions.Frames[^1] : null;
+        ResolutionOutcome outcome = Transactions.Rollback();
+        if (level is not null && outcome.Error is null && outcome.Open == MutationOpen.None)
+        {
+            foreach (DatabaseObject d in _databases.ToArray())
+            {
+                d.RolledBack(level, outermost: level.Level == 1);
+            }
+        }
+        return EditPublication.Of(outcome);
+    }
 
     /// <summary>
     /// OpenDatabase(Name, Options, ReadOnly, Connect): the shared operation of DBEngine and Workspace (source

@@ -614,6 +614,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     public void Forget(IDatabaseRecordset recordset) => _recordsets.Remove(recordset);
 
+    /// <summary>A Rollback of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets (TXN-CLOSE).</summary>
+    public void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost)
+    {
+        foreach (IDatabaseRecordset r in _recordsets.ToArray())
+        {
+            r.RolledBack(level, outermost);
+        }
+    }
+
     /// <summary>Close: every recordset of this Database closes, the file is released, the Workspace forgets it.</summary>
     private CallResult Close()
     {

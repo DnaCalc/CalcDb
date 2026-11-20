@@ -57,6 +57,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("Updatable", (self, args) => Live(self, r => Bool(r.Updatable)))
         .Get("Bookmarkable", (self, args) => Live(self, r => Bool(r.Bookmarkable)))
         .Get("LockEdits", (self, args) => Live(self, r => r.RecordsetType is 1 or 2 ? Bool(r._pessimistic) : r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Put("LockEdits", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetLockEdits(value)); })
         .Get("Transactions", (self, args) => Live(self, r => Bool(r.RecordsetType == 1)))
         .Get("Restartable", (self, args) => Live(self, r => r.RecordsetType == 2 ? Bool(true) : r.RecordsetType == 1 ? Bool(false) : CallResult.Fail(Failure.NotImplemented("Recordset.Restartable of a snapshot or forward-only recordset (not observed)"))))
         .Get("EditMode", (self, args) => Live(self, r => Int16((short)(r._frame?.Mode ?? EditMode.None))))
@@ -74,15 +75,20 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("BatchSize", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("RecordStatus", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("UpdateOptions", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
-        .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()));
+        .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()))
+        .Get("LastModified", (self, args) => Live(self, r => r.LastModified()));
 
     private FieldsObject? _fields;
     private PropertiesObject? _properties;
     private readonly CatalogEntry _entry;
     private readonly int _options;
-    private readonly bool _pessimistic;
-    private readonly int _openDepth;
+    private bool _pessimistic;
+    private readonly ExplicitFrame[] _openLevels;
     private EditFrame? _frame;
+    private RecordsetAfterRollback _afterRollback;
+    private string? _notRecorded;
+    private LastModifiedMark _lastModified;
+    private byte[]? _lastModifiedRow;
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
@@ -95,7 +101,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         RecordsetType = recordsetType;
         _options = options;
         _pessimistic = pessimistic;
-        _openDepth = database.Workspace.Transactions.Depth;
+        _openLevels = [.. database.Workspace.Transactions.Frames];
         database.AddRef(); // a recordset keeps its Database object alive
     }
 
@@ -530,8 +536,37 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             refused = CallResult.Fail(Failure.NotImplemented("an edit member when the table's edit semantics cannot be compiled: " + failure));
             return null;
         }
-        _frame = new EditFrame(context, Cursor, Transactions, updatable: RecordsetType is 1 or 2);
+        _frame = new EditFrame(context, Cursor, Transactions, updatable: RecordsetType is 1 or 2) { LockEdits = _pessimistic };
         return _frame;
+    }
+
+    /// <summary>
+    /// LockEdits put (R-CURSOR-1 CUR-EDIT conflicts; TXN-LOCAL): False makes the next Edit optimistic (the page is locked
+    /// at Update, with the row-image check and its one 3197), True pessimistic (the page is locked at Edit); the edit
+    /// frame takes it (<see cref="EditFrame.LockEdits"/>). Recorded on a dynaset before any edit (r-cursor-1/edit-conflict-
+    /// optimistic: LockEdits = False). A put on a snapshot or forward-only recordset, or with an edit pending, is not
+    /// recorded and is named.
+    /// </summary>
+    private CallResult SetLockEdits(nint value)
+    {
+        if (RecordsetType is not (1 or 2))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.LockEditsType", $"LockEdits put on a type {RecordsetType} recordset (not recorded)"));
+        }
+        if (_frame is { Mode: not EditMode.None })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.LockEditsDuringEdit", "LockEdits put with an edit pending (not recorded)"));
+        }
+        if (Args.Bool(value, omitted: true) is not bool pessimistic)
+        {
+            return CallResult.Fail(Failure.NotImplemented("LockEdits put of a value that is not Boolean"));
+        }
+        _pessimistic = pessimistic;
+        if (_frame is { } frame)
+        {
+            frame.LockEdits = pessimistic;
+        }
+        return CallResult.Nothing;
     }
 
     /// <summary>Edit: the frame's Existing buffer over the current row (CUR-EDIT); 3251 on a snapshot, 3021 without a current row.</summary>
@@ -574,8 +609,144 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         int type = Args.Int32(typeArg, omitted: 1) ?? 1;
         bool force = Args.Bool(forceArg, omitted: false) ?? false;
-        return (frame.Updatable && frame.Mode != EditMode.None ? UnpublishedRead("Update", frame.Table.Semantics) : null) ?? EditPublication.Of(frame.Update(type, force));
+        if (frame.Updatable && frame.Mode != EditMode.None && UnpublishedRead("Update", frame.Table.Semantics) is { } unpublished)
+        {
+            return unpublished;
+        }
+        EditMode mode = frame.Mode;
+        CallResult result = EditPublication.Of(frame.Update(type, force));
+        if (result.Failure is null && frame.Mode == EditMode.None)
+        {
+            Modified(mode);
+        }
+        return result;
     }
+
+    /// <summary>
+    /// LastModified after an accepted Update: an Edit's row is the current row, which Update keeps (CUR-EDIT), so its
+    /// bookmark is the current one (r-cursor-1/edit-cancel-rollback: LastModified equals Bookmark after the Update). The
+    /// new row of an AddNew is not current; its bookmark is not identified here (new rows are W-05/growth-structural-closure).
+    /// </summary>
+    private void Modified(EditMode mode)
+    {
+        if (mode == EditMode.Edit && Cursor.GetBookmark(out _) is { } bookmark)
+        {
+            (_lastModified, _lastModifiedRow) = (LastModifiedMark.Row, bookmark);
+        }
+        else
+        {
+            (_lastModified, _lastModifiedRow) = (mode == EditMode.AddNew ? LastModifiedMark.NewRow : LastModifiedMark.None, null);
+        }
+    }
+
+    /// <summary>
+    /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit Update changed; after an outermost
+    /// Rollback a null array (TXN-CLOSE: r-cursor-1/edit-rollback-*, edit-cancel-rollback; CommitTrans keeps it,
+    /// edit-commit-opened-inside). Before any Update and after an AddNew it is not identified and is named.
+    /// </summary>
+    private CallResult LastModified() => _lastModified switch
+    {
+        LastModifiedMark.Row => Bytes(_lastModifiedRow!),
+        LastModifiedMark.Cleared => NullArray,
+        LastModifiedMark.NewRow => CallResult.Fail(Failure.NotModelled("NotModelled.LastModifiedNewRow", "LastModified after an AddNew Update: the new row's bookmark (W-05/growth-structural-closure)")),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.LastModifiedUnset", "LastModified before any Update of this recordset (not recorded)")),
+    };
+
+    /// <summary>VT_ARRAY|VT_UI1 with a null SAFEARRAY, as ACE answers LastModified after a Rollback.</summary>
+    private static CallResult NullArray => CallResult.Of(OwnedVariant.TakeArray(0, VarType.UI1));
+
+    private static CallResult Bytes(byte[] bytes)
+    {
+        nint array = SafeArrays.Create(VarType.UI1, (0, bytes.Length));
+        bytes.CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), bytes.Length));
+        return CallResult.Of(OwnedVariant.TakeArray(array, VarType.UI1));
+    }
+
+    /// <summary>How this recordset stands after a Rollback of its Workspace (TXN-CLOSE); Valid until one reaches it.</summary>
+    public RecordsetAfterRollback AfterRollback => _afterRollback;
+
+    /// <summary>
+    /// A Rollback of <paramref name="level"/> (qualified.md R-TXN-1 TXN-CLOSE, the recordset after the resolution). The
+    /// outermost Rollback makes a table-type or dynaset recordset opened inside the level <see cref="RecordsetAfterRollback.Invalid"/>
+    /// and a dynaset opened outside every level <see cref="RecordsetAfterRollback.LostCurrentRecord"/>; both answer
+    /// LastModified with a null array. A snapshot or forward-only recordset opened inside the level, and any recordset
+    /// opened inside an inner level that is rolled back, are not recorded (<see cref="RecordsetAfterRollback.NotRecorded"/>).
+    /// A recordset opened before the level keeps its state in the cases the records do not cover (a table-type,
+    /// snapshot or forward-only one opened outside every level; any one at an inner Rollback). CommitTrans changes nothing
+    /// (edit-commit-opened-inside: the recordset reads on its row).
+    /// </summary>
+    public void RolledBack(ExplicitFrame level, bool outermost)
+    {
+        if (Closed || _afterRollback is RecordsetAfterRollback.Invalid or RecordsetAfterRollback.NotRecorded)
+        {
+            return;
+        }
+        if (Array.IndexOf(_openLevels, level) >= 0)
+        {
+            if (outermost && RecordsetType is 1 or 2)
+            {
+                _afterRollback = RecordsetAfterRollback.Invalid;
+                _lastModified = LastModifiedMark.Cleared;
+            }
+            else
+            {
+                _afterRollback = RecordsetAfterRollback.NotRecorded;
+                _notRecorded = outermost
+                    ? $"a type {RecordsetType} recordset opened inside a level that was rolled back (TXN-CLOSE records table-type and dynaset)"
+                    : $"a recordset opened inside an inner level ({level.Level}) that was rolled back (TXN-CLOSE records the outermost level)";
+            }
+        }
+        else if (outermost && RecordsetType == 2 && _openLevels.Length == 0)
+        {
+            _afterRollback = RecordsetAfterRollback.LostCurrentRecord;
+            _lastModified = LastModifiedMark.Cleared;
+        }
+    }
+
+    /// <summary>A recordset that a Rollback changed answers only what the records show (TXN-CLOSE); every other member is named.</summary>
+    protected override Operation? Find(MemberDecl member) => _afterRollback switch
+    {
+        RecordsetAfterRollback.Valid => base.Find(member),
+        RecordsetAfterRollback.Invalid => InvalidOperations.Find(member) ?? AfterRollbackNamed(member),
+        RecordsetAfterRollback.LostCurrentRecord => LostCurrentOperations.Find(member) ?? AfterRollbackNamed(member),
+        _ => member.Name == "Close" ? base.Find(member) : AfterRollbackNamed(member),
+    };
+
+    private Operation AfterRollbackNamed(MemberDecl member)
+    {
+        string detail = $"Recordset.{member.Name} after a Rollback: {_notRecorded ?? (_afterRollback == RecordsetAfterRollback.Invalid ? "a recordset the Rollback made invalid" : "a dynaset that lost its current record")}, not recorded (TXN-CLOSE)";
+        return (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", detail));
+    }
+
+    /// <summary>
+    /// A table-type or dynaset recordset opened inside the level the outermost Rollback ended (r-cursor-1/edit-rollback-no-change,
+    /// edit-rollback-cancel-only, edit-rollback-table, edit-cancel-rollback): EditMode 0; Move 0, MoveFirst and Bookmark
+    /// 3420 from DAO.Recordset without an IErrorInfo; LastModified a null array; Close succeeds.
+    /// </summary>
+    private static readonly OperationTable InvalidOperations = new OperationTable(Decl)
+        .Get("EditMode", (self, args) => Int16(0))
+        .Method("Move", (self, args) => Args.Int32(args[0], omitted: null) == 0 && (args.Length < 2 || args[1] == 0) ? ((RecordsetObject)self).Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).AfterRollbackNamed(Decl.Member("Move", InvokeKind.Method))(self, args))
+        .Method("MoveFirst", (self, args) => ((RecordsetObject)self).Fail(3420, DaoErrors.ObjectInvalid))
+        .Get("Bookmark", (self, args) => ((RecordsetObject)self).Fail(3420, DaoErrors.ObjectInvalid))
+        .Get("LastModified", (self, args) => NullArray)
+        .Method("Close", (self, args) => Live(self, r => r.Close()));
+
+    /// <summary>
+    /// A dynaset opened outside every level, after the outermost Rollback (r-cursor-1/edit-rollback-opened-before): EditMode
+    /// 0; Move 0 3021 from DAO.Recordset without an IErrorInfo; MoveFirst repositions and the recordset is valid again;
+    /// LastModified a null array; Close succeeds.
+    /// </summary>
+    private static readonly OperationTable LostCurrentOperations = new OperationTable(Decl)
+        .Get("EditMode", (self, args) => Int16(0))
+        .Method("Move", (self, args) => Args.Int32(args[0], omitted: null) == 0 && (args.Length < 2 || args[1] == 0) ? ((RecordsetObject)self).Fail(3021, DaoErrors.NoCurrentRecord) : ((RecordsetObject)self).AfterRollbackNamed(Decl.Member("Move", InvokeKind.Method))(self, args))
+        .Method("MoveFirst", (self, args) =>
+        {
+            var r = (RecordsetObject)self;
+            r._afterRollback = RecordsetAfterRollback.Valid;
+            return Operations.Find(Decl.Member("MoveFirst", InvokeKind.Method))!(self, args);
+        })
+        .Get("LastModified", (self, args) => NullArray)
+        .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     /// <summary>CancelUpdate(UpdateType): dbUpdateRegular drops the pending edit without Rollback (CUR-EDIT); another type is not recorded.</summary>
     private CallResult CancelUpdate(nint typeArg)
@@ -737,12 +908,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     private CallResult Close()
     {
-        int depth = Database.Workspace.Transactions.Depth;
-        if (RecordsetType != 1 && depth > _openDepth)
+        int depth = Database.Workspace.Transactions.Depth, openDepth = _openLevels.Length;
+        if (RecordsetType != 1 && depth > openDepth)
         {
-            return RecordsetType == 2 && _openDepth == 0 && depth == 1
+            return RecordsetType == 2 && openDepth == 0 && depth == 1
                 ? Fail(3246, "Operation not supported in transactions.")
-                : CallResult.Fail(Failure.NotModelled("NotModelled.Txn.CloseRecordsetOpenedOutsideLevel", $"Close of a type {RecordsetType} recordset opened at depth {_openDepth} and closed at depth {depth} (TXN-CLOSE records a dynaset from depth 0 to 1)"));
+                : CallResult.Fail(Failure.NotModelled("NotModelled.Txn.CloseRecordsetOpenedOutsideLevel", $"Close of a type {RecordsetType} recordset opened at depth {openDepth} and closed at depth {depth} (TXN-CLOSE records a dynaset from depth 0 to 1)"));
         }
         CloseCursor();
         Database.Forget(this);
@@ -809,11 +980,18 @@ internal sealed unsafe class FieldsObject : DaoObject
     private static CallResult Live(ComObject self, Func<FieldsObject, CallResult> op)
     {
         var f = (FieldsObject)self;
-        return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : f.Recordset.AfterRollback != RecordsetAfterRollback.Valid ? AfterRollbackNamed("Fields") : op(f);
     }
+
+    /// <summary>A Fields or Field member of a recordset a Rollback changed, other than the Value get: not recorded (TXN-CLOSE).</summary>
+    public static CallResult AfterRollbackNamed(string member) => CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", $"{member} of a recordset a Rollback changed, not recorded (TXN-CLOSE)"));
 
     private CallResult Item(nint index)
     {
+        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        {
+            return AfterRollbackNamed("Fields.Item");
+        }
         int? ordinal = CollectionLookup.Find(index, Recordset.FieldNames, out bool objectIndex);
         if (objectIndex)
         {
@@ -888,7 +1066,7 @@ internal sealed unsafe class FieldObject : DaoObject
     private static CallResult Live(ComObject self, Func<FieldObject, CallResult> op)
     {
         var f = (FieldObject)self;
-        return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid) : f.Recordset.AfterRollback != RecordsetAfterRollback.Valid ? FieldsObject.AfterRollbackNamed("Field") : op(f);
     }
 
     /// <summary>DataTypeEnum: the native codes 1-12 and 15 are DAO's own numbers (dbBoolean … dbMemo, dbGUID).</summary>
@@ -901,6 +1079,16 @@ internal sealed unsafe class FieldObject : DaoObject
         if (Recordset.Closed)
         {
             return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
+        }
+        switch (Recordset.AfterRollback)
+        {
+            // TXN-CLOSE: from DAO.Field with an IErrorInfo (r-cursor-1/edit-rollback-no-change 3420, edit-rollback-opened-before 3021).
+            case RecordsetAfterRollback.Invalid:
+                return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
+            case RecordsetAfterRollback.LostCurrentRecord:
+                return Fail(3021, DaoErrors.NoCurrentRecord, publishesErrorInfo: true);
+            case RecordsetAfterRollback.NotRecorded:
+                return FieldsObject.AfterRollbackNamed("Field.Value");
         }
         ColumnDescriptor column = Column;
         if (Recordset.FrameIfMade is { Mode: not EditMode.None } frame)
@@ -935,6 +1123,10 @@ internal sealed unsafe class FieldObject : DaoObject
         if (Recordset.Closed)
         {
             return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
+        }
+        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        {
+            return FieldsObject.AfterRollbackNamed("Field.Value put");
         }
         if (Recordset.Frame(out CallResult refused) is not { } frame)
         {
@@ -1110,6 +1302,47 @@ internal sealed unsafe class ErrorObject : DaoObject
     }
 
     protected override OperationTable Table => Operations;
+}
+
+/// <summary>
+/// How a recordset stands after a Rollback of its Workspace (qualified.md R-TXN-1 TXN-CLOSE, the recordset after the
+/// resolution). These are ACE's states as the records show them, not a closed recordset: Close still succeeds.
+/// </summary>
+internal enum RecordsetAfterRollback : byte
+{
+    /// <summary>No Rollback changed it (CommitTrans never does).</summary>
+    Valid,
+
+    /// <summary>
+    /// <b>Opened before the level, its current record is gone.</b> A dynaset opened outside every level, after the
+    /// outermost Rollback: Field.Value and Move 0 give 3021 until MoveFirst repositions it.
+    /// </summary>
+    LostCurrentRecord,
+
+    /// <summary>
+    /// <b>Opened inside the level, it is invalid but not closed.</b> Field.Value, Move 0, MoveFirst and Bookmark give 3420,
+    /// yet EditMode answers 0, LastModified a null array and Close succeeds.
+    /// </summary>
+    Invalid,
+
+    /// <summary>A case the records do not show (a snapshot or forward-only recordset, an inner level): every member but Close is named.</summary>
+    NotRecorded,
+}
+
+/// <summary>What LastModified answers.</summary>
+internal enum LastModifiedMark : byte
+{
+    /// <summary>No Update yet: not recorded.</summary>
+    None,
+
+    /// <summary>The bookmark of the row an Edit Update changed.</summary>
+    Row,
+
+    /// <summary>An AddNew Update: the new row's bookmark is not identified.</summary>
+    NewRow,
+
+    /// <summary>After the outermost Rollback: a null array.</summary>
+    Cleared,
 }
 
 /// <summary>How OpenRecordset admits an Options value.</summary>

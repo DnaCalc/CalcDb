@@ -2,6 +2,7 @@ using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Foundation;
 using CalcDb.Isam;
+using CalcDb.Isam.Transactions;
 using CalcDb.Sql;
 using CalcDb.Values;
 
@@ -21,7 +22,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
-        .Get("RecordCount", (self, args) => Live(self, r => Int32((int)r.Cursor.RecordCount)))
+        .Get("RecordCount", (self, args) => Live(self, r => r.RecordCount()))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
         .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
@@ -34,6 +35,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private SelectFieldsObject? _fields;
     private CollectionNames? _fieldNames;
+    private readonly ExplicitFrame[] _openLevels;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
     public SelectRecordsetObject(DatabaseObject database, BoundSelect plan, SelectCursor cursor, int recordsetType) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
@@ -42,8 +44,36 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
+        _openLevels = [.. database.Workspace.Transactions.Frames];
         database.AddRef(); // a recordset keeps its Database object alive
     }
+
+    /// <summary>
+    /// Set when a Rollback ended a level this recordset was opened inside: no record shows a query recordset there
+    /// (TXN-CLOSE records table-type and dynaset recordsets of a table), so every member but Close is named. A Rollback of
+    /// a level begun after the open is not recorded either; the recordset keeps answering as before.
+    /// </summary>
+    public string? NotRecordedAfterRollback { get; private set; }
+
+    public void RolledBack(ExplicitFrame level, bool outermost)
+    {
+        if (!Closed && Array.IndexOf(_openLevels, level) >= 0)
+        {
+            NotRecordedAfterRollback ??= $"a query recordset opened inside a level ({level.Level}) that was rolled back, not recorded (TXN-CLOSE)";
+        }
+    }
+
+    protected override Operation? Find(MemberDecl member) => NotRecordedAfterRollback is { } why && member.Name != "Close"
+        ? (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", $"Recordset.{member.Name}: {why}"))
+        : base.Find(member);
+
+    /// <summary>
+    /// RecordCount: the rows populated so far (CUR-POP), or named where the cursor says the population at open is not
+    /// ACE's (<see cref="SelectCursor.RecordCountOpen"/>: a join or union without ORDER BY is read whole at open).
+    /// </summary>
+    private CallResult RecordCount() => Cursor.RecordCountOpen is { } open
+        ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordCount", "RecordCount: " + open))
+        : Int32((int)Cursor.RecordCount);
 
     public DatabaseObject Database { get; }
 
@@ -131,6 +161,22 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 }
 
+/// <summary>The VARIANT result of a value the SQL layer made: a result cell, or a QueryDef's parameter value.</summary>
+internal static class SqlResults
+{
+    /// <summary>
+    /// A BSTR is copied (the value stays its owner's); a Decimal result cell is adopted, as the cursor hands it over;
+    /// scalars go inline.
+    /// </summary>
+    public static CallResult Of(NativeVariant value, string member) => (VarType)value.Vt switch
+    {
+        VarType.Bstr => CallResult.OfOwnedBstr(Bstrs.FromUnits(Bstrs.Chars(value.Pointer).Length, value.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest))),
+        VarType.Decimal => CallResult.Of(OwnedVariant.Adopt(value)),
+        VarType.Empty or VarType.Null or VarType.Bool or VarType.UI1 or VarType.I2 or VarType.I4 or VarType.Currency or VarType.R4 or VarType.R8 or VarType.Date => CallResult.OfScalar((VarType)value.Vt, value.Int64),
+        var other => CallResult.Fail(Failure.NotImplemented($"{member} of a {other} value")),
+    };
+}
+
 /// <summary>
 /// Fields of a SELECT recordset: one collection object per recordset, its columns in select-list order. A Field wrapper
 /// is shared while a client holds it (R-DAO-1 DAO-ID); lookup follows DAO-COLL.
@@ -158,7 +204,8 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
     private static CallResult Live(ComObject self, Func<SelectFieldsObject, CallResult> op)
     {
         var f = (SelectFieldsObject)self;
-        return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid)
+            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Fields: " + why)) : op(f);
     }
 
     private CallResult Item(nint index)
@@ -225,7 +272,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private static CallResult Live(ComObject self, Func<SelectFieldObject, CallResult> op)
     {
         var f = (SelectFieldObject)self;
-        return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid)
+            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field: " + why)) : op(f);
     }
 
     private CallResult FieldType() => Recordset.Cursor.FieldType(_ordinal, out string? open) is int type
@@ -242,19 +290,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
         }
+        if (Recordset.NotRecordedAfterRollback is { } why)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field.Value: " + why));
+        }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
             return failure!.IsNotModelled
                 ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
                 : Fail(failure.Number, failure.Message, publishesErrorInfo: true);
         }
-        return (VarType)value.Vt switch
-        {
-            VarType.Bstr => CallResult.OfOwnedBstr(Bstrs.FromUnits(Bstrs.Chars(value.Pointer).Length, value.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest))),
-            VarType.Decimal => CallResult.Of(OwnedVariant.Adopt(value)),
-            VarType.Null or VarType.Bool or VarType.UI1 or VarType.I2 or VarType.I4 or VarType.Currency or VarType.R4 or VarType.R8 or VarType.Date => CallResult.OfScalar((VarType)value.Vt, value.Int64),
-            var other => CallResult.Fail(Failure.NotImplemented($"Field.Value of a {other} result value")),
-        };
+        return SqlResults.Of(value, "Field.Value");
     }
 
     protected override void OnFinalRelease()

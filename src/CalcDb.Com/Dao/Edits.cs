@@ -69,6 +69,9 @@ internal sealed class UnpublishedChanges
 
     public void Remove(TransactionCoordinator workspace) => _workspaces.Remove(workspace);
 
+    /// <summary>The coordinators of the engine's live Workspaces.</summary>
+    public IReadOnlyList<TransactionCoordinator> Workspaces => _workspaces;
+
     /// <summary>Record the file whose table a compiled semantics describes.</summary>
     public void Register(MutationSemantics semantics, string file) => _files.AddOrUpdate(semantics, file);
 
