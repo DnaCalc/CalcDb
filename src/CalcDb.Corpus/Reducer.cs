@@ -320,6 +320,7 @@ public sealed class Reducer
         switch (verdict.Status)
         {
             case ComparisonStatus.Matched:
+            case ComparisonStatus.AcceptedDifference: // only owner-accepted differences remain: the defining failure is gone
                 return (CandidateOutcome.Pass, null);
             case ComparisonStatus.Mismatched:
                 break;

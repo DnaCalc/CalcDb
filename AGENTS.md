@@ -46,7 +46,9 @@ scope or design, the book wins.
 ## Honesty rules
 
 - Pass means matched the oracle. Fail means mismatched, refused or missing, counted over
-  all cases.
+  all cases. An accepted difference (a documented design difference the owner approved,
+  listed in the comparison rule) is counted on its own: everything else matched, and the
+  difference is reported, never hidden.
 - No hard-coded answers, weakened assertions or regenerated expected results.
 - One of everything (format description, ISAM, evaluator, oracle, harness, verdict
   path): extend it, never duplicate it.

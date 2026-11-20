@@ -15,7 +15,7 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 6,
+        Revision = 7,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key; or (revision 6, R-ORACLE-1 OR-REUSE) the same question asked of the native installation twice, fresh and after a prehistory, compared with each other.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -37,6 +37,27 @@ public static class CallTraceComparison
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
         ],
+        AcceptedDifferences =
+        [
+            new(AdoApartment, "Owner, 2026-11-20 (register; II-13 §18): CalcDb's ADO is apartment-threaded on top of CalcDb with correct COM apartment contracts; ACE's ADO objects aggregate the free-threaded marshaler although registered Apartment (ACT-THREAD MTA-CREATE).",
+                "On an object created from an ADODB class, or obtained through one, the QueryInterface answers for the marshaling and proxy interfaces (IMarshal, IMarshal2, IAgileObject, IClientSecurity, IMultiQI, IRpcOptions, IProxyManager) in an interfaces event (revision 7).",
+                "Every other interface of the same event, every DAO object's answers and everything after the event are compared as before.", ["II-13 §18", "R-ACT-1 ACT-THREAD"]),
+        ],
+    };
+
+    /// <summary>The accepted difference of CalcDb's apartment-threaded ADO (owner, 2026-11-20).</summary>
+    public const string AdoApartment = "ado-apartment";
+
+    /// <summary>The interfaces whose answers show free-threaded marshaling or a proxy, set aside on ADO objects only.</summary>
+    private static readonly HashSet<string> AdoApartmentIids = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "{00000003-0000-0000-C000-000000000046}", // IMarshal
+        "{000001CF-0000-0000-C000-000000000046}", // IMarshal2
+        "{94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90}", // IAgileObject
+        "{0000013D-0000-0000-C000-000000000046}", // IClientSecurity
+        "{00000020-0000-0000-C000-000000000046}", // IMultiQI
+        "{00000144-0000-0000-C000-000000000046}", // IRpcOptions
+        "{00000008-0000-0000-C000-000000000046}", // IProxyManager
     };
 
     private static readonly HashSet<string> RunTimeFields = new(StringComparer.Ordinal)
@@ -78,6 +99,16 @@ public static class CallTraceComparison
         JsonNode[] expectedNodes = HeldIdentities([.. expected.Select(e => Normalized(e, oracle.Environment.AttemptDirectory))]);
         JsonNode[] actualNodes = HeldIdentities([.. actual.Select(e => Normalized(e, candidate.Environment.AttemptDirectory))]);
         bool truncated = false;
+        // Accepted differences describe CalcDb against ACE; two native runs (OR-REUSE) have none.
+        HashSet<string> adoBindings = candidateModule is null ? [] : AdoBindings(expected);
+        var accepted = new List<string>();
+        for (int i = 0; i < Math.Min(expected.Length, actual.Length); i++)
+        {
+            if (expected[i] is InterfacesEvent { Target: var target } && adoBindings.Contains(target))
+            {
+                SetAsideAdoApartment(expectedNodes[i], actualNodes[i], $"{expected[i].ProgramPath}", accepted);
+            }
+        }
         for (int i = 0; i < Math.Max(expected.Length, actual.Length); i++)
         {
             if (differences.Count >= maxDifferences)
@@ -96,7 +127,52 @@ public static class CallTraceComparison
                 differences.Add(new Difference($"{expected[i].ProgramPath} {path.Path}", path.Expected, path.Actual, KindOf(expected[i])));
             }
         }
-        return Result(differences.Count == 0 ? ComparisonStatus.Matched : ComparisonStatus.Mismatched, differences, truncated);
+        ComparisonStatus status = differences.Count > 0 ? ComparisonStatus.Mismatched : accepted.Count > 0 ? ComparisonStatus.AcceptedDifference : ComparisonStatus.Matched;
+        return Result(status, differences, truncated, [.. accepted]);
+    }
+
+    /// <summary>The bindings of the oracle program that hold an ADO object: created from an ADODB class, or bound from a call on one.</summary>
+    private static HashSet<string> AdoBindings(CaptureEvent[] events)
+    {
+        var ado = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CaptureEvent e in events)
+        {
+            switch (e)
+            {
+                case CreateEvent { Bind: { } bind, ProgId: var progId } when progId.StartsWith("ADODB.", StringComparison.OrdinalIgnoreCase):
+                    ado.Add(bind);
+                    break;
+                case ActivationEvent { Bind: { } bind, Class: var cls } when cls.StartsWith("ADODB.", StringComparison.OrdinalIgnoreCase):
+                    ado.Add(bind);
+                    break;
+                case InvokeEvent { Bind: { } bind, Target: var target } when ado.Contains(target):
+                    ado.Add(bind);
+                    break;
+            }
+        }
+        return ado;
+    }
+
+    /// <summary>
+    /// Removes the ADO apartment interfaces from both renderings of an interfaces event (accepted difference
+    /// <see cref="AdoApartment"/>), noting each one whose answers differed; the rest of the event is compared as before.
+    /// </summary>
+    private static void SetAsideAdoApartment(JsonNode expected, JsonNode actual, string at, List<string> accepted)
+    {
+        if (expected["results"] is not JsonObject e || actual["results"] is not JsonObject a)
+        {
+            return;
+        }
+        foreach (string iid in AdoApartmentIids)
+        {
+            string? x = e[iid]?.ToJsonString(), y = a[iid]?.ToJsonString();
+            if (x != y)
+            {
+                accepted.Add($"accepted difference {AdoApartment} at {at} {iid}: expected {x ?? "(absent)"}, actual {y ?? "(absent)"}");
+            }
+            e.Remove(iid);
+            a.Remove(iid);
+        }
     }
 
     private static IEnumerable<Difference> Provenance(Capture candidate, string candidateModule)

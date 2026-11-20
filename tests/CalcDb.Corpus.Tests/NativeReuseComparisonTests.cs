@@ -34,7 +34,7 @@ public sealed class NativeReuseComparisonTests
     {
         ComparisonRecord r = CallTraceComparison.Compare("case", "fresh", Run("fresh", "0x00000000", []), "reused", Run("reused", "0x00000000", [Ace]), candidateModule: null);
         Assert.Equal(ComparisonStatus.Matched, r.Status);
-        Assert.Equal("calls.trace@6", r.Rule);
+        Assert.Equal(CallTraceComparison.Rule.Key, r.Rule);
     }
 
     [Fact]

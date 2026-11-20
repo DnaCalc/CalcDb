@@ -44,6 +44,9 @@ public sealed record ComparisonRule
 
     public IReadOnlyList<string> UnresolvedContexts { get; init; } = [];
 
+    /// <summary>Documented differences the owner accepted: set aside by the rule and reported as notes, never silently.</summary>
+    public IReadOnlyList<AcceptedDifference> AcceptedDifferences { get; init; } = [];
+
     public string Key => $"{RuleId}@{Revision}";
 }
 
@@ -85,6 +88,13 @@ public enum ComparisonStatus
     Matched,
     Mismatched,
 
+    /// <summary>
+    /// Every difference is a documented, owner-accepted difference of the rule (<see cref="ComparisonRule.AcceptedDifferences"/>)
+    /// and everything else matched. Counted apart from Matched and from Mismatched: it is neither a claim that CalcDb behaves
+    /// as ACE does there nor a fault (owner, 2026-11-20).
+    /// </summary>
+    AcceptedDifference,
+
     /// <summary>A required capture is incomplete, truncated, unknown or malformed: never a silent match or drop.</summary>
     EvidenceIncomplete,
 
@@ -97,6 +107,12 @@ public enum ComparisonStatus
     /// <summary>The relation cannot decide this case (for example aliases in a multiset), so it is not counted as matched.</summary>
     Unresolved,
 }
+
+/// <summary>
+/// A difference between CalcDb and the oracle that the owner decided CalcDb keeps (a design choice the book records), with
+/// what it covers and what still differs. A comparison that meets only these is <see cref="ComparisonStatus.AcceptedDifference"/>.
+/// </summary>
+public sealed record AcceptedDifference(string Id, string Decision, string Covers, string StillCompared, IReadOnlyList<string> BookRefs);
 
 /// <summary>One difference at a semantic path, with expected and actual renderings that never replace exact bytes.</summary>
 public sealed record Difference(string Path, string Expected, string Actual, string Kind);
