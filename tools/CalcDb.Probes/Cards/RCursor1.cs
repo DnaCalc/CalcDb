@@ -755,6 +755,56 @@ public sealed class RCursor1 : ICard
                 Forward(p, "rn", 16, GFields);
                 Close(p, "rn");
             }, write: true);
+
+        // Discriminators for edit-cancel-rollback (TXN-CLOSE, 7htc): after eng.Rollback that dynaset answered 3420 to
+        // Field.Value and Move and a null LastModified. Each variant changes one element: no change in the level, only a
+        // cancelled edit, the recordset opened before BeginTrans, a table-type recordset, CommitTrans instead of Rollback.
+        foreach ((string name, string what, bool update, bool cancel, bool before, int type, string resolve) in new[]
+        {
+            ("edit-rollback-no-change", "no edit in the level", false, false, false, Dao.OpenDynaset, "Rollback"),
+            ("edit-rollback-cancel-only", "only an Edit, a put and CancelUpdate in the level", false, true, false, Dao.OpenDynaset, "Rollback"),
+            ("edit-rollback-opened-before", "the dynaset opened before BeginTrans", true, true, true, Dao.OpenDynaset, "Rollback"),
+            ("edit-rollback-table", "a table-type recordset", true, true, false, Dao.OpenTable, "Rollback"),
+            ("edit-commit-opened-inside", "CommitTrans instead of Rollback", true, true, false, Dao.OpenDynaset, "CommitTrans"),
+        })
+        {
+            yield return On("edit", name, ["CUR-EDIT", "CUR-LIFE", "TXN-CLOSE"],
+                $"Discriminator for edit-cancel-rollback, which it repeats except for {what}: DBEngine.BeginTrans and a recordset over G " +
+                "with held Field U (Edit row 'r1', set U 'A', Update, LastModified; MoveNext, Edit, set U 'B', CancelUpdate, as the variant has " +
+                $"them); DBEngine.{resolve}. Then EditMode, U; Move 0, U; MoveFirst, U, LastModified, Bookmark; Close; reopen and walk G. Asks " +
+                "which element makes the recordset answer 3420 after the resolution.",
+                p =>
+                {
+                    if (before)
+                    {
+                        p.OpenRs("rs", "db", "G", type);
+                    }
+                    p.Call("eng", "BeginTrans");
+                    if (!before)
+                    {
+                        p.OpenRs("rs", "db", "G", type);
+                    }
+                    Hold(p, "rs", "g_", "U");
+                    if (update)
+                    {
+                        p.Call("rs", "Edit").Put("g_U", "Value", A.Str("A")).Call("rs", "Update").Get("rs", "LastModified");
+                    }
+                    if (cancel)
+                    {
+                        p.Call("rs", "MoveNext").Call("rs", "Edit").Put("g_U", "Value", A.Str("B")).Call("rs", "CancelUpdate");
+                    }
+                    p.Call("eng", resolve)
+                        .Get("rs", "EditMode").Get("g_U", "Value")
+                        .Call("rs", "Move", A.I4(0)).Get("g_U", "Value")
+                        .Call("rs", "MoveFirst").Get("g_U", "Value").Get("rs", "LastModified").Get("rs", "Bookmark");
+                    Unhold(p, "g_", "U");
+                    Close(p, "rs");
+                    p.Call("db", "Close").Release("db").OpenDb();
+                    p.OpenRs("rn", "db", "G", Dao.OpenSnapshot);
+                    Forward(p, "rn", 16, GFields);
+                    Close(p, "rn");
+                }, write: true);
+        }
     }
 
     // CUR-LIFE ----------------------------------------------------------------------------------------------

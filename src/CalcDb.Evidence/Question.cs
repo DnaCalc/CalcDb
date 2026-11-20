@@ -330,8 +330,10 @@ public sealed record ObserveFiles(string Label) : Operation
 
     /// <summary>
     /// R-CRASH-1 CRASH-ORDER sampling: when set, the size in bytes of the pages each database file is hashed in, so a
-    /// series of observations shows which pages changed between samples without keeping whole images.
+    /// series of observations shows which pages changed between samples without keeping whole images. Omitted from the
+    /// question file when 0, as from the key, so question files written before it existed stay unchanged.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public int PageSize { get; init; }
 
     internal override void Write(CanonicalWriter w)
