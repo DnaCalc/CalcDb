@@ -51,6 +51,30 @@ public sealed class RQ3Sql : ICard
         "Abs('q'+7)", "CStr('q'+7)", "'q'+CInt(7)", "CStr(7)*'q'",
     ];
 
+    /// <summary>
+    /// Follow-up of the W-06 observation (r-expr-1b/cmp-between-in): an In list over literals failed at open, Between at the
+    /// read. The failing part in the left operand, in a list element, in a bound; over literals and over a field; In against
+    /// Between with the same operands.
+    /// </summary>
+    private static readonly string[] InForms =
+    [
+        "('q'+7) In (1, 2)", "('q'+7) Between 1 And 2", "1 In (1/0, 2)", "1 Between 1/0 And 2", "(1/0) In (1, 2)", "(1/0) Between 1 And 2",
+        "1 In (1, 'x')", "'x' In (1, 2)", "1 In ('1', 2)", "1 In (1, 2)", "3 In (1, 2)", "Null In (1, 2)", "1 In (Null, 2)",
+    ];
+
+    /// <summary>The same operand forms over T9's fields (ID Long, K Text), one row each: whether the phase follows the operands' origin.</summary>
+    private static readonly string[] InFieldForms =
+    [
+        "ID In (1, 'x')", "K In (1, 2)", "ID In (1, 2)", "K In ('a', 'b')", "(ID/0) In (1, 2)", "(ID/0) Between 1 And 2", "ID Between 'x' And 'y'",
+    ];
+
+    /// <summary>Follow-up of the CDate observation (3464, not 6, beyond the date range): the exact bounds, text and typed operands.</summary>
+    private static readonly string[] CDateForms =
+    [
+        "CDate(-657434)", "CDate(-657434.5)", "CDate(-657435)", "CDate(2958465)", "CDate(2958465.99999)", "CDate(2958465.999999999)", "CDate(2958466)",
+        "CDate(CDbl(2958466))", "CDate(CCur(2958466))", "CDate(CLng(2958466))", "CDate('2958466')", "CDate('-657435')", "CDate(1E+300)", "CVDate(2958466)",
+    ];
+
     private static readonly string[] Backticks =
     [
         "SELECT `ID` FROM T9", "SELECT ID FROM `T9`", "SELECT `ID` FROM `T9`", "SELECT `Col Name` FROM `T Space`", "SELECT [Col Name] FROM `T Space`",
@@ -126,6 +150,33 @@ public sealed class RQ3Sql : ICard
             p =>
             {
                 foreach (string e in Constants2)
+                {
+                    Select(p, $"SELECT {e} FROM One", Dao.OpenSnapshot, 1);
+                }
+            });
+
+        yield return On("in-phase",
+            $"For each expression [{string.Join(" ;; ", InForms)}]: SELECT e FROM One as a snapshot, then the field's Value read; then for each " +
+            $"[{string.Join(" ;; ", InFieldForms)}]: SELECT ID, e FROM T9 WHERE ID = 1, every value read. Whether In folds at open like a call, " +
+            "where the failing part sits, and over fields (r-expr-1b/cmp-between-in observation).",
+            p =>
+            {
+                foreach (string e in InForms)
+                {
+                    Select(p, $"SELECT {e} FROM One", Dao.OpenSnapshot, 1);
+                }
+                foreach (string e in InFieldForms)
+                {
+                    Select(p, $"SELECT ID, {e} FROM T9 WHERE ID = 1", Dao.OpenSnapshot, 1);
+                }
+            });
+
+        yield return On("cdate-bounds",
+            $"For each expression [{string.Join(" ;; ", CDateForms)}]: SELECT e FROM One as a snapshot, then the field's Value read. The date range's " +
+            "exact bounds and the operand's type and form (the CDate observation: 3464 beyond the range).",
+            p =>
+            {
+                foreach (string e in CDateForms)
                 {
                     Select(p, $"SELECT {e} FROM One", Dao.OpenSnapshot, 1);
                 }

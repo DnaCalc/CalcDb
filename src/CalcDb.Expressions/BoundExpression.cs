@@ -407,28 +407,40 @@ public sealed unsafe class BoundExpression : IDisposable
         return true;
     }
 
-    /// <summary>x In (v1 … vn): (x = v1) Or … Or (x = vn) through the kernel's Kleene Or; the operands are then released.</summary>
+    /// <summary>
+    /// x In (v1 … vn) (qualified.md "R-EXPR-1 Branch D (In)", r-q3-sql/in-phase): Null when x is Null; otherwise the
+    /// comparisons x = vi in order, the first True giving -1 without comparing the rest (1 In (1, 'x') is -1, 'x' In (1, 2)
+    /// fails 3464), a failing comparison failing the In, and a Null comparison counting as False (1 In (Null, 2) is 0;
+    /// r-sql-13b/sub-in-list-null-forms: NOT IN (1, Null) keeps the rows that are neither 1 nor Null). The operands are
+    /// then released.
+    /// </summary>
     private ScalarOutcome In(ref int sp, Instruction ins)
     {
         int n = ins.Operand, x = sp - n - 1;
-        ScalarDescriptor or = _descriptors[ins.Descriptor + n];
-        ScalarOutcome acc = ScalarKernel.Apply(_descriptors[ins.Descriptor], _stack[x].Value, _stack[x + 1].Value, _active);
-        for (int i = 1; i < n && acc.Succeeded; i++)
+        ScalarOutcome result;
+        if ((VarType)_stack[x].Value.Vt == VarType.Null)
         {
-            ScalarOutcome eq = ScalarKernel.Apply(_descriptors[ins.Descriptor + i], _stack[x].Value, _stack[x + 1 + i].Value, _active);
-            if (!eq.Succeeded)
+            result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+        }
+        else
+        {
+            result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = 0 });
+            for (int i = 0; i < n; i++)
             {
-                acc = eq;
-                break;
+                ScalarOutcome eq = ScalarKernel.Apply(_descriptors[ins.Descriptor + i], _stack[x].Value, _stack[x + 1 + i].Value, _active);
+                if (!eq.Succeeded || (eq.Type != VarType.Null && eq.Value.Int64 != 0))
+                {
+                    result = eq;
+                    break;
+                }
             }
-            acc = ScalarKernel.Apply(or, acc.Value, eq.Value, _active);
         }
         for (int i = x; i < sp; i++)
         {
             Release(ref _stack[i]);
         }
         sp = x;
-        return acc;
+        return result;
     }
 
     /// <summary>
@@ -816,12 +828,6 @@ public sealed unsafe class BoundExpression : IDisposable
 
         private Bound In(SyntaxNode node, int at)
         {
-            if (node.Items.Any(i => i is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Null }))
-            {
-                // r-sql-13b/sub-in-list-null-forms: a NOT IN (1, Null) keeps the non-1, non-Null rows, which Kleene Or over
-                // = does not give; the binding rule behind it is not identified.
-                throw Open("NotModelled.InListNull", "a Null literal in an In list");
-            }
             Bound x = Bind(node.Left!, at);
             int depth = x.Depth;
             var contracts = new List<OperandContract>();
@@ -836,7 +842,6 @@ public sealed unsafe class BoundExpression : IDisposable
             {
                 Descriptor(ScalarOperation.Equal, node.Offset, 2, x.Contract, c);
             }
-            Descriptor(ScalarOperation.Or, node.Offset, 2, OperandContract.Expression, OperandContract.Expression);
             Program.Add(new Instruction(Op.In, node.Items.Count, first));
             if (node.Negated)
             {
