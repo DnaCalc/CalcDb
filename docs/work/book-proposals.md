@@ -309,3 +309,24 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
 - **Proposed text, if the owner keeps the implementation.** Row "DAO default OpenDatabase": "Step 2 at open; Step 1 on the
   explicit reopen path at the session's first publication (§3), after the file identity and the pages to be overwritten
   are checked; while another open holds the file, the publication is a named, counted R-LOCK-1/EX-DEFAULT refusal."
+
+## II-07 §6: a table snapshot keeps what it read, not a view fixed at its open (52qh, 2026-11-21)
+
+- **Book.** "For a snapshot, prefer one retained source view plus lazy result production. Produced values are owned by
+  its result store; unproduced values retain enough input versions to be computed consistently." Under D-CURSOR-1
+  (Provisional), this reads as one view fixed at the snapshot's open.
+- **Evidence.** A snapshot over a plain table fixes each whole row when it populates it, and shows a later publication
+  in every row it had not yet populated (qualified.md, R-CURSOR-1 CUR-POP). `c1/pop-visibility-snapshot`: only row 1
+  is populated at open; a dynaset sets its K to 111, and both later walks read 10. Unpopulated ID 4 reads 444, deleted
+  ID 3 is skipped and inserted ID 6 is shown. `q12/*` (r-q12-snapshot-fix): a populated row keeps its values with no
+  field read, a chunk row changed after the first `MoveNext` reads its old value, a populated row deleted later is still
+  shown, and rows a `FindFirst` populated stay as they were. Only a snapshot over `SELECT ... ORDER BY` is complete at
+  open.
+- **Implemented.** `CalcDb.Isam.SnapshotValues` (9964a534) stamps each occurrence with the publication serial at which
+  it was populated and fixes values read at that serial through registered `ReadView`s or owned copies. Reads of
+  unread fields after a publication are NotObserved. The q12 records decide those cases: whole rows at population.
+- **Proposed text.** "A snapshot over a table populates incrementally against the published state. Each row is fixed
+  whole when it is populated (at open, by the first move's chunk, by a Find or a jump), kept by the pager's version
+  retention or copied into its result store; a row deleted later is still produced. A row not yet populated shows the
+  state published when it is populated. A snapshot whose definition orders its rows is produced completely at open
+  (R-CURSOR-1 CUR-POP)."
