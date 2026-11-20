@@ -158,6 +158,7 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 | The probe generator and probes/ agree: running tools/CalcDb.Probes rewrites 280 committed question files (`createsFixture` and other fields); decide per difference whether a key changes, then regenerate or fix the generator (W-01/capture-core) | P3 | — | not started (found 2026-11-20; `"pageSize": 0` was fixed in 936f31b0) | `z9jb` |
 | R-FMT-2: the rule that fixes a native index page's stored prefix (not the entries' common prefix on 2,316 of 5,006 pages); needed by any writer that builds or reshapes a leaf (W-05/growth-structural-closure) | P2 | — | not started (found by mpvx, 2026-11-20) | `gqv4` |
 | One file session per engine: Databases on one file share a cache, a lock manager and the writer lease (today each gets its own, so their Workspaces do not conflict and the second handle blocks the first's lease; II-09, W-05) | P2 | — | not started (found by mpvx, 2026-11-20) | `6xzx` |
+| A dynaset's Bookmark bytes follow ACE's: LastModified, which equals Bookmark, answers `002f0000` where ACE gives `00020000` (r-cursor-1/edit-cancel-rollback and three TXN-CLOSE discriminators, compare-set dao-1; R-CURSOR-1 CUR-ID) | P2 | — | not started (found 2026-11-20) | `hr7t` |
 
 ### W-01/capture-core branches (R-ORACLE-1)
 
