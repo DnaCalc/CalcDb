@@ -81,10 +81,11 @@ public enum ColumnTypeRule : byte
 /// <summary>A result column (II-11 §3 result schema): its name, its DAO metadata and the program that computes it.</summary>
 public sealed class ResultColumn
 {
-    internal ResultColumn(string name, BoundExpression program)
+    internal ResultColumn(string name, BoundExpression program, SyntaxNode? root = null)
     {
         Name = name;
         Program = program;
+        Root = root;
     }
 
     public string Name { get; }
@@ -106,6 +107,17 @@ public sealed class ResultColumn
     public string? SourceField { get; internal set; }
 
     internal BoundExpression Program { get; }
+
+    /// <summary>The select item's expression (borrowed from the bound statement's syntax); null for a <c>*</c> column.</summary>
+    internal SyntaxNode? Root { get; }
+
+    /// <summary>
+    /// Whether the column is a constant that contains a function call: it is evaluated once at OpenRecordset (qualified.md
+    /// R-EXPR-1 EXPR-STAGE, r-q3-sql/constant-phase); a constant of operators over literals alone is evaluated at the read.
+    /// An In list counts with the calls: <c>5 In ('5')</c>, <c>5 In (1, '5')</c> and <c>'5' In (5)</c> fail 3464 at open
+    /// where <c>5 Between '1' And '9'</c> fails at the read (r-expr-1b/cmp-between-in).
+    /// </summary>
+    internal bool FoldsAtOpen => Program.IsConstant && Root is { } root && BoundSelect.Walk(root).Any(n => n.Kind is SyntaxKind.Call or SyntaxKind.In);
 }
 
 /// <summary>The aggregates of a grouped SELECT (II-11 §14: an aggregate descriptor per occurrence).</summary>
@@ -670,8 +682,12 @@ public sealed class BoundSelect : IDisposable
             return null;
         }
 
-        /// <summary>An ORDER BY key that is a bare number: by position or a constant, not decided by the records read so far.</summary>
+        /// <summary>
+        /// An ORDER BY key that is a bare number, signed or not: by position or a constant, not decided by the records read
+        /// so far (r-sql-13b/order-position-forms: 2 and 1.5 open, 0, 3 and -1 fail 3070).
+        /// </summary>
         private static SqlFailure? OrderPosition(OrderItem o) => o.Expression.Syntax.Root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number }
+            or { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } }
             ? Open("NotModelled.OrderByNumber", "ORDER BY a number (position or constant)")
             : null;
 
@@ -691,7 +707,7 @@ public sealed class BoundSelect : IDisposable
                 // qualified.md R-SQL-1 SQL-B: an unnamed expression is Expr1000, Expr1001, … in select-list order.
                 name = "Expr" + (1000 + unnamed++).ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
-            return new ResultColumn(name, program);
+            return new ResultColumn(name, program, item.Expression!.Syntax.Root);
         }
 
         private void Stored(ResultColumn column, ColumnBinding field)
@@ -872,7 +888,7 @@ public sealed class BoundSelect : IDisposable
         }
 
         /// <summary>A bare key column takes the key's name (the field's), not ExprNNNN.</summary>
-        private static ResultColumn Renamed(ResultColumn c, string name) => new(name, c.Program)
+        private static ResultColumn Renamed(ResultColumn c, string name) => new(name, c.Program, c.Root)
         {
             TypeRule = c.TypeRule,
             FieldType = c.FieldType,

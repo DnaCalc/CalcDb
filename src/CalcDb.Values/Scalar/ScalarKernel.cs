@@ -62,7 +62,7 @@ public static unsafe partial class ScalarKernel
     private static ScalarOutcome Dispatch(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c) => d.Operation switch
     {
         ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply or ScalarOperation.Divide
-            or ScalarOperation.IntegerDivide or ScalarOperation.Modulo or ScalarOperation.Power => Arithmetic(d, a, b),
+            or ScalarOperation.IntegerDivide or ScalarOperation.Modulo or ScalarOperation.Power => Arithmetic(d, a, b, c),
         ScalarOperation.Concatenate => Concatenate(d, a, b, c),
         ScalarOperation.Negate => Negate(d, a),
         >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual => Compare(d, a, b, c),
@@ -83,6 +83,7 @@ public static unsafe partial class ScalarKernel
         ScalarOperation.Round => Round(d, a, b, c),
         ScalarOperation.IsNull => Boolean(Tag(a) == VarType.Null),
         ScalarOperation.IsEmpty => Boolean(Tag(a) == VarType.Empty),
+        ScalarOperation.IsError => Boolean(Tag(a) == VarType.Error),
         ScalarOperation.Nz => Nz(d, a, b),
         ScalarOperation.Len => Length(d, a, c),
         ScalarOperation.UCase => UpperCase(d, a, c),
@@ -99,9 +100,11 @@ public static unsafe partial class ScalarKernel
     /// (Byte+Byte → Integer, Integer overflow → Long, Single/Single → Single, Currency+Double → Currency, Date+Decimal →
     /// Decimal, text+text concatenates, numeric text adds as Double, Null propagates). ACE differs in one place: a Long
     /// result that overflows widens to Double only when both operands are literals (<c>2147483647 + 1</c>); with a typed
-    /// source (<c>CLng(2147483647) + CLng(1)</c>, a stored Long) it fails with 6.
+    /// source (<c>CLng(2147483647) + CLng(1)</c>, a stored Long) it fails with 6. A constant folded at open
+    /// (<see cref="ExpressionContext.FoldsAtOpen"/>) keeps oleaut32's widening (qualified.md R-EXPR-1 EXPR-STAGE,
+    /// r-q3-sql/constant-phase-2: <c>Abs(CLng(2147483647)+CLng(1))</c> reads 2147483648).
     /// </summary>
-    private static ScalarOutcome Arithmetic(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b)
+    private static ScalarOutcome Arithmetic(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
     {
         if (Admit(d, a) is { } refusedLeft)
         {
@@ -142,7 +145,7 @@ public static unsafe partial class ScalarKernel
         if (d.Operation <= ScalarOperation.Multiply && Tag(&r) == VarType.R8 && IsIntegral(ta) && IsIntegral(tb))
         {
             // oleaut32 widened a Long overflow to Double (arith-overflow-promotion, b-integer-widening).
-            if (d.First.Origin == OperandOrigin.Literal && d.Second.Origin == OperandOrigin.Literal)
+            if (c.FoldsAtOpen || (d.First.Origin == OperandOrigin.Literal && d.Second.Origin == OperandOrigin.Literal))
             {
                 return ScalarOutcome.Of(r);
             }
@@ -543,7 +546,9 @@ public static unsafe partial class ScalarKernel
         ScalarOutcome date = Convert(d, a, c, VarType.Date);
         if (Tag(a) != VarType.Bstr)
         {
-            return date;
+            // A number beyond the date range fails 3464, where VariantChangeType overflows (CDate(-657435), CDate(2958466):
+            // r-expr-1/c-date-text-and-literals, r-wire/expr-conversion-tags).
+            return !date.Succeeded && date.Failure.Number == AceError.Overflow ? Fail(d, AceError.TypeMismatch) : date;
         }
         NativeVariant number = default;
         if (OleAut.VariantChangeTypeEx(&number, a, c.Lcid, 0, (ushort)VarType.R8) < 0)

@@ -35,6 +35,14 @@ internal static unsafe class Values
     }
 }
 
+/// <summary>The DAO recordset type a result is opened as (RecordsetTypeEnum 2, 4, 8): it decides the order of tied rows.</summary>
+public enum ResultKind : byte
+{
+    Dynaset,
+    Snapshot,
+    ForwardOnly,
+}
+
 /// <summary>An occurrence of a SELECT's result: the source row it stands on, or its group, and its place in a materialized list.</summary>
 [StructLayout(LayoutKind.Auto)]
 public readonly record struct ResultRow(RowId Root, int Group, int Index);
@@ -47,12 +55,14 @@ public readonly record struct ResultRow(RowId Root, int Group, int Index);
 /// rows are reached (R-PAR-1 PAR-ORDER: an unordered scan returns insertion order; R-CURSOR-1 CUR-POP: a snapshot over an
 /// unordered SELECT observes 1 at open and 500 more at the first move, through the one occurrence store).</item>
 /// <item>Any other SELECT reads all qualifying rows at open: groups ascending by key (PAR-ORDER), DISTINCT rows
-/// likewise, ORDER BY by its keys, TOP keeping the rows tied at the cutoff (SQL-TOP). What the records leave open is
-/// named instead of answered: the order of tied rows that differ (the R-SORT-3 tie-order note against
-/// r-sql-1/order-nulls-text), and the spelling a group of differently spelled equal texts shows (SQL-EQ).</item>
+/// likewise, ORDER BY by its keys with ties in the order the recordset type gives (qualified.md R-SORT-3 tie order,
+/// r-q3-sql/ties-*), TOP keeping the rows tied at the cutoff (SQL-TOP). What the records leave open is named instead of
+/// answered: the snapshot tie permutation beyond 9 rows, ties among groups or DISTINCT rows, the order of ties inside
+/// TOP's kept rows, the row order of an unordered dynaset, and the spelling a group of differently spelled equal texts
+/// shows (SQL-EQ).</item>
 /// </list>
-/// A constant column is evaluated once at open for its value; when it fails, whether ACE fails the open or the read is
-/// not identified (EXPR-STAGE against r-expr-1/b-intdiv-mod), so the open is named. A projected column is evaluated when
+/// A constant column that contains a function call is evaluated once at open, so its failure fails the open; operators
+/// over literals alone are evaluated at the read (qualified.md R-EXPR-1 EXPR-STAGE). A projected column is evaluated when
 /// it is read, so its failure fails that read only. Movement follows the one position rule set (CUR-POS).
 /// </summary>
 public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
@@ -65,6 +75,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private readonly NativeVariant[] _constants;
     private readonly int?[] _types;
     private readonly string?[] _typeOpen;
+    private readonly SqlFailure?[] _readFailures;
     private readonly List<NativeVariant> _slots;
     private readonly int _slotWidth;
     private int _group = -1;
@@ -76,6 +87,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         _constants = prepared.Constants;
         _types = prepared.Types;
         _typeOpen = prepared.TypeOpen;
+        _readFailures = prepared.ReadFailures;
         _slots = prepared.Slots;
         _slotWidth = prepared.SlotWidth;
         _producer = prepared.Rows is { } rows ? new ListSource(rows) : new FilteredScan(this);
@@ -110,8 +122,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         return _types[column];
     }
 
-    /// <summary>Open the plan over the database: work done at open fails the open (EXPR-STAGE, SQL-DEMAND).</summary>
-    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, bool forwardOnly, out SqlFailure? failure)
+    /// <summary>Open the plan over the database as <paramref name="kind"/>: work done at open fails the open (EXPR-STAGE, SQL-DEMAND).</summary>
+    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, out SqlFailure? failure)
     {
         SourceSlot source = plan.Sources[0];
         RowReader? reader = database.OpenRows(source.Table, out string? storage);
@@ -120,15 +132,21 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
             return null;
         }
-        var preparing = new Preparer(plan, reader);
+        var preparing = new Preparer(plan, reader, kind);
         Prepared? prepared = preparing.Run(out failure);
+        if (prepared is not null && prepared.Rows is null && kind == ResultKind.Dynaset)
+        {
+            // R-PAR-1 PAR-ORDER: a dynaset of a table returns primary-key order; a plain SELECT's dynaset order is not identified.
+            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder", "the row order of an unordered dynaset");
+            prepared = null;
+        }
         if (prepared is null)
         {
             preparing.Release();
             reader.Dispose();
             return null;
         }
-        var cursor = new SelectCursor(plan, reader, prepared, forwardOnly);
+        var cursor = new SelectCursor(plan, reader, prepared, kind == ResultKind.ForwardOnly);
         failure = cursor.FetchFailure;
         if (failure is not null)
         {
@@ -180,6 +198,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         if (_position.Current is not int ordinal)
         {
             failure = SqlFailure.Ace(SqlPhase.Read, 3021, "No current record.");
+            return false;
+        }
+        if (_readFailures[column] is { } fails)
+        {
+            failure = fails;
             return false;
         }
         if (_constants[column].Vt != (ushort)VarType.Empty)
@@ -244,6 +267,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         public required string?[] TypeOpen { get; init; }
 
+        /// <summary>The failure every read of a column gives (a folded constant that does not fit its static type), or null.</summary>
+        public required SqlFailure?[] ReadFailures { get; init; }
+
         public List<ResultRow>? Rows { get; init; }
 
         public required List<NativeVariant> Slots { get; init; }
@@ -303,7 +329,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     }
 
     /// <summary>The work of an open (II-11 §§11–14), as a small object whose failures release what it copied.</summary>
-    private sealed class Preparer(BoundSelect plan, RowReader reader) : IExpressionRow
+    private sealed class Preparer(BoundSelect plan, RowReader reader, ResultKind kind) : IExpressionRow
     {
         private readonly List<NativeVariant> _slots = [];
         private readonly List<NativeVariant> _keys = [];
@@ -336,6 +362,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             _constants = new NativeVariant[n];
             var types = new int?[n];
             var open = new string?[n];
+            var reads = new SqlFailure?[n];
             for (int i = 0; i < n; i++)
             {
                 ResultColumn c = plan.ColumnList[i];
@@ -347,11 +374,27 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
                 if (!c.Program.Evaluate(this))
                 {
-                    // r-expr-1/e-eager-failures: 1/0 and CInt('q') fail the open; r-expr-1/b-intdiv-mod, b-plus-versus-concat:
-                    // 1 \ 0, 0 / 0 and 'q' + 7 open and fail the Value read. What separates them is not identified.
                     ExpressionFailure f = c.Program.LastFailure!;
-                    failure = f.IsNotModelled ? At(f) : SqlFailure.Open(SqlPhase.Open, "NotModelled.ConstantFailurePhase", $"a constant column fails ({f}): whether at open or at the read is not identified");
-                    return null;
+                    if (f.IsNotModelled)
+                    {
+                        failure = At(f);
+                        return null;
+                    }
+                    if (!c.FoldsAtOpen)
+                    {
+                        // EXPR-STAGE: operators over literals alone are evaluated at the read (1/0, 1\0, 0/0, 'q'+7), so
+                        // the failure is the read's; the read evaluates the column again.
+                        continue;
+                    }
+                    if (Fold(c, out reads[i]) is { } folded)
+                    {
+                        failure = folded;
+                        return null;
+                    }
+                    if (reads[i] is not null)
+                    {
+                        continue;
+                    }
                 }
                 _constants[i] = Copy(c.Program.Value);
                 if (c.TypeRule == ColumnTypeRule.NullAtOpen && _constants[i].Vt == (ushort)VarType.Null)
@@ -373,7 +416,43 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             ClearSlots(_keys);
-            return new Prepared { Constants = _constants, Types = types, TypeOpen = open, Rows = rows, Slots = _slots, SlotWidth = _slotWidth };
+            return new Prepared { Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth };
+        }
+
+        /// <summary>
+        /// A constant with a function call whose evaluation failed (qualified.md R-EXPR-1 EXPR-STAGE, r-q3-sql/constant-phase
+        /// and constant-phase-2): ACE evaluates it once at open with oleaut32's operator rules. A failure there is the open's
+        /// (<c>CDbl(1)/0</c>, <c>CByte(300)</c>, <c>CLng(CLng(2147483647)+CLng(1))</c>). Where only the kernel's rule (1)
+        /// failed it (a Long overflow with a typed operand, which oleaut32 widens to Double), the fold succeeds: under a
+        /// function the widened value is the column's (<c>Abs(CLng(2147483647)+CLng(1))</c> reads 2147483648); at the root,
+        /// between calls and literals, the widened value does not fit the column's static type and every read fails 6
+        /// (<c>CLng(2147483647)+1</c>, <c>CLng(2147483647)*CLng(2)</c>). A widening under another operator is not recorded.
+        /// Returns the open's failure, or null with the program's value or <paramref name="read"/> set.
+        /// </summary>
+        private SqlFailure? Fold(ResultColumn c, out SqlFailure? read)
+        {
+            read = null;
+            ExpressionFailure first = c.Program.LastFailure!;
+            if (first.Number != AceError.Overflow)
+            {
+                return At(first);
+            }
+            if (!c.Program.Evaluate(this, plan.Context.Folding))
+            {
+                return At(c.Program.LastFailure!);
+            }
+            SyntaxNode root = c.Root!;
+            if (root.Kind == SyntaxKind.Call)
+            {
+                return null;
+            }
+            if (root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply }
+                && root.Left!.Kind is SyntaxKind.Call or SyntaxKind.Literal && root.Right!.Kind is SyntaxKind.Call or SyntaxKind.Literal)
+            {
+                read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                return null;
+            }
+            return SqlFailure.Open(SqlPhase.Open, "NotModelled.FoldWidening", $"a folded Long overflow widened to Double under an operator ({c.Name}): its static type is not recorded");
         }
 
         /// <summary>The qualifying source rows in scan order.</summary>
@@ -457,10 +536,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         }
 
         /// <summary>
-        /// Evaluate the ORDER BY keys of every row, then sort by the keys and their directions. The order of rows with equal
-        /// keys is not identified: the R-SORT-3 tie-order note says reverse insertion order, r-sql-1/order-nulls-text lists
-        /// equal texts in insertion order (ids 3, 4, 5, 6, 16) and R-PAR-1 PAR-ORDER calls it unexplained. Tied rows that
-        /// differ in a projected value are therefore named; tied rows identical in every column cannot show their order.
+        /// Evaluate the ORDER BY keys of every row, then sort by the keys and their directions. Rows of equal keys (case
+        /// variants and Nulls included) follow qualified.md R-SORT-3 tie order (r-q3-sql/ties-t9, t9a, t9c, t9n, t50, t200,
+        /// t1000): a dynaset lists them in storage (insertion) order ascending and in its reverse descending; a snapshot of
+        /// at most 9 rows in reverse storage order in both directions. Where no rule decides (a snapshot of more rows, a
+        /// forward-only result, keys of mixed directions, ties among groups or DISTINCT rows), tied rows that differ in a
+        /// projected value are named; tied rows identical in every column cannot show their order.
         /// </summary>
         private List<ResultRow>? Sorted(List<ResultRow> rows, out SqlFailure? failure)
         {
@@ -482,10 +563,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             int[] order = [.. Enumerable.Range(0, rows.Count)];
             bool refused = false;
+            (int ties, string? tieOpen) = TieRule(rows.Count);
             Array.Sort(order, (x, y) =>
             {
                 int c = CompareKeys(x, y, k, ref refused);
-                return c != 0 ? c : x.CompareTo(y);
+                return c != 0 ? c : ties * x.CompareTo(y);
             });
             if (refused)
             {
@@ -497,13 +579,35 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             int cut = plan.Top is { } top ? (int)Math.Min(sorted.Count, Count(top, sorted.Count)) : sorted.Count;
             for (int i = 1; i < sorted.Count; i++)
             {
-                if (CompareKeys(order[i - 1], order[i], k, ref refused) == 0 && (i < cut || plan.Top is null) && !Identical(sorted[i - 1], sorted[i]))
+                if (tieOpen is not null && CompareKeys(order[i - 1], order[i], k, ref refused) == 0 && (i < cut || plan.Top is null) && !Identical(sorted[i - 1], sorted[i]))
                 {
-                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.TieOrder", "rows with equal ORDER BY keys that differ in a projected value: the tie order is not identified (R-SORT-3 tie order against r-sql-1/order-nulls-text)");
+                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.TieOrder", $"rows with equal ORDER BY keys that differ in a projected value: {tieOpen} (qualified.md R-SORT-3 tie order)");
                     return null;
                 }
             }
             return sorted;
+        }
+
+        /// <summary>
+        /// The order of tied rows over <paramref name="count"/> rows in storage order: 1 storage order, -1 its reverse, with
+        /// null; or the reason no rule decides it (the sort then keeps storage order and names differing ties).
+        /// </summary>
+        private (int Ties, string? Open) TieRule(int count)
+        {
+            if (plan.Grouped || plan.Predicate != SelectPredicate.All)
+            {
+                return (1, "the order of tied groups or DISTINCT rows is not recorded");
+            }
+            bool descending = plan.Order[0].Descending;
+            bool mixed = plan.Order.Any(o => o.Descending != descending);
+            return kind switch
+            {
+                ResultKind.Dynaset when mixed => (1, "a dynaset's tie order under keys of mixed directions is not recorded"),
+                ResultKind.Dynaset => (descending ? -1 : 1, null),
+                ResultKind.Snapshot when count <= 9 => (-1, null),
+                ResultKind.Snapshot => (1, "a snapshot of more than 9 rows lists ties in a permutation not identified"),
+                _ => (1, "a forward-only result's tie order is not recorded"),
+            };
         }
 
         private static long Count(TopClause top, int rows) => top.Percent ? (long)Math.Ceiling(rows * top.Count / 100.0) : (long)Math.Floor(top.Count);

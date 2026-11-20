@@ -36,6 +36,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Get("Parameters", (self, args) => Live(self, q => Object(q.ParametersCollection())))
         .Get("Fields", (self, args) => Live(self, q => CallResult.Fail(Failure.NotImplemented("QueryDef.Fields (the output columns need the binder, W-06/parser-binder-scan)"))))
         .Get("Properties", (self, args) => Live(self, q => q.PropertiesCollection()))
+        .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, q => q.OpenRecordset(type, options)); })
+        .Method("Execute", (self, args) => Live(self, q => q.Execute()))
         .Method("Close", (self, args) => Live(self, q => CallResult.Nothing));
 
     private readonly DefinitionCollection _owner;
@@ -71,6 +73,26 @@ internal sealed unsafe class QueryDefObject : DaoObject
         RenderedSql sql = QuerySql.Render(_query);
         return sql.Text is { } text ? Text(text) : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"QueryDef.SQL of '{_query.Name}': {sql.NotModelled}"));
     }
+
+    /// <summary>OpenRecordset(Type, Options): the saved query's recordset, as Database.OpenRecordset opens it by name (W-06/parser-binder-scan).</summary>
+    private CallResult OpenRecordset(nint typeArg, nint optionsArg)
+    {
+        int? type = Args.Int32(typeArg, omitted: null);
+        int? options = Args.Int32(optionsArg, omitted: 0);
+        if (options is null || (typeArg != 0 && type is null))
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.OpenRecordset with a Type or Options argument that is not numeric"));
+        }
+        return Database.OpenSaved(_query, type, options.Value);
+    }
+
+    /// <summary>
+    /// Execute of a row-returning query (select, crosstab, union) is 3065 from DAO.QueryDef, before any parameter is
+    /// asked for (r-cat-1b/qd-execute-on-row-returning: QSel, QXtab, QUni, QParam). Action queries are W-07/actions.
+    /// </summary>
+    private CallResult Execute() => _query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union
+        ? Fail(3065, SelectRoute.CannotExecuteSelect)
+        : CallResult.Fail(Failure.NotImplemented($"QueryDef.Execute of a {_query.Family?.ToString() ?? "unclassified"} query (W-07/actions)"));
 
     /// <summary>A built-in the blob stores (flag 01: ODBCTimeout, MaxRecords), else the value ACE shows for an unset one.</summary>
     private CallResult StoredOr(string name, CallResult unset)

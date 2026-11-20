@@ -22,7 +22,7 @@ namespace CalcDb.Sql.Tests;
 public sealed class SelectReplayTests(ITestOutputHelper output)
 {
     /// <summary>The record folders whose SELECTs this slice replays (the literal lane, single-table SQL, the cursor folders).</summary>
-    private static readonly string[] Folders = ["r-expr-1", "r-expr-1b", "r-sql-1", "r-sql-13b", "r-cursor-1", "r-q-cursor-dao", "r-sql-2-3", "r-par-1", "r-q-expr-sql"];
+    private static readonly string[] Folders = ["r-expr-1", "r-expr-1b", "r-sql-1", "r-sql-13b", "r-cursor-1", "r-q-cursor-dao", "r-sql-2-3", "r-par-1", "r-q-expr-sql", "r-q3-sql"];
 
     public static TheoryData<string> Records()
     {
@@ -233,15 +233,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
             SelectCursor? cursor = null;
             if (plan is not null)
             {
-                if (type == 2 && plan.Order.Count == 0 && !plan.Grouped && plan.Predicate == SelectPredicate.All && plan.Top is null)
-                {
-                    // R-PAR-1 PAR-ORDER: a dynaset of a table returns primary-key order; whether a plain SELECT's does is not identified.
-                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder", "the row order of an unordered dynaset");
-                }
-                else
-                {
-                    cursor = SelectCursor.Open(plan, image, forwardOnly: type == 8, out failure);
-                }
+                cursor = SelectCursor.Open(plan, image, type switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly }, out failure);
             }
             if (Outcome(where, e.ExcepInfo, failure))
             {

@@ -124,6 +124,9 @@ public sealed unsafe class BoundExpression : IDisposable
     private readonly nint[] _scratch;
     private readonly int[] _scratchUnits;
 
+    /// <summary>The context of the evaluation in progress: <see cref="Context"/>, or its open-time fold.</summary>
+    private ExpressionContext _active;
+
     private BoundExpression(Builder b, ExpressionContext context, StaticType type, nint[] ownedTexts)
     {
         _program = [.. b.Program];
@@ -137,6 +140,7 @@ public sealed unsafe class BoundExpression : IDisposable
         _scratch = new nint[_fields.Length];
         _scratchUnits = new int[_fields.Length];
         Context = context;
+        _active = context;
         Type = type;
     }
 
@@ -259,15 +263,21 @@ public sealed unsafe class BoundExpression : IDisposable
     /// Evaluate on the cursor's current row as a predicate (II-10 §9: Boolean operators precede predicate acceptance):
     /// True when the value is -1, False for 0 and Null, Failed with <see cref="LastFailure"/> otherwise.
     /// </summary>
-    public RowTest Test(IRecordCursor cursor) => Verdict(Run(cursor, null));
+    public RowTest Test(IRecordCursor cursor) => Verdict(Run(cursor, null, _active));
 
     /// <summary>Evaluate on a SQL row as a predicate (WHERE, HAVING), by the same rule as <see cref="Test(IRecordCursor)"/>.</summary>
-    public RowTest Test(IExpressionRow row) => Verdict(Run(null, row));
+    public RowTest Test(IExpressionRow row) => Verdict(Run(null, row, _active));
 
     /// <summary>Evaluate on a row; the result is <see cref="Value"/>. False with <see cref="LastFailure"/>.</summary>
-    public bool Evaluate(IExpressionRow row)
+    public bool Evaluate(IExpressionRow row) => Evaluate(row, _active);
+
+    /// <summary>
+    /// Evaluate under another context of the same plan: the open-time fold of a constant (<see cref="ExpressionContext.Folding"/>,
+    /// qualified.md R-EXPR-1 EXPR-STAGE).
+    /// </summary>
+    public bool Evaluate(IExpressionRow row, ExpressionContext context)
     {
-        if (!Run(null, row))
+        if (!Run(null, row, context))
         {
             return false;
         }
@@ -309,8 +319,9 @@ public sealed unsafe class BoundExpression : IDisposable
     /// Run the program over one cursor or a SQL row; the result is in stack slot 0. False with <see cref="LastFailure"/>
     /// and an empty stack. The result an earlier <see cref="Evaluate"/> left is released first.
     /// </summary>
-    private bool Run(IRecordCursor? cursor, IExpressionRow? row)
+    private bool Run(IRecordCursor? cursor, IExpressionRow? row, ExpressionContext context)
     {
+        _active = context;
         if (_holdsResult)
         {
             Release(ref _stack[0]);
@@ -343,18 +354,18 @@ public sealed unsafe class BoundExpression : IDisposable
                     sp++;
                     continue;
                 case Op.Unary:
-                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 1].Value, Context);
+                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 1].Value, _active);
                     Release(ref stack[sp - 1]);
                     sp--;
                     break;
                 case Op.Binary:
-                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 2].Value, stack[sp - 1].Value, Context);
+                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 2].Value, stack[sp - 1].Value, _active);
                     Release(ref stack[sp - 1]);
                     Release(ref stack[sp - 2]);
                     sp -= 2;
                     break;
                 case Op.Ternary:
-                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 3].Value, stack[sp - 2].Value, stack[sp - 1].Value, Context);
+                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 3].Value, stack[sp - 2].Value, stack[sp - 1].Value, _active);
                     Release(ref stack[sp - 1]);
                     Release(ref stack[sp - 2]);
                     Release(ref stack[sp - 3]);
@@ -366,12 +377,12 @@ public sealed unsafe class BoundExpression : IDisposable
                         Unwind(sp);
                         return false;
                     }
-                    r = ScalarKernel.Match(_descriptors[ins.Descriptor], stack[sp - 1].Value, _patterns[ins.Operand]!, Context);
+                    r = ScalarKernel.Match(_descriptors[ins.Descriptor], stack[sp - 1].Value, _patterns[ins.Operand]!, _active);
                     Release(ref stack[sp - 1]);
                     sp--;
                     break;
                 case Op.LikeValue:
-                    r = ScalarKernel.Match(_descriptors[ins.Descriptor], stack[sp - 2].Value, stack[sp - 1].Value, Context);
+                    r = ScalarKernel.Match(_descriptors[ins.Descriptor], stack[sp - 2].Value, stack[sp - 1].Value, _active);
                     Release(ref stack[sp - 1]);
                     Release(ref stack[sp - 2]);
                     sp -= 2;
@@ -401,16 +412,16 @@ public sealed unsafe class BoundExpression : IDisposable
     {
         int n = ins.Operand, x = sp - n - 1;
         ScalarDescriptor or = _descriptors[ins.Descriptor + n];
-        ScalarOutcome acc = ScalarKernel.Apply(_descriptors[ins.Descriptor], _stack[x].Value, _stack[x + 1].Value, Context);
+        ScalarOutcome acc = ScalarKernel.Apply(_descriptors[ins.Descriptor], _stack[x].Value, _stack[x + 1].Value, _active);
         for (int i = 1; i < n && acc.Succeeded; i++)
         {
-            ScalarOutcome eq = ScalarKernel.Apply(_descriptors[ins.Descriptor + i], _stack[x].Value, _stack[x + 1 + i].Value, Context);
+            ScalarOutcome eq = ScalarKernel.Apply(_descriptors[ins.Descriptor + i], _stack[x].Value, _stack[x + 1 + i].Value, _active);
             if (!eq.Succeeded)
             {
                 acc = eq;
                 break;
             }
-            acc = ScalarKernel.Apply(or, acc.Value, eq.Value, Context);
+            acc = ScalarKernel.Apply(or, acc.Value, eq.Value, _active);
         }
         for (int i = x; i < sp; i++)
         {
@@ -431,7 +442,7 @@ public sealed unsafe class BoundExpression : IDisposable
         if (result.Succeeded)
         {
             ScalarOutcome reversed = Within(ins.Descriptor + 3, x, x + 2, x + 1);
-            result = reversed.Succeeded ? ScalarKernel.Apply(_descriptors[ins.Descriptor + 6], result.Value, reversed.Value, Context) : reversed;
+            result = reversed.Succeeded ? ScalarKernel.Apply(_descriptors[ins.Descriptor + 6], result.Value, reversed.Value, _active) : reversed;
         }
         for (int i = x; i < sp; i++)
         {
@@ -444,13 +455,13 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>(x &gt;= low) And (x &lt;= high), with the three descriptors from <paramref name="d"/>.</summary>
     private ScalarOutcome Within(int d, int x, int low, int high)
     {
-        ScalarOutcome ge = ScalarKernel.Apply(_descriptors[d], _stack[x].Value, _stack[low].Value, Context);
+        ScalarOutcome ge = ScalarKernel.Apply(_descriptors[d], _stack[x].Value, _stack[low].Value, _active);
         if (!ge.Succeeded)
         {
             return ge;
         }
-        ScalarOutcome le = ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, Context);
-        return le.Succeeded ? ScalarKernel.Apply(_descriptors[d + 2], ge.Value, le.Value, Context) : le;
+        ScalarOutcome le = ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, _active);
+        return le.Succeeded ? ScalarKernel.Apply(_descriptors[d + 2], ge.Value, le.Value, _active) : le;
     }
 
     /// <summary>CUR-FIND indexed Text: a non-ASCII subject under an indexed Like may take a collation range (R-SORT-3 LIKE-RANGE-01/05).</summary>
@@ -467,7 +478,7 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>
     /// The current row's value of field <paramref name="index"/>, as the DAO read path projects it (R-ORACLE-1
     /// FMT1-FAMILIES): Null, Yes/No as VT_BOOL, Byte UI1, Integer I2, Long I4, Currency CY, Single R4, Double R8, Date
-    /// DATE, Text and Memo as text. GUID, Binary, OLE and Decimal fields are refused when bound. A source with no cursor is a
+    /// DATE, Decimal DECIMAL, Text and Memo as text. GUID, Binary and OLE fields are refused when bound. A source with no cursor is a
     /// Null-extended row: every field reads Null.
     /// </summary>
     private bool Load(IRecordCursor? cursor, int index, ref Slot slot)
@@ -512,6 +523,7 @@ public sealed unsafe class BoundExpression : IDisposable
             NativeKind.Single => new NativeVariant { Vt = (ushort)VarType.R4, Int64 = (uint)v.Bits },
             NativeKind.Double => new NativeVariant { Vt = (ushort)VarType.R8, Int64 = (long)v.Bits },
             NativeKind.DateTime => new NativeVariant { Vt = (ushort)VarType.Date, Int64 = (long)v.Bits },
+            NativeKind.Decimal => Decimal(v.Decimal, column),
             _ => default,
         };
         if (slot.Value.Vt == (ushort)VarType.Empty)
@@ -521,6 +533,16 @@ public sealed unsafe class BoundExpression : IDisposable
         }
         return true;
     }
+
+    /// <summary>
+    /// A Decimal field as VT_DECIMAL, as the DAO read path projects it (R-ORACLE-1 OR-WIRE; W-04/private-codecs): a value
+    /// beyond the DECIMAL's 96 bits or scale 28, or a column of precision above 28 (whose DAO read fails 3000, T-INT-34),
+    /// gives Empty, which the load names.
+    /// </summary>
+    private static NativeVariant Decimal(NativeDecimal value, ColumnDescriptor column) =>
+        !value.FitsAutomation || (column.CalculatedResultType is null && column.NumericPrecision > 28)
+            ? default
+            : OwnedVariant.DecimalCell(new DecimalValue(value.Scale, value.Negative, value.High32, value.Low64));
 
     /// <summary>
     /// The scratch of a field load, laid out as a BSTR (a 4-byte length prefix, the units, a NUL) and sized for
@@ -678,7 +700,13 @@ public sealed unsafe class BoundExpression : IDisposable
                 return new Bound(StaticType.Unknown, OperandContract.Parameter(VarType.Empty), 1);
             }
             ColumnDescriptor column = binding.Column;
-            VarType declared = column.TypeCode switch
+            // A calculated column declares its result type (II-04 §5.6, CAT-P ResultType), not its own type code.
+            byte type = column.CalculatedResultType ?? column.TypeCode;
+            if (column.CalculatedResultType is { } result && result is not NativeTypes.Numeric && result != column.TypeCode)
+            {
+                throw Open("NotModelled.CalculatedField", $"calculated field {column.Name} of result type {result} in an expression");
+            }
+            VarType declared = type switch
             {
                 NativeTypes.Boolean => VarType.Bool,
                 NativeTypes.Byte => VarType.UI1,
@@ -689,6 +717,7 @@ public sealed unsafe class BoundExpression : IDisposable
                 NativeTypes.Double => VarType.R8,
                 NativeTypes.DateTime => VarType.Date,
                 NativeTypes.Text or NativeTypes.Memo => VarType.Bstr,
+                NativeTypes.Numeric => VarType.Decimal,
                 _ => throw Open("NotModelled.FieldType", $"field {column.Name} of native type {column.TypeCode} in an expression (W-04/private-codecs)"),
             };
             int index = Fields.IndexOf(binding);

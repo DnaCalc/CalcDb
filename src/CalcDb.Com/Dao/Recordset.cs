@@ -15,7 +15,7 @@ namespace CalcDb.Com.Dao;
 /// dynaset/snapshot cursor, with the qualified movement rules (R-CURSOR-1 CUR-POS), counts (CUR-POP) and bookmarks (CUR-ID).
 /// After Close every member fails 3420 (R-ACT-1 ACT-RETAIN), with source DAO.Recordset.
 /// </summary>
-internal sealed unsafe class RecordsetObject : DaoObject
+internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Recordset2;
     private static readonly nint Vtable = DualEntries.Build(Decl);

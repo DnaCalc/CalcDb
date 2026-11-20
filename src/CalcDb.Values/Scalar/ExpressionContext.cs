@@ -63,12 +63,30 @@ public abstract class TextCollation
 public sealed class ExpressionContext
 {
     public ExpressionContext(uint lcid, TextCompareMode compare, TextCollation? databaseOrder = null, ExpressionUse use = ExpressionUse.Query)
+        : this(lcid, compare, databaseOrder, use, foldsAtOpen: false)
+    {
+    }
+
+    private ExpressionContext(uint lcid, TextCompareMode compare, TextCollation? databaseOrder, ExpressionUse use, bool foldsAtOpen)
     {
         Lcid = lcid;
         Compare = compare;
         DatabaseOrder = databaseOrder;
         Use = use;
+        FoldsAtOpen = foldsAtOpen;
     }
+
+    /// <summary>
+    /// Whether this context folds a constant at OpenRecordset (qualified.md R-EXPR-1 EXPR-STAGE, r-q3-sql/constant-phase
+    /// and constant-phase-2): a constant expression that contains a function call is evaluated once at open with
+    /// oleaut32's operator rules, so a Long overflow widens to Double there instead of failing 6.
+    /// </summary>
+    public bool FoldsAtOpen { get; }
+
+    /// <summary>The same context for the open-time fold of a constant (made once, kept).</summary>
+    public ExpressionContext Folding => FoldsAtOpen ? this : _folding ??= new ExpressionContext(Lcid, Compare, DatabaseOrder, Use, foldsAtOpen: true);
+
+    private ExpressionContext? _folding;
 
     /// <summary>The locale of text conversion (the oracle ran with 7177, en-ZA).</summary>
     public uint Lcid { get; }

@@ -25,6 +25,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("Version", (self, args) => Live(self, d => d.Version()))
         .Get("CollatingOrder", (self, args) => Live(self, d => d.CollatingOrder()))
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
+        .Method("Execute", (self, args) => { nint query = args[0], options = args.Length > 1 ? args[1] : 0; return Live(self, d => d.Execute(query, options)); })
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
         .Get("QueryDefs", (self, args) => Live(self, d => d.QueryDefsCollection()))
         .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
@@ -45,7 +46,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static List<DatabaseObject>? _openOnThread;
 
     private readonly WorkspaceObject _workspace;
-    private readonly List<RecordsetObject> _recordsets = [];
+    private readonly List<IDatabaseRecordset> _recordsets = [];
     private WindowsFile? _file;
     private LockFile? _lockFile;
     private DefinitionCollection? _tableDefs;
@@ -55,6 +56,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private PropertiesObject? _properties;
     private QueryCatalog? _queries;
     private string? _queriesFailure;
+    private DatabaseSql? _sql;
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
@@ -240,9 +242,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return CallResult.Nothing;
     }
 
+    /// <summary>The database as the SQL layer binds and runs against it, made once per Database.</summary>
+    public DatabaseSql Sql => _sql ??= new DatabaseSql(this);
+
     /// <summary>
-    /// OpenRecordset(Name, Type, Options, LockEdit) on a local table: table-type, dynaset, snapshot or forward-only.
-    /// Not yet: SQL text and saved queries (W-06/W-09), Options, LockEdit, editing (W-05).
+    /// OpenRecordset(Name, Type, Options, LockEdit) on a local table: table-type, dynaset, snapshot or forward-only; on
+    /// SELECT text or a saved select query, a recordset over the SQL executor (<see cref="SelectRoute"/>). Not yet:
+    /// crosstabs and the other saved families (W-06/relational-spill, W-07), LockEdit, editing (W-05).
     /// </summary>
     private CallResult OpenRecordset(ReadOnlySpan<nint> args)
     {
@@ -275,10 +281,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (entry is null)
         {
             string trimmed = name.TrimStart();
-            if (trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("TRANSFORM", StringComparison.OrdinalIgnoreCase)
-                || Catalog.Entries.Any(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)))
+            if (trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
-                return CallResult.Fail(Failure.NotImplemented("OpenRecordset of SQL text or a saved query (W-06, W-09)"));
+                return SelectRoute.Open(this, name, type, options.Value);
+            }
+            if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase)) is { } saved)
+            {
+                return OpenSaved(saved, type, options.Value);
+            }
+            if (trimmed.StartsWith("TRANSFORM", StringComparison.OrdinalIgnoreCase) || Catalog.Entries.Any(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return CallResult.Fail(Failure.NotImplemented("OpenRecordset of a crosstab or a saved query MSysQueries does not list (W-06/relational-spill)"));
             }
             return Fail(3011, DaoErrors.ObjectNotFound(name));
         }
@@ -313,6 +326,45 @@ internal sealed unsafe class DatabaseObject : DaoObject
         CallResult result = Object(recordset);
         recordset.Release();
         return result;
+    }
+
+    /// <summary>
+    /// A saved query opened as a recordset (Database.OpenRecordset by name, QueryDef.OpenRecordset): a select query runs its
+    /// SQL as ACE renders it (QuerySql, CAT-Q); the other families are not this slice's.
+    /// </summary>
+    public CallResult OpenSaved(SavedQuery query, int? type, int options)
+    {
+        if (query.Family != QueryFamily.Select)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a saved {query.Family?.ToString() ?? "unclassified"} query (W-06/relational-spill, W-07)"));
+        }
+        RenderedSql sql = QuerySql.Render(query);
+        return sql.Text is { } text
+            ? SelectRoute.Open(this, text, type, options)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
+    }
+
+    /// <summary>A new recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
+    public CallResult Adopt(SelectRecordsetObject recordset)
+    {
+        _recordsets.Add(recordset);
+        CallResult result = Object(recordset);
+        recordset.Release();
+        return result;
+    }
+
+    /// <summary>
+    /// Execute(Query, Options): an Options value that does not convert is 3421 (r-dao-1-err-1/err-bind-types); a SELECT is
+    /// 3065 (r-err-1b/sql-execute-select). Action queries and DDL are W-07/actions.
+    /// </summary>
+    private CallResult Execute(nint query, nint optionsArg)
+    {
+        if (Args.Int32(optionsArg, omitted: 0) is null)
+        {
+            return Args.TypeOf(optionsArg) == Foundation.VarType.Bstr ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented("Execute with an Options argument that is not numeric"));
+        }
+        string sql = Args.Text(query) ?? "";
+        return SelectRoute.IsSelect(sql) ? Fail(3065, SelectRoute.CannotExecuteSelect) : CallResult.Fail(Failure.NotImplemented("Database.Execute of a statement that is not a SELECT (action queries and DDL are W-07/actions)"));
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
@@ -475,12 +527,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
     }
 
-    public void Forget(RecordsetObject recordset) => _recordsets.Remove(recordset);
+    public void Forget(IDatabaseRecordset recordset) => _recordsets.Remove(recordset);
 
     /// <summary>Close: every recordset of this Database closes, the file is released, the Workspace forgets it.</summary>
     private CallResult Close()
     {
-        foreach (RecordsetObject r in _recordsets.ToArray())
+        foreach (IDatabaseRecordset r in _recordsets.ToArray())
         {
             r.CloseCursor();
         }

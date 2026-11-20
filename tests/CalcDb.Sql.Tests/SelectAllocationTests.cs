@@ -22,12 +22,12 @@ public sealed class SelectAllocationTests(ITestOutputHelper output)
         var db = new SqlFixture(Big);
         using BoundSelect plan = BoundSelect.Prepare(sql, db, out SqlFailure? failure)!;
         Assert.Null(failure);
-        using (SelectCursor.Open(plan, db, forwardOnly: false, out _))
+        using (SelectCursor.Open(plan, db, ResultKind.Snapshot, out _))
         {
             // cold: page cache, scratch
         }
         long before = GC.GetAllocatedBytesForCurrentThread();
-        SelectCursor? cursor = SelectCursor.Open(plan, db, forwardOnly: false, out SqlFailure? open);
+        SelectCursor? cursor = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? open);
         long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
         using (cursor)
         {
@@ -48,7 +48,7 @@ public sealed class SelectAllocationTests(ITestOutputHelper output)
         var db = new SqlFixture(Big);
         using BoundSelect plan = BoundSelect.Prepare("SELECT ID, V, ID * 2 AS d FROM Big", db, out SqlFailure? failure)!;
         Assert.Null(failure);
-        using SelectCursor cursor = SelectCursor.Open(plan, db, forwardOnly: false, out SqlFailure? open)!;
+        using SelectCursor cursor = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? open)!;
         Assert.Null(open);
         long cold = Pass(cursor); // populates the store and the scratch
         long before = GC.GetAllocatedBytesForCurrentThread();

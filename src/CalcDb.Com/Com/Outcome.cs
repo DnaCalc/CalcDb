@@ -41,9 +41,14 @@ internal sealed record Failure(FailureKind Kind, int Scode, string Source, strin
     /// <summary>The DAO error number (Error.Number): the scode's low word.</summary>
     public int Number => Scode & 0xFFFF;
 
-    /// <summary>A DAO error as ACE publishes it: scode 0x800A0000 | number, help file jeterr40.chm, context 5000000 + number.</summary>
-    public static Failure Dao(int number, string source, string description) =>
-        new(FailureKind.Dao, unchecked((int)0x800A0000) | number, source, description, "jeterr40.chm", 5000000 + number);
+    /// <summary>
+    /// A DAO error as ACE publishes it: scode 0x800A0000 | number, help file jeterr40.chm, context 5000000 + number; a
+    /// VBA runtime error of an expression (a number below 3000: 5, 6, 11) has no help file and context -1, from
+    /// DAO.Database, DAO.Field and DAO.Recordset alike (r-q3-sql/constant-phase, r-par-1/err-snapshot-last-bad-row).
+    /// </summary>
+    public static Failure Dao(int number, string source, string description) => number < 3000
+        ? new(FailureKind.Dao, unchecked((int)0x800A0000) | number, source, description, null, -1)
+        : new(FailureKind.Dao, unchecked((int)0x800A0000) | number, source, description, "jeterr40.chm", 5000000 + number);
 
     public static Failure NotImplemented(string member) =>
         new(FailureKind.NotImplemented, HResults.E_NOTIMPL, "CalcDb", $"CalcDb has not implemented {member} yet.");

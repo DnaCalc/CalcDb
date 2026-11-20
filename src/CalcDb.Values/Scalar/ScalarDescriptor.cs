@@ -64,6 +64,9 @@ public enum ScalarOperation : byte
     Left,
     DateSerial,
 
+    /// <summary>IsError: -1 for VT_ERROR, else 0 (qualified.md R-EXPR-1 Branch B, corrected: r-q3-sql/iserror-forms).</summary>
+    IsError,
+
     /// <summary>The Like operator (II-10 §§16–18); applied by <see cref="ScalarKernel.Match"/> with a compiled <see cref="LikePattern"/>.</summary>
     Like,
 }

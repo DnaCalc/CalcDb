@@ -19,8 +19,8 @@ public enum FunctionAvailability : byte
 /// The functions an expression may call (II-10 §13: an inventory of executable descriptors). Available: the kernel's
 /// functions (qualified.md "R-EXPR-1 Branch B, EXPR-RUNTIME" and the Find criteria note: UCase, Len, Chr, Val, Int, CInt,
 /// CDate, DateSerial, IsNull, Left asked in Find). Unknown: the names the standalone service lacks (qualified.md
-/// "function availability": Nz, CVErr, … ; Nz and CVErr asked in Find; IsError is not listed: a query answers IsError(1)
-/// with 0, r-expr-1/a-null-empty-error-literals, against that note). Domain: the domain aggregates (DMax asked
+/// "function availability": Nz, CVErr, … ; Nz and CVErr asked in Find). IsError is available (qualified.md R-EXPR-1
+/// Branch B, corrected: r-q3-sql/iserror-forms, r-expr-1/a-null-empty-error-literals). Domain: the domain aggregates (DMax asked
 /// in Find). Any other name is not in this inventory: the binder names it instead of guessing whether ACE knows it.
 /// </summary>
 public static class FunctionInventory
@@ -55,6 +55,7 @@ public static class FunctionInventory
         Available("Round", ScalarOperation.Round);
         Available("IsNull", ScalarOperation.IsNull, StaticType.Boolean);
         Available("IsEmpty", ScalarOperation.IsEmpty, StaticType.Boolean);
+        Available("IsError", ScalarOperation.IsError, StaticType.Boolean);
         Available("Len", ScalarOperation.Len);
         Available("UCase", ScalarOperation.UCase);
         Available("Chr", ScalarOperation.Chr);

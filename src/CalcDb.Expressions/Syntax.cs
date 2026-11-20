@@ -628,13 +628,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 _position = close + 1;
                 return new Token(TokenKind.Date, start, _position - start, source[(start + 1)..close]);
             }
-            if (c == '[' || char.IsLetter(c) || c == '_')
+            if (c is '[' or '`' || char.IsLetter(c) || c == '_')
             {
                 return LexName(start);
             }
-            if (c is '`' or '?' or '@' or ':')
+            if (c is '?' or '@' or ':')
             {
-                throw new NotModelledSyntax(c == '`' ? "NotModelled.BacktickName" : "NotModelled.ParameterMarker", $"'{c}' in an expression (r-sql-1/b-brackets, r-def-expr-sql/sql-foreign-identifier-quoting)");
+                throw new NotModelledSyntax("NotModelled.ParameterMarker", $"'{c}' in an expression (r-def-expr-sql/sql-foreign-identifier-quoting)");
             }
             if (c is '<' or '>')
             {
@@ -712,16 +712,19 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             }
         }
 
-        /// <summary>A name: letters, digits and _, or a bracketed name; parts joined by '.' form one qualified name.</summary>
+        /// <summary>
+        /// A name: letters, digits and _, or a quoted name in brackets or backticks (qualified.md R-SQL-1 SQL-B, corrected:
+        /// backticks quote names as brackets do, r-q3-sql/backtick-names); parts joined by '.' form one qualified name.
+        /// </summary>
         private Token LexName(int start)
         {
             var name = new System.Text.StringBuilder();
             bool bracketed = false;
             while (true)
             {
-                if (_position < source.Length && source[_position] == '[')
+                if (_position < source.Length && source[_position] is '[' or '`')
                 {
-                    int close = source.IndexOf(']', _position + 1);
+                    int close = source.IndexOf(source[_position] == '[' ? ']' : '`', _position + 1);
                     if (close < 0)
                     {
                         throw new SyntaxError(ExpressionMessages.MissingParenthesis);
@@ -747,7 +750,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     }
                     name.Append(source, s, _position - s);
                 }
-                if (_position + 1 < source.Length && source[_position] is '.' or '!' && (source[_position + 1] == '[' || char.IsLetter(source[_position + 1]) || source[_position + 1] == '_'))
+                if (_position + 1 < source.Length && source[_position] is '.' or '!' && (source[_position + 1] is '[' or '`' || char.IsLetter(source[_position + 1]) || source[_position + 1] == '_'))
                 {
                     // T.F, and the bang form Forms!F!x, which a query takes as one name (r-expr-1b/sandbox-access-hosted-names: 3061).
                     name.Append(source[_position]);

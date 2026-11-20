@@ -212,20 +212,24 @@ public static class SqlParser
             return true;
         }
 
-        /// <summary>A name: <c>[any text]</c> or a word that is not a clause word.</summary>
+        /// <summary>
+        /// A name: <c>[any text]</c>, <c>`any text`</c> (qualified.md R-SQL-1 SQL-B, corrected: backticks quote names as
+        /// brackets do, r-q3-sql/backtick-names) or a word that is not a clause word.
+        /// </summary>
         private string? Name(bool allowClauseWord = false)
         {
             Skip();
-            if (_p < s.Length && s[_p] == '[')
+            if (_p < s.Length && s[_p] is '[' or '`')
             {
-                int close = s.IndexOf(']', _p + 1);
+                char closing = s[_p] == '[' ? ']' : '`';
+                int close = s.IndexOf(closing, _p + 1);
                 if (close < 0)
                 {
                     return null;
                 }
                 string name = s[(_p + 1)..close];
                 _p = close + 1;
-                if (_p < s.Length && s[_p] == ']')
+                if (closing == ']' && _p < s.Length && s[_p] == ']')
                 {
                     // r-sql-1/b-brackets: [x]]y] is 3141 (no escaped bracket).
                     BadName = true;

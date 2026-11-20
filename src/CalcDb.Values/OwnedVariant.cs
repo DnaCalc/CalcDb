@@ -83,20 +83,28 @@ public sealed unsafe class OwnedVariant : IDisposable
     /// </summary>
     public static OwnedVariant FromDecimal(DecimalValue value)
     {
+        var result = new OwnedVariant();
+        *result._cell = DecimalCell(value);
+        result.State = OwnershipState.Owned;
+        return result;
+    }
+
+    /// <summary>A VT_DECIMAL cell, which owns no resource (the 96-bit value lies inline in the VARIANT's 16 bytes).</summary>
+    public static NativeVariant DecimalCell(DecimalValue value)
+    {
         if (value.Scale > TargetDeclarations.WindowsX64.Decimal.MaxScale)
         {
             throw new ArgumentOutOfRangeException(nameof(value), "DECIMAL scale is 0 to 28.");
         }
-        var result = new OwnedVariant();
-        byte* b = (byte*)result._cell;
+        NativeVariant cell = default;
+        byte* b = (byte*)&cell;
         DecimalLayout d = TargetDeclarations.WindowsX64.Decimal;
         b[d.ScaleOffset] = value.Scale;
         b[d.SignOffset] = value.Negative ? d.NegativeSign : (byte)0;
         *(uint*)(b + d.High32Offset) = value.High32;
         *(ulong*)(b + d.Low64Offset) = value.Low64;
-        result._cell->Vt = (ushort)VarType.Decimal;
-        result.State = OwnershipState.Owned;
-        return result;
+        cell.Vt = (ushort)VarType.Decimal;
+        return cell;
     }
 
     /// <summary>
