@@ -23,6 +23,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, d => Text(d.Name)))
         .Get("Version", (self, args) => Live(self, d => d.Version()))
+        .Get("CollatingOrder", (self, args) => Live(self, d => d.CollatingOrder()))
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
@@ -39,7 +40,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     private const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
@@ -48,6 +49,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _lockFile = lockFile;
         Cache = cache;
         Profile = profile;
+        Header = header;
         Format = profile.Descriptor;
         PageCount = pageCount;
         Catalog = catalog;
@@ -88,6 +90,20 @@ internal sealed unsafe class DatabaseObject : DaoObject
         FileFormat.Ace2010 => Text("14.0"),
         var other => CallResult.Fail(Failure.NotImplemented($"Database.Version of the {other} format (not observed)")),
     };
+
+    /// <summary>The decoded page-0 fields, read at open through the header mask (II-03 §1.2).</summary>
+    public DatabaseHeader Header { get; }
+
+    /// <summary>
+    /// CollatingOrder: the database sort identifier of page 0 as VT_I4, the LANGID requested at creation (qualified,
+    /// R-FMT-1 FMT1-COLLATING: r-fix-fmt-sort/fmt1-collating-contrast, r-sort-3b/locale-*, r-q-fmt-sort/locale-extra-accdb;
+    /// the header field is confirmed against the retained fixtures by HeaderFieldTests). A descriptor whose byte +2 is
+    /// not zero is not observed (an LCID beyond 16 bits, such as dbSortJapaneseRadicalStrokeCount 263185, may use it)
+    /// and is refused rather than guessed.
+    /// </summary>
+    private CallResult CollatingOrder() => Header.SortOrder.Reserved == 0
+        ? Int32(Header.SortOrder.Identifier)
+        : CallResult.Fail(Failure.NotImplemented($"Database.CollatingOrder of sort descriptor {Header.SortOrder} with byte +2 = {Header.SortOrder.Reserved} (not observed)"));
 
     public ulong PageCount { get; }
 
@@ -169,7 +185,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
             }
         }
-        database = new DatabaseObject(workspace, full, file, lockFile, cache, profile, pages, catalog);
+        database = new DatabaseObject(workspace, full, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
         return CallResult.Nothing;
     }
 

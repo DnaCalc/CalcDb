@@ -5,6 +5,10 @@ public sealed record InspectionReport
 {
     public required ProfileRefusal Refusal { get; init; }
     public FileProfile? Profile { get; init; }
+
+    /// <summary>The decoded page-0 fields (II-03 §1.2); null when the profile is refused or page 0 is incomplete.</summary>
+    public DatabaseHeader? Header { get; init; }
+
     public required long Length { get; init; }
     public required int PageCount { get; init; }
 
@@ -102,6 +106,7 @@ public static class Inspector
         {
             Refusal = refusal,
             Profile = profile,
+            Header = bytes.Length >= d.PageSize ? DatabaseHeader.Decode(bytes[..d.PageSize], d) : null,
             Length = bytes.Length,
             PageCount = pageCount,
             TrailingBytes = (int)(bytes.Length % d.PageSize),

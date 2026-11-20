@@ -125,4 +125,17 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
 - **§5.2 positions.** Add the native confirmation "`a\x01` → `80 0B 06 03`" beside the source-derived formula, and state
   that `06` is a constant byte between a position and its code.
 
+## II-03 §1.2 and R-FMT-1: the masked header region and the database sort descriptor
+
+- **Evidence.** Decoding page 0 through the mask, header bytes `[0x6E, 0x72)` hold a u16LE identifier equal to
+  `Database.CollatingOrder` in all 134 retained fixtures whose ACE answer is recorded (locales 1029–2057; HeaderFieldTests),
+  then a byte that is 0 in all of them, then a signed byte that is 1 only in the dbVersion 256 creation
+  (r-sort-3/create-version-256) and 0 in the rest.
+- **Implemented.** `HeaderRules` sort identifier, reserved and version; `DatabaseHeader.Decode`; `Database.CollatingOrder`.
+- **Proposed text.** II-03 §1.2, after the `B5` sentence: "The masked region is 128 bytes, `[0x18, 0x98)`. In it, at
+  decoded `[0x6E, 0x72)`, lies the database sort descriptor, with the column descriptor's shape (II-05 §4): u16LE
+  identifier, one uninterpreted byte, one signed version byte. The identifier is the value of `Database.CollatingOrder`
+  (R-FMT-1 FMT1-COLLATING)." R-FMT-1: "a dbVersion 256 creation stored database sort version 1 (General); options 64 and
+  128 stored 0 (one fixture; to be qualified)." A-01 S-JACK-FMT: record the inspection of the sort-order offset and size.
+
 

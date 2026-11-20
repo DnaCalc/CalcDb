@@ -93,8 +93,10 @@ public static class ProfileSelector
 /// </summary>
 /// <remarks>
 /// The mask is the RC4 keystream of the reference's four-byte key (a format fact of the pinned reference, S-JACK-FMT).
-/// Its first byte is B5, as II-03 §1.2 states; that is checked by a test. The rest is unconfirmed until header fields
-/// decoded with it are cross-checked against native captures (R-FMT-1).
+/// Its first byte is B5, as II-03 §1.2 states (DescriptionTests). Mask bytes 0x56–0x57 (header 0x6E–0x6F) are confirmed
+/// natively: the sort identifier they decode equals the Database.CollatingOrder ACE answered for every retained fixture
+/// whose questions read it (R-FMT-1 FMT1-COLLATING; HeaderFieldTests). The other mask bytes stay unconfirmed until a
+/// field decoded with them is cross-checked the same way.
 /// </remarks>
 public static class HeaderMask
 {
@@ -127,15 +129,31 @@ public static class HeaderMask
     }
 
     /// <summary>A decoded copy of the header page: stored bytes in, decoded bytes out, the input untouched.</summary>
-    public static byte[] Decode(ReadOnlySpan<byte> storedHeader, int maskLength = 128, FormatDescriptor? descriptor = null)
+    public static byte[] Decode(ReadOnlySpan<byte> storedHeader, FormatDescriptor? descriptor = null)
     {
-        int start = (descriptor ?? FormatDescriptor.Jet4Family).Header.MaskStart;
+        HeaderRules h = (descriptor ?? FormatDescriptor.Jet4Family).Header;
+        int start = h.MaskStart;
         byte[] decoded = storedHeader.ToArray();
-        byte[] mask = Bytes(maskLength);
+        byte[] mask = Bytes(h.MaskLength);
         for (int i = 0; i < mask.Length && start + i < decoded.Length; i++)
         {
             decoded[start + i] ^= mask[i];
         }
         return decoded;
+    }
+}
+
+/// <summary>
+/// The decoded page-0 fields a session reads (II-03 §1.2, W-08/native-read): read from a decoded copy of the stored
+/// header through the one mask path, never from the stored bytes.
+/// </summary>
+public sealed record DatabaseHeader(TextSortOrder SortOrder)
+{
+    /// <summary>The header fields of a stored page 0 (at least the masked region's end).</summary>
+    public static DatabaseHeader Decode(ReadOnlySpan<byte> storedHeader, FormatDescriptor? descriptor = null)
+    {
+        FormatDescriptor d = descriptor ?? FormatDescriptor.Jet4Family;
+        byte[] decoded = HeaderMask.Decode(storedHeader, d);
+        return new DatabaseHeader(TextSortOrder.Read(decoded, d.Header));
     }
 }

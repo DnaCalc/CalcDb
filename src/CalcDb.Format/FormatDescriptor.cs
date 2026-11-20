@@ -51,6 +51,14 @@ public sealed record FormatDescriptor
             JetSignature = "Standard Jet DB\0"u8.ToArray(),
             AceSignature = "Standard ACE DB\0"u8.ToArray(),
             MaskStart = 0x18,
+            MaskLength = 128,
+            // The database sort descriptor (OFFSET_SORT_ORDER and its four-byte size in the Jet4 profile constants,
+            // S-JACK-FMT), inside the masked region: read from the decoded header only. The identifier is confirmed
+            // against every retained fixture whose questions read Database.CollatingOrder (R-FMT-1 FMT1-COLLATING;
+            // HeaderFieldTests); the bytes at +2 and +3 decode consistently there but no ACE answer reads them.
+            SortIdentifier = new("jet4.header.sort_identifier", "header (decoded)", 0x6E, 2, ByteOrder.Little, "Database sort identifier (LANGID), the value of Database.CollatingOrder.", Reference + "; II-03 §1.2; R-FMT-1 FMT1-COLLATING"),
+            SortReserved = new("jet4.header.sort_reserved", "header (decoded)", 0x70, 1, ByteOrder.Little, "Sort descriptor byte +2, not interpreted, preserved (zero in every fixture HeaderFieldTests decodes).", Reference + "; II-05 §4"),
+            SortVersion = new("jet4.header.sort_version", "header (decoded)", 0x71, 1, ByteOrder.Little, "Signed sort version, the column descriptor's shape (1 General, 0 General - Legacy, -1 General 97); 1 only in the option-256 fixture, 0 in the others decoded.", Reference + "; II-05 §4"),
         },
         DataPage = new DataPageRules
         {
@@ -176,7 +184,11 @@ public sealed record FormatDescriptor
     };
 }
 
-/// <summary>The database header (page 0): magic, signature, format code, and the masked region (II-03 §§1.1–1.2).</summary>
+/// <summary>
+/// The database header (page 0): magic, signature, format code, the masked region (II-03 §§1.1–1.2) and the database
+/// sort descriptor inside it. The format code is read from the stored bytes (it lies before the mask); every field at or
+/// after <see cref="MaskStart"/> is read from the decoded copy (<see cref="HeaderMask.Decode"/>, <see cref="DatabaseHeader"/>).
+/// </summary>
 public sealed record HeaderRules
 {
     public required FieldRule Version { get; init; }
@@ -188,7 +200,15 @@ public sealed record HeaderRules
     /// <summary>The first stored byte the header mask applies to.</summary>
     public required int MaskStart { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [Version];
+    /// <summary>The masked region's length: stored bytes <c>[MaskStart, MaskStart + MaskLength)</c> are XOR-masked.</summary>
+    public required int MaskLength { get; init; }
+
+    /// <summary>The database sort descriptor, the same four-byte shape as a Text column's (II-05 §4).</summary>
+    public required FieldRule SortIdentifier { get; init; }
+    public required FieldRule SortReserved { get; init; }
+    public required FieldRule SortVersion { get; init; }
+
+    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion];
 }
 
 /// <summary>The ordinary data page envelope and slot directory (II-03 §§1.3, 3.3).</summary>

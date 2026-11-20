@@ -7,7 +7,7 @@ public sealed class HeaderDomainTests
 {
     private const int PageSize = 4096;
     private static readonly int MaskStart = FormatDescriptor.Jet4Family.Header.MaskStart;
-    private static readonly byte[] Mask = HeaderMask.Bytes(128);
+    private static readonly byte[] Mask = HeaderMask.Bytes(FormatDescriptor.Jet4Family.Header.MaskLength);
 
     [Fact]
     public void T_PAGER_14_stored_A5_decodes_to_10_and_fingerprints_and_writes_use_the_stored_bytes()

@@ -13,7 +13,14 @@ public readonly record struct TextSortOrder(ushort Identifier, byte Reserved, sb
     public const ushort GeneralIdentifier = 1033;
 
     public static TextSortOrder Read(ReadOnlySpan<byte> columnBlock, ColumnBlockRules c) =>
-        new((ushort)c.SortIdentifier.Read(columnBlock), (byte)c.SortReserved.Read(columnBlock), unchecked((sbyte)(byte)c.SortVersion.Read(columnBlock)));
+        Read(columnBlock, c.SortIdentifier, c.SortReserved, c.SortVersion);
+
+    /// <summary>The database sort descriptor of a decoded page 0, the same shape (II-03 §1.2, R-FMT-1 FMT1-COLLATING).</summary>
+    public static TextSortOrder Read(ReadOnlySpan<byte> decodedHeader, HeaderRules h) =>
+        Read(decodedHeader, h.SortIdentifier, h.SortReserved, h.SortVersion);
+
+    private static TextSortOrder Read(ReadOnlySpan<byte> bytes, FieldRule identifier, FieldRule reserved, FieldRule version) =>
+        new((ushort)identifier.Read(bytes), (byte)reserved.Read(bytes), unchecked((sbyte)(byte)version.Read(bytes)));
 
     public override string ToString() => $"{Identifier}/{Version}";
 }
