@@ -8,8 +8,9 @@ namespace CalcDb.Isam.Tests;
 /// <summary>
 /// Allocation budgets of the resident row loop (task 6p9q; II-15 §28, R-STRING-1): the managed bytes a warm cursor
 /// allocates per row for movement and for a fixed-width field read. Measured with GC.GetAllocatedBytesForCurrentThread
-/// over whole passes after a warm-up pass.
+/// over whole passes after a warm-up pass, alone in the process (<see cref="AllocationBudgets"/>).
 /// </summary>
+[Collection(AllocationBudgets.Name)]
 public sealed class AllocationTests(ITestOutputHelper output)
 {
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;

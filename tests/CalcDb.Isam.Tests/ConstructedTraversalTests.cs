@@ -3,7 +3,9 @@ using CalcDb.Storage;
 
 namespace CalcDb.Isam.Tests;
 
-/// <summary>Text grammar, long values and overflow on constructed pages (II-04 §§6–8; T-FMT-09, T-FMT-11..13).</summary>
+/// <summary>Text grammar, long values and overflow on constructed pages (II-04 §§6–8; T-FMT-09, T-FMT-11..13). One test
+/// holds an allocation budget, so the class runs alone (<see cref="AllocationBudgets"/>).</summary>
+[Collection(AllocationBudgets.Name)]
 public sealed class ConstructedTraversalTests
 {
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
