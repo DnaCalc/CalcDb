@@ -277,3 +277,35 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
 - **Proposed text.** In §21's adapter paragraph, replace "a rule result of Null rejects under the initial field policy" with
   "a rule result of Null admits the value (R-EXPR-1 EXPR-MUTATION); False rejects and an evaluation error fails with its
   own error", and keep the table policy separately selectable as the paragraph says.
+
+## II-08 §12 and Figure F-58: a native leaf's stored prefix is not its entries' common prefix (W-05/same-width-mutation, mpvx, 2026-11-20)
+
+- **Book.** F-58's witness leaves (prefix 4 for two entries, 0 for one) and §12's "Build every fallback leaf independently
+  from its full entry set, including prefix, boundaries and free count" treat the prefix as derived from the entries.
+- **Evidence.** `NativeLeafEncodingTests` (tests/CalcDb.Format.Tests) rebuilds all 5,006 native index pages of the 269
+  retained fixtures byte for byte only under each page's own stored prefix. 2,316 of them store a prefix shorter than
+  their entries' common prefix, often 0 where every entry shares 4 bytes. ACE also leaves old bytes after the used part
+  of the entry area.
+- **Implemented.** `IndexPages.TryWriteEntries` keeps the page's stored prefix; a replacement the stored prefix no longer
+  covers is not written (named, W-05/growth-structural-closure). Task `gqv4` probes the rule that fixes the prefix.
+- **Proposed text.** In §12: "Build every fallback leaf from its full entry set, boundaries and free count, under the
+  prefix the native rule selects (R-FMT-2; the stored prefix of a native leaf is not the entries' common prefix)". Mark
+  F-58's witness prefixes as constructed.
+
+## II-09 §2 admission table: the DAO default open takes the writer lease at its first publication (mpvx, 2026-11-20; owner decision needed)
+
+- **Book.** The §2 table row "DAO default `OpenDatabase(name)`; shared, read/write" says: "Step 1, RW access and share
+  zero. Physically exclusive across processes, even for a caller that only reads; the second default open is a named,
+  counted R-LOCK-1/EX-DEFAULT mismatch." §3 adds that there is no in-place promotion from Step 2: additional rights take
+  the explicit reopen path.
+- **Implemented (deviation).** W-05/same-width-mutation opens the default DAO session under Step 2 (reader-only, as
+  W-10/native-readers-only does). It takes Step 1 on the explicit reopen path at the session's first publication
+  (`SessionFile`): it closes the reader handle, opens read/write with share zero, and checks the file identity and the bytes
+  of every page it will overwrite. On a refusal it restores the reader handle and names the publication outcome.
+- **Trade.** Under the book's rule a second opener fails at open, even when the first session never writes. Under the
+  implementation, readers are admitted until the first write, and that write then fails (named) while another open
+  exists. The implementation matches more of ACE's answers when a default open is only read, as most VBA code does. The
+  book's rule fails earlier and more predictably. ACE answers both cases with success.
+- **Proposed text, if the owner keeps the implementation.** Row "DAO default OpenDatabase": "Step 2 at open; Step 1 on the
+  explicit reopen path at the session's first publication (§3), after the file identity and the pages to be overwritten
+  are checked; while another open holds the file, the publication is a named, counted R-LOCK-1/EX-DEFAULT refusal."

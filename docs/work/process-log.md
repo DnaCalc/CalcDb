@@ -501,3 +501,16 @@ each one owns in its brief.
 
 **Next candidates.** The owner's request for the next process round: CodeAlta work items as the sole tracker (`6v2c`).
 The w-10 lock-length flake at its cause.
+
+## 2026-11-20 (afternoon) · Organizer handover: 68jn, 7htc, mpvx, 6d79/hd6v landed; four probe rounds beside the children (top-level session, Claude Opus 5.5)
+
+Not a process round (none was called); observations made during the work, each with the change it led to.
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| Commit message files with fixed names in `%TEMP%` (`msg-7htc.txt`) | One commit took the earlier organizer's message; fixed before push | Message files carry the session id in their name |
+| `batch` reuses a sealed attempt; a rerun with a changed tool needs `run --token T --new-attempt` | The first ETW rerun returned the old answers silently | Use `run --new-attempt` for reruns after a tooling change |
+| The export copy loop took every modified file of the tree | A child's half-written Sql files broke the export build | Copy an explicit file list per child into the export |
+| Two processes decompressing one fixture into the shared artifact cache | A Format test failed with access denied on the rename | `ArtifactStore.Locate` keeps the winner's copy (the same digest) |
+| A note's claim contradicted its own record (Mid's start) | Found by the implementing child, not at qualification | When a note is written, check each claimed value against the record it cites |
+| A probe over all retained fixtures before writing the leaf writer (mpvx) | Found that ACE's stored prefix is not the common prefix before any page was written | Run such a fixture-wide probe before every format writer |

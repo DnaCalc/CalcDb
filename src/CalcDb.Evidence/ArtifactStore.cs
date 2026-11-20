@@ -101,7 +101,16 @@ public sealed class ArtifactStore
             File.Delete(temp);
             throw new InvalidDataException($"Stored artifact {sha256} does not decompress to its digest.");
         }
-        File.Move(temp, cached, overwrite: true);
+        try
+        {
+            File.Move(temp, cached, overwrite: true);
+        }
+        catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(cached))
+        {
+            // Another process decompressed the same artifact first and holds it open (a parallel test run): its copy has
+            // the same digest, so this one is dropped instead of replacing a file in use.
+            File.Delete(temp);
+        }
         return cached;
     }
 
