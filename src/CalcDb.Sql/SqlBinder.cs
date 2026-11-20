@@ -729,9 +729,33 @@ public sealed class BoundSelect : IDisposable
     /// field outside both is 3122 (r-sql-1: "Your query does not include the specified expression 'g' as part of an
     /// aggregate function.").
     /// </summary>
-    internal sealed class GroupScope(List<SyntaxNode> keys, List<AggregateSpec> aggregates, List<(VarType Declared, StaticType Type)> keyTypes, SourceScope input) : ExpressionSchema
+    internal sealed class GroupScope(List<SyntaxNode> keys, List<AggregateSpec> aggregates, List<(VarType Declared, StaticType Type)> keyTypes, List<ColumnBinding?> keyFields, SourceScope input) : ExpressionSchema
     {
         public string? Item { get; set; }
+
+        public ColumnDescriptor? KeyColumn(SyntaxNode node)
+        {
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (SameExpression(node, keys[i]))
+                {
+                    return keyFields[i]?.Column;
+                }
+            }
+            return null;
+        }
+
+        public AggregateSpec? Aggregate(SyntaxNode node)
+        {
+            for (int i = 0; i < aggregates.Count; i++)
+            {
+                if (ReferenceEquals(aggregates[i].Node, node))
+                {
+                    return aggregates[i];
+                }
+            }
+            return null;
+        }
 
         public override SlotBinding? Substitute(SyntaxNode node)
         {
@@ -1372,18 +1396,22 @@ public sealed class BoundSelect : IDisposable
 
         /// <summary>
         /// A computed column (qualified.md "the DAO Field.Type of a projected column"): 9 for the Null literal and an operator
-        /// with a Null-literal operand; any other static type is not identified. SourceTable and SourceField are "" (r-sql-1/
-        /// agg-count) except where a record shows otherwise (r-sql-1/b-output-names: not decided, named).
+        /// with a Null-literal operand; static types decided by retained evidence records; any other combination stays named.
+        /// SourceTable and SourceField are "" (r-sql-1/agg-count) except where a record shows otherwise (r-sql-1/b-output-names:
+        /// not decided, named).
         /// </summary>
-        private static void Computed(ResultColumn column, SyntaxNode root)
+        private void Computed(ResultColumn column, SyntaxNode root, GroupScope? group = null)
         {
             // r-expr-1b/cmp-between-in, r-expr-1/pat-06-null-and-operand-order: Between and Like with a Null literal operand
             // are 9 when Null, as the operators are; In stays 3 (Null In (1, 2) is 3 with a Null value).
             bool nullOperator = root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Null }
                 || (root.Kind is SyntaxKind.Unary or SyntaxKind.Binary or SyntaxKind.Like or SyntaxKind.Between
                     && (IsNullLiteral(root.Left) || IsNullLiteral(root.Right) || root.Items.Any(IsNullLiteral)));
-            int? type = StaticFieldType(root);
-            column.TypeRule = nullOperator ? ColumnTypeRule.NullAtOpen : type is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
+            StaticTypeResult result = StaticTypeOf(root, group);
+            int? type = result.FieldType;
+            column.TypeRule = nullOperator ? ColumnTypeRule.NullAtOpen
+                : type is not null && result.InnerMatchesDao ? ColumnTypeRule.Bound
+                : ColumnTypeRule.NotModelled;
             column.FieldType = nullOperator ? null : type;
             // qualified.md: 1 <> Null and False And Null are 3, 7 & Null is 10 (the other operators' non-Null case is not recorded).
             column.NonNullType = nullOperator && root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual or ScalarOperation.And or ScalarOperation.Concatenate } ? type : null;
@@ -1404,22 +1432,582 @@ public sealed class BoundSelect : IDisposable
             column.TypeOpen = p.FieldType is null ? "NotModelled.ParameterFieldType" : p.DaoType == 1 ? "NotModelled.ExpressionFieldType" : null;
         }
 
+        private enum OperandKind : byte
+        {
+            Unknown,
+            BooleanLiteral,
+            YesNo,
+            Byte,
+            CByte,
+            Integer,
+            LongLiteral,
+            Long,
+            Currency,
+            Single,
+            Double,
+            Date,
+            Text,
+            Memo,
+            DecimalLiteral,
+            StoredDecimal,
+        }
+
+        /// <summary>
+        /// Static operand classification and DAO Field.Type of a computed expression. <see cref="InnerMatchesDao"/> is false when
+        /// the static DAO Field.Type is decided by retained evidence but the scalar evaluator's inner VarType can differ from the
+        /// DAO Field.Value VarType (e.g. CSng returns VT_R4 while DAO Field.Type is 7; Byte+Byte returns VT_UI1/VT_I2 while DAO
+        /// Field.Type is 4).
+        /// </summary>
+        private readonly record struct StaticTypeResult(OperandKind Kind, int? FieldType, bool InnerMatchesDao, long? LiteralLong = null)
+        {
+            public static StaticTypeResult Unknown => default;
+        }
+
         /// <summary>
         /// The static Field.Type of the computed forms the records decide (qualified.md "the DAO Field.Type of a projected
-        /// column"; r-expr-1/a-null-empty-error-literals, d-logical-bitwise, b-plus-versus-concat; r-sql-1/b-output-names):
-        /// a comparison, Like, Is Null, In, Between and IsNull(…) are 3, with the kernel's VT_I2 -1/0; And is 3
-        /// (<c>False And Null</c>); <c>&amp;</c> is 10 (<c>7 &amp; Null</c>, <c>name &amp; 'x'</c>). Other operators and
-        /// functions are not identified (null).
+        /// column"; r-expr-1/a-null-empty-error-literals, d-logical-bitwise, b-plus-versus-concat; r-sql-1/b-output-names;
+        /// plus arithmetic operators and C* conversion functions). Bare literals, other functions, and operand-type combinations
+        /// not decided by retained evidence return a null FieldType so they stay named (<c>NotModelled.ExpressionFieldType</c>).
         /// </summary>
-        private static int? StaticFieldType(SyntaxNode root) => root switch
+        private StaticTypeResult StaticTypeOf(SyntaxNode root, GroupScope? group) => root switch
         {
             { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal or ScalarOperation.NotEqual or ScalarOperation.Less or ScalarOperation.LessOrEqual
-                or ScalarOperation.Greater or ScalarOperation.GreaterOrEqual or ScalarOperation.And } => 3,
-            { Kind: SyntaxKind.Like or SyntaxKind.IsNull or SyntaxKind.In or SyntaxKind.Between } => 3,
-            { Kind: SyntaxKind.Call, Text: { } name } when name.Equals("IsNull", StringComparison.OrdinalIgnoreCase) && root.Items.Count == 1 => 3,
-            { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Concatenate } => 10,
-            _ => null,
+                or ScalarOperation.Greater or ScalarOperation.GreaterOrEqual or ScalarOperation.And } => new(OperandKind.Integer, 3, true),
+            { Kind: SyntaxKind.Like or SyntaxKind.IsNull or SyntaxKind.In or SyntaxKind.Between } => new(OperandKind.Integer, 3, true),
+            { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Concatenate } => new(OperandKind.Text, 10, true),
+            { Kind: SyntaxKind.Call } => StaticCall(root),
+            { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate } => StaticNegate(root, group),
+            { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply
+                or ScalarOperation.Divide or ScalarOperation.IntegerDivide or ScalarOperation.Modulo or ScalarOperation.Power } => StaticArithmetic(root, group),
+            _ => StaticTypeResult.Unknown,
         };
+
+        /// <summary>
+        /// Static Field.Type of decided single-argument functions: IsNull and the nine C* conversion functions.
+        /// </summary>
+        private static StaticTypeResult StaticCall(SyntaxNode root)
+        {
+            if (root.Text is not { } name || root.Items.Count != 1)
+            {
+                return StaticTypeResult.Unknown;
+            }
+            if (name.Equals("IsNull", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1/a-null-empty-error-literals: IsNull(...) is 3 (VT_I2 -1/0).
+                return new(OperandKind.Integer, 3, true);
+            }
+            if (name.Equals("CBool", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/inv-number-conversion-financial, r-expr-1b/conv-cbool-cvar: CBool(...) is 3.
+                return new(OperandKind.Integer, 3, true);
+            }
+            if (name.Equals("CByte", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-integer-conversion, r-expr-1b/conv-text-to-integer: CByte(...) is 3 (kernel emits VT_I2).
+                return new(OperandKind.CByte, 3, true);
+            }
+            if (name.Equals("CInt", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-integer-conversion, r-expr-1b/conv-range-edges, r-expr-1/e-failure-phase: CInt(...) is 3.
+                return new(OperandKind.Integer, 3, true);
+            }
+            if (name.Equals("CLng", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-integer-conversion, r-expr-1b/conv-range-edges, r-sql-1/demand-conversion: CLng(...) is 4.
+                return new(OperandKind.Long, 4, true);
+            }
+            if (name.Equals("CCur", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-fixed-point-fidelity, r-expr-1b/conv-half-rounding-large: CCur(...) is 5.
+                return new(OperandKind.Currency, 5, true);
+            }
+            if (name.Equals("CSng", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1b/conv-range-edges, r-sql-13b/union-dedup-cross-type: CSng(...) is 7 (Double), inner is VT_R4.
+                return new(OperandKind.Single, 7, false);
+            }
+            if (name.Equals("CDbl", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-floating-fidelity, r-expr-1/c-date-text-and-literals, r-expr-1/c-date-payloads: CDbl(...) is 7.
+                return new(OperandKind.Double, 7, true);
+            }
+            if (name.Equals("CDate", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/c-date-text-and-literals, r-expr-1b/conv-cdate-forms: CDate(...) is 8.
+                return new(OperandKind.Date, 8, true);
+            }
+            if (name.Equals("CStr", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/inv-number-conversion-financial, r-expr-1b/conv-cstr-forms: CStr(...) is 10.
+                return new(OperandKind.Text, 10, true);
+            }
+            return StaticTypeResult.Unknown;
+        }
+
+        /// <summary>Static Field.Type of unary minus (<c>-x</c>) for operand kinds decided by retained evidence.</summary>
+        private StaticTypeResult StaticNegate(SyntaxNode root, GroupScope? group)
+        {
+            SyntaxNode inner = root.Left!;
+            if (inner is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number })
+            {
+                if (inner.Value.Vt == (ushort)VarType.I4)
+                {
+                    long neg = -inner.Value.Int64;
+                    if (FitsInt32(neg))
+                    {
+                        // r-expr-1b/meta-conversion-field-types, r-def-expr-sql/expr-literals-numeric-suffix-radix: negated Int32 literal is 4 (Long).
+                        return new(OperandKind.LongLiteral, 4, true, neg);
+                    }
+                    return StaticTypeResult.Unknown;
+                }
+                if (inner.Value.Vt == (ushort)VarType.Decimal && inner.Text is { } text
+                    && decimal.TryParse(text, System.Globalization.NumberStyles.AllowDecimalPoint | System.Globalization.NumberStyles.AllowExponent,
+                        System.Globalization.CultureInfo.InvariantCulture, out decimal d))
+                {
+                    if (d == 2147483648m)
+                    {
+                        // r-def-expr-sql/expr-literals-numeric-suffix-radix: -2147483648 is 4 (Long); inner is VT_DECIMAL from ScalarLiterals.
+                        return new(OperandKind.LongLiteral, 4, false, int.MinValue);
+                    }
+                    if (d == 0m)
+                    {
+                        // r-expr-1/b-floating-fidelity, r-def-expr-sql/expr-literals-numeric-suffix-radix: -0.0 is 4 (Long); inner is VT_DECIMAL.
+                        return new(OperandKind.LongLiteral, 4, false, 0);
+                    }
+                    if (text.IndexOfAny('.', 'e', 'E') < 0 && d > 2147483648m)
+                    {
+                        // r-def-expr-sql/expr-literals-numeric-suffix-radix: -2147483649 and -9223372036854775808 are 20 (Decimal).
+                        return new(OperandKind.DecimalLiteral, 20, true);
+                    }
+                    // Fractional decimal literal negation (e.g. -0.4, -7.5 inside -0.4 \ 1, -7.5 \ 2): standalone Field.Type is not recorded,
+                    // but its operand kind remains DecimalLiteral for enclosing operators.
+                    return new(OperandKind.DecimalLiteral, null, true);
+                }
+                return StaticTypeResult.Unknown;
+            }
+            StaticTypeResult op = OperandOf(inner, group);
+            return op.Kind switch
+            {
+                // r-expr-1b/arith-overflow-promotion, r-def-expr-sql/expr-operator-spellings: -True / -False is 3 (Integer).
+                OperandKind.BooleanLiteral => new(OperandKind.Integer, 3, true),
+                // r-expr-1b/arith-overflow-promotion: -CByte(1) is 3 (Integer).
+                OperandKind.CByte => new(OperandKind.Integer, 3, true),
+                // r-expr-1b/op-precedence: -(7 \ 2) is 4 (Long).
+                OperandKind.Long => new(OperandKind.Long, 4, op.InnerMatchesDao),
+                // r-sql-13b/agg-expression-composition: -Sum(v) is 7 (Double).
+                OperandKind.Double => new(OperandKind.Double, 7, op.InnerMatchesDao),
+                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-plus-amp-precedence-and-types: -'3' is 7 (Double).
+                OperandKind.Text => new(OperandKind.Double, 7, true),
+                // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity: -M (stored Decimal) is 20 (Decimal).
+                OperandKind.StoredDecimal => new(OperandKind.StoredDecimal, 20, true),
+                _ => StaticTypeResult.Unknown,
+            };
+        }
+
+        /// <summary>Static Field.Type of binary arithmetic operators (+, -, *, /, \, Mod, ^) for decided operand-type pairs.</summary>
+        private StaticTypeResult StaticArithmetic(SyntaxNode root, GroupScope? group)
+        {
+            StaticTypeResult left = OperandOf(root.Left!, group);
+            StaticTypeResult right = OperandOf(root.Right!, group);
+            if (left.Kind == OperandKind.Unknown || right.Kind == OperandKind.Unknown)
+            {
+                return StaticTypeResult.Unknown;
+            }
+            bool bothInner = left.InnerMatchesDao && right.InnerMatchesDao;
+            return root.Operation switch
+            {
+                ScalarOperation.Power => StaticPower(left, right),
+                ScalarOperation.Divide => StaticDivide(left, right),
+                ScalarOperation.IntegerDivide => StaticIntegerDivide(left, right, bothInner),
+                ScalarOperation.Modulo => StaticModulo(left, right, bothInner),
+                ScalarOperation.Add => StaticAdd(left, right, bothInner),
+                ScalarOperation.Subtract => StaticSubtract(left, right, bothInner),
+                ScalarOperation.Multiply => StaticMultiply(left, right, bothInner),
+                _ => StaticTypeResult.Unknown,
+            };
+        }
+
+        private static StaticTypeResult StaticPower(StaticTypeResult left, StaticTypeResult right) => (left.Kind, right.Kind) switch
+        {
+            // r-expr-1b/num-power-operator, r-expr-1b/meta-conversion-field-types, r-expr-1b/op-precedence,
+            // r-expr-1b/op-plus-amp-precedence-and-types, r-expr-1/inv-number-conversion-financial, r-def-expr-sql/expr-operator-spellings:
+            // ^ produces 7 (Double, VT_R8 via VarPow) for every decided pair.
+            (OperandKind.LongLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.DecimalLiteral)
+                or (OperandKind.DecimalLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Double)
+                or (OperandKind.Double, OperandKind.LongLiteral)
+                or (OperandKind.CByte, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.Integer)
+                or (OperandKind.Currency, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Currency)
+                or (OperandKind.BooleanLiteral, OperandKind.LongLiteral)
+                or (OperandKind.Text, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Text)
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, true),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult StaticDivide(StaticTypeResult left, StaticTypeResult right) => (left.Kind, right.Kind) switch
+        {
+            // r-expr-1b/meta-conversion-field-types, r-expr-1/b-intdiv-mod, r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence,
+            // r-expr-1/e-failure-phase, r-expr-1/e-eager-failures, r-q-expr-sql/e-row-arms, r-sql-13b/agg-expression-composition,
+            // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity, r-expr-1b/op-plus-amp-precedence-and-types,
+            // r-def-expr-sql/expr-operator-spellings: / is 7 (Double).
+            (OperandKind.LongLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Long)
+                or (OperandKind.Double, OperandKind.LongLiteral)
+                or (OperandKind.Double, OperandKind.Long)
+                or (OperandKind.Double, OperandKind.Double)
+                or (OperandKind.CByte, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.Integer)
+                or (OperandKind.Long, OperandKind.Long)
+                or (OperandKind.BooleanLiteral, OperandKind.BooleanLiteral)
+                or (OperandKind.Currency, OperandKind.Currency)
+                or (OperandKind.Currency, OperandKind.LongLiteral)
+                or (OperandKind.Date, OperandKind.LongLiteral)
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, true),
+            // r-expr-1b/arith-overflow-promotion: CSng(1) / CSng(3) is 7 (Double), inner is VT_R4.
+            (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult StaticIntegerDivide(StaticTypeResult left, StaticTypeResult right, bool bothInner) => (left.Kind, right.Kind) switch
+        {
+            // r-expr-1b/meta-conversion-field-types, r-expr-1/b-intdiv-mod, r-expr-1b/arith-intdiv-mod-types, r-expr-1b/op-precedence,
+            // r-sql-13b/agg-expression-composition, r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity,
+            // r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings: \ is 4 (Long).
+            (OperandKind.LongLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Long)
+                or (OperandKind.Long, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Double)
+                or (OperandKind.Double, OperandKind.Long)
+                or (OperandKind.LongLiteral, OperandKind.DecimalLiteral)
+                or (OperandKind.DecimalLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.LongLiteral)
+                or (OperandKind.BooleanLiteral, OperandKind.LongLiteral)
+                or (OperandKind.Currency, OperandKind.LongLiteral)
+                or (OperandKind.Single, OperandKind.LongLiteral)
+                or (OperandKind.StoredDecimal, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Text)
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Long, 4, bothInner),
+            // r-expr-1b/arith-intdiv-mod-types: CByte(7) \ CByte(2) and CInt(7) \ CInt(2) are 4 (Long); oleaut32 VarIdiv returns VT_I2.
+            (OperandKind.CByte, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult StaticModulo(StaticTypeResult left, StaticTypeResult right, bool bothInner) => (left.Kind, right.Kind) switch
+        {
+            // r-expr-1b/meta-conversion-field-types, r-expr-1/b-intdiv-mod, r-expr-1b/arith-intdiv-mod-types, r-expr-1b/op-precedence,
+            // r-sql-13b/agg-expression-composition, r-sql-13b/group-expression-forms, r-expr-1b/op-plus-amp-precedence-and-types,
+            // r-def-expr-sql/expr-operator-spellings: Mod is 4 (Long).
+            (OperandKind.LongLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.Long)
+                or (OperandKind.Long, OperandKind.LongLiteral)
+                or (OperandKind.Long, OperandKind.Long)
+                or (OperandKind.LongLiteral, OperandKind.Double)
+                or (OperandKind.Double, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.DecimalLiteral)
+                or (OperandKind.DecimalLiteral, OperandKind.LongLiteral)
+                or (OperandKind.LongLiteral, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.LongLiteral)
+                or (OperandKind.BooleanLiteral, OperandKind.LongLiteral)
+                or (OperandKind.Currency, OperandKind.LongLiteral)
+                or (OperandKind.Single, OperandKind.LongLiteral)
+                or (OperandKind.Date, OperandKind.LongLiteral)
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Long, 4, bothInner),
+            // r-expr-1b/arith-intdiv-mod-types: CByte(7) Mod CByte(2) and CInt(7) Mod CInt(2) are 4 (Long); oleaut32 VarMod returns VT_I2.
+            (OperandKind.CByte, OperandKind.CByte)
+                or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult StaticAdd(StaticTypeResult left, StaticTypeResult right, bool bothInner)
+        {
+            if (left.Kind == OperandKind.LongLiteral && right.Kind == OperandKind.LongLiteral
+                && left.LiteralLong is long a && right.LiteralLong is long b)
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-integer-widening, r-expr-1b/op-precedence,
+                // r-def-expr-sql/expr-operator-spellings: Int32 literal + Int32 literal is 4 when sum fits Int32, else 7 (2147483647 + 1).
+                long sum = a + b;
+                return FitsInt32(sum)
+                    ? new(OperandKind.Long, 4, bothInner)
+                    : new(OperandKind.Double, 7, bothInner);
+            }
+            return (left.Kind, right.Kind) switch
+            {
+                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
+                // True + True is 3 (Integer).
+                (OperandKind.BooleanLiteral, OperandKind.BooleanLiteral) => new(OperandKind.Integer, 3, true),
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence:
+                // True + 0 and Y + 1 are 4 (Long).
+                (OperandKind.BooleanLiteral, OperandKind.LongLiteral)
+                    or (OperandKind.YesNo, OperandKind.LongLiteral) => new(OperandKind.Long, 4, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1/b-integer-widening,
+                // r-expr-1b/meta-conversion-field-types, r-expr-1b/arith-overflow-promotion: narrow integer sums are 4 (Long);
+                // oleaut32 VarAdd returns VT_UI1 or VT_I2 when within narrow range.
+                (OperandKind.Byte, OperandKind.Byte)
+                    or (OperandKind.Byte, OperandKind.CByte)
+                    or (OperandKind.CByte, OperandKind.CByte)
+                    or (OperandKind.Byte, OperandKind.Integer)
+                    or (OperandKind.Integer, OperandKind.Byte)
+                    or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+                // r-expr-1/b-integer-widening, r-expr-1/a-parameter-inputs, r-expr-1/bind-names-and-literals,
+                // r-fix-expr-sql/stored-null-iif, r-sql-13b/order-position-forms, r-sql-13b/group-expression-forms,
+                // r-q-expr-sql/bind-param-fresh-open: Long-wide integer additions are 4 (Long).
+                (OperandKind.Byte, OperandKind.LongLiteral)
+                    or (OperandKind.Integer, OperandKind.LongLiteral)
+                    or (OperandKind.Integer, OperandKind.Long)
+                    or (OperandKind.Long, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Long)
+                    or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
+                // r-expr-1/b-fixed-point-fidelity, r-expr-1b/meta-conversion-field-types, r-expr-1/b-mixed-precedence,
+                // r-fix-expr-sql/dec-mixed-precedence: Currency + Currency/Long is 5 (Currency).
+                (OperandKind.Currency, OperandKind.Currency)
+                    or (OperandKind.Currency, OperandKind.LongLiteral)
+                    or (OperandKind.Currency, OperandKind.Long)
+                    or (OperandKind.Long, OperandKind.Currency) => new(OperandKind.Currency, 5, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence: C + D and D + C are 5 (Currency);
+                // oleaut32 VarAdd(VT_CY, VT_R8) returns VT_R8.
+                (OperandKind.Currency, OperandKind.Double)
+                    or (OperandKind.Double, OperandKind.Currency) => new(OperandKind.Currency, 5, false),
+                // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity: CCur(...) + 0.00001 is 20 (Decimal).
+                (OperandKind.Currency, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1b/arith-overflow-promotion: CSng(1) + CSng(2) is 7 (Double); oleaut32 VarAdd(VT_R4, VT_R4) returns VT_R4.
+                (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/arith-overflow-promotion,
+                // r-sql-13b/agg-expression-composition, r-expr-1/e-eager-failures, r-q-expr-sql/e-row-arms: floating additions are 7 (Double).
+                (OperandKind.Single, OperandKind.Long)
+                    or (OperandKind.Long, OperandKind.Single)
+                    or (OperandKind.Single, OperandKind.Double)
+                    or (OperandKind.Double, OperandKind.Single)
+                    or (OperandKind.Double, OperandKind.LongLiteral)
+                    or (OperandKind.Double, OperandKind.Integer)
+                    or (OperandKind.Integer, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                // r-expr-1b/arith-overflow-promotion: 0.1 + 0.2 and 1 + 0.5 are 20 (Decimal).
+                (OperandKind.DecimalLiteral, OperandKind.DecimalLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-fix-expr-sql/dec-fixed-point-fidelity:
+                // M + D and D + M are 7 (Double); inner VarAdd with Decimal can be VT_DECIMAL.
+                (OperandKind.StoredDecimal, OperandKind.Double)
+                    or (OperandKind.Double, OperandKind.StoredDecimal) => new(OperandKind.Double, 7, false),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/op-plus-amp-precedence-and-types,
+                // r-expr-1/c-date-payloads, r-def-expr-sql/expr-literals-date-forms: Date + number/Date/Text is 8 (Date).
+                (OperandKind.Date, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Date)
+                    or (OperandKind.Date, OperandKind.Currency)
+                    or (OperandKind.Date, OperandKind.Date)
+                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, true),
+                // r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-literals-date-forms: #1/1/2000# + 0.5 is 20 (Decimal).
+                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-fix-expr-sql/stored-null-iif,
+                // r-expr-1b/meta-memo-functions, r-def-expr-sql/expr-operator-spellings: Text + Text and Memo + Text are 10 (Text).
+                (OperandKind.Text, OperandKind.Text)
+                    or (OperandKind.Memo, OperandKind.Text) => new(OperandKind.Text, 10, true),
+                // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-expr-1b/cmp-stored-lanes,
+                // r-def-expr-sql/expr-operator-spellings: Text + number/Boolean is 7 (Double).
+                (OperandKind.Text, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Text)
+                    or (OperandKind.Long, OperandKind.Text)
+                    or (OperandKind.Text, OperandKind.Double)
+                    or (OperandKind.BooleanLiteral, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                _ => StaticTypeResult.Unknown,
+            };
+        }
+
+        private static StaticTypeResult StaticSubtract(StaticTypeResult left, StaticTypeResult right, bool bothInner)
+        {
+            if (left.Kind == OperandKind.LongLiteral && right.Kind == OperandKind.LongLiteral
+                && left.LiteralLong is long a && right.LiteralLong is long b)
+            {
+                // r-expr-1b/op-precedence, r-expr-1b/arith-overflow-promotion: Int32 literal - Int32 literal is 4 when difference fits Int32,
+                // else 7 (-2147483648 - 1, whose inner is VT_DECIMAL because -2147483648 propagates InnerMatchesDao = false).
+                long diff = a - b;
+                return FitsInt32(diff)
+                    ? new(OperandKind.Long, 4, bothInner)
+                    : new(OperandKind.Double, 7, bothInner);
+            }
+            return (left.Kind, right.Kind) switch
+            {
+                // r-expr-1b/arith-overflow-promotion: True - True is 3 (Integer).
+                (OperandKind.BooleanLiteral, OperandKind.BooleanLiteral) => new(OperandKind.Integer, 3, true),
+                // r-expr-1b/arith-overflow-promotion, r-expr-1/b-integer-widening: narrow integer differences are 4 (Long);
+                // oleaut32 VarSub returns VT_UI1 or VT_I2 when within narrow range.
+                (OperandKind.CByte, OperandKind.CByte)
+                    or (OperandKind.Byte, OperandKind.CByte)
+                    or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+                // r-expr-1/b-integer-widening: (B - CByte(255)) - CByte(1) is 4 (Long); propagates left's InnerMatchesDao.
+                (OperandKind.Long, OperandKind.CByte) => new(OperandKind.Long, 4, left.InnerMatchesDao),
+                // r-expr-1b/op-precedence: (10 - 3) - 2 is 4 (Long).
+                (OperandKind.Long, OperandKind.LongLiteral) => new(OperandKind.Long, 4, bothInner),
+                // r-expr-1/b-fixed-point-fidelity: Currency - Currency is 5 (Currency).
+                (OperandKind.Currency, OperandKind.Currency) => new(OperandKind.Currency, 5, true),
+                // r-expr-1/b-floating-fidelity: Double - Double and Single - Double are 7 (Double).
+                (OperandKind.Double, OperandKind.Double)
+                    or (OperandKind.Single, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/arith-overflow-promotion,
+                // r-expr-1/c-date-payloads, r-def-expr-sql/expr-literals-date-forms: Date - Date is 7 (Double).
+                (OperandKind.Date, OperandKind.Date) => new(OperandKind.Double, 7, true),
+                // r-expr-1/c-date-payloads, r-expr-1b/op-plus-amp-precedence-and-types: Date - Long/Text is 8 (Date).
+                (OperandKind.Date, OperandKind.LongLiteral)
+                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, true),
+                // r-expr-1b/op-plus-amp-precedence-and-types: #1/1/2000# - 0.5 is 20 (Decimal).
+                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
+                // Text subtraction is 7 (Double).
+                (OperandKind.Text, OperandKind.Text)
+                    or (OperandKind.Text, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                _ => StaticTypeResult.Unknown,
+            };
+        }
+
+        private static StaticTypeResult StaticMultiply(StaticTypeResult left, StaticTypeResult right, bool bothInner)
+        {
+            if (left.Kind == OperandKind.LongLiteral && right.Kind == OperandKind.LongLiteral
+                && left.LiteralLong is long a && right.LiteralLong is long b)
+            {
+                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence, r-def-expr-sql/expr-operator-spellings:
+                // Int32 literal * Int32 literal is 4 when product fits Int32, else 7 (65536 * 65536, 2147483647 * 2).
+                long prod = a * b;
+                return FitsInt32(prod)
+                    ? new(OperandKind.Long, 4, bothInner)
+                    : new(OperandKind.Double, 7, bothInner);
+            }
+            return (left.Kind, right.Kind) switch
+            {
+                // r-expr-1b/arith-overflow-promotion, r-def-expr-sql/expr-operator-spellings: True * True is 3 (Integer).
+                (OperandKind.BooleanLiteral, OperandKind.BooleanLiteral) => new(OperandKind.Integer, 3, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1/b-integer-widening,
+                // r-expr-1b/arith-overflow-promotion: narrow integer products are 4 (Long); oleaut32 VarMul returns VT_UI1/VT_I2 when in range.
+                (OperandKind.YesNo, OperandKind.YesNo)
+                    or (OperandKind.Byte, OperandKind.CByte)
+                    or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+                // r-expr-1b/arith-overflow-promotion, r-fix-expr-sql/parameter-lifecycle-no-requery-argument, r-expr-1b/op-precedence,
+                // r-expr-1/b-integer-widening: Long-wide integer products are 4 (Long).
+                (OperandKind.CByte, OperandKind.LongLiteral)
+                    or (OperandKind.Integer, OperandKind.LongLiteral)
+                    or (OperandKind.Long, OperandKind.LongLiteral)
+                    or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
+                // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity, r-expr-1b/arith-overflow-promotion:
+                // Currency * Currency/LongLiteral is 5 (Currency).
+                (OperandKind.Currency, OperandKind.Currency)
+                    or (OperandKind.Currency, OperandKind.LongLiteral) => new(OperandKind.Currency, 5, true),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence: Currency * Double is 7 (Double).
+                (OperandKind.Currency, OperandKind.Double)
+                    or (OperandKind.Double, OperandKind.Currency) => new(OperandKind.Double, 7, true),
+                // r-expr-1b/arith-overflow-promotion, r-fix-expr-sql/dec-fixed-point-fidelity: Currency * Decimal is 7 (Double);
+                // oleaut32 VarMul with Decimal returns VT_DECIMAL.
+                (OperandKind.Currency, OperandKind.DecimalLiteral)
+                    or (OperandKind.StoredDecimal, OperandKind.Currency) => new(OperandKind.Double, 7, false),
+                // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1/b-floating-fidelity,
+                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence: floating products are 7 (Double).
+                (OperandKind.Single, OperandKind.Long)
+                    or (OperandKind.Long, OperandKind.Single)
+                    or (OperandKind.Double, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                // r-sql-13b/agg-expression-composition: Sum(v) * 1.5 is 7 (Double); oleaut32 VarMul(VT_R8, VT_DECIMAL) returns VT_DECIMAL.
+                (OperandKind.Double, OperandKind.DecimalLiteral) => new(OperandKind.Double, 7, false),
+                // r-expr-1b/arith-overflow-promotion: 0.1 * 3 is 20 (Decimal).
+                (OperandKind.DecimalLiteral, OperandKind.LongLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1b/arith-overflow-promotion: #1/1/2000# * 2 is 7 (Double).
+                (OperandKind.Date, OperandKind.LongLiteral) => new(OperandKind.Double, 7, true),
+                // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
+                // Text multiplication is 7 (Double).
+                (OperandKind.Text, OperandKind.Text)
+                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                _ => StaticTypeResult.Unknown,
+            };
+        }
+
+        private StaticTypeResult OperandOf(SyntaxNode node, GroupScope? group)
+        {
+            if (group is not null)
+            {
+                if (group.Aggregate(node) is { } agg)
+                {
+                    return AggregateOperand(agg);
+                }
+                if (group.KeyColumn(node) is { } keyColumn)
+                {
+                    return StoredOperand(keyColumn);
+                }
+            }
+            switch (node.Kind)
+            {
+                case SyntaxKind.Literal:
+                    return LiteralOperand(node);
+                case SyntaxKind.Name when node.Text is { } name:
+                    if (bound.ParameterList.Find(p => p.Is(name)) is { } parameter)
+                    {
+                        return ParameterOperand(parameter);
+                    }
+                    if (_scope.Resolve(name, out _) is { } binding)
+                    {
+                        return StoredOperand(binding.Column);
+                    }
+                    return StaticTypeResult.Unknown;
+                default:
+                    return StaticTypeOf(node, group);
+            }
+        }
+
+        private static StaticTypeResult LiteralOperand(SyntaxNode node) => node.Literal switch
+        {
+            LiteralKind.Boolean => new(OperandKind.BooleanLiteral, null, true),
+            LiteralKind.Date => new(OperandKind.Date, null, true),
+            LiteralKind.Text => new(OperandKind.Text, null, true),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.I4 => new(OperandKind.LongLiteral, null, true, node.Value.Int64),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.R8 => new(OperandKind.Double, null, true),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.Decimal => new(OperandKind.DecimalLiteral, null, true),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult StoredOperand(ColumnDescriptor column) => column.TypeCode switch
+        {
+            NativeTypes.Boolean => new(OperandKind.YesNo, null, true),
+            NativeTypes.Byte => new(OperandKind.Byte, null, true),
+            NativeTypes.Integer => new(OperandKind.Integer, null, true),
+            NativeTypes.Long => new(OperandKind.Long, null, true),
+            NativeTypes.Currency => new(OperandKind.Currency, null, true),
+            NativeTypes.Single => new(OperandKind.Single, null, true),
+            NativeTypes.Double => new(OperandKind.Double, null, true),
+            NativeTypes.DateTime => new(OperandKind.Date, null, true),
+            NativeTypes.Text => new(OperandKind.Text, null, true),
+            NativeTypes.Memo => new(OperandKind.Memo, null, true),
+            NativeTypes.Numeric => new(OperandKind.StoredDecimal, null, true),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult ParameterOperand(QueryParameter parameter) => !parameter.Declared ? StaticTypeResult.Unknown : parameter.DaoType switch
+        {
+            2 => new(OperandKind.Byte, null, true),
+            3 => new(OperandKind.Integer, null, true),
+            4 => new(OperandKind.Long, null, true),
+            5 => new(OperandKind.Currency, null, true),
+            6 => new(OperandKind.Single, null, true),
+            7 => new(OperandKind.Double, null, true),
+            8 => new(OperandKind.Date, null, true),
+            10 => new(OperandKind.Text, null, true),
+            12 => new(OperandKind.Memo, null, true),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static StaticTypeResult AggregateOperand(AggregateSpec aggregate) => aggregate.FieldType switch
+        {
+            3 => new(OperandKind.Integer, null, true),
+            4 => new(OperandKind.Long, null, true),
+            5 => new(OperandKind.Currency, null, true),
+            6 => new(OperandKind.Single, null, true),
+            7 => new(OperandKind.Double, null, true),
+            8 => new(OperandKind.Date, null, true),
+            10 => new(OperandKind.Text, null, true),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        private static bool FitsInt32(long value) => value is >= int.MinValue and <= int.MaxValue;
 
         private static bool IsNullLiteral(SyntaxNode? node) => node is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Null };
 
@@ -1504,7 +2092,7 @@ public sealed class BoundSelect : IDisposable
                     }
                 }
             }
-            var output = new GroupScope(keys, bound.Aggregates, keyTypes, _scope);
+            var output = new GroupScope(keys, bound.Aggregates, keyTypes, keyFieldTypes, _scope);
             int unnamed = 0;
             foreach (SelectItem item in syntax.Items)
             {
@@ -1537,6 +2125,10 @@ public sealed class BoundSelect : IDisposable
                         column.SourceTable = "";
                         column.SourceField = "";
                     }
+                }
+                else
+                {
+                    Computed(column, item.Expression!.Syntax.Root!, output);
                 }
                 bound.ColumnList.Add(column);
             }
