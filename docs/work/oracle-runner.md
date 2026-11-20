@@ -153,8 +153,9 @@ owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-c
 question seals Incomplete with the reason. `calcdb-oracle show --etw --attempt ID` (or `--record FILE`, with
 `--file TEXT` and `--all-io`) shows the trace in order, with each operation's process and thread. The workers'
 lifecycle traces are kept as artifacts `trace:<participant>`, so each operation is placed inside the native call that
-issued it. Writes are marked cached (WriteFile into the system cache) or paging (to disk); the recorder attributes
-paging writes only in part.
+issued it. Writes are marked cached (WriteFile into the system cache) or paging (to disk). The recorder names an event's file by
+FileKey, so paging writes are attributed, the system lazy writer's (pid 4) included. `etw-check` checks this with an
+unflushed cached write; events with no attempt file are only counted in the recorder's status line.
 
 **An owned out-of-process server (OR-OWN).** COM starts a local server such as Access.Application outside the
 runner's job. The operation `claimProcess` asks the bound object for a window handle (`hWndAccessApp`), takes the

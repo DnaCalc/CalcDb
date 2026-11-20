@@ -572,8 +572,11 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// <c>calcdb-oracle etw-check</c>: record one known file write in a scratch directory under the attempts root
-    /// through the ETW recorder, and print what it saw (tools/etw-setup).
+    /// <c>calcdb-oracle etw-check</c>: record two known file writes in a scratch directory under the attempts root
+    /// through the ETW recorder, and print what it saw (tools/etw-setup). probe.bin is written through and flushed: its
+    /// paging write is issued on this thread. lazy.bin is written into the cache and closed with no flush, and the check
+    /// waits 15 s: a paging write of lazy.bin from another process (the system's lazy writer) shows that the recorder
+    /// names the writes nobody asked for, so their absence in an ACE trace is an observation (2b3c, R-CRASH-1 CRASH-ORDER).
     /// </summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static int EtwCheck(string repo)
@@ -587,6 +590,11 @@ internal static partial class Program
             f.Write(new byte[8192]);
             f.Flush(flushToDisk: true);
         }
+        using (var f = new FileStream(Path.Combine(dir, "lazy.bin"), FileMode.Create, FileAccess.Write, FileShare.Read, 4096))
+        {
+            f.Write(new byte[65536]);
+        }
+        Thread.Sleep(TimeSpan.FromSeconds(15));
         etw.Stop();
         string status = Path.Combine(dir, "artifacts", EtwBridge.StatusFile);
         string trace = Path.Combine(dir, "artifacts", EtwBridge.TraceFile);
@@ -598,6 +606,14 @@ internal static partial class Program
         string[] lines = File.ReadAllLines(trace);
         Console.WriteLine($"trace: {lines.Length} events in {trace}");
         foreach (string line in lines.Take(12))
+        {
+            Console.WriteLine("  " + line);
+        }
+        string[] lazy = lines.Where(l => l.Contains("lazy.bin", StringComparison.OrdinalIgnoreCase) && l.Contains("\"event\":\"Write\"", StringComparison.Ordinal)).ToArray();
+        int self = Environment.ProcessId;
+        int others = lazy.Count(l => !l.Contains($"\"pid\":{self},", StringComparison.Ordinal));
+        Console.WriteLine($"lazy.bin: {lazy.Length} writes named, {others} of them from another process (the lazy writer)");
+        foreach (string line in lazy.Take(6))
         {
             Console.WriteLine("  " + line);
         }
