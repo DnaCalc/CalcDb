@@ -88,7 +88,7 @@ internal static class InspectCommand
             }
             return sb.ToString();
         }
-        Summary(sb, report, label, d, tables, names);
+        Summary(sb, report, label, d, tables, names, file);
         return sb.ToString();
     }
 
@@ -128,7 +128,22 @@ internal static class InspectCommand
         return names;
     }
 
-    private static void Summary(StringBuilder sb, InspectionReport report, string label, FormatDescriptor d, List<TableDefinition> tables, Dictionary<uint, string> names)
+    /// <summary>
+    /// The physical index's 12-byte counter block on the TableDef's first page (II-05 §1.1), as three little-endian words:
+    /// word1 is UniqueEntryCount; the book leaves word0 and word2 uninterpreted (qualified.md R-FMT-2 statistics words).
+    /// </summary>
+    private static string CounterWords(byte[] file, TableDefinition t, int physical, FormatDescriptor d)
+    {
+        long at = (long)t.FirstPage * d.PageSize + d.TableDef.RealIndexRecordsOffset + (long)physical * d.TableDef.RealIndexRecordBytes;
+        if (d.TableDef.RealIndexRecordsOffset + (physical + 1) * d.TableDef.RealIndexRecordBytes > d.PageSize || at + 12 > file.Length)
+        {
+            return "";
+        }
+        ReadOnlySpan<byte> b = file.AsSpan((int)at, 12);
+        return $" counter=({BitConverter.ToUInt32(b[..4])}, {BitConverter.ToUInt32(b[4..8])}, {BitConverter.ToUInt32(b[8..12])})";
+    }
+
+    private static void Summary(StringBuilder sb, InspectionReport report, string label, FormatDescriptor d, List<TableDefinition> tables, Dictionary<uint, string> names, byte[] file)
     {
         sb.AppendLine($"{label}: {report.Profile!.Format} version={report.Profile.VersionCode:X2} length={report.Length} pages={report.PageCount} trailing={report.TrailingBytes} problems={report.Problems.Count}");
         sb.AppendLine("kinds: " + string.Join(" ", report.PageKinds.Select(k => $"{KindName(k.Key, d)}={k.Value}")));
@@ -147,7 +162,7 @@ internal static class InspectCommand
             foreach (PhysicalIndex p in t.PhysicalIndexes)
             {
                 string cols = string.Join(",", p.Columns.Select(c => t.Columns.FirstOrDefault(x => x.PhysicalNumber == c.PhysicalNumber)?.Name + (c.Ascending ? "" : " desc")));
-                sb.AppendLine($"  physical {p.Number}: columns={cols} root={p.RootPage} flags={p.Flags:X2}{(p.Unique(d.IndexDescriptor) ? " unique" : "")} entries={p.UniqueEntryCount}");
+                sb.AppendLine($"  physical {p.Number}: columns={cols} root={p.RootPage} flags={p.Flags:X2}{(p.Unique(d.IndexDescriptor) ? " unique" : "")} entries={p.UniqueEntryCount}{CounterWords(file, t, p.Number, d)}");
             }
             foreach (LogicalIndex l in t.LogicalIndexes)
             {
