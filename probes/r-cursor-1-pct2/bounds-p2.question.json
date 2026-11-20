@@ -1,0 +1,1252 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cursor-1-pct2/bounds-p2",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "D-CURSOR-1",
+    "CUR-POP",
+    "CUR-POS",
+    "W-08/native-read",
+    "T-ISAM-12"
+  ],
+  "description": "For each value [-10 ;; -5 ;; -2 ;; -1 ;; -0.5 ;; -0.1 ;; 100.1 ;; 100.5 ;; 101 ;; 102 ;; 103 ;; 105 ;; 110]: a fresh table-type recordset over P2 with no index, the value assigned to PercentPosition, then PercentPosition, ID and Bookmark read. Decides the refusal bounds on more than one page. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cursor-1-pct2-main2.accdb",
+      "sha256": "246cdd1942840bf1a73fbaa9cb29099a871aae5bd421dc6a909fb02c51ab5284",
+      "length": 630784,
+      "provenance": "r-cursor-1-pct2.create-pct2b.d7e1a24773.a1 qk1-d7e1a2477351070aea79b141304d6f2d2fb81de9894ccc26b0cac9b37881cbc0 output:r-cursor-1-pct2-main2.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false,
+      "pageSize": 0
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c024000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c014000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c000000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "bff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "bfe0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "bfb999999999999a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4059066666666666"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4059200000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4059400000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4059800000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4059c00000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "405a400000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "hf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "405b800000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "hf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "hf"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 0
+    }
+  ]
+}
