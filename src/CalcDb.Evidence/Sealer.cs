@@ -157,6 +157,10 @@ public static class Sealer
         {
             problems.Add("The owned worker exceeded its timeout and was terminated.");
         }
+        if (owner.ChannelError is { } channel)
+        {
+            problems.Add($"Worker channel ({OracleFrames.Protocol}) failed; the worker was ended: {channel}");
+        }
         foreach (string seen in owner.OwnerInput ?? [])
         {
             problems.Add("Owner input during a main-desktop run while the host showed UI; a dialog may have been answered by a person: " + seen);
@@ -228,6 +232,7 @@ public static class Sealer
             problems.Add("Capture identity does not match the attempt (stale or foreign capture).");
         }
         problems.AddRange(capture.CaptureErrors.Select(e => "Worker capture error: " + e));
+        CheckSession(attemptDir, capture, problems);
 
         foreach (ArtifactRef artifact in capture.Artifacts)
         {
@@ -247,6 +252,29 @@ public static class Sealer
 
         CheckIdentity(capture, problems);
         return capture.Execution;
+    }
+
+    /// <summary>
+    /// R-ORACLE-1 OR-REUSE: a question asked of a long-lived worker has the session the runner expected in
+    /// <c>receipts/session.json</c>; its capture must name exactly that session, prehistory included. A one-attempt
+    /// process has neither. Any other combination would let a reused answer pass for a fresh one, or the reverse.
+    /// </summary>
+    private static void CheckSession(string attemptDir, Capture capture, List<string> problems)
+    {
+        string path = Path.Combine(attemptDir, "receipts", "session.json");
+        WorkerSession? expected = File.Exists(path) ? EvidenceJson.Read<WorkerSession>(path) : null;
+        if (expected is null && capture.Session is not null)
+        {
+            problems.Add($"OR-REUSE: the capture names worker session {capture.Session.SessionId} but the attempt was not asked of a long-lived worker.");
+        }
+        else if (expected is not null && capture.Session is null)
+        {
+            problems.Add($"OR-REUSE: the attempt was asked of worker session {expected.SessionId} but its capture records no session or prehistory.");
+        }
+        else if (expected is not null && capture.Session!.Canonical() != expected.Canonical())
+        {
+            problems.Add($"OR-REUSE: the capture's worker session differs from the one the runner expected: {capture.Session.Canonical()} vs {expected.Canonical()}");
+        }
     }
 
     /// <summary>

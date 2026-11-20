@@ -13,7 +13,7 @@ this runner is tier 2, for owned experiments with effects.
 | --- | --- | --- |
 | [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
 | [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`, `batch`, `reduce`. |
-| [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt. Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
+| [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt, or with `--serve` a long-lived worker that answers several questions (below). Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
 | [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
 | [`evidence/`](../../evidence) | data | Retained answer records (`<card>/<probe>/<attempt>.json`, compact JSON, schema 2) and the bytes development reads back, by SHA-256 of the raw bytes (`artifacts/<sha256>.gz`: fixtures, file-I/O and lifecycle traces, lock files; [evidence-storage.md](evidence-storage.md)). |
@@ -184,6 +184,38 @@ redundant reruns (The Plan §2.4). A doubted answer is run again and its record 
 inputs are found by hash in the store or in `evidence/artifacts/`, so a fresh clone can rerun a
 retained question.
 
+## Long-lived worker (oracle service step 1, OR-REUSE)
+
+Step 1 of [oracle-service.md](oracle-service.md): the same interpreter, started with `--serve`, answers questions one at a
+time over `calcdb-oracle/1` on its stdin and stdout ([`OracleProtocol.cs`](../../src/CalcDb.Evidence/OracleProtocol.cs):
+4-byte big-endian length, type byte, compact JSON body, frames under 64 KB). The runner owns it as it owns an attempt's
+worker: started suspended on the private desktop, put in its own kill-on-close job (a worker the job cannot hold is ended
+before it runs), resumed, then greeted with `hello`; the window guard samples it on every receive. One-attempt-per-process
+stays the default for `run` and `batch`.
+
+- **Each question is still an attempt** ([`PooledRun`](../../src/CalcDb.Evidence/PooledRun.cs)): its own token, fresh input
+  copies, receipts and seal. The `submit` frame is its admission; the worker writes the started receipt before the first
+  native call, the capture and the returned receipt, and answers with the capture's digest. Captures never travel in frames.
+- **Admission.** Only questions of one participant against the native installation, without output files, writing native
+  opens, process control, dialog policy or ETW recording (`PooledAdmission`, each refusal names its reason). Effects through
+  DAO calls are not visible to this check; they stay on the attempt's own input copy.
+- **Reset and prehistory.** Between questions the worker applies the declared reset `release-bindings/1` (`WorkerReset`:
+  what it does and what it leaves). Every capture records its `session`: the worker, its position and the questions that
+  ran before it, each with its reset report. The runner writes the session it expects to `receipts/session.json`; the worker
+  refuses a question whose expected session is not its own record, and the sealer checks that the capture names the same
+  session. A capture with a session is never the oracle record of a CalcDb comparison, and is not eligible for answer reuse
+  until OR-REUSE qualifies the reset for its card (II-15 §3).
+- **Failure.** A worker that dies, misses the deadline, sends a malformed or out-of-turn frame or an error, or reports a
+  failed reset is ended (or retired with `done`). Its question is sealed from its receipts as before (NotStarted, Uncertain;
+  a channel failure makes the capture Incomplete) and is never asked again; the next question gets a new worker with an
+  empty prehistory.
+
+`calcdb-oracle reuse (--files F1,F2,... | --dir DIR) [--retain]` is the OR-REUSE experiment: every admitted question fresh
+(a worker each), then all in one worker in file order and all in one worker in reverse order; each reused answer is compared
+with the fresh one under `calls.trace` revision 6 (native against native: modules loaded before the question are
+environment, another engine or a candidate is provenance). Comparisons go to `reuse/<run>.jsonl` in the store; `--retain`
+writes the records to `evidence/r-oracle-1/or-reuse/`, apart from the cards' own folders.
+
 ## Linux-controlled operation
 
 The proposed service design, with Windows-opened ssh relays to Linux hosts, a fast tier of
@@ -206,7 +238,8 @@ long-lived ACE workers, and this runner as its tier for owned experiments, is in
   place; UI Automation dialog handling is not, so a dialog ends its attempt at the deadline.
   The owned Access host runs (cards `r-access-host`, `r-access-dialog`), on the main desktop for now. Dialogs
   are answered by policy (above); a dialog no rule matches still ends its attempt at the deadline.
-- OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and
+- OR-JOB transport-loss and kill-at-boundary cases, OR-REENTRY, OR-FREEZE and
   OR-REPAIR are not yet exercised against the real worker; the sealing rules they rely on
-  are covered by synthetic tests that qualify the harness only.
+  are covered by synthetic tests that qualify the harness only. OR-REUSE has its first run (long-lived worker, above);
+  the death, hang and malformed-frame handling of the long-lived worker is covered by synthetic tests only.
 - The store assumes one runner process at a time on one host.

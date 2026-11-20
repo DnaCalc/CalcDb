@@ -12,12 +12,18 @@ namespace CalcDb.Oracle.Worker;
 /// receipt before the first native call, interprets the question's operation program on one STA, and
 /// finally writes <c>capture.json</c> and the returned receipt.
 /// Exit codes: 0 returned; 2 bad arguments; 3 attempt/question mismatch; 4 no admission; 5 duplicate start.
+/// With <c>--serve</c> the same interpreter is a long-lived worker that answers questions over calcdb-oracle/1 on its
+/// stdin and stdout (<see cref="Serve"/>, oracle service step 1).
 /// </summary>
 internal static class Program
 {
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--serve"])
+        {
+            return Serve.Run();
+        }
         if (args.Length is < 1 or > 2)
         {
             Console.Error.WriteLine("usage: CalcDb.Oracle.Worker <attempt-directory> [participant]");
@@ -28,7 +34,7 @@ internal static class Program
         string suffix = participant == "a" ? "" : "." + participant;
         AttemptRecord attempt = EvidenceJson.Read<AttemptRecord>(Path.Combine(attemptDir, "attempt.json"));
         Question question = EvidenceJson.Read<Question>(Path.Combine(attemptDir, "question.json"));
-        if (question.Key() != attempt.QuestionKey || (participant != "a" && question.Peers.All(pt => pt.Name != participant)))
+        if (!Matches(question, attempt, participant))
         {
             Console.Error.WriteLine("question.json does not match the attempt's question key or has no such participant.");
             return 3;
@@ -41,8 +47,7 @@ internal static class Program
             Console.Error.WriteLine("No valid admission line received.");
             return 4;
         }
-        var started = new StartedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Environment.ProcessId, DateTimeOffset.UtcNow);
-        if (!EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", $"started{suffix}.json"), started))
+        if (!TryStart(attemptDir, attempt, suffix))
         {
             Console.Error.WriteLine("Attempt already started; refusing duplicate delivery.");
             return 5;
@@ -53,6 +58,14 @@ internal static class Program
         WriteCapture(attemptDir, attempt, suffix, capture);
         return 0;
     }
+
+    /// <summary>The prepared question is the attempt's question and has the participant.</summary>
+    internal static bool Matches(Question question, AttemptRecord attempt, string participant) =>
+        question.Key() == attempt.QuestionKey && (participant == "a" || question.Peers.Any(pt => pt.Name == participant));
+
+    /// <summary>The started receipt, written after admission and before the first native call; false on a duplicate delivery.</summary>
+    internal static bool TryStart(string attemptDir, AttemptRecord attempt, string suffix) =>
+        EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", $"started{suffix}.json"), new StartedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Environment.ProcessId, DateTimeOffset.UtcNow));
 
     /// <summary>Write the capture, then the returned receipt that names its digest.</summary>
     internal static void WriteCapture(string attemptDir, AttemptRecord attempt, string suffix, Capture capture)
@@ -81,11 +94,14 @@ internal sealed unsafe partial class Run : IDisposable
     private readonly string _participant;
     private readonly NativeFiles _native;
     private readonly StreamWriter _trace;
+    private readonly WorkerSession? _session;
     private bool _anyFailure;
     private int _seq;
 
-    public Run(string attemptDir, AttemptRecord attempt, Question question, string participant)
+    /// <param name="session">The long-lived worker session and prehistory the capture records (OR-REUSE); null for a one-attempt process.</param>
+    public Run(string attemptDir, AttemptRecord attempt, Question question, string participant, WorkerSession? session = null)
     {
+        _session = session;
         _attemptDir = attemptDir;
         _attempt = attempt;
         _question = question;
@@ -104,6 +120,9 @@ internal sealed unsafe partial class Run : IDisposable
         _trace.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { seq = _seq + 1, path, call = what, utc = DateTimeOffset.UtcNow }));
 
     public void Dispose() => _trace.Dispose();
+
+    /// <summary>Objects still bound after the program ended; the reset of a long-lived worker requires none (<see cref="WorkerReset"/>).</summary>
+    public int BoundCount => _bound.Count;
 
     private IReadOnlyList<Operation> MyProgram =>
         _participant == "a" ? _question.Program : _question.Peers.Single(pt => pt.Name == _participant).Program;
@@ -130,6 +149,7 @@ internal sealed unsafe partial class Run : IDisposable
                 Artifacts = _artifacts.Artifacts,
                 Execution = Evidence.Execution.Aborted,
                 CaptureErrors = _captureErrors,
+                Session = _session,
             };
         }
         var inputHashes = _question.Inputs.ToDictionary(i => i.FileName, i => i.Sha256, StringComparer.OrdinalIgnoreCase);
@@ -189,6 +209,7 @@ internal sealed unsafe partial class Run : IDisposable
             Artifacts = _artifacts.Artifacts,
             Execution = execution,
             CaptureErrors = _captureErrors,
+            Session = _session,
         };
     }
 
@@ -324,6 +345,7 @@ internal sealed unsafe partial class Run : IDisposable
             Artifacts = _artifacts.Artifacts,
             Execution = Evidence.Execution.Terminated,
             CaptureErrors = _captureErrors,
+            Session = _session,
         };
         Trace(path, "TerminateProcess");
         Program.WriteCapture(_attemptDir, _attempt, _participant == "a" ? "" : "." + _participant, capture);

@@ -163,7 +163,7 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 | R-ORACLE-1 OR-WIRE | partial: scalar, BSTR and UI1 arrays; full scalar fixture missing | `pvz8` | `Dispatch.cs`, `Values.cs` |
 | R-ORACLE-1 OR-OBS | partial: raw IDispatch lane; VBA and managed lanes missing (managed lanes: DAO PIA from `ExcelDna.Interop.Dao`, checked working on .NET 11) | `9fkt` | `Dispatch.cs` |
 | R-ORACLE-1 OR-OWN, OR-DESKTOP | partial: owned workers on a private desktop with a window guard; owned Access host claimed by window handle; dialogs described and answered by UI Automation under a question's policy; the Access host runs on the main desktop by owner instruction until moved | `b8sx` | `OwnedWorker.cs`, `PrivateDesktop.cs`, `src/CalcDb.Oracle.Dialogs`, `evidence/r-access-host`, `evidence/r-access-dialog` |
-| R-ORACLE-1 OR-REUSE | not started | `tdt9` | — |
+| R-ORACLE-1 OR-REUSE | partial: a reused worker with the declared reset `release-bindings/1` gave the fresh answers for 8 read questions in two prior orders (16 of 16; `calcdb-oracle reuse`); positive controls for engine-wide state and wider sets are step 6 | `tdt9` | `OracleProtocol.cs`, `PooledRun.cs`, `Serve.cs`, `evidence/r-oracle-1/or-reuse` |
 | R-ORACLE-1 OR-SEAL | done for synthetic corruption cases | — | `Sealer.cs`, tests |
 | R-ORACLE-1 OR-FREEZE | partial: database and lock-file images kept by another process before any opener (process-kill model) | — | `evidence/r-crash-1-*`, `evidence/r-txn-flush` |
 | R-ORACLE-1 OR-REENTRY, OR-REPAIR (T-COMPACT-1) | not started (DAO CompactDatabase/RepairDatabase lanes captured in r-cplx-rebuild; no damaged controls) | — | — |
@@ -172,12 +172,12 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 
 | Step | Depends on | Status | Work item |
 | --- | --- | --- | --- |
-| 1. Long-lived worker protocol, reset and prehistory | W-01/capture-core | ready | `tdt9` |
-| 2. Windows broker: queue, batcher, answer cache, pool, logs, status | step 1 | blocked | — |
+| 1. Long-lived worker protocol, reset and prehistory | W-01/capture-core | done: `calcdb-oracle/1` over stdio (length-prefixed typed frames), the worker `--serve` started only by the runner on the private desktop in a kill-on-close job, one prepared attempt per `submit` with its own receipts and seal, a structural admission check refusing every tier-2 shape, the declared reset `release-bindings/1`, the prehistory in every capture checked by the sealer, a capture with a session never used as a CalcDb oracle record, death/hang/malformed frames settled from receipts and the worker replaced; calls.trace@6 compares two native runs; the one-attempt path stays the default | `tdt9` |
+| 2. Windows broker: queue, batcher, answer cache, pool, logs, status | step 1 | ready | — |
 | 3. Crash bisection, isolation worker, crash budget | step 2 | blocked | `npmg` |
 | 4. Relay and Linux client | step 2 | blocked | — |
 | 5. Private-desktop launcher and guard for every start path | — | partial: the owned-attempt runner has both; the broker, pooled workers and Office processes do not exist yet | `b8sx` |
-| 6. Continuous leakage checks (OR-REUSE) | steps 1–2 | blocked | `tdt9` |
+| 6. Continuous leakage checks (OR-REUSE) | steps 1–2 | blocked on step 2 | `tdt9` |
 
 
 ## Native observation graph (II-16 §25, F-223): evidence retained

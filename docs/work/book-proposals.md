@@ -163,6 +163,20 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   provider it is the NotModelled.AdoProvider refusal and pins nothing, so a later ACE Provider assignment succeeds where
   ACE fails `0x800A0C94`." A deliberate, named difference.
 
+## II-15 §3, F-184 and A-02 OR-REUSE: the long-lived worker (tdt9, 2026-11-20)
+
+- **Declared reset.** Proposed: "A reset declaration names what it releases or restores and what it leaves. A reset is
+  qualified for a card when the card's questions give the same raw answers fresh and after the reset in at least two
+  prior-case orders, and a positive control that leaves engine-wide state (DBEngine defaults, the Errors collection) is
+  either detected or shown not to reach those questions."
+- **F-184 Question.** Add "declared effects (`none`, `fixture`, `external`) and isolation (`pooled`,
+  `fresh-worker`, `fresh-attempt`)" to its essential fields; oracle-service.md treats them as key fields.
+- **Frame integrity.** Proposed: "On a transport without its own integrity a frame carries its digest; on a local pipe
+  the answer's capture digest and the returned receipt are the integrity check."
+- **Prehistory.** As built, the prehistory is in the capture and checked at seal, not in the QuestionKey, and answers
+  are not reused across attempts (the "otherwise noncacheable" branch). Proposed: "A capture's prehistory record
+  suffices until a reset is qualified."
+
 ## II-13 §§11, 16–18 and 20: activation route matrix (6w9p, 2026-11-20)
 
 - **II-13 §11 and §16, the library is a saved image.** Evidence: ACE's DAO library reports SYS_WIN32 and ADO's

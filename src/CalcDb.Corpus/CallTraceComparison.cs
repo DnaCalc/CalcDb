@@ -15,9 +15,9 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 5,
+        Revision = 6,
         Relation = Relation.IdentityGraph,
-        Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key.",
+        Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key; or (revision 6, R-ORACLE-1 OR-REUSE) the same question asked of the native installation twice, fresh and after a prehistory, compared with each other.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
         RequiredChannels = ["hresult", "result", "excepinfo", "errorinfo", "identity", "files"],
         Normalizations =
@@ -32,7 +32,7 @@ public static class CallTraceComparison
                 "The returned count of a release event, and of an activation step's Release (\"Release N\"), is not compared (revision 4, task 2nqn: ACE's activation Release gives 2, then 0 at the next Release).",
                 "A missing, extra or misplaced release still differs.", ["COM IUnknown::Release"]),
             new("module-observations", "Module lists are environment; provenance is checked separately.",
-                "Module events are not compared as events.", "A candidate run that loaded the native engine (ACE's DAO, core or OLE DB provider, or system ADO: revision 5, W-09/construction-policy), or not the candidate module, is a provenance mismatch.", ["II-13 §15", "R-ACT-1 ACT-ADO-SCOPE"]),
+                "Module events are not compared as events.", "A candidate run that loaded the native engine (ACE's DAO, core or OLE DB provider, or system ADO: revision 5, W-09/construction-policy), or not the candidate module, is a provenance mismatch. Between two native runs (revision 6, OR-REUSE) a candidate implementation on either side, or a different set of loaded native engine module paths, is a provenance mismatch; a reused worker's modules loaded before the question are environment, not answer.", ["II-13 §15", "R-ACT-1 ACT-ADO-SCOPE", "R-ORACLE-1 OR-REUSE"]),
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
@@ -51,7 +51,9 @@ public static class CallTraceComparison
     /// </summary>
     private static readonly string[] NativeEngineModules = ["ACEDAO.DLL", "ACECORE.DLL", "ACEOLEDB.DLL", "MSADO15.DLL"];
 
-    public static ComparisonRecord Compare(string caseId, string oracleId, Capture oracle, string candidateId, Capture candidate, string candidateModule, int maxDifferences = 16)
+    /// <param name="candidateModule">The candidate implementation's module, or null when the candidate is another native run
+    /// of the same question (OR-REUSE: a reused worker compared with a fresh one).</param>
+    public static ComparisonRecord Compare(string caseId, string oracleId, Capture oracle, string candidateId, Capture candidate, string? candidateModule, int maxDifferences = 16)
     {
         ComparisonRecord Result(ComparisonStatus status, List<Difference> differences, bool truncated = false, params string[] notes) => new()
         {
@@ -70,10 +72,7 @@ public static class CallTraceComparison
             return Result(ComparisonStatus.EvidenceIncomplete, [], false, [.. oracle.CaptureErrors.Select(e => "oracle: " + e), .. candidate.CaptureErrors.Select(e => "candidate: " + e)]);
         }
         var differences = new List<Difference>();
-        foreach (Difference d in Provenance(candidate, candidateModule))
-        {
-            differences.Add(d);
-        }
+        differences.AddRange(candidateModule is null ? NativeProvenance(oracle, candidate) : Provenance(candidate, candidateModule));
         CaptureEvent[] expected = oracle.Events.Where(e => e is not ModulesEvent).ToArray();
         CaptureEvent[] actual = candidate.Events.Where(e => e is not ModulesEvent).ToArray();
         JsonNode[] expectedNodes = HeldIdentities([.. expected.Select(e => Normalized(e, oracle.Environment.AttemptDirectory))]);
@@ -119,6 +118,28 @@ public static class CallTraceComparison
             yield return new Difference("modules", candidateModule + " loaded", "not loaded", "provenance");
         }
     }
+
+    /// <summary>Two native runs: neither ran a candidate, and both loaded the same native engine modules (same paths).</summary>
+    private static IEnumerable<Difference> NativeProvenance(Capture first, Capture second)
+    {
+        foreach ((string side, Capture capture) in new[] { ("expected", first), ("actual", second) })
+        {
+            if (capture.Environment.Implementation is { } implementation)
+            {
+                yield return new Difference("environment.implementation", "(none: a native run)", $"{side}: {implementation}", "provenance");
+            }
+        }
+        string a = string.Join(";", EngineModules(first)), b = string.Join(";", EngineModules(second));
+        if (a != b)
+        {
+            yield return new Difference("modules", a, b, "provenance");
+        }
+    }
+
+    private static IEnumerable<string> EngineModules(Capture capture) =>
+        capture.Events.OfType<ModulesEvent>().Where(m => !m.Deliberate).SelectMany(m => m.ModulePaths)
+            .Where(p => NativeEngineModules.Contains(Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
+            .Select(p => p.ToUpperInvariant()).Distinct().Order(StringComparer.Ordinal);
 
     private static string KindOf(CaptureEvent e) => e switch
     {

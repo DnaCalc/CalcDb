@@ -150,7 +150,8 @@ Each step is a CalcDb slice with its own test, and the existing tasks attach whe
 
 1. **Long-lived worker protocol.** Refactor the worker so the same interpreter reads framed
    batches on stdio, keeping today's attempt-directory mode for tier 2. Reset declaration and
-   prehistory recording. (Starts `tdt9`, OR-REUSE.)
+   prehistory recording. (Starts `tdt9`, OR-REUSE.) Built: one question per `submit` frame, as described in
+   [oracle-runner.md](oracle-runner.md#long-lived-worker-oracle-service-step-1-or-reuse).
 2. **Broker on Windows**: queue, priorities, batcher, answer cache, named-pipe endpoint, worker
    pool with restart caps, waits and daily logs, `status`. Tier 2 jobs submitted through the same
    broker run on the existing owned-attempt runner.

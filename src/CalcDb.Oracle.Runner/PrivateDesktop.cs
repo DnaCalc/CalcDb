@@ -80,6 +80,9 @@ internal static partial class PrivateDesktop
 
         public required SafeFileHandle StdinWrite { get; init; }
 
+        /// <summary>The read end of the worker's stdout when it speaks calcdb-oracle/1 there; otherwise null (stdout goes to the log).</summary>
+        public SafeFileHandle? StdoutRead { get; init; }
+
         public void Resume() => _ = ResumeThread(Thread);
 
         public void WriteLine(string line)
@@ -98,12 +101,14 @@ internal static partial class PrivateDesktop
         public void Dispose()
         {
             StdinWrite.Dispose();
+            StdoutRead?.Dispose();
             _ = CloseHandle(Thread);
             _ = CloseHandle(Process);
         }
     }
 
-    public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop = Name)
+    /// <param name="pipeStdout">Give the worker a stdout pipe (the calcdb-oracle/1 channel of a long-lived worker); stderr still goes to the log.</param>
+    public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop = Name, bool pipeStdout = false)
     {
         if (desktop != MainName)
         {
@@ -115,6 +120,16 @@ internal static partial class PrivateDesktop
             throw new Win32Exception(Marshal.GetLastPInvokeError(), "CreatePipe failed");
         }
         _ = SetHandleInformation(writeEnd, 1 /* HANDLE_FLAG_INHERIT */, 0);
+        SafeFileHandle? outRead = null, outWrite = null;
+        if (pipeStdout)
+        {
+            if (!CreatePipe(out outRead, out outWrite, ref sa, 0))
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "CreatePipe failed");
+            }
+            // Only the worker holds the write end, so its death is the end of the stream.
+            _ = SetHandleInformation(outRead, 1 /* HANDLE_FLAG_INHERIT */, 0);
+        }
         SafeFileHandle log = CreateFileW(logPath, 0x40000000 /* GENERIC_WRITE */, 1 | 2, ref sa, 2 /* CREATE_ALWAYS */, 0x80, 0);
         if (log.IsInvalid)
         {
@@ -126,7 +141,7 @@ internal static partial class PrivateDesktop
             Desktop = "WinSta0\\" + desktop,
             Flags = 0x100, // STARTF_USESTDHANDLES
             StdInput = readEnd.DangerousGetHandle(),
-            StdOutput = log.DangerousGetHandle(),
+            StdOutput = (outWrite ?? log).DangerousGetHandle(),
             StdError = log.DangerousGetHandle(),
         };
         string commandLine = string.Join(' ', new[] { exe }.Concat(args).Select(Quote));
@@ -136,12 +151,14 @@ internal static partial class PrivateDesktop
         int error = Marshal.GetLastPInvokeError();
         readEnd.Dispose();
         log.Dispose();
+        outWrite?.Dispose();
         if (!ok)
         {
             writeEnd.Dispose();
+            outRead?.Dispose();
             throw new Win32Exception(error, "CreateProcess failed");
         }
-        return new Launched { Process = pi.Process, Thread = pi.Thread, ProcessId = pi.ProcessId, StdinWrite = writeEnd };
+        return new Launched { Process = pi.Process, Thread = pi.Thread, ProcessId = pi.ProcessId, StdinWrite = writeEnd, StdoutRead = outRead };
     }
 
     /// <summary>Top-level windows of the given processes on the owner's desktop and on the private desktop.</summary>

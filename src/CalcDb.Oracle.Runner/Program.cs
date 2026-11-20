@@ -30,17 +30,19 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>reduce --question FILE [--max-trials N]</c>: find a smaller question with the same defining failure as the
 /// question's latest mismatched CalcDb comparison, every candidate run fresh on ACE and on CalcDb; writes the reduction chain
 /// under <c>reductions/</c> in the store and prints the reduced program (W-01/reduction, II-15 §23).</item>
+/// <item><c>reuse (--files F1,F2 | --dir DIR) [--retain]</c>: ask read-only questions of long-lived workers, fresh and
+/// reused in two orders, and compare the answers (R-ORACLE-1 OR-REUSE; <see cref="Reuse"/>).</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static int Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|reuse|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -68,6 +70,7 @@ internal static class Program
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
+                "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
                 "prune" => Prune(store, options),
@@ -164,14 +167,17 @@ internal static class Program
         return new ImplementationSelection("calcdb", deployment, Hashing.Sha256File(module));
     }
 
-    /// <summary>The retained oracle record of the same question key (the latest complete one), or null.</summary>
+    /// <summary>
+    /// The retained oracle record of the same question key (the latest complete one), or null. Only one-attempt captures
+    /// qualify: an answer from a long-lived worker carries a prehistory (OR-REUSE) and is never the oracle of a comparison.
+    /// </summary>
     private static EvidenceRecord? OracleRecord(string evidenceDir, Question question)
     {
         string probeDir = Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar));
         string key = question.Key();
         return !Directory.Exists(probeDir) ? null : Directory.EnumerateFiles(probeDir, "*.json")
             .Select(EvidenceJson.Read<EvidenceRecord>)
-            .Where(r => r.Manifest.QuestionKey == key && r.Manifest.IsComplete && r.Capture is not null)
+            .Where(r => r.Manifest.QuestionKey == key && r.Manifest.IsComplete && r.Capture is { Session: null })
             .OrderBy(r => r.Manifest.SealedUtc)
             .LastOrDefault();
     }
@@ -487,7 +493,7 @@ internal static class Program
     internal static string RecordPath(string evidenceDir, Question question, string attemptId) =>
         Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
 
-    private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir)
+    private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir, string? recordPath = null)
     {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
         string attemptDir = store.AttemptDirectory(attemptId);
@@ -535,7 +541,7 @@ internal static class Program
             ParticipantCaptures = peers,
             Artifacts = retained,
         };
-        string path = RecordPath(evidenceDir, question, attemptId);
+        string path = recordPath ?? RecordPath(evidenceDir, question, attemptId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         if (!EvidenceJson.TryCreateNewText(path, EvidenceSlim.Serialize(record)))
         {

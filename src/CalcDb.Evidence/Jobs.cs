@@ -111,6 +111,12 @@ public sealed record OwnerReport
 
     public string? LaunchError { get; init; }
 
+    /// <summary>
+    /// A long-lived worker's channel failed during this question (calcdb-oracle/1: a malformed or stale frame, an error
+    /// frame). The worker was ended; the question is sealed from its receipts and its capture is not trusted.
+    /// </summary>
+    public string? ChannelError { get; init; }
+
     /// <summary>OR-DESKTOP: the desktop the worker ran on (<c>WinSta0\CalcDbOracle</c>), or null for an older runner.</summary>
     public string? Desktop { get; init; }
 

@@ -36,6 +36,12 @@ public sealed record Capture
 
     /// <summary>Problems the worker met while capturing. Any entry makes the capture incomplete.</summary>
     public required IReadOnlyList<string> CaptureErrors { get; init; }
+
+    /// <summary>
+    /// R-ORACLE-1 OR-REUSE: the long-lived worker this capture ran in and the questions it ran before (II-15 §3). Null
+    /// for the one-attempt-per-process mode, where nothing ran before the question.
+    /// </summary>
+    public WorkerSession? Session { get; init; }
 }
 
 /// <summary>Immutable bytes referenced by a capture (F-184 <c>Artifact</c>).</summary>

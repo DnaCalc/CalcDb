@@ -57,6 +57,15 @@ internal static class Show
         {
             sb.AppendLine("candidate: " + implementation);
         }
+        if (capture.Session is { } session)
+        {
+            // OR-REUSE: a long-lived worker's answer names what ran before it.
+            sb.AppendLine($"worker session {session.SessionId} pid {session.ProcessId}, position {session.Position}, reset {session.Reset}");
+            foreach (PriorQuestion prior in session.Prehistory)
+            {
+                sb.AppendLine($"  before: {prior.Position} {prior.AttemptId} {prior.Execution}{(prior.Reset.Problem is { } p ? " reset problem: " + p : "")}");
+            }
+        }
         sb.AppendLine($"env: {env.Runtime} {env.ProcessArchitecture} {env.ApartmentType} desktop={env.WindowStation}\\{env.Desktop} lcid={env.UserDefaultLcid} acp={env.AnsiCodePage} tooling={env.ToolingRevision}");
         var previousPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (CaptureEvent e in capture.Events)
