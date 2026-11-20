@@ -117,6 +117,9 @@ public sealed record FormatDescriptor
             FixedOffset = new("jet4.column.fixed_offset", "column block", 21, 2, ByteOrder.Little, "Fixed-data offset from row byte 2.", Reference + "; II-04 §1.3"),
             Length = new("jet4.column.length", "column block", 23, 2, ByteOrder.Little, "Declared column length.", Reference + "; II-04 §1.3"),
             FixedFlag = 0x01,
+            // S-JACK-COL (fact): the auto-number flag; native: r-cursor-1-edit G.ID (COUNTER) has flags 07, its plain LONG
+            // columns 03 (W-05/edit-frames, R-FMT-2 Generated values).
+            AutoNumberFlag = 0x04,
         },
         Payload = new ScalarPayloadRules
         {
@@ -355,6 +358,9 @@ public sealed record ColumnBlockRules
     public required FieldRule FixedOffset { get; init; }
     public required FieldRule Length { get; init; }
     public required byte FixedFlag { get; init; }
+
+    /// <summary>The flag of an incrementing AutoNumber column, whose value the table's counter issues.</summary>
+    public required byte AutoNumberFlag { get; init; }
 
     public IEnumerable<FieldRule> Rules => [Type, Number, VariableIndex, ColumnId, TypeInfo, SortIdentifier, SortReserved, SortVersion, NumericPrecision, NumericScale, Flags, ExtendedFlags, FixedOffset, Length];
 }

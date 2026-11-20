@@ -146,6 +146,9 @@ public sealed record ColumnDescriptor
     /// <summary>The column's position in <see cref="TableDefinition.Columns"/>, for per-column state of a consumer.</summary>
     public int Ordinal { get; init; }
 
+    /// <summary>An incrementing AutoNumber column (<see cref="ColumnBlockRules.AutoNumberFlag"/>): the table's counter issues its value.</summary>
+    public bool IsAutoNumber { get; init; }
+
     /// <summary>The ordinary Boolean (type 1) keeps its value in the row mask (II-04 §2).</summary>
     public bool IsMaskBoolean => TypeCode == NativeTypes.Boolean;
 }
@@ -207,6 +210,13 @@ public sealed record TableDefinition
     public required uint FirstPage { get; init; }
     public required IReadOnlyList<StreamSegment> Segments { get; init; }
     public required uint RowCount { get; init; }
+
+    /// <summary>
+    /// The stored AutoNumber counter: the last value issued (r-cursor-1-edit: G holds IDs 1 and 2, the counter reads 2 and
+    /// the next AddNew shows 3; R-FMT-2 Generated values: the next value is the highest ever issued plus one).
+    /// </summary>
+    public uint AutoNumber { get; init; }
+
     public required byte TableType { get; init; }
     public required int MaxColumns { get; init; }
     public required int VariableColumns { get; init; }
@@ -312,6 +322,7 @@ public static class TableDefDecoder
                 FixedOffset = (int)c.FixedOffset.Read(r.Block),
                 Length = (int)c.Length.Read(r.Block),
                 IsFixed = ((byte)c.Flags.Read(r.Block) & c.FixedFlag) != 0,
+                IsAutoNumber = ((byte)c.Flags.Read(r.Block) & c.AutoNumberFlag) != 0,
                 TextSort = (byte)c.Type.Read(r.Block) is NativeTypes.Text or NativeTypes.Memo ? TextSortOrder.Read(r.Block, c) : null,
                 NumericPrecision = (byte)c.Type.Read(r.Block) == NativeTypes.Numeric ? (byte)c.NumericPrecision.Read(r.Block) : (byte)0,
                 NumericScale = (byte)c.Type.Read(r.Block) == NativeTypes.Numeric ? (byte)c.NumericScale.Read(r.Block) : (byte)0,
@@ -321,6 +332,7 @@ public static class TableDefDecoder
                 FirstPage = firstPage,
                 Segments = stream.Segments,
                 RowCount = (uint)stream.Read(t.RowCount),
+                AutoNumber = (uint)stream.Read(t.AutoNumber),
                 TableType = (byte)stream.Read(t.TableType),
                 MaxColumns = (int)stream.Read(t.MaxColumns),
                 VariableColumns = (int)stream.Read(t.VariableColumns),

@@ -104,6 +104,12 @@ public interface IRecordCursor : IDisposable
     TextFieldRead ReadText(ColumnDescriptor column);
 }
 
+/// <summary>The root of a native cursor's current row (II-07 §2: the identity an edit captures), or null with no current row.</summary>
+public interface IRowPositioned
+{
+    RowId? CurrentRow { get; }
+}
+
 /// <summary>
 /// The current row of a cursor, bound lazily on the first field read after a move and released on the next move
 /// (II-07 §4). Field values are owned copies, so they survive movement and Close (T-ISAM-04). Shared by both cursor
@@ -259,7 +265,7 @@ public enum IndexRefusal
 /// TableDef row count at open (CUR-POP), and gives the root locator as its bookmark in either order (CUR-ID). Changing
 /// the index moves to the first row of the new order (r-cursor-1/id-index-switch). Seek follows CUR-SEEK.
 /// </summary>
-public sealed class TableCursor : IRecordCursor
+public sealed class TableCursor : IRecordCursor, IRowPositioned
 {
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
@@ -311,6 +317,8 @@ public sealed class TableCursor : IRecordCursor
     public long RecordCount => Table.RowCount;
 
     private RowId? CurrentRoot => _position.Current?.Root;
+
+    public RowId? CurrentRow => CurrentRoot;
 
     public RowToken? Current => CurrentRoot is { } root ? new RowToken(FileIncarnation, TableIncarnation, root) : null;
 
@@ -708,7 +716,7 @@ internal static class StoragePercentLanding
 /// required to match. With no writer in the session, a snapshot and a dynaset read the same rows; the retained-view
 /// policies of a snapshot under change are W-03/private-images-coherence's.
 /// </summary>
-public sealed class PopulationCursor : IRecordCursor
+public sealed class PopulationCursor : IRecordCursor, IRowPositioned
 {
     private readonly OccurrenceStore<RowId> _store;
     private readonly ScanSource _source;
@@ -744,6 +752,8 @@ public sealed class PopulationCursor : IRecordCursor
     public long RecordCount => _store.ObservedCount;
 
     private RowId? CurrentRoot => _position.Current is int ordinal ? _store[ordinal] : null;
+
+    public RowId? CurrentRow => CurrentRoot;
 
     public bool ForwardOnly => _position.ForwardOnly;
 

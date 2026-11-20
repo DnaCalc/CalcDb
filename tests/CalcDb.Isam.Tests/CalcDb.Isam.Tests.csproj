@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- W-04/row-catalog-algorithms acceptance: read cases of T-FMT-02..14, T-CAT-01..08 bootstrap, native ACE fixtures. -->
+  <!-- W-04/row-catalog-algorithms acceptance: read cases of T-FMT-02..14, T-CAT-01..08 bootstrap, native ACE fixtures;
+       W-05/edit-frames: T-ISAM-22..27 and T-TXN-02..06 over the edit and transaction frames, with the record replays
+       binding stored rules and defaults through the expression service. -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA1707;CA2201</NoWarn>
   </PropertyGroup>
   <ItemGroup>
@@ -15,5 +18,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\CalcDb.Catalog\CalcDb.Catalog.csproj" />
     <ProjectReference Include="..\..\src\CalcDb.Evidence\CalcDb.Evidence.csproj" />
+    <ProjectReference Include="..\..\src\CalcDb.Expressions\CalcDb.Expressions.csproj" />
   </ItemGroup>
 </Project>

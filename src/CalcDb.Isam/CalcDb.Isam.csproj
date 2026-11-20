@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- ISAM (II-01 §2, II-04 §§7-9, II-07): checked row traversal over the page cache - usage maps, overflow
-       resolution, table scans, long values and typed native field values (W-04/row-catalog-algorithms). Portable. -->
+  <!-- ISAM (II-01 §2, II-04 §§7-9, II-07, II-08 §§1-3): checked row traversal over the page cache - usage maps, overflow
+       resolution, table scans, long values and typed native field values (W-04/row-catalog-algorithms); edit frames
+       and transaction frames (W-05/edit-frames), whose assignment conversion uses the one oleaut32 binding of
+       CalcDb.Values. Portable. -->
   <PropertyGroup>
     <RootNamespace>CalcDb.Isam</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CalcDb.Format\CalcDb.Format.csproj" />
     <ProjectReference Include="..\CalcDb.Storage\CalcDb.Storage.csproj" />
     <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
+    <ProjectReference Include="..\CalcDb.Values\CalcDb.Values.csproj" />
   </ItemGroup>
 </Project>

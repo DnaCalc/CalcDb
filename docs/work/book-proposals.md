@@ -267,4 +267,13 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   dbDecimal 20); the column block's type code need not equal it. An empty result payload is Null for every fixed result
   type."
 
+## II-10 §21: a field or table validation rule whose result is Null admits the value (W-05/edit-frames, 7htc, 2026-11-20)
 
+- **Book.** II-10 §21, "Preferred provisional validation adapter": "a rule result of Null rejects under the initial field
+  policy", with R-EXPR-1's Null/Empty/error matrix to confirm or change each adapter.
+- **Evidence.** qualified.md "R-EXPR-1 EXPR-MUTATION, Branch D: validation rules and Required": a rule that evaluates to
+  Null admits the value, False rejects (3316/3317), an evaluation error is 3802. W-05/edit-frames implements that, and its
+  replays of the edit records match ACE.
+- **Proposed text.** In §21's adapter paragraph, replace "a rule result of Null rejects under the initial field policy" with
+  "a rule result of Null admits the value (R-EXPR-1 EXPR-MUTATION); False rejects and an evaluation error fails with its
+  own error", and keep the table policy separately selectable as the paragraph says.
