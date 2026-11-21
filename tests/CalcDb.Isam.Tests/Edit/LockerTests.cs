@@ -220,12 +220,10 @@ public sealed class LockerTests
         EditFrame keyed = rig.Recordset(rig.A, 2);
         Assert.True(keyed.Edit().Succeeded);
         Assert.True(Put(keyed, rig["U"], "u9").Succeeded);
+        // The unique probe reads UX_U through the Workspace's overlay (task rf2n), so the second Update is checked, not named.
         UpdateOutcome update = keyed.Update();
-        Assert.True(update.Succeeded || update.Open == MutationOpen.PrivateRowKeys, $"{update.Open} {update.Detail}");
-        if (update.Succeeded)
-        {
-            Assert.Equal(2, rig.Locks.HeldBy(rig.A.Locker).Count); // the data page and UX_U's leaf
-        }
+        Assert.True(update.Succeeded, $"{update.Open} {update.Detail}");
+        Assert.Equal(2, rig.Locks.HeldBy(rig.A.Locker).Count); // the data page and UX_U's leaf
     }
 
     /// <summary>

@@ -150,9 +150,12 @@ public static unsafe class ActionExecutor
         }
 
         bool failOnError = (options & DbFailOnError) != 0;
+        // R-TXN-1 TXN-STMT (task sjws): the statement publishes once, at its end, what it changed, also the rows before a
+        // failure; inside a BeginTrans level its changes join the level.
+        using StatementScope statement = database.Workspace.BeginStatement();
         try
         {
-            return plan.Kind switch
+            ActionOutcome outcome = plan.Kind switch
             {
                 ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues),
                 ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues),
@@ -160,6 +163,8 @@ public static unsafe class ActionExecutor
                 ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues),
                 _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionKind", plan.Kind.ToString())),
             };
+            ResolutionOutcome published = statement.Complete();
+            return published.Succeeded ? outcome : ActionOutcome.Fail(MapResolutionFailure(published));
         }
         finally
         {
@@ -217,7 +222,7 @@ public static unsafe class ActionExecutor
                     return ActionOutcome.Fail(reseedOpen);
                 }
 
-                return InsertOneRow(frame, database.Workspace, insideStatementTxn: false, plan.InsertColumns, converted, failOnError, out bool inserted)
+                return InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted)
                     is { } rowFail
                     ? ActionOutcome.Fail(rowFail)
                     : ActionOutcome.Ok(inserted ? 1 : 0);
@@ -378,7 +383,7 @@ public static unsafe class ActionExecutor
                             return ActionOutcome.Fail(reseedOpen);
                         }
 
-                        SqlFailure? rowFail = InsertOneRow(frame, database.Workspace, txnStarted, plan.InsertColumns, converted, failOnError, out bool inserted);
+                        SqlFailure? rowFail = InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted);
                         ClearAll(converted);
                         if (rowFail is not null)
                         {
@@ -565,7 +570,7 @@ public static unsafe class ActionExecutor
                         continue;
                     }
 
-                    if (CommitRowChange(frame, () => frame.Update(), database.Workspace, insideStatementTxn: false, failOnError, out bool applied) is { } updFail)
+                    if (CommitRowChange(frame, () => frame.Update(), failOnError, out bool applied) is { } updFail)
                     {
                         return ActionOutcome.Fail(updFail);
                     }
@@ -672,7 +677,7 @@ public static unsafe class ActionExecutor
                         return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Storage", $"DELETE bookmark failed on {rowId}: {bmFail}"));
                     }
 
-                    if (CommitRowChange(frame, frame.Delete, database.Workspace, txnStarted, failOnError, out bool deleted) is { } delFail)
+                    if (CommitRowChange(frame, frame.Delete, failOnError, out bool deleted) is { } delFail)
                     {
                         if (txnStarted)
                         {
@@ -713,8 +718,6 @@ public static unsafe class ActionExecutor
 
     private static SqlFailure? InsertOneRow(
         EditFrame frame,
-        TransactionCoordinator workspace,
-        bool insideStatementTxn,
         IReadOnlyList<ColumnDescriptor> columns,
         NativeVariant[] values,
         bool failOnError,
@@ -735,84 +738,24 @@ public static unsafe class ActionExecutor
                 return HandleEditOutcome(assign, failOnError, out SqlFailure? assignFail) ? assignFail : null;
             }
         }
-        return CommitRowChange(frame, () => frame.Update(), workspace, insideStatementTxn, failOnError, out inserted);
+        return CommitRowChange(frame, () => frame.Update(), failOnError, out inserted);
     }
 
     /// <summary>
-    /// Commit one <see cref="EditFrame.Update"/> or <see cref="EditFrame.Delete"/> through <paramref name="workspace"/>.
-    /// <see cref="EditFrame"/> succeeds with <see cref="AcceptedRowChange.Physical"/> null when
-    /// <see cref="SameWidthWriter"/> cannot write a row (e.g. an empty table needing a new data page, a variable-length
-    /// update, or a fixed-column-to-Null update) and leaves the change pending; SQL actions must never report success or
-    /// leave an unwritten change in the Workspace's pending set, so a micro-transaction rolls back any unwritten change
-    /// and returns <c>NotModelled.Edit.Publication</c>.
-    /// WORKAROUND (task cited in the register row of W-07/actions): the micro-transaction publishes each row change on its
-    /// own, where ACE publishes one statement (TXN-STMT, TXN-FLUSH-BEHIND). It is removed when EditFrame refuses and
-    /// withdraws an unwritten change itself; that must land before Database.Execute routes actions here.
+    /// One row's <see cref="EditFrame.Update"/> or <see cref="EditFrame.Delete"/> within the statement. A change the ISAM
+    /// cannot write is refused by name (<c>NotModelled.Edit.Publication</c>) and withdrawn by the edit frame, and the
+    /// statement publishes its changes once, at its end (<see cref="StatementScope"/>; R-TXN-1 TXN-STMT, task sjws).
     /// </summary>
-    private static SqlFailure? CommitRowChange(
-        EditFrame frame,
-        Func<UpdateOutcome> mutate,
-        TransactionCoordinator workspace,
-        bool insideStatementTxn,
-        bool failOnError,
-        out bool applied)
+    private static SqlFailure? CommitRowChange(EditFrame frame, Func<UpdateOutcome> mutate, bool failOnError, out bool applied)
     {
-        applied = false;
-        bool microTxn = !insideStatementTxn && workspace.Depth < TransactionCoordinator.MaxWriteDepth;
-        if (microTxn)
+        UpdateOutcome outcome = mutate();
+        applied = outcome.Succeeded;
+        if (applied)
         {
-            if (workspace.BeginTrans() is { } beginErr)
-            {
-                frame.Discard();
-                return SqlFailure.Ace(SqlPhase.Execute, beginErr.Number, beginErr.Describe());
-            }
-        }
-        try
-        {
-            UpdateOutcome outcome = mutate();
-            if (!outcome.Succeeded)
-            {
-                frame.Discard();
-                if (microTxn)
-                {
-                    workspace.Rollback();
-                    microTxn = false;
-                }
-                return HandleUpdateOutcome(outcome, failOnError, out SqlFailure? fail) ? fail : null;
-            }
-            if (outcome.Change is { Physical: null } unwritten)
-            {
-                frame.Discard();
-                if (microTxn)
-                {
-                    workspace.Rollback();
-                    microTxn = false;
-                }
-                return SqlFailure.Open(
-                    SqlPhase.Execute,
-                    "NotModelled.Edit.Publication",
-                    unwritten.NotWritten ?? "row change has no physical form in CalcDb.Isam");
-            }
-            if (microTxn)
-            {
-                ResolutionOutcome commit = workspace.CommitTrans();
-                microTxn = false;
-                if (!commit.Succeeded)
-                {
-                    return MapResolutionFailure(commit);
-                }
-            }
-            applied = true;
             return null;
         }
-        finally
-        {
-            if (microTxn)
-            {
-                frame.Discard();
-                workspace.Rollback();
-            }
-        }
+        frame.Discard();
+        return HandleUpdateOutcome(outcome, failOnError, out SqlFailure? fail) ? fail : null;
     }
 
     private static List<RowId>? CollectCandidates(

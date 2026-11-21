@@ -57,15 +57,16 @@ public sealed class IndexNavigator
     private const int PeerWalkOnStack = 16;
     private const int DecodedPageLimit = 256;
 
-    private readonly PageCache _cache;
+    private readonly PageSource _source;
     private readonly FormatDescriptor _d;
     private readonly uint _owner;
-    private readonly Dictionary<uint, IndexPage> _decoded = [];
+    private readonly Dictionary<uint, (ImageId Image, IndexPage Page)> _decoded = [];
     private ulong _serial;
 
-    public IndexNavigator(PageCache cache, FormatDescriptor d, PhysicalIndex index, uint tableDefPage)
+    /// <param name="source">The pages the tree is read from: the committed images, or a Workspace's overlay (rf2n).</param>
+    public IndexNavigator(PageSource source, FormatDescriptor d, PhysicalIndex index, uint tableDefPage)
     {
-        _cache = cache;
+        _source = source;
         _d = d;
         Index = index;
         _owner = tableDefPage;
@@ -291,18 +292,20 @@ public sealed class IndexNavigator
 
     private IndexPage? Page(uint page)
     {
-        // A publication may have changed any page this navigator decoded (W-05/same-width-mutation).
-        ulong serial = _cache.PublishedSerial;
+        // A publication may have changed any page this navigator decoded (W-05/same-width-mutation); through an overlay a
+        // private revision may too, so a kept page is used only while it is the page's image in the source.
+        ulong serial = _source.Cache.PublishedSerial;
         if (serial != _serial)
         {
             _decoded.Clear();
             _serial = serial;
         }
-        if (_decoded.TryGetValue(page, out IndexPage? kept))
+        if (_decoded.TryGetValue(page, out (ImageId Image, IndexPage Page) kept)
+            && (_source.Overlay is null || _source.CurrentImage(page) == kept.Image))
         {
-            return kept;
+            return kept.Page;
         }
-        using PagePin? pin = _cache.Pin(page).Pin;
+        using PagePin? pin = _source.Pin(page).Pin;
         if (pin is null)
         {
             Fail($"index page {page} could not be pinned", page);
@@ -324,7 +327,7 @@ public sealed class IndexNavigator
         {
             _decoded.Clear();
         }
-        _decoded[page] = decoded;
+        _decoded[page] = (pin.Image, decoded);
         return decoded;
     }
 

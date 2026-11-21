@@ -583,14 +583,16 @@ public sealed partial class PageCache
             }
             // Revalidation (W-05/local-lockers-rebase, II-09 §23): over a base another publication changed, each delta's
             // footprint must read in the rebuilt page as it did when the delta was accepted. Deltas before the last
-            // whole-page delta are overwritten by it and are not checked.
+            // whole-page delta are overwritten by it, so the rebuild starts there: they are neither checked nor applied
+            // (no base is retained for such a page, and they would meet a cleared frame: several index inserts, then a
+            // root split, in one statement or level; task sjws).
             OverlayPage overlayPage = attempt.Overlay.Pages[page.PageNumber];
             bool rebased = overlayPage.Base != page.Old;
             int checkFrom = overlayPage.Deltas.FindLastIndex(d => d.Delta.ReplacesPage);
-            for (int i = 0; i < overlayPage.Deltas.Count; i++)
+            for (int i = Math.Max(checkFrom, 0); i < overlayPage.Deltas.Count; i++)
             {
                 (int _, IPageDelta delta, byte[]? seen) = overlayPage.Deltas[i];
-                bool check = rebased && i >= checkFrom && seen is not null;
+                bool check = rebased && seen is not null;
                 if (!ApplyDelta(page.PageNumber, final, delta, check ? (decoded, footprint) => footprint.Same(seen, decoded) : null))
                 {
                     var conflict = new RebaseConflict(page.PageNumber, i, delta.Footprint);

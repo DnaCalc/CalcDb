@@ -324,14 +324,14 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     public PageCache File => _cache;
 
     /// <summary>
-    /// Compile the modification of <paramref name="root"/> to <paramref name="values"/> (every column, in order). The row
-    /// is read from the committed images (an Edit of a row this Workspace changed is refused before, PrivateRow); a leaf
-    /// is checked as <paramref name="seen"/>, the Workspace's overlay, shows it, since an earlier change of the level can
-    /// have replaced another entry of it.
+    /// Compile the modification of <paramref name="root"/> to <paramref name="values"/> (every column, in order). The row,
+    /// its index entries and its leaves are read as <paramref name="seen"/>, the Workspace's overlay, shows them: an
+    /// earlier change of the level or statement can have moved the row in its page or replaced another entry of a leaf
+    /// (an Edit of a row this Workspace changed is refused before, PrivateRow).
     /// </summary>
     public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null)
     {
-        using RowView? resolved = RowResolver.Resolve(_cache, _d, root, out TraversalFailure? failure);
+        using RowView? resolved = RowResolver.Resolve(Seen(seen), _d, root, out TraversalFailure? failure);
         if (resolved is not { } row)
         {
             return NotWritten($"row {root} cannot be read: {failure?.Predicate ?? "deleted"}");
@@ -350,7 +350,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             ColumnDescriptor c = columns[i];
             NativeValue candidate = values[i];
-            stored[i] = FieldDecoder.Read(row, _table, c, _cache, _d);
+            stored[i] = FieldDecoder.Read(row, _table, c, Seen(seen), _d);
             if (stored[i].Kind == NativeKind.Failed)
             {
                 return NotWritten($"field {c.Name} of row {root} cannot be read: {stored[i].Failure}");
@@ -439,7 +439,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         List<int> changedPhysical = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
         {
-            if (Entry(tree.First(), root, stored, values, out byte[]? oldEntry, out byte[]? newEntry, out string? keyFailure) is not { } at)
+            if (Entry(tree.First(), root, stored, values, seen, out byte[]? oldEntry, out byte[]? newEntry, out string? keyFailure) is not { } at)
             {
                 if (keyFailure is not null)
                 {
@@ -457,7 +457,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         if (changedPhysical.Count > 0)
         {
-            using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+            using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
             if (tdefPin is null)
             {
                 return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
@@ -546,7 +546,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten($"row encoding: {rowFailure}");
         }
-        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(Seen(seen), _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
         if (freePages is null)
         {
             return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
@@ -582,7 +582,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 return NotWritten($"{index.Logical.Name}: {keyFailure}");
             }
             byte[] newEntry = EncodeEntry(newKey, root);
-            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            var navigator = new IndexNavigator(Seen(seen), _d, physical, _table.FirstPage);
             IndexPosition? lb = navigator.LowerBound(KeyBound.Low(newKey));
             if (navigator.LastFailure is { } navFailure)
             {
@@ -602,7 +602,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 }
                 targetLeaf = last?.Leaf ?? physical.RootPage;
             }
-            using PagePin? leafPin = (seen is null ? _cache.Pin(targetLeaf) : seen.Pin(targetLeaf)).Pin;
+            using PagePin? leafPin = Seen(seen).Pin(targetLeaf).Pin;
             if (leafPin is null)
             {
                 return NotWritten($"{index.Logical.Name}: leaf {targetLeaf} could not be pinned");
@@ -652,7 +652,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
         }
 
-        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
         {
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
@@ -680,7 +680,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten("file page count is not supplied for delete usage-map check");
         }
-        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(Seen(seen), _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
         if (freePages is null)
         {
             return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
@@ -696,7 +696,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             rejoin = rejoined;
         }
-        using PagePin? dataPin = (seen is null ? _cache.Pin(root.Page) : seen.Pin(root.Page)).Pin;
+        using PagePin? dataPin = Seen(seen).Pin(root.Page).Pin;
         if (dataPin is null)
         {
             return NotWritten($"data page {root.Page} could not be pinned");
@@ -717,7 +717,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten($"row {root} is its page's last row: ACE then frees the page (its owned and FreeMap bits, page 1; r-fmt-2b/create-w-accdb Au4 page 122, evidence/r-q16-overflow/lower-free DELETE FROM Au1), which is not written (W-05/growth-structural-closure)");
         }
-        using RowView? resolved = RowResolver.Resolve(_cache, _d, root, out TraversalFailure? resolveFailure);
+        using RowView? resolved = RowResolver.Resolve(Seen(seen), _d, root, out TraversalFailure? resolveFailure);
         if (resolved is not { } row)
         {
             return NotWritten($"row {root} cannot be read: {resolveFailure?.Predicate ?? "deleted"}");
@@ -759,7 +759,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 if (!decoded[c.Ordinal])
                 {
-                    stored[c.Ordinal] = FieldDecoder.Read(row, _table, c, _cache, _d);
+                    stored[c.Ordinal] = FieldDecoder.Read(row, _table, c, Seen(seen), _d);
                     if (stored[c.Ordinal].Kind == NativeKind.Failed)
                     {
                         return NotWritten($"field {c.Name} of row {root} cannot be read: {stored[c.Ordinal].Failure}");
@@ -785,7 +785,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 return NotWritten($"{index.Logical.Name}: {keyFailure}");
             }
             byte[] oldEntry = EncodeEntry(oldKey, root);
-            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            var navigator = new IndexNavigator(Seen(seen), _d, physical, _table.FirstPage);
             IndexPosition? found = null;
             for (IndexPosition? p = navigator.LowerBound(KeyBound.Low(oldKey)); p is { } at && navigator.KeyMatches(at, KeyBound.Low(oldKey)); p = navigator.Next(at))
             {
@@ -799,7 +799,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 return NotWritten($"{index.Logical.Name}: the entry of row {root} is not under its stored key{(navigator.LastFailure is { } f ? ": " + f.Predicate : "")}");
             }
-            using PagePin? leafPin = (seen is null ? _cache.Pin(target.Leaf) : seen.Pin(target.Leaf)).Pin;
+            using PagePin? leafPin = Seen(seen).Pin(target.Leaf).Pin;
             if (leafPin is null)
             {
                 return NotWritten($"{index.Logical.Name}: leaf {target.Leaf} could not be pinned");
@@ -828,7 +828,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             removedPhysical.Add(physical.Number);
         }
 
-        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
         {
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
@@ -851,7 +851,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     public CompiledChange CompileAutoNumberAdvance(uint autoNumberFloor, PrivateOverlay? seen = null)
     {
-        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
         {
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
@@ -907,7 +907,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 return NotWritten($"{index.Logical.Name}: {keyFailure}");
             }
-            var navigator = new IndexNavigator(_cache, _d, physical, _table.FirstPage);
+            var navigator = new IndexNavigator(Seen(seen), _d, physical, _table.FirstPage);
             IndexPosition? lb = navigator.LowerBound(KeyBound.Low(newKey));
             if (navigator.LastFailure is { } navFailure)
             {
@@ -919,7 +919,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 incrementUnique.Add(physical.Number);
             }
         }
-        using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
+        using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
         {
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
@@ -966,7 +966,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// The old and new complete entries of one tree for the row (key, then the root's big-endian page and slot), and the
     /// position of the old one; null when the key is unchanged, or with the failure.
     /// </summary>
-    private IndexPosition? Entry(IndexCheck index, RowId root, NativeValue[] stored, IReadOnlyList<NativeValue> values, out byte[]? oldEntry, out byte[]? newEntry, out string? failure)
+    private IndexPosition? Entry(IndexCheck index, RowId root, NativeValue[] stored, IReadOnlyList<NativeValue> values, PrivateOverlay? seen, out byte[]? oldEntry, out byte[]? newEntry, out string? failure)
     {
         oldEntry = newEntry = null;
         failure = null;
@@ -983,7 +983,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         oldEntry = [.. oldKey, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
         newEntry = [.. newKey, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
-        var navigator = new IndexNavigator(_cache, _d, index.Physical, _table.FirstPage);
+        var navigator = new IndexNavigator(Seen(seen), _d, index.Physical, _table.FirstPage);
         for (IndexPosition? p = navigator.LowerBound(KeyBound.Low(oldKey)); p is { } at && navigator.KeyMatches(at, KeyBound.Low(oldKey)); p = navigator.Next(at))
         {
             if (at.Row == root)
@@ -1033,7 +1033,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     private string? Replacement(PhysicalIndex physical, IndexPosition at, byte[] oldEntry, byte[] newEntry, PrivateOverlay? seen)
     {
-        using PagePin? pin = (seen is null ? _cache.Pin(at.Leaf) : seen.Pin(at.Leaf)).Pin;
+        using PagePin? pin = Seen(seen).Pin(at.Leaf).Pin;
         if (pin is null)
         {
             return $"leaf {at.Leaf} could not be pinned";
@@ -1145,7 +1145,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"row {row.Root}: {failure}";
             return null;
         }
-        using PagePin? pin = (seen is null ? _cache.Pin(row.Root.Page) : seen.Pin(row.Root.Page)).Pin;
+        using PagePin? pin = Seen(seen).Pin(row.Root.Page).Pin;
         if (pin is null)
         {
             failure = $"data page {row.Root.Page} could not be pinned";
@@ -1175,7 +1175,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     private List<PageEdit>? OverflowedRow(RowId root, byte[] rowBytes, byte[] rootPage, PrivateOverlay? seen, out string? failure)
     {
-        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(Seen(seen), _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
         if (freePages is null)
         {
             failure = $"FreeMap cannot be read: {freeFailure?.Predicate}";
@@ -1202,7 +1202,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     private PageEdit? MapBit(RowLocator map, uint page, PrivateOverlay? seen, out string? failure, bool member = true)
     {
-        using PagePin? pin = (seen is null ? _cache.Pin(map.Page) : seen.Pin(map.Page)).Pin;
+        using PagePin? pin = Seen(seen).Pin(map.Page).Pin;
         if (pin is null)
         {
             failure = $"map page {map.Page} could not be pinned";
@@ -1234,6 +1234,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         return live;
     }
+
+    /// <summary>The pages as <paramref name="seen"/> shows them: this Workspace's overlay over the committed images (task rf2n).</summary>
+    private PageSource Seen(PrivateOverlay? seen) => new(_cache, seen);
 
     /// <summary>The file's extent as this writer knows it: the extent it was opened with, or what the cache's allocations reached.</summary>
     private ulong Extent => Math.Max(_pageCount, _cache.KnownExtentPages);
@@ -1270,7 +1273,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         failure = null;
         foreach (uint candidate in freePages)
         {
-            using PagePin? pin = (seen is null ? _cache.Pin(candidate) : seen.Pin(candidate)).Pin;
+            using PagePin? pin = Seen(seen).Pin(candidate).Pin;
             if (pin is null || pin.Bytes.Length != _d.PageSize || pin.Bytes[_d.DataPage.Kind.Offset] != 0x01
                 || DataPages.IsLvalPage(pin.Bytes, _d) || _d.DataPage.Owner.Read(pin.Bytes) != _table.FirstPage)
             {
@@ -1388,7 +1391,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"the split leaves: {failure}";
             return false;
         }
-        using PagePin? pin = (seen is null ? _cache.Pin(physical.RootPage) : seen.Pin(physical.RootPage)).Pin;
+        using PagePin? pin = Seen(seen).Pin(physical.RootPage).Pin;
         if (pin is null)
         {
             failure = $"root {physical.RootPage} could not be pinned";
@@ -1408,7 +1411,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
     private bool NewRightmostLeaf(PhysicalIndex physical, uint leafPage, IndexPage leaf, byte[][] entries, byte[] newEntry, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
     {
-        using PagePin? rootPin = (seen is null ? _cache.Pin(physical.RootPage) : seen.Pin(physical.RootPage)).Pin;
+        using PagePin? rootPin = Seen(seen).Pin(physical.RootPage).Pin;
         if (rootPin is null || IndexPages.Decode(rootPin.Bytes, _d, out failure) is not { } root)
         {
             failure = $"root {physical.RootPage} cannot be read";

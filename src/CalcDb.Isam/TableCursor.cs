@@ -127,14 +127,17 @@ public interface IMutableCursor
 /// The current row of a cursor, bound lazily on the first field read after a move and released on the next move
 /// (II-07 §4). Field values are owned copies, so they survive movement and Close (T-ISAM-04). Shared by both cursor
 /// policies, with the bookmark validation they share. A row binds over the current images, or under a registered read
-/// view when a snapshot reads the values it fixed at an earlier serial (<see cref="SnapshotValues"/>).
+/// view when a snapshot reads the values it fixed at an earlier serial (<see cref="SnapshotValues"/>). Over a Workspace's
+/// overlay (<see cref="PageSource"/>) it reads the Workspace's own unpublished rows (task rf2n).
 /// </summary>
-internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefinition table) : IDisposable
+internal sealed class RowBinding(PageSource source, FormatDescriptor d, TableDefinition table) : IDisposable
 {
-    private readonly PageHold _hold = new(cache);
+    private readonly SourceHold _hold = new(source);
     private RowView? _bound;
     private ulong _boundSerial;
     private ReadView? _boundView;
+    private ImageId? _boundRoot;
+    private ImageId? _boundData;
 
     // Where the bound row's Text fields lie once read (D-STRING-1 bounded scratch, task n7mw): one entry per column,
     // allocated once per binding, valid while its generation is the binding's. A repeated read borrows the bytes
@@ -150,7 +153,7 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         {
             return unbound;
         }
-        NativeValue value = FieldDecoder.Read(_bound!.Value, table, column, cache, d);
+        NativeValue value = FieldDecoder.Read(_bound!.Value, table, column, source, d);
         CostCounters.Current.FieldDecodes++;
         return FieldResult.Of(value);
     }
@@ -168,7 +171,7 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
             return new TextFieldRead(row.Body[held.At], held.Shape);
         }
         CostCounters.Current.FieldDecodes++;
-        TextFieldRead read = FieldDecoder.ReadText(row, table, column, cache, d, out Range? location);
+        TextFieldRead read = FieldDecoder.ReadText(row, table, column, source, d, out Range? location);
         if (location is { } at)
         {
             (_texts ??= new TextLocation[table.Columns.Count])[column.Ordinal] = new TextLocation(_generation, at, read.Shape);
@@ -186,8 +189,9 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         // A publication since the row was bound over the current images (W-05/same-width-mutation): the bound row borrows
         // the old image, so it binds again over the current one. One volatile read per field read. A row bound under a
         // registered view stays: the view's images do not change.
-        ulong serial = cache.PublishedSerial;
-        if (_bound is not null && (!ReferenceEquals(view, _boundView) || (view is null && serial != _boundSerial)))
+        // Through an overlay a private revision of the row's pages rebinds it too (two image reads per field read).
+        ulong serial = source.Cache.PublishedSerial;
+        if (_bound is not null && (!ReferenceEquals(view, _boundView) || (view is null && (serial != _boundSerial || !BoundImagesCurrent()))))
         {
             Unbind();
         }
@@ -205,10 +209,20 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
                     ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
                     : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
             }
+            if (view is null && source.Overlay is not null)
+            {
+                _boundRoot = source.CurrentImage(root.Page);
+                _boundData = source.CurrentImage(_bound.Value.Data.Page);
+            }
             CostCounters.Current.RowBinds++;
         }
         return null;
     }
+
+    /// <summary>Whether the bound row's root and data pages are still the source's images (always over the committed images, which the serial guards).</summary>
+    private bool BoundImagesCurrent() =>
+        source.Overlay is null
+        || (_boundRoot is { } r && source.CurrentImage(_bound!.Value.Root.Page) == r && _boundData is { } b && source.CurrentImage(_bound.Value.Data.Page) == b);
 
     public void Unbind()
     {
@@ -225,7 +239,7 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     public bool SameRow(RowId root, ReadView view)
     {
         using RowView? then = RowResolver.Resolve(view, d, root, out TraversalFailure? thenFailure);
-        using RowView? now = RowResolver.Resolve(cache, d, root, out TraversalFailure? nowFailure);
+        using RowView? now = RowResolver.Resolve(source, d, root, out TraversalFailure? nowFailure);
         if (then is not { } a || now is not { } b || thenFailure is not null || nowFailure is not null || !a.Body.SequenceEqual(b.Body))
         {
             return false;
@@ -233,7 +247,7 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         foreach (ColumnDescriptor column in table.Columns)
         {
             if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole
-                && !NativeValue.SameStored(FieldDecoder.Read(a, table, column, cache, d), FieldDecoder.Read(b, table, column, cache, d)))
+                && !NativeValue.SameStored(FieldDecoder.Read(a, table, column, source, d), FieldDecoder.Read(b, table, column, source, d)))
             {
                 return false;
             }
@@ -245,11 +259,11 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     public FieldResult[] CopyRow(RowId root)
     {
         var values = new FieldResult[table.Columns.Count];
-        using RowView? row = RowResolver.Resolve(cache, d, root, out TraversalFailure? failure);
+        using RowView? row = RowResolver.Resolve(source, d, root, out TraversalFailure? failure);
         foreach (ColumnDescriptor column in table.Columns)
         {
             values[column.Ordinal] = row is { } bound
-                ? FieldResult.Of(FieldDecoder.Read(bound, table, column, cache, d))
+                ? FieldResult.Of(FieldDecoder.Read(bound, table, column, source, d))
                 : failure is null
                     ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
                     : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
@@ -272,12 +286,12 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
         {
             return null;
         }
-        using RowView? row = RowResolver.Resolve(cache, d, root, out TraversalFailure? failure);
+        using RowView? row = RowResolver.Resolve(source, d, root, out TraversalFailure? failure);
         if (row is null || failure is not null)
         {
             return null;
         }
-        using PagePin? pin = cache.Pin(root.Page).Pin;
+        using PagePin? pin = source.Pin(root.Page).Pin;
         return pin is not null && d.DataPage.Owner.Read(pin.Bytes) == table.FirstPage ? root : null;
     }
 }
@@ -338,7 +352,7 @@ public enum IndexRefusal
 /// </summary>
 public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
-    private readonly PageCache _cache;
+    private readonly PageSource _cache;
     private readonly FormatDescriptor _d;
     private readonly ScanSource _scan;
     private readonly RowBinding _row;
@@ -352,7 +366,7 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     private long _rowCount;
     private ulong _rowCountSerial;
 
-    private TableCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
+    private TableCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
         _cache = cache;
         _d = d;
@@ -364,7 +378,7 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
         _order = new StorageOrder(source);
         _position = new PositionState<TableOccurrence>(_order, forwardOnly: false);
         _rowCount = table.RowCount;
-        _rowCountSerial = cache.PublishedSerial;
+        _rowCountSerial = cache.Cache.PublishedSerial;
     }
 
     public TableDefinition Table { get; }
@@ -376,10 +390,12 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     /// <summary>The current logical index, or null in storage order.</summary>
     public LogicalIndex? Index { get; private set; }
 
-    public static TableCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, ulong tableIncarnation, out TraversalFailure? failure)
+    /// <param name="cache">The pages the cursor reads: the committed images, or a Workspace's overlay, whose own unpublished
+    /// rows it then reads (task rf2n).</param>
+    public static TableCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, ulong tableIncarnation, out TraversalFailure? failure)
     {
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        return navigator is null ? null : new TableCursor(cache, d, table, new ScanSource(navigator), cache.FileIncarnation, tableIncarnation);
+        return navigator is null ? null : new TableCursor(cache, d, table, new ScanSource(navigator), cache.Cache.FileIncarnation, tableIncarnation);
     }
 
     public bool Bof => _position.Bof;
@@ -393,8 +409,8 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     {
         get
         {
-            ulong serial = _cache.PublishedSerial;
-            if (serial != _rowCountSerial)
+            ulong serial = _cache.Cache.PublishedSerial;
+            if (serial != _rowCountSerial || _cache.Overlay is not null)
             {
                 using PagePin? pin = _cache.Pin(Table.FirstPage).Pin;
                 if (pin is not null && pin.Bytes.Length == _d.PageSize && pin.Bytes[_d.DataPage.Kind.Offset] == 0x02)
@@ -842,7 +858,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>A snapshot's values under later publications (CUR-POP); null on a dynaset or forward-only cursor.</summary>
     private readonly SnapshotValues? _snapshot;
 
-    private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
+    private PopulationCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
     {
         Table = table;
         _row = new RowBinding(cache, d, table);
@@ -852,7 +868,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
         _position = new PositionState<int>(_store, forwardOnly);
-        _snapshot = snapshot ? new SnapshotValues(cache) : null;
+        _snapshot = snapshot ? new SnapshotValues(cache.Cache) : null;
         _snapshot?.Stamp(_store, _row);
     }
 
@@ -862,8 +878,15 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// Open a dynaset, snapshot or forward-only cursor. <paramref name="bookmarkBase"/> numbers its bookmarks
     /// (<see cref="KeysetBookmark"/>); null where ACE's base is not identified, and the bookmarks are then NotObserved.
     /// </summary>
-    public static PopulationCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false)
+    public static PopulationCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false)
     {
+        if (snapshot && cache.Overlay is not null)
+        {
+            // A snapshot fixes its values at a publication serial (SnapshotValues); a Workspace's later private revisions
+            // are not publications, and no record shows a snapshot over a Workspace's own unpublished rows.
+            failure = new TraversalFailure("NotModelled.Edit.UnpublishedRows: a snapshot over this Workspace's unpublished changes", null);
+            return null;
+        }
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
         return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, bookmarkBase, snapshot);
     }

@@ -528,12 +528,14 @@ public sealed class GrowthPublicationTests
         AssertInspectorClean(after);
     }
 
+    /// <summary>A change the writer cannot compile is refused by name and withdrawn (task sjws): nothing is accepted or written.</summary>
     private static void AssertNotWritten(UpdateOutcome outcome, TransactionCoordinator ws, string expectedReason, byte[] expectedImage, MemoryDatabaseFile file)
     {
-        Assert.True(outcome.Succeeded, outcome.ToString());
-        Assert.Null(outcome.Change!.Physical);
-        Assert.Contains(expectedReason, outcome.Change.NotWritten, StringComparison.Ordinal);
-        Assert.NotEmpty(ws.PendingPublication);
+        Assert.Equal(MutationOpen.Publication, outcome.Open);
+        Assert.Null(outcome.Change);
+        Assert.Contains(expectedReason, outcome.Detail, StringComparison.Ordinal);
+        Assert.Empty(ws.PendingPublication);
+        Assert.Empty(ws.Frames.SelectMany(f => f.AcceptedChanges));
         Assert.Equal(expectedImage, file.Snapshot());
     }
 
@@ -811,7 +813,7 @@ public sealed class GrowthPublicationTests
 
             // An OLE insert whose long value is Null compiles: a Null long value is a Null field of the row, as in the
             // catalog rows ACE writes with Null Memo and OLE fields (evidence/r-q11-ddl-closure, W-07/native-metadata-write).
-            // It waits behind the change set's earlier unwritten Memo changes, so the file is unchanged.
+            // The refused Memo changes were withdrawn (task sjws), so nothing waits before it: it is published.
             (TableDefinition lo, _) = rig.Table("Lo");
             (EditFrame loFrame, _) = rig.OpenTable(rig.A, "Lo");
             Assert.True(loFrame.AddNew().Succeeded);
@@ -819,7 +821,8 @@ public sealed class GrowthPublicationTests
             UpdateOutcome loUpdate = loFrame.Update();
             Assert.True(loUpdate.Succeeded, loUpdate.ToString());
             Assert.NotNull(loUpdate.Change!.Physical);
-            Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+            Assert.Empty(rig.A.PendingPublication);
+            Assert.NotEqual(rig.Before, rig.File.Image.Snapshot());
         }
 
         // 2. Leading U+FEFF Text, Overflow-body Delete, and Relationship on EditFixture.

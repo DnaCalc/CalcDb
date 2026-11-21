@@ -13,14 +13,16 @@ public sealed class RowReader : IRecordCursor
 {
     private readonly RowBinding _row;
 
-    private RowReader(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource scan)
+    private RowReader(PageSource cache, FormatDescriptor d, TableDefinition table, ScanSource scan)
     {
         Table = table;
         Scan = scan;
         _row = new RowBinding(cache, d, table);
     }
 
-    public static RowReader? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, out TraversalFailure? failure)
+    /// <param name="cache">The pages the reader reads: the committed images, or a Workspace's overlay, whose own unpublished
+    /// rows it then reads (task rf2n; the owner passes <c>TransactionCoordinator.OverlayOf</c> of the file).</param>
+    public static RowReader? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, out TraversalFailure? failure)
     {
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
         return navigator is null ? null : new RowReader(cache, d, table, new ScanSource(navigator));

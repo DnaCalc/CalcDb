@@ -177,8 +177,9 @@ public enum MutationOpen : byte
     PrivateRow,
 
     /// <summary>
-    /// A change set that was not published: a change without a physical form (a new row, a variable-length or structural
-    /// change: W-05/growth-structural-closure), a file whose writer lease or page revision could not be had, several
+    /// A change that cannot be written, refused at Update or Delete and withdrawn (a structural case of
+    /// W-05/growth-structural-closure, task sjws), a non-transactional write beside the Workspace's unpublished changes,
+    /// or a change set that was not published: a file whose writer lease or page revision could not be had, several
     /// files, or a publication that stopped (W-05/resolution-live-rollback).
     /// </summary>
     Publication,

@@ -32,10 +32,13 @@ public sealed class TableFootprints(PageCache file, FormatDescriptor d, TableDef
     /// <summary>The TableDef first page whose row count, AutoNumber counter or index counters change on insert/delete.</summary>
     public LockResource TableDef => new(Table.FirstPage, LockPurpose.TableDef);
 
-    /// <summary>The leaf holding <paramref name="row"/>'s entry of <paramref name="index"/>, or null when the tree does not show it.</summary>
-    public LockResource? KeyLeaf(IndexCheck index, RowId row)
+    /// <summary>
+    /// The leaf holding <paramref name="row"/>'s entry of <paramref name="index"/> as <paramref name="seen"/> (the locker's
+    /// overlay) shows the tree, or null when the tree does not show it.
+    /// </summary>
+    public LockResource? KeyLeaf(IndexCheck index, RowId row, PrivateOverlay? seen = null)
     {
-        var navigator = new IndexNavigator(File, Format, index.Physical, Table.FirstPage);
+        var navigator = new IndexNavigator(new PageSource(File, seen), Format, index.Physical, Table.FirstPage);
         return navigator.Find(row) is { } at ? new LockResource(at.Leaf, LockPurpose.IndexLeaf) : null;
     }
 }

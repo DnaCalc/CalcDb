@@ -70,13 +70,13 @@ public static class RowResolver
     /// a row). An overflow root's first four bytes are the target locator; the target may carry the deleted bit and
     /// still be live data. Hops are bounded and (page, row) cycles detected.
     /// </summary>
-    public static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(cache, null, null, d, root, out failure);
+    public static RowView? Resolve(PageSource source, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(source, null, null, d, root, out failure);
 
     /// <summary>
     /// Resolve through a page hold (task 6p9q): the pages come from the hold, and the view borrows the hold's pin, valid
     /// until the hold moves to another page.
     /// </summary>
-    public static RowView? Resolve(PageHold hold, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(null, hold, null, d, root, out failure);
+    internal static RowView? Resolve(SourceHold hold, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(null, hold, null, d, root, out failure);
 
     /// <summary>
     /// Resolve under a registered read view (II-03 §3.1): every page of the chain is the image the view's serial selects,
@@ -85,8 +85,8 @@ public static class RowResolver
     /// </summary>
     public static RowView? Resolve(ReadView view, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(null, null, view, d, root, out failure);
 
-    /// <summary>Exactly one of <paramref name="cache"/>, <paramref name="hold"/> and <paramref name="view"/> supplies the pages.</summary>
-    private static RowView? Resolve(PageCache? cache, PageHold? hold, ReadView? view, FormatDescriptor d, RowId root, out TraversalFailure? failure)
+    /// <summary>Exactly one of <paramref name="source"/>, <paramref name="hold"/> and <paramref name="view"/> supplies the pages.</summary>
+    private static RowView? Resolve(PageSource? source, SourceHold? hold, ReadView? view, FormatDescriptor d, RowId root, out TraversalFailure? failure)
     {
         failure = null;
         // The visited set of a bounded chain: at most MaxOverflowHops + 1 locators, kept on the stack.
@@ -101,7 +101,7 @@ public static class RowResolver
                 return null;
             }
             seen[hop] = at;
-            PinResult pinned = hold is not null ? hold.Get(at.Page) : view is not null ? view.Pin(at.Page) : cache!.Pin(at.Page);
+            PinResult pinned = hold is not null ? hold.Get(at.Page) : view is not null ? view.Pin(at.Page) : source!.Value.Pin(at.Page);
             if (pinned.Pin is not { } pin)
             {
                 failure = new TraversalFailure($"page {at.Page}: {pinned.Failure} {pinned.Detail}", at);
@@ -145,7 +145,7 @@ public static class RowResolver
         return null;
     }
 
-    private static void Drop(PagePin pin, PageHold? hold)
+    private static void Drop(PagePin pin, SourceHold? hold)
     {
         if (hold is null)
         {
@@ -158,7 +158,7 @@ public static class RowResolver
     /// skipped; overflow targets carry the deleted bit and are reached only through their roots. A page the map lists
     /// that is not this table's data page is reported, not read as rows.
     /// </summary>
-    public static IEnumerable<RowView> Scan(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, List<TraversalFailure> failures)
+    public static IEnumerable<RowView> Scan(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, List<TraversalFailure> failures)
     {
         IReadOnlyList<uint>? pages = UsageMaps.Pages(cache, d, table.OwnedMap, pageCount, out TraversalFailure? mapFailure);
         if (pages is null)
@@ -202,7 +202,7 @@ public static class RowResolver
 /// <summary>Usage-map traversal: the pages a map declaration names, bounded by the file's page count (II-03 §1.4).</summary>
 public static class UsageMaps
 {
-    public static IReadOnlyList<uint>? Pages(PageCache cache, FormatDescriptor d, RowLocator map, ulong pageCount, out TraversalFailure? failure)
+    public static IReadOnlyList<uint>? Pages(PageSource cache, FormatDescriptor d, RowLocator map, ulong pageCount, out TraversalFailure? failure)
     {
         failure = null;
         var at = RowId.From(map);

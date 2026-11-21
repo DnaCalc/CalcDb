@@ -83,16 +83,14 @@ public static class KeysetBookmark
 /// </summary>
 public sealed class ScanNavigator : IDisposable
 {
-    private readonly PageCache _cache;
-    private readonly PageHold _hold;
+    private readonly SourceHold _hold;
     private readonly FormatDescriptor _d;
     private readonly IReadOnlyList<uint> _pages;
     private readonly uint _owner;
 
-    private ScanNavigator(PageCache cache, FormatDescriptor d, IReadOnlyList<uint> pages, uint owner)
+    private ScanNavigator(PageSource source, FormatDescriptor d, IReadOnlyList<uint> pages, uint owner)
     {
-        _cache = cache;
-        _hold = new PageHold(cache);
+        _hold = new SourceHold(source);
         _d = d;
         _pages = pages;
         _owner = owner;
@@ -102,10 +100,10 @@ public sealed class ScanNavigator : IDisposable
 
     public long SlotInspections { get; private set; }
 
-    public static ScanNavigator? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, out TraversalFailure? failure)
+    public static ScanNavigator? Open(PageSource source, FormatDescriptor d, TableDefinition table, ulong pageCount, out TraversalFailure? failure)
     {
-        IReadOnlyList<uint>? pages = UsageMaps.Pages(cache, d, table.OwnedMap, pageCount, out failure);
-        return pages is null ? null : new ScanNavigator(cache, d, pages, table.FirstPage);
+        IReadOnlyList<uint>? pages = UsageMaps.Pages(source, d, table.OwnedMap, pageCount, out failure);
+        return pages is null ? null : new ScanNavigator(source, d, pages, table.FirstPage);
     }
 
     /// <summary>The first root after <paramref name="after"/> (or the first of the table when null), or null at the end.</summary>

@@ -403,8 +403,9 @@ public sealed class CounterAndLandingTests
             }
             SeekRowById(cursor, f, 8);
             UpdateOutcome last = frame.Delete();
-            Assert.Null(last.Change?.Physical);
-            Assert.Contains("its page's last row", last.Change?.NotWritten);
+            Assert.Equal(MutationOpen.Publication, last.Open);
+            Assert.Null(last.Change);
+            Assert.Contains("its page's last row", last.Detail);
         }
 
         // 5. insert-new (ID=9, N=80): IX_N (8,7) -> (8,8); PK_F (0,8) -> (0,9)

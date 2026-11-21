@@ -138,6 +138,80 @@ public sealed class PublicationTests
         return (stored, indexed);
     }
 
+    /// <summary>Seek PK_R = <paramref name="id"/> over <paramref name="source"/>: whether a row holds the key.</summary>
+    private static bool HoldsKey(PageSource source, TableDefinition r, ulong pages, int id)
+    {
+        using TableCursor cursor = TableCursor.Open(source, D, r, pages, 0, out _)!;
+        Assert.Equal(IndexRefusal.None, cursor.SetIndex("PK_R"));
+        KeyValue key = EntryKeys.ValueOf(new NativeValue(NativeKind.Long) { Integer = id, Bits = (uint)id })!.Value;
+        Assert.Equal(IndexRefusal.None, cursor.Seek(SeekOperator.Equal, [new SeekKey(key)], out bool found));
+        return found;
+    }
+
+    [Fact]
+    public void A_statement_publishes_its_rows_once_and_checks_each_key_against_the_rows_before_it()
+    {
+        // R-TXN-1 TXN-STMT, task sjws: the row changes of one statement wait for its end and are one publication, one +1
+        // on the page-0 counter (qualified.md the page-0 field: each Execute that changes rows counts one). Task rf2n: the
+        // second row's unique check reads PK_R through the Workspace's overlay, so the first row's new key is taken.
+        using var rig = new Rig();
+        (TableDefinition r, _) = rig.Table("R");
+        ResolutionOutcome end;
+        using (StatementScope statement = rig.A.BeginStatement())
+        {
+            EditFrame first = rig.On(rig.A, "R", 10);
+            Set(first, "ID", 100);
+            Assert.True(first.Update().Succeeded);
+            Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+            Assert.Single(rig.A.PendingPublication);
+
+            EditFrame second = rig.On(rig.A, "R", 11);
+            Set(second, "ID", 100);
+            UpdateOutcome duplicate = second.Update();
+            Assert.Equal(MutationError.Duplicate, duplicate.Error?.Number);
+            Set(second, "ID", 101);
+            Assert.True(second.Update().Succeeded);
+            Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+            end = statement.Complete();
+        }
+        Assert.True(end.Succeeded, end.ToString());
+        Assert.Equal(2, end.ResolvedChanges);
+        Assert.Single(rig.A.Publications);
+        Assert.Equal(2, rig.A.Publications[0].Changes);
+        Assert.Empty(rig.A.PendingPublication);
+        byte[] after = rig.File.Image.Snapshot();
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
+        (List<long> stored, List<long> indexed) = ReadR(after, r);
+        Assert.Contains(100L, stored);
+        Assert.Contains(101L, stored);
+        Assert.DoesNotContain(10L, stored);
+        Assert.Equal(stored.Order(), indexed);
+    }
+
+    [Fact]
+    public void A_cursor_over_the_Workspace_overlay_reads_its_unpublished_key()
+    {
+        // Task rf2n (II-09 private change sets; TXN-VIEW: a Workspace's uncommitted change is its own): inside a level the
+        // Workspace's own cursor finds the new key, a cursor over the committed images does not, and after Rollback the
+        // overlay is gone.
+        using var rig = new Rig();
+        (TableDefinition r, _) = rig.Table("R");
+        ulong pages = rig.File.Image.PageCount;
+        Assert.Null(rig.A.BeginTrans());
+        EditFrame frame = rig.On(rig.A, "R", 10);
+        Set(frame, "ID", 100);
+        Assert.True(frame.Update().Succeeded);
+        PrivateOverlay? overlay = rig.A.OverlayOf(rig.File.Cache);
+        Assert.NotNull(overlay);
+        Assert.True(HoldsKey(new PageSource(rig.File.Cache, overlay), r, pages, 100));
+        Assert.False(HoldsKey(new PageSource(rig.File.Cache, overlay), r, pages, 10));
+        Assert.False(HoldsKey(rig.File.Cache, r, pages, 100));
+        Assert.True(HoldsKey(rig.File.Cache, r, pages, 10));
+        Assert.True(rig.A.Rollback().Succeeded);
+        Assert.Null(rig.A.OverlayOf(rig.File.Cache));
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+    }
+
     [Fact]
     public void An_automatic_key_update_changes_only_the_row_field_and_its_leaf()
     {
@@ -290,27 +364,28 @@ public sealed class PublicationTests
             Bstrs.Free(bstr);
         }
         UpdateOutcome update = frame.Update();
-        Assert.True(update.Succeeded);
-        Assert.Null(update.Change!.Physical);
-        Assert.Contains("shorter", update.Change.NotWritten, StringComparison.Ordinal);
+        Assert.Equal(MutationOpen.Publication, update.Open);
+        Assert.Contains("shorter", update.Detail, StringComparison.Ordinal);
+        Assert.Equal(EditMode.Edit, frame.Mode); // refused and withdrawn (task sjws): the edit stays, the level holds nothing
+        Assert.Empty(rig.A.Frames[0].AcceptedChanges);
         ResolutionOutcome commit = rig.A.CommitTrans();
-        Assert.Equal(MutationOpen.Publication, commit.Open);
-        Assert.Single(rig.A.PendingPublication);
+        Assert.True(commit.Succeeded, commit.ToString());
+        Assert.Empty(rig.A.PendingPublication);
         Assert.Equal(rig.Before, rig.File.Image.Snapshot());
     }
 
     [Fact]
     public void A_fixed_field_becoming_Null_is_not_written()
     {
-        // The bytes ACE leaves in a Null fixed field are not observed: the automatic Update is accepted and stays pending.
+        // The bytes ACE leaves in a Null fixed field are not observed: the automatic Update is refused by name and withdrawn.
         using var rig = new Rig();
         EditFrame frame = rig.On(rig.A, "G", 1);
         Assert.True(frame.Edit().Succeeded);
         Assert.True(frame.Assign(Column(frame, "N"), new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
         UpdateOutcome update = frame.Update();
-        Assert.True(update.Succeeded);
-        Assert.Contains("becomes Null", update.Change!.NotWritten, StringComparison.Ordinal);
-        Assert.Single(rig.A.PendingPublication);
+        Assert.Equal(MutationOpen.Publication, update.Open);
+        Assert.Contains("becomes Null", update.Detail, StringComparison.Ordinal);
+        Assert.Empty(rig.A.PendingPublication);
         Assert.Equal(rig.Before, rig.File.Image.Snapshot());
     }
 }

@@ -55,6 +55,8 @@ scope or design, the book wins.
 ## Tool practice
 
 - Edit files with the editing tools, not with ad-hoc scripts. Python is not project tooling.
+- Build an export by copying files into it, never by junctions or links to the repository: a recursive delete of
+  the export would follow them into `evidence/` and `probes/` (process log, 2026-11-21).
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.

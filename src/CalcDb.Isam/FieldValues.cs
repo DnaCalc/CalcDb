@@ -234,7 +234,7 @@ public static class FieldDecoder
     }
 
     /// <summary>The exact payload of a Memo or OLE field's long value, under the row's read view, or null with the failure.</summary>
-    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageCache cache, ReadView? view, FormatDescriptor d, long longValueBudget, out string? failure)
+    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageSource cache, ReadView? view, FormatDescriptor d, long longValueBudget, out string? failure)
     {
         LongValuePlan? plan = LongValuePlan.Inspect(bytes, out string? planFailure);
         if (plan is null)
@@ -258,15 +258,15 @@ public static class FieldDecoder
     /// view's page (Text) or the assembled long value (Memo), checked and measured but not decoded. Null and failures
     /// are those of <see cref="Read"/>; any other column reads as <see cref="Read"/>.
     /// </summary>
-    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget) =>
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget) =>
         ReadText(row, table, column, cache, d, out _, longValueBudget);
 
     /// <summary>
-    /// As <see cref="ReadText(RowView, TableDefinition, ColumnDescriptor, PageCache, FormatDescriptor, long)"/>; for an
+    /// As <see cref="ReadText(RowView, TableDefinition, ColumnDescriptor, PageSource, FormatDescriptor, long)"/>; for an
     /// in-row Text field, <paramref name="location"/> is where its checked bytes lie in the row body, so a holder of the
     /// row can borrow them again without locating them again.
     /// </summary>
-    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget)
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget)
     {
         location = null;
         // A calculated Text or Memo is wrapped (II-04 §5.6): it is decoded whole, not borrowed.
@@ -297,7 +297,7 @@ public static class FieldDecoder
         return new TextFieldRead(bytes, shape);
     }
 
-    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget)
+    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget)
     {
         if (!Locate(row, table, column, d, out ReadOnlySpan<byte> bytes, out NativeValue located))
         {
@@ -335,7 +335,7 @@ public static class FieldDecoder
     /// Yes/No is a payload byte (nonzero True), not the row-mask bit; a calculated Decimal has its own scale and sign.
     /// Without a bound result type the value is NotModelled.CalculatedResultType.
     /// </summary>
-    private static NativeValue ReadCalculated(ReadOnlySpan<byte> bytes, ColumnDescriptor column, PageCache cache, ReadView? view, FormatDescriptor d, long longValueBudget)
+    private static NativeValue ReadCalculated(ReadOnlySpan<byte> bytes, ColumnDescriptor column, PageSource cache, ReadView? view, FormatDescriptor d, long longValueBudget)
     {
         if (column.CalculatedResultType is not byte type)
         {

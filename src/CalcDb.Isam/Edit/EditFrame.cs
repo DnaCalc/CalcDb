@@ -59,9 +59,10 @@ public enum RowChangeKind : byte
 
 /// <summary>
 /// An accepted row change (II-08 §3 OperationFrame's accepted-input receipt): the complete candidate after Update's checks,
-/// with its generated ticket and, when the slice writes it, its physical form (W-05/same-width-mutation), whose deltas
-/// are in the Workspace's private overlay from the change's operation frame on. A change without one stays in the change
-/// set and its publication is named (<see cref="NotWritten"/>).
+/// with its generated ticket and its physical form (W-05/same-width-mutation), whose deltas are in the Workspace's
+/// private overlay from the change's operation frame on. A change of a table with a file that its writer cannot compile
+/// is refused at Update or Delete and never accepted (task sjws); only a table without a file (a constructed table, which
+/// no publication reaches) accepts a change without a physical form, whose publication is named (<see cref="NotWritten"/>).
 /// </summary>
 public sealed class AcceptedRowChange
 {
@@ -116,10 +117,13 @@ public enum UniqueAnswer : byte
     NotModelled,
 }
 
-/// <summary>Answers a unique index's question for a candidate key: is it held by a stored row other than <c>self</c>?</summary>
+/// <summary>
+/// Answers a unique index's question for a candidate key: is it held by a row other than <c>self</c>, as
+/// <c>workspace</c> sees the tree (its own unpublished changes included: task rf2n)?
+/// </summary>
 public interface IUniqueProbe
 {
-    UniqueAnswer Probe(IndexCheck index, ReadOnlySpan<NativeValue> key, RowId? self);
+    UniqueAnswer Probe(IndexCheck index, ReadOnlySpan<NativeValue> key, RowId? self, TransactionCoordinator workspace);
 }
 
 /// <summary>
@@ -583,6 +587,13 @@ public sealed class EditFrame : IDisposable
         {
             physical = new CompiledChange(null, "no physical compiler for this table");
         }
+        if (physical.Change is null && _table.Writer is not null)
+        {
+            // A change the writer cannot compile is refused by name and withdrawn (task sjws): nothing joins the change
+            // set, EditMode and the buffer stay, and the ticket stays with the buffer, as after any failed Update.
+            UnlockFootprint(footprint, held);
+            return new UpdateOutcome(null, MutationOpen.Publication, physical.NotWritten);
+        }
         if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held) is { } refusedClosure)
         {
             return refusedClosure;
@@ -669,6 +680,12 @@ public sealed class EditFrame : IDisposable
         CompiledChange physical = _table.Writer is { } writer
             ? writer.CompileDelete(s, row, _workspace.OverlayOf(writer.File))
             : new CompiledChange(null, "no physical compiler for this table");
+        if (physical.Change is null && _table.Writer is not null)
+        {
+            // Refused by name and withdrawn (task sjws): the row stays, and the cursor stays on it.
+            UnlockFootprint(footprint, held);
+            return new UpdateOutcome(null, MutationOpen.Publication, physical.NotWritten);
+        }
         if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held, reportLockedBySession: true) is { } refusedClosure)
         {
             return refusedClosure;
@@ -783,7 +800,7 @@ public sealed class EditFrame : IDisposable
             {
                 continue;
             }
-            if (fp.KeyLeaf(index, row) is not { } leaf)
+            if (fp.KeyLeaf(index, row, _workspace.OverlayOf(fp.File)) is not { } leaf)
             {
                 return new UpdateOutcome(null, MutationOpen.Conflict, $"the leaf holding row {row} in {index.Logical.Name} was not found");
             }
@@ -1008,11 +1025,13 @@ public sealed class EditFrame : IDisposable
             {
                 continue;
             }
-            if (_workspace.HasAcceptedChanges(_table.Semantics))
+            // The probe reads the tree through this Workspace's overlay (task rf2n). A table without a file has no overlay:
+            // the keys of the changes it accepted are nowhere to be read.
+            if (_table.Writer is null && _workspace.HasAcceptedChanges(_table.Semantics))
             {
-                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} are not published"), null);
+                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} have no physical form"), null);
             }
-            UniqueAnswer answer = _table.Probe?.Probe(index, key, _original) ?? UniqueAnswer.NotModelled;
+            UniqueAnswer answer = _table.Probe?.Probe(index, key, _original, _workspace) ?? UniqueAnswer.NotModelled;
             if (answer == UniqueAnswer.Taken)
             {
                 return (nullIndex, Fail(MutationError.Duplicate), index.Physical.Number);
@@ -1129,11 +1148,14 @@ public sealed class EditFrame : IDisposable
 /// <summary>
 /// The unique probe over a table's stored trees (II-05 §7.3): a table cursor on the index, Seek `=` with the candidate's
 /// key, and a hit on a row other than the edited one is a duplicate. The table cursor is the one ISAM Seek; this adds no
-/// second key path.
+/// second key path. It reads the trees through the Workspace's overlay (task rf2n), so the keys of the rows the
+/// Workspace changed and has not published count, as they did when each row of a statement was published before the
+/// next: a multi-row UPDATE or INSERT ... SELECT, or a level's second Update, checks each row against the ones before
+/// it. (No record has two rows of one statement or level colliding with each other; the records' 3022s meet stored rows.)
 /// </summary>
 public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount) : IUniqueProbe
 {
-    public UniqueAnswer Probe(IndexCheck index, ReadOnlySpan<NativeValue> key, RowId? self)
+    public UniqueAnswer Probe(IndexCheck index, ReadOnlySpan<NativeValue> key, RowId? self, TransactionCoordinator workspace)
     {
         var keys = new SeekKey[key.Length];
         for (int i = 0; i < key.Length; i++)
@@ -1144,7 +1166,8 @@ public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, Table
             }
             keys[i] = new SeekKey(k);
         }
-        using TableCursor? cursor = TableCursor.Open(cache, d, table, pageCount, 0, out _);
+        var source = new PageSource(cache, workspace.OverlayOf(cache));
+        using TableCursor? cursor = TableCursor.Open(source, d, table, Math.Max(pageCount, cache.KnownExtentPages), 0, out _);
         if (cursor is null || cursor.SetIndex(index.Logical.Name) != IndexRefusal.None)
         {
             return UniqueAnswer.NotModelled;

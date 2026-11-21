@@ -166,6 +166,43 @@ public sealed class OperationFrame : IDisposable
 }
 
 /// <summary>
+/// The publication scope of one SQL action statement (R-TXN-1 TXN-STMT; II-08 §3; task sjws). Outside every BeginTrans
+/// level the row changes the statement accepts wait in the change set, and its end publishes them as one commit, where
+/// a recordset's automatic operation publishes each change on its own. ACE adds one to the ACCDB page-0 commit counter
+/// for each Execute statement that changes rows (qualified.md "the page-0 field at offset 3586":
+/// evidence/r-q8-header-counter one-insert-sql, two-statements), so the statement publishes as an immediate commit
+/// (<see cref="CommitMode.Immediate"/>, the mode of an action Execute). A statement of many rows is one burst of writes
+/// inside one page-0 bracket (qualified.md CRASH-ORDER, TXN-FLUSH-OP: evidence/r-etw-rec/update-in-place-4096,
+/// delete-indexed-4096, 4,096 and 2,048 rows). Inside a level its changes join the level
+/// and its end publishes nothing. The end publishes what the statement accepted after a failure too: its earlier
+/// changes survive the failure (TXN-STMT), and a change refused by name was never accepted (EditFrame). The
+/// statement's own reads and its next changes see its earlier ones through the Workspace's overlay. ACE writes an
+/// implicit statement about 0.5 s after it returns (TXN-FLUSH-OP, TXN-FLUSH-BEHIND); CalcDb's file is final at the end,
+/// earlier, as for an automatic operation (<see cref="PublicationPolicy"/>).
+/// </summary>
+public sealed class StatementScope : IDisposable
+{
+    private readonly TransactionCoordinator _owner;
+    private bool _done;
+
+    internal StatementScope(TransactionCoordinator owner) => _owner = owner;
+
+    /// <summary>End the statement: outside every level, publish what it accepted; the publication's outcome.</summary>
+    public ResolutionOutcome Complete()
+    {
+        if (_done)
+        {
+            return default;
+        }
+        _done = true;
+        return _owner.EndStatement();
+    }
+
+    /// <summary>End the statement as <see cref="Complete"/> does; a caller that reports the publication's outcome calls that.</summary>
+    public void Dispose() => Complete();
+}
+
+/// <summary>
 /// The logical transaction owner of one Workspace (II-08 §1 <c>WorkspaceCoordinator</c>, D-TXN-1; W-05/edit-frames,
 /// R-TXN-1 TXN-NEST, TXN-STMT, TXN-TEMP). It keeps the contiguous stack of explicit frames, the files it writes and their
 /// private overlays (W-03's <see cref="PrivateOverlay"/>, one per locker and file), and the edit frames of its recordsets.
@@ -175,7 +212,8 @@ public sealed class OperationFrame : IDisposable
 /// An outer commit, or an automatic operation outside any level, publishes the change set through one
 /// <see cref="PublicationAttempt"/> on the file (W-05/same-width-mutation, <see cref="PublicationPolicy"/>) when every
 /// change has a physical form and a <see cref="Publisher"/> is set; otherwise the changes wait as
-/// <see cref="PendingPublication"/> and the outcome names why.
+/// <see cref="PendingPublication"/> and the outcome names why. A SQL action statement publishes once, at its end
+/// (<see cref="BeginStatement"/>).
 /// The Workspace is one local locker (W-05/local-lockers-rebase; II-09 §28, R-TXN-1 TXN-LOCAL): it takes page grants
 /// on each file's <see cref="LocalLockManager"/> with its <see cref="WaitPolicy"/> through its <see cref="Scheduler"/>.
 /// A change accepted inside a level holds its pages until the outermost resolution (<see cref="LockLifetime.Transaction"/>;
@@ -220,6 +258,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly HashSet<PageCache> _locked = [];
     private readonly Dictionary<PageCache, TimeSpan> _lazyBursts = [];
     private OperationFrame? _operation;
+    private StatementScope? _statement;
+    private int _statementChanges;
 
     public LockerId Locker { get; } = locker;
 
@@ -286,6 +326,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>BeginTrans (II-08 §1: a level with no mutation reserves one frame entry and copies nothing).</summary>
     public MutationError? BeginTrans()
     {
+        if (_statement is not null && _statementChanges > 0)
+        {
+            // The level would share the statement's overlay scope, and its Rollback would discard the statement's rows.
+            throw new InvalidOperationException("BeginTrans inside a statement after its first change.");
+        }
         if (_frames.Count == MaxDepth)
         {
             return new MutationError(MutationError.TooManyTransactions, MutationErrorSource.Workspace);
@@ -416,7 +461,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// Publish a non-transactional side effect directly to <paramref name="cache"/> outside the Workspace's explicit
     /// transaction overlay (AddNew AutoNumber TableDef persistence, and refused 3022 unique-insert UniqueEntryCount /
     /// page-0 commit-counter persistence; R-FMT-2 Generated values, II-05, evidence/r-q10-commit-counter-edits). Such
-    /// writes survive CancelUpdate, subsequent refusals, and explicit Rollback.
+    /// writes survive CancelUpdate, subsequent refusals, and explicit Rollback. Beside this Workspace's unpublished changes
+    /// of the file (an AddNew or a refused insert after an earlier change of the same statement or level) the write is
+    /// named: it would need a second overlay of the locker, and no record shows how ACE orders and counts such a write
+    /// against the statement's or level's own commit (a multi-row INSERT into a table with an AutoNumber).
     /// </summary>
     internal (MutationOpen Open, string? Detail) PublishNonTransactional(
         PageCache cache,
@@ -444,6 +492,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             RecordBurst(cache, mode, burstNow);
             return (MutationOpen.None, null);
+        }
+        if (_participants.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "a non-transactional write (an AddNew's AutoNumber, a refused unique insert's counters) beside this Workspace's unpublished changes of the file: its order and commit count against the statement's or level's commit are not recorded");
         }
         LockResource[] lockResources = footprint.Count > 0 ? [.. footprint] : [];
         if (lockResources.Length > 0)
@@ -711,13 +763,39 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
+    /// Begin the publication scope of one SQL action statement (<see cref="StatementScope"/>). One statement at a time per
+    /// Workspace; a BeginTrans inside it comes before its first change.
+    /// </summary>
+    public StatementScope BeginStatement()
+    {
+        if (_statement is not null)
+        {
+            throw new InvalidOperationException("One statement at a time per Workspace.");
+        }
+        _statementChanges = 0;
+        return _statement = new StatementScope(this);
+    }
+
+    internal ResolutionOutcome EndStatement()
+    {
+        _statement = null;
+        int changes = _statementChanges;
+        _statementChanges = 0;
+        if (_frames.Count > 0 || Publisher is null || _pending.Count == 0 || _pending.Exists(c => c.Physical is null))
+        {
+            return new ResolutionOutcome(ResolvedChanges: changes);
+        }
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+        return new ResolutionOutcome(null, open, detail, changes);
+    }
+
+    /// <summary>
     /// Accept an Update's change through its own operation frame (II-08 §3): its page deltas enter the Workspace's private
     /// overlay in the frame's scope, and the frame merges into the current level. Outside every level the operation is
-    /// automatic and publishes at its end (TXN-FLUSH-OP; <see cref="PublicationPolicy"/>) when it can: a change set with
-    /// a change this slice does not write (a new row), or a Workspace without a <see cref="Publisher"/>, keeps the change
-    /// pending and the Update succeeds as ACE's does, the reads that would see it being the named cases (W-05/edit-frames'
-    /// rule). A publication that runs and fails is named at the Update. A page edit that cannot be made abandons the frame
-    /// and accepts nothing.
+    /// automatic and publishes at its end (TXN-FLUSH-OP; <see cref="PublicationPolicy"/>), or at the end of its statement
+    /// (<see cref="BeginStatement"/>); a Workspace without a <see cref="Publisher"/> keeps the change pending, as does a
+    /// change set holding a change of a table without a file. A publication that runs and fails is named at the Update.
+    /// A page edit that cannot be made abandons the frame and accepts nothing.
     /// </summary>
     internal AcceptOutcome Accept(AcceptedRowChange change)
     {
@@ -745,10 +823,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
         op.Complete(change);
-        if (_frames.Count > 0 || Publisher is null || _pending.Exists(c => c.Physical is null))
+        if (_statement is not null && _frames.Count == 0)
+        {
+            _statementChanges++;
+        }
+        if (_frames.Count > 0 || _statement is not null || Publisher is null || _pending.Exists(c => c.Physical is null))
         {
             return new AcceptOutcome(true);
         }
+        // A recordset's automatic operation: lazy burst (qualified.md the page-0 counter: recordset edits gather into one
+        // lazy commit per burst, evidence/r-q8-header-counter two-deletes-*ms-apart).
         (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.LazyBurst);
         return new AcceptOutcome(true, null, open, detail);
     }
