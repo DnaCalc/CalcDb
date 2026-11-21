@@ -514,7 +514,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             {
                 if (e.ExcepInfo is null && db.File is { Dirty: null } && db.Workspace.Depth == 0 && db.Workspace.ReleasesAtClose(db.File.Fixture.Cache))
                 {
-                    db.Workspace.PublishCounterCommit(db.File.Fixture.Cache);
+                    db.Workspace.PublishCloseCommit(db.File.Fixture.Cache);
                 }
                 return;
             }

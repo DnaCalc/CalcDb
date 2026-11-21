@@ -258,6 +258,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly HashSet<PageCache> _locked = [];
     private readonly Dictionary<PageCache, TimeSpan> _lazyBursts = [];
     private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
+    private readonly HashSet<PageCache> _allocatedGlobalMap = [];
+    private readonly HashSet<PageCache> _reservedExtent = [];
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
@@ -266,11 +268,74 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public bool InStatement => _statement is not null;
 
     /// <summary>
-    /// Whether published changes of this Workspace released data pages of <paramref name="cache"/> whose global-map free bits
-    /// its closing commit sets (<see cref="PhysicalChange.ReleasedAtClose"/>): the Database's Close then commits once more
-    /// even when page 1 is unchanged (evidence/r-q17-growth/retire-delete-au1-read-open).
+    /// Whether published changes of this Workspace released data pages, dropped-table pages, or reserved page-1 extent
+    /// bits of <paramref name="cache"/> whose global-map free bits its closing commit sets
+    /// (<see cref="PhysicalChange.ReleasedAtClose"/>; evidence/r-q17-growth/retire-delete-au1-read-open,
+    /// evidence/r-q15-ddl-open/counter-drop-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*).
     /// </summary>
     public bool ReleasesAtClose(PageCache cache) => _releaseAtClose.ContainsKey(cache);
+
+    /// <summary>
+    /// Whether this Workspace's own publications on <paramref name="cache"/> require a closing commit at Database.Close:
+    /// true when a publication cleared a global-map free bit on page 1 (allocated or reserved a page;
+    /// evidence/r-q11-ddl-closure, evidence/r-q15-ddl-open, evidence/r-q16-overflow) or scheduled
+    /// <see cref="PhysicalChange.ReleasedAtClose"/> bits for Close (evidence/r-q17-growth/retire-delete-au1-read-open,
+    /// evidence/r-q15-ddl-open/counter-drop-pages, evidence/r-q20-delete-pages,
+    /// evidence/r-q22-lv-open/lv-free-timing-update-chain-*). False when a publication only set global-map bits directly
+    /// during a statement (freeing chained long-value pages on DELETE:
+    /// evidence/r-q19-growth-open/lv-op-delete-row-chain, evidence/r-q22-lv-open/lv-free-timing-delete-chain) or when
+    /// another session changed page 1 on disk.
+    /// </summary>
+    public bool NeedsCloseCommit(PageCache cache) => _allocatedGlobalMap.Contains(cache) || _releaseAtClose.ContainsKey(cache);
+
+    /// <summary>
+    /// Whether this Workspace has already published or accepted (unpublished) any global-map allocation, free, deferred
+    /// page-1 release, or page-1 extent reservation on <paramref name="cache"/> in the current session.
+    /// </summary>
+    public bool HasGlobalMapActivity(PageCache cache)
+    {
+        if (_allocatedGlobalMap.Contains(cache) || _releaseAtClose.ContainsKey(cache) || _reservedExtent.Contains(cache))
+        {
+            return true;
+        }
+        uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
+        foreach (AcceptedRowChange c in Accepted())
+        {
+            if (c.Physical is not { } physical || !ReferenceEquals(physical.File, cache))
+            {
+                continue;
+            }
+            if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
+            {
+                return true;
+            }
+            foreach (PageEdit e in physical.Edits)
+            {
+                if (e.Page == globalMapPage)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private bool HasActiveExtentReservation(PageCache cache) =>
+        _reservedExtent.Contains(cache)
+        || Accepted().Any(c => c.Physical is { HasReservedExtent: true } p && ReferenceEquals(p.File, cache));
+
+    private static bool AllocatesGlobalMapPage(PhysicalChange physical)
+    {
+        uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
+        foreach (PageEdit e in physical.Edits)
+        {
+            if (e.Page == globalMapPage && e.Delta is BitDelta { Clear: not 0 })
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public LockerId Locker { get; } = locker;
 
@@ -654,6 +719,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 roles[0] = PageRole.NativeState;
                 bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
             }
+            ulong publishedExtent = p.Cache.KnownExtentPages;
+            foreach (ulong page in p.Overlay.ChangedPages)
+            {
+                if (page + 1UL > publishedExtent)
+                {
+                    publishedExtent = page + 1UL;
+                }
+            }
             PublicationStart start = p.Cache.BeginPublication(p.Overlay);
             if (start.Attempt is not { } attempt)
             {
@@ -680,6 +753,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _publications.Add(new PublicationReceipt(_pending.Count, attempt.Program!));
             }
+            if (publishedExtent > p.Cache.KnownExtentPages)
+            {
+                p.Cache.NoteExtent(publishedExtent);
+            }
             RecordBurst(p.Cache, mode, burstNow);
         }
         foreach (PageCache f in _locked)
@@ -688,13 +765,29 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         foreach (AcceptedRowChange c in _pending)
         {
-            if (c.Physical is { ReleasedAtClose.Count: > 0 } released)
+            if (c.Physical is not { } physical)
             {
-                if (!_releaseAtClose.TryGetValue(released.File, out List<uint>? pages))
+                continue;
+            }
+            foreach (PageEdit e in physical.Edits)
+            {
+                if (e.Page == FormatDescriptor.Jet4Family.Map.GlobalMapPage && e.Delta is BitDelta { Clear: not 0 })
                 {
-                    _releaseAtClose[released.File] = pages = [];
+                    _allocatedGlobalMap.Add(physical.File);
+                    break;
                 }
-                foreach (uint page in released.ReleasedAtClose)
+            }
+            if (physical.HasReservedExtent)
+            {
+                _reservedExtent.Add(physical.File);
+            }
+            if (physical.ReleasedAtClose.Count > 0)
+            {
+                if (!_releaseAtClose.TryGetValue(physical.File, out List<uint>? pages))
+                {
+                    _releaseAtClose[physical.File] = pages = [];
+                }
+                foreach (uint page in physical.ReleasedAtClose)
                 {
                     if (!pages.Contains(page))
                     {
@@ -839,6 +932,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 op.Abandon();
                 return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
             }
+            if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
+            {
+                op.Abandon();
+                return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+            }
             FileParticipant p = op.Enlist(physical.File);
             foreach (PageEdit e in physical.Edits)
             {
@@ -892,6 +990,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             op.Abandon();
             return new AcceptOutcome(false, null, MutationOpen.Publication, compiled.NotWritten);
         }
+        if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(file))
+        {
+            op.Abandon();
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+        }
         LockResource[] footprint = [.. physical.Footprint];
         if (footprint.Length > 0 && Lock(file, footprint, ChangeLifetime).Conflict is { } conflict)
         {
@@ -908,23 +1011,36 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
-    /// Publish a commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket): the commit of a catalog
-    /// step whose pages an earlier publication of the same statement already wrote, or a session's closing commit
-    /// (the callers name the records). Nothing when the file has no such counter.
+    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket): e.g. the second
+    /// commit of DAO <c>TableDefs.Append</c> whose pages an earlier publication of the same statement already wrote
+    /// (<c>evidence/r-q11-ddl-closure/append-dao</c>). Does not free <see cref="PhysicalChange.ReleasedAtClose"/> pages
+    /// and keeps <see cref="NeedsCloseCommit"/> intact until <see cref="PublishCloseCommit"/> runs. Nothing when the file
+    /// has no such counter.
     /// </summary>
-    /// <remarks>
-    /// A session's closing commit also sets the global-map free bits of the data pages its published changes released
-    /// (<see cref="ReleasesAtClose"/>; R-FMT-2 "Overflow / deletion and Map ownership": DELETE without WHERE in
-    /// evidence/r-q17-growth/retire-delete-au1-read-open, page 1 byte 4045 <c>00</c> &gt; <c>40</c>, and a row-by-row
-    /// delete emptying data page P while the table's FreeMap holds a page Q &lt; P in
-    /// evidence/r-q20-delete-pages/where-empty-all, where-empty-last-after-partial-first, where-empty-last-after-empty-first,
-    /// dynaset-empty-all-asc and evidence/r-q19-growth-open/split-empty-right-leaf, split-empty-left-leaf).
-    /// </remarks>
     public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache)
     {
         if (_participants.ContainsKey(cache))
         {
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them");
+        }
+        (MutationOpen open, string? detail) = PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
+        return error is { } refused ? (MutationOpen.Publication, $"the counter commit: {refused.Describe()}") : (open, detail);
+    }
+
+    /// <summary>
+    /// Publish a session's closing commit for <paramref name="cache"/> (when <see cref="NeedsCloseCommit"/> is true):
+    /// sets any <see cref="PhysicalChange.ReleasedAtClose"/> global-map free bits
+    /// (<c>evidence/r-q17-growth/retire-delete-au1-read-open</c>, <c>evidence/r-q15-ddl-open/counter-drop-pages</c>,
+    /// <c>evidence/r-q20-delete-pages/*</c>, <c>evidence/r-q22-lv-open/lv-free-timing-update-chain-*</c>), increments the
+    /// ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and extent
+    /// reservation state. Mid-session counter commits (<see cref="PublishCounterCommit"/>, e.g. DAO
+    /// <c>TableDefs.Append</c>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
+    /// </summary>
+    public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
+    {
+        if (_participants.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a closing commit would publish beside them");
         }
         List<PageEdit> frees = [];
         if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
@@ -944,6 +1060,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (open == MutationOpen.None && error is null)
         {
             _releaseAtClose.Remove(cache);
+            _allocatedGlobalMap.Remove(cache);
+            _reservedExtent.Remove(cache);
         }
         return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
     }

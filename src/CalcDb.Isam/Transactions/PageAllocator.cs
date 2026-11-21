@@ -20,9 +20,11 @@ namespace CalcDb.Isam.Transactions;
 /// evidence/r-q7-index-prefix/long-split take 45 to 51 in the order they need them (KeptPageReplayTests).</item>
 /// </list>
 /// One allocator hands out distinct pages: the pages it gave are not offered again before the caller's global-map edits
-/// reach the overlay. Each allocated page grows <see cref="ExtentPages"/> and the cache's <see cref="PageCache.KnownExtentPages"/>;
-/// the publication's program appends a page past the file (NativeProgram's Append targets). A session that changed page 1
-/// commits once more at its Close (the page-0 counter; r-q16-overflow, r-q11-ddl-closure): its Database does that.
+/// reach the overlay. Each allocated page grows <see cref="ExtentPages"/>; <see cref="PageCache.KnownExtentPages"/> is
+/// raised only when a change actually publishes (<see cref="TransactionCoordinator"/>), so refused compilations and
+/// rolled-back transactions leave no extent state behind. The publication's program appends a page past the file
+/// (NativeProgram's Append targets). A session that changed page 1 commits once more at its Close (the page-0 counter;
+/// r-q16-overflow, r-q11-ddl-closure): its Database does that.
 /// </summary>
 /// <remarks>
 /// Refused by name: a global map that is not an inline declaration or whose inline window ends (its growth, II-04
@@ -37,12 +39,35 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     public ulong ExtentPages { get; private set; } = Math.Max(extentPages, cache.KnownExtentPages);
 
     /// <summary>
+    /// The file's extent in pages as seen through <paramref name="seen"/>: the maximum of <paramref name="baseExtent"/>,
+    /// <paramref name="cache"/>'s published <see cref="PageCache.KnownExtentPages"/>, and one past any page already
+    /// written into <paramref name="seen"/>'s unpublished overlay (e.g. an earlier row of the same statement or
+    /// explicit transaction). Reserved pages only edit page 1 and never appear in <see cref="PrivateOverlay.ChangedPages"/>.
+    /// </summary>
+    public static ulong ExtentOf(PageCache cache, ulong baseExtent, PrivateOverlay? seen)
+    {
+        ulong extent = Math.Max(baseExtent, cache.KnownExtentPages);
+        if (seen is not null)
+        {
+            foreach (ulong page in seen.ChangedPages)
+            {
+                if (page + 1UL > extent)
+                {
+                    extent = page + 1UL;
+                }
+            }
+        }
+        return extent;
+    }
+
+    /// <summary>
     /// Allocate the next page, through <paramref name="seen"/> (the writer's overlay); its global-map edit is returned for
     /// the caller to apply before the next allocation. Null with the reason when no record decides the page.
     /// </summary>
     public uint? Allocate(PrivateOverlay? seen, out PageEdit mapEdit, out string? failure)
     {
         mapEdit = default;
+        ExtentPages = Math.Max(ExtentPages, ExtentOf(cache, ExtentPages, seen));
         MapRules m = d.Map;
         using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
         if (pin is null)
@@ -83,7 +108,6 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
         mapEdit = new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, mask), PageRole.Map);
         _handedOut.Add(page);
         ExtentPages = Math.Max(ExtentPages, page + 1UL);
-        cache.NoteExtent(ExtentPages);
         return page;
     }
 
@@ -112,6 +136,147 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
             return null;
         }
         return new PageEdit(m.GlobalMapPage, new BitDelta(offset, mask, 0), PageRole.Map);
+    }
+
+    /// <summary>
+    /// Capture the committed/overlay global allocation map (page 1) and its lowest free page before an UPDATE that frees a
+    /// chained long value allocates or frees pages (<see cref="TryReserveExtent"/>;
+    /// evidence/r-q22-lv-open/lv-free-timing-update-chain-smaller and lv-free-timing-update-chain-to-single).
+    /// </summary>
+    public bool TryCaptureGlobalFreeMap(PrivateOverlay? seen, out uint firstFree, out byte[] globalMapImage, out string? failure)
+    {
+        firstFree = 0;
+        globalMapImage = [];
+        ExtentPages = Math.Max(ExtentPages, ExtentOf(cache, ExtentPages, seen));
+        MapRules m = d.Map;
+        using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
+        if (pin is null)
+        {
+            failure = $"the global map page {m.GlobalMapPage} could not be pinned";
+            return false;
+        }
+        if (MapPages.InlinePages(pin.Bytes, m.GlobalFreeSlot, d, out failure) is not { } free)
+        {
+            failure = "the global map: " + failure;
+            return false;
+        }
+        if (free.Count == 0)
+        {
+            failure = "the global map's inline window has no free page left (its growth is not written: II-04 Global-map growth)";
+            return false;
+        }
+        firstFree = free[0];
+        if (firstFree < ExtentPages)
+        {
+            failure = $"the lowest free page {firstFree} lies inside the file extent {ExtentPages}: the page-1 reservation extent when free pages lie inside the file is not recorded (R-CRASH-1 CRASH-ORDER Open)";
+            return false;
+        }
+        if (firstFree > ExtentPages)
+        {
+            failure = $"the lowest free page {firstFree} is past the extent {ExtentPages}: a prior page-1 reservation or gap is not recorded";
+            return false;
+        }
+        globalMapImage = pin.Bytes.ToArray();
+        failure = null;
+        return true;
+    }
+
+    /// <summary>Number of pages allocated by this allocator so far.</summary>
+    public int AllocatedCount => _handedOut.Count;
+
+    /// <summary>
+    /// Reserve the unused tail of the session's 4-byte (32-page) global-map extent during an UPDATE that frees a chained
+    /// long value, returning those reserved pages in <paramref name="reservedPages"/> so Database.Close restores their free
+    /// bits (R-FMT-2 "LV form selection and Overflow / deletion"; R-CRASH-1 extent reservation):
+    /// <list type="bullet">
+    /// <item>When the UPDATE allocated new pages (<c>lv-free-timing-update-chain-smaller</c>: 49 and 50 allocated, 47 and
+    /// 48 freed; <c>lv-op-chain-larger</c>, <c>lv-op-chain-smaller</c>), every remaining free page in the 4-byte block
+    /// <c>[firstFreeBefore .. ((firstFreeBefore / 8) * 8) + 32)</c> (pages 51..79; page 1 bytes 4037..4041
+    /// <c>80 01 00 00 00</c> open, <c>80 f9 ff ff ff</c> at Close) is cleared during the statement and returned at Close.</item>
+    /// <item>When the UPDATE allocated no pages (<c>lv-free-timing-update-chain-to-single</c>: 100B single row on existing
+    /// page 45, 47 and 48 freed; <c>lv-op-chain-to-single</c>, <c>lv-op-chain-null</c>),
+    /// <paramref name="firstFreeBefore"/> (49) stays free (<c>1</c>) and the remaining free pages of its 4-byte block
+    /// (50..79; page 1 bytes 4037..4041 <c>80 03 00 00 00</c> open, <c>80 ff ff ff ff</c> at Close) are cleared during
+    /// the statement and returned at Close.</item>
+    /// </list>
+    /// Refused by name where no record decides the anchor or block boundary:
+    /// <list type="bullet">
+    /// <item>Allocating branch: <c>maxAllocated / 8 != firstFreeBefore / 8</c> (in every recorded case both 49 and 50 lie
+    /// in byte 6 [48..55], so the records do not decide between anchoring on <c>firstFreeBefore / 8</c> vs
+    /// <c>maxAllocated / 8</c> nor what ACE reserves when new chain pages spill into the next map byte).</item>
+    /// <item>0-allocation branch: <c>firstFreeBefore % 8 == 0</c> (no record observes a 0-allocation reservation at byte
+    /// offset 0; all recorded cases start at 49, offset 1) and <c>firstFreeBefore % 8 == 7</c> (<c>(firstFreeBefore + 1) / 8
+    /// != firstFreeBefore / 8</c>, where the range leaves its byte and would reserve 3 bytes instead of 4).</item>
+    /// </list>
+    /// </summary>
+    public bool TryReserveExtent(uint firstFreeBefore, ReadOnlySpan<byte> globalMapBefore, List<PageEdit> edits, List<uint> reservedPages, out string? failure)
+    {
+        MapRules m = d.Map;
+        uint rangeStart;
+        uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+        if (_handedOut.Count > 0)
+        {
+            uint maxAllocated = 0;
+            foreach (uint allocated in _handedOut)
+            {
+                if (allocated > maxAllocated)
+                {
+                    maxAllocated = allocated;
+                }
+            }
+            if (maxAllocated / 8 != firstFreeBefore / 8)
+            {
+                failure = $"allocated page {maxAllocated} spills past first free page {firstFreeBefore}'s global-map byte ({firstFreeBefore / 8}): the page-1 reservation when new chain pages cross into the next map byte is not recorded";
+                return false;
+            }
+            rangeStart = firstFreeBefore;
+        }
+        else
+        {
+            if (firstFreeBefore % 8 == 0)
+            {
+                failure = $"first free page {firstFreeBefore} starts a global-map byte ({firstFreeBefore} % 8 == 0): a 0-allocation chain-freeing UPDATE at byte offset 0 is not recorded (all recorded cases start at 49, offset 1)";
+                return false;
+            }
+            rangeStart = firstFreeBefore + 1;
+            if (rangeStart / 8 != firstFreeBefore / 8)
+            {
+                failure = $"first free page {firstFreeBefore} is the last bit of its global-map byte ({firstFreeBefore} % 8 == 7): a 0-allocation reservation crossing into the next map byte is not recorded";
+                return false;
+            }
+        }
+
+        SortedDictionary<int, byte> clearByOffset = [];
+        for (uint page = rangeStart; page < blockEnd; page++)
+        {
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, d, out int offset, out byte mask, out failure))
+            {
+                failure = "the global map reservation: " + failure;
+                return false;
+            }
+            bool wasFree = (globalMapBefore[offset] & mask) != 0;
+            if (!wasFree)
+            {
+                if (page >= ExtentPages)
+                {
+                    failure = $"page {page} past file extent {ExtentPages} is already cleared in page 1: a second chain-freeing UPDATE in a session with an active page-1 reservation is not recorded";
+                    return false;
+                }
+                continue;
+            }
+            if (_handedOut.Contains(page))
+            {
+                continue;
+            }
+            reservedPages.Add(page);
+            clearByOffset[offset] = (byte)(clearByOffset.GetValueOrDefault(offset) | mask);
+        }
+        foreach ((int offset, byte clearMask) in clearByOffset)
+        {
+            edits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
+        }
+        failure = null;
+        return true;
     }
 
     /// <summary>The cache the allocator reads.</summary>

@@ -711,4 +711,116 @@ public sealed class CounterAndLandingTests
             Assert.Equal(before, rig.File.Image.Snapshot());
         }
     }
+
+    /// <summary>
+    /// Tasks <c>jh6s</c> and <c>nv5x</c>: <see cref="TransactionCoordinator.NeedsCloseCommit"/> tracks per-session
+    /// page-1 bit clears (allocations/reservations) and <see cref="PhysicalChange.ReleasedAtClose"/> independently per
+    /// Workspace, ignores direct page-1 frees (<c>BitDelta</c> with <c>Set != 0, Clear == 0</c>, as in DELETE freeing
+    /// chain pages: <c>evidence/r-q22-lv-open/lv-free-timing-delete-chain</c>,
+    /// <c>evidence/r-q19-growth-open/lv-op-delete-row-chain</c>), ignores another session's page-1 changes and rolled-back
+    /// allocations, and preserves the Close obligation across mid-session <see cref="TransactionCoordinator.PublishCounterCommit"/>
+    /// (DAO <c>TableDefs.Append</c>, <c>evidence/r-q11-ddl-closure/append-dao</c>) until
+    /// <see cref="TransactionCoordinator.PublishCloseCommit"/> runs.
+    /// </summary>
+    [Fact]
+    public void NeedsCloseCommit_tracks_per_session_allocations_releases_and_ignores_direct_frees_and_other_sessions()
+    {
+        using var rig = new Rig(EditFixture);
+        using var other = new TransactionCoordinator(new LockerId(2)) { Publisher = rig.File, Scheduler = new CountingScheduler() };
+        PageCache cache = rig.File.Cache;
+        (TableDefinition table, TableEditContext ctx) = rig.Table("G");
+
+        // Find a free page in page 1 so we can emit valid BitDelta clears and frees against it.
+        byte[] page1 = rig.File.Image.Snapshot().AsSpan(D.PageSize, D.PageSize).ToArray();
+        IReadOnlyList<uint> freePages = MapPages.InlinePages(page1, D.Map.GlobalFreeSlot, D, out string? freeErr)!;
+        Assert.Null(freeErr);
+        uint targetPage = freePages[0];
+        Assert.True(MapPages.TryInlineBit(page1, D.Map.GlobalFreeSlot, targetPage, D, out int bitOffset, out byte bitMask, out string? bitErr), bitErr);
+        LockResource mapLock = new(D.Map.GlobalMapPage, LockPurpose.Map);
+
+        Assert.False(rig.A.NeedsCloseCommit(cache));
+        Assert.False(other.NeedsCloseCommit(cache));
+
+        // 1. Rolled-back allocation on `other` does not set NeedsCloseCommit.
+        Assert.Null(other.BeginTrans());
+        AcceptOutcome rolledAlloc = other.AcceptSchemaChange(cache, ctx.Semantics, p =>
+        {
+            PageEdit alloc = new(D.Map.GlobalMapPage, new BitDelta(bitOffset, 0, bitMask), PageRole.Map);
+            Assert.NotNull(p.Overlay.Edit(alloc.Page, alloc.Delta).Image);
+            return new CompiledChange(new PhysicalChange(cache, [alloc], [mapLock]), null);
+        });
+        Assert.True(rolledAlloc.Accepted && rolledAlloc.Open == MutationOpen.None);
+        Assert.True(other.Rollback().Succeeded);
+        Assert.False(other.NeedsCloseCommit(cache));
+        Assert.False(rig.A.NeedsCloseCommit(cache));
+
+        // 2. Published page-1 clear (allocation) on `rig.A` sets NeedsCloseCommit on `rig.A` ONLY, not `other`.
+        AcceptOutcome allocA = rig.A.AcceptSchemaChange(cache, ctx.Semantics, p =>
+        {
+            PageEdit alloc = new(D.Map.GlobalMapPage, new BitDelta(bitOffset, 0, bitMask), PageRole.Map);
+            Assert.NotNull(p.Overlay.Edit(alloc.Page, alloc.Delta).Image);
+            return new CompiledChange(new PhysicalChange(cache, [alloc], [mapLock]), null);
+        });
+        Assert.True(allocA.Accepted && allocA.Open == MutationOpen.None);
+        Assert.True(rig.A.NeedsCloseCommit(cache));
+        Assert.False(other.NeedsCloseCommit(cache));
+
+        // 3. Mid-session PublishCounterCommit (DAO TableDefs.Append second commit) increments counter +1 and keeps
+        // NeedsCloseCommit true; PublishCloseCommit then increments counter +1 and clears NeedsCloseCommit.
+        ushort counterAfterAlloc = BinaryPrimitives.ReadUInt16LittleEndian(rig.File.Image.Snapshot().AsSpan(3586, 2));
+        Assert.Equal(MutationOpen.None, rig.A.PublishCounterCommit(cache).Open);
+        Assert.Equal((ushort)(counterAfterAlloc + 1), BinaryPrimitives.ReadUInt16LittleEndian(rig.File.Image.Snapshot().AsSpan(3586, 2)));
+        Assert.True(rig.A.NeedsCloseCommit(cache));
+
+        Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(cache).Open);
+        Assert.Equal((ushort)(counterAfterAlloc + 2), BinaryPrimitives.ReadUInt16LittleEndian(rig.File.Image.Snapshot().AsSpan(3586, 2)));
+        Assert.False(rig.A.NeedsCloseCommit(cache));
+
+        // 4. Direct page-1 free (BitDelta Set != 0, Clear == 0; DELETE freeing chain pages, task nv5x) on `other`
+        // writes page 1 during the statement and leaves NeedsCloseCommit false.
+        AcceptOutcome freeB = other.AcceptSchemaChange(cache, ctx.Semantics, p =>
+        {
+            PageEdit free = new(D.Map.GlobalMapPage, new BitDelta(bitOffset, bitMask, 0), PageRole.Map);
+            Assert.NotNull(p.Overlay.Edit(free.Page, free.Delta).Image);
+            return new CompiledChange(new PhysicalChange(cache, [free], [mapLock]), null);
+        });
+        Assert.True(freeB.Accepted && freeB.Open == MutationOpen.None);
+        Assert.False(other.NeedsCloseCommit(cache));
+        Assert.False(other.ReleasesAtClose(cache));
+
+        // 5. ReleasedAtClose without clearing page 1 (emptied data page retirement / DROP TABLE) sets NeedsCloseCommit
+        // and ReleasesAtClose. A mid-session PublishCounterCommit (e.g. DAO TableDefs.Append) increments page 0 by +1
+        // without freeing page 1 or clearing ReleasesAtClose / NeedsCloseCommit; PublishCloseCommit then frees the bit,
+        // increments counter +1, and clears both flags.
+        // First clear targetPage again via rig.A (and close rig.A) so ReleasedAtClose has a non-free bit to free.
+        AcceptOutcome allocAgain = rig.A.AcceptSchemaChange(cache, ctx.Semantics, p =>
+        {
+            PageEdit alloc = new(D.Map.GlobalMapPage, new BitDelta(bitOffset, 0, bitMask), PageRole.Map);
+            Assert.NotNull(p.Overlay.Edit(alloc.Page, alloc.Delta).Image);
+            return new CompiledChange(new PhysicalChange(cache, [alloc], [mapLock]), null);
+        });
+        Assert.True(allocAgain.Accepted && allocAgain.Open == MutationOpen.None);
+        Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(cache).Open);
+
+        AcceptOutcome deferredB = other.AcceptSchemaChange(cache, ctx.Semantics, _ =>
+            new CompiledChange(new PhysicalChange(cache, [], []) { ReleasedAtClose = [targetPage] }, null));
+        Assert.True(deferredB.Accepted && deferredB.Open == MutationOpen.None);
+        Assert.True(other.ReleasesAtClose(cache));
+        Assert.True(other.NeedsCloseCommit(cache));
+
+        ushort counterBeforeMidB = BinaryPrimitives.ReadUInt16LittleEndian(rig.File.Image.Snapshot().AsSpan(3586, 2));
+        Assert.Equal(MutationOpen.None, other.PublishCounterCommit(cache).Open);
+        byte[] midImage = rig.File.Image.Snapshot();
+        Assert.Equal((ushort)(counterBeforeMidB + 1), BinaryPrimitives.ReadUInt16LittleEndian(midImage.AsSpan(3586, 2)));
+        Assert.Equal(0, midImage[D.PageSize + bitOffset] & bitMask);
+        Assert.True(other.ReleasesAtClose(cache));
+        Assert.True(other.NeedsCloseCommit(cache));
+
+        Assert.Equal(MutationOpen.None, other.PublishCloseCommit(cache).Open);
+        Assert.False(other.ReleasesAtClose(cache));
+        Assert.False(other.NeedsCloseCommit(cache));
+        byte[] finalImage = rig.File.Image.Snapshot();
+        Assert.Equal((ushort)(counterBeforeMidB + 2), BinaryPrimitives.ReadUInt16LittleEndian(finalImage.AsSpan(3586, 2)));
+        Assert.NotEqual(0, finalImage[D.PageSize + bitOffset] & bitMask);
+    }
 }

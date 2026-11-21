@@ -121,8 +121,8 @@ public sealed class SchemaWriterTests
             return outcome;
         }
 
-        /// <summary>Database.Close of a session that allocated: its closing commit (see the Com Database).</summary>
-        public void Close() => Assert.Equal(MutationOpen.None, Workspace.PublishCounterCommit(Cache).Open);
+        /// <summary>Database.Close of a session that allocated or dropped a table: its closing commit (see the Com Database).</summary>
+        public void Close() => Assert.Equal(MutationOpen.None, Workspace.PublishCloseCommit(Cache).Open);
 
         public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
         {

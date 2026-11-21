@@ -52,7 +52,7 @@ public sealed class DdlTests
             Assert.Equal(0, outcome.RecordsAffected);
         }
 
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -70,7 +70,7 @@ public sealed class DdlTests
 
         Assert.True(ActionExecutor.Execute("CREATE TABLE T (n LONG)", db).Succeeded);
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (n)", db).Succeeded);
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -102,7 +102,7 @@ public sealed class DdlTests
         db.DateBitsProvider = () => timestamps.Dequeue();
         Assert.True(ActionExecutor.Execute("CREATE TABLE T (n LONG)", db).Succeeded);
         Assert.True(ActionExecutor.Execute("DROP TABLE T", db).Succeeded);
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -150,7 +150,7 @@ public sealed class DdlTests
         Assert.True(outcome.PreservesRecordsAffected);
         Assert.Equal(0, outcome.RecordsAffected);
 
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -196,7 +196,7 @@ public sealed class DdlTests
         }
         Assert.Equal(expectedIssued, issued);
 
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -232,7 +232,7 @@ public sealed class DdlTests
         UpdateOutcome upd = frame.Update();
         Assert.True(upd.Succeeded, upd.ToString());
 
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
@@ -417,7 +417,7 @@ public sealed class DdlTests
         Assert.True(ix.Succeeded);
         Assert.Equal(0, ix.RecordsAffected);
 
-        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 

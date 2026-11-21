@@ -387,11 +387,14 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// DROP TABLE of a table without rows or indexes (evidence/r-q11-ddl-closure/create-then-drop): delete its
-    /// MSysObjects row and its MSysACEs rows, delete its maps' rows from its map page, free the TableDef page and the
-    /// map page in the global map (page 1 is as before the table), and mark the TableDef page's first byte
-    /// <see cref="DroppedTableDefKind"/>. The catalog tables' row counts go down and their DistinctCount words stay
-    /// (pages 2 and 3). The extent does not shrink.
+    /// DROP TABLE of a table without rows or indexes (evidence/r-q11-ddl-closure/create-then-drop,
+    /// evidence/r-q15-ddl-open/counter-drop-pages, drop-then-create): delete its MSysObjects row and its MSysACEs rows,
+    /// delete its maps' rows from its map page, mark the TableDef page's first byte <see cref="DroppedTableDefKind"/>,
+    /// and queue the TableDef page and map page in <see cref="PhysicalChange.ReleasedAtClose"/> so page 1 stays untouched
+    /// until <see cref="TransactionCoordinator.PublishCloseCommit"/> frees them at Database.Close (a same-session
+    /// CREATE TABLE therefore takes fresh pages rather than reusing the dropped ones, and a DROP TABLE-only session still
+    /// writes its closing commit). The catalog tables' row counts go down and their DistinctCount words stay (pages 2 and
+    /// 3). The extent does not shrink.
     /// </summary>
     public SchemaOutcome DropTable(TransactionCoordinator workspace, DropTableRequest request)
     {
@@ -612,15 +615,16 @@ public sealed class SchemaWriter
             }
         }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
-        foreach (uint freed in (uint[])[table.FirstPage, table.OwnedMap.Page])
+        uint[] releasedAtClose = [table.FirstPage, table.OwnedMap.Page];
+        foreach (uint freed in releasedAtClose)
         {
-            if (allocator.Free(p.Overlay, freed, out string? freeFailure) is not { } freeEdit)
+            // Verify the pages are currently allocated in page 1 without editing page 1 during the statement:
+            // evidence/r-q15-ddl-open/counter-drop-pages leaves page 1 untouched at drop-at-return / drop-1500ms
+            // and frees pages 42-43 in page 1 at Database.Close (drop-then-create allocates 44-45 for the next
+            // table rather than reusing 42-43 in the same session).
+            if (allocator.Free(p.Overlay, freed, out string? freeFailure) is null)
             {
                 return NotWritten(freeFailure);
-            }
-            if (!work.Apply(freeEdit))
-            {
-                return work.NotWritten();
             }
         }
         if (!work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageDeleteDelta(0, _d), PageRole.Map))
@@ -629,7 +633,7 @@ public sealed class SchemaWriter
         {
             return work.NotWritten();
         }
-        return work.Change(_cache);
+        return work.Change(_cache, releasedAtClose);
     }
 
     /// <summary>
@@ -991,7 +995,8 @@ public sealed class SchemaWriter
 
         public CompiledChange NotWritten() => SchemaWriter.NotWritten(_failure);
 
-        public CompiledChange Change(PageCache cache) => new(new PhysicalChange(cache, _edits, _footprint), null);
+        public CompiledChange Change(PageCache cache, IReadOnlyList<uint>? releasedAtClose = null) =>
+            new(new PhysicalChange(cache, _edits, _footprint) { ReleasedAtClose = releasedAtClose ?? [] }, null);
 
         private bool Take(CompiledChange compiled, string what)
         {

@@ -535,7 +535,7 @@ public sealed class KeptPageReplayTests
         Assert.False(GlobalFreeBit(openImage.AsSpan(D.PageSize, D.PageSize), 50));
         Assert.False(GlobalFreeBit(openImage.AsSpan(D.PageSize, D.PageSize), 51));
 
-        Assert.Equal(MutationOpen.None, s.Workspace.PublishCounterCommit(s.Cache).Open);
+        Assert.Equal(MutationOpen.None, s.Workspace.PublishCloseCommit(s.Cache).Open);
         byte[] closed = s.File.Snapshot();
         Assert.Equal((byte)(counterBefore + 2), closed[D.Header.CommitCounter.Offset]);
         AssertSamePage(closed, 50, aceAfter[50]);
@@ -571,7 +571,7 @@ public sealed class KeptPageReplayTests
         Assert.False(GlobalFreeBit(openImage.AsSpan(D.PageSize, D.PageSize), 45));
         Assert.False(GlobalFreeBit(openImage.AsSpan(D.PageSize, D.PageSize), 46));
 
-        Assert.Equal(MutationOpen.None, s.Workspace.PublishCounterCommit(s.Cache).Open);
+        Assert.Equal(MutationOpen.None, s.Workspace.PublishCloseCommit(s.Cache).Open);
         byte[] closed = s.File.Snapshot();
         Assert.Equal((byte)(counterBefore + 2), closed[D.Header.CommitCounter.Offset]);
         AssertSamePage(closed, 45, aceAfter[45]);
@@ -615,14 +615,13 @@ public sealed class KeptPageReplayTests
 
         public void Session(Action<WAccdbSession> work)
         {
-            byte[] page1 = Page1();
             using var s = new WAccdbSession(File);
             work(s);
             s.CloseRecordsets();
             s.Ws.EndLazyBurst(File.Cache);
-            if (!Page1().AsSpan().SequenceEqual(page1) || s.Ws.ReleasesAtClose(File.Cache))
+            if (s.Ws.NeedsCloseCommit(File.Cache))
             {
-                Assert.Equal(MutationOpen.None, s.Ws.PublishCounterCommit(File.Cache).Open);
+                Assert.Equal(MutationOpen.None, s.Ws.PublishCloseCommit(File.Cache).Open);
             }
         }
 
@@ -639,8 +638,6 @@ public sealed class KeptPageReplayTests
             }
             Assert.Empty(Inspector.Inspect(ours, D).Problems);
         }
-
-        private byte[] Page1() => Snapshot().AsSpan(D.PageSize, D.PageSize).ToArray();
 
         public void Dispose() => File.Dispose();
     }
@@ -1146,25 +1143,11 @@ public sealed class KeptPageReplayTests
         return image;
     }
 
-    private static void CloseLvSession(Session s, byte[] page1Before)
+    private static void CloseLvSession(Session s, byte[]? _ = null)
     {
-        byte[] page1After = s.File.Snapshot().AsSpan(D.PageSize, D.PageSize).ToArray();
-        // Close commits page 0 +1 when this session allocated a page (cleared a bit 1 -> 0 in page 1, returning the
-        // session allocation reservation) or has deferred page releases (emptied data pages). Setting a free bit
-        // 0 -> 1 during a statement (DELETE freeing chain pages, r-q22-lv-open/lv-free-timing-delete-chain) writes
-        // nothing at Close.
-        bool allocatedPage = false;
-        for (int i = 0; i < page1Before.Length; i++)
+        if (s.Workspace.NeedsCloseCommit(s.Cache))
         {
-            if ((page1Before[i] & ~page1After[i]) != 0)
-            {
-                allocatedPage = true;
-                break;
-            }
-        }
-        if (allocatedPage || s.Workspace.ReleasesAtClose(s.Cache))
-        {
-            (MutationOpen open, string? detail) = s.Workspace.PublishCounterCommit(s.Cache);
+            (MutationOpen open, string? detail) = s.Workspace.PublishCloseCommit(s.Cache);
             Assert.Equal(MutationOpen.None, open);
             Assert.Null(detail);
         }
@@ -1330,19 +1313,23 @@ public sealed class KeptPageReplayTests
     }
 
     /// <summary>
-    /// R-FMT-2 "LV form selection and Overflow / deletion" (admitted evidence/r-q19-growth-open/lv-op-* records):
-    /// replacing a stored single Memo (larger, smaller, crossing to chain), clearing a single Memo to Null, and
-    /// deleting a row holding a single or chained Memo. Checks every kept page (1, 42–57) and page 0 commit counter
-    /// (+3586: +2 when UPDATE allocates chain pages, +1 for single-row UPDATE/Null and for BOTH DELETEs including
-    /// lv-op-delete-row-chain) byte-for-byte, plus reads back surviving rows through <see cref="FieldDecoder"/>.
-    /// (UPDATE freeing a chain — lv-op-chain-* — is pinned as a named refusal in
-    /// <see cref="Long_values_r_q22_open_cases_refuse_by_name"/>.)
+    /// R-FMT-2 "LV form selection and Overflow / deletion" (all 10 evidence/r-q19-growth-open/lv-op-* records):
+    /// replacing a stored single Memo (larger, smaller, crossing to chain, clearing to Null), replacing a stored
+    /// chained Memo (larger chain, smaller chain, shrinking to single, clearing to Null), and deleting a row holding
+    /// a single or chained Memo. Checks every kept page (1, 42–57) and page 0 commit counter (+3586: +2 when UPDATE
+    /// allocates chain pages or frees a chain and reserves/returns its 4-byte page-1 extent, +1 for single-row
+    /// UPDATE/Null and for BOTH DELETEs including lv-op-delete-row-chain) byte-for-byte, plus reads back surviving
+    /// rows through <see cref="FieldDecoder"/>.
     /// </summary>
     [Theory]
     [InlineData("lv-op-single-larger", 1, 200, false)]
     [InlineData("lv-op-single-smaller", 1, 80, false)]
     [InlineData("lv-op-single-to-chain", 1, 5000, false)]
     [InlineData("lv-op-single-null", 1, 0, false)]
+    [InlineData("lv-op-chain-larger", 3, 6000, false)]
+    [InlineData("lv-op-chain-smaller", 3, 4500, false)]
+    [InlineData("lv-op-chain-to-single", 3, 100, false)]
+    [InlineData("lv-op-chain-null", 3, 0, false)]
     [InlineData("lv-op-delete-row-single", 1, -1, true)]
     [InlineData("lv-op-delete-row-chain", 3, -1, true)]
     public void Long_values_replace_clear_and_delete_match_ACE_byte_for_byte(string question, int targetId, int newBytes, bool isDelete)
@@ -1444,7 +1431,6 @@ public sealed class KeptPageReplayTests
         const string card = "r-q22-lv-open";
         const string question = "lv-free-timing-delete-chain";
         byte[] image = SeedGrowthOpen(question, card);
-        byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
         using var s = new Session(image);
         TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
         using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
@@ -1465,10 +1451,85 @@ public sealed class KeptPageReplayTests
         // Before Close: page 1 already marks 47 and 48 free and page 0 +3586 is +1.
         AssertMatchesGrowthOpen(question, "pg-open-after-op", s.File.Snapshot(), card);
         Assert.False(s.Workspace.ReleasesAtClose(s.Cache));
+        Assert.False(s.Workspace.NeedsCloseCommit(s.Cache));
 
         // Close writes nothing.
-        CloseLvSession(s, page1Before);
+        CloseLvSession(s);
         AssertMatchesGrowthOpen(question, "pg-after-close", s.File.Snapshot(), card);
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection and Overflow / deletion" (evidence/r-q22-lv-open/lv-free-timing-update-chain-smaller
+    /// and lv-free-timing-update-chain-to-single): UPDATE frees chained LVAL pages 47 and 48 in page 1 and the LV
+    /// owned map during the statement, reserves the unused tail of the 4-byte page-1 extent (51..79 when allocating
+    /// 49 &amp; 50; 50..79 leaving 49 free when placing on existing page 45), and returns those reserved bits at Close
+    /// (+1 on page 0 +3586, total +2). Verifies byte-for-byte identity at BOTH <c>pg-open-after-op</c> and
+    /// <c>pg-after-close</c>, plus <see cref="FieldDecoder"/> readback.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-free-timing-update-chain-smaller", 4500)]
+    [InlineData("lv-free-timing-update-chain-to-single", 100)]
+    public void Long_values_update_chain_frees_page1_and_reserves_extent_matches_ACE_byte_for_byte(string question, int newBytes)
+    {
+        const string card = "r-q22-lv-open";
+        byte[] image = SeedGrowthOpen(question, card);
+        SortedDictionary<long, byte[]> openAfter = KeptPages(card, question, "pg-open-after-op");
+        uint stamp = newBytes > LongValuePlan.SingleRowPayloadMax
+            ? BinaryPrimitives.ReadUInt32LittleEndian(openAfter[49].AsSpan(8))
+            : 0u;
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount) { LongValueTicks = () => stamp });
+        using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+        using var frame = new EditFrame(context, cursor, s.Workspace);
+        for (cursor.MoveFirst(); !cursor.Eof && cursor.Read(t.Columns[0]).Value.Integer != 3; cursor.MoveNext())
+        {
+        }
+        Assert.False(cursor.Eof);
+        using (StatementScope stmt = s.Workspace.BeginStatement())
+        {
+            Assert.True(frame.Edit().Succeeded);
+            NativeVariant val = MakeLvVariant(memo: true, newBytes, out nint ownedBstr);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                UpdateOutcome upd = frame.Update();
+                Assert.True(upd.Succeeded && upd.Change?.Physical is not null, $"{question}: {upd} / {upd.Change?.NotWritten}");
+            }
+            finally
+            {
+                if (ownedBstr != 0)
+                {
+                    Bstrs.Free(ownedBstr);
+                }
+            }
+            Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+        }
+
+        // Before Close: old chain pages 47 and 48 are free in page 1, unused 4-byte extent bits are reserved (0),
+        // and page 0 +3586 is +1.
+        AssertMatchesGrowthOpen(question, "pg-open-after-op", s.File.Snapshot(), card);
+        Assert.True(s.Workspace.ReleasesAtClose(s.Cache));
+        Assert.True(s.Workspace.NeedsCloseCommit(s.Cache));
+
+        // Close returns the reserved bits to 1 and increments page 0 +3586 to +2.
+        CloseLvSession(s);
+        Assert.False(s.Workspace.ReleasesAtClose(s.Cache));
+        Assert.False(s.Workspace.NeedsCloseCommit(s.Cache));
+        byte[] finalImage = s.File.Snapshot();
+        AssertMatchesGrowthOpen(question, "pg-after-close", finalImage, card);
+
+        using var verify = new Session(finalImage);
+        TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using TableCursor readCur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+        for (readCur.MoveFirst(); !readCur.Eof && readCur.Read(tAfter.Columns[0]).Value.Integer != 3; readCur.MoveNext())
+        {
+        }
+        Assert.False(readCur.Eof);
+        NativeValue read = readCur.Read(tAfter.Columns[1]).Value;
+        Assert.Equal(NativeKind.Text, read.Kind);
+        Assert.Equal(newBytes, read.Text!.Length * 2);
     }
 
     /// <summary>
@@ -1649,8 +1710,17 @@ public sealed class KeptPageReplayTests
     }
 
     /// <summary>
-    /// Named refusals directly pinned against the unimplemented/open r-q22-lv-open and r-q19-growth-open records:
-    /// (1) UPDATE freeing a chain (lv-free-timing-update-chain-smaller/-to-single, lv-op-chain-*),
+    /// Named refusals directly pinned against the open r-q22-lv-open and r-q19-growth-open cases:
+    /// (1) a second chain-freeing UPDATE in one session while a prior page-1 reservation is active (not recorded),
+    /// (1b) a chain-freeing UPDATE replacing a chain by a single-row value that allocates a new LVAL page (not recorded),
+    /// (1c) a chain-freeing UPDATE whose new chain allocates past <c>firstFreeBefore</c>'s global-map byte (not recorded;
+    /// also verifies <see cref="PageCache.KnownExtentPages"/> is not raised by the refused compilation so a subsequent
+    /// valid UPDATE in the same session still succeeds),
+    /// (4a/4b/4c) a chain-freeing UPDATE paired with another allocation in the same session (prior allocation, subsequent
+    /// allocation while a reservation is pending, or earlier row in one multi-row UPDATE),
+    /// (5a/5b) 0-allocation extent reservation at <c>firstFreeBefore % 8 == 0</c> or <c>7</c>,
+    /// (6a/6b/6c/6d) chain -&gt; inline (&lt;= 64B) on UPDATE, Long Binary (OLE) chain removal on UPDATE/DELETE,
+    /// chain-freeing UPDATE inside <c>BeginTrans</c>, and multi-LV-column UPDATE freeing a chain,
     /// (2) MEMO WITH COMPRESSION (lv-memo-comp-100, -1908, -1909),
     /// (3) two LV free-map pages with room (lv-two-free-lower-looser-100, -250, -400, -1400, -1500, -same-session:
     /// inserts 1–3 replay byte-for-byte, insert 4 refuses by name).
@@ -1658,18 +1728,10 @@ public sealed class KeptPageReplayTests
     [Fact]
     public void Long_values_r_q22_open_cases_refuse_by_name()
     {
-        // 1. UPDATE freeing a chain: refused by name (UPDATE takes a page-1 allocation reservation returned at Close).
-        foreach ((string card, string question, int newBytes) in new[]
+        // 1. A second chain-freeing UPDATE in the same session while the first UPDATE's page-1 reservation is still
+        // active: refused by name rather than guessing how ACE reuses or extends an active reservation.
         {
-            ("r-q22-lv-open", "lv-free-timing-update-chain-smaller", 4500),
-            ("r-q22-lv-open", "lv-free-timing-update-chain-to-single", 100),
-            ("r-q19-growth-open", "lv-op-chain-larger", 6000),
-            ("r-q19-growth-open", "lv-op-chain-smaller", 4500),
-            ("r-q19-growth-open", "lv-op-chain-to-single", 100),
-            ("r-q19-growth-open", "lv-op-chain-null", 0),
-        })
-        {
-            byte[] image = SeedGrowthOpen(question, card);
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-smaller", "r-q22-lv-open");
             using var s = new Session(image);
             TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
             using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
@@ -1680,24 +1742,480 @@ public sealed class KeptPageReplayTests
             {
             }
             Assert.False(cur.Eof);
-            Assert.True(frame.Edit().Succeeded);
-            nint owned = 0;
-            NativeVariant val = newBytes == 0 ? new NativeVariant { Vt = (ushort)VarType.Null } : MakeLvVariant(memo: true, newBytes, out owned);
-            try
+            using (StatementScope stmt = s.Workspace.BeginStatement())
             {
-                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
-                UpdateOutcome refused = frame.Update();
-                Assert.False(refused.Succeeded, $"{card}/{question} should refuse");
-                Assert.Equal(MutationOpen.Publication, refused.Open);
-                Assert.Contains("frees a chained long value", refused.Detail);
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant first = MakeLvVariant(memo: true, 4500, out nint owned1);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], first).Succeeded);
+                    UpdateOutcome ok = frame.Update();
+                    Assert.True(ok.Succeeded && ok.Change?.Physical is not null, $"{ok} / {ok.Change?.NotWritten}");
+                }
+                finally
+                {
+                    Bstrs.Free(owned1);
+                }
+                Assert.Equal(MutationOpen.None, stmt.Complete().Open);
             }
-            finally
+            // Second SQL UPDATE in the same open session freeing the new chain while pages 47..48 are free inside
+            // the extent (and pages 51..79 are reserved in page 1): refused by name.
+            using (StatementScope stmt2 = s.Workspace.BeginStatement())
             {
-                if (owned != 0)
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant second = MakeLvVariant(memo: true, 100, out nint owned2);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], second).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "second chain-freeing UPDATE in same open session should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("earlier allocation, free, or page-1 reservation", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned2);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt2.Complete();
+            }
+        }
+
+        // 1b. SQL UPDATE replacing a chain by a single-row value that does not fit on existing LV free page 45
+        // (1,978B free) and therefore allocates a new LVAL page: refused by name.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-to-single", "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 2500, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chain -> new single-row LVAL page should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("allocates a new LVAL page", refused.Detail);
+                }
+                finally
                 {
                     Bstrs.Free(owned);
                 }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
             }
+        }
+
+        // 1c. SQL UPDATE freeing a chain whose new chain allocates past firstFreeBefore's global-map byte
+        // (firstFreeBefore = 49 in byte 6 [48..55]; a 32,000B payload allocates 8 chain pages 49..56 so
+        // maxAllocated = 56 lies in byte 7 != byte 6): refused by name without modifying the file or raising
+        // PageCache.KnownExtentPages, so a subsequent valid UPDATE in the same session still succeeds.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-smaller", "r-q22-lv-open");
+            using var s = new Session(image);
+            byte[] before = s.File.Snapshot();
+            ulong extentBefore = s.File.PageCount;
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 32_000, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chain allocation spilling into next global-map byte should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("spills past first free page", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
+            }
+            Assert.Equal(before, s.File.Snapshot());
+            Assert.True(s.Cache.KnownExtentPages <= extentBefore, $"refused compilation must not raise KnownExtentPages ({s.Cache.KnownExtentPages} > {extentBefore})");
+
+            // A valid 100B chain-freeing UPDATE in the same session still succeeds and keeps the extent unchanged.
+            using (StatementScope stmt2 = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant valid = MakeLvVariant(memo: true, 100, out nint owned2);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], valid).Succeeded);
+                    UpdateOutcome ok = frame.Update();
+                    Assert.True(ok.Succeeded && ok.Change?.Physical is not null, $"{ok} / {ok.Change?.NotWritten}");
+                }
+                finally
+                {
+                    Bstrs.Free(owned2);
+                }
+                Assert.Equal(MutationOpen.None, stmt2.Complete().Open);
+            }
+            Assert.True(s.Cache.KnownExtentPages <= extentBefore);
+        }
+
+        // 4a. Prior allocating INSERT followed by a chain-freeing SQL UPDATE in the same session: refused by name.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-smaller", "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            NativeVariant v4 = MakeLvVariant(memo: true, 5000, out nint owned4);
+            try
+            {
+                s.Insert(t, () => 0u, ("ID", I4(4)), ("V", v4));
+            }
+            finally
+            {
+                Bstrs.Free(owned4);
+            }
+            byte[] before = s.File.Snapshot();
+            TableDefinition tNow = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", tNow, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, tNow, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, tNow, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, tNow, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(tNow.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 100, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(tNow.Columns[1], val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chain-freeing UPDATE after earlier allocation should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("earlier allocation, free, or page-1 reservation", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
+            }
+            Assert.Equal(before, s.File.Snapshot());
+        }
+
+        // 4b. Chain-freeing SQL UPDATE followed by an allocating INSERT in the same session while the reservation
+        // is pending: refused by name without modifying the file.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-to-single", "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 100, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                    UpdateOutcome ok = frame.Update();
+                    Assert.True(ok.Succeeded && ok.Change?.Physical is not null, $"{ok} / {ok.Change?.NotWritten}");
+                }
+                finally
+                {
+                    Bstrs.Free(owned);
+                }
+                Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+            }
+            byte[] before = s.File.Snapshot();
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(t.Columns[0], I4(4)).Succeeded);
+            NativeVariant allocVal = MakeLvVariant(memo: true, 5000, out nint ownedAlloc);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], allocVal).Succeeded);
+                UpdateOutcome refused = frame.Update();
+                Assert.False(refused.Succeeded, "allocating INSERT while page-1 extent reservation is pending should refuse");
+                Assert.Equal(MutationOpen.Publication, refused.Open);
+                Assert.Contains("page-1 extent reservation is pending", refused.Detail);
+            }
+            finally
+            {
+                Bstrs.Free(ownedAlloc);
+            }
+            Assert.True(frame.CancelUpdate().Succeeded);
+            Assert.Equal(before, s.File.Snapshot());
+        }
+
+        // 4c. Multi-row SQL UPDATE in one statement where row 1 allocates pages and row 2 frees a chain: row 2 refuses by name.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-smaller", "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 1; cur.MoveNext())
+                {
+                }
+                Assert.False(cur.Eof);
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant row1Val = MakeLvVariant(memo: true, 5000, out nint owned1);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], row1Val).Succeeded);
+                    UpdateOutcome ok1 = frame.Update();
+                    Assert.True(ok1.Succeeded && ok1.Change?.Physical is not null, $"{ok1} / {ok1.Change?.NotWritten}");
+                }
+                finally
+                {
+                    Bstrs.Free(owned1);
+                }
+
+                for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+                {
+                }
+                Assert.False(cur.Eof);
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant row2Val = MakeLvVariant(memo: true, 100, out nint owned2);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], row2Val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "row 2 freeing a chain after row 1 allocated in same UPDATE should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("earlier allocation, free, or page-1 reservation", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned2);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+            }
+        }
+
+        // 5a & 5b. 0-allocation extent reservation at firstFreeBefore % 8 == 0 or 7: refused by name.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-to-single", "r-q22-lv-open");
+            byte[] page1 = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            var allocator = new PageAllocator(s.Cache, D, s.File.PageCount);
+
+            Assert.False(allocator.TryReserveExtent(48, page1, [], [], out string? err48));
+            Assert.Contains("starts a global-map byte", err48);
+
+            Assert.False(allocator.TryReserveExtent(55, page1, [], [], out string? err55));
+            Assert.Contains("last bit of its global-map byte", err55);
+        }
+
+        // 6a. Chain -> inline (<= 64B) on SQL UPDATE: refused by name without modifying the file.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-to-single", "r-q22-lv-open");
+            using var s = new Session(image);
+            byte[] before = s.File.Snapshot();
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 20, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chain -> inline (<= 64B) on UPDATE should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("by an inline", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
+            }
+            Assert.Equal(before, s.File.Snapshot());
+        }
+
+        // 6b. Long Binary (OLE) chain removal on SQL UPDATE and DELETE: refused by name without modifying the file.
+        {
+            byte[] seed = SeedGrowthOpen("lv-chain-3-pages", "r-q22-lv-open");
+            byte[] p1 = seed.AsSpan(D.PageSize, D.PageSize).ToArray();
+            byte[] oleImg;
+            using (var setup = new Session(seed))
+            {
+                TableDefinition tSetup = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => setup.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                setup.Insert(tSetup, () => 0u, ("ID", I4(1)), ("V", MakeLvVariant(memo: false, 5000, out _)));
+                CloseLvSession(setup, p1);
+                oleImg = setup.File.Snapshot();
+            }
+
+            using (var sUpd = new Session(oleImg))
+            {
+                TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => sUpd.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+                var ctx = new TableEditContext(semantics, new StoredUniqueProbe(sUpd.Cache, D, t, sUpd.File.PageCount), 7177, false, new TableFootprints(sUpd.Cache, D, t, sUpd.File.PageCount));
+                using TableCursor cur = TableCursor.Open(sUpd.Cache, D, t, sUpd.File.PageCount, 0, out _)!;
+                using var frame = new EditFrame(ctx, cur, sUpd.Workspace);
+                cur.MoveFirst();
+                Assert.False(cur.Eof);
+                using (StatementScope stmt = sUpd.Workspace.BeginStatement())
+                {
+                    Assert.True(frame.Edit().Succeeded);
+                    Assert.True(frame.Assign(t.Columns[1], new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chained OLE UPDATE should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("chained Long Binary (OLE)", refused.Detail);
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                    stmt.Complete();
+                }
+                Assert.Equal(oleImg, sUpd.File.Snapshot());
+            }
+
+            using (var sDel = new Session(oleImg))
+            {
+                TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => sDel.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+                var ctx = new TableEditContext(semantics, new StoredUniqueProbe(sDel.Cache, D, t, sDel.File.PageCount), 7177, false, new TableFootprints(sDel.Cache, D, t, sDel.File.PageCount));
+                using TableCursor cur = TableCursor.Open(sDel.Cache, D, t, sDel.File.PageCount, 0, out _)!;
+                using var frame = new EditFrame(ctx, cur, sDel.Workspace);
+                cur.MoveFirst();
+                Assert.False(cur.Eof);
+                UpdateOutcome refused = frame.Delete();
+                Assert.False(refused.Succeeded, "chained OLE DELETE should refuse");
+                Assert.Equal(MutationOpen.Publication, refused.Open);
+                Assert.Contains("chained Long Binary (OLE)", refused.Detail);
+                Assert.Equal(oleImg, sDel.File.Snapshot());
+            }
+        }
+
+        // 6c. Chain-freeing SQL UPDATE inside explicit BeginTrans: refused by name without modifying the file.
+        {
+            byte[] image = SeedGrowthOpen("lv-free-timing-update-chain-to-single", "r-q22-lv-open");
+            using var s = new Session(image);
+            byte[] before = s.File.Snapshot();
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            Assert.Null(s.Workspace.BeginTrans());
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                NativeVariant val = MakeLvVariant(memo: true, 100, out nint owned);
+                try
+                {
+                    Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "chain-freeing UPDATE inside BeginTrans should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("explicit transaction (BeginTrans)", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(owned);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
+            }
+            Assert.True(s.Workspace.Rollback().Succeeded);
+            Assert.Equal(before, s.File.Snapshot());
+        }
+
+        // 6d. Multi-LV-column SQL UPDATE freeing a chain: refused by name without modifying the file.
+        {
+            byte[] seed = SeedGrowthOpen("lv-inline-two-memos-60", "r-q22-lv-open");
+            byte[] p1 = seed.AsSpan(D.PageSize, D.PageSize).ToArray();
+            byte[] twoMemoImg;
+            using (var setup = new Session(seed))
+            {
+                TableDefinition tSetup = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => setup.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                NativeVariant m1 = MakeLvVariant(memo: true, 5000, out nint b1);
+                try
+                {
+                    setup.Insert(tSetup, () => 0u, ("ID", I4(1)), ("M1", m1), ("M2", new NativeVariant { Vt = (ushort)VarType.Null }));
+                }
+                finally
+                {
+                    Bstrs.Free(b1);
+                }
+                CloseLvSession(setup, p1);
+                twoMemoImg = setup.File.Snapshot();
+            }
+
+            using var s = new Session(twoMemoImg);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            ColumnDescriptor m1Col = t.Columns.Single(c => c.Name == "M1");
+            ColumnDescriptor m2Col = t.Columns.Single(c => c.Name == "M2");
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            cur.MoveFirst();
+            Assert.False(cur.Eof);
+            using (StatementScope stmt = s.Workspace.BeginStatement())
+            {
+                Assert.True(frame.Edit().Succeeded);
+                Assert.True(frame.Assign(m1Col, new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+                NativeVariant m2Val = MakeLvVariant(memo: true, 100, out nint b2);
+                try
+                {
+                    Assert.True(frame.Assign(m2Col, m2Val).Succeeded);
+                    UpdateOutcome refused = frame.Update();
+                    Assert.False(refused.Succeeded, "multi-LV-column UPDATE freeing a chain should refuse");
+                    Assert.Equal(MutationOpen.Publication, refused.Open);
+                    Assert.Contains("multiple long-value columns", refused.Detail);
+                }
+                finally
+                {
+                    Bstrs.Free(b2);
+                }
+                Assert.True(frame.CancelUpdate().Succeeded);
+                stmt.Complete();
+            }
+            Assert.Equal(twoMemoImg, s.File.Snapshot());
         }
 
         // 2. MEMO WITH COMPRESSION (ExtendedFlags = 0x01): refused by name via TextCodec.TryEncode.

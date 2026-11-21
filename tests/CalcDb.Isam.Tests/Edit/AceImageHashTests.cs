@@ -39,18 +39,15 @@ public sealed class AceImageHashTests
         /// <summary>One DAO session: its Workspace, the edits <paramref name="work"/> makes, then its Close.</summary>
         public void Session(Action<Session> work)
         {
-            byte[] page1 = Page1();
             using var s = new Session(File);
             work(s);
             s.CloseRecordsets();
             s.Ws.EndLazyBurst(File.Cache);
-            if (!Page1().AsSpan().SequenceEqual(page1) || s.Ws.ReleasesAtClose(File.Cache))
+            if (s.Ws.NeedsCloseCommit(File.Cache))
             {
-                Assert.Equal(MutationOpen.None, s.Ws.PublishCounterCommit(File.Cache).Open);
+                Assert.Equal(MutationOpen.None, s.Ws.PublishCloseCommit(File.Cache).Open);
             }
         }
-
-        private byte[] Page1() => File.Image.Snapshot().AsSpan(D.PageSize, D.PageSize).ToArray();
 
         public void Dispose() => File.Dispose();
     }
@@ -367,6 +364,37 @@ public sealed class AceImageHashTests
             Assert.True(updated.Succeeded && updated.Change?.Physical is not null, $"{updated} {updated.Change?.NotWritten}");
         });
         Assert.Equal("971f5828c4a7b0c388339b402a4e44cadba033c5fe96bedcd56f206625f95fa3", f.Sha);
+    }
+
+    /// <summary>
+    /// evidence/r-fmt-2b/mm-many-pages-to-short (503,808 B, hash ac184937...) and mm-many-pages-to-1page (507,904 B,
+    /// grew on a shrink, hash abac03b6...): DAO dynaset Edit/Update freeing a chained Memo writes different bytes from
+    /// SQL UPDATE and has no kept-page record (R-FMT-2 "LV form selection and Overflow / deletion" Open: "A recordset
+    /// Edit/Update instead of SQL"). Both refuse by name without modifying the file.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_chained_Memo_replaced_through_recordset_Edit_Update_refuses_by_name(bool toShortInline)
+    {
+        using var f = new FixtureFile();
+        string beforeSha = f.Sha;
+        f.Session(s =>
+        {
+            (EditFrame frame, PopulationCursor cursor, TableDefinition t) = s.OpenDynaset("Mm");
+            ColumnDescriptor id = t.Columns.Single(c => c.Name == "ID");
+            for (cursor.MoveFirst(); cursor.Read(id).Value.Integer != 4; cursor.MoveNext())
+            {
+            }
+            Assert.True(frame.Edit().Succeeded);
+            string replacement = toShortInline ? "twenty chars of text" : new string('€', 1000);
+            WithBstr(replacement, v => Assert.True(frame.Assign(t.Columns.Single(c => c.Name == "M"), v).Succeeded));
+            UpdateOutcome refused = frame.Update();
+            Assert.False(refused.Succeeded);
+            Assert.Equal(MutationOpen.Publication, refused.Open);
+            Assert.Contains("recordset Edit/Update", refused.Detail);
+        });
+        Assert.Equal(beforeSha, f.Sha);
     }
 
     private static readonly long[] Au1Ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

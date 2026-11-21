@@ -591,7 +591,14 @@ public sealed class EditFrame : IDisposable
         CompiledChange physical;
         if (mode == EditMode.Edit && _original is { } stored && _table.Writer is { } editWriter)
         {
-            physical = editWriter.Compile(s, stored, values, _workspace.OverlayOf(editWriter.File));
+            physical = editWriter.Compile(
+                s,
+                stored,
+                values,
+                _workspace.OverlayOf(editWriter.File),
+                inStatement: _workspace.InStatement,
+                inExplicitTransaction: _workspace.Depth > 0,
+                hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(editWriter.File));
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
@@ -1289,8 +1296,9 @@ public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, Table
             }
             keys[i] = new SeekKey(k);
         }
-        var source = new PageSource(cache, workspace.OverlayOf(cache));
-        using TableCursor? cursor = TableCursor.Open(source, d, table, Math.Max(pageCount, cache.KnownExtentPages), 0, out _);
+        PrivateOverlay? overlay = workspace.OverlayOf(cache);
+        var source = new PageSource(cache, overlay);
+        using TableCursor? cursor = TableCursor.Open(source, d, table, PageAllocator.ExtentOf(cache, pageCount, overlay), 0, out _);
         if (cursor is null || cursor.SetIndex(index.Logical.Name) != IndexRefusal.None)
         {
             return UniqueAnswer.NotModelled;

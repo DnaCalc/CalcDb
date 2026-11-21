@@ -93,7 +93,6 @@ internal sealed unsafe class DatabaseObject : DaoObject
         Format = profile.Descriptor;
         _extentPages = pageCount;
         Catalog = catalog;
-        _globalMapAtOpen = readOnly ? null : GlobalMapImage();
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -179,38 +178,6 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     /// <summary>The catalog as committed; read again after each published catalog change.</summary>
     public CatalogSnapshot Catalog { get; private set; }
-
-    /// <summary>
-    /// Whether a publication of this session changed the global allocation map: its Close then commits once more
-    /// (evidence/r-q11-ddl-closure: the page-0 counter ends one above the statements' commits in every session that
-    /// allocated, create-one-long 2, create-two-tables, create-then-index and create-then-drop 3; R-CRASH-1 CRASH-ORDER
-    /// issued order: "Close writes pending pages, page 1 and a 2-byte field of page 0"). Here page 1 was published with
-    /// the statement, so the Close writes the counter alone; whether the extra commit belongs to Close or to the first
-    /// allocation of the session is not decided by a record (the final bytes are the same). A row publication that took
-    /// a page changes page 1 too (R-FMT-2 Overflow, Page 0: +1 at Close when a free page was taken; r-q16-overflow): Close
-    /// sees it by page 1's committed image against <see cref="_globalMapAtOpen"/>.
-    /// </summary>
-    private bool _globalMapChanged;
-
-    /// <summary>Page 1 (the global map) as committed when this writable session opened; null for a read-only one.</summary>
-    private readonly byte[]? _globalMapAtOpen;
-
-    /// <summary>The committed image of the global map page, or null when it cannot be pinned.</summary>
-    private byte[]? GlobalMapImage()
-    {
-        if (Cache.Pin(Format.Map.GlobalMapPage).Pin is not { } pin)
-        {
-            return null;
-        }
-        using (pin)
-        {
-            return pin.Bytes.ToArray();
-        }
-    }
-
-    /// <summary>Whether this session changed the global map: a catalog change, or a row publication that changed page 1.</summary>
-    private bool GlobalMapChanged => _globalMapChanged
-        || (_globalMapAtOpen is { } before && GlobalMapImage() is { } now && !before.AsSpan().SequenceEqual(now));
 
     /// <summary>
     /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
@@ -875,14 +842,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// A catalog change of this session was published: every one this slice writes changes the global allocation map (a
-    /// new table or index allocates, a drop frees), the extent grows to what it allocated, the catalog is read again
+    /// A catalog change of this session was published: the extent grows to what it allocated, the catalog is read again
     /// from the committed images, and the one TableDefs collection lists its members again (r-q15-ddl-open/lv-rewrite-
     /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
     /// </summary>
     private string? SchemaPublished(ulong extentPages)
     {
-        _globalMapChanged = true;
         _extentPages = Math.Max(_extentPages, extentPages);
         if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
         {
@@ -1074,12 +1039,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _recordsets.Clear();
         _workspace.Transactions.EndLazyBurst(Cache);
         CallResult closing = CallResult.Nothing;
-        // A DELETE without WHERE released its data pages: the closing commit sets their global-map bits, also when page 1
-        // is otherwise unchanged (zfrp; R-FMT-2; evidence/r-q17-growth/retire-delete-au1-read-open).
-        if (GlobalMapChanged || _workspace.Transactions.ReleasesAtClose(Cache))
+        // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
+        // ReleasedAtClose pages (deferred page frees or page-1 reservation return): Close commits once more and sets
+        // those global-map free bits (jh6s, nv5x, zfrp; R-CRASH-1, R-FMT-2; evidence/r-q11-ddl-closure,
+        // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
+        // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
+        // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
+        if (_workspace.Transactions.NeedsCloseCommit(Cache))
         {
-            _globalMapChanged = false;
-            (MutationOpen open, string? detail) = _workspace.Transactions.PublishCounterCommit(Cache);
+            (MutationOpen open, string? detail) = _workspace.Transactions.PublishCloseCommit(Cache);
             if (open != MutationOpen.None)
             {
                 closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
