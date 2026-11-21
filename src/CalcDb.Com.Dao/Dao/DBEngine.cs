@@ -134,10 +134,8 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
         }
     }
 
-    private static long s_lockers;
-
     /// <summary>A locker identity for a new Workspace: each Workspace is a locker of its own (II-09; D-TXN-1), unique in the process.</summary>
-    public static LockerId NextLocker() => new((ulong)Interlocked.Increment(ref s_lockers));
+    public static LockerId NextLocker() => ComDatabaseSession.NextLocker();
 }
 
 /// <summary>

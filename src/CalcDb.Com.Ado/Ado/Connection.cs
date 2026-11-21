@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
-using CalcDb.Com.Dao;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
 using CalcDb.Expressions;
@@ -192,7 +191,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         EngineType = engineType;
         LockingMode = lockingMode;
         OpenInitValues = openInitValues;
-        Transactions = new TransactionCoordinator(EngineState.NextLocker())
+        Transactions = new TransactionCoordinator(ComDatabaseSession.NextLocker())
         {
             Publisher = _core,
             WaitPolicy = LockWaitPolicy.Default,

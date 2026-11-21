@@ -4,7 +4,7 @@ using CalcDb.Values;
 namespace CalcDb.Com.Com;
 
 /// <summary>Reading the borrowed arguments of an operation; VARIANT parameters are coerced through the foundation.</summary>
-internal static unsafe class Args
+public static unsafe class Args
 {
     public static NativeVariant* Cell(nint arg) => (NativeVariant*)arg;
 

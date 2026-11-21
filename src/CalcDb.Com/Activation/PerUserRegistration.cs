@@ -74,6 +74,7 @@ internal static class PerUserRegistration
     /// </summary>
     public static Plan For(string module, RegistryKey merged)
     {
+        ComLibraries.EnsureRegistered();
         var keys = new List<PlannedKey>();
         var skipped = new List<string>();
         var conflicts = new List<string>();
@@ -143,6 +144,7 @@ internal static class PerUserRegistration
     /// </summary>
     public static int Register()
     {
+        ComLibraries.EnsureRegistered();
         if (NativeModule.File is not { } module
             || DeclarationIndex.Libraries.Any(l => !File.Exists(Path.Combine(Path.GetDirectoryName(module)!, TypeLibrary.ImageFile(l)))))
         {

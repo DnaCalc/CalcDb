@@ -10,8 +10,10 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="CalcDb.Values.Tests" />
-    <!-- CalcDb.Com (assembly CalcDb) calls the one oleaut32 declarations class for error info and type libraries. -->
-    <InternalsVisibleTo Include="CalcDb" />
+    <!-- CalcDb.Com.Core and CalcDb.Com.Ado call OleAut; CalcDb.Com.Dao calls OwnedVariant.Adopt. -->
+    <InternalsVisibleTo Include="CalcDb.Com.Core" />
+    <InternalsVisibleTo Include="CalcDb.Com.Dao" />
+    <InternalsVisibleTo Include="CalcDb.Com.Ado" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
