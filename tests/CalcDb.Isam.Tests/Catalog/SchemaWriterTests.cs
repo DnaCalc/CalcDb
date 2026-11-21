@@ -51,7 +51,7 @@ public sealed class SchemaWriterTests
                         reads.Add((offset.GetInt64(), data));
                     }
                 }
-                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
+                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() is "after-close" or "after-create-close" && e.TryGetProperty("files", out JsonElement files))
                 {
                     length = files[0].GetProperty("length").GetInt64();
                 }
@@ -149,8 +149,13 @@ public sealed class SchemaWriterTests
         return (entry.DateCreateBits!.Value, entry.DateUpdateBits!.Value);
     }
 
-    /// <summary>Every kept page equals ACE's, no other page changed, and the length is ACE's.</summary>
-    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours)
+    /// <summary>Every kept page equals ACE's (outside any declared clock spans), no other page changed, and the length is ACE's.</summary>
+    private static void AssertAsAce(
+        Kept kept,
+        byte[] fixture,
+        byte[] ours,
+        IReadOnlySet<long>? allowedUnkeptPages = null,
+        IReadOnlyList<(long Page, int Start, int Length)>? ignoredClockSpans = null)
     {
         byte[] ace = kept.AceImage(fixture);
         Assert.Equal(kept.Length, ours.Length);
@@ -164,18 +169,36 @@ public sealed class SchemaWriterTests
                 ReadOnlySpan<byte> theirs = ace.AsSpan((int)(page * D.PageSize), D.PageSize);
                 for (int i = 0; i < D.PageSize; i++)
                 {
-                    if (mine[i] != theirs[i])
+                    if (mine[i] != theirs[i] && !IsIgnored(ignoredClockSpans, page, i))
                     {
                         differences.Add($"page {page} +{i}: ours {mine[i]:X2}, ACE {theirs[i]:X2}");
                     }
                 }
             }
-            else if (page * D.PageSize < fixture.Length && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
+            else if ((allowedUnkeptPages is null || !allowedUnkeptPages.Contains(page))
+                && page * D.PageSize < fixture.Length
+                && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
             {
                 differences.Add($"page {page} changed, and ACE's record does not keep it");
             }
         }
         Assert.True(differences.Count == 0, $"{differences.Count} differences:\n" + string.Join("\n", differences.Take(40)));
+    }
+
+    private static bool IsIgnored(IReadOnlyList<(long Page, int Start, int Length)>? spans, long page, int offset)
+    {
+        if (spans is null)
+        {
+            return false;
+        }
+        foreach ((long p, int start, int length) in spans)
+        {
+            if (p == page && offset >= start && offset < start + length)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static NewField Long(string name) => new(name, NewFieldType.Long);
@@ -467,4 +490,218 @@ public sealed class SchemaWriterTests
         Assert.Equal(MutationOpen.Publication, unmodelledIdx.Accepted.Open);
         Assert.Contains("R-PRESERVE-1", unmodelledIdx.Accepted.Detail);
     }
+
+    private static NewField Text(string name, int size = 10) => new(name, NewFieldType.Text, Size: size);
+
+    /// <summary>All 14 SQL shapes of evidence/r-q26-column-order (definition-order column blocks, names, numbering and offsets).</summary>
+    public static TheoryData<string, CreateTableRequest> RQ26SqlCreateTableCases() => new()
+    {
+        { "sql-ab-long", new("T", [Long("A"), Long("B")], SchemaRoute.Sql) },
+        { "sql-ab-text", new("T", [Text("A"), Text("B")], SchemaRoute.Sql) },
+        { "sql-ba-long", new("T", [Long("B"), Long("A")], SchemaRoute.Sql) },
+        { "sql-ba-text", new("T", [Text("B"), Text("A")], SchemaRoute.Sql) },
+        { "sql-bca-long", new("T", [Long("B"), Long("C"), Long("A")], SchemaRoute.Sql) },
+        { "sql-bca-mixed", new("T", [Text("B"), Long("C"), Text("A")], SchemaRoute.Sql) },
+        { "sql-case-B-a", new("T", [Long("B"), Long("a")], SchemaRoute.Sql) },
+        { "sql-case-lower-b-A", new("T", [Long("b"), Long("A")], SchemaRoute.Sql) },
+        { "sql-cba-long", new("T", [Long("C"), Long("B"), Long("A")], SchemaRoute.Sql) },
+        { "sql-fixed-var-ab", new("T", [Long("A"), Text("B")], SchemaRoute.Sql) },
+        { "sql-fixed-var-ba", new("T", [Long("B"), Text("A")], SchemaRoute.Sql) },
+        { "sql-prefix-AB-A", new("T", [Long("AB"), Long("A")], SchemaRoute.Sql) },
+        { "sql-var-fixed-ab", new("T", [Text("A"), Long("B")], SchemaRoute.Sql) },
+        { "sql-var-fixed-ba", new("T", [Text("B"), Long("A")], SchemaRoute.Sql) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ26SqlCreateTableCases))]
+    public void R_q26_sql_create_table_writes_ACE_pages(string question, CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q26-column-order");
+        byte[] fixture = Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    /// <summary>All 6 DAO Long shapes of evidence/r-q26-column-order (definition-order TableDef and per-field LvProp commits).</summary>
+    public static TheoryData<string, CreateTableRequest> RQ26DaoLongCreateTableCases() => new()
+    {
+        { "dao-ab-long", new("T", [Long("A"), Long("B")], SchemaRoute.Dao) },
+        { "dao-ba-long", new("T", [Long("B"), Long("A")], SchemaRoute.Dao) },
+        { "dao-case-b-A", new("T", [Long("b"), Long("A")], SchemaRoute.Dao) },
+        { "dao-prefix-AB-A", new("T", [Long("AB"), Long("A")], SchemaRoute.Dao) },
+        { "dao-bca-long", new("T", [Long("B"), Long("C"), Long("A")], SchemaRoute.Dao) },
+        { "dao-cba-long", new("T", [Long("C"), Long("B"), Long("A")], SchemaRoute.Dao) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ26DaoLongCreateTableCases))]
+    public void R_q26_dao_long_create_table_writes_ACE_pages(string question, CreateTableRequest request) =>
+        AssertDaoCreateTableMatchesAce("r-q26-column-order", question, request);
+
+    /// <summary>Non-alphabetical and multi-field DAO LvProp shapes of evidence/r-q15-ddl-open.</summary>
+    public static TheoryData<string, CreateTableRequest> RQ15ColumnOrderAndDaoCases() => new()
+    {
+        { "columns-z-a", new("T", [Long("z"), Long("a")], SchemaRoute.Sql) },
+        { "columns-z-a-dao", new("T", [Long("z"), Long("a")], SchemaRoute.Dao) },
+        { "lv-dao-name-8", new("T", [Long("nnnnnnnn")], SchemaRoute.Dao) },
+        { "lv-dao-fields-2", new("T", [Long("a"), Long("b")], SchemaRoute.Dao) },
+        { "lv-dao-fields-3", new("T", [Long("a"), Long("b"), Long("c")], SchemaRoute.Dao) },
+        { "lv-dao-fields-4", new("T", [Long("a"), Long("b"), Long("c"), Long("d")], SchemaRoute.Dao) },
+        { "lv-dao-fields-6", new("T", [Long("a"), Long("b"), Long("c"), Long("d"), Long("e"), Long("f")], SchemaRoute.Dao) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ15ColumnOrderAndDaoCases))]
+    public void R_q15_column_order_and_dao_lvprop_write_ACE_pages(string question, CreateTableRequest request)
+    {
+        if (request.Route == SchemaRoute.Dao)
+        {
+            AssertDaoCreateTableMatchesAce("r-q15-ddl-open", question, request);
+            return;
+        }
+        Kept kept = Kept.Of(question, "r-q15-ddl-open");
+        byte[] fixture = Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    /// <summary>
+    /// Replay one DAO Long TableDefs.Append against ACE's kept pages: verifies page 42 (TableDef), page 44 (LVAL),
+    /// page 0 (N+2 commits), page 1, page 17 (including Commit 2's vacated inline prefix outside its 8-byte DateUpdate
+    /// clock field), and verifies unkept page 6 changed only at the two MSysObjects.LvProp map bits for LVAL page 44.
+    /// </summary>
+    private static void AssertDaoCreateTableMatchesAce(string card, string question, CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, card);
+        byte[] fixture = Fixture();
+        byte[] ace = kept.AceImage(fixture);
+        (ulong created, ulong updated) = AceDates(ace, request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+
+        CatalogSnapshot catalog = CatalogBootstrap.Open(session.Cache, D, session.Pages, out _)!;
+        CatalogEntry entry = catalog.Entries.Single(e => e.Name == request.Name && e.ParentId == catalog.TablesContainer);
+        ColumnDescriptor lvProp = catalog.ObjectTable.Columns.Single(c => c.Name == "LvProp");
+        LvalColumnMapSpec lvMaps = catalog.ObjectTable.LongValueMaps.Single(m => m.PhysicalNumber == lvProp.PhysicalNumber);
+
+        // When LvProp spills to LVAL page 44, MSysObjects.LvProp's usage maps on page 6 (unkept by these probes) gain
+        // page 44 in both owned and free maps. Verify page 6 changed at those exact two bits and nowhere else.
+        HashSet<long>? allowedUnkept = null;
+        if (ours.Length > 44 * D.PageSize)
+        {
+            Assert.Equal(lvMaps.OwnedMap.Page, lvMaps.FreeMap.Page);
+            uint mapPage = lvMaps.OwnedMap.Page;
+            allowedUnkept = [mapPage];
+            byte[] expectedMapPage = fixture.AsSpan((int)(mapPage * D.PageSize), D.PageSize).ToArray();
+            Assert.True(MapPages.TryInlineBit(expectedMapPage, lvMaps.OwnedMap.Row, 44, D, out int ownOff, out byte ownMask, out _));
+            Assert.True(MapPages.TryInlineBit(expectedMapPage, lvMaps.FreeMap.Row, 44, D, out int freeOff, out byte freeMask, out _));
+            expectedMapPage[ownOff] |= ownMask;
+            expectedMapPage[freeOff] |= freeMask;
+            Assert.True(ours.AsSpan((int)(mapPage * D.PageSize), D.PageSize).SequenceEqual(expectedMapPage), $"{card}/{question}: unkept map page {mapPage} differed outside LvProp bits for page 44");
+        }
+
+        // When Commit 2 wrote an inline 1-field LvProp (<= 64 bytes) and Commit 3 spilled to LVAL page 44, the vacated
+        // prefix on page 17 holds Commit 2's 8-byte DateUpdate clock reading (which can differ by clock ticks from
+        // Commit N+1's live DateUpdate). Ignore only that 8-byte clock span after verifying it is a nearby clock value.
+        List<(long Page, int Start, int Length)>? clockSpans = null;
+        if (request.Fields.Count >= 2)
+        {
+            PropertyMap firstMap = new(PropertySectionKind.ColumnValues, request.Fields[0].Name, [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [0x00])]);
+            byte[] firstBlob = PropertyBlob.Encode([firstMap]);
+            if (firstBlob.Length <= LongValuePlan.InlinePayloadMax)
+            {
+                using PagePin objPin = session.Cache.Pin(entry.Root.Page).Pin!;
+                SlotView liveSlot = DataPages.CheckedSlot(objPin.Bytes, entry.Root.Row, D, out _)!.Value;
+                int inlineGrowth = firstBlob.Length; // inline LvProp (12 + len) vs external LVAL reference (12)
+                int ghostStart = liveSlot.Start - inlineGrowth;
+                int dateUpdateOff = ghostStart + D.Row.FixedBase + catalog.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+                ulong aceGhostDateUpdate = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + dateUpdateOff);
+                TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceGhostDateUpdate)) - DateTime.FromOADate(BitConverter.UInt64BitsToDouble(updated));
+                Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"{card}/{question}: ghost DateUpdate differed from live DateUpdate by {delta}");
+                clockSpans = [(entry.Root.Page, dateUpdateOff, 8)];
+            }
+        }
+
+        AssertAsAce(kept, fixture, ours, allowedUnkept, clockSpans);
+    }
+
+    [Fact]
+    public void R_q26_dao_non_long_shapes_stay_refused_by_name()
+    {
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaWriter w = session.Writer();
+        CreateTableRequest[] refused =
+        [
+            new("T", [Text("B"), Text("A")], SchemaRoute.Dao),
+            new("T", [Text("B"), Long("A")], SchemaRoute.Dao),
+            new("T", [Long("B"), Text("A")], SchemaRoute.Dao),
+            new("T", [Text("B"), Long("C"), Text("A")], SchemaRoute.Dao),
+        ];
+        foreach (CreateTableRequest req in refused)
+        {
+            SchemaRefusal? check = w.Check(req);
+            Assert.NotNull(check);
+            Assert.Null(check.Value.Error);
+            Assert.NotNull(check.Value.NotWritten);
+        }
+    }
+
+    [Fact]
+    public void Duplicate_field_names_follow_ACE_recorded_route_and_pair_rules()
+    {
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaWriter w = session.Writer();
+
+        // SQL CREATE TABLE: exact, ASCII case, non-ASCII case, and NFC/NFD duplicates are 3380
+        // (evidence/r-cat-1/names, evidence/r-def-expr-sql/ddl-column-clauses,
+        // evidence/r-q-cat-txn-lock/cat-b-names-fields-indexes-relations, evidence/r-q-cat-txn-lock/cat-b-names-normalization).
+        foreach ((string first, string second) in new[] { ("A", "A"), ("a", "A"), ("F\u00e9", "F\u00c9"), ("F\u00e9", "Fe\u0301") })
+        {
+            SchemaOutcome outcome = w.CreateTable(session.Workspace, new("DupSql", [Long(first), Long(second)], SchemaRoute.Sql), 1, 1);
+            Assert.False(outcome.Succeeded);
+            Assert.Equal(3380, outcome.Refused?.Error);
+            Assert.Null(outcome.Refused?.NotWritten);
+        }
+        Assert.Equal(fixture, session.File.Snapshot());
+
+        // DAO draft TableDefs.Append (evidence/r-dao-1-err-1/draft-tabledef-field fails 3125 earlier; 3191 is recorded
+        // only for attached TableDef.Fields.Append) and ADO CREATE TABLE stay refused by name on duplicate fields.
+        foreach (SchemaRoute route in new[] { SchemaRoute.Dao, SchemaRoute.Ado })
+        {
+            foreach ((string first, string second) in new[] { ("Aa", "aA"), ("F\u00e9", "F\u00c9"), ("T\u00e9", "Te\u0301") })
+            {
+                SchemaRefusal? refused = w.Check(new("DupOther", [Long(first), Long(second)], route));
+                Assert.NotNull(refused);
+                Assert.Null(refused.Value.Error);
+                Assert.NotNull(refused.Value.NotWritten);
+            }
+        }
+
+        // Accent-only pairs (same base letter, different diacritics) are unprobed (R-CAT-1 CAT-B Open) and stay refused by name.
+        foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao, SchemaRoute.Ado })
+        {
+            foreach ((string first, string second) in new[] { ("e", "\u00e9"), ("\u00e4", "\u00e1") })
+            {
+                SchemaRefusal? refused = w.Check(new("AccentPair", [Long(first), Long(second)], route));
+                Assert.NotNull(refused);
+                Assert.Null(refused.Value.Error);
+                Assert.NotNull(refused.Value.NotWritten);
+            }
+        }
+
+        // Distinct accented letters (Tä vs Té, evidence/r-cat-1/names) are two distinct fields and succeed.
+        Assert.Null(w.Check(new("DistinctAccentSql", [Long("T\u00e4"), Long("T\u00e9")], SchemaRoute.Sql)));
+        Assert.Null(w.Check(new("DistinctAccentDao", [Long("T\u00e4"), Long("T\u00e9")], SchemaRoute.Dao)));
+    }
 }
+
