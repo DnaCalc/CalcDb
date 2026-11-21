@@ -393,6 +393,10 @@ public sealed class EditFrame : IDisposable
                     return EditOutcome.NotModelled(open, detail);
                 }
             }
+            if (_workspace.Depth > 0 && _table.Writer is { } txnWriter && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
+            {
+                _workspace.RecordConsumedAutoNumber(txnWriter.File, s.Table.FirstPage, unchecked((uint)(int)newTicket.Value), counter.Increment, reseed: false);
+            }
         }
         ReleaseTicket();
         // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
@@ -524,9 +528,14 @@ public sealed class EditFrame : IDisposable
             {
                 return new UpdateOutcome(null, MutationOpen.CheckOrder, $"a check fails ({failure.Error?.Number}) at depth {_workspace.Depth}, where an Update also meets 3003");
             }
-            // R-FMT-2 II-05 & R-CRASH-1 CRASH-ORDER (evidence/r-q-fmt-sort/dc-rules-accdb, evidence/r-q10-commit-counter-edits):
-            // a refused 3022 unique insert on AddNew persists UniqueEntryCount increments of physical indexes strictly
-            // before the refusing index, any higher explicit AutoNumber floor, and an immediate +1 on ACCDB page 0 offset 3586.
+            // R-FMT-2 II-05, R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q-fmt-sort/dc-rules-accdb,
+            // evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain, ins-dup-plain-txn,
+            // ins-dup-fail, ins-dup-fail-txn): a refused 3022 unique insert on AddNew persists UniqueEntryCount
+            // increments of physical indexes strictly before the refusing index, the AutoNumber floor (or downward/
+            // upward explicit reseed under unit increment: evidence/r-q-expr-sql/act-ins-autonumber call 349,
+            // evidence/r-q-fmt-sort/auto-cancel-fail-accdb call 257, evidence/r-sql-2-3/act-ins-defaults calls 81, 91),
+            // and outside a SQL statement commits immediately (+1 on ACCDB page 0 offset 3586); inside a SQL statement
+            // it folds into the statement's or transaction's single write group.
             if (failure.Error?.Number == MutationError.Duplicate
                 && Mode == EditMode.AddNew
                 && refusingPhysical is int refPhys
@@ -538,30 +547,59 @@ public sealed class EditFrame : IDisposable
                 {
                     candidateValues[i] = CandidateValue(i);
                 }
+                bool explicitRefuseAuto = false;
+                bool reseedRefuseAuto = false;
                 uint? autoFloor = null;
                 if (s.AutoNumber is { } autoCol && candidateValues[autoCol.Ordinal].Kind == NativeKind.Long)
                 {
+                    explicitRefuseAuto = _cells[autoCol.Ordinal].Assigned;
                     long assignedValue = candidateValues[autoCol.Ordinal].Integer;
-                    long floor = _table.Counter is { } c
-                        ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
-                        : assignedValue;
-                    if (floor is >= int.MinValue and <= int.MaxValue)
+                    if (explicitRefuseAuto && _table.Counter is { Increment: 1 })
                     {
-                        autoFloor = unchecked((uint)(int)floor);
+                        reseedRefuseAuto = true;
+                        if (assignedValue is >= int.MinValue and <= int.MaxValue)
+                        {
+                            autoFloor = unchecked((uint)(int)assignedValue);
+                        }
+                    }
+                    else
+                    {
+                        long floor = _table.Counter is { } c
+                            ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
+                            : assignedValue;
+                        if (floor is >= int.MinValue and <= int.MaxValue)
+                        {
+                            autoFloor = unchecked((uint)(int)floor);
+                        }
                     }
                 }
-                CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File));
+                CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File), reseedRefuseAuto);
                 if (sideEffect.Change is not { } sideCompiled)
                 {
                     return new UpdateOutcome(null, MutationOpen.Publication, sideEffect.NotWritten);
                 }
-                (MutationOpen open, string? detail) = _workspace.PublishNonTransactional(
-                    refuseWriter.File,
-                    sideCompiled.Edits,
-                    sideCompiled.Footprint,
-                    CommitMode.Immediate,
-                    ConflictSource,
-                    out MutationError? pubError);
+                MutationOpen open;
+                string? detail;
+                MutationError? pubError;
+                if (_workspace.InStatement)
+                {
+                    (open, detail) = _workspace.RecordStatementSideEffect(
+                        refuseWriter.File,
+                        sideCompiled.Edits,
+                        sideCompiled.Footprint,
+                        ConflictSource,
+                        out pubError);
+                }
+                else
+                {
+                    (open, detail) = _workspace.PublishNonTransactional(
+                        refuseWriter.File,
+                        sideCompiled.Edits,
+                        sideCompiled.Footprint,
+                        CommitMode.Immediate,
+                        ConflictSource,
+                        out pubError);
+                }
                 if (pubError is not null)
                 {
                     return new UpdateOutcome(pubError);
@@ -572,7 +610,19 @@ public sealed class EditFrame : IDisposable
                 }
                 if (s.AutoNumber is { } autoCol2 && _table.Counter is { } refuseCounter && candidateValues[autoCol2.Ordinal].Kind == NativeKind.Long)
                 {
-                    refuseCounter.Observe(candidateValues[autoCol2.Ordinal].Integer);
+                    long val = candidateValues[autoCol2.Ordinal].Integer;
+                    if (explicitRefuseAuto)
+                    {
+                        refuseCounter.Reseed(val);
+                    }
+                    else
+                    {
+                        refuseCounter.Observe(val);
+                    }
+                    if (autoFloor is { } floorVal && _workspace.Depth > 0)
+                    {
+                        _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto);
+                    }
                 }
             }
             return failure;
@@ -605,6 +655,9 @@ public sealed class EditFrame : IDisposable
         // Workspace sees them, its closure locked with the footprint's lifetime; then the operation frame of the
         // Workspace and the accepted change (II-08 §3).
         EditMode mode = Mode;
+        bool explicitInsertAuto = false;
+        bool reseedInsertAuto = false;
+        uint? acceptedAutoFloor = null;
         CompiledChange physical;
         if (mode == EditMode.Edit && _original is { } stored && _table.Writer is { } editWriter)
         {
@@ -619,19 +672,30 @@ public sealed class EditFrame : IDisposable
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
-            uint? autoFloor = null;
             if (s.AutoNumber is { } autoCol && values[autoCol.Ordinal].Kind == NativeKind.Long)
             {
+                explicitInsertAuto = assigned[autoCol.Ordinal];
                 long assignedValue = values[autoCol.Ordinal].Integer;
-                long floor = _table.Counter is { } c
-                    ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
-                    : assignedValue;
-                if (floor is >= int.MinValue and <= int.MaxValue)
+                if (explicitInsertAuto && _table.Counter is { Increment: 1 })
                 {
-                    autoFloor = unchecked((uint)(int)floor);
+                    reseedInsertAuto = true;
+                    if (assignedValue is >= int.MinValue and <= int.MaxValue)
+                    {
+                        acceptedAutoFloor = unchecked((uint)(int)assignedValue);
+                    }
+                }
+                else
+                {
+                    long floor = _table.Counter is { } c
+                        ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
+                        : assignedValue;
+                    if (floor is >= int.MinValue and <= int.MaxValue)
+                    {
+                        acceptedAutoFloor = unchecked((uint)(int)floor);
+                    }
                 }
             }
-            physical = insertWriter.CompileInsert(s, values, autoFloor, _workspace.OverlayOf(insertWriter.File));
+            physical = insertWriter.CompileInsert(s, values, acceptedAutoFloor, _workspace.OverlayOf(insertWriter.File), reseedInsertAuto);
         }
         else
         {
@@ -682,7 +746,19 @@ public sealed class EditFrame : IDisposable
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
-            counter.Observe(values[auto.Ordinal].Integer);
+            long val = values[auto.Ordinal].Integer;
+            if (assigned[auto.Ordinal])
+            {
+                counter.Reseed(val);
+            }
+            else
+            {
+                counter.Observe(val);
+            }
+            if (acceptedAutoFloor is { } floorVal && _workspace.Depth > 0 && _table.Writer is { } acceptWriter)
+            {
+                _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseedInsertAuto);
+            }
         }
         if (_ticket is not null)
         {
@@ -1277,22 +1353,24 @@ public sealed class EditFrame : IDisposable
         return default;
     }
 
+    // R-CAT-1, R-SQL-2, R-CURSOR-1 CUR-EDIT: ACE refuses "" with 3315 only when LvProp explicitly stores
+    // AllowZeroLength = False (evidence/r-cat-1b/field-zerolength-effect calls 11 [TP.ZlOff] and 18 [TP.Req];
+    // evidence/r-fix-cursor-dao/con-zero-length-required-failonerror [P.Req, LvProp set in
+    // evidence/r-err-1b/create-accdb-base call 35]). Columns storing no AllowZeroLength property in LvProp (SQL DDL
+    // columns) admit "" for both Required=False and Required=True, Text and Memo (evidence/r-sql-2-3/act-ins-defaults
+    // calls 11-12 [R.Z] and 31-32 [R.Req]; evidence/r-q-cursor-dao/edit-required-memo-addnew calls 56-67 [Rm.Mm];
+    // evidence/r-def-expr-sql/str-unique-index-acceptance [U.K]; evidence/r-fix-fmt-sort/fmt2-var-null-empty-ladder [T.N]).
     private UpdateOutcome ZeroLengthCheck()
     {
         MutationSemantics s = _table.Semantics;
         for (int i = 0; i < _cells.Length; i++)
         {
             ColumnSemantics c = s.Columns[i];
-            if (c.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo && CandidateValue(i) is { Kind: NativeKind.Text, Text.Length: 0 })
+            if (c.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo
+                && CandidateValue(i) is { Kind: NativeKind.Text, Text.Length: 0 }
+                && c.AllowZeroLength == false)
             {
-                if (c.AllowZeroLength is null)
-                {
-                    return new UpdateOutcome(null, MutationOpen.ZeroLength, $"{c.QualifiedName} stores no AllowZeroLength: its default for this column is not recorded");
-                }
-                if (c.AllowZeroLength == false)
-                {
-                    return Fail(MutationError.ZeroLength, c.QualifiedName);
-                }
+                return Fail(MutationError.ZeroLength, c.QualifiedName);
             }
         }
         return default;

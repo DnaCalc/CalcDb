@@ -314,16 +314,18 @@ public sealed class IndexEntryDelete(byte[] oldEntry, FormatDescriptor d) : IPag
 }
 
 /// <summary>In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1, R-FMT-2).</summary>
-public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, int[] decrementEntryCounts, FormatDescriptor d) : IPageDelta
+public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, int[] decrementEntryCounts, FormatDescriptor d, bool reseedAutoNumber = false) : IPageDelta
 {
-    public TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d)
-        : this(rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d)
+    public TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d, bool reseedAutoNumber = false)
+        : this(rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d, reseedAutoNumber)
     {
     }
 
     public int RowCountDelta => rowCountDelta;
 
     public uint? AutoNumberFloor => autoNumberFloor;
+
+    public bool ReseedAutoNumber => reseedAutoNumber;
 
     public IReadOnlyList<int> IncrementUniqueEntryCounts => incrementUniqueEntryCounts;
 
@@ -337,10 +339,85 @@ public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor
 
     public void Apply(Span<byte> decodedPage)
     {
-        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, decrementEntryCounts, d, out string? failure))
+        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
+        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, floorArg, incrementUniqueEntryCounts, decrementEntryCounts, d, out string? failure))
         {
             throw new FormatViolationException($"TableDef counts update: {failure}");
         }
+        if (reseedAutoNumber && autoNumberFloor is { } reseed)
+        {
+            d.TableDef.AutoNumber.Write(decodedPage, reseed);
+        }
+    }
+}
+
+/// <summary>
+/// Writes a TableDef page's reached counter words (RowCount, AutoNumber, and each physical index's UniqueEntryCount)
+/// without altering any other TableDef byte (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER;
+/// <c>evidence/r-q18-statements/ins-dup-fail</c>, <c>ins-dup-fail-txn</c>, <c>ins-dup-fail-count</c>).
+/// </summary>
+public sealed class TableDefCounterSnapshotDelta(uint rowCount, uint autoNumber, uint[] uniqueEntryCounts, FormatDescriptor d) : IPageDelta
+{
+    public uint RowCount => rowCount;
+
+    public uint AutoNumber => autoNumber;
+
+    public IReadOnlyList<uint> UniqueEntryCounts => uniqueEntryCounts;
+
+    public DeltaFootprint Footprint => DeltaFootprint.None;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (decodedPage.Length != d.PageSize || decodedPage[d.DataPage.Kind.Offset] != 0x02)
+        {
+            throw new FormatViolationException("TableDef counter snapshot: page is not a TableDef page");
+        }
+        d.TableDef.RowCount.Write(decodedPage, rowCount);
+        d.TableDef.AutoNumber.Write(decodedPage, autoNumber);
+        for (int idx = 0; idx < uniqueEntryCounts.Length; idx++)
+        {
+            int w1Off = TableDefUpdater.UniqueEntryCountOffset(idx, d);
+            if (w1Off + d.IndexDescriptor.UniqueEntryCount.Width <= d.PageSize)
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(decodedPage.Slice(w1Off, 4), uniqueEntryCounts[idx]);
+            }
+        }
+    }
+
+    public static TableDefCounterSnapshotDelta? Capture(ReadOnlySpan<byte> tableDefPage, FormatDescriptor d)
+    {
+        if (tableDefPage.Length != d.PageSize || tableDefPage[d.DataPage.Kind.Offset] != 0x02)
+        {
+            return null;
+        }
+        uint rows = (uint)d.TableDef.RowCount.Read(tableDefPage);
+        uint auto = (uint)d.TableDef.AutoNumber.Read(tableDefPage);
+        int realIndexes = (int)d.TableDef.RealIndexCount.Read(tableDefPage);
+        var uniqueCounts = new uint[realIndexes];
+        for (int idx = 0; idx < realIndexes; idx++)
+        {
+            if (!TableDefUpdater.TryReadUniqueEntryCount(tableDefPage, idx, d, out uniqueCounts[idx]))
+            {
+                return null;
+            }
+        }
+        return new TableDefCounterSnapshotDelta(rows, auto, uniqueCounts, d);
+    }
+}
+
+/// <summary>
+/// Marks a page modified in a publication without changing its bytes (e.g., ACCDB page 1 written unchanged in the
+/// write group of a Rollback or refused INSERT ... SELECT; <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>,
+/// <c>ins-dup-fail</c>, <c>ins-dup-fail-txn</c>).
+/// </summary>
+public sealed class NoOpPageDelta : IPageDelta
+{
+    public static NoOpPageDelta Instance { get; } = new();
+
+    public DeltaFootprint Footprint => DeltaFootprint.None;
+
+    public void Apply(Span<byte> decodedPage)
+    {
     }
 }
 
@@ -569,7 +646,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
     /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
-    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
+    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
         if (_pageCount == 0)
         {
@@ -764,11 +841,16 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, autoNumberFloor, incrementUnique, _d, out string? tdefFailure))
+        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, floorArg, incrementUnique, _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], _d), PageRole.Catalog));
+        if (reseedAutoNumber && autoNumberFloor is { } reseed)
+        {
+            _d.TableDef.AutoNumber.Write(tdefCopy, reseed);
+        }
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root), null);
     }
@@ -783,7 +865,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// stay unchanged).
     /// <list type="bullet">
     /// <item>When live rows remain on <paramref name="root"/>'s page, the page rejoins the FreeMap if it was not there
-    /// (evidence/r-q16-overflow/room-middle, noroom-middle-room-last; evidence/r-q20-delete-pages/slot-delete-*).</item>
+    /// (evidence/r-q16-overflow/room-middle-grow-row2-plus-30, noroom-middle-room-last-grow-row2-plus-30; evidence/r-q20-delete-pages/slot-delete-*).</item>
     /// <item>When deleting <paramref name="root"/> empties data page <c>P</c> and the table's FreeMap already holds a
     /// page <c>Q &lt; P</c> at that moment (from an earlier session or earlier in the same statement), <c>P</c> is
     /// compacted and released: type byte <c>0x01</c> &gt; <c>0x09</c>, cleared from the table's owned map and FreeMap,
@@ -931,8 +1013,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         else if (!freePages.Contains(root.Page))
         {
-            // A kept page outside the FreeMap rejoins it when one of its rows is deleted (evidence/r-q16-overflow/room-middle,
-            // noroom-middle-room-last; evidence/r-q20-delete-pages/slot-delete-*, where-empty-first, where-empty-middle,
+            // A kept page outside the FreeMap rejoins it when one of its rows is deleted (evidence/r-q16-overflow/room-middle-grow-row2-plus-30,
+            // noroom-middle-room-last-grow-row2-plus-30; evidence/r-q20-delete-pages/slot-delete-*, where-empty-first, where-empty-middle,
             // dynaset-empty-all-desc; evidence/r-q19-growth-open/split-empty-left-leaf page 45).
             if (MapBit(_table.FreeMap, root.Page, seen, out string? rejoinFailure) is not { } rejoined)
             {
@@ -1220,12 +1302,15 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// <summary>
     /// Compile the TableDef side effects of an <c>AddNew</c> whose <c>Update</c> is refused 3022 by unique physical
     /// index <paramref name="refusingPhysicalNumber"/> (R-FMT-2 II-05, evidence/r-q-fmt-sort/dc-rules-accdb,
-    /// evidence/r-q10-commit-counter-edits): each physical index strictly before <paramref name="refusingPhysicalNumber"/>
-    /// whose candidate key is not already present increments its UniqueEntryCount (word1, clamped to word0 while
-    /// word0 &gt; 0), and any explicit AutoNumber floor above the stored AutoNumber is persisted. Returns empty edits
-    /// when no TableDef word changes so the caller still commits the refused 3022's page-0 counter increment.
+    /// evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain): each physical index strictly
+    /// before <paramref name="refusingPhysicalNumber"/> whose candidate key is not already present increments its
+    /// UniqueEntryCount (word1, clamped to word0 while word0 &gt; 0), and any AutoNumber floor (or downward/upward
+    /// explicit reseed when <paramref name="reseedAutoNumber"/> is true: evidence/r-q-expr-sql/act-ins-autonumber
+    /// call 349, evidence/r-q-fmt-sort/auto-cancel-fail-accdb call 257, evidence/r-sql-2-3/act-ins-defaults calls 81
+    /// and 91) is persisted. Returns empty edits when no TableDef word changes so the caller still commits the refused
+    /// 3022's page-0 counter increment.
     /// </summary>
-    public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null)
+    public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
         List<int> incrementUnique = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number).OrderBy(g => g.Key))
@@ -1271,9 +1356,14 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, autoNumberFloor, incrementUnique, [], _d, out string? tdefFailure))
+        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, floorArg, incrementUnique, [], _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+        }
+        if (reseedAutoNumber && autoNumberFloor is { } reseed)
+        {
+            _d.TableDef.AutoNumber.Write(tdefCopy, reseed);
         }
         if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
         {
@@ -1281,7 +1371,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         return new CompiledChange(new PhysicalChange(
             _cache,
-            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [.. incrementUnique], [], _d), PageRole.Catalog)],
+            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog)],
             [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
     }
 

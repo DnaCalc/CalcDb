@@ -84,13 +84,29 @@ public sealed class AutoNumberCounter(uint stored, int increment = 1)
     }
 
     /// <summary>
-    /// Under unit increment, an explicit value accepted for the column moves the counter when it is higher
-    /// (qualified.md: an explicit ID 100 gives 101 next; an explicit duplicate refused with 3022 still sets it).
-    /// Explicit values under non-1 increments are refused before reaching here (qualified.md Open).
+    /// Under unit increment, a non-explicit or monotonic observation moves the counter only when <paramref name="value"/>
+    /// is higher than <see cref="Last"/> (preventing a concurrent recordset's earlier ticket from regressing the counter).
     /// </summary>
     public void Observe(long value)
     {
         if (Increment == 1 && value > _last)
+        {
+            _last = value;
+        }
+    }
+
+    /// <summary>
+    /// Under unit increment, an explicit value supplied for the AutoNumber column sets the counter to
+    /// <paramref name="value"/> whether higher or lower than <see cref="Last"/>, including when the insert is refused
+    /// 3022 (<c>evidence/r-q-expr-sql/act-ins-autonumber</c> call 349 -> 1, next auto 2 at call 441;
+    /// <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c> call 257 -> 3, next auto 4 at call 268;
+    /// <c>evidence/r-sql-2-3/act-ins-defaults</c> calls 81 and 91 -> 1, next auto 2 at call 101; upward:
+    /// <c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c> call 139 -> 100, next auto 101).
+    /// Explicit values under non-1 increments are refused before reaching here (qualified.md Open).
+    /// </summary>
+    public void Reseed(long value)
+    {
+        if (Increment == 1)
         {
             _last = value;
         }

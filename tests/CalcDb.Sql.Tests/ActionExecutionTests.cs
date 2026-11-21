@@ -174,16 +174,24 @@ public sealed class ActionExecutionTests
         // Required omitted (3314) on R in ActAccdb.
         Assert.Equal(3314, ActionExecutor.Execute("INSERT INTO R (D) VALUES (5)", actDb, options: 128).Failure!.Number);
 
-        // Zero-length text on T.S (no stored AllowZeroLength) stops at ISAM's MutationOpen.ZeroLength;
-        // TP in r-cat-1b-props.accdb (TP.ZlOff AllowZeroLength=False) also has DateF.DefaultValue=Date(), stopping at NotModelled.Edit.Default until host clock exists.
-        Assert.Equal("NotModelled.Edit.ZeroLength", ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (100, 1, 100, '', 20, 'r')", actDb, options: 128).Failure!.NotModelled);
+        // Zero-length text on columns storing no AllowZeroLength (SQL DDL: T.S Required=False, R.Req Required=True)
+        // is admitted (evidence/r-sql-2-3/act-ins-defaults calls 11-12, 31-32); stored AllowZeroLength=False fails 3315
+        // (evidence/r-cat-1b/field-zerolength-effect calls 11, 18; evidence/r-fix-cursor-dao/con-zero-length-required-failonerror).
+        // TP in r-cat-1b-props.accdb also has DateF.DefaultValue=Date(), stopping at NotModelled.Edit.Default until host clock exists.
+        ActionOutcome emptyTextUnset = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (100, 1, 100, '', 20, 'r')", actDb, options: 128);
+        Assert.True(emptyTextUnset.Succeeded, emptyTextUnset.Failure?.ToString());
+        Assert.Equal(1, emptyTextUnset.RecordsAffected);
+        ActionOutcome emptyReqUnset = ActionExecutor.Execute("INSERT INTO R (Req, D, Z) VALUES ('', 5, '')", actDb, options: 128);
+        Assert.True(emptyReqUnset.Succeeded, emptyReqUnset.Failure?.ToString());
+        Assert.Equal(1, emptyReqUnset.RecordsAffected);
         using var propsDb = new WritableSqlFixture("be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4");
         Assert.Equal("NotModelled.Edit.Default", ActionExecutor.Execute("INSERT INTO TP (Req, ZlOff) VALUES ('r', '')", propsDb, options: 128).Failure!.NotModelled);
 
-        // Field validation (3316) and table validation (3316) on non-related table VR.
+        // Field validation (3316), table validation (3316) on non-related table VR, and stored AllowZeroLength=False (3315) on P.Req.
         using var errDb = new WritableSqlFixture(ErrBaseAccdb);
         Assert.Equal(3316, ActionExecutor.Execute("INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)", errDb, options: 128).Failure!.Number);
         Assert.Equal(3316, ActionExecutor.Execute("INSERT INTO VR (ID, Pv, A, B2) VALUES (11, 1, 5, 2)", errDb, options: 128).Failure!.Number);
+        Assert.Equal(3315, ActionExecutor.Execute("INSERT INTO P (ID, Req) VALUES (99, '')", errDb, options: 128).Failure!.Number);
     }
 
     // ---- INSERT INTO ... SELECT ----------------------------------------------------------------------------------------
