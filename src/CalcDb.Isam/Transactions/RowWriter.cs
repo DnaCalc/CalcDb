@@ -313,19 +313,21 @@ public sealed class IndexEntryDelete(byte[] oldEntry, FormatDescriptor d) : IPag
     }
 }
 
-/// <summary>In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1, R-FMT-2).</summary>
+/// <summary>
+/// In-place TableDef counter update on the TableDef's first page (II-04 §1.2, II-05 §1.1, R-FMT-2). The AutoNumber word
+/// takes <c>autoNumberFloor</c> when it is higher, or exactly when <c>reseedAutoNumber</c> is set: the reseed of a
+/// refused 3022 on the AutoNumber's own primary key (<see cref="SameWidthWriter.CompileRefusedUniqueInsert"/>).
+/// </summary>
 public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, int[] decrementEntryCounts, FormatDescriptor d, bool reseedAutoNumber = false) : IPageDelta
 {
-    public TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d, bool reseedAutoNumber = false)
-        : this(rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d, reseedAutoNumber)
+    public TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor, int[] incrementUniqueEntryCounts, FormatDescriptor d)
+        : this(rowCountDelta, autoNumberFloor, incrementUniqueEntryCounts, [], d)
     {
     }
 
     public int RowCountDelta => rowCountDelta;
 
     public uint? AutoNumberFloor => autoNumberFloor;
-
-    public bool ReseedAutoNumber => reseedAutoNumber;
 
     public IReadOnlyList<int> IncrementUniqueEntryCounts => incrementUniqueEntryCounts;
 
@@ -339,15 +341,32 @@ public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor
 
     public void Apply(Span<byte> decodedPage)
     {
-        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
-        if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta, floorArg, incrementUniqueEntryCounts, decrementEntryCounts, d, out string? failure))
+        if (!TryApply(decodedPage, rowCountDelta, autoNumberFloor, reseedAutoNumber, incrementUniqueEntryCounts, decrementEntryCounts, d, out string? failure))
         {
             throw new FormatViolationException($"TableDef counts update: {failure}");
         }
+    }
+
+    /// <summary>The update <see cref="Apply"/> makes, for a compiler that checks it on a copy of the page first.</summary>
+    internal static bool TryApply(
+        Span<byte> firstPage,
+        int rowCountDelta,
+        uint? autoNumberFloor,
+        bool reseedAutoNumber,
+        IReadOnlyList<int> incrementUniqueEntryCounts,
+        IReadOnlyList<int> decrementEntryCounts,
+        FormatDescriptor d,
+        out string? failure)
+    {
+        if (!TableDefUpdater.TryUpdateCounts(firstPage, rowCountDelta, reseedAutoNumber ? null : autoNumberFloor, incrementUniqueEntryCounts, decrementEntryCounts, d, out failure))
+        {
+            return false;
+        }
         if (reseedAutoNumber && autoNumberFloor is { } reseed)
         {
-            d.TableDef.AutoNumber.Write(decodedPage, reseed);
+            d.TableDef.AutoNumber.Write(firstPage, reseed);
         }
+        return true;
     }
 }
 
@@ -646,7 +665,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
     /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
-    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
+    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
     {
         if (_pageCount == 0)
         {
@@ -841,16 +860,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, floorArg, incrementUnique, _d, out string? tdefFailure))
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, autoNumberFloor, incrementUnique, _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        if (reseedAutoNumber && autoNumberFloor is { } reseed)
-        {
-            _d.TableDef.AutoNumber.Write(tdefCopy, reseed);
-        }
-        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], _d), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root), null);
     }
@@ -1304,11 +1318,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// index <paramref name="refusingPhysicalNumber"/> (R-FMT-2 II-05, evidence/r-q-fmt-sort/dc-rules-accdb,
     /// evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain): each physical index strictly
     /// before <paramref name="refusingPhysicalNumber"/> whose candidate key is not already present increments its
-    /// UniqueEntryCount (word1, clamped to word0 while word0 &gt; 0), and any AutoNumber floor (or downward/upward
-    /// explicit reseed when <paramref name="reseedAutoNumber"/> is true: evidence/r-q-expr-sql/act-ins-autonumber
-    /// call 349, evidence/r-q-fmt-sort/auto-cancel-fail-accdb call 257, evidence/r-sql-2-3/act-ins-defaults calls 81
-    /// and 91) is persisted. Returns empty edits when no TableDef word changes so the caller still commits the refused
-    /// 3022's page-0 counter increment.
+    /// UniqueEntryCount (word1, clamped to word0 while word0 &gt; 0), and the AutoNumber floor is persisted; with
+    /// <paramref name="reseedAutoNumber"/> (an explicit value refused as a duplicate of the AutoNumber's own primary key)
+    /// the word takes the value exactly, also downward (evidence/r-q-expr-sql/act-ins-autonumber seq 349,
+    /// evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 257, evidence/r-sql-2-3/act-ins-defaults seq 81 and 91). Returns
+    /// empty edits when no TableDef word changes, so the caller decides the commit of a refusal that changes nothing.
     /// </summary>
     public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
@@ -1356,14 +1370,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        uint? floorArg = reseedAutoNumber ? null : autoNumberFloor;
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, floorArg, incrementUnique, [], _d, out string? tdefFailure))
+        if (!TableDefCountsDelta.TryApply(tdefCopy, 0, autoNumberFloor, reseedAutoNumber, incrementUnique, [], _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
-        }
-        if (reseedAutoNumber && autoNumberFloor is { } reseed)
-        {
-            _d.TableDef.AutoNumber.Write(tdefCopy, reseed);
         }
         if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
         {

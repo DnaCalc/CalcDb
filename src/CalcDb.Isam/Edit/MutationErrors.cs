@@ -207,7 +207,10 @@ public enum MutationOpen : byte
     /// <summary>AddNew during AddNew: whether the first ticket is consumed and the defaults are sampled again is not recorded.</summary>
     RepeatedAddNew,
 
-    /// <summary>An empty text in a column that stores no AllowZeroLength: ACE's default for such a column is not recorded.</summary>
+    /// <summary>
+    /// An empty text in a Memo column that stores AllowZeroLength False: the records show the 3315 refusal for Text only
+    /// (<c>evidence/r-cat-1b/field-zerolength-effect</c>, <c>evidence/r-fix-cursor-dao/con-zero-length-required-failonerror</c>).
+    /// </summary>
     ZeroLength,
 
     /// <summary>A Rollback of an inner level with an edit pending: only the outermost level's case is recorded (TXN-CLOSE).</summary>
@@ -234,4 +237,20 @@ public enum MutationOpen : byte
     /// wraparound.
     /// </summary>
     AutoNumberOverflow,
+
+    /// <summary>
+    /// An explicit AutoNumber value whose effect on the counter no record shows (R-FMT-2 Generated values): one accepted
+    /// below the counter, or one refused 3022 by an index other than the AutoNumber's own primary key. The records show an
+    /// accepted value above the counter (<c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c>) and a refused
+    /// duplicate of the primary key (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>).
+    /// </summary>
+    AutoNumberReseed,
+
+    /// <summary>
+    /// A TableDef counter or page-0 commit-counter write that no record shows for a refused statement or a Rollback
+    /// (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; qualified.md, the r-q18 statement-publication note): a refusal other than
+    /// 3022 or 3201 after earlier rows, a refused INSERT whose rows span data pages, an MDB or several files, or a Rollback
+    /// that would drop an AutoNumber of a case other than <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>.
+    /// </summary>
+    CounterWrite,
 }

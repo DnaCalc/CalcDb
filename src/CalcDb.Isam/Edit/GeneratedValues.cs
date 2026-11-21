@@ -96,13 +96,14 @@ public sealed class AutoNumberCounter(uint stored, int increment = 1)
     }
 
     /// <summary>
-    /// Under unit increment, an explicit value supplied for the AutoNumber column sets the counter to
-    /// <paramref name="value"/> whether higher or lower than <see cref="Last"/>, including when the insert is refused
-    /// 3022 (<c>evidence/r-q-expr-sql/act-ins-autonumber</c> call 349 -> 1, next auto 2 at call 441;
-    /// <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c> call 257 -> 3, next auto 4 at call 268;
-    /// <c>evidence/r-sql-2-3/act-ins-defaults</c> calls 81 and 91 -> 1, next auto 2 at call 101; upward:
-    /// <c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c> call 139 -> 100, next auto 101).
-    /// Explicit values under non-1 increments are refused before reaching here (qualified.md Open).
+    /// Under unit increment, an explicit value refused 3022 as a duplicate of the AutoNumber's own primary key sets the
+    /// counter to <paramref name="value"/>, also below <see cref="Last"/> (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>
+    /// seq 349, next generated value 2 at seq 441; <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c> seq 257, next 4 at
+    /// seq 283; <c>evidence/r-sql-2-3/act-ins-defaults</c> seq 81 and 91, where the next value 2 is inferred from the 3022
+    /// at seq 101). An accepted explicit value only raises the counter (<see cref="Observe"/>;
+    /// <c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c> seq 139, next 101 at seq 302); one below it is refused
+    /// by name (<see cref="MutationOpen.AutoNumberReseed"/>). Explicit values under non-1 increments are refused before
+    /// reaching here (qualified.md Open).
     /// </summary>
     public void Reseed(long value)
     {

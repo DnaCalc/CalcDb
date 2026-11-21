@@ -174,16 +174,30 @@ public sealed class ActionExecutionTests
         // Required omitted (3314) on R in ActAccdb.
         Assert.Equal(3314, ActionExecutor.Execute("INSERT INTO R (D) VALUES (5)", actDb, options: 128).Failure!.Number);
 
-        // Zero-length text on columns storing no AllowZeroLength (SQL DDL: T.S Required=False, R.Req Required=True)
-        // is admitted (evidence/r-sql-2-3/act-ins-defaults calls 11-12, 31-32); stored AllowZeroLength=False fails 3315
-        // (evidence/r-cat-1b/field-zerolength-effect calls 11, 18; evidence/r-fix-cursor-dao/con-zero-length-required-failonerror).
+        // Zero-length text on columns storing no AllowZeroLength (SQL DDL columns) is admitted, Required False and True
+        // alike; stored AllowZeroLength=False fails 3315 (evidence/r-cat-1b/field-zerolength-effect: TP.ZlOff at seq 9,
+        // 3315 at seq 13; evidence/r-fix-cursor-dao/con-zero-length-required-failonerror).
         // TP in r-cat-1b-props.accdb also has DateF.DefaultValue=Date(), stopping at NotModelled.Edit.Default until host clock exists.
         ActionOutcome emptyTextUnset = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (100, 1, 100, '', 20, 'r')", actDb, options: 128);
         Assert.True(emptyTextUnset.Succeeded, emptyTextUnset.Failure?.ToString());
         Assert.Equal(1, emptyTextUnset.RecordsAffected);
-        ActionOutcome emptyReqUnset = ActionExecutor.Execute("INSERT INTO R (Req, D, Z) VALUES ('', 5, '')", actDb, options: 128);
-        Assert.True(emptyReqUnset.Succeeded, emptyReqUnset.Failure?.ToString());
-        Assert.Equal(1, emptyReqUnset.RecordsAffected);
+        // R.Z (Required False) takes '' (evidence/r-sql-2-3/act-ins-defaults seq 11: RecordsAffected 1 at seq 12, no error
+        // at seq 14; the row reads Req 'c', D Null, Z "" at seq 153-159).
+        ActionOutcome emptyZ = ActionExecutor.Execute("INSERT INTO R (Req, D, Z) VALUES ('c', Null, '')", actDb, options: 128);
+        Assert.True(emptyZ.Succeeded, emptyZ.Failure?.ToString());
+        Assert.Equal(1, emptyZ.RecordsAffected);
+        var rowZ = Assert.Single(actDb.ReadSelect("SELECT D, Z FROM R WHERE Req = 'c'"));
+        Assert.Equal("VT_NULL", rowZ[0].VtName);
+        Assert.Equal("VT_BSTR", rowZ[1].VtName);
+        Assert.Equal("", rowZ[1].Text);
+        // R.Req (Required True) takes '' (act-ins-defaults seq 31: RecordsAffected 1 at seq 32; the row reads Req "", D 5
+        // from its default, Z Null at seq 170-176).
+        ActionOutcome emptyReq = ActionExecutor.Execute("INSERT INTO R (Req) VALUES ('')", actDb, options: 128);
+        Assert.True(emptyReq.Succeeded, emptyReq.Failure?.ToString());
+        Assert.Equal(1, emptyReq.RecordsAffected);
+        var rowReq = Assert.Single(actDb.ReadSelect("SELECT D, Z FROM R WHERE Req = ''"));
+        Assert.Equal("5", rowReq[0].Integer);
+        Assert.Equal("VT_NULL", rowReq[1].VtName);
         using var propsDb = new WritableSqlFixture("be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4");
         Assert.Equal("NotModelled.Edit.Default", ActionExecutor.Execute("INSERT INTO TP (Req, ZlOff) VALUES ('r', '')", propsDb, options: 128).Failure!.NotModelled);
 
