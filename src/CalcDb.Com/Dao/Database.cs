@@ -11,6 +11,7 @@ using CalcDb.Sql;
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
 using CalcDb.Values.Scalar;
+using CalcDb.Values.Windows;
 
 namespace CalcDb.Com.Dao;
 
@@ -231,6 +232,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     private CalcDb.Expressions.DatabaseCollation? _collation;
     private bool _collationMade;
+
+    /// <summary>
+    /// The one <see cref="ExpressionContext"/> factory for this Database (R-EXPR-1 EXPR-LOCALE: <see cref="SessionLocale.Lcid"/>,
+    /// never the thread's; II-10 §14: Database compare with the file's sort order, plus Windows Text compare for
+    /// <c>InStr</c>/<c>StrComp</c> compare=1 and omitted compare).
+    /// </summary>
+    public ExpressionContext CreateExpressionContext(ExpressionUse use) =>
+        new(SessionLocale.Lcid, TextCompareMode.Database, Collation, use, WindowsTextCollation.For(SessionLocale.Lcid));
 
     public bool Closed => _file is null;
 
@@ -464,7 +473,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return null;
         }
         // The text compare and session LCID (R-EXPR-1 EXPR-LOCALE: user default, never the thread's), as Find binds its criteria.
-        _ruleBinder ??= new ExpressionRuleBinder(new ExpressionContext(SessionLocale.Lcid, TextCompareMode.Database, Collation, ExpressionUse.Query));
+        _ruleBinder ??= new ExpressionRuleBinder(CreateExpressionContext(ExpressionUse.Query));
         var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
         bool related = _relationships!.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
         // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).

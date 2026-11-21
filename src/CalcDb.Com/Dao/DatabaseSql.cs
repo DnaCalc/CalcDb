@@ -59,7 +59,7 @@ internal sealed class DatabaseSql(DatabaseObject database) : ISqlSchemaDatabase
     /// </summary>
     public void Forget() => _tables.Clear();
 
-    public ExpressionContext Context { get; } = new(SessionLocale.Lcid, TextCompareMode.Database, database.Collation, ExpressionUse.Query);
+    public ExpressionContext Context { get; } = database.CreateExpressionContext(ExpressionUse.Query);
 
     public TableDefinition? Table(string name)
     {

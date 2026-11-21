@@ -500,7 +500,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return kept;
         }
         _schema ??= new ExpressionSchema(Cursor.Table);
-        _context ??= new ExpressionContext(SessionLocale.Lcid, TextCompareMode.Database, Database.Collation, ExpressionUse.Find);
+        _context ??= Database.CreateExpressionContext(ExpressionUse.Find);
         FindCriteria? bound = FindCriteria.Bind(text.ToString(), _schema, _context, out failure);
         if (bound is not null)
         {
