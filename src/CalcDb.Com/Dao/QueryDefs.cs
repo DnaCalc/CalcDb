@@ -189,12 +189,16 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
         if (_query.Family == QueryFamily.PassThrough)
         {
-            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("a pass-through query has no parameters"));
+            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("a pass-through query has no parameters"))
+            {
+                ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+            };
         }
         if (Plan() is not { } plan)
         {
             return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
+                ClosedSource = "DAO.QueryDef",
                 Gap = _planFailure is { } f
                     ? $"the Parameters of '{_query.Name}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
                     : $"the Parameters of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
@@ -204,6 +208,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. plan.Parameters.Select(p => Unbracketed(p.Name))],
             (c, i) => new ParameterObject(c, this, i))
         {
+            ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
             Gap = declarations is { IsNotModelled: true } open ? $"{open.NotModelled}: {open.Message}" : null,
             CountDenied = declarations is { IsNotModelled: false } ace ? (ace.Number, ace.Message) : null,
             ItemGap = declarations is { IsNotModelled: false } ? "Parameters.Item of a statement declaring one name with two types (Count fails 3060; Item is not recorded)" : null,

@@ -35,6 +35,12 @@ internal sealed record Failure(FailureKind Kind, int Scode, string Source, strin
 {
     public bool PublishesErrorInfo { get; init; }
 
+    /// <summary>
+    /// An error DAO's Errors lists before this one, which EXCEPINFO carries (r-dao-1-err-1/coll-tabledefs-index-variants:
+    /// TableDefs.Item(Database) is 3421 with Errors 3001 then 3421); null for a single error.
+    /// </summary>
+    public Failure? Preceding { get; init; }
+
     /// <summary>The GUID of the IErrorInfo the dispatch lane publishes: zero for DAO, the interface's IID for ADO.</summary>
     public Guid ErrorInfoIid { get; init; }
 

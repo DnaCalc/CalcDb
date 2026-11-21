@@ -54,6 +54,10 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     public void Record(Failure failure)
     {
         Errors.Clear();
+        if (failure.Preceding is { } preceding)
+        {
+            Errors.Add(preceding);
+        }
         Errors.Add(failure);
     }
 
@@ -63,7 +67,10 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     /// <summary>Whether the default session exists yet (DAO-BOOT: SystemDB reads "" before it).</summary>
     public bool Touched => _defaultWorkspace is not null;
 
-    /// <summary>The Workspaces after the default one, in Append order; duplicates allowed (DAO-BOOT).</summary>
+    /// <summary>
+    /// The Workspaces after the default one, in Append order; duplicates allowed (DAO-BOOT). Not references: each stays
+    /// while a client holds it and leaves at its last release or Close (R-ACT-1 ENGINE-IDENTITY).
+    /// </summary>
     public List<WorkspaceObject> Appended { get; } = [];
 
     /// <summary>The accepted, unpublished changes of this engine's Workspaces, as its reads ask for them (W-05/edit-frames).</summary>
@@ -600,10 +607,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         if (!_isDefault)
         {
             _closed = true;
-            while (Engine.Appended.Remove(this))
-            {
-                Release(); // the collection's reference
-            }
+            Engine.Appended.RemoveAll(w => ReferenceEquals(w, this));
         }
         return CallResult.Nothing;
     }
@@ -611,6 +615,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>Releasing a Workspace without Close also rolls back (TXN-CLOSE, wsrelease-no-close-depth-1).</summary>
     protected override void OnFinalRelease()
     {
+        Engine.Appended.RemoveAll(w => ReferenceEquals(w, this)); // it leaves Workspaces (ENGINE-IDENTITY)
         Transactions.Close();
         Engine.Changes.Remove(Transactions);
         _databasesCollection?.Release();
@@ -664,7 +669,8 @@ internal sealed unsafe class WorkspacesObject : DaoObject
         {
             return Fail(3271, DaoErrors.InvalidPropertyValue);
         }
-        workspace.AddRef(); // the collection's reference
+        // The collection holds no reference: an appended Workspace leaves it at its last release (qualified.md R-ACT-1
+        // ENGINE-IDENTITY; r-q2-wire/act-factory-dao-identity, act-typecreate-dao-identity: Count 2, then 1 after the release).
         Engine.Appended.Add(workspace);
         return CallResult.Nothing;
     }

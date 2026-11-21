@@ -353,6 +353,27 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Named(Put(rs, "Collect", "K")); // recorded on a SELECT dynaset only
     }
 
+    /// <summary>
+    /// evidence/r-q16-overflow/grow-row2-plus-30 through DAO: row 2's T1 grown by 30 characters overflows onto page 122,
+    /// a free page of the file, so page 1 changes and Close commits once more (R-FMT-2 Overflow, Page 0; R-CRASH-1
+    /// CRASH-ORDER Close commit); the file then is ACE's after-image byte for byte.
+    /// </summary>
+    [Fact]
+    public void A_row_publication_that_takes_a_free_page_makes_Close_commit_once_more()
+    {
+        const string WAccdb = "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be"; // r-fmt-2b-w-accdb.accdb
+        DatabaseObject db = Open(WAccdb);
+        string path = db.Name;
+        RecordsetObject rs = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "Pg", 2)));
+        Ok(Method(rs, "FindFirst", "ID = 2"));
+        Ok(Method(rs, "Edit"));
+        Ok(Put(Object<FieldObject>(Object<FieldsObject>(rs, "Fields"), "Item", "T1"), "Value", new string('€', 91)));
+        Ok(Method(rs, "Update"));
+        Ok(Method(rs, "Close"));
+        Ok(Method(db, "Close"));
+        Assert.Equal("6f22c95aced354a9d56dc4de6edb053d3de6d359822e2bb4c3ca1b39285fad1d", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
+    }
+
     [Fact]
     public void LockEdits_put_reaches_the_edit_frame()
     {
@@ -562,7 +583,18 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Held fields = Hold(Get(draft, "Fields"));
         Ok(Method(ComObject.Recover<NewFieldsObject>(fields.Pointer), "Append", field));
         DefinitionCollection tableDefs = Object<DefinitionCollection>(db, "TableDefs");
+        int before = (int)Scalar(Get(tableDefs, "Count")).Payload;
+        // r-dao-1-err-1/draft-tabledef-field: a field in one draft's Fields is 3367 in another's; a draft's Name put reads back.
+        Held other = Hold(Method(db, "CreateTableDef", "O"));
+        Held otherFields = Hold(Get(ComObject.Recover<NewTableDefObject>(other.Pointer), "Fields"));
+        Fails(Method(ComObject.Recover<NewFieldsObject>(otherFields.Pointer), "Append", field), 3367, "DAO.Fields", errorInfo: false);
+        Ok(Put(draft, "Name", "T"));
+        Assert.Equal("T", Text(Get(draft, "Name")));
         Ok(Method(tableDefs, "Append", td));
+        // r-q15-ddl-open/lv-rewrite-byte-n: the one TableDefs object lists the new table after the Append.
+        Assert.Same(tableDefs, Object<DefinitionCollection>(db, "TableDefs"));
+        Assert.Equal(before + 1, (int)Scalar(Get(tableDefs, "Count")).Payload);
+        Ok(Get(tableDefs, "Item", "T")).ReleaseUntaken();
         CallResult again = Method(Object<DefinitionCollection>(db, "TableDefs"), "Append", td);
         Assert.Equal(3010, again.Failure?.Number);
         Held empty = Hold(Method(db, "CreateTableDef", "E"));

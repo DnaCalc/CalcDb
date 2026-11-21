@@ -1402,7 +1402,7 @@ internal sealed unsafe class FieldObject : DaoObject
     /// <summary>
     /// FieldSize (qualified.md R-STRING-1 STR-LV): a Memo's current value in bytes, twice its UTF-16 units, on every
     /// recordset type (r-dao-1b/recordset-fields-members-each: 2 for a one-character Memo, 0 for a Null OLE value); a
-    /// field of any other type is 3259. A stored OLE value, a Null Memo, a long value during an edit and a read failure
+    /// field of any other type is 3259; a Null Memo is 0 (r-fmt-2b/mm-null-to-1page). A stored OLE value, a long value during an edit and a read failure
     /// are not recorded and are named.
     /// </summary>
     private CallResult FieldSize()
@@ -1429,6 +1429,7 @@ internal sealed unsafe class FieldObject : DaoObject
         }
         TextFieldRead text = Recordset.Cursor.ReadText(column);
         return text.HasText ? Int32(text.Shape.Units * 2)
+            : text.Result.Succeeded && text.Result.Value.Kind == NativeKind.Null ? Int32(0) // r-fmt-2b/mm-null-to-1page: a Null Memo is 0
             : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeNoText", $"Field.FieldSize of a Memo that reads no text ({text.Result.Failure?.ToString() ?? "Null"}; not recorded)"));
     }
 

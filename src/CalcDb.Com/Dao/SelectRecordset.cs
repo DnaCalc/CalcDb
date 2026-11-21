@@ -236,6 +236,12 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("Fields.Item with an object index (ACE: 3001 and 3421)"));
         }
+        // A whole name in brackets names the column (r-def-cursor-dao/fields-lookup-forms-on-recordset: "[N]" finds N;
+        // " N", "N ", "T.N" and "!N" find nothing).
+        if (ordinal is null && index != 0 && Args.TypeOf(index) == VarType.Bstr && Args.Text(index) is ['[', .. string inner, ']'])
+        {
+            ordinal = Recordset.FieldNames.Find(inner);
+        }
         if (ordinal is not int i)
         {
             return Fail(3265, DaoErrors.ItemNotFound);
@@ -272,7 +278,38 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("SourceTable", (self, args) => Live(self, f => Origin(f.Column.SourceTable, f.Column.Name)))
         .Get("SourceField", (self, args) => Live(self, f => Origin(f.Column.SourceField, f.Column.Name)))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
-        .Get("Value", (self, args) => ((SelectFieldObject)self).Value());
+        .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
+        .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()));
+
+    /// <summary>
+    /// FieldSize (qualified.md R-STRING-1 STR-LV): a Memo column's current value in bytes, twice its UTF-16 units, 0 when
+    /// Null (r-fmt-2b/mm-null-to-1page, mm-short-to-many-pages: 0 then 2000; a Null OLE value is 0 on a table's field,
+    /// r-dao-1b/recordset-fields-members-each); a Text or fixed-length column is 3259 (STR-LV). A stored OLE value and a
+    /// column whose type is not identified are not recorded and are named.
+    /// </summary>
+    private CallResult FieldSize()
+    {
+        if (Recordset.Cursor.FieldType(_ordinal, out _) is not int type)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeType", $"Field.FieldSize of the column {Column.Name}, whose type is not identified"));
+        }
+        if (type is not (12 or 11))
+        {
+            return Fail(3259, DaoErrors.InvalidFieldType);
+        }
+        if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
+        {
+            return failure!.IsNotModelled
+                ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
+                : Fail(failure.Number, failure.Message);
+        }
+        return (VarType)value.Vt switch
+        {
+            VarType.Null => Int32(0),
+            VarType.Bstr when type == 12 => Int32(Bstrs.Chars(value.Pointer).Length * 2),
+            var other => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeValue", $"Field.FieldSize of a {other} value of type {type} (not recorded)")),
+        };
+    }
 
     private readonly SelectFieldsObject _fields;
     private readonly int _ordinal;

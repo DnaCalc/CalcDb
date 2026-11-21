@@ -81,8 +81,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
         Profile = profile;
         Header = header;
         Format = profile.Descriptor;
-        PageCount = pageCount;
+        _extentPages = pageCount;
         Catalog = catalog;
+        _globalMapAtOpen = readOnly ? null : GlobalMapImage();
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -157,8 +158,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         ? Int32(Header.SortOrder.Identifier)
         : CallResult.Fail(Failure.NotImplemented($"Database.CollatingOrder of sort descriptor {Header.SortOrder} with byte +2 = {Header.SortOrder.Reserved} (not observed)"));
 
-    /// <summary>The file's extent in pages; a catalog change that allocates grows it (W-07/native-metadata-write).</summary>
-    public ulong PageCount { get; private set; }
+    /// <summary>
+    /// The file's extent in pages: the larger of the extent at open (or after this session's last catalog change,
+    /// W-07/native-metadata-write) and the extent the cache's writers have allocated (<see cref="PageCache.KnownExtentPages"/>:
+    /// a row publication that took a page past the file, W-05/growth-structural-closure, r-q16-overflow).
+    /// </summary>
+    public ulong PageCount => Math.Max(_extentPages, Cache.KnownExtentPages);
+
+    private ulong _extentPages;
 
     /// <summary>The catalog as committed; read again after each published catalog change.</summary>
     public CatalogSnapshot Catalog { get; private set; }
@@ -169,9 +176,31 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// allocated, create-one-long 2, create-two-tables, create-then-index and create-then-drop 3; R-CRASH-1 CRASH-ORDER
     /// issued order: "Close writes pending pages, page 1 and a 2-byte field of page 0"). Here page 1 was published with
     /// the statement, so the Close writes the counter alone; whether the extra commit belongs to Close or to the first
-    /// allocation of the session is not decided by a record (the final bytes are the same).
+    /// allocation of the session is not decided by a record (the final bytes are the same). A row publication that took
+    /// a page changes page 1 too (R-FMT-2 Overflow, Page 0: +1 at Close when a free page was taken; r-q16-overflow): Close
+    /// sees it by page 1's committed image against <see cref="_globalMapAtOpen"/>.
     /// </summary>
     private bool _globalMapChanged;
+
+    /// <summary>Page 1 (the global map) as committed when this writable session opened; null for a read-only one.</summary>
+    private readonly byte[]? _globalMapAtOpen;
+
+    /// <summary>The committed image of the global map page, or null when it cannot be pinned.</summary>
+    private byte[]? GlobalMapImage()
+    {
+        if (Cache.Pin(Format.Map.GlobalMapPage).Pin is not { } pin)
+        {
+            return null;
+        }
+        using (pin)
+        {
+            return pin.Bytes.ToArray();
+        }
+    }
+
+    /// <summary>Whether this session changed the global map: a catalog change, or a row publication that changed page 1.</summary>
+    private bool GlobalMapChanged => _globalMapChanged
+        || (_globalMapAtOpen is { } before && GlobalMapImage() is { } now && !before.AsSpan().SequenceEqual(now));
 
     /// <summary>
     /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
@@ -616,15 +645,27 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         if (_tableDefs is null)
         {
-            // ACE does not list the tables whose catalog flags carry 0x00030000 (the MSysComplexType_* tables, flags
-            // 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
-            CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-            _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, [.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), holdsDatabase: false)
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make) = TableDefsMembership();
+            _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, names, make, holdsDatabase: false)
             {
                 Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
+                Membership = TableDefsMembership,
+                ClosedSource = "DAO.Database", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+                ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-dao-1-err-1/coll-tabledefs-index-variants
+                NameEndsAtNul = true, // r-dao-1-err-1/coll-name-variants
             };
         }
         return _tableDefs;
+    }
+
+    /// <summary>
+    /// The TableDefs members of the current catalog. ACE does not list the tables whose catalog flags carry 0x00030000
+    /// (the MSysComplexType_* tables, flags 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
+    /// </summary>
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make) TableDefsMembership()
+    {
+        CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+        return ([.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]));
     }
 
     /// <summary>
@@ -710,20 +751,19 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>
     /// A catalog change of this session was published: every one this slice writes changes the global allocation map (a
     /// new table or index allocates, a drop frees), the extent grows to what it allocated, the catalog is read again
-    /// from the committed images, and the TableDefs collection is made again at its next use (a collection the client
-    /// holds keeps the members it listed).
+    /// from the committed images, and the one TableDefs collection lists its members again (r-q15-ddl-open/lv-rewrite-
+    /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
     /// </summary>
     private string? SchemaPublished(ulong extentPages)
     {
         _globalMapChanged = true;
-        PageCount = extentPages;
-        _tableDefs?.Release();
-        _tableDefs = null;
+        _extentPages = Math.Max(_extentPages, extentPages);
         if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
         {
             return "the catalog cannot be read after the catalog change: " + failure;
         }
         Catalog = catalog;
+        _tableDefs?.Relist();
         return null;
     }
 
@@ -764,7 +804,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (_containers is null)
         {
             CatalogEntry[] containers = [.. Catalog.Entries.Where(e => e.ParentId == Format.Catalog.TopLevelParent).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-            _containers = new DefinitionCollection(DaoTypes.Containers, "DAO.Containers", this, [.. containers.Select(c => c.Name)], (c, i) => new ContainerObject(c, containers[i]), holdsDatabase: false);
+            _containers = new DefinitionCollection(DaoTypes.Containers, "DAO.Containers", this, [.. containers.Select(c => c.Name)], (c, i) => new ContainerObject(c, containers[i]), holdsDatabase: false)
+            {
+                ClosedSource = "DAO.Database", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+            };
         }
         return _containers;
     }
@@ -881,7 +924,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _recordsets.Clear();
         _workspace.Transactions.EndLazyBurst(Cache);
         CallResult closing = CallResult.Nothing;
-        if (_globalMapChanged)
+        if (GlobalMapChanged)
         {
             _globalMapChanged = false;
             (MutationOpen open, string? detail) = _workspace.Transactions.PublishCounterCommit(Cache);

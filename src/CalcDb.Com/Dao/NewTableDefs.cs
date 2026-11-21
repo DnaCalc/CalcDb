@@ -1,6 +1,7 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Foundation;
 
 namespace CalcDb.Com.Dao;
 
@@ -18,6 +19,8 @@ internal sealed unsafe class NewTableDefObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, t => Text(t.Name)))
+        // A draft's Name put is kept and read back (draft-tabledef-field: Name = "D1x", then "D1x"); a name is checked at Append.
+        .Put("Name", (self, args) => { nint value = args[^1]; return Live(self, t => { t.Name = Args.Text(value) ?? ""; return CallResult.Nothing; }); })
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
         .Get("Fields", (self, args) => Live(self, t => Object(t.Fields)));
 
@@ -31,7 +34,7 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         Fields = new NewFieldsObject(this);
     }
 
-    public string Name { get; }
+    public string Name { get; private set; }
 
     public DateTime Created { get; }
 
@@ -82,6 +85,11 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         List<NewField> fields = [];
         foreach (NewFieldObject f in Fields.Members)
         {
+            if (f.PropertiesPut.Count > 0)
+            {
+                notWritten = $"TableDefs.Append of a field with {string.Join(", ", f.PropertiesPut.Keys)} put (the schema writer writes no field properties or attributes yet: W-07/native-metadata-write)";
+                return null;
+            }
             switch (f.Type)
             {
                 case NewFieldObject.DbLong:
@@ -130,17 +138,22 @@ internal sealed unsafe class NewFieldsObject : DaoObject
         return c.Invalid ? c.Fail(3420, DaoErrors.ObjectInvalid) : op(c);
     }
 
+    /// <summary>
+    /// Append: 3367 when the field is in a draft's Fields already, this one or another draft's (draft-tabledef-field:
+    /// appending u15 again to its own draft, and to the draft D2).
+    /// </summary>
     private CallResult Append(nint arg)
     {
         if (Args.ObjectOf<NewFieldObject>(arg) is not { } field)
         {
             return CallResult.Fail(Failure.NotImplemented("Fields.Append of an argument that is not a CalcDb draft Field"));
         }
-        if (_members.Contains(field))
+        if (field.AppendedTo is not null)
         {
             return Fail(3367, DaoErrors.AlreadyInCollection);
         }
         field.AddRef(); // the collection's reference
+        field.AppendedTo = this;
         _members.Add(field);
         return CallResult.Nothing;
     }
@@ -155,7 +168,13 @@ internal sealed unsafe class NewFieldsObject : DaoObject
     }
 }
 
-/// <summary>A Field made by a draft TableDef's CreateField (r-dao-1-err-1/draft-tabledef-field: Name, Type and Size as given; omitted "", 0, 0).</summary>
+/// <summary>
+/// A Field made by a draft TableDef's CreateField (r-dao-1-err-1/draft-tabledef-field: Name, Type and Size as given;
+/// omitted "", 0, 0). Before the TableDef is appended, a Type put of dbLong or dbText is kept (draft-tabledef-field: Type =
+/// 10 on an appended draft field), and the puts r-cat-1b/create-props makes are accepted and kept for Append: Attributes
+/// dbAutoIncrField (16), DefaultValue, Required, AllowZeroLength, ValidationRule and ValidationText. Their reads before
+/// Append and other Attributes and Type values are not recorded.
+/// </summary>
 internal sealed unsafe class NewFieldObject : DaoObject
 {
     public const short DbLong = 4;
@@ -166,7 +185,40 @@ internal sealed unsafe class NewFieldObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Text(((NewFieldObject)self).Name))
         .Get("Type", (self, args) => Int16(((NewFieldObject)self).Type))
-        .Get("Size", (self, args) => Int32(((NewFieldObject)self).Size));
+        .Get("Size", (self, args) => Int32(((NewFieldObject)self).Size))
+        .Put("Type", (self, args) => ((NewFieldObject)self).SetType(args[^1]))
+        .Put("Attributes", (self, args) => ((NewFieldObject)self).Keep("Attributes", args[^1], v => Args.Int32(v, null) == 16))
+        .Put("DefaultValue", (self, args) => ((NewFieldObject)self).Keep("DefaultValue", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
+        .Put("ValidationRule", (self, args) => ((NewFieldObject)self).Keep("ValidationRule", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
+        .Put("ValidationText", (self, args) => ((NewFieldObject)self).Keep("ValidationText", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
+        .Put("Required", (self, args) => ((NewFieldObject)self).Keep("Required", args[^1], v => Args.TypeOf(v) == VarType.Bool))
+        .Put("AllowZeroLength", (self, args) => ((NewFieldObject)self).Keep("AllowZeroLength", args[^1], v => Args.TypeOf(v) == VarType.Bool));
+
+    /// <summary>The draft Fields this field was appended to, or null.</summary>
+    public NewFieldsObject? AppendedTo { get; set; }
+
+    /// <summary>The property puts kept for Append, by name, as their text.</summary>
+    public Dictionary<string, string> PropertiesPut { get; } = [];
+
+    private CallResult SetType(nint value)
+    {
+        if (Args.Int32(value, null) is not (DbLong or DbText) and var type)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldType", $"a draft field's Type put of {type?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "a value that is not a number"} (dbText is recorded)"));
+        }
+        Type = (short)Args.Int32(value, null)!.Value;
+        return CallResult.Nothing;
+    }
+
+    private CallResult Keep(string name, nint value, Func<nint, bool> recorded)
+    {
+        if (!recorded(value))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's {name} put of a {Args.TypeOf(value)} value or one not recorded (r-cat-1b/create-props)"));
+        }
+        PropertiesPut[name] = Args.Text(value) ?? "";
+        return CallResult.Nothing;
+    }
 
     public NewFieldObject(NewTableDefObject table, string name, short type, int size) : base(Decl, Vtable, table.Engine, "DAO.Field")
     {
@@ -177,7 +229,7 @@ internal sealed unsafe class NewFieldObject : DaoObject
 
     public string Name { get; }
 
-    public short Type { get; }
+    public short Type { get; private set; }
 
     public int Size { get; }
 

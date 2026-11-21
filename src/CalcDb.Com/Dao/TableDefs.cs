@@ -17,10 +17,29 @@ internal sealed unsafe class DefinitionCollection : DaoObject
 
     private readonly (nint Vtable, OperationTable Operations) _shape;
     private readonly DatabaseObject _database;
-    private readonly IReadOnlyList<string> _names;
-    private readonly CollectionNames _lookup;
-    private readonly Func<DefinitionCollection, int, DaoObject> _make;
+    private IReadOnlyList<string> _names;
+    private CollectionNames _lookup;
+    private Func<DefinitionCollection, int, DaoObject> _make;
     private readonly Dictionary<int, DaoObject> _held = [];
+
+    /// <summary>
+    /// The membership as the Database lists it now, for a collection whose members a catalog change alters (TableDefs);
+    /// null for a fixed collection. The Database relists its one TableDefs object after each catalog change, so a client
+    /// that holds it, or fetches it again, sees the new table (r-q15-ddl-open/lv-rewrite-byte-n: db.TableDefs after the
+    /// Append is the same object, u6, and Item("T") finds the new table; r-cat-1/names: Refresh after the Appends, Count 11).
+    /// </summary>
+    public Func<(IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make)>? Membership { get; init; }
+
+    /// <summary>List the members again from <see cref="Membership"/>; held member wrappers stay valid for their clients.</summary>
+    public void Relist()
+    {
+        if (Membership is { } membership)
+        {
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make) = membership();
+            (_names, _lookup, _make) = (names, new CollectionNames(names), make);
+            _held.Clear(); // the ordinals change
+        }
+    }
 
     /// <param name="holdsDatabase">False for the Database's own TableDefs, which the Database keeps (a reference back would be a cycle).</param>
     public DefinitionCollection(InterfaceDecl decl, string source, DatabaseObject database, IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, bool holdsDatabase = true)
@@ -54,6 +73,31 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// <summary>A named gap: when set, Count and Item give it as not implemented (a membership CalcDb cannot yet decide).</summary>
     public string? Gap { get; init; }
 
+    /// <summary>
+    /// The source of the 3420 a member gives after its Database closed, when it is the owner's rather than the
+    /// collection's (r-dao-1-err-1/life-database-workspace-close: TableDefs.Count and Containers.Count from DAO.Database,
+    /// Indexes.Count from DAO.TableDef, Parameters.Count from DAO.QueryDef); null for the collection's own.
+    /// </summary>
+    public string? ClosedSource { get; init; }
+
+    /// <summary>
+    /// The source of the 3265 for Item("") when it is the owner's (r-dao-1-err-1/coll-name-variants: a TableDef's
+    /// Fields.Item("") from DAO.TableDef, every other missing name from DAO.Fields); null for the collection's own.
+    /// </summary>
+    public string? EmptyNameSource { get; init; }
+
+    /// <summary>
+    /// Item with an object index as ACE answers it for this collection (r-dao-1-err-1/coll-tabledefs-index-variants:
+    /// TableDefs.Item(Database) 3421 from DAO.TableDefs, Errors 3001 then 3421), or null where no record shows it (named).
+    /// </summary>
+    public (int Number, string Text)? ObjectIndexFailure { get; init; }
+
+    /// <summary>
+    /// Whether Item cuts a name at its first NUL (r-dao-1-err-1/coll-name-variants: TableDefs.Item("T\0") is T, where
+    /// that record's Fields lookups keep the NUL).
+    /// </summary>
+    public bool NameEndsAtNul { get; init; }
+
     /// <summary>ACE's failure of Count alone (Parameters.Count 3060, r-sql-1/b-parameters), or null.</summary>
     public (int Number, string Text)? CountDenied { get; init; }
 
@@ -75,8 +119,9 @@ internal sealed unsafe class DefinitionCollection : DaoObject
                 OperationTable operations = new OperationTable(decl)
                     .Get("Count", (self, args) => Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
-                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : c.Item(index)); })
-                    .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing));
+                    .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
+                        : c.Item(index)); })
+                    .Method("Refresh", (self, args) => Live(self, c => { c.Relist(); return CallResult.Nothing; }));
                 if (decl.MembersNamed("Append").Length > 0)
                 {
                     operations = operations.Method("Append", (self, args) => { nint item = args[0]; return Live(self, c => c.Appender is { } append ? append(c, item) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Append"))); });
@@ -93,7 +138,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         var c = (DefinitionCollection)self;
         if (c._database.Closed)
         {
-            return c.Fail(3420, DaoErrors.ObjectInvalid);
+            return CallResult.Fail(Failure.Dao(3420, c.ClosedSource ?? c.Source, DaoErrors.ObjectInvalid));
         }
         return c.Denied is { } denied ? c.Fail(denied.Number, denied.Text) : op(c);
     }
@@ -103,11 +148,19 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         int? ordinal = CollectionLookup.Find(index, _lookup, out bool objectIndex);
         if (objectIndex)
         {
-            return CallResult.Fail(Failure.NotImplemented("a definition collection's Item with an object index"));
+            return ObjectIndexFailure is { } refused
+                ? CallResult.Fail(Failure.Dao(refused.Number, Source, refused.Text) with { Preceding = Failure.Dao(3001, Source, DaoErrors.InvalidArgument) })
+                : CallResult.Fail(Failure.NotImplemented("a definition collection's Item with an object index"));
+        }
+        if (ordinal is null && NameEndsAtNul && index != 0 && Args.TypeOf(index) == Foundation.VarType.Bstr && Args.Text(index) is { } text && text.IndexOf('\0') is int nul and >= 0)
+        {
+            ordinal = _lookup.Find(text.AsSpan(0, nul));
         }
         if (ordinal is not int i)
         {
-            return Fail(3265, DaoErrors.ItemNotFound);
+            return EmptyNameSource is { } owner && Args.TypeOf(index) == Foundation.VarType.Bstr && Args.Text(index) is ""
+                ? CallResult.Fail(Failure.Dao(3265, owner, DaoErrors.ItemNotFound))
+                : Fail(3265, DaoErrors.ItemNotFound);
         }
         if (_held.TryGetValue(i, out DaoObject? held))
         {
@@ -238,7 +291,10 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         IReadOnlyList<ColumnDescriptor> columns = IsSystem ? [] : d.Columns;
         _fields ??= new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, [.. columns.Select(c => c.Name)],
-            (c, i) => new DefinitionFieldObject(c, this, columns[i], null, i));
+            (c, i) => new DefinitionFieldObject(c, this, columns[i], null, i))
+        {
+            EmptyNameSource = "DAO.TableDef", // r-dao-1-err-1/coll-name-variants: Item("") of a TableDef's Fields
+        };
         return Object(_fields);
     }
 
@@ -266,6 +322,7 @@ internal sealed unsafe class TableDefObject : DaoObject
                 (c, i) => new IndexObject(c, d, listed[i]))
             {
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
+                ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
             };
         }
         return Object(_indexes);
@@ -393,7 +450,8 @@ internal sealed unsafe class IndexObject : DaoObject
     private CallResult FieldsCollection()
     {
         ColumnDescriptor[] columns = [.. _physical.Columns.Select(ic => _table.Columns.First(c => c.PhysicalNumber == ic.PhysicalNumber))];
-        _fields ??= new DefinitionCollection(DaoTypes.IndexFields, "DAO.IndexFields", _owner.Database, [.. columns.Select(c => c.Name)],
+        _fields ??= new DefinitionCollection(DaoTypes.IndexFields, "DAO.Fields", // an index field's Item(99) is 3265 from DAO.Fields (r-dao-1b/coll-item-table-family)
+             _owner.Database, [.. columns.Select(c => c.Name)],
             (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i));
         return Object(_fields);
     }
