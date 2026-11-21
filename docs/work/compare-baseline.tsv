@@ -1,9 +1,9 @@
 # calcdb compare-set run
-# name	sjws-1
+# name	com2-1
 # rule	calls.trace@8
-# candidate	48328b261e4ff7183c3610fb01cb7e779bd6af0a620b07760bcc65b91ac066f8
-# source	736b3426aa+dirty
-# at	2026-11-21T03:20:14Z
+# candidate	519d71e99b3cf664f5e31efae7ffa92a3dd37c54e64bb1004d6165e4faa57b2e
+# source	39d7ce922d+dirty
+# at	2026-11-21T03:26:39Z
 folder	case	status	differences	stop	first
 r-act-1-meta	r-act-1-meta/support-ado-objects	Mismatched	2	interfaces	2 $.results.{B196B284-BAB4-101A-B69C-00AA00341D07} [InterfacesEvent]: expected "0x00000000" actual "0x80004002"
 r-act-1-meta	r-act-1-meta/support-dao-objects	Mismatched	3	interfaces	6 $.results.{B196B284-BAB4-101A-B69C-00AA00341D07} [InterfacesEvent]: expected "0x00000000" actual "0x80004002"
@@ -120,7 +120,7 @@ r-cat-1b	r-cat-1b/containers-membership-after-ddl	Mismatched	16	Execute	8 $.invo
 r-cat-1b	r-cat-1b/containers-tables-documents	Matched	0		
 r-cat-1b	r-cat-1b/create-base	Mismatched	11	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/create-idx	Mismatched	9	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1b	r-cat-1b/create-props	Mismatched	16	Attributes	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-cat-1b	r-cat-1b/create-props	Mismatched	16	CreateField	53 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/create-qd	Mismatched	16	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/create-rel	Mismatched	16	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/document-properties	Matched	0		
@@ -310,14 +310,14 @@ r-dao-1-err-1	r-dao-1-err-1/boot-first-opendb	Matched	0
 r-dao-1-err-1	r-dao-1-err-1/boot-first-workspaces	Matched	0		
 r-dao-1-err-1	r-dao-1-err-1/boot-open-twice	Mismatched	1	files	33 $.files[1] [files]: expected {"relativePath":"inputs/r-dao-1-err-1-accdb-base.laccdb","length":64,"sha256":"1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327","attributes":"Archive","artifactRole":"lockfile:after-close:r-d…
 r-dao-1-err-1	r-dao-1-err-1/coll-mutation-refresh	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-dao-1-err-1	r-dao-1-err-1/coll-name-variants	Mismatched	16	Item	33 $.excepInfo.source.bytes [call]: expected "440041004f002e005400610062006c006500440065006600" actual "440041004f002e004600690065006c0064007300"
-r-dao-1-err-1	r-dao-1-err-1/coll-tabledefs-index-variants	Mismatched	16	Item	43 $.excepInfo.scode [call]: expected "0x800A0D5D" actual "0x80004001"
+r-dao-1-err-1	r-dao-1-err-1/coll-name-variants	Matched	0		
+r-dao-1-err-1	r-dao-1-err-1/coll-tabledefs-index-variants	Matched	0		
 r-dao-1-err-1	r-dao-1-err-1/create-accdb-base	Mismatched	16	Execute	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/create-mdb-base	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/create-workspace-route	Mismatched	16	Execute	15 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/draft-index-relation	Mismatched	16	CreateIndex	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/draft-querydef	Mismatched	16	CreateQueryDef	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-dao-1-err-1	r-dao-1-err-1/draft-tabledef-field	Mismatched	9	Name	50 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-dao-1-err-1	r-dao-1-err-1/draft-tabledef-field	Mismatched	1	files	61 $.files[0].length [files]: expected 266240 actual 258048
 r-dao-1-err-1	r-dao-1-err-1/err-base-scope	Mismatched	16	OpenRecordset	17 $.excepInfo.scode [call]: expected "0x800A0C06" actual "0x800A0BC3"
 r-dao-1-err-1	r-dao-1-err-1/err-bind-arity-member	Mismatched	13	CreateWorkspace	8 $.invokeHresult [call]: expected "0x80020009" actual "0x8002000F"
 r-dao-1-err-1	r-dao-1-err-1/err-bind-optional-cells	Mismatched	16	OpenRecordset	5 $.invokeHresult [call]: expected "0x80020009" actual "0x00000000"
@@ -330,7 +330,7 @@ r-dao-1-err-1	r-dao-1-err-1/err-snapshot-held	Mismatched	16	OpenRecordset	5 $.ex
 r-dao-1-err-1	r-dao-1-err-1/id-held-rename	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/id-twice	Matched	0		
 r-dao-1-err-1	r-dao-1-err-1/index-metadata-seek	Matched	0		
-r-dao-1-err-1	r-dao-1-err-1/life-database-workspace-close	Mismatched	6	Count	23 $.excepInfo.source.bytes [call]: expected "440041004f002e0044006100740061006200610073006500" actual "440041004f002e005400610062006c0065004400650066007300"
+r-dao-1-err-1	r-dao-1-err-1/life-database-workspace-close	Matched	0		
 r-dao-1-err-1	r-dao-1-err-1/life-recordset-querydef-release	Mismatched	16	Clone	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/manifest-library	Matched	0		
 r-dao-1-err-1	r-dao-1-err-1/manifest-runtime-types	Mismatched	1	OpenRecordset	61 $.excepInfo.scode [call]: expected "0x800A0C06" actual "0x800A0BC3"
@@ -351,7 +351,7 @@ r-dao-1b	r-dao-1b/coll-delete-field-indexed	Mismatched	5	Delete	19 $.excepInfo.s
 r-dao-1b	r-dao-1b/coll-delete-index-in-relation	Mismatched	16	Delete	14 $.excepInfo.scode [call]: expected "0x800A0CD1" actual "0x80004001"
 r-dao-1b	r-dao-1b/coll-fields-ordinalposition	Mismatched	16	OrdinalPosition	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1b	r-dao-1b/coll-item-query-family	Mismatched	11	Item	45 $.result.identity [call]: expected "o16" actual "o17"
-r-dao-1b	r-dao-1b/coll-item-table-family	Mismatched	3	Item	39 $.excepInfo.source.bytes [call]: expected "440041004f002e004600690065006c0064007300" actual "440041004f002e0049006e006400650078004600690065006c0064007300"
+r-dao-1b	r-dao-1b/coll-item-table-family	Matched	0		
 r-dao-1b	r-dao-1b/coll-item-top-level	Matched	0		
 r-dao-1b	r-dao-1b/coll-newenum-get	Mismatched	15	_NewEnum	24 $.invokeHresult [call]: expected "0x80020009" actual "0x80020003"
 r-dao-1b	r-dao-1b/coll-querydefs-cross-db-refresh	Mismatched	16	CreateQueryDef	11 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -436,7 +436,7 @@ r-def-cursor-dao	r-def-cursor-dao/err-union-column-count	Matched	0
 r-def-cursor-dao	r-def-cursor-dao/errors-refresh-and-members	Mismatched	16	Execute	5 $.excepInfo.scode [call]: expected "0x800A0C06" actual "0x80004001"
 r-def-cursor-dao	r-def-cursor-dao/field-value-trio-during-edit	Mismatched	16	OriginalValue	10 $.excepInfo.scode [call]: expected "0x800A0CB3" actual "0x80004001"
 r-def-cursor-dao	r-def-cursor-dao/field-value-trio-other-writer	Mismatched	16	LockEdits	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-def-cursor-dao	r-def-cursor-dao/fields-lookup-forms-on-recordset	Mismatched	8	Item	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-def-cursor-dao	r-def-cursor-dao/fields-lookup-forms-on-recordset	Matched	0		
 r-def-cursor-dao	r-def-cursor-dao/join-field-names-and-lookup	Mismatched	14	Value	63[0].4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-def-cursor-dao	r-def-cursor-dao/lockedits-put-after-open	Mismatched	10	LockEdits	12 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-def-cursor-dao	r-def-cursor-dao/mdb-pos-dynaset	Mismatched	12	EOF	101 $.result.integer [call]: expected "-1" actual "0"
@@ -527,7 +527,7 @@ r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-datetime2	Mismatched	16	CreateDatabase	3 
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-decimal	Mismatched	16	CreateDatabase	3 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-properties	Mismatched	16	CreateDatabase	3 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2-fx-fixture	Mismatched	16	Execute	5 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/fmt2-scalar-admission-date-range	Mismatched	3	files	104 $.files[0].sha256 [files]: expected "3e45ccb5f1fa5fc31821d146b351bacf4622d8fe4363cbbe7694d78b1c6add6a" actual "892e2151db7978569f8cb32ef0b01fccd71246b10461a1b5928f912b64e2b566"
+r-fix-fmt-sort	r-fix-fmt-sort/fmt2-scalar-admission-date-range	Matched	0		
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2-scalar-admission-decimal	Mismatched	16	Value	19[22].1 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2-var-null-empty-ladder	Mismatched	16	Execute	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2b-au-explicit-high-ladder	Mismatched	16	Execute	22 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -562,7 +562,7 @@ r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-accdb	Mismatched	16	Execute	6 
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-mdb	Mismatched	16	Execute	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-lu-accdb	Mismatched	16	Execute	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-lu-mdb	Mismatched	16	Execute	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-dao-index-flags	Mismatched	16	files	9 $.files[0].sha256 [files]: expected "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8" actual "84960b402cf64e1bf717d17cccd848425ab6b1e5a86425376603bdce5b21a484"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-dao-index-flags	Mismatched	16	files	9 $.files[0].sha256 [files]: expected "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8" actual "4c5488dab75a665d68165630f7143dd06e1b50eb301cf6e54af6d1df2e06b4b6"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3b-existing-nulls-isolated	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-a	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-b	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -671,7 +671,7 @@ r-q-cursor-dao	r-q-cursor-dao/boot-systemdb-properties-first	Matched	0
 r-q-cursor-dao	r-q-cursor-dao/bulk-getrows-deletion-discovery	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q-cursor-dao	r-q-cursor-dao/bulk-getrows-large-count	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q-cursor-dao	r-q-cursor-dao/create-main	Mismatched	16	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-cursor-dao	r-q-cursor-dao/create-membership-refresh	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58" actual "3d77f26b25a53ea3cc99a01ae8d7ac76d8b54b2f25315870bb18838e77ad6767"
+r-q-cursor-dao	r-q-cursor-dao/create-membership-refresh	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58" actual "e6ccb360cd283f34688f2e774061dafeeaa74168d323d2886743763d770f9008"
 r-q-cursor-dao	r-q-cursor-dao/draft-correct-after-failure	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q-cursor-dao	r-q-cursor-dao/draft-setters-after-attach-txn	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q-cursor-dao	r-q-cursor-dao/edit-addnew-counter-rollback-reopen	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
@@ -833,10 +833,10 @@ r-q2-cursor-dao	r-q2-cursor-dao/boot-alias-path-open-twice	Mismatched	16	Name	12
 r-q2-cursor-dao	r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q2-cursor-dao	r-q2-cursor-dao/byref-dao-move-seek	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q2-cursor-dao	r-q2-cursor-dao/byref-dao-openrecordset	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
-r-q2-cursor-dao	r-q2-cursor-dao/create-held-databases-before-engine-create	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "b4f478113cd592f39fbf6bce028a36aef2d26128521b029934992efe3508c1d2" actual "bd88817c39939b6c6a8e260538348ece7db7cbf18aed61d24f0a02001048077b"
+r-q2-cursor-dao	r-q2-cursor-dao/create-held-databases-before-engine-create	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "b4f478113cd592f39fbf6bce028a36aef2d26128521b029934992efe3508c1d2" actual "f4fdf838eedcfd243e8f3809b4db1e153ad4cd86b5f679bd07df785e5e25b598"
 r-q2-cursor-dao	r-q2-cursor-dao/create-main	Mismatched	16	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-early	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "63c44480d54b660ca747369d23a1b26fbe1cf422586443cfe5b4978bb9b69696" actual "8b3e0aa757db124756a5d5a2426f5f15980ebd75fe0e8f2a71fcc5eda90ae1de"
-r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-late	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "9cb27c7cdbc430b5d7459ec9052c70a888973721b44558aa344d6ac57b8630ba" actual "b11ef7004e83fb974691185e13dfa5dedb43f81739216cdeffdd4cd50c3a66b0"
+r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-early	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "63c44480d54b660ca747369d23a1b26fbe1cf422586443cfe5b4978bb9b69696" actual "4c2bb99981ef382c0d7b2b254fea35a4f22e460ea20c445146c3a804b4880f32"
+r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-late	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "9cb27c7cdbc430b5d7459ec9052c70a888973721b44558aa344d6ac57b8630ba" actual "058bde8a956d6aa69053bb5dafa1ab21a7d65a796e20eb3b9fb4301349c68c45"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-close-during-walk	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-dao-child-collections	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-dao-top-level-collections	Mismatched	16	Execute	4 $.excepInfo.scode [call]: expected "0x800A0D30" actual "0x80004001"
@@ -884,9 +884,9 @@ r-q2-wire	r-q2-wire/act-aggregate-ado-cocreate	Matched	0
 r-q2-wire	r-q2-wire/act-aggregate-classobject	Matched	0		
 r-q2-wire	r-q2-wire/act-dao-clsctx-iids	Matched	0		
 r-q2-wire	r-q2-wire/act-factory-ado-classes	Matched	0		
-r-q2-wire	r-q2-wire/act-factory-dao-identity	Mismatched	16	Count	13 $.result.integer [call]: expected "1" actual "2"
+r-q2-wire	r-q2-wire/act-factory-dao-identity	Matched	0		
 r-q2-wire	r-q2-wire/act-typecreate-ado-coclasses	Matched	0		
-r-q2-wire	r-q2-wire/act-typecreate-dao-identity	Mismatched	16	Count	11 $.result.integer [call]: expected "1" actual "2"
+r-q2-wire	r-q2-wire/act-typecreate-dao-identity	Matched	0		
 r-q2-wire	r-q2-wire/byref-ado-command-execute	Mismatched	10	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-wire	r-q2-wire/byref-ado-records-affected-counts	Mismatched	13	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-wire	r-q2-wire/byref-dao-openrecordset-args	Mismatched	16	Execute	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -1005,7 +1005,7 @@ r-sort-3b	r-sort-3b/nulls-walk-compound	Matched	0
 r-sort-3b	r-sort-3b/nulls-walk-single	Matched	0		
 r-str-ado-act	r-str-ado-act/act-ado-classes	Matched	0		
 r-str-ado-act	r-str-ado-act/act-dao120	Matched	0		
-r-str-ado-act	r-str-ado-act/act-two-engines	Mismatched	1	Count	25 $.result.integer [call]: expected "1" actual "2"
+r-str-ado-act	r-str-ado-act/act-two-engines	Matched	0		
 r-str-ado-act	r-str-ado-act/ado-async	Mismatched	16	Open	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/ado-batch	Mismatched	16	Open	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/ado-bulk	Mismatched	16	Open	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
