@@ -1,0 +1,73 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q25-nz-3141/alias-precedence-forms",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B",
+    "R-EXPR-1",
+    "W-06"
+  ],
+  "description": "Organizer discriminator for p7qq: does a missing, malformed or reserved alias after AS fail 3141 when the item's expression itself fails to parse (3075), and does that hold across items (the reserved alias in another item than the failing expression)? Controls: (1 + ) AS x and CAST(1 AS LONG) AS v.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-main.accdb",
+      "sha256": "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337",
+      "length": 229376,
+      "provenance": "r-expr-1b.create-main.141f77b461.a1 qk1-141f77b46191e9a552ba893cbea5d7261e388f3302c8ffe0d70d04f8871292e5 output:r-expr-1b-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{"type": "inputPath", "role": "main"},{"type": "bool", "value": false},{"type": "bool", "value": true}], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS x FROM Mx"},{"type": "i4", "value": 4}], "bind": "r0" },
+    { "op": "invoke", "target": "r0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r0" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS inT FROM Mx"},{"type": "i4", "value": 4}], "bind": "r1" },
+    { "op": "invoke", "target": "r1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r1" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS FROM Mx"},{"type": "i4", "value": 4}], "bind": "r2" },
+    { "op": "invoke", "target": "r2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r2" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS 5 FROM Mx"},{"type": "i4", "value": 4}], "bind": "r3" },
+    { "op": "invoke", "target": "r3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r3" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS [x]]y] FROM Mx"},{"type": "i4", "value": 4}], "bind": "r4" },
+    { "op": "invoke", "target": "r4", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r4" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT 1 AS [x]]y] FROM Mx"},{"type": "i4", "value": 4}], "bind": "r5" },
+    { "op": "invoke", "target": "r5", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r5" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS [inT FROM Mx"},{"type": "i4", "value": 4}], "bind": "r6" },
+    { "op": "invoke", "target": "r6", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r6" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ), 1 AS inT FROM Mx"},{"type": "i4", "value": 4}], "bind": "r7" },
+    { "op": "invoke", "target": "r7", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r7" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT 1 AS inT, (1 + ) FROM Mx"},{"type": "i4", "value": 4}], "bind": "r8" },
+    { "op": "invoke", "target": "r8", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r8" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT Nz(N), 1 AS inT FROM Mx"},{"type": "i4", "value": 4}], "bind": "r9" },
+    { "op": "invoke", "target": "r9", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r9" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT CAST(1 AS LONG) AS v FROM Mx"},{"type": "i4", "value": 4}], "bind": "r10" },
+    { "op": "invoke", "target": "r10", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r10" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{"type": "bstr", "text": "SELECT (1 + ) AS OUTER FROM Mx"},{"type": "i4", "value": 4}], "bind": "r11" },
+    { "op": "invoke", "target": "r11", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "r11" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
