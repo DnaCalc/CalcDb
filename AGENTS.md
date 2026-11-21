@@ -58,7 +58,8 @@ scope or design, the book wins.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
-- Inspect oracle results with `calcdb-oracle show`, not with one-off scripts.
+- Inspect oracle results with `calcdb-oracle show`, not with one-off scripts; `--pages` and `--diff` print a record's
+  kept page bytes and what changed against the input or an earlier point.
 - About 15% of effort goes to reviewing and improving how we work (The Plan §4). Log each round
   in [docs/work/process-log.md](docs/work/process-log.md).
 

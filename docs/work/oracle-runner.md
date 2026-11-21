@@ -97,6 +97,8 @@ $oracle = "src/CalcDb.Oracle.Runner/bin/Debug/net11.0/calcdb-oracle.exe"
 & $oracle submit --question probes/r-oracle-1/table-read-t1.question.json --token r-oracle-1-table-read-t1
 & $oracle run --token r-oracle-1-table-read-t1      # prepares, runs the owned worker, seals
 & $oracle show --attempt r-oracle-1-table-read-t1.a1  # inspect before deciding to retain
+& $oracle show --attempt r-oracle-1-table-read-t1.a1 --pages 0,55   # kept page images, hex with offsets
+& $oracle show --record evidence/<question>/<probe>/<record>.json --diff [input|POINT] [--pages N,...]
 & $oracle retain --attempt r-oracle-1-table-read-t1.a1 --note "why it is kept"
 & $oracle freeze --attempt <id> --artifact output:<file> --role main --file-name <file>  # output -> fixture
 src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe build
@@ -193,6 +195,25 @@ environment, a tool under test), `calcdb-oracle desktop-run [--timeout S] [--log
 ARGS` runs the command on the private desktop inside a kill-on-close job and reports the visible windows of every
 process in the job, children included. Use `--container-desktop` for AppContainer processes such as an mxc process
 container: that second private desktop also admits the AppContainer groups (isolated-environments.md, M2).
+
+**Kept page bytes (`show --pages`, `show --diff`).** Page-level answers are read through `show`, never through one-off
+helpers. A probe keeps bytes with `nativeRead keep:true`; each open handle's kept reads are a *point*, named by the label
+of the `observeFiles` step before it (a repeated label becomes `after-x#2`). `--attempt ID` or `--record FILE` selects
+the attempt, as for the plain `show`.
+
+- `--pages [N,...]` prints every kept point's page images as hex with offsets (16 bytes a line, repeated lines elided
+  with `*`), for the listed page numbers or, bare, for all. A read that covers part of a page shows under that page at its
+  offset. The page size is 4096.
+- `--diff [input|POINT] [--pages N,...]` prints the bytes that differ, as runs `page P offset O: old -> new` in hex,
+  grouped by page. `input` (the default) is the question's input fixture, read through the `ArtifactStore` (or the
+  attempt's `inputs` folder); every kept point is compared with it. A point name compares each later point with that one.
+  Pages beyond the input, or bytes the baseline point did not keep, say so on a line of their own.
+
+```
+> show --record evidence/r-q15-ddl-open/dup-append-dao/<record>.json --diff after-session-1 --pages 0
+== after-session-2 against after-session-1: 1 bytes differ
+  page 0 offset 3586: 02 -> 04
+```
 
 A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
 file-I/O recorder: every create, read, write and flush on the attempt's files, with offsets and sizes, becomes the
