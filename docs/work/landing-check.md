@@ -11,11 +11,14 @@ procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scrat
 2. Run [tools/landing-check.ps1](../../tools/landing-check.ps1) with the child's files (an explicit list, never
    "every modified file"), the test projects the change touches, and the target questions:
    `pwsh tools/landing-check.ps1 -Name <topic> -Files a,b,c -Tests Isam,Sql,Com -Publish -Questions probes/<card> -Snapshot`.
-   It exports HEAD to `%TEMP%` (`git archive`), copies in the files, builds `CalcDb.slnx`, publishes `CalcDb.Com`
-   into the export's `artifacts/native`, runs each test project with a trx logger (failed tests are named, replay
-   counters printed), and runs the candidate check from the repository folder
+   It exports HEAD to `%TEMP%` (`git archive`), copies in the files, checks every cited `<folder>/<question>` in the
+   listed files (where `<folder>` exists under `probes/`) against `probes/<folder>/<question>.question.json` and
+   `evidence/<folder>/<question>/`, builds `CalcDb.slnx`, publishes `CalcDb.Com` into the export's `artifacts/native`,
+   runs each test project with a trx logger (failed tests are named, replay counters printed), and runs the candidate
+   check from the repository folder
    (`calcdb-oracle batch --dir D --env windows-x64-calcdb-local --deployment <export>/artifacts/native --compare --rerun`).
-   Its exit code is the number of failed steps. It lists the changed files it leaves out, so a missing file shows.
+   Any missing citation prints `file:line: <folder>/<question>` and counts as a failed step (its exit code is the number
+   of failed steps). It lists the changed files it leaves out, so a missing file shows.
 3. When the review adjusts a file, run the script again; it starts from a fresh export each time. While a child fixes
    its own new tests it adds `-Filter <dotnet test filter>` (for example `-Filter FullyQualifiedName~DaoBookmarkTests`)
    and leaves out `-Questions`: the same export and build, only those tests. The script prints FILTERED and refuses

@@ -257,15 +257,15 @@ public sealed class CompareSetTests
     [Fact]
     public void Counts_and_render_not_comparable_keep_listed_questions_out_of_compared_denominator()
     {
-        string counts = CompareSet.Counts([E("r-q2-cat-txn-lock/a", "Matched"), E("r-q2-cat-txn-lock/b", "Mismatched", "1 x", 1)], notComparable: 11);
+        string counts = CompareSet.Counts([E("card/a", "Matched"), E("card/b", "Mismatched", "1 x", 1)], notComparable: 11);
         Assert.Equal("  1 matched, 0 accepted of   2 (1 Mismatched); 11 not comparable, listed", counts);
 
         string rendered = CompareSet.RenderNotComparable([
-            new("r-q2-cat-txn-lock/z", "reason z"),
-            new("r-q2-cat-txn-lock/a", "reason a"),
+            new("card/z", "reason z"),
+            new("card/a", "reason a"),
         ]);
         Assert.Equal(
-            "not comparable (2, listed; not counted in matched or compared):\n  r-q2-cat-txn-lock/a: reason a\n  r-q2-cat-txn-lock/z: reason z\n",
+            "not comparable (2, listed; not counted in matched or compared):\n  card/a: reason a\n  card/z: reason z\n",
             rendered);
         Assert.Equal("", CompareSet.RenderNotComparable([]));
     }

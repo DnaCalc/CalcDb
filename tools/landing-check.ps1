@@ -1,8 +1,8 @@
 # Landing check of one child's change (docs/work/landing-check.md, steps 2, 3 and 5).
-# Exports HEAD to %TEMP%, copies exactly the listed files into it, builds, optionally publishes CalcDb.Com, runs the
-# listed test projects with a trx logger (failed tests are named), candidate-checks question folders, and optionally
-# snapshots the export's runner, worker and native deployment for the full compare set. It never writes to the
-# integration checkout. Exit code: the number of failed steps.
+# Exports HEAD to %TEMP%, copies exactly the listed files into it, checks cited <folder>/<question> records in those
+# files, builds, optionally publishes CalcDb.Com, runs the listed test projects with a trx logger (failed tests are
+# named), candidate-checks question folders, and optionally snapshots the export's runner, worker and native deployment
+# for the full compare set. It never writes to the integration checkout. Exit code: the number of failed steps.
 #
 #   pwsh tools/landing-check.ps1 -Name zfrp4 -Files src/a.cs,tests/b.cs -Tests Isam,Sql,Com -Publish `
 #        -Questions probes/r-q17-growth -Snapshot
@@ -73,6 +73,65 @@ if ($staleFiles) { "  not in this landing (other children's or unrelated changes
 
 Push-Location $Export
 try {
+    # Citation check: every <folder>/<question> cited in the listed -Files where <folder> is an existing directory under
+    # probes/ must resolve to probes/<folder>/<question>.question.json or evidence/<folder>/<question>/ (including
+    # evidence-only folders such as r-oracle-1/or-reuse, or wildcard globs matching at least one probe or evidence entry).
+    $probeFolders = @(Get-ChildItem (Join-Path $Export "probes") -Directory | Select-Object -ExpandProperty Name | Sort-Object Length -Descending)
+    if ($probeFolders.Count -gt 0) {
+        $probeFolderSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$probeFolders, [StringComparer]::Ordinal)
+        $folderAlt = ($probeFolders | ForEach-Object { [regex]::Escape($_) }) -join '|'
+        $citeRx = [regex]::new("(?<![A-Za-z0-9_.-])($folderAlt)/([A-Za-z0-9][A-Za-z0-9_.*-]*)", [System.Text.RegularExpressions.RegexOptions]::Compiled)
+        $binaryExts = [System.Collections.Generic.HashSet[string]]::new([string[]]@('.gz', '.accdb', '.mdb', '.dll', '.exe', '.png', '.jpg', '.pdf', '.zip', '.bin'), [StringComparer]::OrdinalIgnoreCase)
+        $citeFiles = [System.Collections.Generic.List[string]]::new()
+        foreach ($f in $Files) {
+            $rel = $f -replace '\\', '/'
+            $fullPath = Join-Path $Export $f
+            if (Test-Path $fullPath -PathType Leaf) {
+                if (-not $binaryExts.Contains([IO.Path]::GetExtension($fullPath))) { $citeFiles.Add($rel) }
+            } elseif (Test-Path $fullPath -PathType Container) {
+                Get-ChildItem $fullPath -Recurse -File | Where-Object { -not $binaryExts.Contains($_.Extension) } | ForEach-Object {
+                    $citeFiles.Add(([IO.Path]::GetRelativePath($Export, $_.FullName) -replace '\\', '/'))
+                }
+            }
+        }
+        $checkedCitations = 0
+        $missingCitations = [System.Collections.Generic.List[string]]::new()
+        foreach ($rel in $citeFiles) {
+            $lines = [IO.File]::ReadAllLines((Join-Path $Export $rel))
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+                $line = $lines[$i]
+                foreach ($m in $citeRx.Matches($line)) {
+                    $folder = $m.Groups[1].Value
+                    $rawQ = $m.Groups[2].Value
+                    # Unwrap comment or prose citations broken across lines at a hyphen.
+                    if ($rawQ.EndsWith('-') -and ($m.Index + $m.Length) -eq $line.TrimEnd().Length -and ($i + 1) -lt $lines.Count) {
+                        $next = $lines[$i + 1] -replace '^\s*(?:///|//|\*|#)?\s*', ''
+                        if ($next -match '^([A-Za-z0-9][A-Za-z0-9_.*-]*)') { $rawQ += $Matches[1] }
+                    }
+                    $q = ($rawQ -replace '\.question\.json$', '').TrimEnd('.')
+                    if (-not $q -or $probeFolderSet.Contains($q)) { continue }
+                    # Shorthand folder pairs in prose (e.g. r-cat-1/1b, r-sort-3/3b where r-cat-1b / r-sort-3b exists).
+                    if ($probeFolderSet.Contains(($folder -replace '[^-]+$', $q))) { continue }
+                    $checkedCitations++
+                    $exists = if ($q.Contains('*')) {
+                        [bool](Get-ChildItem (Join-Path $Export "probes\$folder") -Filter "$q.question.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1) -or
+                        [bool](Get-ChildItem (Join-Path $Export "evidence\$folder") -Filter $q -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+                    } else {
+                        (Test-Path (Join-Path $Export "probes\$folder\$q.question.json") -PathType Leaf) -or
+                        (Test-Path (Join-Path $Export "evidence\$folder\$q") -PathType Container) -or
+                        (Test-Path (Join-Path $Export "evidence\$folder\$q.json") -PathType Leaf)
+                    }
+                    if (-not $exists) { $missingCitations.Add("${rel}:$($i + 1): $folder/$q") }
+                }
+            }
+        }
+        Step "citations: $checkedCitations checked in $($citeFiles.Count) files, $($missingCitations.Count) missing"
+        if ($missingCitations.Count -gt 0) {
+            $failed++
+            $missingCitations | Select-Object -First 50 | ForEach-Object { "  $_" }
+            if ($missingCitations.Count -gt 50) { "  ... and $($missingCitations.Count - 50) more" }
+        }
+    }
     $build = dotnet build CalcDb.slnx -v q -clp:ErrorsOnly 2>&1
     if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
     Step "built"
