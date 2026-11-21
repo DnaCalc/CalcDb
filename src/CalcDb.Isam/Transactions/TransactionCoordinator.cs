@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 using CalcDb.Format;
 using CalcDb.Isam.Edit;
@@ -101,6 +102,8 @@ public sealed class ExplicitFrame
 
     internal List<AcceptedRowChange> Changes { get; } = [];
 
+    internal int UnwrittenCount { get; set; }
+
     public IReadOnlyList<AcceptedRowChange> AcceptedChanges => Changes;
 }
 
@@ -137,11 +140,28 @@ public sealed class OperationFrame : IDisposable
 {
     private readonly TransactionCoordinator _owner;
     private bool _done;
+    private List<FileParticipant>? _scoped;
 
-    internal OperationFrame(TransactionCoordinator owner) => _owner = owner;
+    internal OperationFrame(TransactionCoordinator owner, bool scopesOpen = true)
+    {
+        _owner = owner;
+        ScopesOpen = scopesOpen;
+    }
+
+    internal bool ScopesOpen { get; set; }
 
     /// <summary>The participants this operation opened a scope on.</summary>
-    internal List<FileParticipant> Scoped { get; } = [];
+    internal List<FileParticipant> Scoped => _scoped ??= [];
+
+    internal bool HasScoped => _scoped is { Count: > 0 };
+
+    internal FileParticipant? CreatedWithoutScope { get; set; }
+
+    internal AcceptedRowChange? DeferredSingle { get; set; }
+
+    internal AcceptedRowChange? PromotedSingle { get; set; }
+
+    internal AcceptOutcome? DeferredFailure { get; set; }
 
     /// <summary>Enlist a file for this operation's page edits; its overlay scopes line up with the frames and this operation.</summary>
     public FileParticipant Enlist(PageCache cache) => _owner.EnlistFor(this, cache);
@@ -150,14 +170,14 @@ public sealed class OperationFrame : IDisposable
     {
         ObjectDisposedException.ThrowIf(_done, this);
         _done = true;
-        _owner.EndOperation(this, change is null ? null : [change], commit: true);
+        _owner.EndOperation(this, change, null, commit: true);
     }
 
     internal void CompleteBatch(IReadOnlyList<AcceptedRowChange> changes)
     {
         ObjectDisposedException.ThrowIf(_done, this);
         _done = true;
-        _owner.EndOperation(this, changes, commit: true);
+        _owner.EndOperation(this, null, changes, commit: true);
     }
 
     public void Abandon()
@@ -165,7 +185,7 @@ public sealed class OperationFrame : IDisposable
         if (!_done)
         {
             _done = true;
-            _owner.EndOperation(this, null, commit: false);
+            _owner.EndOperation(this, null, null, commit: false);
         }
     }
 
@@ -259,10 +279,19 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// </summary>
     public static readonly TimeSpan ObservedNewBurstMin = TimeSpan.FromSeconds(1);
 
+    private sealed class TableAcceptedIndex
+    {
+        public int TotalCount;
+        public readonly Dictionary<RowId, int> RowCounts = [];
+    }
+
     private readonly List<ExplicitFrame> _frames = [];
     private readonly Dictionary<PageCache, FileParticipant> _participants = [];
     private readonly List<EditFrame> _edits = [];
     private readonly List<AcceptedRowChange> _pending = [];
+    private readonly Dictionary<MutationSemantics, TableAcceptedIndex> _acceptedByTable = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<PageCache, int> _unpublishedGlobalMapActivity = [];
+    private readonly Dictionary<PageCache, int> _unpublishedReservedExtent = [];
     private readonly HashSet<PageCache> _locked = [];
     private readonly Dictionary<PageCache, TimeSpan> _lazyBursts = [];
     private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
@@ -271,6 +300,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
+    private int _unwrittenPendingCount;
 
     /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
     public bool InStatement => _statement is not null;
@@ -300,43 +330,41 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// Whether this Workspace has already published or accepted (unpublished) any global-map allocation, free, deferred
     /// page-1 release, or page-1 extent reservation on <paramref name="cache"/> in the current session.
     /// </summary>
-    public bool HasGlobalMapActivity(PageCache cache)
+    public bool HasGlobalMapActivity(PageCache cache) =>
+        _allocatedGlobalMap.Contains(cache)
+        || _releaseAtClose.ContainsKey(cache)
+        || _reservedExtent.Contains(cache)
+        || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
+
+    private bool HasActiveExtentReservation(PageCache cache) =>
+        _reservedExtent.Contains(cache)
+        || (_unpublishedReservedExtent.TryGetValue(cache, out int count) && count > 0);
+
+    private static bool HasGlobalMapActivity(PhysicalChange physical)
     {
-        if (_allocatedGlobalMap.Contains(cache) || _releaseAtClose.ContainsKey(cache) || _reservedExtent.Contains(cache))
+        if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
         {
             return true;
         }
         uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
-        foreach (AcceptedRowChange c in Accepted())
+        IReadOnlyList<PageEdit> edits = physical.Edits;
+        for (int i = 0; i < edits.Count; i++)
         {
-            if (c.Physical is not { } physical || !ReferenceEquals(physical.File, cache))
-            {
-                continue;
-            }
-            if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
+            if (edits[i].Page == globalMapPage)
             {
                 return true;
-            }
-            foreach (PageEdit e in physical.Edits)
-            {
-                if (e.Page == globalMapPage)
-                {
-                    return true;
-                }
             }
         }
         return false;
     }
 
-    private bool HasActiveExtentReservation(PageCache cache) =>
-        _reservedExtent.Contains(cache)
-        || Accepted().Any(c => c.Physical is { HasReservedExtent: true } p && ReferenceEquals(p.File, cache));
-
     private static bool AllocatesGlobalMapPage(PhysicalChange physical)
     {
         uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
-        foreach (PageEdit e in physical.Edits)
+        IReadOnlyList<PageEdit> edits = physical.Edits;
+        for (int i = 0; i < edits.Count; i++)
         {
+            PageEdit e = edits[i];
             if (e.Page == globalMapPage && e.Delta is BitDelta { Clear: not 0 })
             {
                 return true;
@@ -375,7 +403,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public void EndLazyBurst(PageCache cache) => _lazyBursts.Remove(cache);
 
     /// <summary>This Workspace's private overlay of <paramref name="cache"/>, if it has changed the file.</summary>
-    public PrivateOverlay? OverlayOf(PageCache cache) => _participants.TryGetValue(cache, out FileParticipant? p) ? p.Overlay : null;
+    public PrivateOverlay? OverlayOf(PageCache cache)
+    {
+        if (_operation is { DeferredSingle: not null })
+        {
+            PromoteDeferredSingle(_operation);
+        }
+        return _participants.TryGetValue(cache, out FileParticipant? p) ? p.Overlay : null;
+    }
 
     /// <summary>The lifetime an accepted change holds its pages with: the transaction inside a level, else until published.</summary>
     public LockLifetime ChangeLifetime => _frames.Count > 0 ? LockLifetime.Transaction : LockLifetime.UntilPublished;
@@ -453,6 +488,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             // Inner commit: the level's deltas and tickets move to the parent; each overlay merges its innermost scope
             // into the parent, which keeps its own earlier before-images (F-54: A17=7 survives, B21=100 is adopted).
             _frames[^1].Changes.AddRange(top.Changes);
+            _frames[^1].UnwrittenCount += top.UnwrittenCount;
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.CommitScope();
@@ -460,6 +496,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
         _pending.AddRange(top.Changes);
+        _unwrittenPendingCount += top.UnwrittenCount;
         bool pages = _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0);
         if (!pages && top.Changes.Count == 0)
         {
@@ -681,7 +718,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// </summary>
     private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode)
     {
-        if (_pending.Find(c => c.Physical is null) is { } unwritten)
+        if (_unwrittenPendingCount > 0 && _pending.Find(c => c.Physical is null) is { } unwritten)
         {
             return (MutationOpen.Publication, $"{_pending.Count} accepted changes await publication: {unwritten.NotWritten}");
         }
@@ -711,10 +748,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 return (MutationOpen.Publication, "the file cannot be written: " + leaseFailure);
             }
             Dictionary<ulong, PageRole> roles = [];
-            foreach (AcceptedRowChange c in _pending)
+            for (int ci = 0; ci < _pending.Count; ci++)
             {
-                foreach (PageEdit e in c.Physical!.Edits)
+                IReadOnlyList<PageEdit> edits = _pending[ci].Physical!.Edits;
+                for (int ei = 0; ei < edits.Count; ei++)
                 {
+                    PageEdit e = edits[ei];
                     roles[e.Page] = e.Role;
                 }
             }
@@ -776,15 +815,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             ReleasePublished(f);
         }
-        foreach (AcceptedRowChange c in _pending)
+        uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
+        for (int ci = 0; ci < _pending.Count; ci++)
         {
-            if (c.Physical is not { } physical)
+            if (_pending[ci].Physical is not { } physical)
             {
                 continue;
             }
-            foreach (PageEdit e in physical.Edits)
+            IReadOnlyList<PageEdit> edits = physical.Edits;
+            for (int ei = 0; ei < edits.Count; ei++)
             {
-                if (e.Page == FormatDescriptor.Jet4Family.Map.GlobalMapPage && e.Delta is BitDelta { Clear: not 0 })
+                PageEdit e = edits[ei];
+                if (e.Page == globalMapPage && e.Delta is BitDelta { Clear: not 0 })
                 {
                     _allocatedGlobalMap.Add(physical.File);
                     break;
@@ -794,14 +836,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 _reservedExtent.Add(physical.File);
             }
-            if (physical.ReleasedAtClose.Count > 0)
+            IReadOnlyList<uint> releasedAtClose = physical.ReleasedAtClose;
+            if (releasedAtClose.Count > 0)
             {
                 if (!_releaseAtClose.TryGetValue(physical.File, out List<uint>? pages))
                 {
                     _releaseAtClose[physical.File] = pages = [];
                 }
-                foreach (uint page in physical.ReleasedAtClose)
+                for (int ri = 0; ri < releasedAtClose.Count; ri++)
                 {
+                    uint page = releasedAtClose[ri];
                     if (!pages.Contains(page))
                     {
                         pages.Add(page);
@@ -810,6 +854,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
         _pending.Clear();
+        ClearAcceptedIndex();
         ReleaseParticipants();
         return (MutationOpen.None, null);
     }
@@ -833,6 +878,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         ExplicitFrame top = _frames[^1];
         _frames.RemoveAt(_frames.Count - 1);
         Consume(top.Changes);
+        UnindexChanges(top.Changes);
         if (_frames.Count > 0)
         {
             foreach (FileParticipant p in _participants.Values)
@@ -861,6 +907,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             ExplicitFrame top = _frames[^1];
             _frames.RemoveAt(_frames.Count - 1);
             Consume(top.Changes);
+            UnindexChanges(top.Changes);
         }
         foreach (EditFrame e in _edits.ToArray())
         {
@@ -875,7 +922,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// Begin the operation frame of one mutation (II-08 §3): 3003 from DAO.Recordset at depth 6 and 7
     /// (<see cref="MaxWriteDepth"/>). Outside any level it is an automatic operation whose success awaits publication.
     /// </summary>
-    public OperationFrame? BeginOperation(out MutationError? refused)
+    public OperationFrame? BeginOperation(out MutationError? refused) => BeginOperation(out refused, openScopes: true);
+
+    private OperationFrame? BeginOperation(out MutationError? refused, bool openScopes)
     {
         if (_operation is not null)
         {
@@ -887,11 +936,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return null;
         }
         refused = null;
-        _operation = new OperationFrame(this);
-        foreach (FileParticipant p in _participants.Values)
+        _operation = new OperationFrame(this, scopesOpen: openScopes);
+        if (openScopes)
         {
-            p.Overlay.BeginScope();
-            _operation.Scoped.Add(p);
+            foreach (FileParticipant p in _participants.Values)
+            {
+                p.Overlay.BeginScope();
+                _operation.Scoped.Add(p);
+            }
         }
         return _operation;
     }
@@ -915,7 +967,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statement = null;
         int changes = _statementChanges;
         _statementChanges = 0;
-        if (_frames.Count > 0 || Publisher is null || _pending.Count == 0 || _pending.Exists(c => c.Physical is null))
+        if (_frames.Count > 0 || Publisher is null || _pending.Count == 0 || _unwrittenPendingCount > 0)
         {
             return new ResolutionOutcome(ResolvedChanges: changes);
         }
@@ -942,14 +994,26 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// </summary>
     internal AcceptOutcome AcceptBatch(Func<Func<AcceptedRowChange, AcceptOutcome>, AcceptOutcome> run)
     {
-        OperationFrame? op = BeginOperation(out MutationError? refused);
+        OperationFrame? op = BeginOperation(out MutationError? refused, openScopes: false);
         if (op is null)
         {
             return new AcceptOutcome(false, refused);
         }
-        List<AcceptedRowChange> accepted = [];
+        List<AcceptedRowChange>? accepted = null;
         AcceptOutcome ApplyOne(AcceptedRowChange change)
         {
+            if (op.DeferredFailure is { } priorFailure)
+            {
+                return priorFailure;
+            }
+            if (op.DeferredSingle is not null)
+            {
+                PromoteDeferredSingle(op);
+                if (op.DeferredFailure is { } deferredFailure)
+                {
+                    return deferredFailure;
+                }
+            }
             if (change.Physical is { } physical)
             {
                 if (_unresolved.Contains(physical.File))
@@ -960,15 +1024,29 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
                 }
-                FileParticipant p = op.Enlist(physical.File);
-                foreach (PageEdit e in physical.Edits)
+            }
+            // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
+            // is atomic (on failure the overlay is unchanged), so defer applying it until either a second change or an
+            // OverlayOf read promotes the operation to scoped, or the batch completes with just this change.
+            if (!op.ScopesOpen && op.PromotedSingle is null && accepted is null && (change.Physical is null || change.Physical.Edits.Count <= 1))
+            {
+                op.DeferredSingle = change;
+                return new AcceptOutcome(true);
+            }
+            EnsureScopesOpen(op);
+            if (accepted is null)
+            {
+                accepted = [];
+                if (op.PromotedSingle is { } promoted)
                 {
-                    EditResult edited = p.Edit(e.Page, e.Delta);
-                    if (!edited.Succeeded)
-                    {
-                        return new AcceptOutcome(false, null, MutationOpen.Publication, $"page {e.Page} could not take the change's private revision: {edited.Failure} {edited.Detail}");
-                    }
+                    accepted.Add(promoted);
+                    op.PromotedSingle = null;
                 }
+            }
+            AcceptOutcome applied = ApplyPhysical(op, change);
+            if (!applied.Accepted)
+            {
+                return applied;
             }
             accepted.Add(change);
             return new AcceptOutcome(true);
@@ -984,17 +1062,59 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             op.Abandon();
             throw;
         }
+        if (op.DeferredFailure is { } failedDeferred)
+        {
+            op.Abandon();
+            return failedDeferred;
+        }
         if (!result.Accepted)
         {
             op.Abandon();
             return result;
         }
-        op.CompleteBatch(accepted);
+        int acceptedCount;
+        if (op.DeferredSingle is { } single)
+        {
+            op.DeferredSingle = null;
+            AcceptOutcome applied;
+            try
+            {
+                applied = ApplyPhysical(op, single);
+            }
+            catch
+            {
+                op.Abandon();
+                throw;
+            }
+            if (!applied.Accepted)
+            {
+                op.Abandon();
+                return applied;
+            }
+            op.Complete(single);
+            acceptedCount = 1;
+        }
+        else if (accepted is not null)
+        {
+            op.CompleteBatch(accepted);
+            acceptedCount = accepted.Count;
+        }
+        else if (op.PromotedSingle is { } promoted)
+        {
+            op.PromotedSingle = null;
+            op.Complete(promoted);
+            acceptedCount = 1;
+        }
+        else
+        {
+            op.Complete(null);
+            acceptedCount = 0;
+        }
         if (_statement is not null && _frames.Count == 0)
         {
-            _statementChanges += accepted.Count;
+            _statementChanges += acceptedCount;
         }
-        if (_frames.Count > 0 || _statement is not null || Publisher is null || _pending.Exists(c => c.Physical is null))
+        if (_frames.Count > 0 || _statement is not null || Publisher is null || _unwrittenPendingCount > 0)
         {
             return new AcceptOutcome(true);
         }
@@ -1002,6 +1122,56 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         // lazy commit per burst, evidence/r-q8-header-counter two-deletes-*ms-apart).
         (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.LazyBurst);
         return new AcceptOutcome(true, null, open, detail);
+    }
+
+    private static AcceptOutcome ApplyPhysical(OperationFrame op, AcceptedRowChange change)
+    {
+        if (change.Physical is not { } physical)
+        {
+            return new AcceptOutcome(true);
+        }
+        FileParticipant p = op.Enlist(physical.File);
+        IReadOnlyList<PageEdit> edits = physical.Edits;
+        for (int i = 0; i < edits.Count; i++)
+        {
+            PageEdit e = edits[i];
+            EditResult edited = p.Edit(e.Page, e.Delta);
+            if (!edited.Succeeded)
+            {
+                return new AcceptOutcome(false, null, MutationOpen.Publication, $"page {e.Page} could not take the change's private revision: {edited.Failure} {edited.Detail}");
+            }
+        }
+        return new AcceptOutcome(true);
+    }
+
+    private void EnsureScopesOpen(OperationFrame operation)
+    {
+        if (operation.ScopesOpen)
+        {
+            return;
+        }
+        operation.ScopesOpen = true;
+        foreach (FileParticipant p in _participants.Values)
+        {
+            p.Overlay.BeginScope();
+            operation.Scoped.Add(p);
+        }
+    }
+
+    private void PromoteDeferredSingle(OperationFrame operation)
+    {
+        AcceptedRowChange pending = operation.DeferredSingle!;
+        operation.DeferredSingle = null;
+        EnsureScopesOpen(operation);
+        AcceptOutcome applied = ApplyPhysical(operation, pending);
+        if (!applied.Accepted)
+        {
+            operation.DeferredFailure = applied;
+        }
+        else
+        {
+            operation.PromotedSingle = pending;
+        }
     }
 
     /// <summary>
@@ -1043,7 +1213,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new AcceptOutcome(false, null, MutationOpen.Conflict, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) is held by locker {conflict.Holder.Value}: a catalog change beside another Workspace's change is R-LOCK-4 WRITE-DDL's");
         }
         op.Complete(new AcceptedRowChange(catalogTable, RowChangeKind.Insert, null, [], [], null, compiled));
-        if (_frames.Count > 0 || Publisher is null || _pending.Exists(c => c.Physical is null))
+        if (_frames.Count > 0 || Publisher is null || _unwrittenPendingCount > 0)
         {
             return new AcceptOutcome(true);
         }
@@ -1119,8 +1289,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             p = new FileParticipant(cache, overlay);
             _participants.Add(cache, p);
+            if (!operation.ScopesOpen)
+            {
+                operation.CreatedWithoutScope = p;
+            }
         }
-        if (!operation.Scoped.Contains(p))
+        if (operation.ScopesOpen && !operation.Scoped.Contains(p))
         {
             if (_frames.Count > 0)
             {
@@ -1131,49 +1305,66 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return p;
     }
 
-    internal void EndOperation(OperationFrame operation, IReadOnlyList<AcceptedRowChange>? changes, bool commit)
+    internal void EndOperation(OperationFrame operation, AcceptedRowChange? single, IReadOnlyList<AcceptedRowChange>? changes, bool commit)
     {
-        foreach (FileParticipant p in operation.Scoped)
+        if (operation.ScopesOpen && operation.HasScoped)
         {
-            if (p.Overlay.Depth > 0)
+            foreach (FileParticipant p in operation.Scoped)
             {
-                if (commit)
+                if (p.Overlay.Depth > 0)
                 {
-                    p.Overlay.CommitScope();
+                    if (commit)
+                    {
+                        p.Overlay.CommitScope();
+                    }
+                    else
+                    {
+                        p.Overlay.RollbackScope();
+                    }
                 }
-                else
+                else if (!commit)
                 {
-                    p.Overlay.RollbackScope();
-                }
-            }
-            else if (!commit)
-            {
-                p.Overlay.Rollback();
-                if (_frames.Count == 0 && !_pending.Exists(c => ReferenceEquals(c.Physical?.File, p.Cache)))
-                {
-                    p.Dispose();
-                    _participants.Remove(p.Cache);
+                    p.Overlay.Rollback();
+                    if (_frames.Count == 0 && !_pending.Exists(c => ReferenceEquals(c.Physical?.File, p.Cache)))
+                    {
+                        p.Dispose();
+                        _participants.Remove(p.Cache);
+                    }
                 }
             }
         }
+        else if (!commit && operation.CreatedWithoutScope is { } created)
+        {
+            created.Dispose();
+            _participants.Remove(created.Cache);
+        }
+        operation.DeferredSingle = null;
+        operation.PromotedSingle = null;
         _operation = null;
-        if (!commit || changes is null || changes.Count == 0)
+        if (!commit)
         {
             return;
         }
-        List<AcceptedRowChange> target = _frames.Count > 0 ? _frames[^1].Changes : _pending;
-        foreach (AcceptedRowChange change in changes)
+        if (single is not null)
         {
-            target.Add(change);
+            RecordAccepted(single);
+        }
+        else if (changes is not null)
+        {
+            for (int i = 0; i < changes.Count; i++)
+            {
+                RecordAccepted(changes[i]);
+            }
         }
     }
 
     /// <summary>Whether this Workspace accepted, and has not published, a change of <paramref name="row"/>.</summary>
     public bool HasAcceptedChange(MutationSemantics table, RowId row) =>
-        Accepted().Any(c => ReferenceEquals(c.Table, table) && c.Original == row);
+        _acceptedByTable.TryGetValue(table, out TableAcceptedIndex? index) && index.RowCounts.ContainsKey(row);
 
     /// <summary>Whether this Workspace holds unpublished accepted changes of the table.</summary>
-    public bool HasAcceptedChanges(MutationSemantics table) => Accepted().Any(c => ReferenceEquals(c.Table, table));
+    public bool HasAcceptedChanges(MutationSemantics table) =>
+        _acceptedByTable.TryGetValue(table, out TableAcceptedIndex? index) && index.TotalCount > 0;
 
     internal void Register(EditFrame frame) => _edits.Add(frame);
 
@@ -1181,7 +1372,125 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     public void Dispose() => Close();
 
-    private IEnumerable<AcceptedRowChange> Accepted() => _frames.SelectMany(f => f.Changes).Concat(_pending);
+    private void RecordAccepted(AcceptedRowChange change)
+    {
+        if (_frames.Count > 0)
+        {
+            ExplicitFrame frame = _frames[^1];
+            frame.Changes.Add(change);
+            if (change.Physical is null)
+            {
+                frame.UnwrittenCount++;
+            }
+        }
+        else
+        {
+            _pending.Add(change);
+            if (change.Physical is null)
+            {
+                _unwrittenPendingCount++;
+            }
+        }
+        IndexAdded(change);
+    }
+
+    private void IndexAdded(AcceptedRowChange change)
+    {
+        if (!_acceptedByTable.TryGetValue(change.Table, out TableAcceptedIndex? tableIndex))
+        {
+            tableIndex = new TableAcceptedIndex();
+            _acceptedByTable.Add(change.Table, tableIndex);
+        }
+        tableIndex.TotalCount++;
+        if (change.Original is { } row)
+        {
+            ref int rowCount = ref CollectionsMarshal.GetValueRefOrAddDefault(tableIndex.RowCounts, row, out _);
+            rowCount++;
+        }
+        if (change.Physical is { } physical)
+        {
+            if (HasGlobalMapActivity(physical))
+            {
+                IncrementCount(_unpublishedGlobalMapActivity, physical.File);
+            }
+            if (physical.HasReservedExtent)
+            {
+                IncrementCount(_unpublishedReservedExtent, physical.File);
+            }
+        }
+    }
+
+    private void IndexRemoved(AcceptedRowChange change)
+    {
+        if (_acceptedByTable.TryGetValue(change.Table, out TableAcceptedIndex? tableIndex))
+        {
+            tableIndex.TotalCount--;
+            if (change.Original is { } row && tableIndex.RowCounts.TryGetValue(row, out int rowCount))
+            {
+                if (rowCount <= 1)
+                {
+                    tableIndex.RowCounts.Remove(row);
+                }
+                else
+                {
+                    tableIndex.RowCounts[row] = rowCount - 1;
+                }
+            }
+            if (tableIndex.TotalCount <= 0)
+            {
+                _acceptedByTable.Remove(change.Table);
+            }
+        }
+        if (change.Physical is { } physical)
+        {
+            if (HasGlobalMapActivity(physical))
+            {
+                DecrementCount(_unpublishedGlobalMapActivity, physical.File);
+            }
+            if (physical.HasReservedExtent)
+            {
+                DecrementCount(_unpublishedReservedExtent, physical.File);
+            }
+        }
+    }
+
+    private void UnindexChanges(List<AcceptedRowChange> changes)
+    {
+        for (int i = 0; i < changes.Count; i++)
+        {
+            IndexRemoved(changes[i]);
+        }
+    }
+
+    private void ClearAcceptedIndex()
+    {
+        Debug.Assert(_frames.Count == 0);
+        _acceptedByTable.Clear();
+        _unpublishedGlobalMapActivity.Clear();
+        _unpublishedReservedExtent.Clear();
+        _unwrittenPendingCount = 0;
+    }
+
+    private static void IncrementCount(Dictionary<PageCache, int> counts, PageCache file)
+    {
+        ref int count = ref CollectionsMarshal.GetValueRefOrAddDefault(counts, file, out _);
+        count++;
+    }
+
+    private static void DecrementCount(Dictionary<PageCache, int> counts, PageCache file)
+    {
+        if (counts.TryGetValue(file, out int count))
+        {
+            if (count <= 1)
+            {
+                counts.Remove(file);
+            }
+            else
+            {
+                counts[file] = count - 1;
+            }
+        }
+    }
 
     private static void Consume(List<AcceptedRowChange> changes)
     {
