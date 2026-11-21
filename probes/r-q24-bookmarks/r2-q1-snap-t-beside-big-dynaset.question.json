@@ -1,0 +1,48 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset",
+  "bookRefs": ["R-CURSOR-1", "CUR-ID"],
+  "description": "Q1 Round 2: On r-q-cursor-dao-main.accdb, open dynaset d_big on Big (2048 rows), MoveLast to populate its multi-page keyset, read d_big.Bookmark, then open snapshot s_t on T and read s_t.Bookmark. Discriminates fixed +0x0300 step vs temp-DB page allocation.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q-cursor-dao-main.accdb",
+      "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+      "length": 909312,
+      "provenance": "r-q-cursor-dao.create-main.21478f5c42.a1 qk1-21478f5c424553abb562d6ec4db4d8dcc9ccd3b9975c0665eebde0e7da33e187 output:r-q-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method",
+      "args": [
+        { "type": "inputPath", "role": "main" },
+        { "type": "bool", "value": false },
+        { "type": "bool", "value": true }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "Big" }, { "type": "i4", "value": 2 }], "bind": "dbig" },
+    { "op": "invoke", "target": "dbig", "member": "MoveLast", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "dbig", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "T" }, { "type": "i4", "value": 4 }], "bind": "st" },
+    { "op": "invoke", "target": "st", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "st", "member": "Move", "kind": "method", "args": [{ "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "st", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "st", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "st" },
+    { "op": "invoke", "target": "dbig", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "dbig" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q24-bookmarks/r2-q1-snap-clone-neighbour",
+  "bookRefs": ["R-CURSOR-1", "CUR-ID"],
+  "description": "Q1 Round 2: On W, open snapshot s1 (0x0300) and sc1 = s1.Clone(), then open snapshot s2 on W. Checks whether a snapshot clone shares s1's slot (s2 = 0x0600) or adds a slot (0x0900).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "bookmarks.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE W (n LONG, t TEXT(10))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO W (n, t) VALUES (1, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO W (n, t) VALUES (2, 'b')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "W" }, { "type": "i4", "value": 4 }], "bind": "s1" },
+    { "op": "invoke", "target": "s1", "member": "Clone", "kind": "method", "args": [], "bind": "sc1" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "W" }, { "type": "i4", "value": 4 }], "bind": "s2" },
+    { "op": "invoke", "target": "s1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "sc1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "s2", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "s2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "s2" },
+    { "op": "invoke", "target": "sc1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "sc1" },
+    { "op": "invoke", "target": "s1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "s1" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

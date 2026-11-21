@@ -1,0 +1,59 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q24-bookmarks/r2-q1-snap-w-beside-l1-neighbours",
+  "bookRefs": ["R-CURSOR-1", "CUR-ID"],
+  "description": "Q1 Round 2: Two tables L1(n LONG) and W(n LONG, t TEXT(10)). Test W snapshot beside (a) open snapshot on L1 (0x0200), (b) open dynaset on L1 (0x0200), (c) closed dynaset on L1.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "bookmarks.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE L1 (n LONG)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (1)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (2)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE W (n LONG, t TEXT(10))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO W (n, t) VALUES (1, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO W (n, t) VALUES (2, 'b')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "L1" }, { "type": "i4", "value": 4 }], "bind": "sl1" },
+    { "op": "invoke", "target": "sl1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "W" }, { "type": "i4", "value": 4 }], "bind": "sw1" },
+    { "op": "invoke", "target": "sw1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "sw1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "sw1" },
+    { "op": "invoke", "target": "sl1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "sl1" },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "L1" }, { "type": "i4", "value": 2 }], "bind": "dl1" },
+    { "op": "invoke", "target": "dl1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "W" }, { "type": "i4", "value": 4 }], "bind": "sw2" },
+    { "op": "invoke", "target": "sw2", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "sw2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "sw2" },
+    { "op": "invoke", "target": "dl1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "dl1" },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "W" }, { "type": "i4", "value": 4 }], "bind": "sw3" },
+    { "op": "invoke", "target": "sw3", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "sw3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "sw3" },
+
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail",
+  "bookRefs": ["R-CURSOR-1", "CUR-POP", "CUR-ID"],
+  "description": "Q5 Round 2: Discriminate Rollback effect on keyset population: (a) unmoved Big dynaset -> BeginTrans -> AddNew+Update -> Rollback (no MoveLast before Rollback) -> inspect RecordCount, ID, MoveNext, EOF, MoveLast, Requery; (b) pre-populated Big dynaset (MoveLast before BeginTrans) -> BeginTrans -> AddNew+Update -> Rollback -> inspect RecordCount, ID, MoveLast.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q-cursor-dao-main.accdb",
+      "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+      "length": 909312,
+      "provenance": "r-q-cursor-dao.create-main.21478f5c42.a1 qk1-21478f5c424553abb562d6ec4db4d8dcc9ccd3b9975c0665eebde0e7da33e187 output:r-q-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method",
+      "args": [
+        { "type": "inputPath", "role": "main" },
+        { "type": "bool", "value": false },
+        { "type": "bool", "value": false }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "eng", "member": "Workspaces", "kind": "propertyGet", "args": [], "bind": "wss" },
+    { "op": "invoke", "target": "wss", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "i4", "value": 0 }], "bind": "ws" },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "Big" }, { "type": "i4", "value": 2 }], "bind": "d1" },
+    { "op": "invoke", "target": "d1", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f1" },
+    { "op": "invoke", "target": "f1", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "ID" }], "bind": "f1_id" },
+    { "op": "invoke", "target": "f1", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "f1_v" },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "AddNew", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "f1_id", "member": "Value", "kind": "propertyPut", "args": [{ "type": "i4", "value": 9001 }] },
+    { "op": "invoke", "target": "f1_v", "member": "Value", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "added" }] },
+    { "op": "invoke", "target": "d1", "member": "Update", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "d1", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "f1_id", "member": "Value", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "MoveNext", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "MoveLast", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "f1_id", "member": "Value", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "Requery", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "MoveLast", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "f1_id", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "release", "target": "f1_v" },
+    { "op": "release", "target": "f1_id" },
+    { "op": "release", "target": "f1" },
+    { "op": "invoke", "target": "d1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d1" },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "Big" }, { "type": "i4", "value": 2 }], "bind": "d2" },
+    { "op": "invoke", "target": "d2", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f2" },
+    { "op": "invoke", "target": "f2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "ID" }], "bind": "f2_id" },
+    { "op": "invoke", "target": "f2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "f2_v" },
+
+    { "op": "invoke", "target": "d2", "member": "MoveLast", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "AddNew", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "f2_id", "member": "Value", "kind": "propertyPut", "args": [{ "type": "i4", "value": 9002 }] },
+    { "op": "invoke", "target": "f2_v", "member": "Value", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "added2" }] },
+    { "op": "invoke", "target": "d2", "member": "Update", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "f2_id", "member": "Value", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "MoveLast", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "f2_id", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "release", "target": "f2_v" },
+    { "op": "release", "target": "f2_id" },
+    { "op": "release", "target": "f2" },
+    { "op": "invoke", "target": "d2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d2" },
+    { "op": "release", "target": "ws" },
+    { "op": "release", "target": "wss" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

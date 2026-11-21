@@ -1,0 +1,54 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q24-bookmarks/q2-snap-long1-beside-moved-dynaset",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-ID"
+  ],
+  "description": "Q2: L1(n LONG) with 5 rows, no index. Open dynaset d1 on L1, Move 2, read d1.Bookmark; then open snapshot s on L1 and read s.Bookmark at row 0 and after Move 2.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "bookmarks.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE L1 (n LONG)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (1)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (2)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (3)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (4)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO L1 (n) VALUES (5)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "L1" }, { "type": "i4", "value": 2 }], "bind": "d1" },
+    { "op": "invoke", "target": "d1", "member": "Move", "kind": "method", "args": [{ "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "d1", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "L1" }, { "type": "i4", "value": 4 }], "bind": "s" },
+    { "op": "invoke", "target": "s", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "s", "member": "Move", "kind": "method", "args": [{ "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "s", "member": "Bookmark", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "s", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "s" },
+    { "op": "invoke", "target": "d1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d1" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
