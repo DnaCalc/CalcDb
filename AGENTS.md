@@ -43,7 +43,9 @@ scope or design, the book wins.
 - Set the model and reasoning of every child: Opus high where behaviour is still being found, for concurrency and
   write publication; Gemini 4 Neon (`antigravity-acp:gemini-4-neon@high`) or Opus medium for record-backed
   implementation; Sonnet medium for routine tooling.
-- A child stops and reports when a record contradicts a note or no record decides a byte. The organizer then probes.
+- A child stops and reports when a record contradicts a note or no record decides a byte. The organizer then probes:
+  a single discriminator itself, a larger round through an Opus high prober child that writes only cards, probes,
+  evidence and its qualified.md note (process log, change 6, 2026-11-21).
 - Before landing, check every rule the child wrote against a record. Expect one generalization beyond the records
   in a larger task.
 - Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md).

@@ -614,3 +614,21 @@ probing the open cases a child names before its next stretch paid off again.
 | A child cited a source ID A-01 does not have (S-JACK-CRYPT) for bytes it observed in fixtures | fixed at landing | review checks each cited source ID against A-01, as each byte rule against a record |
 | `batch` reused a NotStarted attempt sealed by a runner/worker mismatch | two questions stayed incomplete until `run --new-attempt` | the handoff's rule (`run --token T --new-attempt` after a tooling change) applies to mismatched binaries too |
 | ACE-vs-ACE repeats beside each new-file comparison | showed that CalcDb's new file differs from ACE's only where ACE's own reruns do (320 clock bytes) | a repeat is the control for any byte comparison of a written file (task c4rv) |
+
+**Change 6 measured: one probe round in an Opus high prober child (`01a1fb8a`, r-q14-dynaset-order, 2026-11-21).**
+The brief named the two stops of the SQL child (an unordered dynaset's row order over at least two rows, and a join
+dynaset's order). The child designed and ran 4 rounds, 24 questions, and wrote the card, the records and one
+qualified.md note.
+
+| Measure | Prober child | Organizer probe round (2026-11-20/21) |
+| --- | --- | --- |
+| Calls | 51 for 4 rounds and 24 questions | about 25 per round of one card |
+| Time | 14.6 min | not separated from the organizer's turns |
+| Input | 5.98M, 146k per call ($4.13) | at 411k per call, about 10M per round |
+| Organizer cost | review: 6 calls, four records against the note; export check: 2 calls, 2.3 min | — |
+| Findings in review | none against the records (index choice, name ties, DESC, range forms rechecked); one description slip (multi-page-residual says 13 rows, GetRows returned 27; the answer is unaffected, the note says so) | eight notes contradicted by their records on 2026-11-20 |
+
+Quality held: every rule rechecked held, the note names its discriminators and open cases, and both of the SQL
+child's stops follow the rule. **Adopted:** a probe round of more than a few questions goes to an Opus high prober
+child; the organizer keeps single discriminators and reviews each note against its records before landing (AGENTS.md,
+Sub-sessions).
