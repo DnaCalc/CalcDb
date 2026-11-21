@@ -113,7 +113,7 @@ public sealed class BrokerLog
         }
         lock (_lock)
         {
-            File.AppendAllText(WaitsPath, EvidenceJson.SerializeLine(line) + "\n");
+            EvidenceJson.AppendLine(WaitsPath, line);
             Waits++;
         }
     }

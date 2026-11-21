@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -42,6 +43,114 @@ public static class EvidenceJson
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         return JsonSerializer.Deserialize<T>(stream, Options) ?? throw new EvidenceFormatException($"Empty {typeof(T).Name} record.");
+    }
+
+    /// <summary>
+    /// Read the lines of an append-only ledger with read, write and delete sharing so a reader never collides with
+    /// concurrent <see cref="AppendLine{T}"/> writers.
+    /// </summary>
+    public static IEnumerable<string> ReadLines(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        while (reader.ReadLine() is { } line)
+        {
+            yield return line;
+        }
+    }
+
+    /// <summary>
+    /// Append one JSON line to an append-only ledger so several threads or processes can write to one store without a
+    /// sharing violation or split lines (task b66t).
+    /// </summary>
+    public static void AppendLine<T>(string path, T value) => AppendLineText(path, SerializeLine(value));
+
+    /// <summary>
+    /// Append one UTF-8 line (terminated with <c>\n</c>) to an append-only ledger, shared across threads and processes.
+    /// </summary>
+    /// <remarks>
+    /// Serializes writers on a per-path named mutex (with bounded wait and abandoned-mutex recovery), opens the ledger
+    /// with <see cref="FileMode.Append"/> and <see cref="FileShare.ReadWrite"/> (plus delete) and <c>bufferSize: 0</c>
+    /// so each line goes in one OS write, and retries boundedly on transient sharing violations (such as an external
+    /// reader or scanner holding the file without write sharing). When retries or the lock wait are exhausted, throws an
+    /// <see cref="IOException"/> naming the ledger path, attempt count and cause.
+    /// </remarks>
+    public static void AppendLineText(string path, string line, int maxAttempts = 40, int retryDelayMs = 50, int lockTimeoutMs = 10_000)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentNullException.ThrowIfNull(line);
+        if (maxAttempts < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), maxAttempts, "Must be at least 1.");
+        }
+        if (retryDelayMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryDelayMs), retryDelayMs, "Must be non-negative.");
+        }
+        if (lockTimeoutMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lockTimeoutMs), lockTimeoutMs, "Must be non-negative.");
+        }
+
+        string fullPath = Path.GetFullPath(path);
+        if (Path.GetDirectoryName(fullPath) is { Length: > 0 } dir)
+        {
+            Directory.CreateDirectory(dir);
+        }
+        byte[] payload = Encoding.UTF8.GetBytes(line + "\n");
+        string key = OperatingSystem.IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
+        string hash = Hashing.Sha256Hex(Encoding.UTF8.GetBytes(key));
+        string mutexName = OperatingSystem.IsWindows() ? "Local\\CalcDb.Ledger." + hash[..32] : "CalcDb.Ledger." + hash[..32];
+
+        using var mutex = new Mutex(initiallyOwned: false, name: mutexName);
+        bool acquired = false;
+        try
+        {
+            try
+            {
+                acquired = mutex.WaitOne(lockTimeoutMs);
+            }
+            catch (AbandonedMutexException)
+            {
+                // Another process exited while holding the mutex; this thread now owns it.
+                acquired = true;
+            }
+            if (!acquired)
+            {
+                throw new IOException($"Could not append to ledger '{fullPath}': timed out waiting {lockTimeoutMs} ms for the ledger lock.");
+            }
+            WriteLineWithRetry(fullPath, payload, maxAttempts, retryDelayMs);
+        }
+        finally
+        {
+            if (acquired)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
+    }
+
+    private static void WriteLineWithRetry(string fullPath, byte[] payload, int maxAttempts, int retryDelayMs)
+    {
+        Exception? last = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(fullPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0);
+                stream.Write(payload);
+                return;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                last = e;
+                if (attempt < maxAttempts && retryDelayMs > 0)
+                {
+                    Thread.Sleep(retryDelayMs);
+                }
+            }
+        }
+        throw new IOException($"Could not append to ledger '{fullPath}' after {maxAttempts} attempts (sharing violation or transient lock): {last!.Message}", last);
     }
 
     /// <summary>Write via a temporary file and an atomic rename, so readers never see a partial record.</summary>

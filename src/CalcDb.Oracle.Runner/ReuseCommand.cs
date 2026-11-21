@@ -84,7 +84,7 @@ internal static partial class Program
             foreach (string arm in (string[])["forward", "reverse"])
             {
                 Corpus.ComparisonRecord verdict = CompareReuse(store, question, answers[("fresh", question.Key())], answers[(arm, question.Key())], arm);
-                File.AppendAllText(ledger, EvidenceJson.SerializeLine(verdict) + "\n");
+                EvidenceJson.AppendLine(ledger, verdict);
                 counts[verdict.Status.ToString()] = counts.GetValueOrDefault(verdict.Status.ToString()) + 1;
                 Console.WriteLine($"{verdict.Status,-18} {arm,-8} {question.Probe}");
                 foreach (Corpus.Difference d in verdict.Differences.Take(6))

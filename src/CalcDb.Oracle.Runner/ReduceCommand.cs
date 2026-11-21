@@ -117,7 +117,7 @@ internal static class ReduceCommand
         {
             return null;
         }
-        string? last = File.ReadLines(ledger).LastOrDefault(l => l.Contains("\"candidateCapture\":\"" + attemptPrefix, StringComparison.Ordinal));
+        string? last = EvidenceJson.ReadLines(ledger).LastOrDefault(l => l.Contains("\"candidateCapture\":\"" + attemptPrefix, StringComparison.Ordinal));
         return last is null ? null : EvidenceJson.Deserialize<ComparisonRecord>(last);
     }
 

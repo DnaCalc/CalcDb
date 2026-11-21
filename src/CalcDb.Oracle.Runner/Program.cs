@@ -294,7 +294,7 @@ internal static partial class Program
             {
                 observe?.Invoke(new BatchOutcome(question, manifest, verdict, run.Oracle));
                 ledger.Append(verdict);
-                File.AppendAllText(Path.Combine(store.Root, "comparisons.jsonl"), EvidenceJson.SerializeLine(verdict) + "\n");
+                EvidenceJson.AppendLine(Path.Combine(store.Root, "comparisons.jsonl"), verdict);
                 Console.WriteLine($"       {verdict.Status} against {verdict.OracleCapture}{(verdict.DifferencesTruncated ? " (differences truncated)" : "")}");
                 foreach (Corpus.Difference d in verdict.Differences.Take(6))
                 {

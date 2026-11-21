@@ -289,6 +289,10 @@ The runner always runs the worker of its own build configuration (a Debug runner
 
 The store lives in `.oracle-runs/` (ignored by git): attempts, dry runs and failures stay
 there, and it is disposable: `prune [--days N]` removes the file copies of older sealed attempts.
+Its append-only JSONL ledgers (`comparisons.jsonl`, `reuse/<run>.jsonl`, `broker/log/waits.jsonl`)
+are written through [`EvidenceJson.AppendLine`](../../src/CalcDb.Evidence/EvidenceJson.cs)
+(`FileMode.Append` with `FileShare.ReadWrite`, a per-path named mutex and bounded retry on sharing
+violations), so concurrent candidate batches can append to one store without colliding (task b66t).
 Only `retain` and `freeze` write to `evidence/`. `retain` writes the answer record and never
 overwrites one; it keeps every artifact as a fact (role, length, SHA-256) and its bytes only for
 traces and lock files. `freeze` keeps a fixture's bytes. Retain a capture because it answers a
