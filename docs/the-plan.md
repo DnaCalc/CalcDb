@@ -1,8 +1,8 @@
 # The Plan
 ## Implementation companion to *The Book of CalcDb* v1.1
 
-**Working draft v0.3 — 18 November 2026**  
-**Status:** working implementation approach, revised after review of Sections 1–4; v0.3 adds §3.2 from the first measured optimization. Further refinements may follow.  
+**Working draft v0.4 — 21 November 2026**  
+**Status:** working implementation approach, revised after review of Sections 1–4; v0.3 added §3.2 from the first measured optimization; v0.4 isolates concurrent writers (§2.1) and replaces the standing improvement budget with indicators and triggered reviews (§4). Further refinements may follow.  
 **Authority:** *The Book of CalcDb* v1.1 remains authoritative for product scope, behavioral requirements, architecture, experimental questions, and acceptance obligations. This companion describes how we intend to undertake the work. It is not a replacement for the Book or a claim that its planned experiments have been performed.
 
 ## 1. Purpose and operating principles
@@ -19,7 +19,7 @@ The Book already supplies stable requirement, work, research, and test identifie
 
 **CodeAlta** is the initial agent coding and coordination harness, to be evaluated through actual use rather than treated as permanent infrastructure. Prefer its native Markdown plans and tasks, approvals, and session orchestration. The choice of coordinating agent/models may evolve; initially choose a practical arrangement for planning, implementation, and independent review, and record the configuration used for experiments about agent effectiveness.
 
-Work dependency order is governed by the Book and a lightweight traceability/dependency register. Do not adopt Beads or GitHub Issues as primary task management by default. Do not center the workflow on Git worktrees: prefer one controlled integration checkout, serialized code-changing work there, and parallel research, experiment design, or reviews when useful. If multiple concurrent writers eventually become worthwhile, choose isolation deliberately and only then.
+Work dependency order is governed by the Book and a lightweight traceability/dependency register. Do not adopt Beads or GitHub Issues as primary task management by default. Concurrent writers became worthwhile on 2026-11-20, and their isolation was chosen on 2026-11-21 from measurement (docs/work/landing-check.md): one integration checkout on master; each code writer or prober in a CodeAlta worktree of its own, one writer per project at a time, landed by a merge after an incremental check in one persistent check worktree; the bookkeeping files edited by the organizer alone, so branches rarely conflict. When the code base grows enough that this stops serving, the next steps are, as measurement calls for them: split a project that serializes writers (`CalcDb.Com` into DAO and ADO, where the Book's architecture allows), give writers solution filters for their area, and try the long-lived Roslyn workspace of §4.
 
 If CodeAlta lacks a useful native feature such as task dependencies, first establish the real need. A possible upstream contribution is a small, well-specified extension: stable task IDs, `depends_on`, ready/blocked computation, cycle detection, and meaningful retention of references after task completion. Offer Alexandre Mutel a specification or implementation according to his preference; do not make this a prerequisite for starting CalcDb.
 
@@ -98,7 +98,7 @@ A tool that takes minutes where seconds are expected has a cause: find it before
 
 ## 4. Leg three: continuous improvement of agentic C# development
 
-Reserve an **initial budget of approximately 15% of CalcDb implementation effort** for a continuous, measured improvement cycle in our development tools, agent skills, and ways of working. This is an investment in engineering effectiveness, not a requirement to spend exactly 15% or a license for unlimited tool-building. This work runs **throughout** CalcDb development, not only during initial tool selection.
+Run a continuous, measured improvement cycle in our development tools, agent skills, and ways of working **throughout** CalcDb development, not only during initial tool selection. It is an investment in engineering effectiveness, not a license for unlimited tool-building. Until 2026-11-21 it had a standing budget of about 15% of effort; it now runs on indicators. At each organizer handover a short table (`tools/process-indicators.ps1` plus the session figures) goes into the process log: the engine's share of changed lines, landing checks passed on the first run and their duration, unexplained compare losses, rules found wrong after landing, reviewer findings per 1,000 lines, children stopped for a missing record, organizer calls per landing, merge time, and leftover disk use. A full process review runs when an indicator crosses its line, at most once a week otherwise. When the engine's share of the work falls below about two thirds, the review first asks what process to remove.
 
 Start from real agent development tasks and an honest baseline: what can CodeAlta and capable coding agents already accomplish without special assistance? Compare that with existing **DNAKode/RoslynSkills / RosCLI**, Microsoft's Roslyn and language-server facilities, other C# MCP/LSP implementations, and promising combinations. In particular, test whether a **long-lived, incrementally updated Roslyn workspace** materially improves the end-to-end workflow; persistent process sharing and correct per-agent workspace isolation are separate questions. We may improve RosCLI, replace parts of it, combine it with other tools, or decide that raw agent behavior wins for some task classes.
 

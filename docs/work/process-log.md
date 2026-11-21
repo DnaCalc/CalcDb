@@ -714,3 +714,34 @@ one rule beyond its records (narrowed in four of the nine code stretches) and th
 | The old organizer forwarded every child progress note (compile errors, typos, reruns): 10 forwards, none needing action | a turn of the organizer's context each | asked it to forward only ready, blocked, contradiction or question reports |
 | The citation check failed a landing on two shorthand citations already in qualified.md (`{a,b}` and `eng-, ws-, ...` lists) | a red step for a doc file in -Files | the shorthands written out in full (abc6949c); write citations in full from the start |
 
+
+## 2026-11-21 (evening) - Landing without exports, writers in worktrees, indicators instead of a budget (session 01a1ff68, Claude Opus 5.5)
+
+**Work observed.** A disk scan of C: found 23.8 GB written to %TEMP% in a few hours, mostly 24 landing exports of
+0.96-1.26 GB each, left by failing or repeated checks (xdzw 5, c7gn 4), and 4.3 GB in %LOCALAPPDATA%\CalcDb (42
+compare snapshots, per-child stores). Organizers 5, 6 and 7 had each been created as a child of the one before, so
+every answer of a successor woke its predecessor (organizer 5's last turn decided not to forward organizer 6's
+report). Over 143 commits since 2026-11-20, 82% of the changed lines (outside evidence/) were engine code and its
+tests; process documents 774 lines, bookkeeping files 4,631. The register changed in 62 of the last 150 commits and the
+compare baseline in 38; the busiest code file in 16.
+
+**Changes adopted (owner, 2026-11-21 evening).**
+
+| Change | Replaces | Expected effect |
+| --- | --- | --- |
+| One persistent check worktree (`CalcDb-check`); incremental build; Com publish only when its closure's sources changed | a fresh 753 MB export and a full build per run, 1.2 GB per failing run left behind | a check of a small change in about a minute (estimate; measure); flat disk use |
+| Tests from the project graph | the hand-written `-Tests` list (one skipped-tests slip on 2026-11-20) | no forgotten test project |
+| Writers and probers in CodeAlta worktrees, landed by a merge; one writer per project kept | file lists, hunk staging, half-written files breaking other children's builds | the child's change is its commit; rework stays on its branch |
+| A self-check (`-InPlace`) before the child reports | whole-check reruns for the child's own test errors (6 of 10) | the organizer's check passes on the first run |
+| Bookkeeping files edited by the organizer alone; children give the lines in a fixed report | merge conflicts on the register and baseline | branches rarely conflict |
+| Reviews by a model other than the writer's; Sonnet for tooling; Opus for subtle probe design | Neon for every child | uncorrelated misses between writer and reviewer |
+| Compare tiers: the 1,360-question core per landing, the 3,158-question wide set daily and before a baseline | the undecided choice between 8 and 25 min per landing | wide coverage without slower landings |
+| An indicator table at each handover; a full review only on a trigger (The Plan v0.4 §4) | the standing 15% budget | review when something moves, not by the clock |
+| Organizer successors created with `--no-parent` at a quiet point | nested organizers | no relaying between organizers |
+
+Not done: one shared repository-root helper for the test projects. It was proposed so a code-only export could read
+`evidence/`; with no exports its purpose is gone, and the duplicated helpers stay as they are.
+
+**Measure next time.** Landing checks passed on the first run, check duration and merge minutes (landing-runs.tsv,
+tools/process-indicators.ps1); the gap from a child's report to its landing; whether any branch conflicts outside the
+bookkeeping files.

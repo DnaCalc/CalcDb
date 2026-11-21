@@ -301,7 +301,7 @@ public static class DdlBinder
         {
             if (col.Nullability == DdlNullability.NotNull)
             {
-                // r-q15-ddl-open/lv-sql-notnull-long & lv-sql-notnull-text: NOT NULL writes an LvProp blob on MSysObjects.
+                // r-q15-ddl-open/lv-sql-notnull-1 to r-q15-ddl-open/lv-sql-notnull-64 (one Long column): NOT NULL writes an LvProp blob on MSysObjects.
                 return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on column '{col.Name}' writes an LvProp blob (r-q15-ddl-open) not yet modelled in SchemaWriter"), out failure);
             }
             switch (col.DataType.Kind)

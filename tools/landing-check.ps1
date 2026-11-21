@@ -1,225 +1,314 @@
-# Landing check of one child's change (docs/work/landing-check.md, steps 2, 3 and 5).
-# Exports HEAD to %TEMP%, copies exactly the listed files into it, checks cited <folder>/<question> records in those
-# files, builds, optionally publishes CalcDb.Com, runs the listed test projects with a trx logger (failed tests are
-# named), candidate-checks question folders, and optionally snapshots the export's runner, worker and native deployment
-# for the full compare set. It never writes to the integration checkout. Exit code: the number of failed steps.
+# Landing check of one change (docs/work/landing-check.md). It runs in a persistent worktree that keeps its build
+# output between runs, so the build is incremental and the NativeAOT publish runs only when the sources of
+# CalcDb.Com's closure changed. The change comes in one of three ways:
+#   -Branch alta/<name>   a child's branch (a CodeAlta worktree child), merged onto master in the check worktree
+#   -Files a,b,c          the files of a child that worked in the integration checkout, copied onto master there
+#   -InPlace              the current worktree as it is: a child's self-check in its own worktree
+# It checks the <folder>/<question> citations in the changed files, builds CalcDb.slnx, runs the test projects that
+# depend on what changed (from the project graph; -Tests adds more), candidate-checks -Questions, and with -Snapshot
+# copies runner, worker, native deployment and compare sets to %LOCALAPPDATA%\CalcDb\compare-bin\<Name> for the
+# background compare. It never writes to the integration checkout. Exit code: the number of failed steps.
 #
-#   pwsh tools/landing-check.ps1 -Name zfrp4 -Files src/a.cs,tests/b.cs -Tests Isam,Sql,Com -Publish `
-#        -Questions probes/r-q17-growth -Snapshot
+#   pwsh tools/landing-check.ps1 -Name 2qbr -Branch alta/2qbr -Questions probes/r-q-ado-misc -Snapshot
+#   pwsh tools/landing-check.ps1 -Name f8g8 -Files src/CalcDb.Catalog/SchemaWriter.cs,tests/... -Snapshot
+#   pwsh tools/landing-check.ps1 -Name 2qbr-self -InPlace -Solution CalcDb.Com.slnf -Filter FullyQualifiedName~AdoImmediateEditTests
 param(
-    [Parameter(Mandatory)] [string] $Name,          # topic of the landing; names the export and the snapshot
-    [Parameter(Mandatory)] [string[]] $Files,       # the child's files, repository-relative, an explicit list
-    [string[]] $Tests = @(),                        # test project stems: Isam, Com, Sql ...
+    [Parameter(Mandatory)] [string] $Name,          # topic of the landing; names the logs and the snapshot
+    [string] $Branch = "",                          # a child's branch, merged onto master
+    [string[]] $Files = @(),                        # a shared-checkout child's files, repository-relative
+    [switch] $InPlace,                              # check the current worktree as it is
+    [string[]] $Tests = @(),                        # test project stems to run beside the graph's (Isam, Com, Sql ...)
     [string[]] $Questions = @(),                    # question folders for the candidate check
-    [switch] $Publish,                              # publish CalcDb.Com into the export's artifacts/native
-    [switch] $Snapshot,                             # copy runner, worker, native to compare-bin\<Name>
-    [switch] $KeepExport,                           # keep the export (about 1 GB) after a run with no failed step
-    [string] $Filter = "",                         # dotnet test --filter while iterating on new tests; never on a landing run
-    [string] $Export = "")
+    [switch] $Snapshot,                             # copy runner, worker, native and compare sets to compare-bin\<Name>
+    [string] $Filter = "",                          # dotnet test --filter while iterating; never on a landing run
+    [string] $Solution = "CalcDb.slnx",             # with -InPlace, an area's filter (CalcDb.Sql.slnf ...) builds only that area
+    [string] $CheckTree = "")                       # default: <repository>-check beside the integration checkout
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
 $Files = @($Files | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Tests = @($Tests | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Questions = @($Questions | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
-# Four Com test classes load the published native module (AdoAggregation, AdoConstruction, FactoryHostCore,
-# PerUserRegistration): Com tests always publish first.
-if ($Tests -contains 'Com') { $Publish = [switch]::new($true) }
-if ($Snapshot -and -not $Publish) { throw "-Snapshot needs -Publish: the compare set runs the export's native deployment" }
+$modes = @([bool] $Branch, [bool] $Files.Count, [bool] $InPlace) | Where-Object { $_ }
+if (@($modes).Count -ne 1) { throw "give exactly one of -Branch, -Files and -InPlace" }
+if ($Solution -ne "CalcDb.slnx" -and -not $InPlace) { throw "-Solution is for a child's -InPlace self-check; a landing builds the whole solution" }
 if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for iterating, not for a landing run with -Snapshot" }
 $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
-$repo = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
-$head = (git -C $repo rev-parse --short HEAD).Trim()
-if (-not $Export) { $Export = Join-Path $env:TEMP "calcdb-land-$Name-$head" }
-$failed = 0
 $sw = [Diagnostics.Stopwatch]::StartNew()
 function Step([string] $what) { "[{0,5:n0} s] {1}" -f $sw.Elapsed.TotalSeconds, $what }
+$failed = 0
 
-# Export: a fresh copy of HEAD, never links into the repository (AGENTS.md, Tool practice).
-if (Test-Path $Export) {
-    $links = Get-ChildItem $Export -Recurse -Attributes ReparsePoint -ErrorAction SilentlyContinue
-    if ($links) { throw "export $Export holds links ($($links[0].FullName)): remove them as links first" }
-    Remove-Item $Export -Recurse -Force
+$here = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
+if ($InPlace) {
+    $work = $here
+    $base = (git -C $work merge-base master HEAD).Trim()
+} else {
+    # The integration checkout is the main worktree: the first entry of `git worktree list`.
+    $repo = ((git -C $here worktree list --porcelain | Select-Object -First 1) -replace '^worktree ', '').Trim() -replace '/', '\'
+    if (-not $CheckTree) { $CheckTree = Join-Path (Split-Path $repo) ((Split-Path $repo -Leaf) + "-check") }
+    $work = $CheckTree
+    $base = (git -C $repo rev-parse master).Trim()
 }
-New-Item -ItemType Directory -Force $Export | Out-Null
-$tar = Join-Path $env:TEMP "calcdb-land-$Name-$head.tar"
-git -C $repo archive -o $tar HEAD; if ($LASTEXITCODE) { throw "git archive failed" }
-tar -xf $tar -C $Export; if ($LASTEXITCODE) { throw "tar failed" }
-Remove-Item $tar
-Step "exported HEAD $head to $Export"
 
-foreach ($f in $Files) {
-    $from = Join-Path $repo $f
-    $to = Join-Path $Export $f
-    if (-not (Test-Path $from)) {
-        # A file the child deleted: delete it in the export too.
-        if (Test-Path $to) { Remove-Item $to -Force; "  deleted $f" } else { throw "no such file: $f" }
-        continue
-    }
-    New-Item -ItemType Directory -Force (Split-Path $to) | Out-Null
-    if (Test-Path $from -PathType Container) {
-        # A folder (a probe's questions or records): its files replace the export's copy of it.
-        if (Test-Path $to) { Remove-Item $to -Recurse -Force }
-        Copy-Item $from $to -Recurse -Force
-    } else { Copy-Item $from $to -Force }
-}
-Step "copied $($Files.Count) files"
-# The export has no .git; Directory.Build.props reads the source state the binaries record from this file.
-$full = (git -C $repo rev-parse HEAD).Trim()
-$tooling = @($Files | Where-Object { ($_ -replace '\\', '/') -match '^(src|tools|tests)/|^(Directory\.Build\.props|global\.json|CalcDb\.slnx)$' })
-$changed = if ($tooling) { git -C $repo status --porcelain --untracked-files=all -- $tooling } else { $null }
-Set-Content (Join-Path $Export "calcdb-source.txt") ($(if ($changed) { "$full+dirty" } else { $full })) -NoNewline
-$staleFiles = git -C $repo status --porcelain --untracked-files=all | ForEach-Object { $_.Substring(3) -replace '"', '' } |
-    Where-Object { $_ -notin ($Files | ForEach-Object { $_ -replace '\\', '/' }) -and $_ -notlike '.alta/*' }
-if ($staleFiles) { "  not in this landing (other children's or unrelated changes): $($staleFiles.Count) files" }
-
-Push-Location $Export
+# One run at a time per worktree: two runs would check out and build over each other.
+$lockPath = "$work.landing-lock"
+try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
+catch { throw "another landing check is running in $work ($lockPath is held)" }
 try {
-    # Citation check: every <folder>/<question> cited in the listed -Files where <folder> is an existing directory under
-    # probes/ must resolve to probes/<folder>/<question>.question.json or evidence/<folder>/<question>/ (including
-    # evidence-only folders such as r-oracle-1/or-reuse, or wildcard globs matching at least one probe or evidence entry).
-    $probeFolders = @(Get-ChildItem (Join-Path $Export "probes") -Directory | Select-Object -ExpandProperty Name | Sort-Object Length -Descending)
-    if ($probeFolders.Count -gt 0) {
-        $probeFolderSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$probeFolders, [StringComparer]::Ordinal)
-        $folderAlt = ($probeFolders | ForEach-Object { [regex]::Escape($_) }) -join '|'
-        $citeRx = [regex]::new("(?<![A-Za-z0-9_.-])($folderAlt)/([A-Za-z0-9][A-Za-z0-9_.*-]*)", [System.Text.RegularExpressions.RegexOptions]::Compiled)
-        $binaryExts = [System.Collections.Generic.HashSet[string]]::new([string[]]@('.gz', '.accdb', '.mdb', '.dll', '.exe', '.png', '.jpg', '.pdf', '.zip', '.bin'), [StringComparer]::OrdinalIgnoreCase)
-        $citeFiles = [System.Collections.Generic.List[string]]::new()
+    if (-not $InPlace) {
+        if (-not (Test-Path $work)) {
+            git -C $repo worktree add --detach $work $base 2>&1 | Out-Null
+            if ($LASTEXITCODE) { throw "git worktree add $work failed" }
+            Step "created the check worktree $work (the first build is a full one)"
+        }
+        # Back to master as committed. Ignored build output (bin, obj, artifacts) stays: that is the point.
+        git -C $work checkout --force --detach $base -q; if ($LASTEXITCODE) { throw "checkout of $base failed" }
+        git -C $work clean -fdq; if ($LASTEXITCODE) { throw "git clean failed" }
+    }
+    $short = $base.Substring(0, 8)
+
+    if ($Branch) {
+        $tip = (git -C $work rev-parse --verify "$Branch^{commit}" 2>$null)
+        if (-not $tip) { throw "no such branch: $Branch" }
+        if ((git -C $work merge-base $base $tip).Trim() -eq $tip.Trim()) { throw "$Branch has nothing master does not have" }
+        # Fast-forward when master has not moved since the child started; else a merge. Never a rebase (AGENTS.md).
+        if ((git -C $work merge-base $base $tip).Trim() -eq $base) { git -C $work merge --ff-only -q $tip 2>&1 | Out-Null }
+        else { git -C $work merge --no-ff --no-edit -q -m "Merge $Branch ($Name)" $tip 2>&1 | Out-Null }
+        if ($LASTEXITCODE) {
+            $conflicts = git -C $work diff --name-only --diff-filter=U
+            git -C $work merge --abort 2>&1 | Out-Null
+            Step "MERGE CONFLICT with master in $(@($conflicts).Count) files:"
+            $conflicts | ForEach-Object { "  $_" }
+            exit 1
+        }
+        $candidate = (git -C $work rev-parse HEAD).Trim()
+        $changed = @(git -C $work diff --name-only $base $candidate)
+        Step "merged $Branch onto master $short as $($candidate.Substring(0, 8)): $($changed.Count) files"
+    } elseif ($Files.Count) {
         foreach ($f in $Files) {
-            $rel = $f -replace '\\', '/'
-            $fullPath = Join-Path $Export $f
-            if (Test-Path $fullPath -PathType Leaf) {
-                if (-not $binaryExts.Contains([IO.Path]::GetExtension($fullPath))) { $citeFiles.Add($rel) }
-            } elseif (Test-Path $fullPath -PathType Container) {
-                Get-ChildItem $fullPath -Recurse -File | Where-Object { -not $binaryExts.Contains($_.Extension) } | ForEach-Object {
-                    $citeFiles.Add(([IO.Path]::GetRelativePath($Export, $_.FullName) -replace '\\', '/'))
+            $from = Join-Path $repo $f
+            $to = Join-Path $work $f
+            if (-not (Test-Path $from)) {
+                # A file the child deleted: delete it here too.
+                if (Test-Path $to) { Remove-Item $to -Recurse -Force; "  deleted $f" } else { throw "no such file: $f" }
+                continue
+            }
+            New-Item -ItemType Directory -Force (Split-Path $to) | Out-Null
+            if (Test-Path $from -PathType Container) {
+                # A folder (a probe's questions or records): its files replace master's copy of it.
+                if (Test-Path $to) { Remove-Item $to -Recurse -Force }
+                Copy-Item $from $to -Recurse -Force
+            } else { Copy-Item $from $to -Force }
+        }
+        $changed = @($Files | ForEach-Object { $_ -replace '\\', '/' })
+        $candidate = "$base+files"
+        Step "copied $($Files.Count) files onto master $short"
+        $others = git -C $repo status --porcelain --untracked-files=all | ForEach-Object { $_.Substring(3) -replace '"', '' } |
+            Where-Object { $_ -notin $changed -and $_ -notlike '.alta/*' }
+        if ($others) { "  not in this landing (other children's or unrelated changes): $(@($others).Count) files" }
+    } else {
+        $changed = @(@(git -C $work diff --name-only $base) + @(git -C $work ls-files --others --exclude-standard) | Sort-Object -Unique)
+        $candidate = (git -C $work rev-parse HEAD).Trim() + $(if (git -C $work status --porcelain) { "+dirty" } else { "" })
+        Step "checking $work as it is: $($changed.Count) files changed against master"
+    }
+
+    Push-Location $work
+    try {
+        # Citation check: every <folder>/<question> cited in the changed files (not evidence/), where <folder> is a
+        # directory under probes/, must resolve to probes/<folder>/<question>.question.json or evidence/<folder>/<question>/
+        # (including evidence-only folders such as r-oracle-1/or-reuse, or wildcard globs matching at least one entry).
+        $probeFolders = @(Get-ChildItem (Join-Path $work "probes") -Directory | Select-Object -ExpandProperty Name | Sort-Object Length -Descending)
+        if ($probeFolders.Count -gt 0) {
+            $probeFolderSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$probeFolders, [StringComparer]::Ordinal)
+            $folderAlt = ($probeFolders | ForEach-Object { [regex]::Escape($_) }) -join '|'
+            $citeRx = [regex]::new("(?<![A-Za-z0-9_.-])($folderAlt)/([A-Za-z0-9][A-Za-z0-9_.*-]*)", [System.Text.RegularExpressions.RegexOptions]::Compiled)
+            $binaryExts = [System.Collections.Generic.HashSet[string]]::new([string[]]@('.gz', '.accdb', '.mdb', '.dll', '.exe', '.png', '.jpg', '.pdf', '.zip', '.bin'), [StringComparer]::OrdinalIgnoreCase)
+            $citeFiles = [System.Collections.Generic.List[string]]::new()
+            foreach ($rel in ($changed | Where-Object { $_ -notlike 'evidence/*' })) {
+                $fullPath = Join-Path $work $rel
+                if (Test-Path $fullPath -PathType Leaf) {
+                    if (-not $binaryExts.Contains([IO.Path]::GetExtension($fullPath))) { $citeFiles.Add($rel) }
+                } elseif (Test-Path $fullPath -PathType Container) {
+                    Get-ChildItem $fullPath -Recurse -File | Where-Object { -not $binaryExts.Contains($_.Extension) } | ForEach-Object {
+                        $citeFiles.Add(([IO.Path]::GetRelativePath($work, $_.FullName) -replace '\\', '/'))
+                    }
                 }
             }
-        }
-        $checkedCitations = 0
-        $missingCitations = [System.Collections.Generic.List[string]]::new()
-        foreach ($rel in $citeFiles) {
-            $lines = [IO.File]::ReadAllLines((Join-Path $Export $rel))
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                $line = $lines[$i]
-                foreach ($m in $citeRx.Matches($line)) {
-                    $folder = $m.Groups[1].Value
-                    $rawQ = $m.Groups[2].Value
-                    # Unwrap comment or prose citations broken across lines at a hyphen.
-                    if ($rawQ.EndsWith('-') -and ($m.Index + $m.Length) -eq $line.TrimEnd().Length -and ($i + 1) -lt $lines.Count) {
-                        $next = $lines[$i + 1] -replace '^\s*(?:///|//|\*|#)?\s*', ''
-                        if ($next -match '^([A-Za-z0-9][A-Za-z0-9_.*-]*)') { $rawQ += $Matches[1] }
+            $checkedCitations = 0
+            $missingCitations = [System.Collections.Generic.List[string]]::new()
+            foreach ($rel in $citeFiles) {
+                $lines = [IO.File]::ReadAllLines((Join-Path $work $rel))
+                for ($i = 0; $i -lt $lines.Count; $i++) {
+                    $line = $lines[$i]
+                    foreach ($m in $citeRx.Matches($line)) {
+                        $folder = $m.Groups[1].Value
+                        $rawQ = $m.Groups[2].Value
+                        # Unwrap comment or prose citations broken across lines at a hyphen.
+                        if ($rawQ.EndsWith('-') -and ($m.Index + $m.Length) -eq $line.TrimEnd().Length -and ($i + 1) -lt $lines.Count) {
+                            $next = $lines[$i + 1] -replace '^\s*(?:///|//|\*|#)?\s*', ''
+                            if ($next -match '^([A-Za-z0-9][A-Za-z0-9_.*-]*)') { $rawQ += $Matches[1] }
+                        }
+                        $q = ($rawQ -replace '\.question\.json$', '').TrimEnd('.')
+                        if (-not $q -or $probeFolderSet.Contains($q)) { continue }
+                        # Shorthand folder pairs in prose (e.g. r-cat-1/1b, r-sort-3/3b where r-cat-1b / r-sort-3b exists).
+                        if ($probeFolderSet.Contains(($folder -replace '[^-]+$', $q))) { continue }
+                        $checkedCitations++
+                        $exists = if ($q.Contains('*')) {
+                            [bool](Get-ChildItem (Join-Path $work "probes\$folder") -Filter "$q.question.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1) -or
+                            [bool](Get-ChildItem (Join-Path $work "evidence\$folder") -Filter $q -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+                        } else {
+                            (Test-Path (Join-Path $work "probes\$folder\$q.question.json") -PathType Leaf) -or
+                            (Test-Path (Join-Path $work "evidence\$folder\$q") -PathType Container) -or
+                            (Test-Path (Join-Path $work "evidence\$folder\$q.json") -PathType Leaf)
+                        }
+                        if (-not $exists) { $missingCitations.Add("${rel}:$($i + 1): $folder/$q") }
                     }
-                    $q = ($rawQ -replace '\.question\.json$', '').TrimEnd('.')
-                    if (-not $q -or $probeFolderSet.Contains($q)) { continue }
-                    # Shorthand folder pairs in prose (e.g. r-cat-1/1b, r-sort-3/3b where r-cat-1b / r-sort-3b exists).
-                    if ($probeFolderSet.Contains(($folder -replace '[^-]+$', $q))) { continue }
-                    $checkedCitations++
-                    $exists = if ($q.Contains('*')) {
-                        [bool](Get-ChildItem (Join-Path $Export "probes\$folder") -Filter "$q.question.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1) -or
-                        [bool](Get-ChildItem (Join-Path $Export "evidence\$folder") -Filter $q -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
-                    } else {
-                        (Test-Path (Join-Path $Export "probes\$folder\$q.question.json") -PathType Leaf) -or
-                        (Test-Path (Join-Path $Export "evidence\$folder\$q") -PathType Container) -or
-                        (Test-Path (Join-Path $Export "evidence\$folder\$q.json") -PathType Leaf)
-                    }
-                    if (-not $exists) { $missingCitations.Add("${rel}:$($i + 1): $folder/$q") }
                 }
             }
+            Step "citations: $checkedCitations checked in $($citeFiles.Count) files, $($missingCitations.Count) missing"
+            if ($missingCitations.Count -gt 0) {
+                $failed++
+                $missingCitations | Select-Object -First 50 | ForEach-Object { "  $_" }
+                if ($missingCitations.Count -gt 50) { "  ... and $($missingCitations.Count - 50) more" }
+            }
         }
-        Step "citations: $checkedCitations checked in $($citeFiles.Count) files, $($missingCitations.Count) missing"
-        if ($missingCitations.Count -gt 0) {
-            $failed++
-            $missingCitations | Select-Object -First 50 | ForEach-Object { "  $_" }
-            if ($missingCitations.Count -gt 50) { "  ... and $($missingCitations.Count - 50) more" }
+
+        # The project graph: each project's direct references, by project name.
+        $projects = @{}
+        foreach ($p in Get-ChildItem src, tests, tools -Recurse -Filter *.csproj | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }) {
+            $xml = [xml] (Get-Content $p.FullName -Raw)
+            $refs = @($xml.Project.ItemGroup.ProjectReference.Include | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
+            $projects[$p.BaseName] = [pscustomobject]@{ Dir = ([IO.Path]::GetRelativePath($work, $p.DirectoryName) -replace '\\', '/') + '/'; Refs = $refs }
         }
-    }
-    $build = dotnet build CalcDb.slnx -v q -clp:ErrorsOnly 2>&1
-    if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
-    Step "built"
-    if ($Publish) {
-        $pub = dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native -v q 2>&1
-        if ($LASTEXITCODE) { $failed++; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
-        else { Step "published CalcDb.Com" }
-    }
-    $out = Join-Path $Export "landing-out"
-    New-Item -ItemType Directory -Force $out | Out-Null
-    $env:COLUMNS = "4000"
-    foreach ($t in $Tests) {
-        $log = Join-Path $out "$t.txt"
-        dotnet test "tests/CalcDb.$t.Tests" --no-build @filterArgs --logger "console;verbosity=detailed" `
-            --logger "trx;LogFileName=$t.trx" --results-directory $out > $log 2>&1
-        $code = $LASTEXITCODE
-        $text = (Get-Content $log -Raw) -replace '\r?\n\s*', ' '
-        $trxPath = Join-Path $out "$t.trx"
-        $trx = if (Test-Path $trxPath) { [xml] (Get-Content $trxPath -Raw) } else { $null }
-        if ($trx) {
-            $c = $trx.TestRun.ResultSummary.Counters
-            Step "$t`: total $($c.total), passed $($c.passed), failed $($c.failed), not executed $($c.notExecuted) (exit $code)"
-        } else { Step "$t`: no trx (exit $code)" }
-        if ($code) {
-            $failed++
+        function Closure([string] $start) {
+            $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $todo = [System.Collections.Generic.Stack[string]]::new(); $todo.Push($start)
+            while ($todo.Count) { $n = $todo.Pop(); if ($seen.Add($n) -and $projects[$n]) { foreach ($r in $projects[$n].Refs) { $todo.Push($r) } } }
+            $seen
+        }
+        # Tests from the graph: a test project runs when its closure holds a changed project. A change to the build
+        # files, evidence/ or probes/ (which the replay tests read) runs every test project.
+        $testProjects = @($projects.Keys | Where-Object { $projects[$_].Dir -like 'tests/*' -and $_ -match '^CalcDb\.(.+)\.Tests$' } | Sort-Object)
+        $everything = [bool] ($changed | Where-Object { $_ -match '^(Directory\.Build\.(props|targets)|Directory\.Packages\.props|global\.json|CalcDb\.slnx|NuGet\.config)$|^(evidence|probes)/' } | Select-Object -First 1)
+        $changedProjects = @($changed | ForEach-Object {
+                $path = $_
+                $projects.Keys | Where-Object { $path.StartsWith($projects[$_].Dir, [StringComparison]::OrdinalIgnoreCase) } |
+                    Sort-Object { $projects[$_].Dir.Length } -Descending | Select-Object -First 1
+            } | Sort-Object -Unique)
+        $graphTests = @($testProjects | Where-Object {
+                $everything -or @((Closure $_) | Where-Object { $_ -in $changedProjects }).Count } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
+        $Tests = @(@($graphTests) + @($Tests) | Sort-Object -Unique)
+        $why = if ($everything) { "build files, evidence or probes changed" } else { "changed projects: $($changedProjects -join ', ')" }
+        Step "tests from the project graph: $(if ($Tests.Count) { $Tests -join ', ' } else { 'none' }) ($why)"
+
+        $build = dotnet build $Solution -v q -clp:ErrorsOnly 2>&1
+        if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
+        Step "built $Solution"
+
+        # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
+        # last publish here. Four Com test classes, the candidate check and the snapshot load the published module.
+        if ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) {
+            $dirs = @((Closure 'CalcDb.Com') | ForEach-Object { $projects[$_].Dir }) + @('Directory.Build.props', 'global.json')
+            $sources = git -C $work ls-files -co --exclude-standard -- $dirs | Sort-Object
+            $text = ($sources | ForEach-Object { "$_ $((Get-FileHash (Join-Path $work $_) -Algorithm SHA256).Hash)" }) -join "`n"
+            $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($text)))
+            $stamp = Join-Path $work "artifacts\native\calcdb-native-sources.sha256"
+            if ((Test-Path $stamp) -and (Get-Content $stamp -Raw).Trim() -eq $hash) { Step "native deployment current (CalcDb.Com closure unchanged)" }
+            else {
+                $pub = dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native -v q 2>&1
+                if ($LASTEXITCODE) { $failed++; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
+                else { Set-Content $stamp $hash -NoNewline; Step "published CalcDb.Com" }
+            }
+        }
+
+        $out = Join-Path $env:TEMP "calcdb-land-out\$Name-$($candidate.Substring(0, 8))"
+        if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+        New-Item -ItemType Directory -Force $out | Out-Null
+        $env:COLUMNS = "4000"
+        foreach ($t in $Tests) {
+            $log = Join-Path $out "$t.txt"
+            dotnet test "tests/CalcDb.$t.Tests" --no-build @filterArgs --logger "console;verbosity=detailed" `
+                --logger "trx;LogFileName=$t.trx" --results-directory $out > $log 2>&1
+            $code = $LASTEXITCODE
+            $text = (Get-Content $log -Raw) -replace '\r?\n\s*', ' '
+            $trxPath = Join-Path $out "$t.trx"
+            $trx = if (Test-Path $trxPath) { [xml] (Get-Content $trxPath -Raw) } else { $null }
             if ($trx) {
-                $trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed' | Select-Object -First 30 |
-                    ForEach-Object { "  FAILED $($_.testName)" }
+                $c = $trx.TestRun.ResultSummary.Counters
+                Step "$t`: total $($c.total), passed $($c.passed), failed $($c.failed), not executed $($c.notExecuted) (exit $code)"
+            } else { Step "$t`: no trx (exit $code)" }
+            if ($code) {
+                $failed++
+                if ($trx) {
+                    $trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed' | Select-Object -First 30 |
+                        ForEach-Object { "  FAILED $($_.testName)" }
+                }
+                if (-not $trx) { Get-Content $log -Tail 15 | ForEach-Object { "  $_" } }
             }
-            if (-not $trx) { Get-Content $log -Tail 15 | ForEach-Object { "  $_" } }
+            # Replay counters the replay tests print per record, summed by form (edit/lock "checks", action "actions").
+            $sums = @{}
+            foreach ($m in [regex]::Matches($text, '(\d+) (checks )?matched(?: \((\d+) actions\))?, (\d+) mismatched, (\d+) not modelled')) {
+                $form = if ($m.Groups[2].Success) { 'checks' } elseif ($m.Groups[3].Success) { 'actions' } else { 'values' }
+                if (-not $sums[$form]) { $sums[$form] = @(0, 0, 0, 0, 0) }
+                $s = $sums[$form]
+                $s[0] += [int] $m.Groups[1].Value; $s[1] += [int] $m.Groups[4].Value; $s[2] += [int] $m.Groups[5].Value
+                if ($m.Groups[3].Success) { $s[3] += [int] $m.Groups[3].Value }
+                $s[4]++
+            }
+            foreach ($form in $sums.Keys) {
+                $s = $sums[$form]
+                $acts = if ($form -eq 'actions') { " ($($s[3]) actions)" } else { "" }
+                "    replay $form`: $($s[0]) matched$acts, $($s[1]) mismatched, $($s[2]) not modelled, over $($s[4]) records"
+            }
+            [regex]::Matches($text, 'MISMATCH: .{0,300}') | Select-Object -First 10 | ForEach-Object { "  $($_.Value)" }
         }
-        # Replay counters the replay tests print per record, summed by form (edit/lock "checks", action "actions").
-        $sums = @{}
-        foreach ($m in [regex]::Matches($text, '(\d+) (checks )?matched(?: \((\d+) actions\))?, (\d+) mismatched, (\d+) not modelled')) {
-            $form = if ($m.Groups[2].Success) { 'checks' } elseif ($m.Groups[3].Success) { 'actions' } else { 'values' }
-            if (-not $sums[$form]) { $sums[$form] = @(0, 0, 0, 0, 0) }
-            $s = $sums[$form]
-            $s[0] += [int] $m.Groups[1].Value; $s[1] += [int] $m.Groups[4].Value; $s[2] += [int] $m.Groups[5].Value
-            if ($m.Groups[3].Success) { $s[3] += [int] $m.Groups[3].Value }
-            $s[4]++
-        }
-        foreach ($form in $sums.Keys) {
-            $s = $sums[$form]
-            $acts = if ($form -eq 'actions') { " ($($s[3]) actions)" } else { "" }
-            "    replay $form`: $($s[0]) matched$acts, $($s[1]) mismatched, $($s[2]) not modelled, over $($s[4]) records"
-        }
-        [regex]::Matches($text, 'MISMATCH: .{0,300}') | Select-Object -First 10 | ForEach-Object { "  $($_.Value)" }
-    }
-    $runner = Join-Path $Export "src\CalcDb.Oracle.Runner\bin\Debug\net11.0\calcdb-oracle.exe"
-    $worker = Join-Path $Export "src\CalcDb.Oracle.Worker\bin\Debug\net11.0-windows\win-x64\CalcDb.Oracle.Worker.exe"
-    foreach ($q in $Questions) {
-        # Runs from the repository folder, as the candidate check always has: evidence and the store are the checkout's.
-        Push-Location $repo
-        try {
-            $res = & $runner batch --dir $q --env windows-x64-calcdb-local --deployment (Join-Path $Export "artifacts\native") `
+        $runner = Join-Path $work "src\CalcDb.Oracle.Runner\bin\Debug\net11.0\calcdb-oracle.exe"
+        $worker = Join-Path $work "src\CalcDb.Oracle.Worker\bin\Debug\net11.0-windows\win-x64\CalcDb.Oracle.Worker.exe"
+        foreach ($q in $Questions) {
+            # From this worktree: its evidence holds the change's records, its .oracle-runs is the store.
+            $res = & $runner batch --dir $q --env windows-x64-calcdb-local --deployment (Join-Path $work "artifacts\native") `
                 --worker $worker --compare --rerun 2>&1
             if ($LASTEXITCODE) { $failed++ }
             Step "candidate check $q (exit $LASTEXITCODE)"
             $res | Select-Object -Last 25 | ForEach-Object { "  $_" }
-        } finally { Pop-Location }
+        }
+        if ($Snapshot) {
+            $bins = Join-Path $env:LOCALAPPDATA "CalcDb\compare-bin"
+            $snap = Join-Path $bins $Name
+            if (Test-Path $snap) { Remove-Item $snap -Recurse -Force }
+            Copy-Item (Split-Path $runner) "$snap\runner" -Recurse
+            Copy-Item (Split-Path $worker) "$snap\worker" -Recurse
+            Copy-Item (Join-Path $work "artifacts\native") "$snap\native" -Recurse
+            # The set definitions travel with the binaries: compare-set otherwise reads probes/ from a working tree,
+            # where a child's unfinished edit changes a running compare (process log, 2026-11-21).
+            Get-ChildItem (Join-Path $work "probes") -Filter "compare-set*.json" | Copy-Item -Destination $snap
+            Step "snapshot $snap"
+            "  compare: $snap\runner\calcdb-oracle.exe compare-set --rerun --name $Name-1 --against baseline --set $snap\compare-set.json " +
+                "--worker $snap\worker\CalcDb.Oracle.Worker.exe --deployment $snap\native --store $env:LOCALAPPDATA\CalcDb\compare-store"
+            # Keep the ten newest snapshots: enough to find which landing a wide-set loss came from.
+            Get-ChildItem $bins -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -Recurse -Force
+        }
+    } finally { Pop-Location }
+
+    # Keep the logs of the 40 newest runs.
+    Get-ChildItem (Split-Path $out) -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Skip 40 | Remove-Item -Recurse -Force
+    Step "logs $out"
+    # One line per run, read by tools/process-indicators.ps1 (first-pass rate, check duration).
+    $ledger = Join-Path $env:LOCALAPPDATA "CalcDb\landing-runs.tsv"
+    if (-not (Test-Path $ledger)) { New-Item -ItemType Directory -Force (Split-Path $ledger) | Out-Null; "utc`tname`tmode`tcandidate`tfailed`tseconds`tfiltered`ttests" | Set-Content $ledger }
+    $mode = if ($Branch) { 'branch' } elseif ($Files.Count) { 'files' } else { 'inplace' }
+    "$([DateTime]::UtcNow.ToString('s'))`t$Name`t$mode`t$candidate`t$failed`t$([int] $sw.Elapsed.TotalSeconds)`t$([bool] $Filter)`t$($Tests -join ',')" | Add-Content $ledger
+
+    if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)"; exit $failed }
+    Step "done, $failed failed steps"
+    if ($failed -eq 0 -and $Branch) {
+        $tree = ((git -C $repo worktree list --porcelain) -join "`n") -split "`n`n" | Where-Object { $_ -match "branch refs/heads/$([regex]::Escape($Branch))(\n|$)" } |
+            ForEach-Object { ($_ -split "`n")[0] -replace '^worktree ', '' }
+        "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
+        "           (if master moved meanwhile, run the check again)"
+        if ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
+        else { "  then:    git branch -d $Branch" }
+    } elseif ($failed -eq 0 -and $Files.Count) {
+        "  land:    commit exactly the listed files in the integration checkout, then push"
     }
-    if ($Snapshot) {
-        $snap = Join-Path $env:LOCALAPPDATA "CalcDb\compare-bin\$Name"
-        if (Test-Path $snap) { Remove-Item $snap -Recurse -Force }
-        Copy-Item (Split-Path $runner) "$snap\runner" -Recurse
-        Copy-Item (Split-Path $worker) "$snap\worker" -Recurse
-        Copy-Item (Join-Path $Export "artifacts\native") "$snap\native" -Recurse
-        # The set definition travels with the binaries: compare-set otherwise reads probes/compare-set.json from the
-        # working tree, where a child's unfinished edit changes a running compare (process log, 2026-11-21).
-        Copy-Item (Join-Path $Export "probes\compare-set.json") "$snap\compare-set.json"
-        Step "snapshot $snap"
-        "  compare: $snap\runner\calcdb-oracle.exe compare-set --rerun --name $Name-1 --against baseline --set $snap\compare-set.json " +
-            "--worker $snap\worker\CalcDb.Oracle.Worker.exe --deployment $snap\native --store $env:LOCALAPPDATA\CalcDb\compare-store"
-    }
-} finally { Pop-Location }
-# Each export is about 1 GB; 82 of them filled the disk on 2026-11-21 and stopped a compare (process log). The logs
-# (test output, trx) move to calcdb-land-out; a passing run's export goes, a failing one stays for inspection.
-$logs = Join-Path $env:TEMP "calcdb-land-out\$Name-$head"
-if (Test-Path (Join-Path $Export 'landing-out')) {
-    if (Test-Path $logs) { Remove-Item $logs -Recurse -Force }
-    New-Item -ItemType Directory -Force (Split-Path $logs) | Out-Null
-    Copy-Item (Join-Path $Export 'landing-out') $logs -Recurse
-    Step "logs $logs"
-}
-if ($failed -eq 0 -and -not $KeepExport -and -not (Get-ChildItem $Export -Recurse -Attributes ReparsePoint -ErrorAction SilentlyContinue)) {
-    Remove-Item $Export -Recurse -Force -ErrorAction SilentlyContinue
-    Step "export removed (-KeepExport keeps it)"
-}
-if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)" } else { Step "done, $failed failed steps" }
-exit $failed
+    exit $failed
+} finally { $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue }

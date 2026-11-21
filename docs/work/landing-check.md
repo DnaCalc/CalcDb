@@ -1,94 +1,108 @@
 # Landing a sub-session's change
 
-How the organizer lands a code child's work: review, check, commit, and compare against ACE. This page carries the
-procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scratchpads. The process round of
-2026-11-21 ([process-log.md](process-log.md)) measured it and proposes the changes marked **proposed** below.
+How a slice goes from a brief to master, and how the organizer reviews, checks, lands and compares a child's work. The
+process round of 2026-11-21 evening ([process-log.md](process-log.md)) replaced the fresh export per landing with a
+persistent check worktree and gave code writers worktrees of their own.
 
-## Today's procedure
+## The gates of a slice
 
-1. Review the child's diff closely: scope (only the files its brief owns), every claimed rule against the record it
-   cites, and any generalization beyond the records.
-2. Run [tools/landing-check.ps1](../../tools/landing-check.ps1) with the child's files (an explicit list, never
-   "every modified file"), the test projects the change touches, and the target questions:
-   `pwsh tools/landing-check.ps1 -Name <topic> -Files a,b,c -Tests Isam,Sql,Com -Publish -Questions probes/<card> -Snapshot`.
-   It exports HEAD to `%TEMP%` (`git archive`), copies in the files, checks every cited `<folder>/<question>` in the
-   listed files (where `<folder>` exists under `probes/`) against `probes/<folder>/<question>.question.json` and
-   `evidence/<folder>/<question>/`, builds `CalcDb.slnx`, publishes `CalcDb.Com` into the export's `artifacts/native`,
-   runs each test project with a trx logger (failed tests are named, replay counters printed), and runs the candidate
-   check from the repository folder
-   (`calcdb-oracle batch --dir D --env windows-x64-calcdb-local --deployment <export>/artifacts/native --compare --rerun`).
-   Any missing citation prints `file:line: <folder>/<question>` and counts as a failed step (its exit code is the number
-   of failed steps). It lists the changed files it leaves out, so a missing file shows. At the end it copies the test
-   logs to `%TEMP%\calcdb-land-out\<topic>-<head>` and, when no step failed, deletes the export (about 1 GB; 82 of them
-   filled the disk on 2026-11-21 and stopped a compare); a failing export stays for inspection, and `-KeepExport` keeps a
-   passing one (for repeated `dotnet test --no-build` runs in it).
-3. When the review adjusts a file, run the script again; it starts from a fresh export each time. While a child fixes
-   its own new tests it adds `-Filter <dotnet test filter>` (for example `-Filter FullyQualifiedName~DaoBookmarkTests`)
-   and leaves out `-Questions`: the same export and build, only those tests. The script prints FILTERED and refuses
-   `-Filter` with `-Snapshot`; the run that lands is unfiltered. (Measured 2026-11-21: the ADO read-side child ran 7
-   landing checks, bkmk and gdkq 3 each; at least 6 of the 10 reruns were for errors in the child's own new test
-   files, each a whole check of about 4 min. A filtered trial ran 3 tests in 21 s, but its export took 34 s and its build
-   217 s, with a compare and four children's checks running beside it: the filter saves the test and candidate steps,
-   not the build.)
-4. Commit only the child's files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`), push,
-   update its register row and task.
-5. With `-Snapshot` the script has copied the export's runner, worker, `artifacts/native` and
-   `probes/compare-set.json` to `%LOCALAPPDATA%\CalcDb\compare-bin\<topic>\runner`, `\worker`, `\native` and
-   `\compare-set.json` (31 MB, seconds) and printed the compare command. Run it from the repository folder as an
-   `alta job`:
-   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --set <snapshot>\compare-set.json --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`.
-   Without `--set` the run reads the working tree's set, where a child's unfinished edit changes it: on 2026-11-21 a
-   compare of old binaries took up a child's new folders before they landed and ran 30 min instead of 8.
-   (about 5 min: candidate attempts run six at a time, `--parallel N`; 17 min one at a time with `--parallel 1`;
-   task mvgk, 2026-11-21). The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
-   `docs/work/compare-baseline.tsv` when nothing is lost, and investigate every loss first. Its `source` line names the
-   integration checkout's state, not the candidate's: the commit message names the commit compared.
-6. The job blocks nothing: children build, the next child starts and probes run while it runs. A later landing waits
-   only for the earlier run's result before it records its own baseline.
+1. **Ready.** No new byte decision lacks a record. Before a writer starts, a prober checks the slice's open questions
+   against [qualified.md](qualified.md) and the records and runs the round that closes them, one slice ahead of the
+   writers. A writer that still meets a byte no record decides stops and reports (AGENTS.md, Sub-sessions).
+2. **Brief.** The projects or files the child owns, its build limits, the book rows, and the records it relies on.
+3. **Write.** In the child's own CodeAlta worktree (`alta session create --worktree`, branch `alta/<name>`). The child
+   checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
+   `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
+4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
+   its record, by a model other than the writer's. A stretch over about 1,000 lines gets a read-only reviewer child;
+   the organizer then checks that its findings were applied. A smaller stretch has the organizer's review only.
+5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
+6. **Compare.** The core compare set in the background after the landing; the wide set once a day.
 
-## What it costs (2026-11-20, session 01a1f97d)
+### The child's report
 
-- Steps 2–3 took 1.4–4.0 min per export (45 calls, 50 min of tool time over the session). A full `git archive HEAD`
-  extracts 7,917 files (753 MB, of which `evidence/` 585 MB and `probes/` 114 MB) in 48 s and deletes in 15 s. The code
-  alone (`src tests tools third_party CalcDb.slnx Directory.Build.props global.json`, 432 files) extracts in 2.8 s.
-  Every export also rebuilds the solution from nothing and runs the NativeAOT publish.
-- Step 5 ran 11 times (180 min, two failed runs of 18 min). A run is 1,043 candidate attempts run one after another:
-  896 s, 0.86 s each, 87 % of it inside worker processes. Eight ADO questions that wait out a timeout take 140 s
-  (`r-q-ado-misc/resync-affect-matrix` 32.5 s, `async-execute-polled` 20.8 s, six more at 9–17 s).
-- Step 6 made the pipeline serial. From a child's report to the next writer starting took 7–21 min, and from 17:37 to
-  22:53 only one code writer ran at a time.
+A child ends with these parts and nothing else:
 
-## Proposed: compare from a snapshot, so it blocks nothing
+- **Change:** its branch (or, in the integration checkout, the exact file list).
+- **Rules:** each rule it implemented, with the record that shows its case.
+- **Tests:** the tests that cite those records, and the result of its last self-check.
+- **Bookkeeping:** the register row text, qualified.md note or process-log lines it would add. Only the organizer edits
+  those files.
+- **Open:** the branches of the slice it did not do, and every byte it met that no record decides.
 
-Rule 6 exists because the job runs the working tree's binaries. `compare-set` already takes `--worker`,
-`--deployment` and `--store`, so it can run from a copy:
+The solution filters `CalcDb.Isam.slnf`, `CalcDb.Sql.slnf`, `CalcDb.Com.slnf` and `CalcDb.Oracle.slnf` each hold an
+area's projects, everything they reference and the area's tests: a child builds, and loads into an editor or a Roslyn
+workspace, only its area. A project added to the solution goes into each filter whose area references it.
 
-1. After the commit, copy the export's runner (`src/CalcDb.Oracle.Runner/bin/Debug/net11.0/`), worker
-   (`src/CalcDb.Oracle.Worker/bin/Debug/net11.0-windows/win-x64/`) and `artifacts/native` to
-   `%LOCALAPPDATA%\CalcDb\compare-bin\<name>\` (tens of MB, seconds).
-2. Start the job from the repository folder:
-   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`.
-   The separate store keeps the candidate attempts apart from the children's `batch` runs (the job-file race of
-   2026-11-20). Its `cas` cache is filled once, on the first run. ACE's answers still come from `evidence/`.
-3. Children build, and the next child starts, while it runs. The organizer records the baseline when the job
-   reports. A later landing waits only for the earlier run's result before it records its own.
+## The landing check
 
-Quality is unchanged: it is the same set, comparer and per-question diff, still after every landing.
+[tools/landing-check.ps1](../../tools/landing-check.ps1) runs in the check worktree, `CalcDb-check` beside the
+repository: a detached worktree that only this script uses and that keeps its `bin`, `obj` and `artifacts` between runs.
+The script creates it on its first run (that one build is a full one).
 
-**Tried and adopted (52qh landing, 9964a534, 2026-11-21).** Run 52qh-1 took 930 s (896 s for growth-2) while two
-children worked and twelve oracle questions ran beside it. Its verdicts equal growth-2's on all 1,043 questions but
-the one the change moved (pop-visibility-snapshot: call 43 to Requery at 56): 178 of 1,043 on both. The procedure above
-now uses it.
+```
+pwsh tools/landing-check.ps1 -Name <topic> -Branch alta/<name> [-Questions probes/<card>] -Snapshot
+pwsh tools/landing-check.ps1 -Name <topic> -Files a,b,c [-Questions probes/<card>] -Snapshot
+```
 
-## One landing-check command (adopted 2026-11-21); the persistent clone stays with the owner
+It checks out master as committed and then:
 
-Steps 2–3 were six to nine calls per landing in the organizer's large context, and caused two slips on 2026-11-20 (the
-wrong file list once, skipped tests once). [tools/landing-check.ps1](../../tools/landing-check.ps1) does them in one
-call over a fresh export. Its first run (organizer 01a1fc2f, 2026-11-21): export 16–28 s, build 18–25 s, NativeAOT
-publish 29 s, Evidence tests 55 s, snapshot 2 s; 120 s in one call.
+- **merges the child's branch** (`-Branch`): a fast-forward when master has not moved since the child started, else a
+  merge, never a rebase. A conflict ends the check with the conflicting files; the child merges master into its branch
+  (`git merge master`) and the check runs again. **Or copies the listed files** (`-Files`) of a child that worked in
+  the integration checkout, and names the changed files it leaves out.
+- **checks every `<folder>/<question>` citation** in the changed files against `probes/` and `evidence/`.
+- **builds incrementally** and **chooses the tests from the project graph**: every test project whose references reach a
+  changed project; every test project when the build files, `evidence/` or `probes/` changed. `-Tests` adds more.
+- **publishes CalcDb.Com** only when a source of its project closure changed since the last publish there (a hash in
+  `artifacts/native`). The Com tests, the candidate check and the snapshot use the published module.
+- **runs the tests** with a trx logger (failed tests named, replay counters summed) and the **candidate check** of each
+  `-Questions` folder from the check worktree, whose `evidence/` holds the change's records.
+- with `-Snapshot`, **copies the runner, worker, native deployment and `probes/compare-set*.json`** to
+  `%LOCALAPPDATA%\CalcDb\compare-bin\<topic>` and prints the compare command. It keeps the ten newest snapshots.
+- keeps the logs of the 40 newest runs in `%TEMP%\calcdb-land-out`, and appends one line per run to
+  `%LOCALAPPDATA%\CalcDb\landing-runs.tsv` for [tools/process-indicators.ps1](../../tools/process-indicators.ps1).
 
-The proposed persistent check clone would replace the fresh export with `git checkout --force` in a second checkout,
-saving the export and giving an incremental build. It is a second checkout, and its `checkout --force` is what
-AGENTS.md forbids in the integration checkout, so it waits for the owner's word. Without it, the export cannot drop to
-the code part alone: the Corpus, Format, Isam, Expressions and Sql replay tests read `evidence/` from the root they
-find.
+Its exit code is the number of failed steps. One check runs at a time in a worktree (a lock file beside it); the
+landings form a queue, and each one is checked on top of the master it lands on. `-Filter` is for iterating and is
+refused with `-Snapshot`: the run that lands is unfiltered.
+
+**After a passing check.** For a branch, the script prints the landing: `git merge --ff-only <checked commit>` in the
+integration checkout and `git push`. If master moved meanwhile, the fast-forward refuses and the check runs again. Once
+the child's session has ended, remove its worktree (`git worktree remove`) and delete its branch (`git branch -d`). For
+a file list, commit exactly those files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and
+push. When two children in the integration checkout edited one file, stage only the landing child's hunks (a copy of
+the file, `git hash-object -w`, `git update-index --cacheinfo`) and check the staged diff. Then update the register row,
+the task, and the bookkeeping lines of the child's report.
+
+## The compare tiers
+
+- **Core set, after every landing:** [probes/compare-set.json](../../probes/compare-set.json), 1,360 questions, about
+  8 min with six candidate attempts at a time. Run it from the repository folder as an `alta job` with the printed
+  command:
+  `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --set <snapshot>\compare-set.json --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`.
+  `--set` from the snapshot matters: without it the run reads the working tree's set, where an unfinished edit
+  changes it. The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
+  [compare-baseline.tsv](compare-baseline.tsv) when nothing is lost, and investigate every loss first. Its `source`
+  line names the integration checkout's state; the commit message names the commit compared.
+- **Wide set, once a day and before a baseline is recorded:** `probes/compare-set-wide.json`, every folder CalcDb can
+  answer as a candidate (3,158 questions from task 3x6h, about 25 min), with the same command, `--set
+  <snapshot>\compare-set-wide.json` and `--against` the previous wide run. A loss in a folder outside the core set is
+  traced with `--dirs <folder>` against the snapshots of the landings since the last wide run.
+
+The compare job blocks nothing: children build, the next child starts and probes run while it runs. A later landing
+waits only for the earlier run's result before it records its own baseline.
+
+## Why it is built this way (measured)
+
+- A fresh export was 7,917 files and 753 MB (699 MB of it `evidence/` and `probes/`), then a full build and a NativeAOT
+  publish: 1.4–4.0 min per landing, and 1.2 GB left behind by each failing run. On 2026-11-21 such leftovers filled the
+  disk once and stopped a compare, and 24 GB of them were in `%TEMP%` that evening.
+- At least 6 of 10 reruns on 2026-11-21 were for errors in the child's own new tests; each was a whole check. The
+  self-check in the child's worktree moves those to the child.
+- Children in one working tree needed explicit file lists and hunk staging, and broke each other's builds with
+  half-written files. A worktree per writer makes the child's change its commit. The bookkeeping files, which nearly
+  every landing touches (the register in 62 of 150 commits, the baseline in 38), stay with the organizer, so branches
+  rarely conflict.
+- Snapshot compares (adopted at the 52qh landing, 9964a534) gave verdicts equal to a normal run's on all 1,043
+  questions but the one the change moved, while two children worked beside them.

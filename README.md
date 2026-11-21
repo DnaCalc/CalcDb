@@ -22,7 +22,7 @@ that hold for all work, then points into the design book, which holds the detail
   The oracle tooling is described in [docs/work/oracle-runner.md](docs/work/oracle-runner.md);
   what is built, what is next and what it depends on is in the
   [implementation register](docs/work/register.md).
-- **Approach:** [The Plan](docs/the-plan.md) (working draft v0.3, about 6.5k tokens) says
+- **Approach:** [The Plan](docs/the-plan.md) (working draft v0.4, about 7k tokens) says
   how we undertake the work. Everyone working on CalcDb reads it in full. The book
   stays the authority for scope and design.
 - **External inputs** that CalcDb consumes but does not build are listed in
