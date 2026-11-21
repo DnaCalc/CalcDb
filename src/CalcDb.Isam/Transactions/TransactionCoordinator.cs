@@ -237,10 +237,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public const int MaxWriteDepth = 5;
 
     /// <summary>
-    /// Below this gap two lazy writes stay in one commit-counter burst: ACE's deferred write of an automatic operation comes
-    /// 500–545 ms after it (TXN-FLUSH-OP), and a write before it joins it. Paused 100 to 485 ms apart, three runs each, two
-    /// Deletes counted once; with call overhead those gaps measure just under 500 ms (evidence/r-q8-header-counter
-    /// two-deletes-*ms-apart; qualified.md the page-0 commit counter).
+    /// Below this gap two lazy writes stay in one commit-counter burst: ACE's write-behind window ends about 0.5 s after
+    /// the return (R-TXN-1 TXN-FLUSH-BEHIND; ETW background writer delay 500–545 ms, TXN-FLUSH-OP), and a write before it
+    /// joins it. Paused 100 to 485 ms apart, three runs each, two Deletes counted once; the records give only the nominal
+    /// pause, with no per-call timestamps (evidence/r-q8-header-counter two-deletes-*ms-apart; qualified.md the page-0
+    /// commit counter).
     /// </summary>
     public static readonly TimeSpan ObservedSameBurstMax = TimeSpan.FromMilliseconds(500);
 
@@ -475,10 +476,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// evidence/r-q10-commit-counter-edits). Non-ACCDB files and synthetic caches without a database header leave
     /// page 0 untouched.
     /// </summary>
-    private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out TimeSpan? burstNow)
+    private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out bool trackLazyBurst)
     {
         incrementPage0 = false;
-        burstNow = null;
+        trackLazyBurst = false;
         FormatDescriptor d = FormatDescriptor.Jet4Family;
         using PagePin? page0 = cache.Pin(0).Pin;
         if (page0 is null || !DatabaseHeader.IsAccdb(page0.Bytes, d))
@@ -491,15 +492,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         else
         {
-            TimeSpan now = Clock();
-            burstNow = now;
+            trackLazyBurst = true;
             if (!_lazyBursts.TryGetValue(cache, out TimeSpan last))
             {
                 incrementPage0 = true;
             }
             else
             {
-                TimeSpan elapsed = now - last;
+                TimeSpan elapsed = Clock() - last;
                 if (elapsed < ObservedSameBurstMax)
                 {
                     incrementPage0 = false;
@@ -521,15 +521,21 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return (MutationOpen.None, null);
     }
 
-    private void RecordBurst(PageCache cache, CommitMode mode, TimeSpan? burstNow)
+    /// <summary>
+    /// Record the burst state after a publication completes: an immediate commit ends any active lazy burst, and a lazy
+    /// write starts its burst clock at the end of publication (after <c>attempt.Run</c>, when the call returns) rather
+    /// than before I/O, matching ACE's write-behind window which ends about 0.5 s after the return
+    /// (R-TXN-1 TXN-FLUSH-BEHIND; ETW background writer delay 500–545 ms).
+    /// </summary>
+    private void RecordBurst(PageCache cache, CommitMode mode, bool trackLazyBurst)
     {
         if (mode == CommitMode.Immediate)
         {
             _lazyBursts.Remove(cache);
         }
-        else if (burstNow is TimeSpan ts)
+        else if (trackLazyBurst)
         {
-            _lazyBursts[cache] = ts;
+            _lazyBursts[cache] = Clock();
         }
     }
 
@@ -559,14 +565,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return (MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
         }
-        (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out TimeSpan? burstNow);
+        (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out bool trackLazyBurst);
         if (counterOpen != MutationOpen.None)
         {
             return (counterOpen, counterDetail);
         }
         if (edits.Count == 0 && !incrementPage0)
         {
-            RecordBurst(cache, mode, burstNow);
+            RecordBurst(cache, mode, trackLazyBurst);
             return (MutationOpen.None, null);
         }
         if (_participants.ContainsKey(cache))
@@ -642,7 +648,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _publications.Add(new PublicationReceipt(0, attempt.Program!));
             }
-            RecordBurst(cache, mode, burstNow);
+            RecordBurst(cache, mode, trackLazyBurst);
             return (MutationOpen.None, null);
         }
         finally
@@ -684,7 +690,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (written.Length == 1 && Publisher is { } publisher)
         {
             FileParticipant p = written[0];
-            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out TimeSpan? burstNow);
+            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out bool trackLazyBurst);
             if (counterOpen != MutationOpen.None)
             {
                 return (counterOpen, counterDetail);
@@ -757,7 +763,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 p.Cache.NoteExtent(publishedExtent);
             }
-            RecordBurst(p.Cache, mode, burstNow);
+            RecordBurst(p.Cache, mode, trackLazyBurst);
         }
         foreach (PageCache f in _locked)
         {
