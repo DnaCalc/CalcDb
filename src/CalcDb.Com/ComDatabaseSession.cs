@@ -31,7 +31,9 @@ internal sealed class ComDatabaseSession : IPublicationTarget
     private QueryCatalog? _queries;
     private string? _queriesFailure;
     private IReadOnlyList<Relationship>? _relationships;
+    private CatalogRelationshipContext? _relationshipContext;
     private Dictionary<int, TableEditContext>? _editContexts;
+    private List<MutationSemantics>? _retiredSemantics;
     private ExpressionRuleBinder? _ruleBinder;
     private CalcDb.Expressions.DatabaseCollation? _collation;
     private bool _collationMade;
@@ -191,9 +193,10 @@ internal sealed class ComDatabaseSession : IPublicationTarget
     }
 
     /// <summary>
-    /// The shared edit state of a table of this session (II-07 §14; W-05/edit-frames): its <see cref="MutationSemantics"/>
-    /// compiled once from the TableDef and its stored property blob through <see cref="ExpressionRuleBinder"/>, its
-    /// AutoNumber counter, the unique probe over its stored trees, and whether a relationship names it (MSysRelationships).
+    /// The shared edit state of a table of this session (II-07 §14; W-05/edit-frames, W-05/fk-cascades): its
+    /// <see cref="MutationSemantics"/> compiled once from the TableDef and its stored property blob through
+    /// <see cref="ExpressionRuleBinder"/>, its AutoNumber counter, the unique probe over its stored trees, and the
+    /// catalog-backed referential integrity probe when <c>MSysRelationships</c> names it.
     /// </summary>
     public TableEditContext? EditContext(CatalogEntry entry, out string? failure)
     {
@@ -211,21 +214,26 @@ internal sealed class ComDatabaseSession : IPublicationTarget
         {
             return null;
         }
-        if (Relationships(out failure) is null)
+        if (Relationships(out failure) is not { } relationships)
         {
             return null;
         }
         // The text compare and session LCID (R-EXPR-1 EXPR-LOCALE: user default, never the thread's), as Find binds its criteria.
         _ruleBinder ??= new ExpressionRuleBinder(CreateExpressionContext(ExpressionUse.Query));
         var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
-        bool related = _relationships!.Any(r =>
-            string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
+        _relationshipContext ??= new CatalogRelationshipContext(Cache, Format, relationships, PageCount, ResolveEditContextByName);
+        IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
         // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).
-        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, related, new TableFootprints(Cache, Format, table, PageCount));
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, relProbe is not null, new TableFootprints(Cache, Format, table, PageCount), relProbe);
         _onEditContextCreated?.Invoke(context, entry, table);
         _editContexts.Add(entry.Id, context);
         return context;
+    }
+
+    private TableEditContext? ResolveEditContextByName(string tableName)
+    {
+        CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => CatalogRelationshipContext.NamesEqual(e.Name, tableName));
+        return entry is null ? null : EditContext(entry, out _);
     }
 
     /// <summary>
@@ -245,7 +253,8 @@ internal sealed class ComDatabaseSession : IPublicationTarget
 
     /// <summary>
     /// Reload the committed catalog after a published catalog change, grow the tracked extent, notify the owner, and
-    /// drop edit contexts for tables no open recordset holds so they recompile against the updated TableDef.
+    /// invalidate cached edit contexts so subsequent lookups recompile against the updated TableDef and relationships
+    /// (deferring disposal of semantics still held by live open recordsets until session close).
     /// </summary>
     public string? SchemaPublished(ulong extentPages, Func<string, bool> isTableHeld, Action? onCatalogReloaded = null)
     {
@@ -255,8 +264,10 @@ internal sealed class ComDatabaseSession : IPublicationTarget
             return "the catalog cannot be read after the catalog change: " + failure;
         }
         Catalog = catalog;
+        _relationships = null;
+        _relationshipContext = null;
         onCatalogReloaded?.Invoke();
-        ForgetUnheldEditContexts(isTableHeld);
+        InvalidateEditContexts(isTableHeld);
         return null;
     }
 
@@ -304,6 +315,14 @@ internal sealed class ComDatabaseSession : IPublicationTarget
             }
             _editContexts = null;
         }
+        if (_retiredSemantics is { } retired)
+        {
+            foreach (MutationSemantics semantics in retired)
+            {
+                semantics.Dispose();
+            }
+            _retiredSemantics = null;
+        }
     }
 
     public void DisposeAll()
@@ -313,7 +332,7 @@ internal sealed class ComDatabaseSession : IPublicationTarget
         DisposeFile();
     }
 
-    private void ForgetUnheldEditContexts(Func<string, bool> isTableHeld)
+    private void InvalidateEditContexts(Func<string, bool> isTableHeld)
     {
         if (_editContexts is not { } contexts)
         {
@@ -321,11 +340,15 @@ internal sealed class ComDatabaseSession : IPublicationTarget
         }
         foreach ((int id, TableEditContext context) in contexts.ToArray())
         {
-            if (!isTableHeld(context.Semantics.TableName))
+            if (isTableHeld(context.Semantics.TableName))
+            {
+                (_retiredSemantics ??= []).Add(context.Semantics);
+            }
+            else
             {
                 context.Semantics.Dispose();
-                contexts.Remove(id);
             }
+            contexts.Remove(id);
         }
     }
 

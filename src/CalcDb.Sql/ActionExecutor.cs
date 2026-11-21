@@ -648,10 +648,25 @@ public static unsafe class ActionExecutor
         // R-FMT-2 (qualified.md: DELETE without WHERE; evidence/r-q17-growth/retire-delete-au1,
         // evidence/r-q19-growth-open/delete-all-*): a single-table DELETE without WHERE and without a join
         // (ActionSyntax.Delete already refuses joins and external databases) routes through EditFrame.DeleteEveryRow
-        // so ACE's page-release path runs instead of row-by-row deletion.
+        // so ACE's page-release path runs instead of row-by-row deletion, EXCEPT when the target is a parent table
+        // of an enforced relationship, where ACE deletes row by row so each row is checked/cascaded or skipped
+        // without dbFailOnError and rolled back on failure with dbFailOnError
+        // (r-sql-2-3/act-cascade call 31, r-q-cursor-dao/errpart-delete-ri-position-plain, -failonerror).
         if (plan.Where is null)
         {
-            return ExecuteDeleteAll(plan, database, failOnError);
+            TableEditContext? targetCtx = database.EditContext(plan.TargetName, out string? ctxFail);
+            if (targetCtx is null)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.EditContext", ctxFail ?? plan.TargetName));
+            }
+            if (targetCtx.Relationships is { } relProbe && relProbe.CheckDeleteAttributes() is { } attrOpen)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit.Relationship", attrOpen));
+            }
+            if (!targetCtx.HasEnforcedParentRelations)
+            {
+                return ExecuteDeleteAll(plan, database, failOnError);
+            }
         }
 
         List<RowId>? candidates = CollectCandidates(plan, database, paramValues, out SqlFailure? scanFailure);
@@ -1264,7 +1279,7 @@ public static unsafe class ActionExecutor
             ? SqlFailure.Ace(SqlPhase.Execute, err.Number, err.Describe())
             : SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit." + outcome.Open, outcome.Detail ?? outcome.Open.ToString());
 
-    /// <summary>Row-level constraint and lock refusals skipped without dbFailOnError (R-SQL-2 SQL-CONTINUE, R-ERR-1 ERR-PARTIAL).</summary>
+    /// <summary>Row-level constraint, referential integrity, and lock refusals skipped without dbFailOnError (R-SQL-2 SQL-CONTINUE, R-ERR-1 ERR-PARTIAL).</summary>
     private static bool IsSkippableRowError(int number) => number is
         MutationError.Duplicate or
         MutationError.Required or
@@ -1272,6 +1287,8 @@ public static unsafe class ActionExecutor
         MutationError.RuleWithText or
         MutationError.RuleWithoutText or
         MutationError.NullInIndex or
+        MutationError.RelatedRecordsExist or
+        MutationError.RelatedRecordRequired or
         MutationError.LockedBySession or
         MutationError.WriteConflict;
 

@@ -27,6 +27,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
     private readonly MemoryDatabaseFile _image;
     private readonly CatalogSnapshot _catalog;
     private readonly ExpressionRuleBinder _binder;
+    private readonly CatalogRelationshipContext _relationshipContext;
     private readonly Dictionary<string, TableEditContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
 
     public ReplayFixture(string sha256)
@@ -38,6 +39,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _binder = new ExpressionRuleBinder(new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query));
         Relationships = RelationshipCatalog.Read(_cache, D, _catalog, _image.PageCount, out _) ?? [];
+        _relationshipContext = new CatalogRelationshipContext(_cache, D, Relationships, _image.PageCount, name => Table(name)?.Context);
     }
 
     public PageCache Cache => _cache;
@@ -45,9 +47,19 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
     /// <summary>The file as publications left it.</summary>
     public MemoryDatabaseFile Image => _image;
 
-    public void Dispose() => _image.Dispose();
+    public void Dispose()
+    {
+        foreach (TableEditContext ctx in _contexts.Values)
+        {
+            ctx.Semantics.Dispose();
+        }
+        _contexts.Clear();
+        _image.Dispose();
+    }
 
     public IReadOnlyList<Relationship> Relationships { get; }
+
+    public CatalogSnapshot Catalog => _catalog;
 
     /// <summary>The fixture's own file, for its own cache (a memory file has no lease to take and no other writer).</summary>
     public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
@@ -68,18 +80,31 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
 
     public (TableDefinition Table, TableEditContext Context)? Table(string name)
     {
-        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => CatalogRelationshipContext.NamesEqual(e.Name, name));
         if (entry is null)
         {
             return null;
         }
         if (!_contexts.TryGetValue(entry.Name, out TableEditContext? context))
         {
-            TableDefinition table = TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _)!;
-            PropertyBlob? blob = entry.Properties is { } raw ? PropertyBlob.Read(raw, out _) : null;
+            TableDefSegmentView? seg = TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 64, out _);
+            TableDefinition? table = seg is null ? null : TableDefDecoder.Decode(seg, (uint)entry.Id, D, out _);
+            if (table is null)
+            {
+                return null;
+            }
+            PropertyBlob? blob = null;
+            if (entry.Properties is { Length: > 0 } raw)
+            {
+                blob = PropertyBlob.Read(raw, out string? propFail);
+                if (propFail is not null)
+                {
+                    return null;
+                }
+            }
             var semantics = MutationSemantics.Compile(entry.Name, table, blob, _binder, D.IndexDescriptor);
-            bool related = Relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, related, new TableFootprints(_cache, D, table, _image.PageCount));
+            IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
+            context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, relProbe is not null, new TableFootprints(_cache, D, table, _image.PageCount), relProbe);
             _contexts.Add(entry.Name, context);
         }
         return (context.Semantics.Table, context);
@@ -373,7 +398,7 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
     [GeneratedRegex(@"^UPDATE (\w+) SET (\w+) = (?:(\w+) ([+-]) )?(\d+) WHERE ID = (\d+)$", RegexOptions.IgnoreCase)]
     private static partial Regex SingleRowUpdate();
 
-    [GeneratedRegex(@"^SELECT (.+?) FROM (\w+)(?: WHERE ID (?:= (\d+)|IN \(([\d, ]+)\)))?( ORDER BY ID)?$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^SELECT (.+?) FROM (\w+)(?: WHERE ID (?:= (\d+)|IN \(([\d, ]+)\)))?(?: ORDER BY (\w+))?$", RegexOptions.IgnoreCase)]
     private static partial Regex StoredRowsSelect();
 
     [GeneratedRegex(@"^SELECT \* FROM (\w+)$", RegexOptions.IgnoreCase)]
@@ -508,24 +533,38 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
         HashSet<long>? keys = select.Groups[3].Success ? [long.Parse(select.Groups[3].Value, CultureInfo.InvariantCulture)]
             : select.Groups[4].Success ? [.. select.Groups[4].Value.Split(',').Select(k => long.Parse(k.Trim(), CultureInfo.InvariantCulture))]
             : null;
-        ColumnDescriptor id = table.Table.Columns.First(c => string.Equals(c.Name, "ID", StringComparison.OrdinalIgnoreCase));
+        ColumnDescriptor? whereCol = keys is null ? null : table.Table.Columns.FirstOrDefault(c => string.Equals(c.Name, "ID", StringComparison.OrdinalIgnoreCase));
+        if (keys is not null && whereCol is null)
+        {
+            _recordsets[bind] = new ReplayRecordset { Name = bind, Database = db, Stopped = true };
+            Open.Add($"{where}: a WHERE ID column the fixture does not have");
+            return;
+        }
+        string orderColName = select.Groups[5].Success ? select.Groups[5].Value : "ID";
+        ColumnDescriptor? orderCol = table.Table.Columns.FirstOrDefault(c => string.Equals(c.Name, orderColName, StringComparison.OrdinalIgnoreCase));
+        if (orderCol is null)
+        {
+            _recordsets[bind] = new ReplayRecordset { Name = bind, Database = db, Stopped = true };
+            Open.Add($"{where}: an ORDER BY column the fixture does not have ({orderColName})");
+            return;
+        }
         List<(long Key, StoredRow Row)> rows = [];
         using (IRecordCursor cursor = db.Fixture.Open(table.Table, 1)!)
         {
             for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
             {
-                long key = cursor.Read(id).Value.Integer;
-                if (keys is not null && !keys.Contains(key))
+                if (keys is not null && !keys.Contains(cursor.Read(whereCol!).Value.Integer))
                 {
                     continue;
                 }
+                long sortKey = cursor.Read(orderCol).Value.Integer;
                 RowId row = ((IRowPositioned)cursor).CurrentRow!.Value;
                 var values = new NativeValue?[items.Count];
                 for (int i = 0; i < items.Count; i++)
                 {
                     values[i] = items[i].Column is { } c ? cursor.Read(c).Value : null;
                 }
-                rows.Add((key, new StoredRow(values, Hidden(db.Workspace, table.Context.Semantics, row) || Unknown(table.Context.Semantics))));
+                rows.Add((sortKey, new StoredRow(values, Hidden(db.Workspace, table.Context.Semantics, row) || Unknown(table.Context.Semantics))));
             }
         }
         rows.Sort((a, b) => a.Key.CompareTo(b.Key));
@@ -613,6 +652,14 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
                     return;
                 }
                 Check(where, e.Result!.Integer != "0", e.Member == "BOF" ? rs.Cursor!.Bof : rs.Cursor!.Eof);
+                return;
+            case "AbsolutePosition" when rs.Cursor is PopulationCursor pop && e.Args.Count == 0 && e.ExcepInfo is null:
+                if (TableHidden(rs))
+                {
+                    Open.Add($"{where}: membership with accepted changes not published (W-05/same-width-mutation)");
+                    return;
+                }
+                Check(where, e.Result!.Integer!, (pop.Ordinal ?? -1).ToString(CultureInfo.InvariantCulture));
                 return;
             case "Index" when e.Args.Count == 1 && rs.Cursor is TableCursor table:
                 frame.Discard();

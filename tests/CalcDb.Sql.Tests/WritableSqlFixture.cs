@@ -27,6 +27,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
     private QueryCatalog? _queries;
     private readonly ExpressionRuleBinder _ruleBinder;
     private IReadOnlyList<Relationship> _relationships;
+    private CatalogRelationshipContext _relationshipContext;
     private ulong _pageCount;
     private readonly Dictionary<string, TableEditContext> _editContexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TableDefinition?> _tables = new(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +46,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog = CatalogBootstrap.Open(_cache, D, _pageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, _pageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
+        _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, _pageCount, name => EditContext(name, out _));
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _sortOrder = header.SortOrder;
         Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query, SqlFixture.HostTextOrder(7177));
@@ -96,10 +98,15 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
     {
         _pageCount = Math.Max(_image.PageCount, extentPages);
         _tables.Clear();
+        foreach (TableEditContext ctx in _editContexts.Values)
+        {
+            ctx.Semantics.Dispose();
+        }
         _editContexts.Clear();
         _catalog = CatalogBootstrap.Open(_cache, D, PageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, PageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
+        _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, PageCount, name => EditContext(name, out _));
     }
 
     public ulong NowDateBits() => DateBitsProvider?.Invoke() ?? SchemaWriter.DateBits(DateTime.Now);
@@ -158,8 +165,8 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
             return cached;
         }
         CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => NamesEqual(e.Name, name));
-        TableDefinition? table = entry is null ? null
-            : TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _);
+        TableDefSegmentView? seg = entry is null ? null : TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 64, out _);
+        TableDefinition? table = entry is not null && seg is not null ? TableDefDecoder.Decode(seg, (uint)entry.Id, D, out _) : null;
         _tables[key] = table;
         return table;
     }
@@ -209,16 +216,24 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
             failure = $"table '{tableName}' cannot be decoded";
             return null;
         }
-        PropertyBlob? blob = entry.Properties is { } raw ? PropertyBlob.Read(raw, out _) : null;
+        PropertyBlob? blob = null;
+        if (entry.Properties is { Length: > 0 } raw)
+        {
+            blob = PropertyBlob.Read(raw, out failure);
+            if (failure is not null)
+            {
+                return null;
+            }
+        }
         MutationSemantics semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, D.IndexDescriptor);
-        bool related = _relationships.Any(r =>
-            NamesEqual(r.Table, entry.Name) || NamesEqual(r.ForeignTable, entry.Name));
+        IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
         var ctx = new TableEditContext(
             semantics,
             new StoredUniqueProbe(_cache, D, table, PageCount),
             7177,
-            related,
-            new TableFootprints(_cache, D, table, PageCount));
+            relProbe is not null,
+            new TableFootprints(_cache, D, table, PageCount),
+            relProbe);
         _editContexts[key] = ctx;
         failure = null;
         return ctx;
@@ -293,6 +308,11 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
             peer.Dispose();
         }
         Workspace.Dispose();
+        foreach (TableEditContext ctx in _editContexts.Values)
+        {
+            ctx.Semantics.Dispose();
+        }
+        _editContexts.Clear();
         _image.Dispose();
     }
 

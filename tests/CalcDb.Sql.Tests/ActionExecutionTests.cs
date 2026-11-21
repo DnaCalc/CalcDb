@@ -119,12 +119,20 @@ public sealed class ActionExecutionTests
             Assert.Empty(actDb.ReadSelect("SELECT ID FROM T WHERE ID = 15"));
         }
 
-        // Table participating in a relationship stops cleanly with NotModelled.Edit.Relationship (W-05/fk-cascades).
+        // r-fix-cursor-dao/ovf-insert-byte-failonerror: parent INSERT on a relationship table clears RI and stops at
+        // Publication because Yes/No Flg is omitted (Null into Yes/No).
         using (var relDb = new WritableSqlFixture(ErrBaseAccdb))
         {
-            ActionOutcome rel = ActionExecutor.Execute("INSERT INTO P (ID, Code, Req, Bt) VALUES (16, 'x16', 'r', 300)", relDb, options: 128);
-            Assert.False(rel.Succeeded);
-            Assert.Equal("NotModelled.Edit.Relationship", rel.Failure!.NotModelled);
+            ActionOutcome omittedFlg = ActionExecutor.Execute("INSERT INTO P (ID, Code, Req, Bt) VALUES (16, 'x16', 'r', 300)", relDb, options: 128);
+            Assert.False(omittedFlg.Succeeded);
+            Assert.Equal("NotModelled.Edit.Publication", omittedFlg.Failure!.NotModelled);
+
+            // r-fix-cursor-dao/con-fk-orphan-insert-failonerror: orphan child INSERT fails 3201 naming parent table 'P'.
+            ActionOutcome orphan = ActionExecutor.Execute("INSERT INTO Ch (CID, PID) VALUES (10, 999)", relDb, options: 128);
+            Assert.False(orphan.Succeeded);
+            Assert.Equal(3201, orphan.Failure!.Number);
+            Assert.Equal("You cannot add or change a record because a related record is required in table 'P'.", orphan.Failure.Message);
+            Assert.Equal(0, orphan.RecordsAffected);
         }
     }
 

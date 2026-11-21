@@ -130,7 +130,13 @@ public interface IUniqueProbe
 /// The shared edit state of one table of one open file (II-07 §14): its compiled <see cref="MutationSemantics"/>, its
 /// AutoNumber counter and the unique probe over its stored trees. One per table, shared by every recordset over it.
 /// </summary>
-public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? probe, uint lcid, bool hasRelationships = false, TableFootprints? footprints = null)
+public sealed class TableEditContext(
+    MutationSemantics semantics,
+    IUniqueProbe? probe,
+    uint lcid,
+    bool hasRelationships = false,
+    TableFootprints? footprints = null,
+    IRelationshipProbe? relationships = null)
 {
     public MutationSemantics Semantics { get; } = semantics;
 
@@ -151,8 +157,14 @@ public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? 
 
     public IUniqueProbe? Probe { get; } = probe;
 
-    /// <summary>Whether a relationship names the table: its checks (3200/3201) are W-05/fk-cascades, so such an Update is named.</summary>
+    /// <summary>Whether a relationship names the table; when true without <see cref="Relationships"/>, mutations are refused by name.</summary>
     public bool HasRelationships { get; } = hasRelationships;
+
+    /// <summary>The referential integrity probe for this table, or null when unwired or unrelated.</summary>
+    public IRelationshipProbe? Relationships { get; } = relationships;
+
+    /// <summary>Whether this table is the parent side of at least one enforced relationship.</summary>
+    public bool HasEnforcedParentRelations => Relationships?.HasEnforcedParentRelations ?? false;
 }
 
 /// <summary>
@@ -487,20 +499,25 @@ public sealed class EditFrame : IDisposable
             return Fail(MutationError.InvalidArgument);
         }
         MutationSemantics s = _table.Semantics;
-        if (_table.HasRelationships)
+        if (_table.HasRelationships && _table.Relationships is null)
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
 
         // The checks of the candidate row (II-10 §21 F-91 "Scheduled field and row checks"), each class reporting its
-        // first failure in declaration order. ACE's order is qualified only along Required (3314), field rule
-        // (3316/3317, 3802), unique index (3022) (CUR-EDIT, edit-validation-order); zero-length text (3315), the table
-        // rule and a Null in a Null-refusing index (3058) are each recorded alone. So the earliest failing class of that
-        // chain decides when every other failing class comes after it in the chain; any other combination is named, as
-        // is a failing check at depth 6 or 7, where the order of 3003 against the checks is not recorded.
-        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), default, default];
-        (stages[4], stages[5], int? refusingPhysical) = IndexChecks();
-        UpdateOutcome? decided = Decide(stages);
+        // first failure in declaration order. ACE's order is qualified along Required (3314), field rule
+        // (3316/3317, 3802), unique index (3022) (CUR-EDIT, edit-validation-order), and on a parent-key UPDATE whose
+        // new key collides with the PK while children still reference the old key, parent RI (3200) beats PK (3022)
+        // (evidence/r-dao-1-err-1/err-partial-constraint call 45, `UPDATE T SET ID = ID + 1` with dbFailOnError).
+        // Zero-length text (3315), the table rule, a Null in a Null-refusing index (3058), and child RI (3201) are
+        // each recorded alone. So the earliest failing class of the Recorded chain decides when every other failing
+        // class comes after it in the chain, and parent 3200 decides over 3022; any other combination is named, as is
+        // a failing check at depth 6 or 7, where the order of 3003 against the checks is not recorded.
+        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), default, default, default];
+        (stages[4], stages[5], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
+        IReadOnlyList<CascadeStep>? cascades = null;
+        stages[6] = RelationshipUpdateCheck(out cascades);
+        UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary);
         if (decided is { } failure)
         {
             if (!failure.Succeeded && _workspace.Depth > TransactionCoordinator.MaxWriteDepth)
@@ -631,12 +648,37 @@ public sealed class EditFrame : IDisposable
         {
             return refusedClosure;
         }
-        var change = new AcceptedRowChange(s, mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used, physical);
-        AcceptOutcome accepted = _workspace.Accept(change);
-        if (!accepted.Accepted)
+        AcceptedRowChange change;
+        AcceptOutcome accepted;
+        if (cascades is { Count: > 0 })
         {
-            UnlockFootprint(footprint, held);
-            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+            UpdateOutcome cascadeOutcome = AcceptWithCascades(
+                s,
+                mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify,
+                _original,
+                values,
+                assigned,
+                used,
+                physical,
+                cascades,
+                ref footprint,
+                held,
+                out accepted);
+            if (!accepted.Accepted)
+            {
+                return cascadeOutcome;
+            }
+            change = cascadeOutcome.Change!;
+        }
+        else
+        {
+            change = new AcceptedRowChange(s, mode == EditMode.AddNew ? RowChangeKind.Insert : RowChangeKind.Modify, _original, values, assigned, used, physical);
+            accepted = _workspace.Accept(change);
+            if (!accepted.Accepted)
+            {
+                UnlockFootprint(footprint, held);
+                return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+            }
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
@@ -659,10 +701,10 @@ public sealed class EditFrame : IDisposable
 
     /// <summary>
     /// Delete the current row (W-05/growth-structural-closure; II-07 §16, CUR-EDIT, CUR-POS): discards any pending Edit
-    /// or AddNew, locks the row's data page (pessimistic lock conflict fails 3188 from <see cref="ConflictSource"/>,
-    /// evidence/r-err-1b/lock-pessimistic-delete), compiles the in-page slot delete, index removals and TableDef RowCount
-    /// decrement, locks the closure, accepts and publishes through the Workspace, and moves the cursor into its deleted
-    /// current state (BOF=False, EOF=False, no current row).
+    /// or AddNew, checks referential integrity (3200 or recorded delete cascade), locks the row's data page (pessimistic
+    /// lock conflict fails 3188 from <see cref="ConflictSource"/>, evidence/r-err-1b/lock-pessimistic-delete), compiles
+    /// the in-page slot delete, index removals and TableDef RowCount decrement, locks the closure, accepts and publishes
+    /// through the Workspace, and moves the cursor into its deleted current state (BOF=False, EOF=False, no current row).
     /// </summary>
     public UpdateOutcome Delete()
     {
@@ -681,13 +723,44 @@ public sealed class EditFrame : IDisposable
             }
             return Fail(MutationError.NoCurrentRecord);
         }
-        if (_table.HasRelationships)
+        if (_table.HasRelationships && _table.Relationships is null)
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
         if (_workspace.HasAcceptedChange(s, row))
         {
             return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
+        }
+        IReadOnlyList<CascadeStep>? cascades = null;
+        if (_table.Relationships is { } relProbe)
+        {
+            IReadOnlyList<ColumnDescriptor> columns = s.Table.Columns;
+            var originals = new NativeValue[columns.Count];
+            for (int i = 0; i < originals.Length; i++)
+            {
+                FieldResult read = _cursor.Read(columns[i]);
+                if (!read.Succeeded)
+                {
+                    return read.Failure switch
+                    {
+                        CursorFailure.NoCurrentRecord => Fail(MutationError.NoCurrentRecord),
+                        CursorFailure.DeletedRecord => Fail(MutationError.RecordDeleted),
+                        _ => new UpdateOutcome(null, MutationOpen.ColumnType, $"field {columns[i].Name} cannot be read: {read.Detail}"),
+                    };
+                }
+                originals[i] = read.Value;
+            }
+            RelationshipOutcome rel = relProbe.CheckDelete(originals, row, _workspace);
+            if (rel.Verdict != RelationshipVerdict.Admit)
+            {
+                UpdateOutcome mapped = MapRelationshipFailure(rel);
+                if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
+                {
+                    return new UpdateOutcome(null, MutationOpen.CheckOrder, $"a relationship check fails ({mapped.Error?.Number}) at depth {_workspace.Depth}, where a Delete also meets 3003");
+                }
+                return mapped;
+            }
+            cascades = rel.Cascades;
         }
         if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
         {
@@ -729,12 +802,37 @@ public sealed class EditFrame : IDisposable
         {
             return refusedClosure;
         }
-        var change = new AcceptedRowChange(s, RowChangeKind.Delete, row, [], [], null, physical);
-        AcceptOutcome accepted = _workspace.Accept(change);
-        if (!accepted.Accepted)
+        AcceptedRowChange change;
+        AcceptOutcome accepted;
+        if (cascades is { Count: > 0 })
         {
-            UnlockFootprint(footprint, held);
-            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+            UpdateOutcome cascadeOutcome = AcceptWithCascades(
+                s,
+                RowChangeKind.Delete,
+                row,
+                [],
+                [],
+                null,
+                physical,
+                cascades,
+                ref footprint,
+                held,
+                out accepted);
+            if (!accepted.Accepted)
+            {
+                return cascadeOutcome;
+            }
+            change = cascadeOutcome.Change!;
+        }
+        else
+        {
+            change = new AcceptedRowChange(s, RowChangeKind.Delete, row, [], [], null, physical);
+            accepted = _workspace.Accept(change);
+            if (!accepted.Accepted)
+            {
+                UnlockFootprint(footprint, held);
+                return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+            }
         }
         if (physical.Change?.DeferredEntryDecrements is { } decrements)
         {
@@ -750,11 +848,12 @@ public sealed class EditFrame : IDisposable
 
     /// <summary>
     /// <c>DELETE FROM T</c> without WHERE (W-05/growth-structural-closure; R-FMT-2 "only DELETE without WHERE releases a
-    /// table's data page"): every row of the table goes as one change that releases its data page
-    /// (<see cref="SameWidthWriter.CompileRelease"/>) instead of one delete per row; <paramref name="rows"/> is the count
-    /// removed (RecordsAffected). The caller is a SQL statement with no WHERE, join or other source (II-11 DELETE target);
-    /// a shape the writer has no record for is refused by name and nothing is deleted, and the caller may then delete row
-    /// by row only where that gives ACE's bytes, which it does not here.
+    /// table's data page"): for tables without enforced parent relationships, every row goes as one change that releases
+    /// its data page (<see cref="SameWidthWriter.CompileRelease"/>) instead of one delete per row; <paramref name="rows"/>
+    /// is the count removed (RecordsAffected). When the table is the parent side of an enforced relationship, deletes
+    /// row by row through <see cref="Delete"/> (the same path as <c>ActionExecutor</c>: checks 3200 and executes
+    /// recorded delete cascades, per <c>r-sql-2-3/act-cascade</c> call 31 and
+    /// <c>r-q-cursor-dao/errpart-delete-ri-position-*</c>).
     /// </summary>
     public UpdateOutcome DeleteEveryRow(out int rows)
     {
@@ -765,7 +864,7 @@ public sealed class EditFrame : IDisposable
         }
         Discard();
         MutationSemantics s = _table.Semantics;
-        if (_table.HasRelationships)
+        if (_table.HasRelationships && _table.Relationships is null)
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
@@ -773,9 +872,21 @@ public sealed class EditFrame : IDisposable
         {
             return new UpdateOutcome(null, MutationOpen.PrivateRow, $"{s.TableName} has rows this Workspace changed and did not publish");
         }
+        if (_table.Relationships is { } relProbe && relProbe.CheckDeleteAttributes() is { } attrDetail)
+        {
+            if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
+            {
+                return new UpdateOutcome(null, MutationOpen.CheckOrder, $"a relationship check fails at depth {_workspace.Depth}, where a Delete also meets 3003");
+            }
+            return new UpdateOutcome(null, MutationOpen.Relationship, attrDetail);
+        }
         if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
         {
             return Fail(MutationError.TooManyTransactions);
+        }
+        if (_table.HasEnforcedParentRelations)
+        {
+            return DeleteEveryRowByRow(out rows);
         }
         if (_table.Writer is not { } writer)
         {
@@ -803,6 +914,93 @@ public sealed class EditFrame : IDisposable
             return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
         }
         return new UpdateOutcome(null, accepted.Open, accepted.Detail, change);
+    }
+
+    private UpdateOutcome DeleteEveryRowByRow(out int rows)
+    {
+        rows = 0;
+        MoveOutcome first = _cursor.MoveFirst();
+        if (first is not MoveOutcome.Moved and not MoveOutcome.ReachedBoundary)
+        {
+            return new UpdateOutcome(null, MutationOpen.Publication, $"table scan failed during row-by-row DELETE without WHERE ({first})");
+        }
+        if (first == MoveOutcome.ReachedBoundary || _cursor.Eof)
+        {
+            return new UpdateOutcome(null, MutationOpen.None, null);
+        }
+
+        StatementScope? ownStatement = _workspace.InStatement ? null : _workspace.BeginStatement();
+        bool startedTxn = false;
+        int deleted = 0;
+        UpdateOutcome lastOk = default;
+        try
+        {
+            if (_workspace.Depth == 0)
+            {
+                if (_workspace.BeginTrans() is { } beginErr)
+                {
+                    return new UpdateOutcome(beginErr);
+                }
+                startedTxn = true;
+            }
+            for (; !_cursor.Eof; )
+            {
+                UpdateOutcome outcome = Delete();
+                if (!outcome.Succeeded)
+                {
+                    if (startedTxn)
+                    {
+                        _workspace.Rollback();
+                        startedTxn = false;
+                    }
+                    rows = 0;
+                    return outcome;
+                }
+                lastOk = outcome;
+                deleted++;
+                MoveOutcome next = _cursor.MoveNext();
+                if (next is not MoveOutcome.Moved and not MoveOutcome.ReachedBoundary)
+                {
+                    if (startedTxn)
+                    {
+                        _workspace.Rollback();
+                        startedTxn = false;
+                    }
+                    rows = 0;
+                    return new UpdateOutcome(null, MutationOpen.Publication, $"table scan failed during row-by-row DELETE without WHERE ({next})");
+                }
+            }
+            if (startedTxn)
+            {
+                ResolutionOutcome committed = _workspace.CommitTrans();
+                startedTxn = false;
+                if (!committed.Succeeded)
+                {
+                    rows = 0;
+                    return new UpdateOutcome(committed.Error, committed.Open, committed.Detail);
+                }
+            }
+            if (ownStatement is not null)
+            {
+                ResolutionOutcome resolved = ownStatement.Complete();
+                ownStatement = null;
+                if (!resolved.Succeeded)
+                {
+                    rows = 0;
+                    return new UpdateOutcome(resolved.Error, resolved.Open, resolved.Detail);
+                }
+            }
+            rows = deleted;
+            return lastOk;
+        }
+        finally
+        {
+            if (startedTxn)
+            {
+                _workspace.Rollback();
+            }
+            ownStatement?.Dispose();
+        }
     }
 
     /// <summary>
@@ -1019,11 +1217,11 @@ public sealed class EditFrame : IDisposable
         };
     }
 
-    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, Null in index, unique.</summary>
-    private const int RequiredStage = 0, FieldRuleStage = 2, UniqueStage = 5;
+    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, Null in index, unique, relationship.</summary>
+    private const int RequiredStage = 0, FieldRuleStage = 2, UniqueStage = 5, RelationshipStage = 6;
 
     /// <summary>The outcome the stages decide (see <see cref="Update"/>), or null when every check passed.</summary>
-    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages)
+    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision)
     {
         int failing = 0, first = -1;
         for (int i = 0; i < stages.Length; i++)
@@ -1041,6 +1239,17 @@ public sealed class EditFrame : IDisposable
         if (failing == 1)
         {
             return stages[first];
+        }
+        // evidence/r-dao-1-err-1/err-partial-constraint call 45 (`UPDATE T SET ID = ID + 1` with dbFailOnError):
+        // updating a parent key whose new key collides with the PK (3022) while children still reference the old key
+        // fails with 3200 naming the child table.
+        if (failing == 2
+            && parentKeyPkCollision
+            && first == UniqueStage
+            && stages[UniqueStage].Error?.Number == MutationError.Duplicate
+            && stages[RelationshipStage].Error?.Number == MutationError.RelatedRecordsExist)
+        {
+            return stages[RelationshipStage];
         }
         bool chainOnly = true;
         for (int i = first + 1; i < stages.Length; i++)
@@ -1117,7 +1326,7 @@ public sealed class EditFrame : IDisposable
     }
 
     /// <summary>The Null-in-index check (3058) and the unique check (3022), each its first failure in index order.</summary>
-    private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical) IndexChecks()
+    private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical, bool RefusingIsPrimary) IndexChecks()
     {
         UpdateOutcome nullIndex = default;
         foreach (IndexCheck index in _table.Semantics.Indexes)
@@ -1159,19 +1368,194 @@ public sealed class EditFrame : IDisposable
             // the keys of the changes it accepted are nowhere to be read.
             if (_table.Writer is null && _workspace.HasAcceptedChanges(_table.Semantics))
             {
-                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} have no physical form"), null);
+                return (nullIndex, new UpdateOutcome(null, MutationOpen.PrivateRowKeys, $"{index.Logical.Name}: rows this Workspace accepted in {_table.Semantics.TableName} have no physical form"), null, false);
             }
             UniqueAnswer answer = _table.Probe?.Probe(index, key, _original, _workspace) ?? UniqueAnswer.NotModelled;
             if (answer == UniqueAnswer.Taken)
             {
-                return (nullIndex, Fail(MutationError.Duplicate), index.Physical.Number);
+                byte pkType = FormatDescriptor.Jet4Family.IndexDescriptor.PrimaryKeyType;
+                bool isPrimary = _table.Semantics.Table.LogicalIndexes.Any(l => l.PhysicalNumber == index.Physical.Number && l.IndexType == pkType);
+                return (nullIndex, Fail(MutationError.Duplicate), index.Physical.Number, isPrimary);
             }
             if (answer == UniqueAnswer.NotModelled)
             {
-                return (nullIndex, new UpdateOutcome(null, MutationOpen.UniqueIndex, index.Logical.Name), null);
+                return (nullIndex, new UpdateOutcome(null, MutationOpen.UniqueIndex, index.Logical.Name), null, false);
             }
         }
-        return (nullIndex, default, null);
+        return (nullIndex, default, null, false);
+    }
+
+    private UpdateOutcome RelationshipUpdateCheck(out IReadOnlyList<CascadeStep>? cascades)
+    {
+        cascades = null;
+        if (_table.Relationships is not { } probe)
+        {
+            return default;
+        }
+        var candidate = new NativeValue[_cells.Length];
+        for (int i = 0; i < candidate.Length; i++)
+        {
+            candidate[i] = CandidateValue(i);
+        }
+        RelationshipOutcome result = probe.CheckUpdate(
+            candidate,
+            _originals is { } orig ? orig : ReadOnlySpan<NativeValue>.Empty,
+            Mode == EditMode.Edit,
+            _original,
+            _workspace);
+        if (result.Verdict == RelationshipVerdict.Admit)
+        {
+            cascades = result.Cascades;
+            return default;
+        }
+        return MapRelationshipFailure(result);
+    }
+
+    private UpdateOutcome MapRelationshipFailure(RelationshipOutcome result) => result.Verdict switch
+    {
+        RelationshipVerdict.MissingParent => Fail(MutationError.RelatedRecordRequired, result.TableName),
+        RelationshipVerdict.HasChildren => Fail(MutationError.RelatedRecordsExist, result.TableName),
+        RelationshipVerdict.CheckOrder => new UpdateOutcome(null, MutationOpen.CheckOrder, result.Detail),
+        _ => new UpdateOutcome(null, MutationOpen.Relationship, result.Detail ?? $"{_table.Semantics.TableName} relationship check is not modelled"),
+    };
+
+    /// <summary>
+    /// Execute a parent change together with its recorded child-row cascades through
+    /// <see cref="TransactionCoordinator.AcceptBatch"/> so every unresolved-file, extent-reservation, overlay-edit,
+    /// statement-count, and per-row <see cref="AcceptedRowChange"/> invariant applies to both the parent and every
+    /// cascaded child row atomically (and rolls back or commits together inside an explicit BeginTrans:
+    /// <c>r-def-cat-txn/txn-cascade-delete-rollback-and-commit</c>).
+    /// </summary>
+    private UpdateOutcome AcceptWithCascades(
+        MutationSemantics parentSemantics,
+        RowChangeKind parentKind,
+        RowId? parentOriginal,
+        NativeValue[] parentValues,
+        bool[] parentAssigned,
+        GeneratedTicket? parentTicket,
+        CompiledChange parentCompiled,
+        IReadOnlyList<CascadeStep> cascades,
+        ref LockResource[] footprint,
+        LockLifetime held,
+        out AcceptOutcome accepted)
+    {
+        accepted = default;
+        if (!_workspace.InStatement)
+        {
+            UnlockFootprint(footprint, held);
+            footprint = [];
+            return new UpdateOutcome(null, MutationOpen.Relationship, "cascading update or delete outside a SQL action statement (recordset cascade) is not recorded");
+        }
+        if (parentCompiled.Change is not { } parentPhysical)
+        {
+            UnlockFootprint(footprint, held);
+            footprint = [];
+            return new UpdateOutcome(null, MutationOpen.Relationship, "cascading update or delete requires a physical compiler");
+        }
+        PageCache file = parentPhysical.File;
+        for (int i = 0; i < cascades.Count; i++)
+        {
+            TableEditContext targetCtx = cascades[i].TargetContext;
+            if (targetCtx.Footprints is not { } targetFp || !ReferenceEquals(targetFp.File, file))
+            {
+                UnlockFootprint(footprint, held);
+                footprint = [];
+                return new UpdateOutcome(null, MutationOpen.Relationship, "cross-file cascade is not recorded");
+            }
+            if (targetCtx.Writer is null)
+            {
+                UnlockFootprint(footprint, held);
+                footprint = [];
+                return new UpdateOutcome(null, MutationOpen.Publication, $"cascade target table '{targetCtx.Semantics.TableName}' has no physical compiler");
+            }
+        }
+        // Acquire initial row locks on every cascade target before opening the OperationFrame.
+        // In-process lock conflict on a cascade child row is not recorded (only cross-process is:
+        // r-fix-cat-txn/txn-xproc-cascade-delete-vs-pending-child-edit-final), so refuse by name rather than emitting 3188.
+        List<LockResource> childRowLocks = [];
+        foreach (CascadeStep step in cascades)
+        {
+            LockResource rowLock = TableFootprints.Row(step.TargetRow);
+            if (!footprint.Contains(rowLock) && !childRowLocks.Contains(rowLock))
+            {
+                childRowLocks.Add(rowLock);
+            }
+        }
+        if (childRowLocks.Count > 0)
+        {
+            LockAcquisition got = _workspace.Lock(file, childRowLocks.ToArray(), held);
+            if (got.Conflict is { } conflict)
+            {
+                UnlockFootprint(footprint, held);
+                footprint = [];
+                return new UpdateOutcome(null, MutationOpen.Conflict, $"in-process lock conflict on cascade child page {conflict.Resource.Page} ({conflict.Resource.Purpose}) held by locker {conflict.Holder.Value} is not recorded");
+            }
+            footprint = [.. footprint, .. childRowLocks];
+        }
+
+        var parentChange = new AcceptedRowChange(parentSemantics, parentKind, parentOriginal, parentValues, parentAssigned, parentTicket, parentCompiled);
+        List<LockResource> batchFootprint = [.. footprint];
+        accepted = _workspace.AcceptBatch(apply =>
+        {
+            AcceptOutcome parentResult = apply(parentChange);
+            if (!parentResult.Accepted)
+            {
+                return parentResult;
+            }
+            foreach (CascadeStep step in cascades)
+            {
+                TableEditContext childCtx = step.TargetContext;
+                SameWidthWriter childWriter = childCtx.Writer!;
+                CompiledChange childCompiled = step.Kind == RowChangeKind.Delete
+                    ? childWriter.CompileDelete(childCtx.Semantics, step.TargetRow, _workspace.OverlayOf(file), deferTableDefCounts: false, tableCursorDelete: false)
+                    : childWriter.Compile(
+                        childCtx.Semantics,
+                        step.TargetRow,
+                        step.NewValues!,
+                        _workspace.OverlayOf(file),
+                        inStatement: _workspace.InStatement,
+                        inExplicitTransaction: _workspace.Depth > 0,
+                        hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(file));
+                if (childCompiled.Change is not { } childPhysical)
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, $"cascade {step.Kind} on {childCtx.Semantics.TableName} row {step.TargetRow}: {childCompiled.NotWritten}");
+                }
+                LockResource[] extra = [.. childPhysical.Footprint.Where(r => !batchFootprint.Contains(r))];
+                if (extra.Length > 0)
+                {
+                    LockAcquisition got = _workspace.Lock(file, extra, held);
+                    if (got.Conflict is { } conflict)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Conflict, $"in-process lock conflict on cascade child page {conflict.Resource.Page} ({conflict.Resource.Purpose}) held by locker {conflict.Holder.Value} is not recorded");
+                    }
+                    batchFootprint.AddRange(extra);
+                }
+                NativeValue[] childValues = step.NewValues ?? [];
+                var childChange = new AcceptedRowChange(
+                    childCtx.Semantics,
+                    step.Kind,
+                    step.TargetRow,
+                    childValues,
+                    new bool[childValues.Length],
+                    null,
+                    childCompiled);
+                AcceptOutcome childResult = apply(childChange);
+                if (!childResult.Accepted)
+                {
+                    return childResult;
+                }
+            }
+            return new AcceptOutcome(true);
+        });
+
+        footprint = [.. batchFootprint];
+        if (!accepted.Accepted)
+        {
+            UnlockFootprint(footprint, held);
+            footprint = [];
+            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+        }
+        return new UpdateOutcome(null, accepted.Open, accepted.Detail, parentChange);
     }
 
     private bool KeyChanged(IndexCheck index)

@@ -150,7 +150,14 @@ public sealed class OperationFrame : IDisposable
     {
         ObjectDisposedException.ThrowIf(_done, this);
         _done = true;
-        _owner.EndOperation(this, change, commit: true);
+        _owner.EndOperation(this, change is null ? null : [change], commit: true);
+    }
+
+    internal void CompleteBatch(IReadOnlyList<AcceptedRowChange> changes)
+    {
+        ObjectDisposedException.ThrowIf(_done, this);
+        _done = true;
+        _owner.EndOperation(this, changes, commit: true);
     }
 
     public void Abandon()
@@ -924,40 +931,68 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// change set holding a change of a table without a file. A publication that runs and fails is named at the Update.
     /// A page edit that cannot be made abandons the frame and accepts nothing.
     /// </summary>
-    internal AcceptOutcome Accept(AcceptedRowChange change)
+    internal AcceptOutcome Accept(AcceptedRowChange change) => AcceptBatch(apply => apply(change));
+
+    /// <summary>
+    /// Accept one or more row changes (e.g. a parent change and its recorded cascades) inside a single
+    /// <see cref="OperationFrame"/> through the same unresolved-file, extent-reservation, overlay-edit, change-set,
+    /// statement-count, and publication path as <see cref="Accept"/>. Each accepted row joins the change set as its own
+    /// <see cref="AcceptedRowChange"/> so <see cref="HasAcceptedChange"/> and <see cref="HasAcceptedChanges"/> see every
+    /// affected table and row. Any failure abandons the frame and rolls back every private revision in the batch.
+    /// </summary>
+    internal AcceptOutcome AcceptBatch(Func<Func<AcceptedRowChange, AcceptOutcome>, AcceptOutcome> run)
     {
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
         {
             return new AcceptOutcome(false, refused);
         }
-        if (change.Physical is { } physical)
+        List<AcceptedRowChange> accepted = [];
+        AcceptOutcome ApplyOne(AcceptedRowChange change)
         {
-            if (_unresolved.Contains(physical.File))
+            if (change.Physical is { } physical)
             {
-                op.Abandon();
-                return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
-            }
-            if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
-            {
-                op.Abandon();
-                return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
-            }
-            FileParticipant p = op.Enlist(physical.File);
-            foreach (PageEdit e in physical.Edits)
-            {
-                EditResult edited = p.Edit(e.Page, e.Delta);
-                if (!edited.Succeeded)
+                if (_unresolved.Contains(physical.File))
                 {
-                    op.Abandon();
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, $"page {e.Page} could not take the change's private revision: {edited.Failure} {edited.Detail}");
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+                }
+                if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+                }
+                FileParticipant p = op.Enlist(physical.File);
+                foreach (PageEdit e in physical.Edits)
+                {
+                    EditResult edited = p.Edit(e.Page, e.Delta);
+                    if (!edited.Succeeded)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, $"page {e.Page} could not take the change's private revision: {edited.Failure} {edited.Detail}");
+                    }
                 }
             }
+            accepted.Add(change);
+            return new AcceptOutcome(true);
         }
-        op.Complete(change);
+
+        AcceptOutcome result;
+        try
+        {
+            result = run(ApplyOne);
+        }
+        catch
+        {
+            op.Abandon();
+            throw;
+        }
+        if (!result.Accepted)
+        {
+            op.Abandon();
+            return result;
+        }
+        op.CompleteBatch(accepted);
         if (_statement is not null && _frames.Count == 0)
         {
-            _statementChanges++;
+            _statementChanges += accepted.Count;
         }
         if (_frames.Count > 0 || _statement is not null || Publisher is null || _pending.Exists(c => c.Physical is null))
         {
@@ -1096,7 +1131,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return p;
     }
 
-    internal void EndOperation(OperationFrame operation, AcceptedRowChange? change, bool commit)
+    internal void EndOperation(OperationFrame operation, IReadOnlyList<AcceptedRowChange>? changes, bool commit)
     {
         foreach (FileParticipant p in operation.Scoped)
         {
@@ -1114,20 +1149,22 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             else if (!commit)
             {
                 p.Overlay.Rollback();
+                if (_frames.Count == 0 && !_pending.Exists(c => ReferenceEquals(c.Physical?.File, p.Cache)))
+                {
+                    p.Dispose();
+                    _participants.Remove(p.Cache);
+                }
             }
         }
         _operation = null;
-        if (!commit || change is null)
+        if (!commit || changes is null || changes.Count == 0)
         {
             return;
         }
-        if (_frames.Count > 0)
+        List<AcceptedRowChange> target = _frames.Count > 0 ? _frames[^1].Changes : _pending;
+        foreach (AcceptedRowChange change in changes)
         {
-            _frames[^1].Changes.Add(change);
-        }
-        else
-        {
-            _pending.Add(change);
+            target.Add(change);
         }
     }
 

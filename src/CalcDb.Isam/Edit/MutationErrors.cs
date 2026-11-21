@@ -67,6 +67,20 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     /// <summary>3167 "Record is deleted." (CUR-POS / CUR-ID: reading or deleting a deleted row).</summary>
     public const int RecordDeleted = 3167;
 
+    /// <summary>
+    /// 3200 "The record cannot be deleted or changed because table '&lt;child&gt;' includes related records."
+    /// (r-cat-1b/rel-parent-delete-by-attributes, rel-parent-key-update-by-attributes, r-q-cursor-dao/edit-fk-violation,
+    /// r-err-1b/con-fk-parent-delete).
+    /// </summary>
+    public const int RelatedRecordsExist = 3200;
+
+    /// <summary>
+    /// 3201 "You cannot add or change a record because a related record is required in table '&lt;parent&gt;'."
+    /// (r-cat-1b/rel-orphan-insert, r-q-cursor-dao/edit-fk-violation, r-fix-cursor-dao/con-fk-orphan-insert-failonerror,
+    /// r-def-cat-txn/cat-rel-compound-key-enforcement).
+    /// </summary>
+    public const int RelatedRecordRequired = 3201;
+
     /// <summary>3251 "Operation is not supported for this type of object." (Edit, Update, CancelUpdate, Delete on a snapshot).</summary>
     public const int NotSupported = 3251;
 
@@ -113,6 +127,8 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
         NullInIndex => "Index or primary key cannot contain a Null value.",
         FieldTooSmall => "The field is too small to accept the amount of data you attempted to add. Try inserting or pasting less data.",
         RecordDeleted => "Record is deleted.",
+        RelatedRecordsExist => $"The record cannot be deleted or changed because table '{Argument}' includes related records.",
+        RelatedRecordRequired => $"You cannot add or change a record because a related record is required in table '{Argument}'.",
         LockedBySession => "Could not update; currently locked by another session on this machine.",
         WriteConflict => "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.",
         NotSupported => "Operation is not supported for this type of object.",
@@ -148,13 +164,17 @@ public enum MutationOpen : byte
     /// <summary>A validation rule the binder does not admit, or whose result is not a truth value (no record decides it).</summary>
     Rule,
 
-    /// <summary>Two failing check classes whose order the records do not establish (a table rule against a unique index, 3058 against 3314).</summary>
+    /// <summary>Two failing check classes whose order the records do not establish (a table rule against a unique index, 3058 against 3314, relationship against another check).</summary>
     CheckOrder,
 
     /// <summary>A unique check against rows this locker accepted and did not publish (their keys are not readable yet).</summary>
     PrivateRowKeys,
 
-    /// <summary>A relationship (3200/3201) check: W-05/fk-cascades.</summary>
+    /// <summary>
+    /// An unrecorded relationship case: a related table opened without an <see cref="IRelationshipProbe"/>, unrecorded
+    /// <c>MSysRelationships.grbit</c> bits, a self-referencing row referencing itself, an unencodable relationship key,
+    /// or a cascading shape not shown by the retained records (recordset cascades, multi-level/cyclic/compound cascades).
+    /// </summary>
     Relationship,
 
     /// <summary>A uniqueness check the index layer could not answer (an unencodable key, a sort order outside the General family).</summary>
