@@ -1,0 +1,109 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q25-nz-3141/alias-int-precedence",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B",
+    "R-EXPR-1",
+    "EXPR-BIND",
+    "W-06"
+  ],
+  "description": "Error precedence of unbracketed AS inT against 3085 (Undefined function Nz), 3078 (missing table), 3061 (unresolved column), 3075 (wrong function arity CDec(1)), and 3075 (expression syntax error), plus bracketed [inT] control showing 3085.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-main.accdb",
+      "sha256": "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337",
+      "length": 229376,
+      "provenance": "r-expr-1b.create-main.141f77b461.a1 qk1-141f77b46191e9a552ba893cbea5d7261e388f3302c8ffe0d70d04f8871292e5 output:r-expr-1b-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        { "type": "inputPath", "role": "main" },
+        { "type": "bool", "value": false },
+        { "type": "bool", "value": true }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT Nz(N) AS inT FROM Mx" }, { "type": "i4", "value": 4 }],
+      "bind": "rs0"
+    },
+    { "op": "invoke", "target": "rs0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs0" },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT Nz(N) AS [inT] FROM Mx" }, { "type": "i4", "value": 4 }],
+      "bind": "rs1"
+    },
+    { "op": "invoke", "target": "rs1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs1" },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT 1 AS inT FROM NoSuchTable" }, { "type": "i4", "value": 4 }],
+      "bind": "rs2"
+    },
+    { "op": "invoke", "target": "rs2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs2" },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT NoSuchCol AS inT FROM Mx" }, { "type": "i4", "value": 4 }],
+      "bind": "rs3"
+    },
+    { "op": "invoke", "target": "rs3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs3" },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT CDec(1) AS inT FROM Mx" }, { "type": "i4", "value": 4 }],
+      "bind": "rs4"
+    },
+    { "op": "invoke", "target": "rs4", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs4" },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [{ "type": "bstr", "text": "SELECT (1 + ) AS inT FROM Mx" }, { "type": "i4", "value": 4 }],
+      "bind": "rs5"
+    },
+    { "op": "invoke", "target": "rs5", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs5" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

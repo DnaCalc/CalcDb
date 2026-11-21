@@ -1,0 +1,90 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q25-nz-3141/no-order-by",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B",
+    "R-EXPR-1",
+    "EXPR-BIND",
+    "W-06"
+  ],
+  "description": "Single-element variation of r-q25-nz-3141/baseline: remove ORDER BY ID.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-main.accdb",
+      "sha256": "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337",
+      "length": 229376,
+      "provenance": "r-expr-1b.create-main.141f77b461.a1 qk1-141f77b46191e9a552ba893cbea5d7261e388f3302c8ffe0d70d04f8871292e5 output:r-expr-1b-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "Version", "kind": "propertyGet", "args": [] },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        { "type": "inputPath", "role": "main" },
+        { "type": "bool", "value": false },
+        { "type": "bool", "value": true }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "CollatingOrder", "kind": "propertyGet", "args": [] },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N, T, IsNull(N) AS inN, IsNull(T) AS inT, Nz(N) AS nzN, Nz(T) AS nzT, Nz(N, -1) AS nzN1, Nz(T, 'none') AS nzT1, Len(T) AS lT, VarType(Nz(N)) AS vN, VarType(Nz(T)) AS vT FROM Mx"
+        },
+        { "type": "i4", "value": 4 }
+      ],
+      "bind": "rs0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs0",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        { "op": "invoke", "target": "rs0", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "rs0f" },
+        {
+          "op": "forEachItem",
+          "target": "rs0f",
+          "bind": "rs0x",
+          "maxItems": 64,
+          "body": [
+            { "op": "invoke", "target": "rs0x", "member": "Name", "kind": "propertyGet", "args": [] },
+            { "op": "invoke", "target": "rs0x", "member": "Type", "kind": "propertyGet", "args": [] },
+            { "op": "invoke", "target": "rs0x", "member": "Value", "kind": "propertyGet", "args": [] }
+          ]
+        },
+        { "op": "release", "target": "rs0f" },
+        { "op": "invoke", "target": "rs0", "member": "MoveNext", "kind": "method", "args": [] }
+      ]
+    },
+    { "op": "invoke", "target": "rs0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs0" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
