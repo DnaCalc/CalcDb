@@ -40,15 +40,15 @@ scope or design, the book wins.
 
 - Run code writers in parallel, one per project at a time. A brief names the projects or files the child owns, its
   build limits, and the book rows and records it relies on.
-- Set the model and reasoning of every child: Opus high where behaviour is still being found, for concurrency and
-  write publication; Gemini 4 Neon (`antigravity-acp:gemini-4-neon@high`) or Opus medium for record-backed
-  implementation; Sonnet medium for routine tooling.
+- Set the model and reasoning of every child. Children run on Gemini 4 Neon (`antigravity-acp:gemini-4-neon@high`):
+  implementation, probe rounds, reviews and tooling alike. The organizer stays on Opus. A Claude child only where the
+  owner asks for one (owner, 2026-11-21: to even out the week's Claude usage).
 - A child stops and reports when a record contradicts a note or no record decides a byte. The organizer then probes:
-  a single discriminator itself, a larger round through an Opus high prober child that writes only cards, probes,
+  a single discriminator itself, a larger round through a prober child that writes only cards, probes,
   evidence and its qualified.md note (process log, change 6, 2026-11-21).
 - Before landing, check every rule the child wrote against a record. Expect one generalization beyond the records
-  in a larger task; a Neon stretch of about 3,400 lines had eleven. For a stretch of more than about 1,000 lines, an
-  Opus high read-only reviewer child does the rule-against-record check (process log, 2026-11-21, organizer 01a1fc2f).
+  in a larger task; a Neon stretch of about 3,400 lines had eleven. For a stretch of more than about 1,000 lines, a
+  read-only reviewer child (a session other than the writer) does the rule-against-record check (process log, 2026-11-21, organizer 01a1fc2f).
   Keep Neon stretches to one deliverable each.
 - Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md). When two children edited one file,
   stage only the landing child's hunks (a copy of the file, `git hash-object -w`, `git update-index --cacheinfo`) and
