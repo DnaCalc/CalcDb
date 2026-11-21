@@ -603,3 +603,14 @@ equal growth-2's on every question but the one the change moved. Adopted: landin
 under change 2 (Neon trial 7 on Sql) while two were running, so three code writers ran at once for the first time.
 Also seen: a landing's follow-up probes overturned the child's per-field rule within the hour (r-q12-snapshot-fix), so
 probing the open cases a child names before its next stretch paid off again.
+
+**Observations during the landings of 2026-11-21 (organizer 01a1fb2e-5624).**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| Com tests run before the export's publish | 4 of 50 failed once and were taken for a flake; they need the published native deployment | landing-check.md step 2 already orders build, publish, tests: follow it |
+| Evidence records committed before the Evidence tests ran (9143fd42 to 950e85ce) | none (they passed afterwards) | the per-commit check runs before `git commit`, also for probe-only commits |
+| A register row written with a task id before the task existed, twice | caught before commit both times | create the task first, then cite its id |
+| A child cited a source ID A-01 does not have (S-JACK-CRYPT) for bytes it observed in fixtures | fixed at landing | review checks each cited source ID against A-01, as each byte rule against a record |
+| `batch` reused a NotStarted attempt sealed by a runner/worker mismatch | two questions stayed incomplete until `run --new-attempt` | the handoff's rule (`run --token T --new-attempt` after a tooling change) applies to mismatched binaries too |
+| ACE-vs-ACE repeats beside each new-file comparison | showed that CalcDb's new file differs from ACE's only where ACE's own reruns do (320 clock bytes) | a repeat is the control for any byte comparison of a written file (task c4rv) |
