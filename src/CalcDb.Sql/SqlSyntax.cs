@@ -186,19 +186,8 @@ public static class SqlParser
     /// </summary>
     public static SelectSyntax? Parse(string source, out SqlFailure? failure)
     {
-        int nul = source.IndexOf('\0', StringComparison.Ordinal);
-        if (nul >= 0)
+        if (!NormalizeSource(ref source, out failure))
         {
-            source = source[..nul];
-        }
-        if (source.Length >= 65534)
-        {
-            failure = SqlFailure.Ace(SqlPhase.Parse, 3035, "System resource exceeded.");
-            return null;
-        }
-        if (source.Length > 65000)
-        {
-            failure = SqlFailure.Open(SqlPhase.Parse, "NotModelled.StatementLength", $"{source.Length} units: the length limit lies between 65000 and 65534");
             return null;
         }
         var p = new Parser(source);
@@ -216,9 +205,77 @@ public static class SqlParser
         return statement;
     }
 
-    private sealed class Parser(string s)
+    internal static bool NormalizeSource(ref string source, out SqlFailure? failure)
     {
-        private int _p;
+        int nul = source.IndexOf('\0', StringComparison.Ordinal);
+        if (nul >= 0)
+        {
+            source = source[..nul];
+        }
+        if (source.Length >= 65534)
+        {
+            failure = SqlFailure.Ace(SqlPhase.Parse, 3035, "System resource exceeded.");
+            return false;
+        }
+        if (source.Length > 65000)
+        {
+            failure = SqlFailure.Open(SqlPhase.Parse, "NotModelled.StatementLength", $"{source.Length} units: the length limit lies between 65000 and 65534");
+            return false;
+        }
+        failure = null;
+        return true;
+    }
+
+    internal static SqlFailure? ParseLeadingParameters(string source, ref int position, List<ParameterDeclaration> parameters)
+    {
+        var p = new Parser(source, position);
+        var scratch = new SelectSyntax(source);
+        try
+        {
+            SqlFailure? failure = p.LeadingParameters(scratch);
+            if (failure is not null)
+            {
+                return failure;
+            }
+            parameters.AddRange(scratch.Parameters);
+            position = p.Position;
+            return null;
+        }
+        finally
+        {
+            scratch.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Parse the SELECT body of an <c>INSERT INTO … SELECT …</c> starting at <paramref name="position"/>: handles both
+    /// standard SELECT with FROM and FROM-less constant SELECT (<c>INSERT INTO U (ID, K) SELECT 602, 'y'</c>,
+    /// r-def-expr-sql/sql-insert-values-forms), refuses UNION with 3131 (same record), and leaves <paramref name="position"/>
+    /// before any trailing <c>WITH OWNERACCESS OPTION</c> or <c>;</c>.
+    /// </summary>
+    internal static SelectSyntax? ParseInsertSelect(string source, ref int position, out bool hasFrom, out SqlFailure? failure)
+    {
+        var p = new Parser(source, position);
+        var statement = new SelectSyntax(source);
+        failure = p.InsertSelectBody(statement, out hasFrom);
+        if (failure is null && p.BadName)
+        {
+            failure = SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+        }
+        if (failure is not null)
+        {
+            statement.Dispose();
+            return null;
+        }
+        position = p.Position;
+        return statement;
+    }
+
+    private sealed class Parser(string s, int start = 0)
+    {
+        private int _p = start;
+
+        public int Position => _p;
 
         /// <summary>The depth of parenthesized arms the position is inside: there a ')' ends a clause.</summary>
         private int _armDepth;
@@ -404,11 +461,7 @@ public static class SqlParser
             return new SqlFailure(SqlPhase.Parse, 3075, $"Syntax error (missing operator){SqlFailure.QueryExpression}{s[start..stop]}'.") { ExcerptExact = false };
         }
 
-        /// <summary>
-        /// A statement: <c>[PARAMETERS …;] arm {UNION [ALL] arm} [;]</c> (II-11 §2, §15). The last arm's ORDER BY is the
-        /// union's; an ORDER BY on an earlier arm is not recorded. UNION is left-associative: each operator keeps its arm.
-        /// </summary>
-        public SqlFailure? Select(SelectSyntax statement)
+        public SqlFailure? LeadingParameters(SelectSyntax statement)
         {
             if (TakeWord("PARAMETERS") && Parameters(statement) is { } declarations)
             {
@@ -417,6 +470,19 @@ public static class SqlParser
             if (IsWord("PARAMETERS"))
             {
                 return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// A statement: <c>[PARAMETERS …;] arm {UNION [ALL] arm} [;]</c> (II-11 §2, §15). The last arm's ORDER BY is the
+        /// union's; an ORDER BY on an earlier arm is not recorded. UNION is left-associative: each operator keeps its arm.
+        /// </summary>
+        public SqlFailure? Select(SelectSyntax statement)
+        {
+            if (LeadingParameters(statement) is { } declarations)
+            {
+                return declarations;
             }
             if (QueryBody(statement) is { } bodyFailure)
             {
@@ -558,8 +624,26 @@ public static class SqlParser
             return ArmBody(statement);
         }
 
-        private SqlFailure? ArmBody(SelectSyntax statement)
+        public SqlFailure? InsertSelectBody(SelectSyntax statement, out bool hasFrom)
         {
+            SqlFailure? f = ArmBody(statement, allowNoFrom: true, allowWith: true, out hasFrom);
+            if (f is not null)
+            {
+                return f;
+            }
+            if (IsWord("UNION"))
+            {
+                // r-def-expr-sql/sql-insert-values-forms: INSERT INTO U ... SELECT ... UNION SELECT ... fails 3131.
+                return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+            }
+            return null;
+        }
+
+        private SqlFailure? ArmBody(SelectSyntax statement) => ArmBody(statement, allowNoFrom: false, allowWith: false, out _);
+
+        private SqlFailure? ArmBody(SelectSyntax statement, bool allowNoFrom, bool allowWith, out bool hasFrom)
+        {
+            hasFrom = false;
             if (!TakeWord("SELECT"))
             {
                 string? word = PeekWord();
@@ -586,7 +670,7 @@ public static class SqlParser
             }
             do
             {
-                if (Item(statement) is { } itemFailure)
+                if (Item(statement, allowWith) is { } itemFailure)
                 {
                     return itemFailure;
                 }
@@ -594,8 +678,13 @@ public static class SqlParser
             while (TakeSymbol(','));
             if (!TakeWord("FROM"))
             {
+                if (allowNoFrom && (AtEnd() || IsSymbol(';') || (allowWith && IsWord("WITH"))))
+                {
+                    return null;
+                }
                 return AtEnd() ? Open("NotModelled.NoFrom", "a SELECT without FROM") : MissingOperator(statement.Items[^1].Offset);
             }
+            hasFrom = true;
             do
             {
                 if (Source(statement, out SourceSyntax? source) is { } sourceFailure)
@@ -612,7 +701,7 @@ public static class SqlParser
             }
             if (TakeWord("WHERE"))
             {
-                if (Clause(statement, out Fragment? where, "GROUP", "HAVING", "ORDER") is { } f)
+                if (Clause(statement, out Fragment? where, allowWith ? ["GROUP", "HAVING", "ORDER", "WITH"] : ["GROUP", "HAVING", "ORDER"]) is { } f)
                 {
                     return f;
                 }
@@ -626,7 +715,7 @@ public static class SqlParser
                 }
                 do
                 {
-                    if (Clause(statement, out Fragment? key, "HAVING", "ORDER") is { } f)
+                    if (Clause(statement, out Fragment? key, allowWith ? ["HAVING", "ORDER", "WITH"] : ["HAVING", "ORDER"]) is { } f)
                     {
                         return f;
                     }
@@ -636,7 +725,7 @@ public static class SqlParser
             }
             if (TakeWord("HAVING"))
             {
-                if (Clause(statement, out Fragment? having, "ORDER") is { } f)
+                if (Clause(statement, out Fragment? having, allowWith ? ["ORDER", "WITH"] : ["ORDER"]) is { } f)
                 {
                     return f;
                 }
@@ -650,7 +739,7 @@ public static class SqlParser
                 }
                 do
                 {
-                    if (Clause(statement, out Fragment? key, "ASC", "DESC") is { } f)
+                    if (Clause(statement, out Fragment? key, allowWith ? ["ASC", "DESC", "WITH"] : ["ASC", "DESC"]) is { } f)
                     {
                         return f;
                     }
@@ -663,7 +752,7 @@ public static class SqlParser
                 }
                 while (TakeSymbol(','));
             }
-            if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(_armDepth > 0 && IsSymbol(')')))
+            if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(allowWith && IsWord("WITH")) && !(_armDepth > 0 && IsSymbol(')')))
             {
                 return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
             }
@@ -703,7 +792,7 @@ public static class SqlParser
             return null;
         }
 
-        private SqlFailure? Item(SelectSyntax statement)
+        private SqlFailure? Item(SelectSyntax statement, bool allowWith = false)
         {
             Skip();
             int offset = _p;
@@ -733,7 +822,7 @@ public static class SqlParser
                 }
             }
             statement.Items.Add(new SelectItem(expression, false, null, alias, offset));
-            if (!IsSymbol(',') && !IsWord("FROM") && !AtEnd())
+            if (!IsSymbol(',') && !IsWord("FROM") && !AtEnd() && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
             {
                 return MissingOperator(offset);
             }

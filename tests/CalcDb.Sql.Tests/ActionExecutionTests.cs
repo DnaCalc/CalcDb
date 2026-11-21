@@ -1,0 +1,401 @@
+using CalcDb.Catalog;
+using CalcDb.Expressions;
+using CalcDb.Format;
+using CalcDb.Foundation;
+using CalcDb.Isam;
+using CalcDb.Isam.Edit;
+using CalcDb.Isam.Transactions;
+using CalcDb.Values;
+using CalcDb.Values.Scalar;
+
+namespace CalcDb.Sql.Tests;
+
+/// <summary>
+/// Targeted unit and integration tests for single-table SQL actions (W-07/actions stretch 1; II-11 §§22–28):
+/// parser syntax errors and named boundaries, binder resolution and errors, SQL target conversions, INSERT VALUES,
+/// INSERT SELECT (explicit, name-mapped, constant, self-insert), UPDATE (original-row view, key-moving stability,
+/// failure disposition with and without dbFailOnError, two-workspace 3188 conflict), DELETE forms, parameterized
+/// actions, and saved action QueryDef execution through the catalog read path.
+/// </summary>
+public sealed class ActionExecutionTests
+{
+    private const string ActAccdb = "a9991effea1dc52b7f857ef9a05a68573df00212d4f79e3ff2c21c01c8f674cd";
+    private const string ErrBaseAccdb = "33192b8c7ea72f4d74393996eedd0b157654218c623c63c99de672149b49e5ed";
+    private const string DefSqlAccdb = "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70";
+    private const string CatQdAccdb = "54d09662048f566a7c2de5f0128cf3b8891a6e0452d18f60ec7a6f247b552616";
+    private const string FxByteAccdb = "53afa2ada2f2b1506bc287fa2dc2a561c269145fe9583bbc55ad02adce4a8f03";
+
+    private static NativeVariant I4(int v) => new() { Vt = (ushort)VarType.I4, Int64 = (uint)v };
+
+    // ---- Parser & Binder errors and named boundaries -------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("BEGIN TRANSACTION", 3129)]
+    [InlineData("EXEC sp_help", 3129)]
+    [InlineData("SELECT ID FROM T", 3065)]
+    [InlineData("INSERT T (ID) VALUES (1)", 3134)]
+    [InlineData("INSERT INTO T (ID) VALUES ()", 3134)]
+    [InlineData("INSERT INTO T (ID, V) VALUES (1, (SELECT 2 FROM T))", 3067)]
+    [InlineData("INSERT INTO T (ID) VALUES (1), (2)", 3137)]
+    [InlineData("INSERT INTO T (ID) VALUES (1); EXTRA", 3142)]
+    [InlineData("UPDATE T SET (V, W) = (1, 2)", 3144)]
+    [InlineData("UPDATE T SET V = (SELECT 1 FROM T)", 3073)]
+    [InlineData("UPDATE T SET V = 1 FROM T", 3075)]
+    [InlineData("DELETE TOP 1 FROM T", 3130)]
+    [InlineData("DELETE FROM T, T2", 3128)]
+    [InlineData("DELETE FROM T LIMIT 1", 3131)]
+    [InlineData("DELETE FROM T ORDER BY ID", 3137)]
+    public void Parse_errors_match_recorded_ace_numbers(string sql, int expectedNumber)
+    {
+        ActionSyntax? syntax = ActionParser.Parse(sql, out SqlFailure? failure);
+        Assert.Null(syntax);
+        Assert.NotNull(failure);
+        Assert.False(failure!.IsNotModelled, failure.ToString());
+        Assert.Equal(expectedNumber, failure.Number);
+    }
+
+    [Theory]
+    [InlineData("CREATE TABLE X (ID LONG)", "NotModelled.DdlStatement")]
+    [InlineData("ALTER TABLE T ADD COLUMN Z LONG", "NotModelled.DdlStatement")]
+    [InlineData("DROP TABLE T", "NotModelled.DdlStatement")]
+    [InlineData("SELECT * INTO TB FROM T", "NotModelled.MakeTableAction")]
+    [InlineData("UPDATE T INNER JOIN T2 ON T.ID = T2.ID SET T.V = 1", "NotModelled.JoinedAction")]
+    [InlineData("DELETE T.* FROM T INNER JOIN T2 ON T.ID = T2.ID", "NotModelled.JoinedAction")]
+    [InlineData("INSERT INTO T IN 'other.accdb' (ID) VALUES (1)", "NotModelled.ExternalDatabaseAction")]
+    [InlineData("DELETE FROM T WHERE ID IN (SELECT ID FROM T2)", "NotModelled.Subquery")]
+    public void Out_of_scope_actions_return_named_not_modelled(string sql, string expectedName)
+    {
+        ActionSyntax? syntax = ActionParser.Parse(sql, out SqlFailure? failure);
+        Assert.Null(syntax);
+        Assert.NotNull(failure);
+        Assert.Equal(expectedName, failure!.NotModelled);
+    }
+
+    [Theory]
+    [InlineData("SELEC ID FROM T", 3078)]
+    [InlineData("TRUNCATE TABLE T", 3078)]
+    [InlineData("INSERT INTO NoSuchTable (ID) VALUES (1)", 3192)]
+    [InlineData("UPDATE NoSuchTable SET V = 1", 3078)]
+    [InlineData("DELETE FROM NoSuchTable", 3078)]
+    [InlineData("INSERT INTO T (NoCol) VALUES (1)", 3127)]
+    [InlineData("INSERT INTO T (ID, ID) VALUES (1, 2)", 3063)]
+    [InlineData("INSERT INTO T (ID, V) VALUES (1)", 3346)]
+    [InlineData("UPDATE T SET V = 1, V = 2", 3063)]
+    [InlineData("UPDATE T SET V = pVal WHERE ID = 1", 3061)]
+    public void Bind_and_parameter_errors_match_recorded_ace_numbers(string sql, int expectedNumber)
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, options: 128);
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(0, outcome.RecordsAffected);
+        Assert.NotNull(outcome.Failure);
+        Assert.False(outcome.Failure!.IsNotModelled, outcome.Failure.ToString());
+        Assert.Equal(expectedNumber, outcome.Failure.Number);
+    }
+
+    // ---- INSERT INTO ... VALUES ----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Insert_values_byte_wraps_mod_256_and_long_text_mismatch_fails_3464()
+    {
+        // r-fix-cursor-dao/ovf-insert-byte-failonerror: 300 into Byte wraps mod 256 to 44.
+        using (var fxDb = new WritableSqlFixture(FxByteAccdb))
+        {
+            ActionOutcome byteWrap = ActionExecutor.Execute("UPDATE Fx SET Fb = 300 WHERE ID = 5", fxDb, options: 128);
+            Assert.True(byteWrap.Succeeded, byteWrap.Failure?.ToString());
+            Assert.Equal(1, byteWrap.RecordsAffected);
+            Assert.Equal("44", fxDb.ReadSelect("SELECT Fb FROM Fx WHERE ID = 5")[0][0].Integer);
+        }
+
+        // r-fix-cursor-dao/sql-insert-text-into-number-failonerror: 'abc' into Long fails 3464 and inserts nothing.
+        using (var actDb = new WritableSqlFixture(ActAccdb))
+        {
+            ActionOutcome badNum = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (15, 'abc', 115, 's', 20, 'r')", actDb, options: 128);
+            Assert.False(badNum.Succeeded);
+            Assert.Equal(3464, badNum.Failure!.Number);
+            Assert.Equal(0, badNum.RecordsAffected);
+            Assert.Empty(actDb.ReadSelect("SELECT ID FROM T WHERE ID = 15"));
+        }
+
+        // Table participating in a relationship stops cleanly with NotModelled.Edit.Relationship (W-05/fk-cascades).
+        using (var relDb = new WritableSqlFixture(ErrBaseAccdb))
+        {
+            ActionOutcome rel = ActionExecutor.Execute("INSERT INTO P (ID, Code, Req, Bt) VALUES (16, 'x16', 'r', 300)", relDb, options: 128);
+            Assert.False(rel.Succeeded);
+            Assert.Equal("NotModelled.Edit.Relationship", rel.Failure!.NotModelled);
+        }
+    }
+
+    [Fact]
+    public void Insert_values_long_overflow_3464_and_text_truncation_and_number_to_text()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // r-def-expr-sql/sql-insert-values-forms: Long overflow -> 3464.
+        ActionOutcome ovf = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (901, 2147483648, 901, 'a', 20, 'r')", db, options: 128);
+        Assert.False(ovf.Succeeded);
+        Assert.Equal(3464, ovf.Failure!.Number);
+
+        // r-def-expr-sql/sql-insert-values-forms: number into Text converts via CStr; >10 chars into Text(10) truncates cleanly.
+        ActionOutcome numToText = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (902, 1, 902, 123, 20, 'r')", db, options: 128);
+        Assert.True(numToText.Succeeded, numToText.Failure?.ToString());
+        Assert.Equal("123", db.ReadSelect("SELECT S FROM T WHERE ID = 902")[0][0].Text);
+
+        ActionOutcome trunc = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (903, 1, 903, '0123456789ABCDEF', 20, 'r')", db, options: 128);
+        Assert.True(trunc.Succeeded, trunc.Failure?.ToString());
+        Assert.Equal("0123456789", db.ReadSelect("SELECT S FROM T WHERE ID = 903")[0][0].Text);
+    }
+
+    [Fact]
+    public void Insert_values_constraints_with_and_without_fail_on_error()
+    {
+        using var actDb = new WritableSqlFixture(ActAccdb);
+
+        // Duplicate PK (3022) with dbFailOnError fails; without dbFailOnError succeeds with RecordsAffected 0.
+        ActionOutcome dupFail = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (1, 10, 999, 'a', 20, 'r')", actDb, options: 128);
+        Assert.False(dupFail.Succeeded);
+        Assert.Equal(3022, dupFail.Failure!.Number);
+        Assert.Equal(0, dupFail.RecordsAffected);
+
+        ActionOutcome dupSkip = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (1, 10, 999, 'a', 20, 'r')", actDb, options: 0);
+        Assert.True(dupSkip.Succeeded, dupSkip.Failure?.ToString());
+        Assert.Equal(0, dupSkip.RecordsAffected);
+
+        // Required omitted (3314) on R in ActAccdb.
+        Assert.Equal(3314, ActionExecutor.Execute("INSERT INTO R (D) VALUES (5)", actDb, options: 128).Failure!.Number);
+
+        // Zero-length text on T.S (no stored AllowZeroLength) stops at ISAM's MutationOpen.ZeroLength;
+        // TP in r-cat-1b-props.accdb (TP.ZlOff AllowZeroLength=False) also has DateF.DefaultValue=Date(), stopping at NotModelled.Edit.Default until host clock exists.
+        Assert.Equal("NotModelled.Edit.ZeroLength", ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) VALUES (100, 1, 100, '', 20, 'r')", actDb, options: 128).Failure!.NotModelled);
+        using var propsDb = new WritableSqlFixture("be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4");
+        Assert.Equal("NotModelled.Edit.Default", ActionExecutor.Execute("INSERT INTO TP (Req, ZlOff) VALUES ('r', '')", propsDb, options: 128).Failure!.NotModelled);
+
+        // Field validation (3316) and table validation (3316) on non-related table VR.
+        using var errDb = new WritableSqlFixture(ErrBaseAccdb);
+        Assert.Equal(3316, ActionExecutor.Execute("INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)", errDb, options: 128).Failure!.Number);
+        Assert.Equal(3316, ActionExecutor.Execute("INSERT INTO VR (ID, Pv, A, B2) VALUES (11, 1, 5, 2)", errDb, options: 128).Failure!.Number);
+    }
+
+    // ---- INSERT INTO ... SELECT ----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Insert_select_constant_and_with_owneraccess_option()
+    {
+        using var actDb = new WritableSqlFixture(ActAccdb);
+
+        // FROM-less constant SELECT + trailing WITH OWNERACCESS OPTION (r-def-expr-sql/sql-insert-values-forms, r-sql-2-3/act-owneraccess).
+        ActionOutcome constIns = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) SELECT 602, 10, 602, 'y', 20, 'r' WITH OWNERACCESS OPTION;", actDb, options: 128);
+        Assert.True(constIns.Succeeded, constIns.Failure?.ToString());
+        Assert.Equal(1, constIns.RecordsAffected);
+        Assert.Equal("y", actDb.ReadSelect("SELECT S FROM T WHERE ID = 602")[0][0].Text);
+
+        // Empty table U in DefSqlAccdb needs a new data page (W-05/growth-structural-closure): stops honestly with NotModelled.Edit.Publication.
+        using var defDb = new WritableSqlFixture(DefSqlAccdb);
+        ActionOutcome emptyTarget = ActionExecutor.Execute("INSERT INTO U (ID, K) SELECT 602, 'y' WITH OWNERACCESS OPTION;", defDb, options: 128);
+        Assert.False(emptyTarget.Succeeded);
+        Assert.Equal("NotModelled.Edit.Publication", emptyTarget.Failure!.NotModelled);
+    }
+
+    [Fact]
+    public void Insert_select_name_mapping_and_self_insert_finiteness()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // Self-insert from T into T without dbFailOnError (note: T has PK on ID, so ID+100 makes unique rows, and
+        // running without dbFailOnError publishes row by row, proving finite materialization without re-entering appended rows).
+        int before = db.ReadSelect("SELECT ID FROM T").Count;
+        ActionOutcome selfIns = ActionExecutor.Execute("INSERT INTO T (ID, V, U, S, W, R) SELECT ID + 100, V, U + 100, S, W, R FROM T", db, options: 0);
+        Assert.True(selfIns.Succeeded, selfIns.Failure?.ToString());
+        Assert.Equal(before, selfIns.RecordsAffected);
+        Assert.Equal(before * 2, db.ReadSelect("SELECT ID FROM T").Count);
+    }
+
+    // ---- UPDATE --------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Update_swap_uses_original_row_and_noop_counts_all_matching_rows()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        var before = db.ReadSelect("SELECT ID, V, W FROM T ORDER BY ID");
+        // R-SQL-2 ACT-UPD-01: SET V = W, W = V swaps original values.
+        ActionOutcome swap = ActionExecutor.Execute("UPDATE T AS d SET d.V = d.W, d.W = d.V WHERE d.ID <= 2", db, options: 128);
+        Assert.True(swap.Succeeded, swap.Failure?.ToString());
+        Assert.Equal(2, swap.RecordsAffected);
+        var after = db.ReadSelect("SELECT ID, V, W FROM T ORDER BY ID");
+        Assert.Equal(before[0][2].Integer, after[0][1].Integer);
+        Assert.Equal(before[0][1].Integer, after[0][2].Integer);
+        Assert.Equal(before[1][2].Integer, after[1][1].Integer);
+        Assert.Equal(before[1][1].Integer, after[1][2].Integer);
+
+        // R-SQL-2 ACT-UPD-04: no-op assignment counts every qualifying row.
+        ActionOutcome noop = ActionExecutor.Execute("UPDATE T SET V = V", db, options: 128);
+        Assert.True(noop.Succeeded, noop.Failure?.ToString());
+        Assert.Equal(before.Count, noop.RecordsAffected);
+    }
+
+    [Fact]
+    public void Update_validation_and_unique_failure_disposition_matches_ace()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // r-sql-2-3/act-fail-validation: T has W = 30, 10, 30, 30 (rule W >= 10).
+        // Without dbFailOnError: skips row 2 (10 - 15 = -5), updates 1, 3, 4 -> RecordsAffected = 3.
+        ActionOutcome noFlag = ActionExecutor.Execute("UPDATE T SET W = W - 15", db, options: 0);
+        Assert.True(noFlag.Succeeded, noFlag.Failure?.ToString());
+        Assert.Equal(3, noFlag.RecordsAffected);
+        Assert.Equal<string>(["15", "10", "15", "15"], db.ReadSelect("SELECT W FROM T ORDER BY ID").Select(r => r[0].Integer!));
+
+        // With dbFailOnError on T2 (same starting values): updates row 1 (15), stops at row 2 (3316), keeps row 1, leaves 3 & 4 untouched!
+        ActionOutcome withFlag = ActionExecutor.Execute("UPDATE T2 SET W = W - 15", db, options: 128);
+        Assert.False(withFlag.Succeeded);
+        Assert.Equal(3316, withFlag.Failure!.Number);
+        Assert.Equal(0, withFlag.RecordsAffected);
+        Assert.Equal<string>(["15", "10", "30", "30"], db.ReadSelect("SELECT W FROM T2 ORDER BY ID").Select(r => r[0].Integer!));
+    }
+
+    [Fact]
+    public void Update_unique_skip_without_flag_and_stop_with_flag()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // r-sql-2-3/act-fail-unique: T has U = 101, 102, 103, 104 (unique).
+        ActionOutcome noFlag = ActionExecutor.Execute("UPDATE T SET U = U + 1", db, options: 0);
+        Assert.True(noFlag.Succeeded, noFlag.Failure?.ToString());
+        Assert.Equal(1, noFlag.RecordsAffected);
+        Assert.Equal<string>(["101", "102", "103", "105"], db.ReadSelect("SELECT U FROM T ORDER BY ID").Select(r => r[0].Integer!));
+
+        ActionOutcome withFlag = ActionExecutor.Execute("UPDATE T2 SET U = U + 1", db, options: 128);
+        Assert.False(withFlag.Succeeded);
+        Assert.Equal(3022, withFlag.Failure!.Number);
+        Assert.Equal(0, withFlag.RecordsAffected);
+        Assert.Equal<string>(["101", "102", "103", "104"], db.ReadSelect("SELECT U FROM T2 ORDER BY ID").Select(r => r[0].Integer!));
+    }
+
+    [Fact]
+    public void Update_expression_division_by_zero_stops_keeping_earlier_rows()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // r-txn-1/stmt-expression-fail-d1: 100 / (ID - 3) updates IDs 1 & 2, fails 11 at ID 3, keeps 1 & 2, leaves 3 & 4 untouched.
+        var before = db.ReadSelect("SELECT ID, V FROM T ORDER BY ID");
+        ActionOutcome fail = ActionExecutor.Execute("UPDATE T SET V = 100 / (ID - 3)", db, options: 128);
+        Assert.False(fail.Succeeded);
+        Assert.Equal(11, fail.Failure!.Number);
+        Assert.Equal(0, fail.RecordsAffected);
+        var after = db.ReadSelect("SELECT ID, V FROM T ORDER BY ID");
+        Assert.Equal("-50", after[0][1].Integer);
+        Assert.Equal("-100", after[1][1].Integer);
+        Assert.Equal(before[2][1].Integer, after[2][1].Integer);
+        Assert.Equal(before[3][1].Integer, after[3][1].Integer);
+    }
+
+    [Fact]
+    public void Update_key_moving_stability_visits_each_qualifying_row_once()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        // R-SQL-2 ACT-SEL-01/02: T.V is indexed (IX_V_T) with duplicate keys 10, 20, 20, 30.
+        // Updating V = V + 100 WHERE V BETWEEN 10 AND 20 visits each qualifying row once without re-entering moved keys.
+        ActionOutcome up = ActionExecutor.Execute("UPDATE T SET V = V + 100 WHERE V BETWEEN 10 AND 20", db, options: 128);
+        Assert.True(up.Succeeded, up.Failure?.ToString());
+        Assert.Equal(3, up.RecordsAffected);
+        Assert.Equal<string>(["30", "110", "120", "120"], db.ReadSelect("SELECT V FROM T ORDER BY V").Select(r => r[0].Integer!));
+    }
+
+    [Fact]
+    public void Update_lock_conflict_from_second_workspace_fails_3188_with_flag_and_skips_without()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+        TransactionCoordinator peer = db.CreatePeerWorkspace(2);
+        TableDefinition t = db.Table("T")!;
+        TableEditContext ctx = db.EditContext("T", out _)!;
+        using TableCursor peerCursor = db.OpenCursor(t, out _)!;
+        using var peerFrame = new EditFrame(ctx, peerCursor, peer) { LockEdits = true };
+        Assert.Equal(MoveOutcome.Moved, peerCursor.MoveFirst());
+        Assert.True(peerFrame.Edit().Succeeded);
+
+        // With dbFailOnError -> 3188, RecordsAffected 0.
+        ActionOutcome flagged = ActionExecutor.Execute("UPDATE T SET V = V + 1", db, options: 128);
+        Assert.False(flagged.Succeeded);
+        Assert.Equal(3188, flagged.Failure!.Number);
+        Assert.Equal(0, flagged.RecordsAffected);
+
+        // Without dbFailOnError -> succeeds with RecordsAffected 0 (all rows share one page).
+        ActionOutcome plain = ActionExecutor.Execute("UPDATE T SET V = V + 1", db, options: 0);
+        Assert.True(plain.Succeeded, plain.Failure?.ToString());
+        Assert.Equal(0, plain.RecordsAffected);
+
+        peerFrame.CancelUpdate();
+    }
+
+    // ---- DELETE --------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Delete_forms_and_multi_row_atomic_delete_work()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+
+        ActionOutcome d1 = ActionExecutor.Execute("DELETE * FROM T WHERE ID = 1", db, options: 128);
+        Assert.True(d1.Succeeded, d1.Failure?.ToString());
+        Assert.Equal(1, d1.RecordsAffected);
+
+        ActionOutcome d2 = ActionExecutor.Execute("DELETE d.* FROM T AS d WHERE d.ID IN (2, 3)", db, options: 128);
+        Assert.True(d2.Succeeded, d2.Failure?.ToString());
+        Assert.Equal(2, d2.RecordsAffected);
+
+        ActionOutcome d3 = ActionExecutor.Execute("DELETE ID FROM T", db, options: 128);
+        Assert.True(d3.Succeeded, d3.Failure?.ToString());
+        Assert.Equal(1, d3.RecordsAffected);
+        Assert.Empty(db.ReadSelect("SELECT ID FROM T"));
+    }
+
+    // ---- Saved Action QueryDef & Parameters ----------------------------------------------------------------------------
+
+    [Fact]
+    public void Saved_action_querydef_and_parameterized_action_execute_via_catalog()
+    {
+        using var db = new WritableSqlFixture(CatQdAccdb);
+
+        // Saved SELECT refuses 3065.
+        SavedQuery? selectQuery = db.SavedQuery("QSel");
+        if (selectQuery is not null)
+        {
+            ActionOutcome selExec = db.ExecuteSaved("QSel", options: 128);
+            Assert.False(selExec.Succeeded);
+            Assert.Equal(3065, selExec.Failure!.Number);
+        }
+
+        // r-cat-1b/qd-execute-action-saved: saved QDel (0 rows) and QApp (4 rows into W).
+        ActionOutcome qDel = db.ExecuteSaved("QDel", options: 0);
+        Assert.True(qDel.Succeeded, qDel.Failure?.ToString());
+        Assert.Equal(0, qDel.RecordsAffected);
+
+        ActionOutcome qApp = db.ExecuteSaved("QApp", options: 0);
+        Assert.True(qApp.Succeeded, qApp.Failure?.ToString());
+        Assert.Equal(4, qApp.RecordsAffected);
+        Assert.Equal(5, db.ReadSelect("SELECT ID FROM W").Count);
+
+        // r-cat-1b/qd-execute-param-action: saved QParamUpd without parameter -> 3061; with pV=7 -> 1 row updated.
+        ActionOutcome qParamMissing = db.ExecuteSaved("QParamUpd", options: 0);
+        Assert.False(qParamMissing.Succeeded);
+        Assert.Equal(3061, qParamMissing.Failure!.Number);
+
+        ActionOutcome qParamOk = db.ExecuteSaved("QParamUpd", options: 0, parameters: [I4(7)]);
+        Assert.True(qParamOk.Succeeded, qParamOk.Failure?.ToString());
+        Assert.Equal(1, qParamOk.RecordsAffected);
+        Assert.Equal("7", db.ReadSelect("SELECT B FROM T WHERE ID = 1")[0][0].Integer);
+
+        // Parameterized ad-hoc action executes cleanly when parameter supplied, and fails 3061 when omitted.
+        using var actDb = new WritableSqlFixture(ActAccdb);
+        const string paramSql = "PARAMETERS pDelta Long, pId Long; UPDATE T SET V = V + pDelta WHERE ID = pId;";
+        ActionOutcome missing = ActionExecutor.Execute(paramSql, actDb, options: 128);
+        Assert.False(missing.Succeeded);
+        Assert.Equal(3061, missing.Failure!.Number);
+
+        ActionOutcome ok = ActionExecutor.Execute(paramSql, actDb, options: 128, parameters: [I4(7), I4(2)]);
+        Assert.True(ok.Succeeded, ok.Failure?.ToString());
+        Assert.Equal(1, ok.RecordsAffected);
+        Assert.Equal("27", actDb.ReadSelect("SELECT V FROM T WHERE ID = 2")[0][0].Integer);
+    }
+}

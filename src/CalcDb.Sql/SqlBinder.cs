@@ -403,11 +403,13 @@ public sealed class BoundSelect : IDisposable
     /// declarations bind first (II-11 §2), then the arms, each in its own scope, then a union's output shape (§15).
     /// </summary>
     public static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, out SqlFailure? failure) =>
-        Bind(syntax, database, ownsSyntax: true, out failure);
+        Bind(syntax, database, ownsSyntax: true, parameters: [], out failure);
 
-    private static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, bool ownsSyntax, out SqlFailure? failure)
+    internal static BoundSelect? BindWithParameters(SelectSyntax syntax, ISqlDatabase database, List<QueryParameter> parameters, out SqlFailure? failure) =>
+        Bind(syntax, database, ownsSyntax: false, parameters, out failure);
+
+    private static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, bool ownsSyntax, List<QueryParameter> parameters, out SqlFailure? failure)
     {
-        var parameters = new List<QueryParameter>();
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
         if (failure is null && ownsSyntax && CountSelects(syntax) > 50)
@@ -455,20 +457,27 @@ public sealed class BoundSelect : IDisposable
     };
 
     /// <summary>The PARAMETERS declarations: one name declared twice with one type is one parameter, with two types 3060 at Parameters.</summary>
-    private SqlFailure? Declare(List<ParameterDeclaration> declarations)
+    internal static void DeclareParameters(List<ParameterDeclaration> declarations, List<QueryParameter> parameterList, ref SqlFailure? parametersFailure)
     {
         foreach (ParameterDeclaration d in declarations)
         {
-            QueryParameter? same = ParameterList.Find(p => p.Is(new QueryParameter(d.Name, 0, true).Key));
+            QueryParameter? same = parameterList.Find(p => p.Is(new QueryParameter(d.Name, 0, true).Key));
             if (same is null)
             {
-                ParameterList.Add(new QueryParameter(d.Name, d.DaoType, Declared: true, d.FieldType));
+                parameterList.Add(new QueryParameter(d.Name, d.DaoType, Declared: true, d.FieldType));
             }
             else if (same.DaoType != d.DaoType)
             {
-                ParametersFailure ??= SqlFailure.Ace(SqlPhase.Bind, 3060, $"Wrong data type for parameter '{d.Name}'.");
+                parametersFailure ??= SqlFailure.Ace(SqlPhase.Bind, 3060, $"Wrong data type for parameter '{d.Name}'.");
             }
         }
+    }
+
+    private SqlFailure? Declare(List<ParameterDeclaration> declarations)
+    {
+        SqlFailure? f = ParametersFailure;
+        DeclareParameters(declarations, ParameterList, ref f);
+        ParametersFailure = f;
         return null;
     }
 
@@ -1242,7 +1251,7 @@ public sealed class BoundSelect : IDisposable
                     node = new TableNode(index);
                     return null;
                 case SubquerySource sub:
-                    BoundSelect? inner = Bind(sub.Query, database, ownsSyntax: false, out SqlFailure? subFailure);
+                    BoundSelect? inner = Bind(sub.Query, database, ownsSyntax: false, parameters: [], out SqlFailure? subFailure);
                     if (subFailure is not null)
                     {
                         return subFailure;
