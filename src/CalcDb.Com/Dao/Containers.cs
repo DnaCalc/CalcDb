@@ -196,7 +196,8 @@ internal sealed unsafe class RelationObject : DaoObject
 
 /// <summary>
 /// A Field of a Relation (r-dao-1b/relationfield-members-each): Name the primary column, ForeignName the foreign one,
-/// CollectionIndex its ordinal; FieldSize 3267, OriginalValue and VisibleValue 3251, and every other Field member 3219.
+/// CollectionIndex its ordinal; FieldSize 3267, OriginalValue and VisibleValue 3251, Properties with Count 24 (its
+/// entries named), and every other Field member 3219.
 /// </summary>
 internal sealed unsafe class RelationFieldObject : DaoObject
 {
@@ -207,6 +208,7 @@ internal sealed unsafe class RelationFieldObject : DaoObject
     private readonly DefinitionCollection _owner;
     private readonly RelationshipColumn _column;
     private readonly int _ordinal;
+    private PropertiesObject? _properties;
 
     public RelationFieldObject(DefinitionCollection owner, RelationshipColumn column, int ordinal) : base(Decl, Vtable, owner.Engine, "DAO.Field")
     {
@@ -230,7 +232,9 @@ internal sealed unsafe class RelationFieldObject : DaoObject
             .Get("OriginalValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
             .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
             // Field.Value failures publish an IErrorInfo (R-ERR-1 ERR-EXCEP; relationfield-members-each).
-            .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)));
+            .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
+            // Count 24 as recorded (relationfield-members-each); the entries are not recorded and are named.
+            .Get("Properties", (self, args) => Live(self, f => Object(f._properties ??= new PropertiesObject(f, 24, "the Properties entries of a relation field (relationfield-members-each records only Count 24)"))));
         foreach (string name in (string[])["AllowZeroLength", "Attributes", "CollatingOrder", "ComplexType", "DataUpdatable", "DefaultValue", "Expression",
                      "OrdinalPosition", "Required", "Size", "SourceField", "SourceTable", "Type", "ValidateOnSet", "ValidationRule", "ValidationText"])
         {
@@ -247,6 +251,7 @@ internal sealed unsafe class RelationFieldObject : DaoObject
 
     protected override void OnFinalRelease()
     {
+        _properties?.Release();
         _owner.Released(this);
         _owner.Release();
     }

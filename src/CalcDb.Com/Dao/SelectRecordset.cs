@@ -31,7 +31,28 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Method("MoveNext", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveNext())))
         .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
-        .Method("Close", (self, args) => Live(self, r => r.Close()));
+        .Method("Close", (self, args) => Live(self, r => r.Close()))
+        .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
+        // A query recordset's edits are not built, so no edit is ever pending: a dynaset's Collect put is 3020 from DAO.Field
+        // without an IErrorInfo (r-def-cursor-dao/recordset-collect-member); the other types are not recorded.
+        .Put("Collect", (self, args) => Live(self, r => r.RecordsetType == 2
+            ? CallResult.Fail(Failure.Dao(3020, "DAO.Field", "Update or CancelUpdate without AddNew or Edit."))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEdit", $"Collect put on a type {r.RecordsetType} query recordset (not recorded)"))));
+
+    /// <summary>
+    /// Collect(Item): the value of the column the index names, as Field.Value reads it; an index naming no column (3, -1,
+    /// "T.N", Null, Empty) is 3265 from DAO.Fields without an IErrorInfo, names compare case-insensitively
+    /// (r-def-cursor-dao/recordset-collect-member).
+    /// </summary>
+    private CallResult Collect(nint item)
+    {
+        int? ordinal = CollectionLookup.Find(item, FieldNames, out bool objectIndex);
+        if (objectIndex)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CollectObjectIndex", "Collect with an object index (not recorded)"));
+        }
+        return ordinal is int i ? SelectFieldObject.ReadValue(this, i) : CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+    }
 
     private SelectFieldsObject? _fields;
     private CollectionNames? _fieldNames;
@@ -284,21 +305,20 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldSource", $"Field.SourceTable and SourceField of the column {column} (r-sql-1/b-output-names)"))
         : Text(value);
 
-    private CallResult Value()
+    private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
+
+    /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect).</summary>
+    public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal)
     {
-        if (Recordset.Closed)
-        {
-            return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
-        }
-        if (Recordset.NotRecordedAfterRollback is { } why)
+        if (recordset.NotRecordedAfterRollback is { } why)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field.Value: " + why));
         }
-        if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
+        if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
         {
             return failure!.IsNotModelled
                 ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
-                : Fail(failure.Number, failure.Message, publishesErrorInfo: true);
+                : CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
         }
         return SqlResults.Of(value, "Field.Value");
     }

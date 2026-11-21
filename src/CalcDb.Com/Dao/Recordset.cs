@@ -40,7 +40,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Read(self, "PercentPosition", r => r.SetPercentPosition(value)); })
         .Get("Bookmark", (self, args) => Read(self, "Bookmark", r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Moving(self, "Bookmark", r => r.SetBookmark(value)); })
-        .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"))))
+        // Index of a dynaset, snapshot or forward-only recordset is 3251 without an IErrorInfo (r-dao-1b/recordset-members-dynaset, -snapshot, -forward-only, -at-eof).
+        .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Put("Index", (self, args) => { nint value = args[^1]; return Read(self, "Index", r => r.EditPending("Index") ?? r.SetIndex(value)); })
         .Method("Requery", (self, args) => Live(self, r => r.Requery()))
         .Method("Seek", static (self, args) => (RecordsetObject)self is { Closed: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).GuardedSeek(args))
@@ -59,11 +60,23 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("LockEdits", (self, args) => Live(self, r => r.RecordsetType is 1 or 2 ? Bool(r._pessimistic) : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Put("LockEdits", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetLockEdits(value)); })
         .Get("Transactions", (self, args) => Live(self, r => Bool(r.RecordsetType == 1)))
-        .Get("Restartable", (self, args) => Live(self, r => r.RecordsetType == 2 ? Bool(true) : r.RecordsetType == 1 ? Bool(false) : CallResult.Fail(Failure.NotImplemented("Recordset.Restartable of a snapshot or forward-only recordset (not observed)"))))
+        // Restartable: table-type False, the other types True (r-dao-1b/recordset-members-table, -dynaset, -snapshot, -forward-only).
+        .Get("Restartable", (self, args) => Live(self, r => Bool(r.RecordsetType != 1)))
         .Get("EditMode", (self, args) => Live(self, r => Int16((short)(r._frame?.Mode ?? EditMode.None))))
-        .Get("Filter", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Text("") : CallResult.Fail(Failure.NotImplemented("Recordset.Filter of a snapshot or forward-only recordset (not observed)"))))
-        .Get("Sort", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Text("") : CallResult.Fail(Failure.NotImplemented("Recordset.Sort of a snapshot or forward-only recordset (not observed)"))))
-        .Get("CacheSize", (self, args) => Live(self, r => r.RecordsetType == 1 ? r.Fail(3251, DaoErrors.NotSupportedForType) : r.RecordsetType == 2 ? Int32(0) : CallResult.Fail(Failure.NotImplemented("Recordset.CacheSize of a snapshot or forward-only recordset (not observed)"))))
+        .Get("Filter", (self, args) => Live(self, r => r.NotTableType() ?? Text(r._filter)))
+        .Put("Filter", (self, args) => { nint value = args[^1]; return Live(self, r => r.NotTableType() ?? r.SetText(ref r._filter, value)); })
+        .Get("Sort", (self, args) => Live(self, r => r.NotTableType() ?? Text(r._sort)))
+        .Put("Sort", (self, args) => { nint value = args[^1]; return Live(self, r => r.NotTableType() ?? r.SetText(ref r._sort, value)); })
+        .Get("CacheSize", (self, args) => Live(self, r => r.NotTableType() ?? Int32(r._cacheSize)))
+        .Put("CacheSize", (self, args) => { nint value = args[^1]; return Live(self, r => r.NotTableType() ?? r.SetCacheSize(value)); })
+        .Get("CacheStart", (self, args) => Live(self, r => r.NotTableType() ?? (r._cacheStart is { } start ? Bytes(start) : NullArray)))
+        // hStmt (ODBCDirect) is 3251 on every local recordset (r-dao-1b/recordset-members-dynaset, -snapshot, -forward-only, -at-eof).
+        .Get("hStmt", (self, args) => Live(self, r => r.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Put("CacheStart", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetCacheStart(value)); })
+        .Method("FillCache", (self, args) => { nint rows = args.Length > 0 ? args[0] : 0, start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.FillCache(rows, start)); })
+        .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return Live(self, r => r.GetRows(count)); })
+        .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
+        .Put("Collect", (self, args) => Live(self, r => SetCollect()))
         .Get("DateCreated", (self, args) => Live(self, r => r.RecordsetType == 1 ? CatalogDates.Date(r._entry.DateCreateBits) : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("LastUpdated", (self, args) => Live(self, r => r.RecordsetType == 1 ? CatalogDates.Date(r._entry.DateUpdateBits) : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("ValidationRule", (self, args) => Live(self, r => r.TableStored("ValidationRule")))
@@ -89,6 +102,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private string? _notRecorded;
     private LastModifiedMark _lastModified;
     private byte[]? _lastModifiedRow;
+    private string _filter = "", _sort = "";
+    private int _cacheSize;
+    private byte[]? _cacheStart;
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
@@ -106,7 +122,31 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>Updatable (R-CURSOR-1 CUR-PROV with the option matrix of r-fix-cursor-dao/option-flags-rw): <see cref="RecordsetOptions.Updatable"/>.</summary>
-    private bool Updatable => RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
+    public bool Updatable => RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
+
+    /// <summary>
+    /// A table-type or dynaset recordset that dbReadOnly alone makes not updatable, on a writable open
+    /// (r-cursor-1b/option-readonly-write: Edit, AddNew and Delete 3027 from DAO.Recordset without an IErrorInfo, a Value
+    /// put from DAO.Field with one, 3027 on a dynaset and 3020 on table-type, Update and CancelUpdate 3020, no edit being
+    /// pending).
+    /// </summary>
+    public bool ReadOnlyByOption => RecordsetType is 1 or 2 && !Database.ReadOnly && RecordsetOptions.ReadOnlyOnly(_options);
+
+    /// <summary>The table's property blob (CAT-P), read once; null with <paramref name="failure"/> when it cannot be read.</summary>
+    public PropertyBlob? Blob(out string? failure)
+    {
+        if (!_blobRead)
+        {
+            _blob = Database.Blob(_entry, out _blobFailure);
+            _blobRead = true;
+        }
+        failure = _blobFailure;
+        return _blob;
+    }
+
+    private PropertyBlob? _blob;
+    private string? _blobFailure;
+    private bool _blobRead;
 
     private bool Bookmarkable => RecordsetOptions.Bookmarkable(RecordsetType, _options);
 
@@ -528,7 +568,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         if (RecordsetType is 1 or 2 && !Updatable)
         {
-            refused = CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ReadOnlyRecordset", "an edit member of a table-type or dynaset recordset that is not updatable (dbReadOnly, dbForwardOnly or a read-only Database): ACE's errors are not recorded"));
+            refused = ReadOnlyByOption
+                ? Fail(MutationError.ReadOnly, "Cannot update. Database or object is read-only.")
+                : CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ReadOnlyRecordset", "an edit member of a table-type or dynaset recordset that is not updatable (dbForwardOnly or a read-only Database): ACE's errors are not recorded"));
             return null;
         }
         if (Database.EditContext(_entry, out string? failure) is not { } context)
@@ -567,6 +609,202 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             frame.LockEdits = pessimistic;
         }
         return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// 3251 without an IErrorInfo on a table-type recordset, for Filter, Sort, CacheSize and CacheStart, gets and puts
+    /// (r-cursor-1b/filter-sort-other-types, cache-size-properties; r-dao-1b/recordset-members-table); null otherwise.
+    /// </summary>
+    private CallResult? NotTableType() => RecordsetType == 1 ? Fail(3251, DaoErrors.NotSupportedForType) : null;
+
+    /// <summary>
+    /// A Filter or Sort put on a dynaset, snapshot or forward-only recordset keeps the text and changes nothing in the
+    /// recordset; a text naming no column is accepted and fails only at the derived OpenRecordset (qualified.md R-CURSOR-1
+    /// CUR-LIFE; r-cursor-1/life-filter-sort, r-cursor-1b/filter-sort-other-types, r-def-cursor-dao/err-badcol-filter).
+    /// </summary>
+    private CallResult SetText(ref string kept, nint value)
+    {
+        kept = Args.Text(value) ?? "";
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// CacheSize put: any Long is kept and read back (0, 1, 4, 5, 6, 100, 1200, 1201, -1; "10" and 10.5 as 10, the binder's
+    /// coercion; Null 3421 with an IErrorInfo there): r-cursor-1b/cache-size-properties on dynaset, snapshot and
+    /// forward-only. CacheStart reads a null array whatever was put.
+    /// </summary>
+    private CallResult SetCacheSize(nint value)
+    {
+        _cacheSize = Args.Int32(value, omitted: 0) ?? 0;
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// CacheStart put (r-cursor-1b/cache-fill-and-start, dynaset): a Byte array is kept and read back as given (00000000,
+    /// 02020000), an empty one and BSTR "" make it read a null array again; I4, Null and Empty are 3421 with an IErrorInfo
+    /// and keep what was read. Table-type, a BSTR with characters and other value types are not recorded.
+    /// </summary>
+    private CallResult SetCacheStart(nint value)
+    {
+        if (RecordsetType == 1)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CacheStartPutType", "CacheStart put on a table-type recordset (not recorded)"));
+        }
+        VarType vt = Args.TypeOf(value);
+        NativeVariant* v = Args.Cell(value);
+        if (vt == (VarType.Array | VarType.UI1) && v->Pointer != 0 && SafeArrays.Shape(v->Pointer) is [(int lower, int count)])
+        {
+            _cacheStart = count <= 0 ? null : new Span<byte>(SafeArrays.ElementPointer(v->Pointer, lower), count).ToArray();
+            return CallResult.Nothing;
+        }
+        if (vt == VarType.Bstr && (v->Pointer == 0 || Bstrs.Chars(v->Pointer).Length == 0))
+        {
+            _cacheStart = null;
+            return CallResult.Nothing;
+        }
+        return vt is VarType.I4 or VarType.Null or VarType.Empty
+            ? Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.CacheStartPutValue", $"CacheStart put of a {vt} value (not recorded)"));
+    }
+
+    /// <summary>
+    /// FillCache(Rows, StartBookmark) changes nothing a member reads (r-cursor-1b/cache-fill-and-start: BOF, EOF, the
+    /// value and RecordCount stay; dynaset, snapshot and forward-only): Rows omitted or any Long (0, -1, 21, 1000),
+    /// StartBookmark omitted, a Byte array or a BSTR. A Rows or StartBookmark that does not convert (BSTR "a", Null) is
+    /// 3421 without an IErrorInfo; table-type is 3219 (CUR-BULK).
+    /// </summary>
+    private CallResult FillCache(nint rows, nint start)
+    {
+        if (RecordsetType == 1)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (rows != 0 && !OwnedVariant.TryChangeScalar(Args.Cell(rows), VarType.I4, SessionLocale.Lcid, out _, out _))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        if (start == 0)
+        {
+            return CallResult.Nothing;
+        }
+        VarType vt = Args.TypeOf(start);
+        return vt is (VarType.Array | VarType.UI1) or VarType.Bstr ? CallResult.Nothing
+            : vt == VarType.Null ? Fail(3421, DaoErrors.ConversionError)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.FillCacheStart", $"FillCache with a StartBookmark of type {vt} (not recorded)"));
+    }
+
+    /// <summary>
+    /// GetRows(NumRows) (qualified.md R-CURSOR-1 CUR-BULK): a VT_ARRAY|VT_VARIANT [0+fields, 0+rows], dimension 1 the
+    /// field, of up to NumRows rows from the current one, each read as Field.Value reads it; the cursor ends after the last
+    /// row read (EOF when the rows ran out, r-cursor-1b/getrows-beyond-eof: GetRows(21) of 20 rows returns 20). NumRows
+    /// omitted or Missing is 1; it converts as a Long ("3", 2.5 as 2, I2), 0, -1, True and Empty are 3001, Null and "abc"
+    /// 3421, all from DAO.Recordset without an IErrorInfo (getrows-count-arguments). At EOF, or on an empty recordset, 3021.
+    /// A pending Edit or AddNew gives the first row from its buffer and is discarded (getrows-edit-buffer). A current row another call deleted gives ACE's degenerate
+    /// array, which is named (its shape is not identified beyond one record).
+    /// </summary>
+    private CallResult GetRows(nint countArg)
+    {
+        int count = 1;
+        if (countArg != 0)
+        {
+            if (!OwnedVariant.TryChangeScalar(Args.Cell(countArg), VarType.I4, SessionLocale.Lcid, out NativeVariant converted, out _))
+            {
+                return Fail(3421, DaoErrors.ConversionError);
+            }
+            count = (int)converted.Int64;
+            if (count <= 0)
+            {
+                return Fail(3001, DaoErrors.InvalidArgument);
+            }
+        }
+        if (UnpublishedRead("GetRows") is { } unpublished)
+        {
+            return unpublished;
+        }
+        if (Cursor.Eof)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (Cursor.Bof)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsAtBof", "GetRows with the cursor before the first row (not recorded)"));
+        }
+        IReadOnlyList<ColumnDescriptor> columns = Cursor.Table.Columns;
+        var cells = new List<OwnedVariant>();
+        try
+        {
+            int rows = 0;
+            while (rows < count && !Cursor.Eof)
+            {
+                foreach (ColumnDescriptor column in columns)
+                {
+                    // With an edit pending the first row is its buffer (getrows-edit-buffer: an Edit's assigned 99.5 and
+                    // "edited memo"; an AddNew's 7, 7.5, "added" and Nulls in place of the current row 1, then rows 2 and 3).
+                    CallResult cell = rows == 0 && _frame is { Mode: not EditMode.None } ? FieldObject.ReadValue(this, column) : FieldObject.StoredValue(this, column);
+                    if (cell.Failure is { } failure)
+                    {
+                        return failure.Number == 3167
+                            ? CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", "GetRows on a row another call deleted: ACE's degenerate array (CUR-BULK) is not identified"))
+                            : CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCell", "GetRows of a cell Field.Value refuses: " + failure.Description));
+                    }
+                    cells.Add(Owned(cell));
+                }
+                _frame?.Discard(); // the move discards the edit (EditMode 0 after, CancelUpdate 3020)
+                rows++;
+                if (Cursor.MoveNext() is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
+                {
+                    break;
+                }
+            }
+            nint array = SafeArrays.Create(VarType.Variant, (0, columns.Count), (0, rows));
+            NativeVariant* data = rows == 0 || columns.Count == 0 ? null : (NativeVariant*)SafeArrays.ElementPointer(array, 0, 0);
+            for (int i = 0; i < cells.Count; i++)
+            {
+                cells[i].TransferTo(data + i); // dimension 1 (the field) varies fastest
+            }
+            return CallResult.Of(OwnedVariant.TakeArray(array, VarType.Variant));
+        }
+        finally
+        {
+            foreach (OwnedVariant cell in cells)
+            {
+                cell.Dispose();
+            }
+        }
+    }
+
+    /// <summary>A successful read's value as an owned VARIANT.</summary>
+    private static OwnedVariant Owned(CallResult cell) => cell.Value ?? OwnedVariant.Adopt(cell.Scalar);
+
+    /// <summary>
+    /// Collect(Item): the value of the field the index names, as Field.Value reads it, without a Field object; an index
+    /// naming no field (3, -1, "T.N", Null, Empty) is 3265 from DAO.Fields without an IErrorInfo; names compare
+    /// case-insensitively (r-def-cursor-dao/recordset-collect-member).
+    /// </summary>
+    private CallResult Collect(nint item) => CollectColumn(item, out CallResult refused) is { } column ? FieldObject.ReadValue(this, column) : refused;
+
+    /// <summary>
+    /// Collect(Item) = value on a table-type, dynaset, snapshot or forward-only recordset of a table: not recorded (the
+    /// one record, r-def-cursor-dao/recordset-collect-member, puts through a SELECT dynaset), so it is named.
+    /// </summary>
+    private static CallResult SetCollect() =>
+        CallResult.Fail(Failure.NotModelled("NotModelled.CollectPut", "Collect put on a recordset of a table (recorded on a SELECT dynaset only)"));
+
+    private ColumnDescriptor? CollectColumn(nint item, out CallResult refused)
+    {
+        refused = default;
+        int? ordinal = CollectionLookup.Find(item, FieldNames, out bool objectIndex);
+        if (objectIndex)
+        {
+            refused = CallResult.Fail(Failure.NotModelled("NotModelled.CollectObjectIndex", "Collect with an object index (not recorded)"));
+            return null;
+        }
+        if (ordinal is not int i)
+        {
+            refused = CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+            return null;
+        }
+        return Cursor.Table.Columns[i];
     }
 
     /// <summary>Edit: the frame's Existing buffer over the current row (CUR-EDIT); 3251 on a snapshot, 3021 without a current row.</summary>
@@ -610,7 +848,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     {
         if (Frame(out CallResult refused) is not { } frame)
         {
-            return refused;
+            return ReadOnlyByOption ? NoEditPending : refused;
         }
         int type = Args.Int32(typeArg, omitted: 1) ?? 1;
         bool force = Args.Bool(forceArg, omitted: false) ?? false;
@@ -667,14 +905,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit Update changed; after an outermost
     /// Rollback a null array (TXN-CLOSE: r-cursor-1/edit-rollback-*, edit-cancel-rollback; CommitTrans keeps it,
-    /// edit-commit-opened-inside). Before any Update and after an AddNew it is not identified and is named.
+    /// edit-commit-opened-inside). Before any Update a table-type or dynaset recordset answers a null array and a snapshot
+    /// or forward-only one 3251 (r-dao-1b/recordset-members-table, -dynaset, -at-eof, -snapshot, -forward-only). After an
+    /// AddNew it is not identified and is named.
     /// </summary>
     private CallResult LastModified() => _lastModified switch
     {
         LastModifiedMark.Row => Bytes(_lastModifiedRow!),
         LastModifiedMark.Cleared => NullArray,
         LastModifiedMark.NewRow => CallResult.Fail(Failure.NotModelled("NotModelled.LastModifiedNewRow", "LastModified after an AddNew Update: the new row's bookmark (W-05/growth-structural-closure)")),
-        _ => CallResult.Fail(Failure.NotModelled("NotModelled.LastModifiedUnset", "LastModified before any Update of this recordset (not recorded)")),
+        _ => RecordsetType is 1 or 2 ? NullArray : Fail(3251, DaoErrors.NotSupportedForType),
     };
 
     /// <summary>VT_ARRAY|VT_UI1 with a null SAFEARRAY, as ACE answers LastModified after a Rollback.</summary>
@@ -780,8 +1020,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
         }
-        return Frame(out CallResult refused) is { } frame ? EditPublication.Of(frame.CancelUpdate()) : refused;
+        return Frame(out CallResult refused) is { } frame ? EditPublication.Of(frame.CancelUpdate()) : ReadOnlyByOption ? NoEditPending : refused;
     }
+
+    /// <summary>3020 from DAO.Recordset: Update or CancelUpdate of a recordset no edit can be pending on (option-readonly-write).</summary>
+    private CallResult NoEditPending => Fail(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
 
     /// <summary>Delete: discards any pending Edit or AddNew and removes the current row (W-05/growth-structural-closure; CUR-EDIT, CUR-POS).</summary>
     private CallResult Delete()
@@ -1085,7 +1328,29 @@ internal sealed unsafe class FieldObject : DaoObject
         .Get("Value", (self, args) => ((FieldObject)self).Value())
         .Put("Value", (self, args) => ((FieldObject)self).Assign(args[^1]))
         .Get("ValidateOnSet", (self, args) => Live(self, f => Bool(f.Recordset.FrameIfMade?.ValidateOnSet(f.Column) ?? false)))
-        .Put("ValidateOnSet", (self, args) => { nint value = args[^1]; return Live(self, f => f.SetValidateOnSet(value)); });
+        .Put("ValidateOnSet", (self, args) => { nint value = args[^1]; return Live(self, f => f.SetValidateOnSet(value)); })
+        // The members below follow r-dao-1b/recordset-fields-members-each (a dynaset of every family, read-only open),
+        // r-fix-cursor-dao/updatable-members-rw and r-cursor-1b/option-readonly-write (writable opens).
+        .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable() is bool u ? Bool(u) : f.CalculatedNamed("DataUpdatable")))
+        .Get("Attributes", (self, args) => Live(self, f => f.DataUpdatable() is bool u && ColumnFacts.Attributes(f.Column, u) is int a ? Int32(a) : f.CalculatedNamed("Attributes")))
+        .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
+        .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
+        .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
+        .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
+        .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
+        .Get("CollatingOrder", (self, args) => Live(self, f => Int32(ColumnFacts.CollatingOrder(f.Column))))
+        .Get("CollectionIndex", (self, args) => Live(self, f => Int16(f._ordinal)))
+        .Get("SourceField", (self, args) => Live(self, f => Text(f.Column.Name)))
+        .Get("SourceTable", (self, args) => Live(self, f => Text(f.Recordset.TableName)))
+        .Get("Expression", (self, args) => Live(self, f => f.Column.CalculatedResultType is null ? Text("") : f.CalculatedNamed("Expression")))
+        .Get("ComplexType", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("OriginalValue", (self, args) => Live(self, f => f.Recordset.FrameIfMade is { Mode: not EditMode.None }
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.OriginalValueDuringEdit", "Field.OriginalValue with an edit pending (not recorded)"))
+            : f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()))
+        .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     private readonly FieldsObject _fields;
     private readonly int _ordinal;
@@ -1112,68 +1377,164 @@ internal sealed unsafe class FieldObject : DaoObject
     /// <summary>DataTypeEnum: the native codes 1-12 and 15 are DAO's own numbers (dbBoolean … dbMemo, dbGUID).</summary>
     private int? DaoType() => ColumnFacts.DaoType(Column);
 
+    /// <summary>
+    /// DataUpdatable: the recordset's Updatable, for the column kinds the records show. On a read-only open every stored
+    /// family is False (r-dao-1b/recordset-fields-members-each: the 14 families of Typed, AutoNumber and Decimal included).
+    /// On a writable open the records show Long, Text and Double columns (r-fix-cursor-dao/updatable-members-rw: Parent's
+    /// Long, Text and Double, True on table-type and dynaset, False on snapshot and forward-only; r-cursor-1b/option-
+    /// readonly-write: Long, True, False with dbReadOnly; r-def-cursor-dao/prov-heap-duplicate-rows: Long and Text, True).
+    /// Any other kind, and a calculated column, is not recorded: null.
+    /// </summary>
+    private bool? DataUpdatable()
+    {
+        ColumnDescriptor column = Column;
+        if (column.CalculatedResultType is not null)
+        {
+            return null;
+        }
+        if (Recordset.Database.ReadOnly)
+        {
+            return false;
+        }
+        return column.TypeCode is NativeTypes.Long or NativeTypes.Text or NativeTypes.Double && !column.IsAutoNumber ? Recordset.Updatable : null;
+    }
+
+    /// <summary>
+    /// FieldSize (qualified.md R-STRING-1 STR-LV): a Memo's current value in bytes, twice its UTF-16 units, on every
+    /// recordset type (r-dao-1b/recordset-fields-members-each: 2 for a one-character Memo, 0 for a Null OLE value); a
+    /// field of any other type is 3259. A stored OLE value, a Null Memo, a long value during an edit and a read failure
+    /// are not recorded and are named.
+    /// </summary>
+    private CallResult FieldSize()
+    {
+        ColumnDescriptor column = Column;
+        if (column.TypeCode is not (NativeTypes.Memo or NativeTypes.Ole))
+        {
+            return Fail(3259, DaoErrors.InvalidFieldType);
+        }
+        if (Recordset.FrameIfMade is { Mode: not EditMode.None })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDuringEdit", "Field.FieldSize of a long value with an edit pending (not recorded)"));
+        }
+        if (Recordset.UnpublishedRead("Field.FieldSize") is { } unpublished)
+        {
+            return unpublished;
+        }
+        if (column.TypeCode == NativeTypes.Ole)
+        {
+            // A Null OLE value is 0 (recordset-fields-members-each: TOle); a stored one's length is not recorded.
+            FieldResult read = Recordset.Cursor.Read(column);
+            return read.Succeeded && read.Value.Kind == NativeKind.Null ? Int32(0)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeOle", "Field.FieldSize of an OLE value that is not Null (not recorded)"));
+        }
+        TextFieldRead text = Recordset.Cursor.ReadText(column);
+        return text.HasText ? Int32(text.Shape.Units * 2)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeNoText", $"Field.FieldSize of a Memo that reads no text ({text.Result.Failure?.ToString() ?? "Null"}; not recorded)"));
+    }
+
+    private CallResult CalculatedNamed(string member) =>
+        CallResult.Fail(Failure.NotModelled("NotModelled.FieldKindMember",$"Field.{member} of the column {Column.Name} (native type {Column.TypeCode}) on a recordset: its kind is not recorded"));
+
+    private PropertiesObject? _properties;
+
+    /// <summary>A stored column property of the table's blob (CAT-P), or <paramref name="unset"/>.</summary>
+    private CallResult Stored(string name, CallResult unset)
+    {
+        PropertyBlob? blob = Recordset.Blob(out string? failure);
+        return failure is not null
+            ? CallResult.Fail(Failure.NotImplemented("a Field member when the table's property blob cannot be read: " + failure))
+            : ColumnFacts.Stored(blob, Column, name, unset);
+    }
+
+    /// <summary>
+    /// The 24 built-ins of a field, then the column's other stored properties (r-dao-1b/recordset-fields-members-each:
+    /// Count 24 on each field of a dynaset of a table; the list and order as a TableDef field's, r-dao-1b/field-properties-enumerated).
+    /// </summary>
+    private CallResult PropertiesCollection()
+    {
+        PropertyBlob? blob = Recordset.Blob(out string? failure);
+        if (failure is not null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Field.Properties when the table's property blob cannot be read: " + failure));
+        }
+        if (DaoType() is not int type)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.Properties of native type {Column.TypeCode}"));
+        }
+        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), blob?.Map(PropertySectionKind.ColumnValues, Column.Name)));
+        return Object(_properties);
+    }
+
     private int? Size() => ColumnFacts.Size(Column);
 
-    private CallResult Value()
+    private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, Column);
+
+    /// <summary>
+    /// The Value get of <paramref name="column"/> of an open recordset (Field.Value, Recordset.Collect): after a Rollback
+    /// as TXN-CLOSE shows it, during an edit the buffer cell, otherwise the current row's stored value.
+    /// </summary>
+    public static CallResult ReadValue(RecordsetObject recordset, ColumnDescriptor column)
     {
-        if (Recordset.Closed)
-        {
-            return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
-        }
-        switch (Recordset.AfterRollback)
+        switch (recordset.AfterRollback)
         {
             // TXN-CLOSE: from DAO.Field with an IErrorInfo (r-cursor-1/edit-rollback-no-change 3420, edit-rollback-opened-before 3021).
             case RecordsetAfterRollback.Invalid:
-                return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
+                return FieldFailure(3420, DaoErrors.ObjectInvalid);
             case RecordsetAfterRollback.LostCurrentRecord:
-                return Fail(3021, DaoErrors.NoCurrentRecord, publishesErrorInfo: true);
+                return FieldFailure(3021, DaoErrors.NoCurrentRecord);
             case RecordsetAfterRollback.NotRecorded:
                 return FieldsObject.AfterRollbackNamed("Field.Value");
         }
-        ColumnDescriptor column = Column;
-        if (Recordset.FrameIfMade is { Mode: not EditMode.None } frame)
+        if (recordset.FrameIfMade is { Mode: not EditMode.None } frame)
         {
             // During an edit the field reads its buffer cell: the accepted value, the stored original, or Null when unset (CUR-EDIT).
             return Published(frame.Read(column), column);
         }
-        if (Recordset.UnpublishedRead("Field.Value") is { } unpublished)
-        {
-            return unpublished;
-        }
+        return recordset.UnpublishedRead("Field.Value") ?? StoredValue(recordset, column);
+    }
+
+    /// <summary>The current row's stored value of <paramref name="column"/>, with Field.Value's failures (no edit pending, the read admitted).</summary>
+    public static CallResult StoredValue(RecordsetObject recordset, ColumnDescriptor column)
+    {
         if (column.TypeCode is NativeTypes.Text or NativeTypes.Memo)
         {
             // D-STRING-1 (task n7mw): the final BSTR is built straight from the encoded field bytes.
-            TextFieldRead text = Recordset.Cursor.ReadText(column);
+            TextFieldRead text = recordset.Cursor.ReadText(column);
             if (text.HasText)
             {
                 return CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Shape.Units, text, static (dest, t) => t.DecodeInto(dest)));
             }
             return Published(text.Result, column);
         }
-        return Published(Recordset.Cursor.Read(column), column);
+        return Published(recordset.Cursor.Read(column), column);
     }
+
+    /// <summary>A failure from DAO.Field with an IErrorInfo, as Value failures are published (R-ERR-1 ERR-EXCEP).</summary>
+    private static CallResult FieldFailure(int number, string description) =>
+        CallResult.Fail(Failure.Dao(number, "DAO.Field", description) with { PublishesErrorInfo = true });
+
+    private CallResult Assign(nint value) => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : AssignValue(Recordset, Column, value);
 
     /// <summary>
     /// A Value put (II-10 §21 F-91; W-05/edit-frames): the value, read through one by-reference level, converts into the
     /// frame's temporary candidate and is accepted, or fails from DAO.Field with an IErrorInfo (3020 without an edit, 3027
     /// on a snapshot, 3421 a conversion, 3316 under ValidateOnSet; assign-without-edit-by-type, stage-validate-on-set).
     /// </summary>
-    private CallResult Assign(nint value)
+    public static CallResult AssignValue(RecordsetObject recordset, ColumnDescriptor column, nint value)
     {
-        if (Recordset.Closed)
-        {
-            return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
-        }
-        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        if (recordset.AfterRollback != RecordsetAfterRollback.Valid)
         {
             return FieldsObject.AfterRollbackNamed("Field.Value put");
         }
-        if (Recordset.Frame(out CallResult refused) is not { } frame)
+        if (recordset.Frame(out CallResult refused) is not { } frame)
         {
-            return refused;
+            // dbReadOnly, from DAO.Field with an IErrorInfo (r-cursor-1b/option-readonly-write): 3027 on a dynaset, 3020 on table-type.
+            return !recordset.ReadOnlyByOption ? refused
+                : recordset.RecordsetType == 2 ? FieldFailure(MutationError.ReadOnly, "Cannot update. Database or object is read-only.")
+                : FieldFailure(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        return EditPublication.Of(frame.Assign(Column, incoming));
+        return EditPublication.Of(frame.Assign(column, incoming));
     }
 
     /// <summary>ValidateOnSet (EXPR-STAGE): True runs the field's rule at the put, False at Update.</summary>
@@ -1181,22 +1542,24 @@ internal sealed unsafe class FieldObject : DaoObject
     {
         if (Recordset.Frame(out CallResult refused) is not { } frame)
         {
-            return refused;
+            return Recordset.ReadOnlyByOption
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ReadOnlyValidateOnSet", "ValidateOnSet put on a dbReadOnly recordset (not recorded)"))
+                : refused;
         }
         frame.SetValidateOnSet(Column, Args.Bool(value, omitted: false) ?? false);
         return CallResult.Nothing;
     }
 
     /// <summary>The published result of a field read that is not borrowed text.</summary>
-    private CallResult Published(FieldResult read, ColumnDescriptor column)
+    private static CallResult Published(FieldResult read, ColumnDescriptor column)
     {
         if (read.Failure == CursorFailure.NoCurrentRecord)
         {
-            return Fail(3021, DaoErrors.NoCurrentRecord, publishesErrorInfo: true);
+            return FieldFailure(3021, DaoErrors.NoCurrentRecord);
         }
         if (read.Failure == CursorFailure.DeletedRecord)
         {
-            return Fail(3167, DaoErrors.RecordDeleted, publishesErrorInfo: true);
+            return FieldFailure(3167, DaoErrors.RecordDeleted);
         }
         if (!read.Succeeded)
         {
@@ -1254,12 +1617,12 @@ internal sealed unsafe class FieldObject : DaoObject
     /// 28 is not modelled. A calculated Decimal has no declared precision and reads as VT_DECIMAL
     /// (r-cplx-rebuild/calc-schema-change).
     /// </summary>
-    private CallResult? DecimalRefusal(NativeDecimal value, ColumnDescriptor column)
+    private static CallResult? DecimalRefusal(NativeDecimal value, ColumnDescriptor column)
     {
         if (column.CalculatedResultType is null && column.NumericPrecision > 28)
         {
             return column.NumericPrecision == 38
-                ? Fail(3000, "Reserved error (-1038); there is no message for this error.", publishesErrorInfo: true)
+                ? FieldFailure(3000, "Reserved error (-1038); there is no message for this error.")
                 : CallResult.Fail(Failure.NotImplemented($"Field.Value of a Decimal column of precision {column.NumericPrecision} (not observed)"));
         }
         return value.FitsAutomation ? null : CallResult.Fail(Failure.NotImplemented($"Field.Value of a Decimal beyond VT_DECIMAL ({value.Magnitude} at scale {value.Scale})"));
@@ -1272,7 +1635,12 @@ internal sealed unsafe class FieldObject : DaoObject
         return OwnedVariant.TakeArray(array, VarType.UI1);
     }
 
-    protected override void OnFinalRelease() => _fields.Released(_ordinal);
+    protected override void OnFinalRelease()
+    {
+        _properties?.Release();
+        _properties = null;
+        _fields.Released(_ordinal);
+    }
 
     /// <summary>
     /// Parked by the Fields collection after the final release, to be handed out again (task hdw6). The hold on the
@@ -1449,6 +1817,9 @@ internal static class RecordsetOptions
         2 => (options & (ReadOnly | ForwardOnly)) == 0,
         _ => false,
     };
+
+    /// <summary>dbReadOnly is set and dbForwardOnly is not: the one cause of a not-updatable writable open whose edit errors are recorded.</summary>
+    public static bool ReadOnlyOnly(int options) => (options & (ReadOnly | ForwardOnly)) == ReadOnly;
 
     public static bool Bookmarkable(int type, int options) => type switch
     {

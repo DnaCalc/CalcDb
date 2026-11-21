@@ -408,15 +408,18 @@ internal sealed unsafe class IndexObject : DaoObject
 }
 
 /// <summary>
-/// A Field of a definition (a TableDef's or an Index's Fields; Field3): Name, Type, Size and OrdinalPosition from the
-/// column; an index field's Attributes is dbDescending (1) for a descending column, else 0 (r-cat-1b/index-members-ddl).
-/// A TableDef field (r-dao-1b/field-properties-enumerated, read-only open) also answers: its stored column properties
-/// (CAT-P: DefaultValue, ValidationRule, ValidationText as "" and Required, AllowZeroLength as False when none is
-/// stored), SourceTable and SourceField (its own table and name), AppendOnly False, Expression "", Scale 0 outside
-/// Decimal, CollatingOrder the database's; Value, ValidateOnSet and ForeignName 3219, FieldSize 3267, OriginalValue and
-/// VisibleValue 3251 (members of a recordset field only). Not yet: the TableDef field's Attributes bits; Precision
-/// (1033 for Long and Text in that record, a value no probe has separated from the collating order) and DataUpdatable
-/// on a writable open (False read-only).
+/// A Field of a definition (a TableDef's or an Index's Fields; Field3). A TableDef field (r-dao-1b/field-members-typed-
+/// each, field-properties-enumerated; r-cat-1b/field-members-builtin) answers Name, Type, Size, OrdinalPosition and
+/// CollectionIndex from the column; its stored column properties (CAT-P: DefaultValue, ValidationRule, ValidationText
+/// as "" and Required, AllowZeroLength as False when none is stored); SourceTable and SourceField (its own table and
+/// name), AppendOnly False, Expression "", Scale 0 outside Decimal, Attributes by <see cref="ColumnFacts.Attributes"/>
+/// and CollatingOrder by <see cref="ColumnFacts.CollatingOrder"/>; Value 3219 with an IErrorInfo, ValidateOnSet,
+/// ForeignName and ComplexType 3219, FieldSize 3267, OriginalValue and VisibleValue 3251 (members of a recordset field
+/// only). An index field (r-dao-1b/indexfield-members-each) answers only Name, Attributes (dbDescending 1 for a
+/// descending column, else 0; r-cat-1b/index-members-ddl) and CollectionIndex: every other member is 3219 (Value with
+/// an IErrorInfo), FieldSize 3267, OriginalValue and VisibleValue 3251. Not yet: Precision (1033 for Long and Text in
+/// field-properties-enumerated, a value no probe has separated from the collating order), DataUpdatable on a writable
+/// open (False read-only) and an index field's Properties.
 /// </summary>
 internal sealed unsafe class DefinitionFieldObject : DaoObject
 {
@@ -424,13 +427,18 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, f => Text(f._column.Name)))
-        .Get("Type", (self, args) => Live(self, f => ColumnFacts.DaoType(f._column) is int t ? Int16(t) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {f._column.TypeCode}"))))
-        .Get("Size", (self, args) => Live(self, f => ColumnFacts.Size(f._column) is int s ? Int32(s) : CallResult.Fail(Failure.NotImplemented($"Field.Size of native type {f._column.TypeCode}"))))
-        .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
-        .Get("Attributes", (self, args) => Live(self, f => f._indexColumn is { } ic ? Int32(ic.Ascending ? 0 : 1) : CallResult.Fail(Failure.NotImplemented("TableDef Field.Attributes"))))
+        .Get("Type", (self, args) => Live(self, f => f.OfTable(t => ColumnFacts.DaoType(f._column) is int type ? Int16(type) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {f._column.TypeCode}")))))
+        .Get("Size", (self, args) => Live(self, f => f.OfTable(t => ColumnFacts.Size(f._column) is int s ? Int32(s) : CallResult.Fail(Failure.NotImplemented($"Field.Size of native type {f._column.TypeCode}")))))
+        .Get("OrdinalPosition", (self, args) => Live(self, f => f.OfTable(t => Int16(f._ordinal))))
+        // CollectionIndex of a definition field is 0 at every ordinal, unlike a recordset field's (r-dao-1b/field-members-
+        // typed-each: 14 TableDef fields; indexfield-members-each: the second field of a two-field index).
+        .Get("CollectionIndex", (self, args) => Live(self, f => Int16(0)))
+        // A TableDef field is never dbUpdatableField (r-dao-1b/field-members-typed-each, r-cat-1b/field-members-builtin: 17, 2, 1).
+        .Get("Attributes", (self, args) => Live(self, f => f._indexColumn is { } ic ? Int32(ic.Ascending ? 0 : 1)
+            : ColumnFacts.Attributes(f._column, updatable: false) is int a ? Int32(a) : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"Field.Attributes of the column {f._column.Name} (calculated, auto-GUID or hyperlink: not recorded)"))))
         .Get("SourceTable", (self, args) => Live(self, f => f.OfTable(t => Text(t.Name))))
         .Get("SourceField", (self, args) => Live(self, f => f.OfTable(t => Text(f._column.Name))))
-        .Get("CollatingOrder", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.Run(DaoTypes.Database.Member("CollatingOrder", InvokeKind.PropertyGet), []))))
+        .Get("CollatingOrder", (self, args) => Live(self, f => f.OfTable(t => Int32(ColumnFacts.CollatingOrder(f._column)))))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
         .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
         .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
@@ -440,13 +448,14 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
         .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
-        .Get("Value", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true))))
-        .Get("ValidateOnSet", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation))))
-        .Get("ForeignName", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation))))
-        .Get("FieldSize", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3267, DaoErrors.RecordsetFieldOnly))))
-        .Get("OriginalValue", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3251, DaoErrors.NotSupportedForType))))
-        .Get("VisibleValue", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3251, DaoErrors.NotSupportedForType))))
-        .Get("Properties", (self, args) => Live(self, f => f.OfTable(t => f.PropertiesCollection(t))));
+        .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
+        .Get("ValidateOnSet", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("ComplexType", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("FieldSize", (self, args) => Live(self, f => f.Fail(3267, DaoErrors.RecordsetFieldOnly)))
+        .Get("OriginalValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection(f._table)));
 
     private readonly DefinitionCollection _owner;
     private readonly TableDefObject? _table;
@@ -477,21 +486,27 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
     }
 
+    /// <summary>A member of a TableDef field; an index field answers it 3219 without an IErrorInfo (r-dao-1b/indexfield-members-each).</summary>
     private CallResult OfTable(Func<TableDefObject, CallResult> op) =>
-        _table is { } t ? op(t) : CallResult.Fail(Failure.NotImplemented("this member of an index field"));
+        _table is { } t ? op(t) : Fail(3219, DaoErrors.InvalidOperation);
 
     /// <summary>The column's stored map in the table's blob (CAT-P), by the column's exact name.</summary>
     private PropertyMap? ColumnMap(TableDefObject t) => t.Blob?.Map(PropertySectionKind.ColumnValues, _column.Name);
 
-    private CallResult Stored(string name, CallResult unset) => OfTable(t =>
-    {
-        StoredProperty? stored = ColumnMap(t)?.Properties.FirstOrDefault(p => p.Name == name);
-        return stored is null ? unset : PropertyObject.StoredValue(stored);
-    });
+    private CallResult Stored(string name, CallResult unset) => OfTable(t => ColumnFacts.Stored(t.Blob, _column, name, unset));
 
-    /// <summary>The 24 built-ins, then the column's other stored properties (r-dao-1b/field-properties-enumerated: Parent.Name lists Description, 25).</summary>
-    private CallResult PropertiesCollection(TableDefObject t)
+    /// <summary>
+    /// The 24 built-ins, then a TableDef field's other stored properties (r-dao-1b/field-properties-enumerated: Parent.Name
+    /// lists Description, 25). An index field's collection has Count 24, its entries named (r-dao-1b/indexfield-members-each
+    /// records only the Count).
+    /// </summary>
+    private CallResult PropertiesCollection(TableDefObject? t)
     {
+        if (t is null)
+        {
+            _properties ??= new PropertiesObject(this, 24, "the Properties entries of an index field (indexfield-members-each records only Count 24)");
+            return Object(_properties);
+        }
         if (ColumnFacts.DaoType(_column) is not int type)
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.Properties of native type {_column.TypeCode}"));
@@ -522,6 +537,46 @@ internal static class ColumnFacts
         var t and (>= 1 and <= 12 or 15) => t,
         _ => null,
     };
+
+    /// <summary>
+    /// FieldAttributeEnum of a stored column (R-FMT-1 FMT1-FAMILIES: one value per family in ACCDB and MDB): dbFixedField 1
+    /// for a fixed-length column, dbVariableField 2 otherwise, plus dbAutoIncrField 16 for AutoNumber (r-dao-1b/field-members-
+    /// typed-each: AutoNumber 17, Text and Memo 2, the numeric, Date, Yes/No and Decimal families 1, OLE and GUID 2;
+    /// r-cat-1b/field-members-builtin). A recordset field adds dbUpdatableField 32 when its data is updatable
+    /// (r-cursor-1b/option-readonly-write: 33 on a writable dynaset, 1 with dbReadOnly). A calculated column and the
+    /// replication, auto-GUID and hyperlink column flags are not recorded: null.
+    /// </summary>
+    public static int? Attributes(ColumnDescriptor column, bool updatable)
+    {
+        if (column.CalculatedResultType is not null || (column.Flags & UnrecordedFlags) != 0)
+        {
+            return null;
+        }
+        // A GUID column reads dbVariableField whatever its stored length flag (field-members-typed-each: TGuid 2).
+        int attributes = column.IsFixed && column.TypeCode != NativeTypes.Guid ? 1 : 2;
+        return attributes | (column.IsAutoNumber ? 16 : 0) | (updatable ? 32 : 0);
+    }
+
+    /// <summary>
+    /// A field's CollatingOrder is its column's, not the database's: a Decimal's declared precision (r-dao-1b/field-
+    /// members-typed-each 38 for a CreateField(name, 20) column, r-fix-fmt-sort/fmt2-scalar-admission-decimal 18); any
+    /// other column's sort word (column block bytes 11-12, <see cref="ColumnDescriptor.TypeInfo"/>), 0 reading as
+    /// dbSortNeutral 1024 (r-cat-1b/field-members-builtin: 1033 for its Text fields, 1024 for Long, Memo, Date and Yes/No;
+    /// field-members-typed-each: 1033 for every family of that file).
+    /// </summary>
+    public static int CollatingOrder(ColumnDescriptor column) => column.TypeCode == NativeTypes.Numeric
+        ? column.NumericPrecision
+        : (ushort)column.TypeInfo is 0 ? 1024 : (ushort)column.TypeInfo;
+
+    /// <summary>The column flags no record maps to an attribute: auto-GUID 0x40 and hyperlink 0x80.</summary>
+    private const byte UnrecordedFlags = 0x40 | 0x80;
+
+    /// <summary>A stored column property of <paramref name="name"/> in the table's blob (CAT-P), or <paramref name="unset"/> when none is stored.</summary>
+    public static CallResult Stored(PropertyBlob? blob, ColumnDescriptor column, string name, CallResult unset)
+    {
+        StoredProperty? stored = blob?.Map(PropertySectionKind.ColumnValues, column.Name)?.Properties.FirstOrDefault(p => p.Name == name);
+        return stored is null ? unset : PropertyObject.StoredValue(stored);
+    }
 
     /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length.</summary>
     public static int? Size(ColumnDescriptor column) => column.TypeCode switch

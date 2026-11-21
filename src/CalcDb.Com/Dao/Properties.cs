@@ -8,7 +8,8 @@ namespace CalcDb.Com.Dao;
 /// <summary>
 /// One entry of a DAO Properties collection (II-06 §7: a semantic view, not the stored blob). A built-in reads through
 /// its owner's own getter of the same name, so Properties("X").Value and the direct getter cannot drift apart
-/// (R-DAO-1 DAO-PROP: "direct getters equal Properties.Item(...).Value"), failure and source included; a stored
+/// (R-DAO-1 DAO-PROP: "direct getters equal Properties.Item(...).Value"), failure and source included (a TableDef
+/// field's Value without its IErrorInfo); a stored
 /// (user-defined) one decodes its MR2 record (CAT-P). <see cref="Member"/> is the getter's declared name when it differs
 /// from the property's spelling (a Recordset lists "BookMark" for its Bookmark getter).
 /// </summary>
@@ -177,11 +178,22 @@ internal sealed unsafe class PropertiesObject : DaoObject
     private readonly CollectionNames _names;
     private readonly Dictionary<int, PropertyObject> _held = [];
 
+    private readonly string? _entriesNotRecorded;
+
     public PropertiesObject(DaoObject owner, PropertySpec[] specs) : base(Decl, Vtable, owner.Engine, "DAO.Properties")
     {
         _owner = owner;
         _specs = specs;
         _names = new CollectionNames([.. specs.Select(s => s.Name)]);
+    }
+
+    /// <summary>
+    /// A collection whose records show only its Count (<paramref name="count"/>): Item is named with
+    /// <paramref name="entriesNotRecorded"/>, as the entries' names and types are not recorded.
+    /// </summary>
+    public PropertiesObject(DaoObject owner, int count, string entriesNotRecorded) : this(owner, [.. Enumerable.Range(0, count).Select(i => new PropertySpec($"#{i}", 0))])
+    {
+        _entriesNotRecorded = entriesNotRecorded;
     }
 
     public DaoObject Owner => _owner;
@@ -196,6 +208,10 @@ internal sealed unsafe class PropertiesObject : DaoObject
 
     private CallResult Item(nint index)
     {
+        if (_entriesNotRecorded is { } why)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.PropertyEntries", why));
+        }
         int? ordinal = CollectionLookup.Find(index, _names, out bool objectIndex);
         if (objectIndex)
         {
@@ -268,9 +284,17 @@ internal sealed unsafe class PropertyObject : DaoObject
         string member = _spec.Member ?? _spec.Name;
         MemberDecl? getter = owner.Declaration.Members.FirstOrDefault(m => m.Kind == InvokeKind.PropertyGet && m.Parameters.Count == 0
             && string.Equals(m.Name, member, StringComparison.OrdinalIgnoreCase));
-        return getter is null
-            ? CallResult.Fail(Failure.NotImplemented($"the {_spec.Name} property of {owner.Declaration.Name} (no getter declared)"))
-            : owner.Run(getter, []);
+        if (getter is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"the {_spec.Name} property of {owner.Declaration.Name} (no getter declared)"));
+        }
+        // A TableDef field's Value getter publishes an IErrorInfo, its Properties("Value").Value does not (r-cat-1b/
+        // field-properties-enum, r-dao-1b/field-properties-enumerated, r-fix-fmt-sort/fmt2-scalar-admission-decimal); no
+        // record shows another built-in's failure through Properties, so the others answer as their getter.
+        CallResult result = owner.Run(getter, []);
+        return owner is DefinitionFieldObject && _spec.Name == "Value" && result.Failure is { PublishesErrorInfo: true } failure
+            ? CallResult.Fail(failure with { PublishesErrorInfo = false })
+            : result;
     }
 
     /// <summary>A stored property's value (CAT-P), typed by its native type code, which is also its DAO type.</summary>

@@ -225,6 +225,135 @@ public sealed unsafe class DaoWiringTests : IDisposable
     }
 
     [Fact]
+    public void Cache_Filter_Sort_Index_hStmt_and_LastModified_answer_by_recordset_type()
+    {
+        // r-dao-1b/recordset-members-*, r-cursor-1b/cache-size-properties, cache-fill-and-start, filter-sort-other-types.
+        DatabaseObject db = Open(EditFixture);
+        RecordsetObject dynaset = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
+        Assert.Equal((VarType.I4, 0L), Scalar(Get(dynaset, "CacheSize")));
+        Ok(Put(dynaset, "CacheSize", 1201));
+        Assert.Equal((VarType.I4, 1201L), Scalar(Get(dynaset, "CacheSize")));
+        Assert.True(NullArray(Get(dynaset, "CacheStart")));
+        Ok(Put(dynaset, "CacheStart", ""));
+        Fails(Put(dynaset, "CacheStart", 1), 3421, "DAO.Recordset", errorInfo: true);
+        Ok(Method(dynaset, "FillCache", 5));
+        Fails(Method(dynaset, "FillCache", "a"), 3421, "DAO.Recordset", errorInfo: false);
+        Ok(Put(dynaset, "Filter", "N > 20"));
+        Ok(Put(dynaset, "Sort", "N DESC"));
+        Assert.Equal("N > 20", Text(Get(dynaset, "Filter")));
+        Assert.Equal("N DESC", Text(Get(dynaset, "Sort")));
+        Fails(Get(dynaset, "Index"), 3251, "DAO.Recordset", errorInfo: false);
+        Fails(Get(dynaset, "hStmt"), 3251, "DAO.Recordset", errorInfo: false);
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(dynaset, "Restartable")));
+        Assert.True(NullArray(Get(dynaset, "LastModified")));
+
+        RecordsetObject table = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 1)));
+        Fails(Get(table, "CacheSize"), 3251, "DAO.Recordset", errorInfo: false);
+        Fails(Put(table, "Filter", "N > 20"), 3251, "DAO.Recordset", errorInfo: false);
+        Fails(Method(table, "FillCache"), 3219, "DAO.Recordset", errorInfo: false);
+        Assert.True(NullArray(Get(table, "LastModified")));
+
+        RecordsetObject snapshot = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 4)));
+        Fails(Get(snapshot, "LastModified"), 3251, "DAO.Recordset", errorInfo: false);
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(snapshot, "Restartable")));
+    }
+
+    [Fact]
+    public void GetRows_returns_fields_by_rows_converts_its_count_and_stops_at_EOF()
+    {
+        // qualified.md R-CURSOR-1 CUR-BULK; r-cursor-1b/getrows-count-arguments, getrows-beyond-eof, getrows-edit-buffer.
+        DatabaseObject db = Open(EditFixture);
+        RecordsetObject rs = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 1)));
+        FieldsObject fields = Object<FieldsObject>(rs, "Fields");
+        int columns = (int)Scalar(Get(fields, "Count")).Payload;
+        int u = (int)Scalar(Get(Object<FieldObject>(fields, "Item", "U"), "OrdinalPosition")).Payload;
+        Fails(Method(rs, "GetRows", 0), 3001, "DAO.Recordset", errorInfo: false);
+        Fails(Method(rs, "GetRows", "abc"), 3421, "DAO.Recordset", errorInfo: false);
+        Fails(Method(rs, "GetRows", DBNull.Value), 3421, "DAO.Recordset", errorInfo: false);
+
+        Ok(Method(rs, "Edit"));
+        Ok(Put(Object<FieldObject>(fields, "Item", "U"), "Value", "edited"));
+        CallResult two = Ok(Method(rs, "GetRows", "2"));
+        nint psa = Value(two).Pointer;
+        Assert.Equal(new (int, int)[] { (0, columns), (0, 2) }, SafeArrays.Shape(psa));
+        var cells = (NativeVariant*)SafeArrays.ElementPointer(psa, 0, 0);
+        Assert.Equal("edited", Marshal.PtrToStringBSTR(cells[u].Pointer)); // the pending Edit's buffer is the first row
+        Assert.Equal("u2", Marshal.PtrToStringBSTR(cells[columns + u].Pointer));
+        two.Value?.Dispose();
+        Assert.Equal((VarType.I2, 0L), Scalar(Get(rs, "EditMode")));
+
+        RecordsetObject all = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
+        CallResult rest = Ok(Method(all, "GetRows", 1_000_000)); // no row ceiling: a short return of every row
+        Assert.Equal(2, SafeArrays.Shape(Value(rest).Pointer)[1].Count);
+        rest.Value?.Dispose();
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(all, "EOF")));
+        Fails(Method(all, "GetRows"), 3021, "DAO.Recordset", errorInfo: false);
+    }
+
+    [Fact]
+    public void A_dbReadOnly_recordset_refuses_edits_as_ACE_does_by_type()
+    {
+        // r-cursor-1b/option-readonly-write: ("F", 2, 4) and ("F", 1, 4) on a writable open.
+        DatabaseObject db = Open(EditFixture);
+        RecordsetObject dynaset = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2, 4)));
+        FieldObject n = Object<FieldObject>(Object<FieldsObject>(dynaset, "Fields"), "Item", "N");
+        Assert.Equal((VarType.Bool, 0L), Scalar(Get(n, "DataUpdatable")));
+        Fails(Method(dynaset, "Edit"), 3027, "DAO.Recordset", errorInfo: false);
+        Fails(Put(n, "Value", 5), 3027, "DAO.Field", errorInfo: true);
+        Fails(Method(dynaset, "Update"), 3020, "DAO.Recordset", errorInfo: false);
+        Fails(Method(dynaset, "AddNew"), 3027, "DAO.Recordset", errorInfo: false);
+        Fails(Method(dynaset, "Delete"), 3027, "DAO.Recordset", errorInfo: false);
+        Fails(Method(dynaset, "CancelUpdate"), 3020, "DAO.Recordset", errorInfo: false);
+
+        RecordsetObject table = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 1, 4)));
+        Fails(Put(Object<FieldObject>(Object<FieldsObject>(table, "Fields"), "Item", "N"), "Value", 5), 3020, "DAO.Field", errorInfo: true);
+
+        RecordsetObject writable = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
+        FieldObject w = Object<FieldObject>(Object<FieldsObject>(writable, "Fields"), "Item", "N");
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(w, "DataUpdatable")));
+        Assert.Equal(32, (int)Scalar(Get(w, "Attributes")).Payload & 32);
+    }
+
+    [Fact]
+    public void Field_members_of_definitions_and_recordsets_follow_the_rich_fixture()
+    {
+        // r-dao-1b/field-members-typed-each, recordset-fields-members-each, indexfield-members-each (read-only open).
+        DatabaseObject db = Open(RichFixture, readOnly: true);
+        DispatchObject typed = Object<DispatchObject>(Object<DispatchObject>(db, "TableDefs"), "Item", "Typed");
+        DispatchObject tableFields = Object<DispatchObject>(typed, "Fields");
+        (string Name, int Attributes, int Collating)[] expected =
+            [("K", 17, 1033), ("TText", 2, 1033), ("TMemo", 2, 1033), ("TByte", 1, 1033), ("TBool", 1, 1033), ("TOle", 2, 1033), ("TGuid", 2, 1033), ("TDec", 1, 38)];
+        foreach ((string name, int attributes, int collating) in expected)
+        {
+            DispatchObject f = Object<DispatchObject>(tableFields, "Item", name);
+            Assert.Equal((name, attributes, collating, 0), (name, (int)Scalar(Get(f, "Attributes")).Payload, (int)Scalar(Get(f, "CollatingOrder")).Payload, (int)(short)Scalar(Get(f, "CollectionIndex")).Payload));
+            Fails(Get(f, "ComplexType"), 3219, "DAO.Field", errorInfo: false);
+        }
+
+        RecordsetObject rs = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "Typed", 2)));
+        FieldsObject fields = Object<FieldsObject>(rs, "Fields");
+        FieldObject memo = Object<FieldObject>(fields, "Item", "TMemo");
+        Assert.Equal((VarType.I2, 2L), Scalar(Get(memo, "CollectionIndex")));
+        Assert.Equal((VarType.I4, 2L), Scalar(Get(memo, "FieldSize"))); // twice the units of the one-character Memo
+        Assert.Equal((VarType.I4, 0L), Scalar(Get(Object<FieldObject>(fields, "Item", "TOle"), "FieldSize")));
+        Fails(Get(Object<FieldObject>(fields, "Item", "K"), "FieldSize"), 3259, "DAO.Field", errorInfo: false);
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(Object<FieldObject>(fields, "Item", "TText"), "AllowZeroLength")));
+        Assert.Equal((VarType.I2, 24L), Scalar(Get(Object<PropertiesObject>(memo, "Properties"), "Count")));
+
+        DispatchObject index = Object<DispatchObject>(Object<DispatchObject>(typed, "Indexes"), "Item", 0);
+        DispatchObject indexField = Object<DispatchObject>(Object<DispatchObject>(index, "Fields"), "Item", 0);
+        Fails(Get(indexField, "Type"), 3219, "DAO.Field", errorInfo: false);
+        Fails(Get(indexField, "Value"), 3219, "DAO.Field", errorInfo: true);
+        Assert.Equal((VarType.I2, 0L), Scalar(Get(indexField, "CollectionIndex")));
+        PropertiesObject indexProperties = Object<PropertiesObject>(indexField, "Properties");
+        Assert.Equal((VarType.I2, 24L), Scalar(Get(indexProperties, "Count")));
+        Named(Get(indexProperties, "Item", 0)); // only the Count is recorded
+
+        Assert.Equal((VarType.Bool, 0L), Scalar(Get(memo, "DataUpdatable"))); // read-only open: every family False
+        Named(Put(rs, "Collect", "K")); // recorded on a SELECT dynaset only
+    }
+
+    [Fact]
     public void LockEdits_put_reaches_the_edit_frame()
     {
         // r-cursor-1/edit-conflict-optimistic: ra.LockEdits = False on a dynaset before any edit.
