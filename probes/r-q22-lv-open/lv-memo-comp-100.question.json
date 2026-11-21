@@ -1,0 +1,934 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q22-lv-open/lv-memo-comp-100",
+  "bookRefs": [
+    "R-FMT-2",
+    "W-05/growth-structural-closure",
+    "LV form selection",
+    "Map ownership and growth",
+    "R-ADO-1"
+  ],
+  "description": "CreateDatabase(path, dbLangGeneral, dbVersion120); Close; ADO (Microsoft.ACE.OLEDB.12.0) runs CREATE TABLE V (ID LONG CONSTRAINT PK_V PRIMARY KEY, V MEMO WITH COMPRESSION) and closes. A shared DAO session inserts ID 1 with V of 100 ASCII 'a' characters (would be FF FE + 100 = 102 bytes if compressed, 200 bytes if uncompressed) through a table recordset (AddNew/Update) and closes. Page 0 bytes 3584-3591, page 1 and pages 42-53 are read after create and after insert (pages 0-55 hashed after insert), and FieldSize read back. Asks whether ACE compresses the Memo value and whether it is stored inline, as a single LVAL row, or chained.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "lval.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "lval.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE V (ID LONG CONSTRAINT PK_V PRIMARY KEY, V MEMO WITH COMPRESSION)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-create",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-after-create",
+      "file": "work:lval.accdb",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 188416,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 192512,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 196608,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 200704,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-create",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "lval.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-insert-1",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-after-insert-1",
+      "file": "work:lval.accdb",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 188416,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 192512,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 196608,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 200704,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 221184,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert-1",
+      "offset": 225280,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-after-insert-1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "lval.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V FROM V ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fv",
+          "member": "FieldSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
