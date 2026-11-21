@@ -152,8 +152,14 @@ public sealed class SelectSyntax : IDisposable
 /// </summary>
 public static class SqlParser
 {
-    /// <summary>3141, the SELECT statement's own syntax error (r-sql-2-3/top-arguments: TOP 0, TOP -1).</summary>
+    /// <summary>3141, the SELECT statement's own syntax error (r-sql-2-3/top-arguments: TOP 0, TOP -1; r-q25-nz-3141/baseline, alias-int-alone: unbracketed reserved word after AS).</summary>
     public const string SelectSyntaxError = "The SELECT statement includes a reserved word or an argument name that is misspelled or missing, or the punctuation is incorrect.";
+
+    /// <summary>3131, the FROM clause syntax error (r-q25-nz-3141/alias-int-positions, alias-from-words, alias-more-words; r-def-expr-sql/sql-insert-values-forms; r-sql-13b/union-syntax-forms).</summary>
+    public const string FromSyntaxError = "Syntax error in FROM clause.";
+
+    /// <summary>3450, incomplete query clause (r-q25-nz-3141/alias-from-words #107: FROM Mx AS UNION).</summary>
+    public const string IncompleteQueryClause = "Syntax error in query. Incomplete query clause.";
 
     /// <summary>3139 (r-sql-13b/params-declaration-syntax, params-declared-type-names).</summary>
     public const string ParameterClauseError = "Syntax error in PARAMETER clause.";
@@ -174,11 +180,102 @@ public static class SqlParser
         ["Decimal"] = 0, ["Memo"] = 0, ["Counter"] = 0, ["Boolean"] = 0, ["Variant"] = 0, ["TinyInt"] = 0,
     };
 
-    private static readonly HashSet<string> ClauseWords = new(StringComparer.OrdinalIgnoreCase)
+    [Flags]
+    private enum WordRole : byte
     {
-        "SELECT", "FROM", "WHERE", "GROUP", "HAVING", "ORDER", "BY", "AS", "ON", "INNER", "LEFT", "RIGHT", "OUTER", "JOIN",
-        "UNION", "ASC", "DESC", "IN", "TOP", "PERCENT", "DISTINCT", "DISTINCTROW", "ALL", "WITH", "PARAMETERS", "TRANSFORM", "PIVOT",
+        None = 0,
+
+        /// <summary>Stops bare names (<c>s.*</c>, <c>FROM table</c>, bare <c>FROM t alias</c>).</summary>
+        Clause = 1,
+
+        /// <summary>
+        /// Refused unbracketed after <c>AS</c> in a SELECT list (3141) and in <c>FROM ... AS</c> (3131, except <c>UNION</c> 3450):
+        /// exactly the 66 words refused across r-q25-nz-3141/alias-type-words (24), r-q25-nz-3141/alias-clause-words (31),
+        /// r-q25-nz-3141/alias-from-words, and r-q25-nz-3141/alias-more-words (11). The 39 accepted words and unprobed words
+        /// do not carry this flag.
+        /// </summary>
+        ReservedAlias = 2,
+    }
+
+    private static readonly Dictionary<string, WordRole> ReservedWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // 27 clause words, all refused after AS (24 in r-q25-nz-3141/alias-clause-words + 3 in alias-more-words / alias-from-words):
+        ["SELECT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["FROM"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["WHERE"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["GROUP"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["HAVING"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["ORDER"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["BY"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["AS"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["ON"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["INNER"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["LEFT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["RIGHT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["JOIN"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["UNION"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["ASC"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["DESC"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["IN"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["TOP"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["DISTINCT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["DISTINCTROW"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["ALL"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["WITH"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["TRANSFORM"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["PIVOT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["OUTER"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["PERCENT"] = WordRole.Clause | WordRole.ReservedAlias,
+        ["PARAMETERS"] = WordRole.Clause | WordRole.ReservedAlias,
+
+        // 7 additional clause/DML words refused in r-q25-nz-3141/alias-clause-words and alias-from-words:
+        ["INTO"] = WordRole.ReservedAlias,
+        ["TABLE"] = WordRole.ReservedAlias,
+        ["SET"] = WordRole.ReservedAlias,
+        ["VALUES"] = WordRole.ReservedAlias,
+        ["UPDATE"] = WordRole.ReservedAlias,
+        ["DELETE"] = WordRole.ReservedAlias,
+        ["INSERT"] = WordRole.ReservedAlias,
+
+        // 24 type words refused in r-q25-nz-3141/alias-type-words and alias-from-words:
+        ["INT"] = WordRole.ReservedAlias,
+        ["INTEGER"] = WordRole.ReservedAlias,
+        ["LONG"] = WordRole.ReservedAlias,
+        ["SHORT"] = WordRole.ReservedAlias,
+        ["BYTE"] = WordRole.ReservedAlias,
+        ["SINGLE"] = WordRole.ReservedAlias,
+        ["DOUBLE"] = WordRole.ReservedAlias,
+        ["CURRENCY"] = WordRole.ReservedAlias,
+        ["TEXT"] = WordRole.ReservedAlias,
+        ["DATE"] = WordRole.ReservedAlias,
+        ["DATETIME"] = WordRole.ReservedAlias,
+        ["YESNO"] = WordRole.ReservedAlias,
+        ["BIT"] = WordRole.ReservedAlias,
+        ["BINARY"] = WordRole.ReservedAlias,
+        ["GUID"] = WordRole.ReservedAlias,
+        ["CHAR"] = WordRole.ReservedAlias,
+        ["VARCHAR"] = WordRole.ReservedAlias,
+        ["NUMERIC"] = WordRole.ReservedAlias,
+        ["FLOAT"] = WordRole.ReservedAlias,
+        ["REAL"] = WordRole.ReservedAlias,
+        ["VALUE"] = WordRole.ReservedAlias,
+        ["STRING"] = WordRole.ReservedAlias,
+        ["NUMBER"] = WordRole.ReservedAlias,
+        ["TIMESTAMP"] = WordRole.ReservedAlias,
+
+        // 8 additional words refused in r-q25-nz-3141/alias-more-words (alongside OUTER, PERCENT, PARAMETERS above):
+        ["OWNERACCESS"] = WordRole.ReservedAlias,
+        ["TIME"] = WordRole.ReservedAlias,
+        ["LONGTEXT"] = WordRole.ReservedAlias,
+        ["LONGBINARY"] = WordRole.ReservedAlias,
+        ["VARBINARY"] = WordRole.ReservedAlias,
+        ["MONEY"] = WordRole.ReservedAlias,
+        ["SMALLINT"] = WordRole.ReservedAlias,
+        ["UNIQUE"] = WordRole.ReservedAlias,
     };
+
+    private static bool HasRole(string word, WordRole role) =>
+        role != WordRole.None && ReservedWords.TryGetValue(word, out WordRole flags) && (flags & role) != 0;
 
     /// <summary>
     /// Parse a statement. The text ends at its first NUL (qualified.md "refusals of a SELECT's output"); 65534 units or
@@ -345,9 +442,9 @@ public static class SqlParser
 
         /// <summary>
         /// A name: <c>[any text]</c>, <c>`any text`</c> (qualified.md R-SQL-1 SQL-B, corrected: backticks quote names as
-        /// brackets do, r-q3-sql/backtick-names) or a word that is not a clause word.
+        /// brackets do, r-q3-sql/backtick-names) or a word that does not carry any role in <paramref name="disallowed"/>.
         /// </summary>
-        private string? Name(bool allowClauseWord = false)
+        private string? Name(WordRole disallowed = WordRole.Clause)
         {
             Skip();
             if (_p < s.Length && s[_p] is '[' or '`')
@@ -368,7 +465,7 @@ public static class SqlParser
                 return name;
             }
             string? word = PeekWord();
-            if (word is null || (!allowClauseWord && ClauseWords.Contains(word)))
+            if (word is null || HasRole(word, disallowed))
             {
                 return null;
             }
@@ -597,16 +694,16 @@ public static class SqlParser
             int start = _p;
             if (_p < s.Length && s[_p] == '[')
             {
-                return Name(allowClauseWord: true) is null ? null : s[start.._p];
+                return Name(WordRole.None) is null ? null : s[start.._p];
             }
-            if (Name(allowClauseWord: true) is null)
+            if (Name(WordRole.None) is null)
             {
                 return null;
             }
             while (_p < s.Length && s[_p] == '.')
             {
                 _p++;
-                if (Name(allowClauseWord: true) is null)
+                if (Name(WordRole.None) is null)
                 {
                     return null;
                 }
@@ -643,7 +740,7 @@ public static class SqlParser
             if (IsWord("UNION"))
             {
                 // r-def-expr-sql/sql-insert-values-forms: INSERT INTO U ... SELECT ... UNION SELECT ... fails 3131.
-                return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
             }
             return null;
         }
@@ -714,7 +811,7 @@ public static class SqlParser
             if (IsWord("SELECT"))
             {
                 // r-sql-13b/union-syntax-forms: INTERSECT, EXCEPT and MINUS are read as an alias, then SELECT is 3131.
-                return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
             }
             if (TakeWord("WHERE"))
             {
@@ -827,12 +924,14 @@ public static class SqlParser
             _p = save;
             if (Expression(statement, out Fragment? expression) is { } f)
             {
-                return f;
+                return HasInvalidTopLevelAlias(offset, allowWith)
+                    ? SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError)
+                    : f;
             }
             string? alias = null;
             if (TakeWord("AS"))
             {
-                alias = Name(allowClauseWord: true);
+                alias = Name(WordRole.ReservedAlias);
                 if (alias is null || BadName)
                 {
                     return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
@@ -844,6 +943,123 @@ public static class SqlParser
                 return MissingOperator(offset);
             }
             return null;
+        }
+
+        /// <summary>
+        /// When an item's expression fails to parse (3075), scan the current SELECT item at parenthesis depth 0 for a
+        /// top-level <c>AS</c> followed by a reserved word or an unclosed bracketed/backticked name
+        /// (r-q25-nz-3141/alias-int-precedence #20; r-q25-nz-3141/alias-precedence-forms #8, #11, #14, #17, #23, #26, #35, #38:
+        /// <c>AS inT</c>, <c>AS FROM</c>, unclosed <c>AS [inT</c>, and <c>AS OUTER</c> fail 3141, while <c>AS 5</c>,
+        /// <c>AS [x]]y]</c>, <c>CAST(1 AS LONG) AS v</c>, and a later item's <c>AS inT</c> keep the expression's own failure).
+        /// </summary>
+        private bool HasInvalidTopLevelAlias(int start, bool allowWith)
+        {
+            int savedP = _p;
+            bool savedBad = BadName;
+            try
+            {
+                _p = start;
+                int depth = 0;
+                char prev = '\0';
+                while (!AtEnd())
+                {
+                    char c = s[_p];
+                    if (c is '\'' or '"')
+                    {
+                        _p++;
+                        while (_p < s.Length)
+                        {
+                            if (s[_p++] == c)
+                            {
+                                if (_p < s.Length && s[_p] == c)
+                                {
+                                    _p++;
+                                    continue;
+                                }
+                                break;
+                            }
+                        }
+                        prev = c;
+                        continue;
+                    }
+                    if (c == '#')
+                    {
+                        int close = s.IndexOf('#', _p + 1);
+                        if (close < 0)
+                        {
+                            return false;
+                        }
+                        _p = close + 1;
+                        prev = '#';
+                        continue;
+                    }
+                    if (c is '[' or '`')
+                    {
+                        if (Name(WordRole.None) is null)
+                        {
+                            return false;
+                        }
+                        prev = c;
+                        continue;
+                    }
+                    if (c == '(')
+                    {
+                        depth++;
+                        _p++;
+                        prev = '(';
+                        continue;
+                    }
+                    if (c == ')')
+                    {
+                        if (depth > 0)
+                        {
+                            depth--;
+                        }
+                        else if (_armDepth > 0)
+                        {
+                            return false;
+                        }
+                        _p++;
+                        prev = ')';
+                        continue;
+                    }
+                    if (depth == 0 && c is ',' or ';')
+                    {
+                        return false;
+                    }
+                    if (PeekWord() is { } word)
+                    {
+                        _p += word.Length;
+                        if (depth == 0 && prev is not ('.' or '!'))
+                        {
+                            if (word.Equals("FROM", StringComparison.OrdinalIgnoreCase)
+                                || (allowWith && word.Equals("WITH", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                return false;
+                            }
+                            if (word.Equals("AS", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Skip();
+                                if (_p < s.Length && s[_p] is '[' or '`')
+                                {
+                                    return Name(WordRole.None) is null;
+                                }
+                                return PeekWord() is { } alias && HasRole(alias, WordRole.ReservedAlias);
+                            }
+                        }
+                        prev = 'A';
+                        continue;
+                    }
+                    prev = c;
+                    _p++;
+                }
+                return false;
+            }
+            finally
+            {
+                _p = savedP;
+                BadName = savedBad;
+            }
         }
 
         /// <summary>A clause expression that one of <paramref name="followers"/>, a comma, <c>;</c> or the end must follow.</summary>
@@ -878,7 +1094,7 @@ public static class SqlParser
                 }
                 if (!TakeWord("ON"))
                 {
-                    return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                    return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
                 }
                 Skip();
                 int onStart = _p;
@@ -938,7 +1154,7 @@ public static class SqlParser
                     if (!TakeSymbol(')'))
                     {
                         inner.Dispose();
-                        return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                        return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
                     }
                     if (SourceAlias(out string? subAlias) is { } aliasFailure)
                     {
@@ -952,12 +1168,12 @@ public static class SqlParser
                 {
                     return f;
                 }
-                return TakeSymbol(')') ? null : SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                return TakeSymbol(')') ? null : SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
             }
             string? name = Name();
             if (name is null)
             {
-                return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
             }
             if (IsWord("IN"))
             {
@@ -976,10 +1192,15 @@ public static class SqlParser
             alias = null;
             if (TakeWord("AS"))
             {
-                alias = Name(allowClauseWord: true);
+                if (IsWord("UNION"))
+                {
+                    // r-q25-nz-3141/alias-from-words #107: FROM Mx AS UNION fails 3450 (the 65 other reserved words fail 3131).
+                    return SqlFailure.Ace(SqlPhase.Parse, 3450, IncompleteQueryClause);
+                }
+                alias = Name(WordRole.ReservedAlias);
                 if (alias is null)
                 {
-                    return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                    return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
                 }
             }
             else if (Name() is { } bare)

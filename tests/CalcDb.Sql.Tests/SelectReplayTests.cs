@@ -68,10 +68,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
     }
 
     /// <summary>Records whose replay differs from ACE for a registered reason, by probe, with the task that fixes it.</summary>
-    private static readonly Dictionary<string, string> KnownDifferences = new(StringComparer.Ordinal)
-    {
-        ["r-expr-1b/info-stored-null-handling"] = "unexplained: ACE answers 3141 where CalcDb answers 3085 (Nz undefined); registered with the SQL row",
-    };
+    private static readonly Dictionary<string, string> KnownDifferences = new(StringComparer.Ordinal);
 
     internal sealed class Replay(string record, ISqlDatabase? liveDatabase = null)
     {
