@@ -205,6 +205,26 @@ public sealed partial class PageCache
 
     public ulong FileIncarnation { get; }
 
+    private ulong _knownExtentPages;
+
+    /// <summary>
+    /// The file's extent in pages as far as this cache's writers have allocated (W-05/growth-structural-closure): the
+    /// highest page any allocation handed out, plus one, or 0 before any. A writer bounds map traversal and allocation by
+    /// the larger of this and the extent it opened with, so the pages one change appended are seen by the next compile of
+    /// any table of the file. It may run ahead of the file (a change that allocated and then rolled back): whether a
+    /// page is appended is decided at publication from the file itself (<see cref="NativeProgram"/>).
+    /// </summary>
+    public ulong KnownExtentPages => Volatile.Read(ref _knownExtentPages);
+
+    /// <summary>Raise <see cref="KnownExtentPages"/> to <paramref name="pages"/> if it is lower.</summary>
+    public void NoteExtent(ulong pages)
+    {
+        ulong seen;
+        while ((seen = Volatile.Read(ref _knownExtentPages)) < pages && Interlocked.CompareExchange(ref _knownExtentPages, pages, seen) != seen)
+        {
+        }
+    }
+
     public int PageSize { get; }
 
     public int FrameCount => _slots.Length;

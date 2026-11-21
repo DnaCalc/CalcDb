@@ -28,8 +28,12 @@ public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits
 /// <summary>A compiled change, or why this slice does not write it (the change is then accepted without a physical form).</summary>
 public readonly record struct CompiledChange(PhysicalChange? Change, string? NotWritten);
 
-/// <summary>Append one encoded row to an existing FreeMap data page at <paramref name="expectedSlot"/> (II-03 §1.3, II-04 §2).</summary>
-public sealed class DataPageAppendDelta(byte[] rowBytes, byte expectedSlot, FormatDescriptor d) : IPageDelta
+/// <summary>
+/// Append one encoded row to an existing FreeMap data page at <paramref name="expectedSlot"/> (II-03 §1.3, II-04 §2); an
+/// <paramref name="overflowTarget"/> slot carries the deleted flag (II-04 §8, evidence/r-q16-overflow room-last: slot 4
+/// <c>8400</c>).
+/// </summary>
+public sealed class DataPageAppendDelta(byte[] rowBytes, byte expectedSlot, FormatDescriptor d, bool overflowTarget = false) : IPageDelta
 {
     public ReadOnlySpan<byte> RowBytes => rowBytes;
 
@@ -44,6 +48,42 @@ public sealed class DataPageAppendDelta(byte[] rowBytes, byte expectedSlot, Form
         if (actualSlot != expectedSlot)
         {
             throw new FormatViolationException($"Data page append: expected slot {expectedSlot}, landed at slot {actualSlot}");
+        }
+        if (overflowTarget)
+        {
+            DataPages.MarkOverflowTarget(decodedPage, actualSlot, d);
+        }
+    }
+}
+
+/// <summary>Replace one live ordinary slot's body in place with a body as long or longer (<see cref="DataPages.TryReplaceRow"/>).</summary>
+public sealed class DataPageReplaceRowDelta(byte slot, byte[] rowBytes, FormatDescriptor d) : IPageDelta
+{
+    public byte Slot => slot;
+
+    public ReadOnlySpan<byte> RowBytes => rowBytes;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DataPages.TryReplaceRow(decodedPage, slot, rowBytes, d, out string? failure))
+        {
+            throw new FormatViolationException($"Data page row replacement: {failure}");
+        }
+    }
+}
+
+/// <summary>Turn one live slot into an overflow root that names <paramref name="target"/> (<see cref="DataPages.TryMakeOverflowRoot"/>).</summary>
+public sealed class OverflowRootDelta(byte slot, RowLocator target, FormatDescriptor d) : IPageDelta
+{
+    public byte Slot => slot;
+
+    public RowLocator Target => target;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DataPages.TryMakeOverflowRoot(decodedPage, slot, target, d, out string? failure))
+        {
+            throw new FormatViolationException($"Overflow root: {failure}");
         }
     }
 }
@@ -110,7 +150,17 @@ public sealed class IndexEntryReplacement(byte[] oldEntry, byte[] newEntry, Form
     }
 }
 
-/// <summary>One index entry inserted into an existing leaf whose stored prefix still covers it (II-05 §2, W-05/growth-structural-closure).</summary>
+/// <summary>
+/// One index entry inserted into an existing leaf whose stored prefix still covers it (II-05 §2, W-05/growth-structural-closure).
+/// An entry that does not fit under the stored prefix rewrites the leaf under its entries' whole common prefix when that
+/// makes it fit (II-05 §9 "Recompression"; the area bytes past the new payload are kept, <see cref="IndexPages.TryWriteEntries"/>),
+/// on a leaf with no next peer, the root leaf or the rightmost leaf; an inner leaf is refused, naming the open case
+/// "inner leaf recompression". Recorded for those two only: ACE's root held 602 LONG entries under prefix 3 before it split
+/// (3 + 602 × 6 = 3,615 of the 3,616-byte area, free 1; prefix 0 holds 401), and the new right leaf 49, begun under prefix 0,
+/// was rewritten under prefix 3 when its 402nd entry did not fit: the two 9-byte entries past its final payload are what
+/// prefix 0 left there (evidence/r-q7-index-prefix/long-split pages 48 and 49; r-fmt-2b/create-w-accdb IxM root 70). A leaf
+/// stores prefix 0, or the prefix it was made with, while its entries fit (R-FMT-2 gqv4).
+/// </summary>
 public sealed class IndexEntryInsert(byte[] newEntry, FormatDescriptor d) : IPageDelta
 {
     public ReadOnlySpan<byte> NewEntry => newEntry;
@@ -145,7 +195,21 @@ public sealed class IndexEntryInsert(byte[] newEntry, FormatDescriptor d) : IPag
         int to = entries.FindIndex(e => IndexKeys.Compare(e, added) > 0);
         entries.Insert(to < 0 ? entries.Count : to, added);
         int prefix = leaf.Count == 0 ? 0 : leaf.PrefixLength;
-        return IndexPages.TryWriteEntries(page, entries, prefix, d, out failure);
+        if (IndexPages.TryWriteEntries(page, entries, prefix, d, out failure))
+        {
+            return true;
+        }
+        int common = IndexPages.CommonPrefix(entries);
+        if (common <= prefix)
+        {
+            return false;
+        }
+        if (leaf.NextPeer != 0)
+        {
+            failure = $"{failure}: rewriting this inner leaf under its {common}-byte common prefix would make room, and inner leaf recompression is not recorded (r-q7-index-prefix shows it for the root and the rightmost leaf)";
+            return false;
+        }
+        return IndexPages.TryWriteEntries(page, entries, common, d, out failure);
     }
 }
 
@@ -234,21 +298,21 @@ public sealed class CommitCounterDelta(FormatDescriptor d) : IPageDelta
 /// The physical compiler of row changes (W-05/same-width-mutation, W-05/growth-structural-closure; II-07 §16,
 /// II-16 §17):
 /// <list type="bullet">
-/// <item><b>Same-width Edit</b>: fixed-width byte patches, mask-bit changes, in-leaf index entry replacements, and
-/// bulk-built index statistics-word decrements when <c>word0 &gt; 0</c>.</item>
-/// <item><b>In-page AddNew</b>: encodes a new row into the first owned FreeMap data page in storage order with room
-/// (appending a new slot after any deleted slots without reuse), inserts each physical index entry into an existing
-/// leaf whose prefix still covers it without changing a non-root leaf's first or last entry, and updates TableDef
-/// RowCount, AutoNumber and each physical index's UniqueEntryCount (DistinctCount, clamped to <c>word0</c> while
-/// <c>word0 &gt; 0</c>).</item>
+/// <item><b>Edit</b>: fixed-width byte patches, mask-bit changes, in-leaf index entry replacements, and bulk-built index
+/// statistics-word decrements when <c>word0 &gt; 0</c>; a changed variable-width field re-encodes the row, which grows
+/// in place when its page has room and otherwise overflows (<see cref="OverflowedRow"/>).</item>
+/// <item><b>AddNew</b>: encodes a new row onto the page <see cref="PlaceRow"/> chooses (a FreeMap page with room, else a
+/// new data page), inserts each physical index entry into its leaf, recompressing a full root or rightmost leaf to its common prefix and
+/// splitting where <see cref="GrownTree"/> knows ACE's shape, and updates TableDef RowCount, AutoNumber and each physical
+/// index's UniqueEntryCount (DistinctCount, clamped to <c>word0</c> while <c>word0 &gt; 0</c>).</item>
 /// <item><b>In-page Delete</b>: marks and compacts an ordinary slot on a FreeMap data page, removes each physical index
 /// entry without emptying or changing the boundaries of a non-root leaf, decrements TableDef RowCount, and decrements
 /// <c>word0</c> (clamping <c>word1 &lt;= word0</c>) for bulk-built indexes.</item>
 /// </list>
-/// Every structural or unestablished case (new data page, usage-map change, leaf split, non-root boundary change,
-/// LVAL Memo/OLE, calculated column, uncovered prefix gqv4, overflow-body delete, dropped columns, 0-fixed-width
-/// tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF, partial-Null IgnoreNulls key) is
-/// refused with a named reason.
+/// Every unestablished case (a delete from a page outside the FreeMap or of a page's last row, a split inside or before
+/// a full leaf, a non-root boundary change, a shrinking row, LVAL Memo/OLE, calculated column, overflow-body delete or
+/// rewrite, dropped columns, 0-fixed-width tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF,
+/// partial-Null IgnoreNulls key) is refused with a named reason.
 /// </summary>
 public sealed class SameWidthWriter(TableFootprints footprints)
 {
@@ -281,6 +345,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         var stored = new NativeValue[values.Count];
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         int slot = row.Slot.Start;
+        bool rewrite = false;
         for (int i = 0; i < columns.Count; i++)
         {
             ColumnDescriptor c = columns[i];
@@ -317,7 +382,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 if (!NativeValue.SameStored(stored[i], candidate))
                 {
-                    return NotWritten($"field {c.Name} is {(c.IsFixed ? "calculated" : "variable-length")}: its change resizes or rewraps the row (W-05/growth-structural-closure)");
+                    if (c.IsFixed || c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+                    {
+                        return NotWritten($"field {c.Name} is {(c.IsFixed ? "calculated" : "a long value")}: its change rewraps the row or its LVAL pages (W-05/growth-structural-closure)");
+                    }
+                    rewrite = true;
                 }
                 continue;
             }
@@ -349,10 +418,23 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 edits.Add(new PageEdit(row.Data.Page, new BitDelta(maskByte, bit, 0), PageRole.Data));
             }
         }
+        if (rewrite)
+        {
+            if (RewrittenRow(row, envelope, values, stored, seen, out string? rewriteFailure) is not { } rewritten)
+            {
+                return NotWritten(rewriteFailure!);
+            }
+            edits.Clear();
+            edits.AddRange(rewritten);
+        }
         List<LockResource> footprint = [TableFootprints.Row(root)];
         if (row.Data.Page != root.Page)
         {
             footprint.Add(TableFootprints.Row(row.Data));
+        }
+        foreach (PageEdit e in edits)
+        {
+            AddUnique(footprint, new LockResource(e.Page, e.Role == PageRole.Map ? LockPurpose.Map : LockPurpose.DataPage));
         }
         List<int> changedPhysical = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
@@ -404,12 +486,12 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
     /// <summary>
     /// Compile the insertion of a new row (<paramref name="values"/>, in <see cref="TableDefinition.Columns"/> order)
-    /// into an existing owned FreeMap data page (W-05/growth-structural-closure; II-04 §§1.2, 2, II-05 §2, II-16 §17;
-    /// R-LOCK-4 WRITE-ALLOC, evidence/r-q9-insert-landing): encodes the row, selects the first owned FreeMap page in
-    /// storage order that has room (appending a new slot after any deleted slots without reuse), inserts one entry per
-    /// physical index into an existing leaf whose stored prefix still covers it without changing a non-root leaf's first
-    /// or last entry, and updates TableDef RowCount, AutoNumber and each physical index's UniqueEntryCount (DistinctCount)
-    /// when the user key was not already present (clamped to word0 while word0 &gt; 0).
+    /// (W-05/growth-structural-closure; II-04 §§1.2, 2, 9.3, II-05 §§2, 9, II-16 §17; R-LOCK-4 WRITE-ALLOC): encodes the
+    /// row, places it (<see cref="PlaceRow"/>: the first FreeMap page with room, else a new data page), inserts one entry
+    /// per physical index into its leaf (an entry past the rightmost leaf's last extends it; a full leaf is recompressed or
+    /// split, <see cref="GrownTree"/>), and updates TableDef RowCount, AutoNumber and each physical index's
+    /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
+    /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
     public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
     {
@@ -464,47 +546,18 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten($"row encoding: {rowFailure}");
         }
-        IReadOnlyList<uint>? ownedPages = UsageMaps.Pages(_cache, _d, _table.OwnedMap, _pageCount, out TraversalFailure? ownedFailure);
-        if (ownedPages is null)
-        {
-            return NotWritten($"OwnedMap cannot be read: {ownedFailure?.Predicate}");
-        }
-        IReadOnlyList<uint>? freePagesList = UsageMaps.Pages(_cache, _d, _table.FreeMap, _pageCount, out TraversalFailure? freeFailure);
-        if (freePagesList is null)
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
+        if (freePages is null)
         {
             return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
         }
-        HashSet<uint> freePages = [.. freePagesList];
-        RowId? landing = null;
-        string? lastReject = null;
-        // R-LOCK-4 WRITE-ALLOC (evidence/r-q9-insert-landing): pick the first owned FreeMap page in ascending storage
-        // order that has room; append a new slot after any deleted slots without reusing deleted slots.
-        foreach (uint pageNumber in ownedPages)
+        var allocator = new PageAllocator(_cache, _d, Extent);
+        List<PageEdit> edits = [];
+        if (PlaceRow(rowBytes!, freePages, overflowTarget: false, allocator, seen, edits, out string? placeFailure) is not { } placed)
         {
-            if (!freePages.Contains(pageNumber))
-            {
-                continue;
-            }
-            using PagePin? pin = (seen is null ? _cache.Pin(pageNumber) : seen.Pin(pageNumber)).Pin;
-            if (pin is null || pin.Bytes.Length != _d.PageSize || pin.Bytes[_d.DataPage.Kind.Offset] != 0x01
-                || DataPages.IsLvalPage(pin.Bytes, _d) || _d.DataPage.Owner.Read(pin.Bytes) != _table.FirstPage)
-            {
-                continue;
-            }
-            byte[] copy = pin.Bytes.ToArray();
-            if (DataPages.TryAppendRow(copy, rowBytes!, _d, out byte slot, out string? appendFailure))
-            {
-                landing = new RowId(pageNumber, slot);
-                break;
-            }
-            lastReject = appendFailure;
+            return NotWritten($"the {rowBytes!.Length}-byte row: {placeFailure}");
         }
-        if (landing is not { } root)
-        {
-            return NotWritten($"no owned FreeMap data page can accept the {rowBytes!.Length}-byte row without a new data page or usage-map change ({lastReject ?? "FreeMap has no eligible page"}; W-05/growth-structural-closure)");
-        }
-
-        List<PageEdit> edits = [new PageEdit(root.Page, new DataPageAppendDelta(rowBytes!, root.Row, _d), PageRole.Data)];
+        RowId root = RowId.From(placed);
         List<LockResource> footprint = [TableFootprints.Row(root)];
         List<int> incrementUnique = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number))
@@ -559,25 +612,44 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 return NotWritten($"{index.Logical.Name}: page {targetLeaf}: {leafFailure ?? "not an index leaf"}");
             }
             byte[][] entries = IndexPages.Entries(leaf);
-            if (targetLeaf != physical.RootPage)
+            // The rightmost leaf of a two-level tree is its root's tail child, which no fence entry names: an entry past
+            // its last changes no parent (evidence/r-q7-index-prefix/long-split: keys 604..1200 extend leaf 49).
+            bool appendsRightmost = targetLeaf != physical.RootPage && leaf.NextPeer == 0 && entries.Length > 0 && IndexKeys.Compare(newEntry, entries[^1]) > 0;
+            if (targetLeaf != physical.RootPage && !appendsRightmost)
             {
                 if (entries.Length < 2 || IndexKeys.Compare(entries[0], newEntry) >= 0 || IndexKeys.Compare(newEntry, entries[^1]) >= 0)
                 {
                     return NotWritten($"{index.Logical.Name}: new entry changes non-root leaf {targetLeaf}'s first or last entry (parent fence or neighbour leaf change; W-05/growth-structural-closure)");
                 }
             }
-            byte[] leafCopy = leafPin.Bytes.ToArray();
-            if (!IndexEntryInsert.TryApply(leafCopy, newEntry, _d, out string? insertFailure))
-            {
-                return NotWritten($"{index.Logical.Name}: leaf {targetLeaf}: {insertFailure} (leaf split or prefix change; W-05/growth-structural-closure)");
-            }
             bool keyPresent = entries.Any(e => e.Length == newKey.Length + 4 && e.AsSpan(0, newKey.Length).SequenceEqual(newKey));
             if (!keyPresent)
             {
                 incrementUnique.Add(physical.Number);
             }
-            edits.Add(new PageEdit(targetLeaf, new IndexEntryInsert(newEntry, _d), PageRole.Index));
-            AddUnique(footprint, new LockResource(targetLeaf, LockPurpose.IndexLeaf));
+            byte[] leafCopy = leafPin.Bytes.ToArray();
+            if (IndexEntryInsert.TryApply(leafCopy, newEntry, _d, out string? insertFailure))
+            {
+                edits.Add(new PageEdit(targetLeaf, new IndexEntryInsert(newEntry, _d), PageRole.Index));
+                AddUnique(footprint, new LockResource(targetLeaf, LockPurpose.IndexLeaf));
+                continue;
+            }
+            int before = edits.Count;
+            if (!GrownTree(physical, targetLeaf, leaf, entries, newEntry, allocator, seen, edits, out string? growFailure))
+            {
+                return NotWritten($"{index.Logical.Name}: leaf {targetLeaf}: {insertFailure}; {growFailure} (W-05/growth-structural-closure)");
+            }
+            for (int e = before; e < edits.Count; e++)
+            {
+                AddUnique(footprint, new LockResource(edits[e].Page, edits[e].Role == PageRole.Map ? LockPurpose.Map : LockPurpose.IndexLeaf));
+            }
+        }
+        foreach (PageEdit e in edits)
+        {
+            if (e.Role is PageRole.Data or PageRole.Map)
+            {
+                AddUnique(footprint, new LockResource(e.Page, e.Role == PageRole.Map ? LockPurpose.Map : LockPurpose.DataPage));
+            }
         }
 
         using PagePin? tdefPin = (seen is null ? _cache.Pin(_table.FirstPage) : seen.Pin(_table.FirstPage)).Pin;
@@ -597,10 +669,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
     /// <summary>
     /// Compile the deletion of <paramref name="root"/> (W-05/growth-structural-closure; II-03 §§1.3, 3.3, II-04 §1.2,
-    /// II-05 §2, II-16 §17): requires <paramref name="root"/>'s data page to already be in FreeMap (avoiding a
-    /// usage-map change), marks and compacts the ordinary slot in place, removes each physical index entry without
-    /// emptying or changing the boundaries of a non-root leaf, and decrements TableDef RowCount (AutoNumber and
-    /// UniqueEntryCount stay unchanged).
+    /// II-05 §2, II-16 §17): marks and compacts the ordinary slot in place, returns its page to the FreeMap when it was
+    /// not there (evidence/r-q16-overflow room-middle), removes each physical index entry without emptying or changing
+    /// the boundaries of a non-root leaf, and decrements TableDef RowCount (AutoNumber and UniqueEntryCount stay
+    /// unchanged). The page's last live row is refused by name: ACE then frees the page.
     /// </summary>
     public CompiledChange CompileDelete(MutationSemantics semantics, RowId root, PrivateOverlay? seen = null)
     {
@@ -608,14 +680,21 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten("file page count is not supplied for delete usage-map check");
         }
-        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, _pageCount, out TraversalFailure? freeFailure);
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
         if (freePages is null)
         {
             return NotWritten($"FreeMap cannot be read: {freeFailure?.Predicate}");
         }
+        // A page outside the FreeMap rejoins it when one of its rows is deleted (evidence/r-q16-overflow/room-middle:
+        // DELETE of rows 5 and 6 puts page 56 back beside 57; noroom-middle-room-last: row 5 alone does too).
+        PageEdit? rejoin = null;
         if (!freePages.Contains(root.Page))
         {
-            return NotWritten($"data page {root.Page} is not in FreeMap: deleting a row returns it to FreeMap (usage-map change; W-05/growth-structural-closure)");
+            if (MapBit(_table.FreeMap, root.Page, seen, out string? rejoinFailure) is not { } rejoined)
+            {
+                return NotWritten($"data page {root.Page} rejoins the FreeMap: {rejoinFailure}");
+            }
+            rejoin = rejoined;
         }
         using PagePin? dataPin = (seen is null ? _cache.Pin(root.Page) : seen.Pin(root.Page)).Pin;
         if (dataPin is null)
@@ -633,6 +712,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         if (slotView.Overflow)
         {
             return NotWritten($"row {root} is an overflow row: overflow-body delete is not written (W-05/growth-structural-closure)");
+        }
+        if (LiveSlots(dataPin.Bytes) <= 1)
+        {
+            return NotWritten($"row {root} is its page's last row: ACE then frees the page (its owned and FreeMap bits, page 1; r-fmt-2b/create-w-accdb Au4 page 122, evidence/r-q16-overflow/lower-free DELETE FROM Au1), which is not written (W-05/growth-structural-closure)");
         }
         using RowView? resolved = RowResolver.Resolve(_cache, _d, root, out TraversalFailure? resolveFailure);
         if (resolved is not { } row)
@@ -660,6 +743,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
         List<PageEdit> edits = [new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d), PageRole.Data)];
         List<LockResource> footprint = [TableFootprints.Row(root)];
+        if (rejoin is { } r)
+        {
+            edits.Add(r);
+            footprint.Add(new LockResource(r.Page, LockPurpose.Map));
+        }
         List<int> removedPhysical = [];
         var stored = new NativeValue[columns.Count];
         var decoded = new bool[columns.Count];
@@ -971,6 +1059,415 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         byte[] copy = pin.Bytes.ToArray();
         return IndexEntryReplacement.TryApply(copy, oldEntry, newEntry, _d, out failure) ? null : $"leaf {at.Leaf}: {failure} (ACE's prefix rule is not known; W-05/growth-structural-closure)";
+    }
+
+    /// <summary>
+    /// The variable-width Edit of an ordinary row (W-05/growth-structural-closure; II-04 §§2, 4.2, 8): the whole row is
+    /// encoded again by the one <see cref="RowEncoder"/>, each unchanged field from its stored bytes (a long-value
+    /// definition and its opaque stamp word are kept as they are, II-04 §7.1) and each changed field from its new value,
+    /// and replaces the slot's body in place when the page has room (<see cref="DataPages.TryReplaceRow"/>). Refused by
+    /// name: a row that no longer fits its page (the overflow root and target), a shrinking row, an overflow row, and a
+    /// row recorded before a column was added (row growth past C).
+    /// </summary>
+    private List<PageEdit>? RewrittenRow(RowView row, RowEnvelope envelope, IReadOnlyList<NativeValue> values, NativeValue[] stored, PrivateOverlay? seen, out string? failure)
+    {
+        failure = null;
+        if (row.Data != row.Root)
+        {
+            failure = $"row {row.Root} is an overflow row: rewriting its target is not written (W-05/growth-structural-closure)";
+            return null;
+        }
+        if (envelope.ColumnCount != _table.MaxColumns)
+        {
+            failure = $"row {row.Root} records {envelope.ColumnCount} of {_table.MaxColumns} columns: a row grown past C is not recorded";
+            return null;
+        }
+        IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        ReadOnlySpan<byte> body = row.Body;
+        int knownFixedEnd = _table.KnownFixedEnd(envelope.ColumnCount, _d);
+        var fields = new EncodedField[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            ColumnDescriptor c = columns[i];
+            NativeValue v = values[i];
+            if (NativeValue.SameStored(stored[i], v))
+            {
+                FieldRead read = envelope.ReadField(c, knownFixedEnd);
+                fields[i] = read.Outcome switch
+                {
+                    FieldOutcome.Null => EncodedField.Null,
+                    FieldOutcome.Boolean => EncodedField.OfBoolean(read.Value),
+                    FieldOutcome.Bytes => EncodedField.OfBytes(body[read.Start..read.End].ToArray()),
+                    _ => default,
+                };
+                if (read.Outcome == FieldOutcome.Malformed)
+                {
+                    failure = $"field {c.Name} of row {row.Root}: {read.Failure}";
+                    return null;
+                }
+                continue;
+            }
+            if (c.IsMaskBoolean)
+            {
+                fields[i] = EncodedField.OfBoolean(v.Boolean);
+            }
+            else if (v.Kind == NativeKind.Null)
+            {
+                if (c.IsFixed)
+                {
+                    failure = $"fixed field {c.Name} becomes Null: the bytes ACE leaves in a Null fixed field are not observed";
+                    return null;
+                }
+                fields[i] = EncodedField.Null;
+            }
+            else if (c.IsFixed)
+            {
+                byte[] bytes = new byte[NativeTypes.FixedWidth(c.TypeCode) ?? c.Length];
+                if (!FieldEncoder.TryEncodeFixed(v, c, _d, bytes, out failure))
+                {
+                    failure = $"field {c.Name}: {failure}";
+                    return null;
+                }
+                fields[i] = EncodedField.OfBytes(bytes);
+            }
+            else
+            {
+                if (!FieldEncoder.TryEncodeVariable(v, c, _d, out byte[]? bytes, out failure))
+                {
+                    failure = $"field {c.Name}: {failure}";
+                    return null;
+                }
+                fields[i] = EncodedField.OfBytes(bytes!);
+            }
+        }
+        if (!RowEncoder.TryEncode(_table, fields, _d, out byte[]? rowBytes, out failure))
+        {
+            failure = $"row {row.Root}: {failure}";
+            return null;
+        }
+        using PagePin? pin = (seen is null ? _cache.Pin(row.Root.Page) : seen.Pin(row.Root.Page)).Pin;
+        if (pin is null)
+        {
+            failure = $"data page {row.Root.Page} could not be pinned";
+            return null;
+        }
+        byte[] copy = pin.Bytes.ToArray();
+        int growth = rowBytes!.Length - row.Slot.Length;
+        if (growth > (int)_d.DataPage.FreeCount.Read(copy))
+        {
+            return OverflowedRow(row.Root, rowBytes, copy, seen, out failure);
+        }
+        if (!DataPages.TryReplaceRow(copy, row.Root.Row, rowBytes, _d, out failure))
+        {
+            failure = $"row {row.Root}: {failure} (W-05/growth-structural-closure)";
+            return null;
+        }
+        return [new PageEdit(row.Root.Page, new DataPageReplaceRowDelta(row.Root.Row, rowBytes, _d), PageRole.Data)];
+    }
+
+    /// <summary>
+    /// A row that no longer fits its page (II-04 §8, W-05/growth-structural-closure; R-FMT-2 "Overflow / deletion, Map
+    /// ownership and growth", evidence/r-q16-overflow): the whole grown row goes where <see cref="PlaceRow"/> puts it, as
+    /// a slot marked an overflow target, and the root keeps its page and slot as a 4-byte locator of it
+    /// (<see cref="DataPages.TryMakeOverflowRoot"/>). Every r-q16 question's kept pages and r-fmt-2b's pg-grow after-hashes
+    /// are reproduced (AceImageHashTests). Recorded for DAO Database.Execute UPDATE; an Edit/Update reaches the same
+    /// compiler.
+    /// </summary>
+    private List<PageEdit>? OverflowedRow(RowId root, byte[] rowBytes, byte[] rootPage, PrivateOverlay? seen, out string? failure)
+    {
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, _table.FreeMap, Extent, out TraversalFailure? freeFailure);
+        if (freePages is null)
+        {
+            failure = $"FreeMap cannot be read: {freeFailure?.Predicate}";
+            return null;
+        }
+        List<PageEdit> edits = [];
+        if (PlaceRow(rowBytes, freePages, overflowTarget: true, new PageAllocator(_cache, _d, Extent), seen, edits, out failure) is not { } target)
+        {
+            failure = $"row {root} grows past its page: {failure}";
+            return null;
+        }
+        if (!DataPages.TryMakeOverflowRoot(rootPage, root.Row, target, _d, out failure))
+        {
+            failure = $"row {root}: {failure}";
+            return null;
+        }
+        edits.Add(new PageEdit(root.Page, new OverflowRootDelta(root.Row, target, _d), PageRole.Data));
+        return edits;
+    }
+
+    /// <summary>
+    /// The edit that makes <paramref name="page"/> a member of the usage map at <paramref name="map"/>, or no longer one
+    /// (II-04 §9.1); null with the reason when its bit cannot be located or already says so.
+    /// </summary>
+    private PageEdit? MapBit(RowLocator map, uint page, PrivateOverlay? seen, out string? failure, bool member = true)
+    {
+        using PagePin? pin = (seen is null ? _cache.Pin(map.Page) : seen.Pin(map.Page)).Pin;
+        if (pin is null)
+        {
+            failure = $"map page {map.Page} could not be pinned";
+            return null;
+        }
+        if (!MapPages.TryInlineBit(pin.Bytes, map.Row, page, _d, out int offset, out byte mask, out failure))
+        {
+            return null;
+        }
+        if (((pin.Bytes[offset] & mask) != 0) == member)
+        {
+            failure = $"page {page} is {(member ? "already" : "not")} a member of the map at {map}";
+            return null;
+        }
+        return new PageEdit(map.Page, member ? new BitDelta(offset, mask, 0) : new BitDelta(offset, 0, mask), PageRole.Map);
+    }
+
+    /// <summary>The slots of a data page that are not deleted: its live roots (II-03 §3.3).</summary>
+    private int LiveSlots(ReadOnlySpan<byte> page)
+    {
+        int count = (int)_d.DataPage.RowCount.Read(page);
+        int live = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (DataPages.CheckedSlot(page, i, _d, out _) is { Deleted: false })
+            {
+                live++;
+            }
+        }
+        return live;
+    }
+
+    /// <summary>The file's extent as this writer knows it: the extent it was opened with, or what the cache's allocations reached.</summary>
+    private ulong Extent => Math.Max(_pageCount, _cache.KnownExtentPages);
+
+    /// <summary>
+    /// Where a row goes that its page cannot hold, an inserted one or the body of one that grew (II-04 §9.3 "Add row to
+    /// owned page", "Allocate new owner page"; W-05/growth-structural-closure; R-FMT-2 "Overflow / deletion, Map ownership
+    /// and growth"): the table's FreeMap is walked in ascending page order, each ordinary data page of the table without
+    /// room for the row and its 2-byte slot (<see cref="DataPages.TryAppendRow"/>, 255 slots at most) leaves the FreeMap,
+    /// and the first page with room takes the row as a new slot after any deleted ones, no other map changing. With none,
+    /// the lowest free page of the global map, inside the file or at its end, from the one <see cref="PageAllocator"/>, is
+    /// written whole as a data page of the table (<see cref="DataPages.Initialize"/>) holding the row as slot 0, and joins
+    /// the owned map and the FreeMap. An overflow body's slot carries the deleted flag (<see cref="DataPages.MarkOverflowTarget"/>).
+    /// Evidence: for a grown row, evidence/r-q16-overflow (room-last and room-middle land on 57 and 56 with the maps kept,
+    /// noroom-middle-room-last clears 56 and lands on 57, grow-row2-plus-30 clears 57 and rewrites the freed page 122 with
+    /// zero fill, lower-free takes 110 before 122, no-free appends 123); for an insert, r-q9-insert-landing (the first page
+    /// with room, in a new slot), evidence/r-q7-index-prefix/long-split (pages 45, 46, 47, 50 and 51 filled in turn to 255
+    /// rows, KeptPageReplayTests) and the final maps of r-fmt-2b/create-w-accdb (Pg owns 55 to 57, each with 58 bytes free,
+    /// only 57 in its FreeMap; IxM's 71 and 72 at 255 rows, only 73; Nums owns 45, 46, 47, 50 and 51, only 51 in its
+    /// FreeMap). That an insert clears the pages it passes over, as
+    /// the grown row's walk does, is what those final maps show, not a recorded single step. A page of the FreeMap that
+    /// is not an ordinary data page of the table is passed over and kept.
+    /// </summary>
+    /// <summary>
+    /// The least free space a new data page is recorded to keep and join the FreeMap with: evidence/r-q16-overflow
+    /// grow-row2-plus-60's target page 122 (free word <c>8c 0b</c>, 2,956). r-cplx-rebuild/create-rb-rich-accdb's W shows a
+    /// new page that does not join (page 54 holds a 3,023-byte overflow body, 1,057 bytes free, and W's FreeMap is
+    /// empty); the bound between them is not recorded, so a new page left with less is refused by name.
+    /// </summary>
+    private const int LeastRecordedFreeOfANewFreeMapPage = 2956;
+
+    private RowLocator? PlaceRow(byte[] rowBytes, IReadOnlyList<uint> freePages, bool overflowTarget, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    {
+        failure = null;
+        foreach (uint candidate in freePages)
+        {
+            using PagePin? pin = (seen is null ? _cache.Pin(candidate) : seen.Pin(candidate)).Pin;
+            if (pin is null || pin.Bytes.Length != _d.PageSize || pin.Bytes[_d.DataPage.Kind.Offset] != 0x01
+                || DataPages.IsLvalPage(pin.Bytes, _d) || _d.DataPage.Owner.Read(pin.Bytes) != _table.FirstPage)
+            {
+                continue;
+            }
+            byte[] copy = pin.Bytes.ToArray();
+            if (DataPages.TryAppendRow(copy, rowBytes, _d, out byte slot, out _))
+            {
+                edits.Add(new PageEdit(candidate, new DataPageAppendDelta(rowBytes, slot, _d, overflowTarget), PageRole.Data));
+                return new RowLocator(candidate, slot);
+            }
+            if (MapBit(_table.FreeMap, candidate, seen, out failure, member: false) is not { } cleared)
+            {
+                failure = $"the FreeMap: {failure}";
+                return null;
+            }
+            edits.Add(cleared);
+        }
+        if (allocator.Allocate(seen, out PageEdit globalEdit, out failure) is not { } page)
+        {
+            failure = $"no FreeMap page has room and no page can be allocated: {failure}";
+            return null;
+        }
+        byte[] bytes = new byte[_d.PageSize];
+        DataPages.Initialize(bytes, _table.FirstPage, _d);
+        if (!DataPages.TryAppendRow(bytes, rowBytes, _d, out byte first, out failure))
+        {
+            failure = $"the row does not fit a new data page: {failure}";
+            return null;
+        }
+        if (overflowTarget)
+        {
+            DataPages.MarkOverflowTarget(bytes, first, _d);
+        }
+        int left = (int)_d.DataPage.FreeCount.Read(bytes);
+        if (left < LeastRecordedFreeOfANewFreeMapPage)
+        {
+            failure = $"the new page would keep {left} bytes free: whether it then joins the FreeMap is not recorded (r-q16-overflow targets with 2,956 and 3,016 free join it; r-cplx-rebuild/create-rb-rich-accdb W's page 54 with 1,057 free is not in it)";
+            return null;
+        }
+        if (MapBit(_table.OwnedMap, page, seen, out failure) is not { } owned || MapBit(_table.FreeMap, page, seen, out failure) is not { } free)
+        {
+            failure = $"the table's maps: {failure}";
+            return null;
+        }
+        edits.Add(new PageEdit(page, new WholePage(bytes), PageRole.Data));
+        edits.Add(owned);
+        edits.Add(free);
+        edits.Add(globalEdit);
+        return new RowLocator(page, first);
+    }
+
+    /// <summary>
+    /// The tree changes for an entry its target leaf cannot take (II-05 §9; W-05/growth-structural-closure, R-FMT-2 gqv4),
+    /// as far as records show ACE's shape, each new leaf from the one <see cref="PageAllocator"/> and in the index's owned
+    /// map:
+    /// <list type="bullet">
+    /// <item><b>A full root leaf and an entry past its last</b> (evidence/r-q7-index-prefix/long-split, keys 1..1200
+    /// ascending; text-split): the root's entries all move to a new left leaf under the prefix they had (3 bytes for
+    /// LONG, 6 for TEXT, the prefix the root was recompressed to) and the entry starts a new right leaf under prefix 0;
+    /// the root page becomes a level-1 intermediate page whose one entry is the left leaf's last entry and whose tail
+    /// child is the right leaf.</item>
+    /// <item><b>The rightmost leaf under such a root and an entry past its last that its stored prefix does not
+    /// cover</b> (long-split-insert-wider, k = 100000 after 1..1200): a new rightmost leaf holds the one entry with prefix
+    /// 0; the root gains the old leaf's last entry for it, and the new leaf becomes its tail child.</item>
+    /// </list>
+    /// Refused by name: an entry inside a full leaf or before its first (where ACE splits then: ix-mid-insert-at-602,
+    /// long-split-descending), a full non-root leaf, and a root whose entries no longer fit (a second level).
+    /// </summary>
+    private bool GrownTree(PhysicalIndex physical, uint leafPage, IndexPage leaf, byte[][] entries, byte[] newEntry, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    {
+        if (entries.Length == 0 || IndexKeys.Compare(newEntry, entries[^1]) <= 0)
+        {
+            failure = "the entry falls inside or before the leaf's entries: where ACE splits a leaf then is not recorded (ix-mid-insert-at-602, long-split-descending)";
+            return false;
+        }
+        bool covered = leaf.PrefixLength == 0 || newEntry.AsSpan().StartsWith(entries[0].AsSpan(0, leaf.PrefixLength));
+        if (leafPage == physical.RootPage)
+        {
+            if (!covered)
+            {
+                failure = "a root leaf whose stored prefix does not cover the entry is not recorded";
+                return false;
+            }
+            return SplitRoot(physical, leaf, entries, newEntry, allocator, seen, edits, out failure);
+        }
+        if (covered)
+        {
+            failure = "a full non-root leaf is not recorded (where ACE splits it, and the parent's new fence)";
+            return false;
+        }
+        if (leaf.NextPeer != 0)
+        {
+            failure = "the leaf is not the rightmost one";
+            return false;
+        }
+        return NewRightmostLeaf(physical, leafPage, leaf, entries, newEntry, allocator, seen, edits, out failure);
+    }
+
+    private bool SplitRoot(PhysicalIndex physical, IndexPage root, byte[][] entries, byte[] newEntry, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    {
+        int prefix = root.PrefixLength;
+        if (NewLeaf(physical, allocator, seen, edits, out failure) is not { } left || NewLeaf(physical, allocator, seen, edits, out failure) is not { } right)
+        {
+            return false;
+        }
+        byte[] leftBytes = new byte[_d.PageSize];
+        IndexPages.InitializeLeaf(leftBytes, root.Owner, _d);
+        IndexPages.SetPeers(leftBytes, 0, right, _d);
+        byte[] rightBytes = new byte[_d.PageSize];
+        IndexPages.InitializeLeaf(rightBytes, root.Owner, _d);
+        IndexPages.SetPeers(rightBytes, left, 0, _d);
+        if (!IndexPages.TryWriteEntries(leftBytes, entries, prefix, _d, out failure) || !IndexPages.TryWriteEntries(rightBytes, [newEntry], 0, _d, out failure))
+        {
+            failure = $"the split leaves: {failure}";
+            return false;
+        }
+        using PagePin? pin = (seen is null ? _cache.Pin(physical.RootPage) : seen.Pin(physical.RootPage)).Pin;
+        if (pin is null)
+        {
+            failure = $"root {physical.RootPage} could not be pinned";
+            return false;
+        }
+        byte[] rootBytes = pin.Bytes.ToArray();
+        if (!IndexPages.TryMakeInterior(rootBytes, [IndexPages.InteriorEntry(entries[^1], left)], right, 1, _d, out failure))
+        {
+            failure = $"the root: {failure}";
+            return false;
+        }
+        edits.Add(new PageEdit(left, new WholePage(leftBytes), PageRole.Index));
+        edits.Add(new PageEdit(right, new WholePage(rightBytes), PageRole.Index));
+        edits.Add(new PageEdit(physical.RootPage, new WholePage(rootBytes), PageRole.Index));
+        return true;
+    }
+
+    private bool NewRightmostLeaf(PhysicalIndex physical, uint leafPage, IndexPage leaf, byte[][] entries, byte[] newEntry, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    {
+        using PagePin? rootPin = (seen is null ? _cache.Pin(physical.RootPage) : seen.Pin(physical.RootPage)).Pin;
+        if (rootPin is null || IndexPages.Decode(rootPin.Bytes, _d, out failure) is not { } root)
+        {
+            failure = $"root {physical.RootPage} cannot be read";
+            return false;
+        }
+        if (root.IsLeaf || root.Level != 1 || root.TailChild != leafPage)
+        {
+            failure = $"the leaf's parent is not the level-1 root that names it as its tail child (a deeper tree is not recorded)";
+            return false;
+        }
+        if (NewLeaf(physical, allocator, seen, edits, out failure) is not { } added)
+        {
+            return false;
+        }
+        byte[] addedBytes = new byte[_d.PageSize];
+        IndexPages.InitializeLeaf(addedBytes, leaf.Owner, _d);
+        IndexPages.SetPeers(addedBytes, leafPage, 0, _d);
+        if (!IndexPages.TryWriteEntries(addedBytes, [newEntry], 0, _d, out failure))
+        {
+            return false;
+        }
+        byte[] rootBytes = rootPin.Bytes.ToArray();
+        if (!IndexPages.TryMakeInterior(rootBytes, [.. IndexPages.Entries(root), IndexPages.InteriorEntry(entries[^1], leafPage)], added, 1, _d, out failure))
+        {
+            failure = $"the root: {failure} (a second level is not recorded)";
+            return false;
+        }
+        edits.Add(new PageEdit(added, new WholePage(addedBytes), PageRole.Index));
+        edits.Add(new PageEdit(leafPage, new BytePatch(_d.IndexPage.NextPeer.Offset, LittleEndian(added, _d.IndexPage.NextPeer.Width)), PageRole.Index));
+        edits.Add(new PageEdit(physical.RootPage, new WholePage(rootBytes), PageRole.Index));
+        return true;
+    }
+
+    /// <summary>One new leaf page: allocated, in the index's owned map; its map edits are appended to <paramref name="edits"/>.</summary>
+    private uint? NewLeaf(PhysicalIndex physical, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    {
+        if (allocator.Allocate(seen, out PageEdit globalEdit, out failure) is not { } page)
+        {
+            failure = $"no page can be allocated: {failure}";
+            return null;
+        }
+        if (MapBit(physical.OwnedMap, page, seen, out failure) is not { } owned)
+        {
+            failure = $"the index's owned map: {failure}";
+            return null;
+        }
+        edits.Add(owned);
+        edits.Add(globalEdit);
+        return page;
+    }
+
+    private static byte[] LittleEndian(uint value, int width)
+    {
+        byte[] bytes = new byte[width];
+        for (int i = 0; i < width; i++)
+        {
+            bytes[i] = (byte)(value >> (8 * i));
+        }
+        return bytes;
     }
 
     private static CompiledChange NotWritten(string why) => new(null, why);

@@ -389,19 +389,22 @@ public sealed class CounterAndLandingTests
             Assert.Equal((6u, 6u), ReadWords(rig.File.Image.Snapshot(), f.FirstPage, "IX_N"));
         }
 
-        // 4. delete-all (all 8 rows): IX_N (8,7) -> (0,0); PK_F stays (0,8)
+        // 4. delete-all (all 8 rows; ACE: IX_N (8,7) -> (0,0), PK_F stays (0,8)): the 8th delete leaves F's only data
+        // page without a live row, and ACE then frees the page (r-fmt-2b/create-w-accdb Au4, r-q16-overflow lower-free),
+        // which is not written: that delete has no physical form, so ACE's final words are not reached here.
         using (var rig = new Rig(BulkWordsFixture))
         {
             (TableDefinition f, _) = rig.Table("F");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable("F");
-            for (int id = 1; id <= 8; id++)
+            for (int id = 1; id <= 7; id++)
             {
                 SeekRowById(cursor, f, id);
-                Assert.True(frame.Delete().Succeeded);
+                Assert.True(frame.Delete().Change?.Physical is not null);
             }
-            byte[] after = rig.File.Image.Snapshot();
-            Assert.Equal((0u, 0u), ReadWords(after, f.FirstPage, "IX_N"));
-            Assert.Equal((0u, 8u), ReadWords(after, f.FirstPage, "PK_F"));
+            SeekRowById(cursor, f, 8);
+            UpdateOutcome last = frame.Delete();
+            Assert.Null(last.Change?.Physical);
+            Assert.Contains("its page's last row", last.Change?.NotWritten);
         }
 
         // 5. insert-new (ID=9, N=80): IX_N (8,7) -> (8,8); PK_F (0,8) -> (0,9)

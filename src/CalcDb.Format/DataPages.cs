@@ -103,9 +103,10 @@ public static class DataPages
     /// <summary>
     /// Append one ordinary row body at the end of a data page's slot directory (II-03 §1.3; verified across 7,524 user
     /// data pages in 269 ACE fixtures and <c>evidence/r-q9-insert-landing</c>). A page with deleted slots appends a new
-    /// slot (<c>slot = RowCount</c>) without reusing deleted slots (R-LOCK-4 WRITE-ALLOC). Refuses pages that reach
-    /// <see cref="DataPageRules.WriterSlotLimit"/> (255 slots, which clears FreeMap), pages whose FreeCount does not
-    /// match the contiguous gap, or pages without room for <c>rowBytes.Length + 2</c> bytes.
+    /// slot (<c>slot = RowCount</c>) without reusing deleted slots (R-LOCK-4 WRITE-ALLOC). Refuses pages that already
+    /// hold <see cref="DataPageRules.WriterSlotLimit"/> slots (255: ACE fills a page to 255 rows and starts the next one,
+    /// evidence/r-q7-index-prefix/long-split pages 45–47 and 50, r-fmt-2b/create-w-accdb IxM pages 71 and 72), pages
+    /// whose FreeCount does not match the contiguous gap, or pages without room for <c>rowBytes.Length + 2</c> bytes.
     /// </summary>
     public static bool TryAppendRow(Span<byte> page, ReadOnlySpan<byte> rowBytes, FormatDescriptor d, out byte slot, out string? failure)
     {
@@ -123,9 +124,9 @@ public static class DataPages
             return false;
         }
         int count = (int)r.RowCount.Read(page);
-        if (count + 1 >= r.WriterSlotLimit)
+        if (count >= r.WriterSlotLimit)
         {
-            failure = $"data page already holds {count} slots: reaching {r.WriterSlotLimit} clears FreeMap (usage-map change)";
+            failure = $"data page already holds {count} slots, the {r.WriterSlotLimit} a writer fills a page to";
             return false;
         }
         int minStart = d.PageSize;
@@ -227,6 +228,161 @@ public static class DataPages
         }
         r.FreeCount.Write(page, (ulong)(free + length));
         return true;
+    }
+
+    /// <summary>
+    /// Replace one live ordinary slot's body in place with a body as long or longer (II-03 §§1.3, 3.3, II-04 §8: "An
+    /// in-place update is used when the existing final-row extent suffices"; W-05/growth-structural-closure): the bodies
+    /// of the later slots, which lie below it, move down by the growth, the slot keeps its end and its flags and starts
+    /// that much lower, every later slot offset moves down by the growth, and <see cref="DataPageRules.FreeCount"/> falls
+    /// by it. <see cref="DataPageRules.RowCount"/> and <see cref="DataPageRules.Stamp"/> are unchanged. Decided by
+    /// evidence/r-fmt-2b/pg-grow-row2-plus-1 and pg-grow-row2-plus-29 (a 1004-byte row of page 55 grown by 2 and by 58
+    /// bytes, the second filling the page's 58 free bytes exactly; whole-file SHA-256 equal to ACE's, AceImageHashTests).
+    /// A shorter body is refused: which bytes ACE leaves in the freed gap of a shrinking row is not recorded.
+    /// </summary>
+    public static bool TryReplaceRow(Span<byte> page, int slot, ReadOnlySpan<byte> body, FormatDescriptor d, out string? failure)
+    {
+        DataPageRules r = d.DataPage;
+        failure = null;
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        {
+            failure = "page is not an ordinary data page";
+            return false;
+        }
+        if (CheckedSlot(page, slot, d, out failure) is not { } target)
+        {
+            return false;
+        }
+        if (target.Deleted || target.Overflow)
+        {
+            failure = $"slot {slot} is {(target.Deleted ? "deleted" : "an overflow root")}: its body is not an ordinary row";
+            return false;
+        }
+        int growth = body.Length - target.Length;
+        if (growth < 0)
+        {
+            failure = $"the new body is {-growth} bytes shorter: the bytes ACE leaves in a shrinking row's freed gap are not recorded";
+            return false;
+        }
+        int count = (int)r.RowCount.Read(page);
+        int minStart = d.PageSize;
+        for (int i = 0; i < count; i++)
+        {
+            if (CheckedSlot(page, i, d, out failure) is not { } s)
+            {
+                return false;
+            }
+            minStart = s.Start;
+        }
+        int directoryEnd = r.SlotBase + (count * r.SlotEntryBytes);
+        int free = (int)r.FreeCount.Read(page);
+        if (free != minStart - directoryEnd)
+        {
+            failure = $"data page FreeCount {free} does not match free gap {minStart - directoryEnd}";
+            return false;
+        }
+        if (growth > free)
+        {
+            failure = $"the row grows by {growth} bytes and the page has {free} free";
+            return false;
+        }
+        if (growth > 0 && target.Start > minStart)
+        {
+            page.Slice(minStart, target.Start - minStart).CopyTo(page.Slice(minStart - growth, target.Start - minStart));
+        }
+        int start = target.Start - growth;
+        body.CopyTo(page.Slice(start, body.Length));
+        int at = r.SlotBase + (slot * r.SlotEntryBytes);
+        ushort flagMask = (ushort)~r.RowOffsetMask;
+        WriteSlotWord(page, at, (ushort)(((page[at] | (page[at + 1] << 8)) & flagMask) | start));
+        for (int j = slot + 1; j < count; j++)
+        {
+            int pos = r.SlotBase + (j * r.SlotEntryBytes);
+            ushort raw = (ushort)(page[pos] | (page[pos + 1] << 8));
+            WriteSlotWord(page, pos, (ushort)((raw & flagMask) | ((raw & r.RowOffsetMask) - growth)));
+        }
+        r.FreeCount.Write(page, (ulong)(free - growth));
+        return true;
+    }
+
+    /// <summary>
+    /// Turn one live ordinary slot into an overflow root (II-04 §8): its body becomes the 4-byte locator of
+    /// <paramref name="target"/> (<c>u8 row, u24LE page</c>) at the end of its old extent, the slot word gains the
+    /// overflow flag, the bodies of the later slots move up by the bytes the root gave up and their offsets with them,
+    /// and <see cref="DataPageRules.FreeCount"/> rises by those bytes; the freed gap's bytes are left as they were, as a
+    /// delete leaves them (<see cref="TryDeleteSlot"/>). The shape is ACE's in every overflow root of the retained
+    /// fixtures (r-cplx-rebuild/create-rb-rich-accdb W page 53 slot 31: a 4-byte root at 3317 under slot 30's 3321, slot
+    /// 32 at 3292, the target page 54 slot 0 with the deleted flag; r-cat-1/create-accdb-queries page 17).
+    /// </summary>
+    public static bool TryMakeOverflowRoot(Span<byte> page, int slot, RowLocator target, FormatDescriptor d, out string? failure)
+    {
+        DataPageRules r = d.DataPage;
+        failure = null;
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        {
+            failure = "page is not an ordinary data page";
+            return false;
+        }
+        if (CheckedSlot(page, slot, d, out failure) is not { } root)
+        {
+            return false;
+        }
+        if (root.Deleted || root.Overflow)
+        {
+            failure = $"slot {slot} is {(root.Deleted ? "deleted" : "already an overflow root")}";
+            return false;
+        }
+        const int locatorBytes = 4;
+        if (root.Length < locatorBytes)
+        {
+            failure = $"slot {slot} has a {root.Length}-byte extent, short of the 4-byte locator (R-FMT-2 FMT-SHORTROOT is not recorded)";
+            return false;
+        }
+        int count = (int)r.RowCount.Read(page);
+        int minStart = d.PageSize;
+        for (int i = 0; i < count; i++)
+        {
+            if (CheckedSlot(page, i, d, out failure) is not { } s)
+            {
+                return false;
+            }
+            minStart = s.Start;
+        }
+        int directoryEnd = r.SlotBase + (count * r.SlotEntryBytes);
+        int free = (int)r.FreeCount.Read(page);
+        if (free != minStart - directoryEnd)
+        {
+            failure = $"data page FreeCount {free} does not match free gap {minStart - directoryEnd}";
+            return false;
+        }
+        int released = root.Length - locatorBytes;
+        int start = root.End - locatorBytes;
+        if (released > 0 && root.Start > minStart)
+        {
+            page.Slice(minStart, root.Start - minStart).CopyTo(page.Slice(minStart + released, root.Start - minStart));
+        }
+        target.Encode(page.Slice(start, locatorBytes));
+        WriteSlotWord(page, r.SlotBase + (slot * r.SlotEntryBytes), (ushort)(r.OverflowFlag | start));
+        ushort flagMask = (ushort)~r.RowOffsetMask;
+        for (int j = slot + 1; j < count; j++)
+        {
+            int pos = r.SlotBase + (j * r.SlotEntryBytes);
+            ushort raw = (ushort)(page[pos] | (page[pos + 1] << 8));
+            WriteSlotWord(page, pos, (ushort)((raw & flagMask) | ((raw & r.RowOffsetMask) + released)));
+        }
+        r.FreeCount.Write(page, (ulong)(free + released));
+        return true;
+    }
+
+    /// <summary>
+    /// Mark the slot <paramref name="slot"/> an overflow target (II-04 §8: the deleted flag keeps a scan from yielding it;
+    /// its root reaches it): r-cplx-rebuild/create-rb-rich-accdb W page 54 slot 0.
+    /// </summary>
+    public static void MarkOverflowTarget(Span<byte> page, int slot, FormatDescriptor d)
+    {
+        DataPageRules r = d.DataPage;
+        int at = r.SlotBase + (slot * r.SlotEntryBytes);
+        WriteSlotWord(page, at, (ushort)((page[at] | (page[at + 1] << 8)) | r.DeletedFlag));
     }
 
     private static void WriteSlotWord(Span<byte> page, int offset, ushort value)

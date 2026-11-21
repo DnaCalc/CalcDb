@@ -231,6 +231,9 @@ public sealed record TableDefinition
 
     public IReadOnlyList<LogicalIndex> LogicalIndexes { get; init; } = [];
 
+    /// <summary>The owned and free usage maps of each Memo or OLE column that has them (II-04 §9.1), by physical column number.</summary>
+    public IReadOnlyList<LvalColumnMapSpec> LongValueMaps { get; init; } = [];
+
     private int[]? _fixedEnds;
 
     /// <summary>
@@ -308,6 +311,7 @@ public static class TableDefDecoder
             {
                 return null;
             }
+            List<LvalColumnMapSpec> longValueMaps = ReadLongValueMaps(stream, columns, position);
             var descriptors = raw.Select((r, ordinal) => new ColumnDescriptor
             {
                 Ordinal = ordinal,
@@ -345,6 +349,7 @@ public static class TableDefDecoder
                 Columns = descriptors,
                 PhysicalIndexes = indexes.Value.physical,
                 LogicalIndexes = indexes.Value.logical,
+                LongValueMaps = longValueMaps,
             };
         }
         catch (FormatViolationException ex)
@@ -352,6 +357,30 @@ public static class TableDefDecoder
             failure = ex.Message;
             return null;
         }
+    }
+
+    /// <summary>
+    /// The trailing long-value column usage maps after the logical index names (II-04 §9.1 "Native column-map metadata";
+    /// <see cref="TableDefEncoder"/> step 7): 10-byte records of u16LE physical column, owned-map locator and free-map
+    /// locator, up to the <c>FF FF</c> terminator, at most one per column. A stream that ends or holds more records than
+    /// columns gives the records read so far: they only add the column maps, and a column without one is refused by the
+    /// long-value writer.
+    /// </summary>
+    private static List<LvalColumnMapSpec> ReadLongValueMaps(TableDefSegmentView stream, int columns, long position)
+    {
+        List<LvalColumnMapSpec> maps = [];
+        Span<byte> record = stackalloc byte[10];
+        while (maps.Count < columns && stream.TryRead(position, record[..2]))
+        {
+            ushort physical = (ushort)(record[0] | (record[1] << 8));
+            if (physical == TableDefEncoder.StreamTerminator || !stream.TryRead(position, record))
+            {
+                break;
+            }
+            maps.Add(new LvalColumnMapSpec(physical, RowLocator.Decode(record.Slice(2, 4)), RowLocator.Decode(record.Slice(6, 4))));
+            position += record.Length;
+        }
+        return maps;
     }
 
     /// <summary><paramref name="count"/> names of u16LE byte length then UTF-16LE bytes, from <paramref name="position"/>.</summary>

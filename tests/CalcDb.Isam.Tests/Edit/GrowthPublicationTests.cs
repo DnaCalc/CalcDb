@@ -302,70 +302,20 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void AddNew_and_Delete_between_zero_and_one_row_updates_empty_root_leaf()
+    public void Deleting_the_last_row_of_a_page_is_refused_by_name()
     {
-        // Start from T1 (2 rows on 1 FreeMap data page, PK root leaf), delete both rows -> 0 rows & empty root leaf;
-        // then prepare a clean empty FreeMap page on the same empty root leaf to also test 0 -> 1 -> 0!
+        // T1 has 2 rows on one FreeMap data page. The first delete compacts the page in place; the second would leave the
+        // page without a live row, and ACE then frees the page (r-fmt-2b/create-w-accdb Au4 page 122; evidence/r-q16-overflow
+        // lower-free, DELETE FROM Au1 frees page 110), which is not written.
         using var rig = new Rig(T1Fixture);
-        (TableDefinition t1, _) = rig.Table("T1");
-        uint rootLeaf = t1.PhysicalIndexes[0].RootPage;
         (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "T1");
         cursor.MoveFirst();
-        uint dataPage = cursor.CurrentRow!.Value.Page;
-
-        // Delete both existing rows: 2 -> 1 -> 0, emptying the root leaf cleanly.
         Assert.True(frame.Delete().Succeeded);
+        AssertInspectorClean(rig.File.Image.Snapshot());
+        byte[] oneRow = rig.File.Image.Snapshot();
         cursor.MoveNext();
         Assert.False(cursor.Eof);
-        Assert.True(frame.Delete().Succeeded);
-        Assert.Equal(0, cursor.RecordCount);
-
-        byte[] emptyImage = rig.File.Image.Snapshot();
-        AssertInspectorClean(emptyImage);
-        TableDefinition t1Empty = DecodeTableDef(emptyImage, t1.FirstPage);
-        Assert.Equal(0u, t1Empty.RowCount);
-        IndexPage emptyLeaf = IndexPages.Decode(emptyImage.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out string? leafErr)!;
-        Assert.Null(leafErr);
-        Assert.Equal(0, emptyLeaf.Count);
-        Assert.Equal(0, emptyLeaf.PrefixLength);
-        Assert.Equal(D.IndexPage.EntryAreaBytes, emptyLeaf.FreeCount);
-
-        // Now reset the data page to a clean 0-slot empty FreeMap page (no deleted slots) so 0 -> 1 AddNew can run.
-        byte[] cleanEmptyData = new byte[D.PageSize];
-        cleanEmptyData[D.DataPage.Kind.Offset] = 0x01;
-        D.DataPage.Owner.Write(cleanEmptyData, t1.FirstPage);
-        D.DataPage.RowCount.Write(cleanEmptyData, 0);
-        D.DataPage.FreeCount.Write(cleanEmptyData, (ulong)(D.PageSize - D.DataPage.SlotBase));
-        WriteRawPage(rig.File, dataPage, cleanEmptyData);
-
-        // 0 -> 1 insert into empty root leaf (with Boolean, Text, Long).
-        Assert.True(frame.AddNew().Succeeded);
-        Assert.True(frame.Assign(Col(t1, "ID"), I4(7)).Succeeded);
-        Assert.True(frame.Assign(Col(t1, "N"), I4(77)).Succeeded);
-        AssignText(frame, Col(t1, "S"), "sole");
-        Assert.True(frame.Assign(Col(t1, "B"), Bool(true)).Succeeded);
-        UpdateOutcome ins = frame.Update();
-        Assert.True(ins.Succeeded, ins.ToString());
-        Assert.Equal(1, cursor.RecordCount);
-
-        byte[] oneRowImage = rig.File.Image.Snapshot();
-        AssertInspectorClean(oneRowImage);
-        IndexPage oneLeaf = IndexPages.Decode(oneRowImage.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out _)!;
-        Assert.Equal(1, oneLeaf.Count);
-
-        // Verify MoveFirst recovers from empty state and reads the inserted row, then Delete back to 0.
-        cursor.MoveFirst();
-        Assert.False(cursor.Bof);
-        Assert.False(cursor.Eof);
-        Assert.Equal(7L, cursor.Read(Col(t1, "ID")).Value.Integer);
-        Assert.True(cursor.Read(Col(t1, "B")).Value.Boolean);
-        Assert.Equal("sole", cursor.Read(Col(t1, "S")).Value.Text);
-
-        Assert.True(frame.Delete().Succeeded);
-        Assert.Equal(0, cursor.RecordCount);
-        byte[] backToEmpty = rig.File.Image.Snapshot();
-        AssertInspectorClean(backToEmpty);
-        Assert.Equal(0, IndexPages.Decode(backToEmpty.AsSpan((int)(rootLeaf * D.PageSize), D.PageSize), D, out _)!.Count);
+        AssertNotWritten(frame.Delete(), rig.A, "its page's last row", oneRow, rig.File.Image);
     }
 
     [Fact]
@@ -557,6 +507,27 @@ public sealed class GrowthPublicationTests
         Assert.Equal(rig.Before, rig.File.Image.Snapshot());
     }
 
+    /// <summary>The insert took a page of its own: slot 0 of a data page of the table in its owned map and FreeMap, which <paramref name="previousFreePage"/> left.</summary>
+    private static void AssertNewDataPage(Rig rig, TableDefinition table, UpdateOutcome outcome, uint? previousFreePage)
+    {
+        Assert.True(outcome.Succeeded, outcome.ToString());
+        Assert.True(outcome.Change?.Physical is not null, outcome.Change?.NotWritten);
+        RowId row = outcome.Change!.Inserted!.Value;
+        Assert.Equal((byte)0, row.Row);
+        Assert.NotEqual(previousFreePage, row.Page);
+        byte[] after = rig.File.Image.Snapshot();
+        ulong pages = (ulong)after.Length / (ulong)D.PageSize;
+        Assert.Contains(row.Page, UsageMaps.Pages(rig.File.Cache, D, table.OwnedMap, pages, out _)!);
+        IReadOnlyList<uint> free = UsageMaps.Pages(rig.File.Cache, D, table.FreeMap, pages, out _)!;
+        Assert.Contains(row.Page, free);
+        if (previousFreePage is { } full)
+        {
+            Assert.DoesNotContain(full, free);
+        }
+        Assert.Equal(table.FirstPage, (uint)D.DataPage.Owner.Read(after.AsSpan((int)(row.Page * D.PageSize), D.PageSize)));
+        AssertInspectorClean(after);
+    }
+
     private static void AssertNotWritten(UpdateOutcome outcome, TransactionCoordinator ws, string expectedReason, byte[] expectedImage, MemoryDatabaseFile file)
     {
         Assert.True(outcome.Succeeded, outcome.ToString());
@@ -567,7 +538,7 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void Refuses_new_data_page_required_on_empty_table_and_full_data_page()
+    public void A_new_data_page_is_written_for_an_empty_table_and_past_a_full_page()
     {
         // 1. T0 in T1Fixture has 0 owned pages -> new data page required.
         using (var rig = new Rig(T1Fixture))
@@ -578,7 +549,8 @@ public sealed class GrowthPublicationTests
             Assert.True(frame.Assign(Col(t0, "ID"), I4(1)).Succeeded);
             Assert.True(frame.Assign(Col(t0, "B"), Bool(false)).Succeeded);
             UpdateOutcome out0 = frame.Update();
-            AssertNotWritten(out0, rig.A, "new data page", rig.Before, rig.File.Image);
+            // evidence/r-q16-overflow/no-free (INSERT INTO Au4, whose FreeMap is empty): the row takes a page of its own.
+            AssertNewDataPage(rig, t0, out0, previousFreePage: null);
         }
 
         // 2. Full data page: shrink G's data page free gap to 4 bytes so any row overflows it.
@@ -601,14 +573,15 @@ public sealed class GrowthPublicationTests
             AssignText(frame, Col(g, "T"), "full");
             AssignText(frame, Col(g, "U"), "u-full");
             UpdateOutcome fullOut = frame.Update();
-            AssertNotWritten(fullOut, rig.A, "free bytes", snapshotBefore, rig.File.Image);
+            // The FreeMap walk clears the full page and the row takes a new one (PlaceRow; r-q16-overflow, r-q7 long-split).
+            AssertNewDataPage(rig, g, fullOut, previousFreePage: dp);
         }
     }
 
     [Fact]
-    public void Refuses_usage_map_change_on_non_FreeMap_delete_and_appends_new_slot_past_deleted_slots_on_insert()
+    public void A_delete_returns_its_page_to_the_FreeMap_and_an_insert_appends_a_new_slot_past_deleted_slots()
     {
-        // 1. Delete on a page NOT in FreeMap (PagesFixture table M has full data pages absent from FreeMap).
+        // 1. Delete on a page NOT in FreeMap (PagesFixture table M has full data pages absent from FreeMap): it rejoins it.
         using (var rig = new Rig(PagesFixture))
         {
             (TableDefinition m, _) = rig.Table("M");
@@ -624,8 +597,13 @@ public sealed class GrowthPublicationTests
                 }
             }
             Assert.True(foundNonFree, "expected a row of M on a page outside FreeMap");
+            uint page = cursor.CurrentRow!.Value.Page;
             UpdateOutcome del = frame.Delete();
-            AssertNotWritten(del, rig.A, "not in FreeMap", rig.Before, rig.File.Image);
+            // evidence/r-q16-overflow/room-middle: the page returns to the FreeMap.
+            Assert.True(del.Succeeded, del.ToString());
+            Assert.NotNull(del.Change?.Physical);
+            Assert.Contains(page, UsageMaps.Pages(rig.File.Cache, D, m.FreeMap, rig.File.Image.PageCount, out _)!);
+            AssertInspectorClean(rig.File.Image.Snapshot());
         }
 
         // 2. Deleted-slot page on insert (R-LOCK-4 WRITE-ALLOC, evidence/r-q9-insert-landing): Au2 in WAccdbFixture has
@@ -651,8 +629,45 @@ public sealed class GrowthPublicationTests
         }
     }
 
+    /// <summary>
+    /// A full leaf whose entries share a prefix it does not store: with no next peer (the root or the rightmost leaf,
+    /// evidence/r-q7-index-prefix/long-split) the insert rewrites it under the common prefix; an inner leaf (a next peer)
+    /// is refused, naming the open case, since no record shows ACE recompressing one.
+    /// </summary>
+    [Theory]
+    [InlineData(0u, true)]
+    [InlineData(77u, false)]
+    public void A_full_leaf_is_recompressed_only_without_a_next_peer(uint nextPeer, bool recompressed)
+    {
+        byte[] Entry(int i)
+        {
+            byte[] e = new byte[9];
+            e[0] = 0x7F;
+            BinaryPrimitives.WriteUInt32BigEndian(e.AsSpan(1, 4), (uint)(i ^ int.MinValue));
+            e[7] = 0x33;
+            e[8] = (byte)i;
+            return e;
+        }
+        byte[] leaf = new byte[D.PageSize];
+        IndexPages.InitializeLeaf(leaf, 42, D);
+        IndexPages.SetPeers(leaf, 0, nextPeer, D);
+        List<byte[]> packed = [.. Enumerable.Range(1, D.IndexPage.EntryAreaBytes / 9).Select(Entry)];
+        Assert.True(IndexPages.TryWriteEntries(leaf, packed, prefixLength: 0, D, out string? err), err);
+        var insert = new IndexEntryInsert(Entry(packed.Count + 1), D);
+        if (recompressed)
+        {
+            insert.Apply(leaf);
+            Assert.Equal(IndexPages.CommonPrefix([.. packed, Entry(packed.Count + 1)]), IndexPages.Decode(leaf, D, out _)!.PrefixLength);
+        }
+        else
+        {
+            FormatViolationException refused = Assert.Throws<FormatViolationException>(() => insert.Apply(leaf));
+            Assert.Contains("inner leaf recompression", refused.Message);
+        }
+    }
+
     [Fact]
-    public void Refuses_non_root_leaf_boundary_change_leaf_split_and_uncovered_prefix()
+    public void Refuses_non_root_leaf_boundary_change_and_uncovered_prefix_and_recompresses_a_full_root()
     {
         // 1. Non-root leaf boundary change on multi-leaf index IX_K (PagesFixture table DL).
         using (var rig = new Rig(PagesFixture))
@@ -694,13 +709,21 @@ public sealed class GrowthPublicationTests
             UpdateOutcome del = frame.Delete();
             AssertNotWritten(del, rig.A, "first or last entry", rig.Before, rig.File.Image);
 
-            // Insert larger than the last leaf's last entry -> changes non-root leaf's last entry.
+        }
+
+        // An insert past the last leaf's last entry, on a fresh file (a refused change above stays pending and holds its page).
+        using (var rig = new Rig(PagesFixture))
+        {
+            (TableDefinition dl, _) = rig.Table("DL");
             (EditFrame frame2, _) = rig.OpenTable(rig.B, "DL");
             Assert.True(frame2.AddNew().Succeeded);
             Assert.True(frame2.Assign(Col(dl, "ID"), I4(9999999)).Succeeded);
             AssignText(frame2, Col(dl, "K"), new string('z', 60));
             UpdateOutcome ins = frame2.Update();
-            AssertNotWritten(ins, rig.B, "first or last entry", rig.Before, rig.File.Image);
+            // An entry past the rightmost leaf's last changes no fence (r-q7-index-prefix long-split, long-split-insert-wider).
+            Assert.True(ins.Succeeded, ins.ToString());
+            Assert.True(ins.Change?.Physical is not null, ins.Change?.NotWritten);
+            AssertInspectorClean(rig.File.Image.Snapshot());
         }
 
         // 2. Leaf split: pack PK_R's root leaf near capacity so one more entry does not fit.
@@ -721,14 +744,20 @@ public sealed class GrowthPublicationTests
             }
             Assert.True(IndexPages.TryWriteEntries(leaf, packed, prefixLength: 0, D, out string? wErr), wErr);
             WriteRawPage(rig.File, leafPage, leaf);
-            byte[] beforeSplit = rig.File.Image.Snapshot();
 
             (EditFrame frame, _) = rig.OpenTable(rig.A, "R");
             Assert.True(frame.AddNew().Succeeded);
             Assert.True(frame.Assign(Col(r, "ID"), I4(1000)).Succeeded);
             AssignText(frame, Col(r, "V"), "split");
             UpdateOutcome splitOut = frame.Update();
-            AssertNotWritten(splitOut, rig.A, "leaf split", beforeSplit, rig.File.Image);
+            // A full root leaf is rewritten under its entries' common prefix when that makes the entry fit (r-q7 long-split).
+            Assert.True(splitOut.Succeeded, splitOut.ToString());
+            Assert.True(splitOut.Change?.Physical is not null, splitOut.Change?.NotWritten);
+            using (PagePin rewritten = rig.File.Cache.Pin(leafPage).Pin!)
+            {
+                Assert.True(IndexPages.Decode(rewritten.Bytes, D, out _)!.PrefixLength > 0);
+            }
+            AssertInspectorClean(rig.File.Image.Snapshot());
         }
 
         // 3. Uncovered prefix (gqv4): set PK_R's root leaf stored prefix to 2 bytes (0x7F, 0x80) for positive IDs,

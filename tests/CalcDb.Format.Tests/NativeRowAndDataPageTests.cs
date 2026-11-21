@@ -294,16 +294,16 @@ public sealed class NativeRowAndDataPageTests
         SlotView s2 = DataPages.CheckedSlot(deletedPage, 2, D, out _)!.Value;
         Assert.Equal(row1, deletedPage.AsSpan(s2.Start, s2.Length).ToArray());
 
-        // WriterSlotLimit (255) refusal: 254 rows succeed, 255th refuses (would clear FreeMap)
+        // WriterSlotLimit (255): ACE fills a page to 255 rows (r-q7-index-prefix/long-split pages 45-47); the 256th refuses
         byte[] dense = EmptyDataPage(owner: 50);
         byte[] tiny = [1, 2, 3, 4];
-        for (int i = 0; i < D.DataPage.WriterSlotLimit - 1; i++)
+        for (int i = 0; i < D.DataPage.WriterSlotLimit; i++)
         {
             Assert.True(DataPages.TryAppendRow(dense, tiny, D, out byte slot, out err), $"slot {i}: {err}");
             Assert.Equal((byte)i, slot);
         }
         Assert.False(DataPages.TryAppendRow(dense, tiny, D, out _, out string? limitErr));
-        Assert.Contains("FreeMap", limitErr);
+        Assert.Contains("255", limitErr);
     }
 
     [Fact]

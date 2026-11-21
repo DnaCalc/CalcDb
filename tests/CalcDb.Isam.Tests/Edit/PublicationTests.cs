@@ -274,12 +274,13 @@ public sealed class PublicationTests
     [Fact]
     public void A_change_the_slice_does_not_write_stays_pending_and_the_commit_is_named()
     {
-        // The boundary of the slice: a variable-length change has no physical form; nothing is written.
+        // The boundary of the slice: a row that shrinks has no physical form (the bytes ACE leaves in its freed gap are not
+        // recorded); nothing is written.
         using var rig = new Rig();
         EditFrame frame = rig.On(rig.A, "G", 1);
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.Edit().Succeeded);
-        nint bstr = Bstrs.FromUnits(3, "new", static (span, t) => t.AsSpan().CopyTo(span));
+        nint bstr = Bstrs.FromUnits(1, "n", static (span, t) => t.AsSpan().CopyTo(span));
         try
         {
             Assert.True(frame.Assign(Column(frame, "T"), new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr }).Succeeded);
@@ -291,7 +292,7 @@ public sealed class PublicationTests
         UpdateOutcome update = frame.Update();
         Assert.True(update.Succeeded);
         Assert.Null(update.Change!.Physical);
-        Assert.Contains("variable-length", update.Change.NotWritten, StringComparison.Ordinal);
+        Assert.Contains("shorter", update.Change.NotWritten, StringComparison.Ordinal);
         ResolutionOutcome commit = rig.A.CommitTrans();
         Assert.Equal(MutationOpen.Publication, commit.Open);
         Assert.Single(rig.A.PendingPublication);

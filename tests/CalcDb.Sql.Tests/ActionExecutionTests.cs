@@ -189,11 +189,13 @@ public sealed class ActionExecutionTests
         Assert.Equal(1, constIns.RecordsAffected);
         Assert.Equal("y", actDb.ReadSelect("SELECT S FROM T WHERE ID = 602")[0][0].Text);
 
-        // Empty table U in DefSqlAccdb needs a new data page (W-05/growth-structural-closure): stops honestly with NotModelled.Edit.Publication.
+        // Empty table U in DefSqlAccdb takes a new data page (W-05/growth-structural-closure stretch 3, the r-q16-overflow
+        // page rule): the insert is written.
         using var defDb = new WritableSqlFixture(DefSqlAccdb);
         ActionOutcome emptyTarget = ActionExecutor.Execute("INSERT INTO U (ID, K) SELECT 602, 'y' WITH OWNERACCESS OPTION;", defDb, options: 128);
-        Assert.False(emptyTarget.Succeeded);
-        Assert.Equal("NotModelled.Edit.Publication", emptyTarget.Failure!.NotModelled);
+        Assert.True(emptyTarget.Succeeded, emptyTarget.Failure?.ToString());
+        Assert.Equal(1, emptyTarget.RecordsAffected);
+        Assert.Equal("y", defDb.ReadSelect("SELECT K FROM U WHERE ID = 602")[0][0].Text);
     }
 
     [Fact]
@@ -344,10 +346,12 @@ public sealed class ActionExecutionTests
         Assert.True(d2.Succeeded, d2.Failure?.ToString());
         Assert.Equal(2, d2.RecordsAffected);
 
+        // Deleting a page's last row: ACE frees the page (r-fmt-2b Au4 page 122, r-q16-overflow lower-free), which
+        // W-05/growth-structural-closure refuses by name until it is written; the statement leaves the row in place.
         ActionOutcome d3 = ActionExecutor.Execute("DELETE ID FROM T", db, options: 128);
-        Assert.True(d3.Succeeded, d3.Failure?.ToString());
-        Assert.Equal(1, d3.RecordsAffected);
-        Assert.Empty(db.ReadSelect("SELECT ID FROM T"));
+        Assert.False(d3.Succeeded);
+        Assert.Equal("NotModelled.Edit.Publication", d3.Failure!.NotModelled);
+        Assert.Single(db.ReadSelect("SELECT ID FROM T"));
     }
 
     // ---- Saved Action QueryDef & Parameters ----------------------------------------------------------------------------

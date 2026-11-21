@@ -267,6 +267,61 @@ public static class IndexPages
     }
 
     /// <summary>
+    /// Make <paramref name="page"/> an intermediate page in place (II-05 §§2, 9.3; W-05/growth-structural-closure): kind
+    /// <see cref="IndexPageRules.InteriorKind"/>, the given level and tail child, no peers, and
+    /// <paramref name="entries"/> (each a leaf entry followed by its child page, big-endian) under prefix 0, the prefix a
+    /// root stores (R-FMT-2 gqv4). The owner and the area bytes past the new payload are kept, as
+    /// <see cref="TryWriteEntries"/> keeps them. ACE's root after its first split is such a page: level 1, one entry
+    /// (the left leaf's last entry and the left leaf) and the right leaf as tail child
+    /// (evidence/r-q7-index-prefix/long-split and text-split page 44).
+    /// </summary>
+    public static bool TryMakeInterior(Span<byte> page, IReadOnlyList<byte[]> entries, uint tailChild, int level, FormatDescriptor d, out string? failure)
+    {
+        IndexPageRules r = d.IndexPage;
+        if (page.Length != d.PageSize)
+        {
+            failure = "not a full page";
+            return false;
+        }
+        if (!TryWriteEntries(page, entries, 0, d, out failure))
+        {
+            return false;
+        }
+        d.DataPage.Kind.Write(page, r.InteriorKind);
+        r.Level.Write(page, (ulong)level);
+        r.TailChild.Write(page, tailChild);
+        r.PreviousPeer.Write(page, 0);
+        r.NextPeer.Write(page, 0);
+        return true;
+    }
+
+    /// <summary>The leaf entry <paramref name="entry"/> followed by <paramref name="child"/>, big-endian: an intermediate entry (II-05 §3.1).</summary>
+    public static byte[] InteriorEntry(ReadOnlySpan<byte> entry, uint child) =>
+        [.. entry, (byte)(child >> 24), (byte)(child >> 16), (byte)(child >> 8), (byte)child];
+
+    /// <summary>Set a leaf's previous and next peers (II-05 §2).</summary>
+    public static void SetPeers(Span<byte> page, uint previous, uint next, FormatDescriptor d)
+    {
+        d.IndexPage.PreviousPeer.Write(page, previous);
+        d.IndexPage.NextPeer.Write(page, next);
+    }
+
+    /// <summary>The length of the longest prefix all of <paramref name="entries"/> share.</summary>
+    public static int CommonPrefix(IReadOnlyList<byte[]> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return 0;
+        }
+        int length = entries[0].Length;
+        for (int i = 1; i < entries.Count && length > 0; i++)
+        {
+            length = Math.Min(length, entries[0].AsSpan(0, length).CommonPrefixLength(entries[i]));
+        }
+        return length;
+    }
+
+    /// <summary>
     /// Initialize a blank index leaf page (II-05 §2): kind <c>0x04</c>, subtype <c>0x01</c>, full free count
     /// (<see cref="IndexPageRules.EntryAreaBytes"/>), owning TableDef page, zero peers/tail/prefix/level, and empty
     /// boundary bitmap.
