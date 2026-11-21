@@ -198,4 +198,34 @@ public sealed class WindowsFileTests : IDisposable
         Assert.False(denied.Succeeded);
         Assert.NotNull(denied.NativeError);
     }
+
+    [Fact]
+    public void CreateFresh_creates_exclusively_and_refuses_existing_destination_untouched()
+    {
+        // T-LOCK-67 / R-LOCK-1 EX-CREATE: CREATE_NEW refuses an existing file (Win32 80) without touching its bytes,
+        // and a freshly created Exclusive handle denies concurrent opens.
+        string existing = NewFile("existing.accdb", 128);
+        byte[] before = File.ReadAllBytes(existing);
+
+        OpenResult collision = WindowsFile.CreateFresh(existing, Admission.Exclusive);
+        Assert.False(collision.Succeeded);
+        Assert.True(collision.AlreadyExists);
+        Assert.Equal(before, File.ReadAllBytes(existing));
+
+        string fresh = Path.Combine(_dir, "fresh.accdb");
+        OpenResult created = WindowsFile.CreateFresh(fresh, Admission.Exclusive);
+        Assert.True(created.Succeeded, $"CreateFresh failed with {created.NativeError}");
+        using (WindowsFile handle = created.File!)
+        {
+            Assert.Equal(Admission.Exclusive, handle.Admission);
+            OpenResult concurrentReader = WindowsFile.Open(fresh, Admission.ReaderOnly);
+            Assert.False(concurrentReader.Succeeded);
+            Assert.True(concurrentReader.SharingViolation);
+        }
+
+        string missingDir = Path.Combine(_dir, "no-such-dir", "child.accdb");
+        OpenResult badPath = WindowsFile.CreateFresh(missingDir, Admission.Exclusive);
+        Assert.False(badPath.Succeeded);
+        Assert.True(badPath.PathNotFound);
+    }
 }

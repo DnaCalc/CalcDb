@@ -102,10 +102,10 @@ public static class HeaderMask
 {
     private static readonly byte[] Key = [0xC7, 0xDA, 0x39, 0x6B];
 
-    /// <summary>The first <paramref name="length"/> mask bytes.</summary>
-    public static byte[] Bytes(int length)
+    /// <summary>Generate an RC4 keystream of <paramref name="output"/>.Length bytes from <paramref name="key"/>.</summary>
+    public static void Rc4(ReadOnlySpan<byte> key, Span<byte> output)
     {
-        var s = new byte[256];
+        Span<byte> s = stackalloc byte[256];
         for (int i = 0; i < 256; i++)
         {
             s[i] = (byte)i;
@@ -113,33 +113,46 @@ public static class HeaderMask
         int j = 0;
         for (int i = 0; i < 256; i++)
         {
-            j = (j + s[i] + Key[i % Key.Length]) & 0xFF;
+            j = (j + s[i] + key[i % key.Length]) & 0xFF;
             (s[i], s[j]) = (s[j], s[i]);
         }
-        var output = new byte[length];
         int x = 0, y = 0;
-        for (int n = 0; n < length; n++)
+        for (int n = 0; n < output.Length; n++)
         {
             x = (x + 1) & 0xFF;
             y = (y + s[x]) & 0xFF;
             (s[x], s[y]) = (s[y], s[x]);
             output[n] = s[(s[x] + s[y]) & 0xFF];
         }
+    }
+
+    /// <summary>The first <paramref name="length"/> mask bytes.</summary>
+    public static byte[] Bytes(int length)
+    {
+        var output = new byte[length];
+        Rc4(Key, output);
         return output;
     }
 
     /// <summary>A decoded copy of the header page: stored bytes in, decoded bytes out, the input untouched.</summary>
-    public static byte[] Decode(ReadOnlySpan<byte> storedHeader, FormatDescriptor? descriptor = null)
+    public static byte[] Decode(ReadOnlySpan<byte> storedHeader, FormatDescriptor? descriptor = null) =>
+        XorMask(storedHeader, descriptor);
+
+    /// <summary>A stored copy of a decoded header page: decoded bytes in, masked bytes out, the input untouched.</summary>
+    public static byte[] Encode(ReadOnlySpan<byte> decodedHeader, FormatDescriptor? descriptor = null) =>
+        XorMask(decodedHeader, descriptor);
+
+    private static byte[] XorMask(ReadOnlySpan<byte> header, FormatDescriptor? descriptor)
     {
         HeaderRules h = (descriptor ?? FormatDescriptor.Jet4Family).Header;
         int start = h.MaskStart;
-        byte[] decoded = storedHeader.ToArray();
+        byte[] result = header.ToArray();
         byte[] mask = Bytes(h.MaskLength);
-        for (int i = 0; i < mask.Length && start + i < decoded.Length; i++)
+        for (int i = 0; i < mask.Length && start + i < result.Length; i++)
         {
-            decoded[start + i] ^= mask[i];
+            result[start + i] ^= mask[i];
         }
-        return decoded;
+        return result;
     }
 }
 

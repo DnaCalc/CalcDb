@@ -1,6 +1,9 @@
+using System.Globalization;
+using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
@@ -113,6 +116,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
         .Method("SetOption", (self, args) => ((DBEngineObject)self).SetOption(args[0], args[1]))
         .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args))
+        .Method("CreateDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.CreateDatabase(args))
         // DBEngine's transaction members are the default Workspace's: the first touch creates it (DAO-BOOT) and its
         // failures come from DAO.Workspace (r-dao-1-err-1/boot-first-begintrans: eng.Rollback 3034 "DAO.Workspace").
         .Method("BeginTrans", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.BeginTrans())
@@ -136,14 +140,20 @@ internal sealed unsafe class DBEngineObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
-    /// <summary>An argument-count or conversion failure of DBEngine's transaction members is not recorded (the Workspace's is).</summary>
-    protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback"
-        ? Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.{member.Name} with a wrong argument count (recorded on Workspace only)")
-        : null;
+    /// <summary>An argument-count or conversion failure of DBEngine's transaction members is not recorded (the Workspace's is); CreateDatabase reports 3001/3421 from DAO.DbEngine with IErrorInfo (r-wire/opt-createdatabase).</summary>
+    protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name switch
+    {
+        "BeginTrans" or "CommitTrans" or "Rollback" => Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.{member.Name} with a wrong argument count (recorded on Workspace only)"),
+        "CreateDatabase" => InvalidArgumentCount(),
+        _ => null,
+    };
 
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => member.Name == "CommitTrans"
-        ? Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)")
-        : null;
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => member.Name switch
+    {
+        "CommitTrans" => Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)"),
+        "CreateDatabase" => missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        _ => null,
+    };
 
     private WorkspacesObject WorkspacesCollection => _workspaces ??= new WorkspacesObject(Engine);
 
@@ -280,6 +290,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         .Get("Groups", (self, args) => Live(self, w => Object(w._groups ??= new EmptyCollection(DaoTypes.Groups, "DAO.Groups", w))))
         .Get("Properties", (self, args) => Live(self, w => Object(w._properties ??= new PropertiesObject(w, BuiltInProperties.Workspace))))
         .Method("OpenDatabase", static (self, args) => (WorkspaceObject)self is { Invalid: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((WorkspaceObject)self).OpenDatabase(args))
+        .Method("CreateDatabase", static (self, args) => (WorkspaceObject)self is { Invalid: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((WorkspaceObject)self).CreateDatabase(args))
         .Method("BeginTrans", (self, args) => Live(self, w => w.BeginTrans()))
         .Method("CommitTrans", (self, args) => { nint options = args.Length > 0 ? args[0] : 0; return Live(self, w => w.CommitTrans(options)); })
         .Method("Rollback", (self, args) => Live(self, w => w.Rollback()))
@@ -410,6 +421,169 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             database.Release(); // the result holds it; the Workspace keeps it in its list until Close
         }
         return result;
+    }
+
+    /// <summary>
+    /// CreateDatabase(Name, Locale/Connect, Option): the shared operation of DBEngine and Workspace (source
+    /// DAO.Workspace; R-CAT-1 CAT-NEW, R-DAO-1 DAO-CREATE, R-LOCK-1 EX-CREATE, W-07/new-database-image).
+    /// Supports ACCDB 2007 (<c>dbVersion120 = 128</c> or omitted) with <c>dbLangGeneral</c> (<c>;LANGID=0x0409</c>,
+    /// optional <c>CP=1252</c>, optional <c>COUNTRY=0</c>). Recorded ACE errors return ACE's exact error numbers and
+    /// texts; valid-in-ACE-but-out-of-stretch forms return named <c>NotModelled</c> refusals.
+    /// </summary>
+    public CallResult CreateDatabase(ReadOnlySpan<nint> args)
+    {
+        // R-CAT-1 CAT-NEW (r-cat-1/create-accdb-in-transaction): 3246, no file created.
+        if (Transactions.Depth > 0)
+        {
+            return Fail(3246, DaoErrors.NotSupportedInTransactions);
+        }
+
+        string? name = args.Length > 0 ? ReadBstrOrEmpty(args[0]) : null;
+        if (name is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateDatabase with a non-text Name argument"));
+        }
+
+        string? locale = args.Length > 1 ? ReadBstrOrEmpty(args[1]) : null;
+        if (locale is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateDatabase with a non-text Locale argument"));
+        }
+
+        if (ValidateCreateLocale(locale) is { } localeFailure)
+        {
+            return localeFailure;
+        }
+
+        if (ValidateCreateOption(args.Length > 2 ? args[2] : 0) is { } optionFailure)
+        {
+            return optionFailure;
+        }
+
+        CallResult result = DatabaseObject.Create(this, name, NewDatabaseRequest.AccdbGeneral(), out DatabaseObject? database);
+        if (database is not null)
+        {
+            _databases.Add(database);
+            result = Object(database);
+            database.Release(); // the result holds it; the Workspace keeps it in its list until Close
+        }
+        return result;
+    }
+
+    private static string? ReadBstrOrEmpty(nint arg)
+    {
+        if (Args.Text(arg) is { } text)
+        {
+            return text;
+        }
+        return arg != 0 && Args.TypeOf(arg) == VarType.Bstr ? "" : null;
+    }
+
+    private CallResult? ValidateCreateLocale(string locale)
+    {
+        // r-sort-3/create-locale-spellings: "" -> 3001, missing leading ';' -> 3170.
+        if (locale.Length == 0)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (locale[0] != ';')
+        {
+            return Fail(3170, DaoErrors.CouldNotFindInstallableIsam);
+        }
+
+        int? langId = null;
+        int? codePage = null;
+        int? country = null;
+
+        foreach (string token in locale.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int eq = token.IndexOf('=');
+            if (eq <= 0)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with unrecognized locale token '{token}'"));
+            }
+            string key = token[..eq].Trim();
+            string value = token[(eq + 1)..].Trim();
+            if (key.Equals("PWD", StringComparison.OrdinalIgnoreCase))
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DatabasePassword", "CreateDatabase with a database password (;pwd=)"));
+            }
+            if (key.Equals("LANGID", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with unparsed LANGID '{value}'"));
+                }
+                langId = parsed;
+            }
+            else if (key.Equals("CP", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with unparsed CP '{value}'"));
+                }
+                codePage = parsed;
+            }
+            else if (key.Equals("COUNTRY", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with unparsed COUNTRY '{value}'"));
+                }
+                country = parsed;
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with locale parameter '{key}'"));
+            }
+        }
+
+        if (langId == 0)
+        {
+            // r-sort-3/create-locale-spellings: ;LANGID=0x0000;CP=1252;COUNTRY=0 -> 3228.
+            return Fail(3228, DaoErrors.CollatingSequenceNotSupported);
+        }
+        if (langId == 0x0409 && (codePage is null or 1252) && (country is null or 0))
+        {
+            return null;
+        }
+        return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with locale '{locale}': only dbLangGeneral (;LANGID=0x0409, optional CP=1252, optional COUNTRY=0) is implemented"));
+    }
+
+    private static bool TryParseLocaleNumber(string value, out int number)
+    {
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(value.AsSpan(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out number);
+        }
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number);
+    }
+
+    private CallResult? ValidateCreateOption(nint optionArg)
+    {
+        if (optionArg == 0)
+        {
+            return null; // Omitted or Missing -> dbVersion120 (Ace2007)
+        }
+        VarType vt = Args.TypeOf(optionArg) & ~VarType.ByRef;
+        if (vt == VarType.Empty)
+        {
+            return null; // r-wire/opt-createdatabase (o2): VT_EMPTY -> default dbVersion120 (Ace2007)
+        }
+        if (vt == VarType.Null)
+        {
+            return Fail(3421, DaoErrors.ConversionError); // r-wire/opt-createdatabase (o3): VT_NULL -> 3421 DAO.Workspace
+        }
+        int? option = Args.Int32(optionArg, omitted: 128);
+        return option switch
+        {
+            128 => null, // dbVersion120 (Ace2007)
+            2 => Fail(3001, DaoErrors.InvalidArgument), // r-q-cat-txn-lock/cat-new-argument-forms: dbEncrypt alone -> 3001
+            64 or 192 => CallResult.Fail(Failure.NotModelled("NotModelled.CreateJet4Mdb", $"CreateDatabase option {option} (Jet 4 MDB): only ACCDB 2007 (dbVersion120 = 128 or omitted) is implemented")),
+            256 => CallResult.Fail(Failure.NotModelled("NotModelled.CreateAce2010", "CreateDatabase option 256 (ACE 2010): only ACCDB 2007 (dbVersion120 = 128 or omitted) is implemented")),
+            null => CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", "CreateDatabase with a non-integer Option argument")),
+            _ => CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", $"CreateDatabase option {option}: only dbVersion120 (128) or omitted is implemented")),
+        };
     }
 
     public void Forget(DatabaseObject database) => _databases.Remove(database);

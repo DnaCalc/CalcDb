@@ -272,6 +272,119 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
+    /// Create a new database file atomically under exclusive admission (R-LOCK-1 EX-CREATE, R-CAT-1 CAT-NEW,
+    /// W-07/new-database-image), write the synthesized image through <see cref="NativeProgram"/> /
+    /// <see cref="NativeProgramExecutor"/>, and return the open exclusive <see cref="DatabaseObject"/> with no
+    /// <c>.laccdb</c> lock file. An existing destination is refused with DAO 3204 without touching its bytes.
+    /// </summary>
+    public static CallResult Create(WorkspaceObject workspace, string name, NewDatabaseRequest request, out DatabaseObject? database)
+    {
+        database = null;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return workspace.Fail(3044, DaoErrors.NotAValidPath(name));
+        }
+        string full;
+        try
+        {
+            full = Path.GetFullPath(name);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return workspace.Fail(3044, DaoErrors.NotAValidPath(name));
+        }
+        string? directory = Path.GetDirectoryName(full);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            return workspace.Fail(3044, DaoErrors.NotAValidPath(name));
+        }
+
+        FormatDescriptor format = FormatDescriptor.Jet4Family;
+        byte[][] synthesizedPages = NewDatabaseSynthesizer.SynthesizePages(request, format);
+
+        if (SessionFile.CreateNewExclusive(full, out OpenResult opened) is not { } file)
+        {
+            if (opened.AlreadyExists)
+            {
+                return workspace.Fail(3204, DaoErrors.DatabaseAlreadyExists);
+            }
+            if (opened.PathNotFound)
+            {
+                return workspace.Fail(3044, DaoErrors.NotAValidPath(name));
+            }
+            return CallResult.Fail(Failure.NotImplemented($"CreateDatabase when the file cannot be created (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})"));
+        }
+
+        bool created = true;
+        try
+        {
+            var revisions = new PreparedRevision[synthesizedPages.Length];
+            for (int i = 0; i < synthesizedPages.Length; i++)
+            {
+                revisions[i] = new PreparedRevision(i + 1, (ulong)i, synthesizedPages[i])
+                {
+                    Initialize = true,
+                    Purpose = WritePurpose.Initialize,
+                };
+            }
+            var unit = new PreparedUnit(format.PageSize, revisions);
+            ProgramCompilation compiled = NativeProgram.Compile(unit, ProgramPolicy.CrashOrderData, file.Incarnation, extent: 0);
+            if (!compiled.Succeeded)
+            {
+                return CallResult.Fail(Failure.NotImplemented("CreateDatabase native program compilation failed: " + compiled.Failure));
+            }
+            NativeOutcome outcome = NativeProgramExecutor.Run(compiled.Program!, file);
+            if (!outcome.Completed)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"CreateDatabase write failed ({outcome.Kind}): {outcome.Cause}"));
+            }
+
+            ProfileRefusal refusal = ProfileSelector.Select(synthesizedPages[0], out FileProfile? profile, format);
+            if (profile is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"CreateDatabase synthesized header refused ({refusal})"));
+            }
+
+            ulong pageCount = (ulong)synthesizedPages.Length;
+            var cache = new PageCache(new FilePageSource(file, (uint)format.PageSize, 0xFFFFFF, uint.MaxValue), file.Incarnation, format.PageSize, CachePages);
+            CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pageCount, out CatalogFailure? failure, readProperties: true);
+            if (catalog is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented("CreateDatabase catalog bootstrap failed: " + failure));
+            }
+
+            database = new DatabaseObject(workspace, full, readOnly: false, file, lockFile: null, cache, profile, DatabaseHeader.Decode(synthesizedPages[0], format), pageCount, catalog);
+            created = false;
+            return CallResult.Nothing;
+        }
+        finally
+        {
+            if (created)
+            {
+                CleanupCreatedFile(file, full);
+            }
+        }
+    }
+
+    private static void CleanupCreatedFile(SessionFile file, string fullPath)
+    {
+        file.Dispose();
+        try
+        {
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>
     /// The shared edit state of a table of this Database (II-07 §14; W-05/edit-frames): its <see cref="MutationSemantics"/>
     /// compiled once from the TableDef and its stored property blob (CAT-P: Required, AllowZeroLength, DefaultValue,
     /// ValidationRule and ValidationText; v8qw's PropertyBlobs) through the expression service's adapters

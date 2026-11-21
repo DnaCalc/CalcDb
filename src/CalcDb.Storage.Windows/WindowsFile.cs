@@ -82,6 +82,9 @@ public sealed unsafe class WindowsFile : IPositionedFile
     /// <summary>Create (or truncate) a file for tests and new-database work, under the admission's share flags.</summary>
     public static OpenResult Create(string path, Admission admission) => OpenCore(path, admission, Kernel32.CreateAlways);
 
+    /// <summary>Atomically create a fresh file (CREATE_NEW), failing with <see cref="OpenResult.AlreadyExists"/> when the destination exists.</summary>
+    public static OpenResult CreateFresh(string path, Admission admission) => OpenCore(path, admission, Kernel32.CreateNew);
+
     private static OpenResult OpenCore(string path, Admission admission, uint disposition)
     {
         (uint access, uint share) = admission switch
@@ -375,8 +378,12 @@ public sealed unsafe class WindowsFile : IPositionedFile
     }
 }
 
-/// <summary>An opened file, or the native error (with sharing conflicts named, T-LOCK-01).</summary>
+/// <summary>An opened file, or the native error (with sharing conflicts and existing-file refusals named, T-LOCK-01/67).</summary>
 public sealed record OpenResult(WindowsFile? File, int? NativeError, bool SharingViolation)
 {
     public bool Succeeded => File is not null;
+
+    public bool AlreadyExists => NativeError is Kernel32.ErrorFileExists or Kernel32.ErrorAlreadyExists;
+
+    public bool PathNotFound => NativeError == Kernel32.ErrorPathNotFound;
 }

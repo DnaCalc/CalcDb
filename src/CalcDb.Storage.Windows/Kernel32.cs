@@ -10,21 +10,25 @@ internal static unsafe partial class Kernel32
     public const uint GenericWrite = 0x40000000;
     public const uint FileShareRead = 0x1;
     public const uint FileShareWrite = 0x2;
-    public const uint OpenExisting = 3;
+    public const uint CreateNew = 1;
     public const uint CreateAlways = 2;
+    public const uint OpenExisting = 3;
     public const uint OpenAlways = 4;
     public const uint FileFlagOverlapped = 0x40000000;
     public const uint FileAttributeNormal = 0x80;
     public const uint LockfileFailImmediately = 0x1;
     public const uint LockfileExclusiveLock = 0x2;
 
-    public const int ErrorHandleEof = 38;
-    public const int ErrorIoPending = 997;
-    public const int ErrorOperationAborted = 995;
-    public const int ErrorNotFound = 1168;
+    public const int ErrorPathNotFound = 3;
     public const int ErrorSharingViolation = 32;
     public const int ErrorLockViolation = 33;
+    public const int ErrorHandleEof = 38;
+    public const int ErrorFileExists = 80;
+    public const int ErrorAlreadyExists = 183;
+    public const int ErrorOperationAborted = 995;
     public const int ErrorIoIncomplete = 996;
+    public const int ErrorIoPending = 997;
+    public const int ErrorNotFound = 1168;
 
     public const int FileEndOfFileInfoClass = 6;
     public const int FileIdInfoClass = 18;

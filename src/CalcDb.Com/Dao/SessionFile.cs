@@ -33,6 +33,13 @@ internal sealed class SessionFile : IPositionedFile
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
 
+    /// <summary>Atomically create a new database file under exclusive admission (R-LOCK-1 EX-CREATE, W-07/new-database-image).</summary>
+    public static SessionFile? CreateNewExclusive(string path, out OpenResult opened)
+    {
+        opened = WindowsFile.CreateFresh(path, Admission.Exclusive);
+        return opened.File is { } file ? new SessionFile(path, file) : null;
+    }
+
     /// <summary>The session's own incarnation: the first handle's, kept across the reopen (the cache's images stay valid).</summary>
     public ulong Incarnation { get; }
 

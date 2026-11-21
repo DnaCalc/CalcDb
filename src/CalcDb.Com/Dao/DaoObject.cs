@@ -73,6 +73,18 @@ internal static class DaoErrors
     /// <summary>3044 (r-q-wire/thread-engine-identity-main-then-mta).</summary>
     public static string NotAValidPath(string path) =>
         $"'{path}' is not a valid path. Make sure that the path name is spelled correctly and that you are connected to the server on which the file resides.";
+
+    /// <summary>3204 (r-cat-1/create-accdb-existing-destination).</summary>
+    public const string DatabaseAlreadyExists = "Database already exists.";
+
+    /// <summary>3246 (r-cat-1/create-accdb-in-transaction).</summary>
+    public const string NotSupportedInTransactions = "Operation not supported in transactions.";
+
+    /// <summary>3170 (r-sort-3/create-locale-spellings: locale without a leading semicolon).</summary>
+    public const string CouldNotFindInstallableIsam = "Could not find installable ISAM.";
+
+    /// <summary>3228 (r-sort-3/create-locale-spellings: LANGID=0x0000).</summary>
+    public const string CollatingSequenceNotSupported = "Selected collating sequence not supported by the operating system.";
 }
 
 /// <summary>

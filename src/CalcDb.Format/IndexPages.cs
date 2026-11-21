@@ -265,12 +265,86 @@ public static class IndexPages
         r.FreeCount.Write(page, (ulong)(r.EntryAreaBytes - used));
         return true;
     }
+
+    /// <summary>
+    /// Initialize a blank index leaf page (II-05 §2): kind <c>0x04</c>, subtype <c>0x01</c>, full free count
+    /// (<see cref="IndexPageRules.EntryAreaBytes"/>), owning TableDef page, zero peers/tail/prefix/level, and empty
+    /// boundary bitmap.
+    /// </summary>
+    public static void InitializeLeaf(Span<byte> page, uint owner, FormatDescriptor d)
+    {
+        if (page.Length != d.PageSize)
+        {
+            throw new ArgumentException($"Index page must be {d.PageSize} bytes, got {page.Length}.", nameof(page));
+        }
+        IndexPageRules r = d.IndexPage;
+        page.Clear();
+        d.DataPage.Kind.Write(page, r.LeafKind);
+        page[1] = 0x01;
+        r.FreeCount.Write(page, (ulong)r.EntryAreaBytes);
+        r.Owner.Write(page, owner);
+        r.PreviousPeer.Write(page, 0);
+        r.NextPeer.Write(page, 0);
+        r.TailChild.Write(page, 0);
+        r.PrefixLength.Write(page, 0);
+        r.Level.Write(page, 0);
+    }
 }
 
 /// <summary>A decoded usage-map declaration (II-03 §1.4) and its membership test, with the map's role kept by the caller.</summary>
 public sealed record MapDeclaration(byte Type, uint InlineBase, byte[] InlineBitmap, IReadOnlyList<uint> BitmapPages)
 {
+    /// <summary>Standard inline bitmap payload width in Jet 4 / ACE: 64 bytes (512 pages) after the 5-byte header.</summary>
+    public const int DefaultInlineBitmapBytes = 64;
+
     public bool IsInline => Type == 0;
+
+    /// <summary>
+    /// Encode a type-0 inline usage-map declaration (II-03 §1.4): type byte <c>0x00</c>, <c>u32LE</c>
+    /// <paramref name="basePage"/>, and a <paramref name="bitmapBytes"/>-byte LSB-first bitmap with bits set for
+    /// <paramref name="pages"/>.
+    /// </summary>
+    public static byte[] EncodeInline(uint basePage, ReadOnlySpan<uint> pages, FormatDescriptor d, int bitmapBytes = DefaultInlineBitmapBytes)
+    {
+        MapRules m = d.Map;
+        byte[] result = new byte[m.InlineBitmapOffset + bitmapBytes];
+        m.Type.Write(result, 0);
+        m.InlineBase.Write(result, basePage);
+        int bitCapacity = bitmapBytes * 8;
+        for (int i = 0; i < pages.Length; i++)
+        {
+            uint page = pages[i];
+            if (page < basePage || page - basePage >= (uint)bitCapacity)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pages), $"Page {page} lies outside inline map [{basePage}, {basePage + (uint)bitCapacity}).");
+            }
+            int bit = (int)(page - basePage);
+            result[m.InlineBitmapOffset + (bit / 8)] |= (byte)(1 << (bit % 8));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Encode a type-0 inline usage-map declaration with every page in <c>[firstSetPage, endExclusivePage)</c> marked.
+    /// </summary>
+    public static byte[] EncodeInlineRange(uint basePage, uint firstSetPage, uint endExclusivePage, FormatDescriptor d, int bitmapBytes = DefaultInlineBitmapBytes)
+    {
+        MapRules m = d.Map;
+        byte[] result = new byte[m.InlineBitmapOffset + bitmapBytes];
+        m.Type.Write(result, 0);
+        m.InlineBase.Write(result, basePage);
+        uint bitLimit = basePage + (uint)(bitmapBytes * 8);
+        if (firstSetPage < basePage || endExclusivePage > bitLimit || firstSetPage > endExclusivePage)
+        {
+            throw new ArgumentOutOfRangeException(nameof(firstSetPage), $"Range [{firstSetPage}, {endExclusivePage}) lies outside inline map [{basePage}, {bitLimit}).");
+        }
+        for (uint p = firstSetPage; p < endExclusivePage; p++)
+        {
+            int bit = (int)(p - basePage);
+            result[m.InlineBitmapOffset + (bit / 8)] |= (byte)(1 << (bit % 8));
+        }
+        return result;
+    }
 
     public static MapDeclaration? Decode(ReadOnlySpan<byte> declaration, FormatDescriptor d, out string? failure)
     {

@@ -76,7 +76,7 @@ internal static partial class Program
                 "submit" => Submit(store, options),
                 "run" => RunJob(store, options, repo),
                 "status" => Status(store, options),
-                "freeze" => Freeze(store, options),
+                "freeze" => Freeze(store, options, repo),
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
                 "inspect" => InspectCommand.Run(store, options),
@@ -328,10 +328,14 @@ internal static partial class Program
     /// Register an output file as an immutable named fixture (name = file name without extension). A name is
     /// bound once: a different later output under the same name is reported, never substituted.
     /// </summary>
-    private static void FreezeNamed(JobStore store, string repo, CaptureManifest manifest, ArtifactRef output)
+    /// <summary>
+    /// Register <paramref name="output"/> as the named fixture <paramref name="name"/> (default: its file name) in
+    /// <c>probes/fixtures.json</c> and keep its bytes in <c>evidence/artifacts</c>; a name already bound is never rebound.
+    /// </summary>
+    private static void FreezeNamed(JobStore store, string repo, CaptureManifest manifest, ArtifactRef output, string? name = null)
     {
-        string fileName = output.Role["output:".Length..];
-        string name = Path.GetFileNameWithoutExtension(fileName);
+        string fileName = output.Role[(output.Role.IndexOf(':') + 1)..];
+        name ??= Path.GetFileNameWithoutExtension(fileName);
         string registryPath = Path.Combine(repo, "probes", "fixtures.json");
         var registry = File.Exists(registryPath)
             ? new SortedDictionary<string, FixtureInput>(EvidenceJson.Read<Dictionary<string, FixtureInput>>(registryPath), StringComparer.Ordinal)
@@ -492,7 +496,12 @@ internal static partial class Program
         return 0;
     }
 
-    private static int Freeze(JobStore store, Options options)
+    /// <summary>
+    /// <c>freeze --attempt ID --artifact ROLE (--name N | --role R --file-name F)</c>: with <c>--name</c>, register the
+    /// artifact as the named fixture N (for example a file CalcDb created, which ACE is then asked to open: T-COMPACT-1);
+    /// otherwise import its bytes into the store as an input and print the input.
+    /// </summary>
+    private static int Freeze(JobStore store, Options options, string repo)
     {
         string attemptId = options.Require("attempt");
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
@@ -502,6 +511,11 @@ internal static partial class Program
         }
         string role = options.Require("artifact");
         ArtifactRef artifact = manifest.Artifacts.SingleOrDefault(a => a.Role == role) ?? throw new InvalidOperationException($"No verified artifact '{role}' in {attemptId}.");
+        if (options.Get("name") is { } name)
+        {
+            FreezeNamed(store, repo, manifest, artifact, name);
+            return 0;
+        }
         string source = Path.Combine(store.AttemptDirectory(attemptId), artifact.RelativePath);
         FixtureInput input = store.ImportContent(source, options.Require("role"), options.Require("file-name"), $"{attemptId} {manifest.QuestionKey} {role}");
         Console.WriteLine(EvidenceJson.Serialize(input));

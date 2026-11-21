@@ -13,12 +13,42 @@ public readonly record struct RowLocator(uint Page, byte Row)
 
     public static RowLocator FromWord(uint value) => new(value >> 8, (byte)value);
 
+    public uint ToWord() => (Page << 8) | Row;
+
+    public void Encode(Span<byte> four)
+    {
+        four[0] = Row;
+        four[1] = (byte)Page;
+        four[2] = (byte)(Page >> 8);
+        four[3] = (byte)(Page >> 16);
+    }
+
     public override string ToString() => $"page {Page} row {Row}";
 }
 
 /// <summary>The data-page envelope (II-03 §§1.3, 3.3): bounded slot access without decoding columns.</summary>
 public static class DataPages
 {
+    /// <summary>
+    /// Initialize a blank ordinary data page (II-03 §1.3): kind <c>0x01</c>, subtype <c>0x01</c>, full free count
+    /// (<c>PageSize - SlotBase</c>), owning TableDef page (or usage-map owner), zero write stamp, and zero slots.
+    /// </summary>
+    public static void Initialize(Span<byte> page, uint owner, FormatDescriptor d)
+    {
+        if (page.Length != d.PageSize)
+        {
+            throw new ArgumentException($"Data page must be {d.PageSize} bytes, got {page.Length}.", nameof(page));
+        }
+        DataPageRules r = d.DataPage;
+        page.Clear();
+        r.Kind.Write(page, 0x01);
+        page[1] = 0x01;
+        r.FreeCount.Write(page, (ulong)(d.PageSize - r.SlotBase));
+        r.Owner.Write(page, owner);
+        r.Stamp.Write(page, 0);
+        r.RowCount.Write(page, 0);
+    }
+
     /// <summary>
     /// CheckedSlot (II-03 §3.3): the count against the structural 256-slot domain, the directory inside the page, the
     /// masked start, and the end from the previous slot (slot 0 ends at the page end). A count of 256 is admitted by the
