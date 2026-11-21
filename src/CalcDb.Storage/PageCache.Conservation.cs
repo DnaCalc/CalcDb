@@ -128,15 +128,52 @@ public sealed partial class PageCache
             void Expect(ImageId image) => expected[image] = expected.GetValueOrDefault(image) + 1;
             foreach (PrivateOverlay overlay in _overlays)
             {
-                foreach (OverlayPage page in overlay.Pages.Values)
+                Dictionary<int, HashSet<ulong>> expectedScopePages = [];
+                foreach ((ulong pageNumber, OverlayPage page) in overlay.Pages)
                 {
                     Expect(page.Current);
-                    foreach ((int _, ImageId? before) in page.Befores)
+                    int prevScope = 0;
+                    int prevDeltaStart = 0;
+                    foreach (ScopeBefore entry in page.Befores)
                     {
-                        if (before is { } image)
+                        if (entry.Scope <= prevScope || entry.Scope > overlay.Depth)
+                        {
+                            violations.Add($"Overlay page {pageNumber} has out-of-order scope-before {entry.Scope} (prev {prevScope}, depth {overlay.Depth}).");
+                        }
+                        if (entry.DeltaStart < prevDeltaStart || entry.DeltaStart > page.Deltas.Count)
+                        {
+                            violations.Add($"Overlay page {pageNumber} scope {entry.Scope} has invalid DeltaStart {entry.DeltaStart} (prev {prevDeltaStart}, count {page.Deltas.Count}).");
+                        }
+                        prevScope = entry.Scope;
+                        prevDeltaStart = entry.DeltaStart;
+                        if (!expectedScopePages.TryGetValue(entry.Scope, out HashSet<ulong>? set))
+                        {
+                            expectedScopePages[entry.Scope] = set = [];
+                        }
+                        set.Add(pageNumber);
+                        if (entry.Before is { } image)
                         {
                             Expect(image);
                         }
+                    }
+                }
+                for (int i = 0; i < overlay.ScopePages.Count; i++)
+                {
+                    int scope = i + 1;
+                    List<ulong> recorded = overlay.ScopePages[i];
+                    if (scope > overlay.Depth)
+                    {
+                        if (recorded.Count != 0)
+                        {
+                            violations.Add($"Overlay inactive scope {scope} retains {recorded.Count} pages (depth {overlay.Depth}).");
+                        }
+                        continue;
+                    }
+                    HashSet<ulong>? expectedForScope = expectedScopePages.GetValueOrDefault(scope);
+                    int expectedCount = expectedForScope?.Count ?? 0;
+                    if (recorded.Count != expectedCount || (expectedForScope is not null && !expectedForScope.SetEquals(recorded)))
+                    {
+                        violations.Add($"Overlay scope {scope} tracked {recorded.Count} pages but {expectedCount} pages hold a scope-before for it.");
                     }
                 }
             }

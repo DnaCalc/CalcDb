@@ -230,6 +230,130 @@ public sealed class PrivateOverlayTests
         Conservation.Settled(cache);
     }
 
+    [Fact]
+    public void Nested_scope_promotion_and_rollback_preserve_delta_boundaries_and_conservation()
+    {
+        var file = new ControlledFile(PageSize);
+        var cache = new PageCache(file, 1, PageSize, 16);
+        using PrivateOverlay a = cache.CreateOverlay(A);
+
+        Assert.True(a.Edit(17, new BytePatch(100, [0x11])).Succeeded);
+
+        // Depth 1 touches page 20, skips page 17 and page 19.
+        Assert.Equal(1, a.BeginScope());
+        Assert.True(a.Edit(20, new BytePatch(0, [0xA1])).Succeeded);
+
+        // Depth 2 edits existing page 17, creates page 19, and edits depth-1 page 20.
+        Assert.Equal(2, a.BeginScope());
+        Assert.True(a.Edit(17, new BytePatch(101, [0x22])).Succeeded);
+        Assert.True(a.Edit(17, new BytePatch(102, [0x23])).Succeeded);
+        Assert.True(a.Edit(19, new BytePatch(10, [0x91])).Succeeded);
+        Assert.True(a.Edit(20, new BytePatch(1, [0xA2])).Succeeded);
+
+        // Empty nested scopes commit and roll back cleanly.
+        Assert.Equal(3, a.BeginScope());
+        a.CommitScope();
+        Assert.Equal(3, a.BeginScope());
+        a.RollbackScope();
+        Conservation.Conserved(cache);
+
+        // Commit depth 2 -> depth 1: promotes pages 17 and 19 into depth 1, drops depth 2's before for page 20.
+        a.CommitScope();
+        Assert.Equal(1, a.Depth);
+        Conservation.Conserved(cache);
+
+        // Further edits in depth 1 reuse the promoted ScopeBefore entries without duplicating them.
+        Assert.True(a.Edit(17, new BytePatch(103, [0x34])).Succeeded);
+        Assert.True(a.Edit(19, new BytePatch(11, [0x92])).Succeeded);
+        Conservation.Conserved(cache);
+
+        // Second depth-2 scope edits already-tracked pages 17 and 19, then commits into depth 1.
+        Assert.Equal(2, a.BeginScope());
+        Assert.True(a.Edit(17, new BytePatch(104, [0x45])).Succeeded);
+        Assert.True(a.Edit(19, new BytePatch(12, [0x93])).Succeeded);
+        a.CommitScope();
+        Conservation.Conserved(cache);
+
+        // Rolling back depth 1 must drop all depth-1 and promoted depth-2 deltas on page 17, and remove pages 19 and 20.
+        a.RollbackScope();
+        Assert.Equal(0, a.Depth);
+        Conservation.Conserved(cache);
+        Assert.Null(a.PrivateImage(19));
+        Assert.Null(a.PrivateImage(20));
+
+        // Page 20 created in depth 1, edited in depth 2, depth 2 rolled back, depth 1 committed to transaction scope.
+        Assert.Equal(1, a.BeginScope());
+        Assert.True(a.Edit(20, new BytePatch(0, [0xB1])).Succeeded);
+        Assert.Equal(2, a.BeginScope());
+        Assert.True(a.Edit(20, new BytePatch(1, [0xB2])).Succeeded);
+        a.RollbackScope();
+        Conservation.Conserved(cache);
+        a.CommitScope();
+        Conservation.Conserved(cache);
+
+        Assert.True(a.Edit(17, new BytePatch(105, [0x56])).Succeeded);
+        Assert.True(cache.Publish(a, file).Succeeded);
+
+        byte m17 = ControlledFile.Marker(17);
+        Assert.Equal(new byte[] { 0x11, m17, m17, m17, m17, 0x56 }, file.Page(17)[100..106]);
+        Assert.Equal(ControlledFile.Marker(19), file.Page(19)[10]);
+        Assert.Equal(new byte[] { 0xB1, ControlledFile.Marker(20) }, file.Page(20)[..2]);
+        Conservation.Settled(cache);
+    }
+
+    [Fact]
+    public void Failed_edit_inside_nested_scope_and_overlay_rollback_conserve_owners()
+    {
+        var file = new ControlledFile(PageSize);
+        var cache = new PageCache(file, 1, PageSize, 2);
+        using PrivateOverlay a = cache.CreateOverlay(A);
+
+        Assert.True(a.Edit(17, new BytePatch(0, [0xAA])).Succeeded);
+
+        // Path A: NoFrame inside depth 1 (twice on the same page), then RollbackScope.
+        a.BeginScope();
+        using (PagePin blocker = cache.Pin(18).Pin!)
+        {
+            EditResult fail1 = a.Edit(17, new BytePatch(1, [0xBB]));
+            Assert.False(fail1.Succeeded);
+            Assert.Equal(PinFailureKind.NoFrame, fail1.Failure);
+            Conservation.Conserved(cache);
+
+            EditResult fail2 = a.Edit(17, new BytePatch(2, [0xCC]));
+            Assert.False(fail2.Succeeded);
+            Assert.Equal(PinFailureKind.NoFrame, fail2.Failure);
+            Conservation.Conserved(cache);
+        }
+        a.RollbackScope();
+        Conservation.Conserved(cache);
+
+        // Path B: NoFrame inside depth 1, then CommitScope into transaction scope.
+        a.BeginScope();
+        using (PagePin blocker = cache.Pin(18).Pin!)
+        {
+            Assert.Equal(PinFailureKind.NoFrame, a.Edit(17, new BytePatch(1, [0xBB])).Failure);
+            Conservation.Conserved(cache);
+        }
+        a.CommitScope();
+        Conservation.Conserved(cache);
+
+        // Path C: NoFrame inside depth 2, promoted to depth 1, then full overlay.Rollback() with open scope.
+        a.BeginScope();
+        a.BeginScope();
+        using (PagePin blocker = cache.Pin(18).Pin!)
+        {
+            Assert.Equal(PinFailureKind.NoFrame, a.Edit(17, new BytePatch(1, [0xBB])).Failure);
+            Conservation.Conserved(cache);
+        }
+        a.CommitScope();
+        Assert.Equal(1, a.Depth);
+        Conservation.Conserved(cache);
+
+        a.Rollback();
+        Assert.Equal(0, a.Depth);
+        Conservation.Settled(cache);
+    }
+
     /// <summary>
     /// F-76's constructed 4096-byte data page: owner 0x20, two slots naming 0x0FF9 and 0x0FF2, free space 4064, each row
     /// one non-null Long (7 and 100); a global declaration byte at 0x0FCA starts at FF.

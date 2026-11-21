@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 
 namespace CalcDb.Storage;
 
@@ -116,7 +117,7 @@ public readonly record struct EditResult(ImageId? Image, PinFailureKind? Failure
 
 /// <summary>
 /// One locker's private overlay (II-03 §5.1): for each page it changed, the base it was built from, its current private
-/// revision, the accepted deltas tagged by scope and the scope-before images. Different lockers have separate overlays
+/// revision, the accepted deltas and the scope-before restore points. Different lockers have separate overlays
 /// of the same page. Private images live in cache frames with no native source; eviction never writes them to the
 /// file: under pressure they spill (II-03 §5.2). Used by its locker's one caller at a time.
 /// </summary>
@@ -142,11 +143,20 @@ public sealed class PrivateOverlay : IDisposable
 
     internal Dictionary<ulong, OverlayPage> Pages { get; } = [];
 
+    /// <summary>
+    /// Pages that have a <see cref="ScopeBefore"/> at each nested scope depth (index <c>scope - 1</c>), with no
+    /// duplicates. Maintained in lockstep with <see cref="OverlayPage.Befores"/> so commit and rollback touch only the
+    /// ending scope's own pages, and cleared-in-place so steady-state scope cycles allocate nothing.
+    /// </summary>
+    internal List<List<ulong>> ScopePages { get; } = [];
+
     internal bool Publishing { get; set; }
 
     internal bool Disposed { get; set; }
 
     internal PageCache Cache => _cache;
+
+    internal void RecordScopePage(int scope, ulong pageNumber) => ScopePages[scope - 1].Add(pageNumber);
 
     /// <summary>Pages with a private revision.</summary>
     public IReadOnlyCollection<ulong> ChangedPages => _cache.OverlayPages(this);
@@ -197,6 +207,15 @@ public sealed class PrivateOverlay : IDisposable
     }
 }
 
+/// <summary>
+/// A nested scope's restore point for one page: the revision before <see cref="Scope"/> first touched the page (null
+/// when the page had no private revision then) and the count of deltas on the page when <see cref="Scope"/> first
+/// touched it. Because scopes are strictly LIFO, <see cref="OverlayPage.Befores"/> stays strictly ascending in
+/// <see cref="Scope"/> and rolling back <see cref="Scope"/> truncates <see cref="OverlayPage.Deltas"/> to
+/// <see cref="DeltaStart"/>.
+/// </summary>
+internal readonly record struct ScopeBefore(int Scope, ImageId? Before, int DeltaStart);
+
 /// <summary>One page of an overlay.</summary>
 internal sealed class OverlayPage(ImageId baseImage, ImageId current)
 {
@@ -206,17 +225,16 @@ internal sealed class OverlayPage(ImageId baseImage, ImageId current)
     public ImageId Current { get; set; } = current;
 
     /// <summary>
-    /// Accepted deltas in acceptance order, tagged with the scope that accepted them, each with the bytes of its footprint
-    /// as it saw them when accepted (null for an empty footprint): the publication's revalidation compares them with the
-    /// rebuilt page at that delta (II-09 §23).
+    /// Accepted deltas in acceptance order, each with the bytes of its footprint as it saw them when accepted (null for
+    /// an empty footprint): the publication's revalidation compares them with the rebuilt page at that delta (II-09 §23).
     /// </summary>
-    public List<(int Scope, IPageDelta Delta, byte[]? Seen)> Deltas { get; } = [];
+    public List<(IPageDelta Delta, byte[]? Seen)> Deltas { get; } = [];
 
     /// <summary>
-    /// For each scope that first touched the page after the transaction scope: the revision before it (null when the
-    /// page had no private revision then). The transaction scope needs none: rolling it back removes the page.
+    /// For each nested scope that touched the page after the transaction scope, in strictly ascending scope order: the
+    /// revision and delta count before it. The transaction scope needs none: rolling it back removes the page.
     /// </summary>
-    public List<(int Scope, ImageId? Before)> Befores { get; } = [];
+    public List<ScopeBefore> Befores { get; } = [];
 }
 
 public sealed partial class PageCache
@@ -284,10 +302,11 @@ public sealed partial class PageCache
             {
                 create = false;
                 baseImage = page.Base;
-                if (overlay.Depth > 0 && !page.Befores.Exists(b => b.Scope == overlay.Depth))
+                if (overlay.Depth > 0 && (page.Befores.Count == 0 || page.Befores[^1].Scope != overlay.Depth))
                 {
                     // The scope-before image: the current revision is retained and sealed, so the edit copies (II-03 §5.1).
-                    page.Befores.Add((overlay.Depth, page.Current));
+                    page.Befores.Add(new ScopeBefore(overlay.Depth, page.Current, page.Deltas.Count));
+                    overlay.RecordScopePage(overlay.Depth, pageNumber);
                     AddOwner(page.Current);
                     Seal(page.Current);
                 }
@@ -303,7 +322,7 @@ public sealed partial class PageCache
             {
                 OverlayPage page = overlay.Pages[pageNumber];
                 ReturnLease(page.Current);
-                page.Deltas.Add((overlay.Depth, delta, seenInPlace));
+                page.Deltas.Add((delta, seenInPlace));
                 return new EditResult(page.Current, null);
             }
         }
@@ -349,9 +368,10 @@ public sealed partial class PageCache
                 var page = new OverlayPage(baseImage, revision);
                 if (overlay.Depth > 0)
                 {
-                    page.Befores.Add((overlay.Depth, null));
+                    page.Befores.Add(new ScopeBefore(overlay.Depth, null, 0));
+                    overlay.RecordScopePage(overlay.Depth, pageNumber);
                 }
-                page.Deltas.Add((overlay.Depth, delta, seen));
+                page.Deltas.Add((delta, seen));
                 overlay.Pages[pageNumber] = page;
             }
             else
@@ -359,7 +379,7 @@ public sealed partial class PageCache
                 OverlayPage page = overlay.Pages[pageNumber];
                 ReleaseOwner(page.Current);
                 page.Current = revision;
-                page.Deltas.Add((overlay.Depth, delta, seen));
+                page.Deltas.Add((delta, seen));
             }
             return new EditResult(revision, null);
         }
@@ -398,7 +418,12 @@ public sealed partial class PageCache
         lock (_latch)
         {
             ThrowIfUnusable(overlay);
-            return ++overlay.Depth;
+            int depth = ++overlay.Depth;
+            if (overlay.ScopePages.Count < depth)
+            {
+                overlay.ScopePages.Add([]);
+            }
+            return depth;
         }
     }
 
@@ -466,20 +491,23 @@ public sealed partial class PageCache
     private void RollbackScopeUnderLatch(PrivateOverlay overlay)
     {
         int scope = overlay.Depth;
-        foreach (ulong pageNumber in overlay.Pages.Keys.ToList())
+        List<ulong> touched = overlay.ScopePages[scope - 1];
+        for (int i = 0; i < touched.Count; i++)
         {
+            ulong pageNumber = touched[i];
             OverlayPage page = overlay.Pages[pageNumber];
-            page.Deltas.RemoveAll(d => d.Scope == scope);
-            int at = page.Befores.FindIndex(b => b.Scope == scope);
-            if (at < 0)
-            {
-                continue;
-            }
-            ImageId? before = page.Befores[at].Before;
-            page.Befores.RemoveAt(at);
+            int last = page.Befores.Count - 1;
+            Debug.Assert(last >= 0 && page.Befores[last].Scope == scope);
+            ScopeBefore entry = page.Befores[last];
+            page.Befores.RemoveAt(last);
             ReleaseOwner(page.Current);
-            if (before is { } restored)
+            if (entry.Before is { } restored)
             {
+                int added = page.Deltas.Count - entry.DeltaStart;
+                if (added > 0)
+                {
+                    page.Deltas.RemoveRange(entry.DeltaStart, added);
+                }
                 page.Current = restored; // the scope-before owner becomes the current-revision owner
             }
             else
@@ -487,42 +515,39 @@ public sealed partial class PageCache
                 overlay.Pages.Remove(pageNumber);
             }
         }
+        touched.Clear();
         overlay.Depth--;
     }
 
-    /// <summary>Merge the innermost scope into its parent: deltas are re-tagged; a before image the parent needs is kept.</summary>
+    /// <summary>Merge the innermost scope into its parent: deltas stay in place; a before image the parent needs is kept.</summary>
     private void CommitScopeUnderLatch(PrivateOverlay overlay)
     {
         int scope = overlay.Depth;
         int parent = scope - 1;
-        foreach (OverlayPage page in overlay.Pages.Values)
+        List<ulong> touched = overlay.ScopePages[scope - 1];
+        List<ulong>? parentTouched = parent > 0 ? overlay.ScopePages[parent - 1] : null;
+        for (int i = 0; i < touched.Count; i++)
         {
-            for (int i = 0; i < page.Deltas.Count; i++)
+            ulong pageNumber = touched[i];
+            OverlayPage page = overlay.Pages[pageNumber];
+            int last = page.Befores.Count - 1;
+            Debug.Assert(last >= 0 && page.Befores[last].Scope == scope);
+            ScopeBefore entry = page.Befores[last];
+            if (parent == 0 || (last > 0 && page.Befores[last - 1].Scope == parent))
             {
-                if (page.Deltas[i].Scope == scope)
-                {
-                    page.Deltas[i] = page.Deltas[i] with { Scope = parent };
-                }
-            }
-            int at = page.Befores.FindIndex(b => b.Scope == scope);
-            if (at < 0)
-            {
-                continue;
-            }
-            ImageId? before = page.Befores[at].Before;
-            if (parent == 0 || page.Befores.Exists(b => b.Scope == parent))
-            {
-                page.Befores.RemoveAt(at);
-                if (before is { } dropped)
+                page.Befores.RemoveAt(last);
+                if (entry.Before is { } dropped)
                 {
                     ReleaseOwner(dropped);
                 }
             }
             else
             {
-                page.Befores[at] = (parent, before);
+                page.Befores[last] = entry with { Scope = parent };
+                parentTouched!.Add(pageNumber);
             }
         }
+        touched.Clear();
         overlay.Depth--;
     }
 

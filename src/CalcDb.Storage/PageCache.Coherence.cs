@@ -591,7 +591,7 @@ public sealed partial class PageCache
             int checkFrom = overlayPage.Deltas.FindLastIndex(d => d.Delta.ReplacesPage);
             for (int i = Math.Max(checkFrom, 0); i < overlayPage.Deltas.Count; i++)
             {
-                (int _, IPageDelta delta, byte[]? seen) = overlayPage.Deltas[i];
+                (IPageDelta delta, byte[]? seen) = overlayPage.Deltas[i];
                 bool check = rebased && seen is not null;
                 if (!ApplyDelta(page.PageNumber, final, delta, check ? (decoded, footprint) => footprint.Same(seen, decoded) : null))
                 {
