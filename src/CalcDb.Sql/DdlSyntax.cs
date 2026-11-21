@@ -29,6 +29,7 @@ public enum DdlTypeKind : byte
     YesNo,
     Guid,
     Binary,
+    VarBinary,
     LongBinary,
     Numeric,
     BigInt,
@@ -233,7 +234,7 @@ public static class DdlParser
         ["LOGICAL1"] = DdlTypeKind.YesNo,
         ["GUID"] = DdlTypeKind.Guid,
         ["BINARY"] = DdlTypeKind.Binary,
-        ["VARBINARY"] = DdlTypeKind.Binary,
+        ["VARBINARY"] = DdlTypeKind.VarBinary,
         ["LONGBINARY"] = DdlTypeKind.LongBinary,
         ["GENERAL"] = DdlTypeKind.LongBinary,
         ["IMAGE"] = DdlTypeKind.LongBinary,
@@ -757,7 +758,7 @@ public static class DdlParser
             }
             _p += word.Length;
 
-            if (kind is DdlTypeKind.Text or DdlTypeKind.Binary)
+            if (kind is DdlTypeKind.Text or DdlTypeKind.Binary or DdlTypeKind.VarBinary)
             {
                 if (TakeSymbol('('))
                 {

@@ -41,7 +41,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
         .Get("Connect", (self, args) => Live(self, d => Text("")))
         .Get("QueryTimeout", (self, args) => Live(self, d => Int16(60)))
-        .Get("RecordsAffected", (self, args) => Live(self, d => Int32(d._recordsAffected)))
+        .Get("RecordsAffected", (self, args) => Live(self, d => Int32(d._recordsAffected.Current)))
         .Get("ReplicaID", (self, args) => Live(self, d => NullBstr()))
         .Get("DesignMasterID", (self, args) => Live(self, d => NullBstr()))
         .Get("Connection", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType)))
@@ -68,11 +68,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private IReadOnlyList<Relationship>? _relationships;
 
     /// <summary>
-    /// The RecordsAffected of this Database's last Execute (R-SQL-2; r-sql-2-3/act-records-affected): the rows the
-    /// statement changed, 0 after a DDL statement and after a failure (SQL-ACT-FAIL). A QueryDef's Execute counts on the
-    /// QueryDef and leaves this one (r-cat-1b/qd-execute-action-saved: db.RecordsAffected reads 0 after each).
+    /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
+    /// r-def-expr-sql/ddl-counter-seed-increment; r-sql-2-3/act-ddl-columns-indexes): a successful DDL leaves it at
+    /// the last successful DML count, and a failure reads 0 (SQL-ACT-FAIL) without clearing that remembered DML count.
+    /// A QueryDef's Execute counts on the QueryDef and leaves this one (r-cat-1b/qd-execute-action-saved: db.RecordsAffected reads 0 after each).
     /// </summary>
-    private int _recordsAffected;
+    private RecordsAffectedState _recordsAffected;
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
@@ -676,10 +677,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return ActionRoute.Execute(this, this, sql, options, null, ActionErrorSource.Database, ref _recordsAffected);
     }
 
-    /// <summary>A failure of Execute before the SQL layer ran: RecordsAffected reads 0 after it (SQL-ACT-FAIL).</summary>
+    /// <summary>A failure of Execute before the SQL layer ran: RecordsAffected reads 0 after it without clearing last DML (SQL-ACT-FAIL).</summary>
     private CallResult Affected(CallResult failed)
     {
-        _recordsAffected = 0;
+        _recordsAffected.Fail();
         return failed;
     }
 

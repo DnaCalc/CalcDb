@@ -296,6 +296,7 @@ public static class DdlBinder
 
         // Preserve declaration order (r-q15-ddl-open/columns-z-a proved ACE writes columns in declaration order).
         var fields = new List<NewField>(stmt.Columns.Count);
+        bool hasLval = false;
         foreach (DdlColumnDef col in stmt.Columns)
         {
             if (col.Nullability == DdlNullability.NotNull)
@@ -303,23 +304,105 @@ public static class DdlBinder
                 // r-q15-ddl-open/lv-sql-notnull-long & lv-sql-notnull-text: NOT NULL writes an LvProp blob on MSysObjects.
                 return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on column '{col.Name}' writes an LvProp blob (r-q15-ddl-open) not yet modelled in SchemaWriter"), out failure);
             }
-            if (col.DataType.Kind == DdlTypeKind.Long)
+            switch (col.DataType.Kind)
             {
-                fields.Add(new NewField(col.Name, NewFieldType.Long));
-            }
-            else if (col.DataType.Kind == DdlTypeKind.Text)
-            {
-                int size = col.DataType.Size ?? 255;
-                if (size == 0)
+                case DdlTypeKind.YesNo:
+                    fields.Add(new NewField(col.Name, NewFieldType.YesNo));
+                    break;
+                case DdlTypeKind.Byte:
+                    fields.Add(new NewField(col.Name, NewFieldType.Byte));
+                    break;
+                case DdlTypeKind.Short:
+                    fields.Add(new NewField(col.Name, NewFieldType.Short));
+                    break;
+                case DdlTypeKind.Long:
+                    fields.Add(new NewField(col.Name, NewFieldType.Long));
+                    break;
+                case DdlTypeKind.Counter:
+                    if (col.DataType.Seed is int seed)
+                    {
+                        if (col.DataType.Increment is not int inc)
+                        {
+                            return Fail(BindOpen("NotModelled.DdlCounterSingleArg", $"single-argument COUNTER({seed}) on column '{col.Name}' is not recorded in r-q21-ddl-types"), out failure);
+                        }
+                        if (inc != 1)
+                        {
+                            // AutoNumberCounter steps by 1 and TableDefinition does not decode TDEF+0x18 yet; refuse non-1 step on the SQL route.
+                            return Fail(BindOpen("NotModelled.DdlCounterIncrement", "the AutoNumber step is not applied by the ISAM yet"), out failure);
+                        }
+                        long initial = (long)seed - inc;
+                        if (initial is < int.MinValue or > int.MaxValue)
+                        {
+                            return Fail(BindOpen("NotModelled.DdlCounterOverflow", $"COUNTER({seed}, {inc}) on column '{col.Name}': seed - increment overflows signed 32-bit int"), out failure);
+                        }
+                        fields.Add(new NewField(col.Name, NewFieldType.Counter, Seed: seed, Increment: inc));
+                    }
+                    else
+                    {
+                        fields.Add(new NewField(col.Name, NewFieldType.Counter));
+                    }
+                    break;
+                case DdlTypeKind.Currency:
+                    fields.Add(new NewField(col.Name, NewFieldType.Currency));
+                    break;
+                case DdlTypeKind.Single:
+                    fields.Add(new NewField(col.Name, NewFieldType.Single));
+                    break;
+                case DdlTypeKind.Double:
+                    fields.Add(new NewField(col.Name, NewFieldType.Double));
+                    break;
+                case DdlTypeKind.DateTime:
+                    fields.Add(new NewField(col.Name, NewFieldType.DateTime));
+                    break;
+                case DdlTypeKind.Binary:
                 {
-                    // r-def-expr-sql/ddl-type-names-accdb accepts TEXT(0); SchemaWriter requires 1..255.
-                    return Fail(BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on column '{col.Name}' is not modelled in SchemaWriter"), out failure);
+                    // r-q21-ddl-types/col-binary-bare: bare BINARY defaults to 510 bytes (fixed).
+                    int size = col.DataType.Size ?? 510;
+                    if (size is < 1 or > 510)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlBinarySize", $"BINARY({size}) on column '{col.Name}' is outside 1..510 (bounds not probed in r-q21-ddl-types)"), out failure);
+                    }
+                    fields.Add(new NewField(col.Name, NewFieldType.Binary, size));
+                    break;
                 }
-                fields.Add(new NewField(col.Name, NewFieldType.Text, size));
-            }
-            else
-            {
-                return Fail(BindOpen("NotModelled.DdlFieldType", $"CREATE TABLE column '{col.Name}' type {col.DataType.Kind} is not modelled in SchemaWriter (supports Long and Text)"), out failure);
+                case DdlTypeKind.VarBinary:
+                {
+                    // r-q21-ddl-types Open: bare VARBINARY default length and upper bounds were not probed.
+                    if (col.DataType.Size is not int size)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlVarBinaryDefaultSize", $"bare VARBINARY on column '{col.Name}': default length is not probed in r-q21-ddl-types"), out failure);
+                    }
+                    if (size is < 1 or > 510)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlBinarySize", $"VARBINARY({size}) on column '{col.Name}' is outside 1..510 (bounds not probed in r-q21-ddl-types)"), out failure);
+                    }
+                    fields.Add(new NewField(col.Name, NewFieldType.VarBinary, size));
+                    break;
+                }
+                case DdlTypeKind.Text:
+                {
+                    int size = col.DataType.Size ?? 255;
+                    if (size == 0)
+                    {
+                        // r-def-expr-sql/ddl-type-names-accdb accepts TEXT(0); SchemaWriter requires 1..255.
+                        return Fail(BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on column '{col.Name}' is not modelled in SchemaWriter"), out failure);
+                    }
+                    fields.Add(new NewField(col.Name, NewFieldType.Text, size));
+                    break;
+                }
+                case DdlTypeKind.Memo:
+                    hasLval = true;
+                    fields.Add(new NewField(col.Name, NewFieldType.Memo));
+                    break;
+                case DdlTypeKind.LongBinary:
+                    hasLval = true;
+                    fields.Add(new NewField(col.Name, NewFieldType.Ole));
+                    break;
+                case DdlTypeKind.Guid:
+                    fields.Add(new NewField(col.Name, NewFieldType.Guid));
+                    break;
+                default:
+                    return Fail(BindOpen("NotModelled.DdlFieldType", $"CREATE TABLE column '{col.Name}' type {col.DataType.Kind} is not modelled in SchemaWriter"), out failure);
             }
         }
 
@@ -335,6 +418,10 @@ public static class DdlBinder
         IReadOnlyList<NewIndex>? indexes = null;
         if (primaryKeys.Count == 1)
         {
+            if (hasLval)
+            {
+                return Fail(BindOpen("NotModelled.DdlLvalWithInlineConstraint", "CREATE TABLE with both a Memo/OLE column and an inline PRIMARY KEY constraint is not modelled in SchemaWriter (r-q21-ddl-types Open)"), out failure);
+            }
             (string? pkName, IReadOnlyList<string> pkCols) = primaryKeys[0];
             if (pkName is null)
             {
@@ -546,7 +633,7 @@ public static class DdlBinder
         DdlTypeKind.Single => NativeTypes.Single,
         DdlTypeKind.Double => NativeTypes.Double,
         DdlTypeKind.DateTime => NativeTypes.DateTime,
-        DdlTypeKind.Binary => NativeTypes.Binary,
+        DdlTypeKind.Binary or DdlTypeKind.VarBinary => NativeTypes.Binary,
         DdlTypeKind.Text => NativeTypes.Text,
         DdlTypeKind.LongBinary => NativeTypes.Ole,
         DdlTypeKind.Memo => NativeTypes.Memo,
@@ -598,24 +685,39 @@ public static class DdlBinder
 
         // ---- Lowering to SchemaWriter.CreateIndexRequest (SchemaRoute.Sql) ----
 
-        if (stmt.Unique || stmt.Options != DdlIndexOptions.None)
+        bool primary = (stmt.Options & DdlIndexOptions.Primary) != 0;
+        bool disallowNull = (stmt.Options & DdlIndexOptions.DisallowNull) != 0;
+        bool ignoreNull = (stmt.Options & DdlIndexOptions.IgnoreNull) != 0;
+        if ((primary && (disallowNull || ignoreNull)) || (disallowNull && ignoreNull))
         {
-            return Fail(BindOpen("NotModelled.DdlIndexOptions", "UNIQUE or WITH PRIMARY/DISALLOW NULL/IGNORE NULL index is not modelled in SchemaWriter"), out failure);
+            return Fail(BindOpen("NotModelled.DdlIndexOptions", "combining WITH PRIMARY with DISALLOW/IGNORE NULL, or DISALLOW NULL with IGNORE NULL, is not recorded in r-q21-ddl-types"), out failure);
         }
-        if (stmt.Columns.Count != 1 || stmt.Columns[0].Descending)
+        if (stmt.Columns.Count is < 1 or > 2)
         {
-            return Fail(BindOpen("NotModelled.DdlIndexShape", "multi-column or DESC index is not modelled in SchemaWriter"), out failure);
+            return Fail(BindOpen("NotModelled.DdlIndexShape", $"CREATE INDEX with {stmt.Columns.Count} columns is not modelled in SchemaWriter (r-q11/r-q21 record 1–2 columns)"), out failure);
         }
-        if (boundCols![0].TypeCode != NativeTypes.Long)
+        foreach (ColumnDescriptor col in boundCols!)
         {
-            return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type {boundCols[0].TypeCode} is not modelled in SchemaWriter (supports Long)"), out failure);
+            if (col.TypeCode is not (NativeTypes.Long or NativeTypes.Text))
+            {
+                return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21 record Long and Text)"), out failure);
+            }
         }
+
+        var newIndex = new NewIndex(
+            stmt.IndexName,
+            [.. boundCols.Select(c => c.Name)],
+            PrimaryKey: primary,
+            Unique: stmt.Unique,
+            DisallowNull: disallowNull,
+            IgnoreNull: ignoreNull,
+            Descending: stmt.Columns.Any(c => c.Descending) ? [.. stmt.Columns.Select(c => c.Descending)] : null);
 
         failure = null;
         return new BoundDdl(
             stmt,
             BoundDdlKind.CreateIndex,
-            CreateIndex: new CreateIndexRequest(stmt.TableName, new NewIndex(stmt.IndexName, [boundCols[0].Name], PrimaryKey: false), SchemaRoute.Sql));
+            CreateIndex: new CreateIndexRequest(stmt.TableName, newIndex, SchemaRoute.Sql));
     }
 
     private static SqlFailure? ValidateCreateIndexBody(CreateIndexStatement stmt, TableDefinition table, out List<ColumnDescriptor>? boundCols)
@@ -955,7 +1057,8 @@ public static class DdlBinder
 /// <summary>
 /// SQL DDL execution service (W-07/native-metadata-write stretch 2; II-11 §28): parses, binds and lowers DDL
 /// statements to <see cref="SchemaWriter"/> on <see cref="ISqlSchemaDatabase"/>, returning
-/// <see cref="ActionOutcome.Ok"/>(0) on success (matching ACE's <c>RecordsAffected = 0</c> for DDL) or an exact ACE
+/// <see cref="ActionOutcome.OkDdl"/> on success (preserving the caller's last successful DML <c>RecordsAffected</c>,
+/// <c>r-def-expr-sql/ddl-counter-seed-increment</c> and <c>r-sql-2-3/act-ddl-columns-indexes</c>) or an exact ACE
 /// error / named <c>NotModelled.*</c> refusal.
 /// </summary>
 public static class DdlExecutor
@@ -1027,8 +1130,9 @@ public static class DdlExecutor
         if (outcome.Succeeded)
         {
             schemaDb.OnSchemaPublished(outcome.ExtentPages);
-            // r-def-expr-sql/ddl-column-clauses, ddl-index-forms, ddl-drop-and-missing-objects: DDL sets RecordsAffected = 0.
-            return ActionOutcome.Ok(0);
+            // r-def-expr-sql/ddl-counter-seed-increment, r-sql-2-3/act-ddl-columns-indexes:
+            // successful DDL preserves the database's last successful DML RecordsAffected (0 before any DML).
+            return ActionOutcome.OkDdl();
         }
 
         if (outcome.Refused is { } refused)

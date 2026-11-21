@@ -38,7 +38,12 @@ public sealed record LogicalIndexSpec(
 /// <summary>Trailing LVAL (Memo/OLE) column usage-map entry in a TableDef stream.</summary>
 public sealed record LvalColumnMapSpec(ushort PhysicalNumber, RowLocator OwnedMap, RowLocator FreeMap);
 
-/// <summary>Complete single-page TableDef specification for <see cref="TableDefEncoder.Encode"/>.</summary>
+/// <summary>
+/// Complete single-page TableDef specification for <see cref="TableDefEncoder.Encode"/>.
+/// <paramref name="AutoNumber"/> (<c>[20..24)</c>, int32LE) holds <c>seed - increment</c> (last-issued value before the first insert)
+/// and <paramref name="AutoNumberIncrement"/> (<c>[24..28)</c>, int32LE) holds the signed increment (default 1;
+/// <c>evidence/r-q21-ddl-types/col-counter*</c>).
+/// </summary>
 public sealed record TableDefSpec(
     byte TableType,
     uint RowCount,
@@ -50,7 +55,8 @@ public sealed record TableDefSpec(
     IReadOnlyList<ColumnSpec> Columns,
     IReadOnlyList<PhysicalIndexSpec> PhysicalIndexes,
     IReadOnlyList<LogicalIndexSpec> LogicalIndexes,
-    IReadOnlyList<LvalColumnMapSpec> LvalColumnMaps);
+    IReadOnlyList<LvalColumnMapSpec> LvalColumnMaps,
+    int AutoNumberIncrement = 1);
 
 /// <summary>
 /// Single-page TableDef emitter (II-04 §§1.2–1.3, II-05 §§1.1–1.3, W-07/new-database-image). Writes every defined field
@@ -63,9 +69,6 @@ public static class TableDefEncoder
     /// column block <c>[1..5)</c>, and every 28-byte logical index block <c>[0..4)</c>.
     /// </summary>
     public const uint UnconfirmedTableDefMarker = 0x00000659u;
-
-    /// <summary>Unconfirmed ACE 2007 constant <c>0x00000001</c> observed at TableDef header <c>[24..28)</c>.</summary>
-    public const uint UnconfirmedInitialAutoNumberFlag = 0x00000001u;
 
     /// <summary>Unconfirmed ACE 2007 constant <c>0x00000783</c> observed at every 52-byte physical index block <c>[0..4)</c>.</summary>
     public const uint UnconfirmedPhysicalIndexMarker = 0x00000783u;
@@ -94,7 +97,9 @@ public static class TableDefEncoder
         BinaryPrimitives.WriteUInt32LittleEndian(page[12..], UnconfirmedTableDefMarker);
         t.RowCount.Write(page, spec.RowCount);
         t.AutoNumber.Write(page, spec.AutoNumber);
-        BinaryPrimitives.WriteUInt32LittleEndian(page[24..], UnconfirmedInitialAutoNumberFlag);
+        // Signed int32LE AutoNumber increment at TableDef header [24..28) (evidence/r-q21-ddl-types:
+        // col-counter = 1, col-counter-seed-inc = 5, col-counter-100-7 = 7, col-counter-neg-inc = -2).
+        BinaryPrimitives.WriteInt32LittleEndian(page[24..], spec.AutoNumberIncrement);
         t.TableType.Write(page, spec.TableType);
         t.MaxColumns.Write(page, spec.MaxColumns);
         t.VariableColumns.Write(page, spec.VariableColumns);
@@ -210,9 +215,10 @@ public static class TableDefEncoder
 
     /// <summary>
     /// The spec of a decoded single-page TableDef, for a writer that changes one part of it (CREATE INDEX: W-07/native-metadata-write);
-    /// null with the reason when the definition has parts a spec does not carry (Memo or OLE columns, whose LVAL map
-    /// locators the decoder does not keep, or a continuation page). A caller re-encodes the spec and compares it with
-    /// the stored page before it writes a changed one, so that no byte it does not model is lost (R-PRESERVE-1).
+    /// null with the reason when the definition spans continuation pages. Trailing LVAL column map locators decoded in
+    /// <see cref="TableDefinition.LongValueMaps"/> are carried forward (<c>evidence/r-q21-ddl-types/ix-on-table-with-memo</c>).
+    /// A caller re-encodes the spec and compares it with the stored page before it writes a changed one, so that no byte
+    /// it does not model (such as a non-1 AutoNumber increment) is lost (R-PRESERVE-1).
     /// </summary>
     public static TableDefSpec? SpecOf(TableDefinition t, out string? failure)
     {
@@ -220,11 +226,6 @@ public static class TableDefEncoder
         if (t.Segments.Count != 1)
         {
             failure = $"the TableDef spans {t.Segments.Count} pages";
-            return null;
-        }
-        if (t.Columns.Any(c => c.TypeCode is NativeTypes.Memo or NativeTypes.Ole))
-        {
-            failure = "a Memo or OLE column's LVAL map locators are not kept by the decoder";
             return null;
         }
         return new TableDefSpec(
@@ -238,7 +239,7 @@ public static class TableDefEncoder
             Columns: [.. t.Columns.Select(c => new ColumnSpec(c.Name, c.TypeCode, (ushort)c.PhysicalNumber, (ushort)c.VariableIndex, (ushort)c.ColumnId, c.TypeInfo, c.Flags, c.ExtendedFlags, (ushort)c.FixedOffset, (ushort)c.Length))],
             PhysicalIndexes: [.. t.PhysicalIndexes.Select(p => new PhysicalIndexSpec(p.Columns, p.OwnedMap, p.RootPage, p.Flags, p.EntryCount, p.UniqueEntryCount))],
             LogicalIndexes: [.. t.LogicalIndexes.Select(l => new LogicalIndexSpec(l.Name, (uint)l.Number, (uint)l.PhysicalNumber, l.IndexType, l.RelatedTableType, l.RelatedIndex, l.RelatedTable))],
-            LvalColumnMaps: []);
+            LvalColumnMaps: [.. t.LongValueMaps]);
     }
 
     private static int WriteName(Span<byte> page, int pos, string name, int lengthBytes)

@@ -258,8 +258,8 @@ internal static class SelectRoute
 /// </summary>
 internal static class ActionRoute
 {
-    /// <summary>Run <paramref name="sql"/>; <paramref name="recordsAffected"/> is the caller's RecordsAffected.</summary>
-    public static CallResult Execute(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref int recordsAffected)
+    /// <summary>Run <paramref name="sql"/>; <paramref name="recordsAffected"/> tracks the caller's RecordsAffected.</summary>
+    public static CallResult Execute(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
     {
         if (database.SchemaFailure is { } stale)
         {
@@ -282,7 +282,13 @@ internal static class ActionRoute
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
-        return Published(database, caller, outcome, plan.Kind is ActionKind.InsertValues or ActionKind.InsertSelect, ref recordsAffected);
+        RecordsAffectedState state = default;
+        CallResult result = Published(database, caller, outcome, plan.Kind is ActionKind.InsertValues or ActionKind.InsertSelect, ref state);
+        if (result.Failure?.Kind != FailureKind.NotModelled)
+        {
+            recordsAffected = state.Current;
+        }
+        return result;
     }
 
     /// <summary>
@@ -290,11 +296,11 @@ internal static class ActionRoute
     /// on-row-returning); a pass-through one would go to its ODBC source and is named; the others run their SQL as ACE
     /// renders it (QuerySql, CAT-Q).
     /// </summary>
-    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref int recordsAffected)
+    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
     {
         if (query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union)
         {
-            recordsAffected = 0;
+            recordsAffected.Fail();
             return caller.Fail(3065, SelectRoute.CannotExecuteSelect);
         }
         if (query.Family is not { } family || family == QueryFamily.PassThrough)
@@ -307,15 +313,35 @@ internal static class ActionRoute
             : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
     }
 
-    /// <summary>A bind failure of a QueryDef's action plan, published as Execute would publish it.</summary>
-    public static CallResult Failed(DatabaseObject database, DaoObject caller, SqlFailure failure, ref int recordsAffected) =>
-        Published(database, caller, ActionOutcome.Fail(failure), insert: false, ref recordsAffected);
+    /// <summary>QueryDef overload forwarding to <see cref="RecordsAffectedState"/> (a saved QueryDef runs one query family).</summary>
+    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref int recordsAffected)
+    {
+        RecordsAffectedState state = default;
+        CallResult result = ExecuteSaved(database, caller, query, options, values, source, ref state);
+        if (result.Failure?.Kind != FailureKind.NotModelled)
+        {
+            recordsAffected = state.Current;
+        }
+        return result;
+    }
 
-    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, bool insert, ref int recordsAffected)
+    /// <summary>A bind failure of a QueryDef's action plan, published as Execute would publish it.</summary>
+    public static CallResult Failed(DatabaseObject database, DaoObject caller, SqlFailure failure, ref int recordsAffected)
+    {
+        RecordsAffectedState state = default;
+        CallResult result = Published(database, caller, ActionOutcome.Fail(failure), insert: false, ref state);
+        if (result.Failure?.Kind != FailureKind.NotModelled)
+        {
+            recordsAffected = state.Current;
+        }
+        return result;
+    }
+
+    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, bool insert, ref RecordsAffectedState recordsAffected)
     {
         if (outcome.Failure is not { } failure)
         {
-            recordsAffected = outcome.RecordsAffected;
+            recordsAffected.Apply(outcome);
             return CallResult.Nothing;
         }
         if (failure.IsNotModelled)
@@ -325,12 +351,12 @@ internal static class ActionRoute
             // process (with one it succeeded: r-fix-cursor-dao/lock-readonly-db-insert-failonerror, still named).
             if (failure.NotModelled == "NotModelled.ReadOnlyAction" && insert && !ReadWriteBeside(database))
             {
-                recordsAffected = 0;
+                recordsAffected.Fail();
                 return caller.Fail(3073, SqlMessages.NotUpdateable);
             }
             return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
         }
-        recordsAffected = 0; // SQL-ACT-FAIL: RecordsAffected reads 0 after every failure.
+        recordsAffected.Apply(outcome); // SQL-ACT-FAIL: RecordsAffected reads 0 after every failure without clearing last DML.
         return caller.Fail(failure.Number, failure.Message);
     }
 

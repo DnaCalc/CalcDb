@@ -7,28 +7,67 @@ using CalcDb.Storage;
 namespace CalcDb.Catalog;
 
 /// <summary>
-/// The route a catalog change came by. ACE writes the two differently for the same table (evidence/r-q11-ddl-closure:
+/// The route a catalog change came by. ACE writes SQL and DAO differently for the same table (evidence/r-q11-ddl-closure:
 /// create-one-long by <c>Execute</c>, append-dao by <c>TableDefs.Append</c>): the DAO route stores a property blob on
-/// the MSysObjects row, a later DateUpdate, no collation on a Long column, and commits twice.
+/// the MSysObjects row, a later DateUpdate, no collation on a Long column, and commits twice. The ADO route
+/// (<c>Microsoft.ACE.OLEDB.12.0</c>, evidence/r-q21-ddl-types: col-long-ado, col-counter-seed-inc-ado, col-decimal-ado*)
+/// writes the same bytes as SQL and additionally admits <see cref="NewFieldType.Decimal"/>.
 /// </summary>
 public enum SchemaRoute : byte
 {
     Sql,
     Dao,
+    Ado,
 }
 
-/// <summary>The field types a new table takes in this slice; the others are refused by name until a record shows them.</summary>
+/// <summary>The field types a new table takes (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types); unrecorded types stay refused by name.</summary>
 public enum NewFieldType : byte
 {
     Long,
     Text,
+    YesNo,
+    Byte,
+    Short,
+    Counter,
+    Currency,
+    Single,
+    Double,
+    DateTime,
+    Binary,
+    VarBinary,
+    Ole,
+    Memo,
+    Guid,
+    Decimal,
 }
 
-/// <summary>A field of a new table (II-11 §28 field descriptor; DAO CreateField): its name, type and, for Text, its size in characters.</summary>
-public sealed record NewField(string Name, NewFieldType Type, int Size = 0);
+/// <summary>
+/// A field of a new table (II-11 §28 field descriptor; DAO CreateField): its name, type, optional size
+/// (characters for Text; bytes for Binary/VarBinary), optional Counter <c>(Seed, Increment)</c>, and Decimal
+/// <c>(Precision, Scale)</c>.
+/// </summary>
+public sealed record NewField(
+    string Name,
+    NewFieldType Type,
+    int Size = 0,
+    int? Seed = null,
+    int? Increment = null,
+    byte Precision = 0,
+    byte Scale = 0);
 
-/// <summary>An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, ascending, and whether it is the primary key.</summary>
-public sealed record NewIndex(string Name, IReadOnlyList<string> Fields, bool PrimaryKey);
+/// <summary>
+/// An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, its option flags
+/// (<c>PrimaryKey</c>, <c>Unique</c>, <c>DisallowNull</c>, <c>IgnoreNull</c>), and optional per-column descending flags
+/// (<c>null</c> means all ascending; evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types).
+/// </summary>
+public sealed record NewIndex(
+    string Name,
+    IReadOnlyList<string> Fields,
+    bool PrimaryKey,
+    bool Unique = false,
+    bool DisallowNull = false,
+    bool IgnoreNull = false,
+    IReadOnlyList<bool>? Descending = null);
 
 /// <summary>A typed CREATE TABLE request over the catalog mutation service (II-11 §28, F-114; II-06 catalog mutation).</summary>
 public sealed record CreateTableRequest(string Name, IReadOnlyList<NewField> Fields, SchemaRoute Route, IReadOnlyList<NewIndex>? Indexes = null)
@@ -60,7 +99,7 @@ public readonly record struct SchemaOutcome(SchemaRefusal? Refused, AcceptOutcom
 /// is transactional and published like any other (R-TXN-1 TXN-DDL; <see cref="TransactionCoordinator.AcceptSchemaChange"/>).
 /// New pages come from the one <see cref="PageAllocator"/>, the catalog rows go in and out through the one row compiler
 /// (<see cref="SameWidthWriter"/>), and the TableDef through the one <see cref="TableDefEncoder"/>. Every byte rule cites
-/// the record it was read from (evidence/r-q11-ddl-closure); what no record decides is refused by name.
+/// the record it was read from (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types); what no record decides is refused by name.
 /// </summary>
 public sealed class SchemaWriter
 {
@@ -77,20 +116,32 @@ public sealed class SchemaWriter
     private const short TableObjectType = 1;
     private const int NewTableFlags = 0;
 
-    /// <summary>The flags of the column blocks ACE writes: a Long 03, a Text 02 (r-q11 create-two-columns, page 42).</summary>
+    /// <summary>
+    /// The flags of the column blocks ACE writes: fixed 03, variable 02, AutoNumber (COUNTER/AUTOINCREMENT) 07
+    /// (0x03 | 0x04; r-q11 create-two-columns, r-q21-ddl-types col-counter*).
+    /// </summary>
     private const byte FixedColumnFlags = 0x03;
     private const byte VariableColumnFlags = 0x02;
+    private const byte AutoNumberColumnFlags = 0x07;
 
     /// <summary>
-    /// The physical index flags ACE writes for a one-field index on an empty table: 0x89 for a PRIMARY KEY constraint
-    /// (r-q11 create-primary-key, page 42 offset 0x96), 0x80 for <c>CREATE INDEX</c> without options (create-then-index).
-    /// Their bits are not separated by these two records (0x01 is the descriptor's unique flag); other kinds are refused.
+    /// The physical index flags ACE writes on an empty table (r-q11 create-primary-key and create-then-index;
+    /// r-q21-ddl-types ix-unique, ix-with-primary, ix-unique-with-primary, ix-disallow-null, ix-ignore-null,
+    /// ix-unique-disallow-null, ix-unique-ignore-null): base 0x80 with bit 0x01 UNIQUE, bit 0x02 IGNORE NULL,
+    /// bit 0x08 DISALLOW NULL; WITH PRIMARY writes 0x89 (with or without UNIQUE) and logical IndexType 1.
     /// </summary>
-    private const byte PrimaryKeyIndexFlags = 0x89;
     private const byte PlainIndexFlags = 0x80;
+    private const byte UniqueIndexFlag = 0x01;
+    private const byte IgnoreNullIndexFlag = 0x02;
+    private const byte DisallowNullIndexFlag = 0x08;
+    private const byte PrimaryKeyIndexFlags = PlainIndexFlags | UniqueIndexFlag | DisallowNullIndexFlag; // 0x89
 
-    /// <summary>An ascending index column's slot flags (01; r-q11 create-primary-key and the system tables' indexes).</summary>
+    /// <summary>Index column slot flags: 0x01 ascending, 0x00 descending (r-q11 create-primary-key, r-q21 ix-desc, ix-two-col-mixed-desc).</summary>
     private const byte AscendingColumnFlags = 0x01;
+    private const byte DescendingColumnFlags = 0x00;
+
+    /// <summary>Maximum LVAL columns whose 2 empty 69-byte maps plus the table's 2 maps fit on one 4096-byte map page (2 + 2*27 = 56 &lt;= 57).</summary>
+    private const int MaxSinglePageLvalColumns = 27;
 
     /// <summary>
     /// The one property a DAO-appended field stores: <c>Required</c> False, with the DDL flag 01, in the field's column
@@ -157,24 +208,116 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, $"fields {request.Fields[i - 1].Name} and {request.Fields[i].Name} are not in name order: the column-block order ACE writes then is not recorded");
             }
         }
+        int counterCount = 0;
+        int lvalCount = 0;
+        int fixedBytes = 0;
         foreach (NewField f in request.Fields)
         {
-            if (f.Type == NewFieldType.Text && (f.Size is < 1 or > 255))
-            {
-                return new SchemaRefusal(null, $"Text field {f.Name} of size {f.Size}");
-            }
             if (request.Route == SchemaRoute.Dao && f.Type != NewFieldType.Long)
             {
                 return new SchemaRefusal(null, $"DAO-appended {f.Type} field {f.Name}: only a Long field's TableDef and property bytes are recorded (r-q11 append-dao)");
             }
+            switch (f.Type)
+            {
+                case NewFieldType.Text:
+                    if (f.Size is < 1 or > 255)
+                    {
+                        return new SchemaRefusal(null, $"Text field {f.Name} of size {f.Size}");
+                    }
+                    break;
+                case NewFieldType.Binary:
+                case NewFieldType.VarBinary:
+                    if (f.Size is < 1 or > 510)
+                    {
+                        return new SchemaRefusal(null, $"{f.Type} field {f.Name} of size {f.Size} (bounds outside 1..510 are not probed in r-q21-ddl-types)");
+                    }
+                    if (f.Type == NewFieldType.Binary)
+                    {
+                        fixedBytes += f.Size;
+                    }
+                    break;
+                case NewFieldType.Counter:
+                    counterCount++;
+                    if (counterCount > 1)
+                    {
+                        return new SchemaRefusal(null, "multiple Counter fields in one table");
+                    }
+                    if ((f.Seed is null) != (f.Increment is null))
+                    {
+                        return new SchemaRefusal(null, $"single-argument COUNTER({f.Seed}) on field {f.Name}: only default COUNTER and COUNTER(seed, inc) are recorded in r-q21-ddl-types");
+                    }
+                    if (f.Increment == 0)
+                    {
+                        return new SchemaRefusal(null, $"COUNTER field {f.Name} with increment 0 (page changes on refusal are not recorded in r-q21-ddl-types)");
+                    }
+                    if (f.Seed is int seed && f.Increment is int inc)
+                    {
+                        long initial = (long)seed - inc;
+                        if (initial is < int.MinValue or > int.MaxValue)
+                        {
+                            return new SchemaRefusal(null, $"COUNTER({seed}, {inc}) on field {f.Name}: seed - increment overflows signed 32-bit int");
+                        }
+                    }
+                    fixedBytes += 4;
+                    break;
+                case NewFieldType.Decimal:
+                    if (request.Route != SchemaRoute.Ado)
+                    {
+                        return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao)");
+                    }
+                    if (f.Precision is < 1 or > 28 || f.Scale > f.Precision)
+                    {
+                        return new SchemaRefusal(null, $"Decimal field {f.Name}({f.Precision}, {f.Scale}): precision/scale outside 1..28 / 0..precision are not probed in r-q21-ddl-types");
+                    }
+                    fixedBytes += 17;
+                    break;
+                case NewFieldType.Memo:
+                case NewFieldType.Ole:
+                    lvalCount++;
+                    break;
+                case NewFieldType.YesNo:
+                case NewFieldType.Guid:
+                    break;
+                case NewFieldType.Byte:
+                    fixedBytes += 1;
+                    break;
+                case NewFieldType.Short:
+                    fixedBytes += 2;
+                    break;
+                case NewFieldType.Long:
+                case NewFieldType.Single:
+                    fixedBytes += 4;
+                    break;
+                case NewFieldType.Currency:
+                case NewFieldType.Double:
+                case NewFieldType.DateTime:
+                    fixedBytes += 8;
+                    break;
+                default:
+                    return new SchemaRefusal(null, $"field {f.Name} of unrecorded type {f.Type}");
+            }
         }
-        if (request.AllIndexes.Count > 0 && (request.Route == SchemaRoute.Dao || request.AllIndexes.Count > 1 || !request.AllIndexes[0].PrimaryKey))
+        if (fixedBytes > ushort.MaxValue)
         {
-            return new SchemaRefusal(null, "CREATE TABLE with indexes other than one PRIMARY KEY constraint, or by the DAO route (r-q11 records one SQL PRIMARY KEY)");
+            return new SchemaRefusal(null, $"fixed column bytes ({fixedBytes}) exceed 16-bit FixedOffset range");
         }
-        foreach (NewIndex index in request.AllIndexes)
+        if (lvalCount > MaxSinglePageLvalColumns)
         {
-            if (IndexRefusal(index, [.. request.Fields.Select(f => (f.Name, f.Type == NewFieldType.Long))]) is { } refused)
+            return new SchemaRefusal(null, $"{lvalCount} LVAL columns exceed single-page map capacity ({MaxSinglePageLvalColumns})");
+        }
+        if (request.AllIndexes.Count > 0)
+        {
+            if (lvalCount > 0)
+            {
+                return new SchemaRefusal(null, "CREATE TABLE with both a long-value column (Memo/OLE) and an inline index/PRIMARY KEY (map-row order on page 43 is not recorded: r-q21-ddl-types Open)");
+            }
+            NewIndex pk = request.AllIndexes[0];
+            if (request.Route != SchemaRoute.Sql || request.AllIndexes.Count > 1 || !pk.PrimaryKey || pk.Unique || pk.DisallowNull || pk.IgnoreNull
+                || pk.Fields.Count != 1 || (pk.Descending is not null && pk.Descending.Any(d => d)))
+            {
+                return new SchemaRefusal(null, "CREATE TABLE with indexes other than one SQL PRIMARY KEY constraint on one ascending Long column (r-q11 create-primary-key)");
+            }
+            if (IndexRefusal(pk, [.. request.Fields.Select(f => (f.Name, NativeTypeOf(f.Type)))], allowText: false) is { } refused)
             {
                 return refused;
             }
@@ -207,16 +350,20 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// CREATE INDEX on an existing empty table (evidence/r-q11-ddl-closure/create-then-index): allocate the index leaf,
-    /// add the index's map to the table's map page (its next row), rewrite the TableDef with the index (the same bytes
-    /// as a PRIMARY KEY constraint at creation but for the flags, name and type: create-primary-key), initialize the
-    /// empty leaf, and set the table's MSysObjects DateUpdate to <paramref name="dateUpdateBits"/>.
+    /// CREATE INDEX on an existing empty table (evidence/r-q11-ddl-closure/create-then-index, evidence/r-q21-ddl-types/ix-*):
+    /// allocate the index leaf, add the index's map to the table's map page (its next row, after the table's owned/free
+    /// maps and any LVAL column maps), rewrite the TableDef with the index (keeping any trailing LVAL map entries before
+    /// FF FF), initialize the empty leaf, and set the table's MSysObjects DateUpdate to <paramref name="dateUpdateBits"/>.
     /// </summary>
     public SchemaOutcome CreateIndex(TransactionCoordinator workspace, CreateIndexRequest request, ulong dateUpdateBits)
     {
         if (FileRefusal() is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
+        }
+        if (request.Route != SchemaRoute.Sql)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX on {request.Route} route (only SQL CREATE INDEX is recorded: r-q11, r-q21-ddl-types)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } entry)
         {
@@ -226,13 +373,13 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, failure), default, _pageCount);
         }
-        if (IndexRefusal(request.Index, [.. table.Columns.Select(c => (c.Name, c.TypeCode == NativeTypes.Long))]) is { } invalid)
+        if (IndexRefusal(request.Index, [.. table.Columns.Select(c => (c.Name, c.TypeCode))], allowText: true) is { } invalid)
         {
             return new SchemaOutcome(invalid, default, _pageCount);
         }
-        if (request.Index.PrimaryKey || table.PhysicalIndexes.Count > 0 || table.LogicalIndexes.Count > 0 || table.RowCount > 0)
+        if (table.PhysicalIndexes.Count > 0 || table.LogicalIndexes.Count > 0 || table.RowCount > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX of a primary key, on a table with indexes or with rows (r-q11 records a plain index on an empty table)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a table with existing indexes or with rows (r-q11/r-q21 record the first index on an empty table)"), default, _pageCount);
         }
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent));
@@ -309,7 +456,16 @@ public sealed class SchemaWriter
         byte[] tdef = new byte[_d.PageSize];
         TableDefEncoder.Encode(tdef, spec, _d);
         byte[] map = new byte[_d.PageSize];
-        MapPages.Initialize(map, [[], [], .. leaves.Select(l => new[] { l })], _d);
+        // Map page rows: 0 = table owned, 1 = table free, then 2 empty maps per LVAL column (r-q21 col-memo,
+        // col-two-memos, col-longbinary, col-oleobject) or 1 map per inline index (r-q11 create-primary-key).
+        uint[][] mapRows =
+        [
+            [],
+            [],
+            .. Enumerable.Repeat<uint[]>([], spec.LvalColumnMaps.Count * 2),
+            .. leaves.Select(l => new[] { l }),
+        ];
+        MapPages.Initialize(map, mapRows, _d);
         if (!work.Apply(new PageEdit(tdefPage, new WholePage(tdef), PageRole.Catalog)) || !work.Apply(new PageEdit(mapPage, new WholePage(map), PageRole.Map))
             || !leaves.All(leaf => work.Apply(new PageEdit(leaf, new WholePage(EmptyLeaf(tdefPage)), PageRole.Index))))
         {
@@ -380,10 +536,27 @@ public sealed class SchemaWriter
         {
             return NotWritten($"{entry.Name}'s maps are not on one readable map page");
         }
-        byte mapSlot = (byte)_d.DataPage.RowCount.Read(mapPage);
-        if (mapSlot != 2 || table.OwnedMap.Row != 0 || table.FreeMap.Row != 1)
+        int lvalColumns = table.Columns.Count(c => c.TypeCode is NativeTypes.Memo or NativeTypes.Ole);
+        if (lvalColumns != table.LongValueMaps.Count)
         {
-            return NotWritten($"{entry.Name}'s map page holds {mapSlot} maps: only a page with the table's owned and free maps in rows 0 and 1 is recorded (r-q11 create-then-index)");
+            return NotWritten($"{entry.Name} has {lvalColumns} LVAL columns but {table.LongValueMaps.Count} decoded LVAL map entries");
+        }
+        int expectedMapRows = 2 + (table.LongValueMaps.Count * 2);
+        bool lvalMapsSequential = true;
+        for (int i = 0; i < table.LongValueMaps.Count; i++)
+        {
+            LvalColumnMapSpec lval = table.LongValueMaps[i];
+            if (lval.OwnedMap.Page != table.OwnedMap.Page || lval.FreeMap.Page != table.OwnedMap.Page
+                || lval.OwnedMap.Row != 2 + (i * 2) || lval.FreeMap.Row != 3 + (i * 2))
+            {
+                lvalMapsSequential = false;
+                break;
+            }
+        }
+        byte mapSlot = (byte)_d.DataPage.RowCount.Read(mapPage);
+        if (mapSlot != expectedMapRows || table.OwnedMap.Row != 0 || table.FreeMap.Row != 1 || !lvalMapsSequential)
+        {
+            return NotWritten($"{entry.Name}'s map page holds {mapSlot} maps (expected {expectedMapRows} for {table.LongValueMaps.Count} LVAL columns: r-q11 create-then-index, r-q21 ix-on-table-with-memo)");
         }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
         if (work.Allocate(allocator) is not { } leaf)
@@ -460,38 +633,114 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// The new table's TableDef (r-q11 create-one-long and create-two-columns, page 42): type 4E, no rows, the owned and
-    /// free maps in rows 0 and 1 of its map page, one column block per field in definition order with its physical
-    /// number, column id and variable index (a variable column's ordinal among the variable ones, a fixed column's count
-    /// of variable ones before it), fixed offsets in definition order, a Text's length in bytes. TypeInfo is the
-    /// database's sort order on the SQL route (0x0409, the General – Legacy descriptor, for Long and Text alike) and 0 for
-    /// a DAO-appended Long (append-dao, page 42 offsets 74–75).
+    /// The new table's TableDef (r-q11 create-one-long and create-two-columns; r-q21-ddl-types col-*): type 4E, no rows,
+    /// the owned and free maps in rows 0 and 1 of its map page, one column block per field in definition order with its
+    /// physical number, column id and variable index (a variable column's ordinal among the variable ones, a fixed column's
+    /// count of variable ones before it), fixed offsets in definition order (YesNo stays at FixedOffset 0 and advances by 0),
+    /// TypeInfo equal to the database's sort order on SQL/ADO (0 for DAO Long; precision | scale &lt;&lt; 8 for ADO Decimal),
+    /// AutoNumber header [0x14..0x17] = seed - increment and [0x18..0x1B] = signed increment for COUNTER/AUTOINCREMENT, and
+    /// trailing LVAL map entries (2 empty map rows on the map page + 10B TDEF entry each) for Memo/OLE columns.
     /// </summary>
     private TableDefSpec Spec(CreateTableRequest request, uint mapPage)
     {
         uint sortInfo = (uint)_sortOrder.Identifier | ((uint)_sortOrder.Reserved << 16) | ((uint)(byte)_sortOrder.Version << 24);
         List<ColumnSpec> columns = [];
+        List<LvalColumnMapSpec> lvalMaps = [];
         ushort fixedOffset = 0;
         ushort variables = 0;
+        uint autoNumber = 0;
+        int autoNumberIncrement = 1;
         for (int i = 0; i < request.Fields.Count; i++)
         {
             NewField f = request.Fields[i];
             uint typeInfo = request.Route == SchemaRoute.Dao ? 0u : sortInfo;
-            if (f.Type == NewFieldType.Long)
+            switch (f.Type)
             {
-                columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
-                fixedOffset += 4;
-            }
-            else
-            {
-                columns.Add(new ColumnSpec(f.Name, NativeTypes.Text, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, (ushort)(f.Size * 2)));
-                variables++;
+                case NewFieldType.YesNo:
+                    // Boolean values live in the row's null bitmap: FixedOffset is always 0 and does not advance (r-q21 col-yesno-long, MSysACEs.FInheritable).
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Boolean, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, 0, 1));
+                    break;
+                case NewFieldType.Byte:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Byte, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 1));
+                    fixedOffset += 1;
+                    break;
+                case NewFieldType.Short:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Integer, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 2));
+                    fixedOffset += 2;
+                    break;
+                case NewFieldType.Long:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
+                    fixedOffset += 4;
+                    break;
+                case NewFieldType.Counter:
+                {
+                    int seed = f.Seed ?? 1;
+                    int inc = f.Increment ?? 1;
+                    autoNumber = unchecked((uint)(seed - inc));
+                    autoNumberIncrement = inc;
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, AutoNumberColumnFlags, 0x00, fixedOffset, 4));
+                    fixedOffset += 4;
+                    break;
+                }
+                case NewFieldType.Currency:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Currency, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                    fixedOffset += 8;
+                    break;
+                case NewFieldType.Single:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Single, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
+                    fixedOffset += 4;
+                    break;
+                case NewFieldType.Double:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Double, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                    fixedOffset += 8;
+                    break;
+                case NewFieldType.DateTime:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.DateTime, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                    fixedOffset += 8;
+                    break;
+                case NewFieldType.Binary:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Binary, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, (ushort)f.Size));
+                    fixedOffset += (ushort)f.Size;
+                    break;
+                case NewFieldType.VarBinary:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Binary, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, (ushort)f.Size));
+                    variables++;
+                    break;
+                case NewFieldType.Text:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Text, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, (ushort)(f.Size * 2)));
+                    variables++;
+                    break;
+                case NewFieldType.Ole:
+                case NewFieldType.Memo:
+                {
+                    byte typeCode = f.Type == NewFieldType.Memo ? NativeTypes.Memo : NativeTypes.Ole;
+                    columns.Add(new ColumnSpec(f.Name, typeCode, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 0));
+                    variables++;
+                    byte ownedRow = (byte)(2 + (lvalMaps.Count * 2));
+                    byte freeRow = (byte)(ownedRow + 1);
+                    lvalMaps.Add(new LvalColumnMapSpec((ushort)i, new RowLocator(mapPage, ownedRow), new RowLocator(mapPage, freeRow)));
+                    break;
+                }
+                case NewFieldType.Guid:
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Guid, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 16));
+                    variables++;
+                    break;
+                case NewFieldType.Decimal:
+                {
+                    // ADO DECIMAL(p, s): TypeInfo = precision | (scale << 8), fixed 17 bytes (r-q21 col-decimal-ado*).
+                    uint decimalInfo = f.Precision | ((uint)f.Scale << 8);
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, FixedColumnFlags, 0x00, fixedOffset, 17));
+                    fixedOffset += 17;
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException($"Unchecked field type {f.Type}.");
             }
         }
         return new TableDefSpec(
             TableType: UserTableType,
             RowCount: 0,
-            AutoNumber: 0,
+            AutoNumber: autoNumber,
             MaxColumns: (ushort)columns.Count,
             VariableColumns: variables,
             OwnedMap: new RowLocator(mapPage, 0),
@@ -499,39 +748,100 @@ public sealed class SchemaWriter
             Columns: columns,
             PhysicalIndexes: [],
             LogicalIndexes: [],
-            LvalColumnMaps: []);
+            LvalColumnMaps: lvalMaps,
+            AutoNumberIncrement: autoNumberIncrement);
     }
 
+    private static byte NativeTypeOf(NewFieldType type) => type switch
+    {
+        NewFieldType.YesNo => NativeTypes.Boolean,
+        NewFieldType.Byte => NativeTypes.Byte,
+        NewFieldType.Short => NativeTypes.Integer,
+        NewFieldType.Long or NewFieldType.Counter => NativeTypes.Long,
+        NewFieldType.Currency => NativeTypes.Currency,
+        NewFieldType.Single => NativeTypes.Single,
+        NewFieldType.Double => NativeTypes.Double,
+        NewFieldType.DateTime => NativeTypes.DateTime,
+        NewFieldType.Binary or NewFieldType.VarBinary => NativeTypes.Binary,
+        NewFieldType.Text => NativeTypes.Text,
+        NewFieldType.Ole => NativeTypes.Ole,
+        NewFieldType.Memo => NativeTypes.Memo,
+        NewFieldType.Guid => NativeTypes.Guid,
+        NewFieldType.Decimal => NativeTypes.Numeric,
+        _ => 0,
+    };
+
     /// <summary>
-    /// A TableDef spec with one more one-field ascending index, the table's first (r-q11 create-primary-key and
-    /// create-then-index: physical and logical number 0, no entries, its map and its leaf; a primary key is logical
-    /// type 1 with flags <see cref="PrimaryKeyIndexFlags"/>, a plain index type 0 with <see cref="PlainIndexFlags"/>).
+    /// A TableDef spec with one more index, the table's first (r-q11 create-primary-key and create-then-index;
+    /// r-q21-ddl-types ix-*): physical and logical number 0, no entries, its map and its leaf; per-column slot flags
+    /// 0x01 ascending / 0x00 descending; physical flags 0x89 for primary key (logical type 1) or 0x80 | Unique(0x01) |
+    /// IgnoreNull(0x02) | DisallowNull(0x08) (logical type 0).
     /// </summary>
     private TableDefSpec WithIndex(TableDefSpec spec, NewIndex index, RowLocator map, uint leaf)
     {
-        ColumnSpec column = spec.Columns.Single(c => string.Equals(c.Name, index.Fields[0], StringComparison.OrdinalIgnoreCase));
-        var physical = new PhysicalIndexSpec([new IndexColumn(column.PhysicalNumber, true, AscendingColumnFlags)], map, leaf, index.PrimaryKey ? PrimaryKeyIndexFlags : PlainIndexFlags);
+        List<IndexColumn> keyCols = [];
+        for (int i = 0; i < index.Fields.Count; i++)
+        {
+            ColumnSpec column = spec.Columns.Single(c => string.Equals(c.Name, index.Fields[i], StringComparison.OrdinalIgnoreCase));
+            bool desc = index.Descending is not null && index.Descending[i];
+            keyCols.Add(new IndexColumn(column.PhysicalNumber, !desc, desc ? DescendingColumnFlags : AscendingColumnFlags));
+        }
+        byte flags = index.PrimaryKey
+            ? PrimaryKeyIndexFlags
+            : (byte)(PlainIndexFlags
+                | (index.Unique ? UniqueIndexFlag : 0)
+                | (index.IgnoreNull ? IgnoreNullIndexFlag : 0)
+                | (index.DisallowNull ? DisallowNullIndexFlag : 0));
+        var physical = new PhysicalIndexSpec(keyCols, map, leaf, flags);
         var logical = new LogicalIndexSpec(index.Name, 0, 0, index.PrimaryKey ? _d.IndexDescriptor.PrimaryKeyType : (byte)0);
         return spec with { PhysicalIndexes = [.. spec.PhysicalIndexes, physical], LogicalIndexes = [.. spec.LogicalIndexes, logical] };
     }
 
-    /// <summary>An index that this slice writes: one Long field the table has, a valid name (r-q11 records PK_T and IX_T on n LONG).</summary>
-    private static SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, bool IsLong)> fields)
+    /// <summary>
+    /// Validate an index against the recorded shapes (r-q11, r-q21-ddl-types): valid name, 1–2 distinct Long or Text
+    /// columns, recorded option combinations (no WITH PRIMARY + DISALLOW/IGNORE NULL, no DISALLOW NULL + IGNORE NULL).
+    /// </summary>
+    private static SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, byte TypeCode)> fields, bool allowText)
     {
         if (!IsValidName(index.Name))
         {
             return new SchemaRefusal(null, $"index name {index.Name}: an invalid index name's error is not recorded");
         }
-        if (index.Fields.Count != 1)
+        if (index.PrimaryKey && (index.DisallowNull || index.IgnoreNull))
         {
-            return new SchemaRefusal(null, $"index {index.Name} of {index.Fields.Count} fields (r-q11 records one-field indexes)");
+            return new SchemaRefusal(null, $"index {index.Name} combines WITH PRIMARY with DISALLOW/IGNORE NULL (not recorded in r-q21-ddl-types)");
         }
-        (string Name, bool IsLong)[] matches = [.. fields.Where(f => string.Equals(f.Name, index.Fields[0], StringComparison.OrdinalIgnoreCase))];
-        if (matches.Length != 1)
+        if (index.DisallowNull && index.IgnoreNull)
         {
-            return new SchemaRefusal(null, $"index {index.Name} names field {index.Fields[0]}, which the table does not have once (ACE's refusal is not recorded)");
+            return new SchemaRefusal(null, $"index {index.Name} combines DISALLOW NULL and IGNORE NULL (not recorded in r-q21-ddl-types)");
         }
-        return matches[0].IsLong ? null : new SchemaRefusal(null, $"index {index.Name} on a field that is not Long (r-q11 records a Long key)");
+        if (index.Fields.Count is < 1 or > 2)
+        {
+            return new SchemaRefusal(null, $"index {index.Name} of {index.Fields.Count} fields (r-q11/r-q21 record 1–2 field indexes)");
+        }
+        if (index.Descending is not null && index.Descending.Count != index.Fields.Count)
+        {
+            return new SchemaRefusal(null, $"index {index.Name} Descending length {index.Descending.Count} does not match Fields length {index.Fields.Count}");
+        }
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string fieldName in index.Fields)
+        {
+            if (!seen.Add(fieldName))
+            {
+                return new SchemaRefusal(null, $"index {index.Name} repeats field {fieldName}");
+            }
+            (string Name, byte TypeCode)[] matches = [.. fields.Where(f => string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase))];
+            if (matches.Length != 1)
+            {
+                return new SchemaRefusal(null, $"index {index.Name} names field {fieldName}, which the table does not have once (ACE's refusal is not recorded)");
+            }
+            byte tc = matches[0].TypeCode;
+            if (tc != NativeTypes.Long && !(allowText && tc == NativeTypes.Text))
+            {
+                return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} of native type 0x{tc:X2} (r-q11/r-q21 record Long{(allowText ? " and Text" : "")} keys)");
+            }
+        }
+        return null;
     }
 
     private byte[] EmptyLeaf(uint owner)

@@ -144,7 +144,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
 
             public bool ReadOnly { get; } = readOnly;
 
-            public int RecordsAffected { get; set; }
+            public RecordsAffectedState RecordsAffected;
 
             public string? LastActionOpen { get; set; }
 
@@ -201,7 +201,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
 
             public NativeVariant?[] Values { get; set; } = [];
 
-            public int RecordsAffected { get; set; }
+            public RecordsAffectedState RecordsAffected;
 
             public string? Stopped { get; set; }
 
@@ -579,7 +579,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                     Open.Add($"{where}: {openReason}");
                     return;
                 }
-                Check(where, int.Parse(raText, CultureInfo.InvariantCulture), db.RecordsAffected);
+                Check(where, int.Parse(raText, CultureInfo.InvariantCulture), db.RecordsAffected.Current);
                 return;
             }
             if (e.Member == "QueryDefs" && e.Args.Count == 0 && e.Bind is { } qdsName && e.ExcepInfo is null)
@@ -687,7 +687,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                     Open.Add($"{where}: {stop}");
                     return;
                 }
-                Check(where, int.Parse(raText, CultureInfo.InvariantCulture), qd.RecordsAffected);
+                Check(where, int.Parse(raText, CultureInfo.InvariantCulture), qd.RecordsAffected.Current);
             }
         }
 
@@ -878,11 +878,11 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                 }
                 if (qd is not null)
                 {
-                    qd.RecordsAffected = outcome.RecordsAffected;
+                    qd.RecordsAffected.Apply(outcome);
                 }
                 else
                 {
-                    db.RecordsAffected = outcome.RecordsAffected;
+                    db.RecordsAffected.Apply(outcome);
                 }
                 return;
             }
@@ -894,18 +894,18 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                 return;
             }
 
-            // Both failed: RecordsAffected resets to 0 on the object that executed (SQL-ACT-FAIL).
+            // Both failed: RecordsAffected reads 0 on the object that executed without clearing last DML (SQL-ACT-FAIL).
             if (db.File is not null)
             {
                 db.File.ActionCount++;
             }
             if (qd is not null)
             {
-                qd.RecordsAffected = 0;
+                qd.RecordsAffected.Apply(outcome);
             }
             else
             {
-                db.RecordsAffected = 0;
+                db.RecordsAffected.Apply(outcome);
             }
 
             string expected = e.ExcepInfo.Description?.Text ?? "";

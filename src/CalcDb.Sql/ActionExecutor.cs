@@ -40,17 +40,60 @@ public enum ActionErrorSource : byte
 }
 
 /// <summary>
-/// The outcome of executing a SQL action statement: <see cref="RecordsAffected"/> (always 0 on failure: R-SQL-2
-/// SQL-ACT-FAIL, <c>r-sql-2-3/act-records-affected</c>) and any <see cref="SqlFailure"/> (ACE error or named
-/// <c>NotModelled.*</c> refusal).
+/// The outcome of executing a SQL action or DDL statement: <see cref="RecordsAffected"/> (always 0 on failure: R-SQL-2
+/// SQL-ACT-FAIL, <c>r-sql-2-3/act-records-affected</c>), any <see cref="SqlFailure"/> (ACE error or named
+/// <c>NotModelled.*</c> refusal), and <see cref="PreservesRecordsAffected"/> (true for a successful DDL statement,
+/// which does not replace the database's last successful DML count).
 /// </summary>
-public readonly record struct ActionOutcome(int RecordsAffected, SqlFailure? Failure)
+public readonly record struct ActionOutcome(int RecordsAffected, SqlFailure? Failure, bool PreservesRecordsAffected = false)
 {
     public bool Succeeded => Failure is null;
 
-    public static ActionOutcome Ok(int recordsAffected) => new(recordsAffected, null);
+    public static ActionOutcome Ok(int recordsAffected) => new(recordsAffected, null, PreservesRecordsAffected: false);
 
-    public static ActionOutcome Fail(SqlFailure failure) => new(0, failure);
+    /// <summary>Successful DDL statement: leaves the caller's last successful DML <c>RecordsAffected</c> intact (<see cref="RecordsAffectedState"/>).</summary>
+    public static ActionOutcome OkDdl() => new(0, null, PreservesRecordsAffected: true);
+
+    public static ActionOutcome Fail(SqlFailure failure) => new(0, failure, PreservesRecordsAffected: false);
+}
+
+/// <summary>
+/// Tracks <c>RecordsAffected</c> across <c>Execute</c> calls on a DAO <c>Database</c> (or <c>QueryDef</c>).
+/// A successful DML statement updates both <see cref="Current"/> and the remembered last successful DML count;
+/// a successful DDL statement (<see cref="ActionOutcome.PreservesRecordsAffected"/>) sets <see cref="Current"/> to
+/// that last successful DML count (0 before any DML has succeeded);
+/// a failed statement sets <see cref="Current"/> to 0 (R-SQL-2 SQL-ACT-FAIL) without clearing the remembered DML count,
+/// so a later successful DDL still reads the last successful DML count
+/// (<c>r-def-expr-sql/ddl-counter-seed-increment</c> #88-89, #168-169, #248-249, #328-360, #449-450, #539-540, #660-661;
+/// <c>r-sql-2-3/act-ddl-columns-indexes</c> #16-17, #31-32, #41-72, #81-82, #91-92).
+/// </summary>
+public struct RecordsAffectedState
+{
+    private int _lastDml;
+
+    /// <summary>The value <c>RecordsAffected</c> currently reads.</summary>
+    public int Current { get; private set; }
+
+    /// <summary>Apply a completed (non-<c>NotModelled</c>) <see cref="ActionOutcome"/>.</summary>
+    public void Apply(ActionOutcome outcome)
+    {
+        if (outcome.Failure is not null)
+        {
+            Current = 0;
+        }
+        else if (outcome.PreservesRecordsAffected)
+        {
+            Current = _lastDml;
+        }
+        else
+        {
+            _lastDml = outcome.RecordsAffected;
+            Current = outcome.RecordsAffected;
+        }
+    }
+
+    /// <summary>Record a failure before <see cref="ActionExecutor"/> ran (SQL-ACT-FAIL: reads 0, preserves last DML).</summary>
+    public void Fail() => Current = 0;
 }
 
 /// <summary>

@@ -26,15 +26,15 @@ public sealed class SchemaWriterTests
     /// <summary>What ACE's record keeps: the read ranges (offset, bytes) after Close and the file's length then.</summary>
     private sealed record Kept(IReadOnlyList<(long Offset, byte[] Bytes)> Reads, long Length)
     {
-        public static Kept Of(string question)
+        public static Kept Of(string question, string card = "r-q11-ddl-closure")
         {
-            string folder = Path.Combine(ReplayFixture.Root(), "evidence", "r-q11-ddl-closure", question);
+            string folder = Path.Combine(ReplayFixture.Root(), "evidence", card, question);
             string record = Directory.GetFiles(folder, "*.a1.json").Single();
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
             List<(long, byte[])> reads = [];
             long length = -1;
             Walk(doc.RootElement, reads, ref length);
-            Assert.True(length > 0 && reads.Count > 0, $"{question}: the record keeps no pages");
+            Assert.True(length > 0 && reads.Count > 0, $"{card}/{question}: the record keeps no pages");
             return new Kept(reads, length);
         }
 
@@ -45,7 +45,11 @@ public sealed class SchemaWriterTests
                 if (e.TryGetProperty("op", out JsonElement op) && op.ValueKind == JsonValueKind.String && op.GetString() == "read"
                     && e.TryGetProperty("bytes", out JsonElement bytes) && e.TryGetProperty("offset", out JsonElement offset))
                 {
-                    reads.Add((offset.GetInt64(), Convert.FromHexString(bytes.GetString()!)));
+                    byte[] data = Convert.FromHexString(bytes.GetString()!);
+                    if (data.Length > 0)
+                    {
+                        reads.Add((offset.GetInt64(), data));
+                    }
                 }
                 if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
                 {
@@ -296,5 +300,151 @@ public sealed class SchemaWriterTests
         SchemaOutcome again = writer.CreateTable(session.Workspace, new CreateTableRequest("t", [Long("n")], SchemaRoute.Sql), 1, 1);
         Assert.Equal(3010, again.Refused?.Error);
         Assert.Equal(after, session.File.Snapshot());
+    }
+
+    public static TheoryData<string, CreateTableRequest> RQ21CreateTableCases() => new()
+    {
+        { "col-memo", new("T", [new("n", NewFieldType.Memo)], SchemaRoute.Sql) },
+        { "col-longtext", new("T", [new("n", NewFieldType.Memo)], SchemaRoute.Sql) },
+        { "col-two-memos", new("T", [new("a", NewFieldType.Memo), new("b", NewFieldType.Memo)], SchemaRoute.Sql) },
+        { "col-counter", new("T", [new("n", NewFieldType.Counter)], SchemaRoute.Sql) },
+        { "col-autoincrement", new("T", [new("n", NewFieldType.Counter)], SchemaRoute.Sql) },
+        { "col-counter-seed-inc", new("T", [new("n", NewFieldType.Counter, Seed: 10, Increment: 5)], SchemaRoute.Sql) },
+        { "col-counter-seed-inc-ado", new("T", [new("n", NewFieldType.Counter, Seed: 10, Increment: 5)], SchemaRoute.Ado) },
+        { "col-counter-100-7", new("T", [new("n", NewFieldType.Counter, Seed: 100, Increment: 7)], SchemaRoute.Sql) },
+        { "col-counter-neg-inc", new("T", [new("n", NewFieldType.Counter, Seed: 10, Increment: -2)], SchemaRoute.Sql) },
+        { "col-double", new("T", [new("n", NewFieldType.Double)], SchemaRoute.Sql) },
+        { "col-byte", new("T", [new("n", NewFieldType.Byte)], SchemaRoute.Sql) },
+        { "col-short", new("T", [new("n", NewFieldType.Short)], SchemaRoute.Sql) },
+        { "col-integer", new("T", [new("n", NewFieldType.Long)], SchemaRoute.Sql) },
+        { "col-single", new("T", [new("n", NewFieldType.Single)], SchemaRoute.Sql) },
+        { "col-currency", new("T", [new("n", NewFieldType.Currency)], SchemaRoute.Sql) },
+        { "col-datetime", new("T", [new("n", NewFieldType.DateTime)], SchemaRoute.Sql) },
+        { "col-yesno", new("T", [new("n", NewFieldType.YesNo)], SchemaRoute.Sql) },
+        { "col-bit", new("T", [new("n", NewFieldType.YesNo)], SchemaRoute.Sql) },
+        { "col-yesno-long", new("T", [new("a", NewFieldType.YesNo), new("b", NewFieldType.Long)], SchemaRoute.Sql) },
+        { "col-guid", new("T", [new("n", NewFieldType.Guid)], SchemaRoute.Sql) },
+        { "col-fixed-guid-memo", new("T", [new("a", NewFieldType.Long), new("b", NewFieldType.Guid), new("c", NewFieldType.Memo)], SchemaRoute.Sql) },
+        { "col-longbinary", new("T", [new("n", NewFieldType.Ole)], SchemaRoute.Sql) },
+        { "col-oleobject", new("T", [new("n", NewFieldType.Ole)], SchemaRoute.Sql) },
+        { "col-binary-16", new("T", [new("n", NewFieldType.Binary, Size: 16)], SchemaRoute.Sql) },
+        { "col-binary-1", new("T", [new("n", NewFieldType.Binary, Size: 1)], SchemaRoute.Sql) },
+        { "col-binary-bare", new("T", [new("n", NewFieldType.Binary, Size: 510)], SchemaRoute.Sql) },
+        { "col-varbinary-16", new("T", [new("n", NewFieldType.VarBinary, Size: 16)], SchemaRoute.Sql) },
+        { "col-binary-long", new("T", [new("a", NewFieldType.Binary, Size: 16), new("b", NewFieldType.Long)], SchemaRoute.Sql) },
+        { "col-long-ado", new("T", [new("n", NewFieldType.Long)], SchemaRoute.Ado) },
+        { "col-decimal-ado", new("T", [new("n", NewFieldType.Decimal, Precision: 18, Scale: 4)], SchemaRoute.Ado) },
+        { "col-decimal-ado-28-0", new("T", [new("n", NewFieldType.Decimal, Precision: 28, Scale: 0)], SchemaRoute.Ado) },
+        { "col-decimal-ado-bare", new("T", [new("n", NewFieldType.Decimal, Precision: 18, Scale: 0)], SchemaRoute.Ado) },
+        { "col-decimal-long-ado", new("T", [new("a", NewFieldType.Decimal, Precision: 18, Scale: 4), new("b", NewFieldType.Long)], SchemaRoute.Ado) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ21CreateTableCases))]
+    public void R_q21_create_table_writes_ACE_pages(string question, CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q21-ddl-types");
+        byte[] fixture = Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void R_q21_col_decimal_dao_is_refused_and_changes_zero_bytes()
+    {
+        Kept kept = Kept.Of("col-decimal-dao", "r-q21-ddl-types");
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaOutcome outcome = session.Writer().CreateTable(
+            session.Workspace,
+            new CreateTableRequest("T", [new("n", NewFieldType.Decimal, Precision: 18, Scale: 4)], SchemaRoute.Sql),
+            1,
+            1);
+        Assert.False(outcome.Succeeded);
+        Assert.NotNull(outcome.Refused?.NotWritten);
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    public static TheoryData<string, CreateTableRequest, NewIndex> RQ21CreateIndexCases() => new()
+    {
+        { "ix-unique", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, Unique: true) },
+        { "ix-with-primary", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: true) },
+        { "ix-unique-with-primary", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: true, Unique: true) },
+        { "ix-disallow-null", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, DisallowNull: true) },
+        { "ix-ignore-null", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, IgnoreNull: true) },
+        { "ix-unique-disallow-null", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, Unique: true, DisallowNull: true) },
+        { "ix-unique-ignore-null", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, Unique: true, IgnoreNull: true) },
+        { "ix-desc", new("T", [Long("n")], SchemaRoute.Sql), new("IX_T", ["n"], PrimaryKey: false, Descending: [true]) },
+        { "ix-text", new("T", [new("t", NewFieldType.Text, Size: 50)], SchemaRoute.Sql), new("IX_T", ["t"], PrimaryKey: false) },
+        { "ix-two-col", new("T", [Long("a"), Long("b")], SchemaRoute.Sql), new("IX_T", ["a", "b"], PrimaryKey: false) },
+        { "ix-two-col-mixed-desc", new("T", [Long("a"), new("b", NewFieldType.Text, Size: 50)], SchemaRoute.Sql), new("IX_T", ["a", "b"], PrimaryKey: false, Descending: [false, true]) },
+        { "ix-on-table-with-memo", new("T", [new("a", NewFieldType.Memo), Long("b")], SchemaRoute.Sql), new("IX_T", ["b"], PrimaryKey: false) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ21CreateIndexCases))]
+    public void R_q21_create_index_writes_ACE_pages(string question, CreateTableRequest createTable, NewIndex index)
+    {
+        Kept kept = Kept.Of(question, "r-q21-ddl-types");
+        byte[] fixture = Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), createTable.Name);
+        using var session = new Session(fixture);
+        session.Create(createTable, created, created);
+        SchemaOutcome indexed = session.Writer().CreateIndex(session.Workspace, new CreateIndexRequest(createTable.Name, index, SchemaRoute.Sql), updated);
+        Assert.True(indexed.Succeeded, $"{indexed.Refused} {indexed.Accepted}");
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void Unrecorded_table_and_index_shapes_stay_refused_by_name()
+    {
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaWriter w = session.Writer();
+
+        // LVAL column + inline PRIMARY KEY (map-row order on page 43 not probed in r-q21-ddl-types).
+        Assert.NotNull(w.Check(new("T", [new("a", NewFieldType.Memo), Long("b")], SchemaRoute.Sql, [new("PK_T", ["b"], PrimaryKey: true)]))?.NotWritten);
+        // Single-argument COUNTER(seed) and increment 0.
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Counter, Seed: 10)], SchemaRoute.Sql))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Counter, Seed: 1, Increment: 0)], SchemaRoute.Sql))?.NotWritten);
+        // Binary/VarBinary sizes outside 1..510.
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Binary, Size: 0)], SchemaRoute.Sql))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Binary, Size: 511)], SchemaRoute.Sql))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.VarBinary, Size: 0)], SchemaRoute.Sql))?.NotWritten);
+        // Decimal on DAO route or invalid precision/scale on ADO route.
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 18, Scale: 4)], SchemaRoute.Dao))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 0, Scale: 0)], SchemaRoute.Ado))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 29, Scale: 0)], SchemaRoute.Ado))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 10, Scale: 11)], SchemaRoute.Ado))?.NotWritten);
+        // DAO route non-Long column types remain refused (LvProp/TypeInfo unprobed).
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Memo)], SchemaRoute.Dao))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Double)], SchemaRoute.Dao))?.NotWritten);
+
+        // Index refusals on a created table.
+        session.Create(new("T", [Long("a"), Long("b"), Long("c"), new("d", NewFieldType.Double)], SchemaRoute.Sql), 1, 1);
+        SchemaWriter w2 = session.Writer();
+        // 3-column index (r-q21 Open).
+        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_3", ["a", "b", "c"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
+        // Unrecorded option combinations.
+        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_PI", ["a"], PrimaryKey: true, IgnoreNull: true), SchemaRoute.Sql), 2).Refused?.NotWritten);
+        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DI", ["a"], PrimaryKey: false, DisallowNull: true, IgnoreNull: true), SchemaRoute.Sql), 2).Refused?.NotWritten);
+        // Unrecorded key column type (Double).
+        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_D", ["d"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
+        // DAO route CREATE INDEX.
+        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DAO", ["a"], PrimaryKey: false), SchemaRoute.Dao), 2).Refused?.NotWritten);
+        // Second index on a table that already has one.
+        Assert.True(w2.CreateIndex(session.Workspace, new("T", new("IX_1", ["a"], PrimaryKey: false), SchemaRoute.Sql), 2).Succeeded);
+        Assert.NotNull(session.Writer().CreateIndex(session.Workspace, new("T", new("IX_2", ["b"], PrimaryKey: false), SchemaRoute.Sql), 3).Refused?.NotWritten);
+
+        // R-PRESERVE-1: CREATE INDEX on a table with non-1 AutoNumberIncrement refuses rather than clobbering bytes 0x18..0x1B.
+        session.Create(new("U", [new("n", NewFieldType.Counter, Seed: 10, Increment: 5)], SchemaRoute.Sql), 1, 1);
+        SchemaOutcome counterIdx = session.Writer().CreateIndex(session.Workspace, new("U", new("IX_U", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2);
+        Assert.False(counterIdx.Succeeded);
+        Assert.Equal(MutationOpen.Publication, counterIdx.Accepted.Open);
+        Assert.Contains("R-PRESERVE-1", counterIdx.Accepted.Detail);
     }
 }

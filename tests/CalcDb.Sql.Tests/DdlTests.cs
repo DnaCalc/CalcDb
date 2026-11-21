@@ -105,6 +105,175 @@ public sealed class DdlTests
         AssertAsAce(kept, fixture, db.Image.Snapshot());
     }
 
+    [Theory]
+    [InlineData("col-memo", "CREATE TABLE T (n MEMO)")]
+    [InlineData("col-longtext", "CREATE TABLE T (n LONGTEXT)")]
+    [InlineData("col-two-memos", "CREATE TABLE T (a MEMO, b MEMO)")]
+    [InlineData("col-counter", "CREATE TABLE T (n COUNTER)")]
+    [InlineData("col-autoincrement", "CREATE TABLE T (n AUTOINCREMENT)")]
+    [InlineData("col-double", "CREATE TABLE T (n DOUBLE)")]
+    [InlineData("col-byte", "CREATE TABLE T (n BYTE)")]
+    [InlineData("col-short", "CREATE TABLE T (n SHORT)")]
+    [InlineData("col-integer", "CREATE TABLE T (n INTEGER)")]
+    [InlineData("col-single", "CREATE TABLE T (n SINGLE)")]
+    [InlineData("col-currency", "CREATE TABLE T (n CURRENCY)")]
+    [InlineData("col-datetime", "CREATE TABLE T (n DATETIME)")]
+    [InlineData("col-yesno", "CREATE TABLE T (n YESNO)")]
+    [InlineData("col-bit", "CREATE TABLE T (n BIT)")]
+    [InlineData("col-yesno-long", "CREATE TABLE T (a YESNO, b LONG)")]
+    [InlineData("col-guid", "CREATE TABLE T (n GUID)")]
+    [InlineData("col-fixed-guid-memo", "CREATE TABLE T (a LONG, b GUID, c MEMO)")]
+    [InlineData("col-longbinary", "CREATE TABLE T (n LONGBINARY)")]
+    [InlineData("col-oleobject", "CREATE TABLE T (n OLEOBJECT)")]
+    [InlineData("col-binary-16", "CREATE TABLE T (n BINARY(16))")]
+    [InlineData("col-binary-1", "CREATE TABLE T (n BINARY(1))")]
+    [InlineData("col-binary-bare", "CREATE TABLE T (n BINARY)")]
+    [InlineData("col-varbinary-16", "CREATE TABLE T (n VARBINARY(16))")]
+    [InlineData("col-binary-long", "CREATE TABLE T (a BINARY(16), b LONG)")]
+    public void R_q21_ddl_types_create_table_executes_byte_exact_through_sql_ddl(string question, string sql)
+    {
+        Kept kept = Kept.Of(question, "r-q21-ddl-types");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        var timestamps = new Queue<ulong>([created, updated]);
+
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        Assert.Null(outcome.Failure);
+        Assert.True(outcome.Succeeded);
+        Assert.True(outcome.PreservesRecordsAffected);
+        Assert.Equal(0, outcome.RecordsAffected);
+
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Theory]
+    [InlineData("CREATE TABLE T (n COUNTER(10, 5))")]
+    [InlineData("CREATE TABLE T (n COUNTER(100, 7))")]
+    [InlineData("CREATE TABLE T (n COUNTER(10, -2))")]
+    public void Counter_with_non_unit_increment_is_refused_on_the_sql_route(string sql)
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        Assert.False(outcome.Succeeded);
+        Assert.NotNull(outcome.Failure);
+        Assert.Equal("NotModelled.DdlCounterIncrement", outcome.Failure!.NotModelled);
+        Assert.Equal("the AutoNumber step is not applied by the ISAM yet", outcome.Failure.Message);
+    }
+
+    [Fact]
+    public void Counter_with_unit_increment_accepts_custom_seed_and_records_affected_persists_across_ddl()
+    {
+        // r-def-expr-sql/ddl-counter-seed-increment (Cs2 AUTOINCREMENT(10, 1); #88-89, #168-169, #328-360)
+        // and r-sql-2-3/act-ddl-columns-indexes (#16-17, #31-32, #41-72, #81-82, #91-92):
+        // successful DDL leaves RecordsAffected at the last successful DML count; failures read 0 without clearing it.
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        RecordsAffectedState affected = default;
+
+        ActionOutcome create = ActionExecutor.Execute("CREATE TABLE Cs2 (A AUTOINCREMENT(10, 1), B LONG)", db);
+        Assert.True(create.Succeeded);
+        affected.Apply(create);
+        Assert.Equal(0, affected.Current);
+
+        ActionOutcome ins1 = ActionExecutor.Execute("INSERT INTO Cs2 (B) VALUES (1)", db);
+        Assert.True(ins1.Succeeded);
+        affected.Apply(ins1);
+        Assert.Equal(1, affected.Current);
+
+        ActionOutcome ins2 = ActionExecutor.Execute("INSERT INTO Cs2 (B) VALUES (2)", db);
+        Assert.True(ins2.Succeeded);
+        affected.Apply(ins2);
+        Assert.Equal(1, affected.Current);
+
+        ActionOutcome upd = ActionExecutor.Execute("UPDATE Cs2 SET B = B + 10", db);
+        Assert.True(upd.Succeeded);
+        affected.Apply(upd);
+        Assert.Equal(2, affected.Current);
+
+        // Successful DDL after DML reads the last DML count (2).
+        ActionOutcome createOther = ActionExecutor.Execute("CREATE TABLE Other (K LONG)", db);
+        Assert.True(createOther.Succeeded);
+        affected.Apply(createOther);
+        Assert.Equal(2, affected.Current);
+
+        // Failed Execute reads 0 (SQL-ACT-FAIL) without clearing the remembered last DML count (2).
+        ActionOutcome failed = ActionExecutor.Execute("CREATE TABLE Cs4 (A COUNTER(1, 0), B LONG)", db);
+        Assert.False(failed.Succeeded);
+        Assert.Equal(3001, failed.Failure?.Number);
+        affected.Apply(failed);
+        Assert.Equal(0, affected.Current);
+
+        // Subsequent successful DDL restores the remembered last DML count (2).
+        ActionOutcome createIdx = ActionExecutor.Execute("CREATE INDEX IX_Other ON Other (K)", db);
+        Assert.True(createIdx.Succeeded);
+        affected.Apply(createIdx);
+        Assert.Equal(2, affected.Current);
+
+        // Verify COUNTER(10, 1) generated 10, 11.
+        using BoundSelect plan = BoundSelect.Prepare("SELECT A, B FROM Cs2 ORDER BY A", db, out SqlFailure? selFail)!;
+        Assert.Null(selFail);
+        using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, [], out selFail)!;
+        Assert.Null(selFail);
+        var ids = new List<long>();
+        while (!cur.Eof)
+        {
+            Assert.True(cur.Read(0, out NativeVariant v, out _));
+            ids.Add(v.Int64);
+            cur.MoveNext();
+        }
+        Assert.Equal([10L, 11L], ids);
+    }
+
+    [Fact]
+    public void R_q21_ddl_types_col_decimal_dao_fails_3292_with_zero_bytes_changed()
+    {
+        Kept kept = Kept.Of("col-decimal-dao", "r-q21-ddl-types");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+
+        using var db = new WritableSqlFixture(fixture);
+        AssertAceError(db, "CREATE TABLE T (n DECIMAL(18, 4))", 3292);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Theory]
+    [InlineData("ix-unique", "CREATE TABLE T (n LONG)", "CREATE UNIQUE INDEX IX_T ON T (n)")]
+    [InlineData("ix-with-primary", "CREATE TABLE T (n LONG)", "CREATE INDEX IX_T ON T (n) WITH PRIMARY")]
+    [InlineData("ix-unique-with-primary", "CREATE TABLE T (n LONG)", "CREATE UNIQUE INDEX IX_T ON T (n) WITH PRIMARY")]
+    [InlineData("ix-disallow-null", "CREATE TABLE T (n LONG)", "CREATE INDEX IX_T ON T (n) WITH DISALLOW NULL")]
+    [InlineData("ix-ignore-null", "CREATE TABLE T (n LONG)", "CREATE INDEX IX_T ON T (n) WITH IGNORE NULL")]
+    [InlineData("ix-unique-disallow-null", "CREATE TABLE T (n LONG)", "CREATE UNIQUE INDEX IX_T ON T (n) WITH DISALLOW NULL")]
+    [InlineData("ix-unique-ignore-null", "CREATE TABLE T (n LONG)", "CREATE UNIQUE INDEX IX_T ON T (n) WITH IGNORE NULL")]
+    [InlineData("ix-desc", "CREATE TABLE T (n LONG)", "CREATE INDEX IX_T ON T (n DESC)")]
+    [InlineData("ix-text", "CREATE TABLE T (t TEXT(50))", "CREATE INDEX IX_T ON T (t)")]
+    [InlineData("ix-two-col", "CREATE TABLE T (a LONG, b LONG)", "CREATE INDEX IX_T ON T (a, b)")]
+    [InlineData("ix-two-col-mixed-desc", "CREATE TABLE T (a LONG, b TEXT(50))", "CREATE INDEX IX_T ON T (a, b DESC)")]
+    [InlineData("ix-on-table-with-memo", "CREATE TABLE T (a MEMO, b LONG)", "CREATE INDEX IX_T ON T (b)")]
+    public void R_q21_ddl_types_create_index_executes_byte_exact_through_sql_ddl(string question, string createTableSql, string createIndexSql)
+    {
+        Kept kept = Kept.Of(question, "r-q21-ddl-types");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        var timestamps = new Queue<ulong>([created, created, updated]);
+
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome t = ActionExecutor.Execute(createTableSql, db);
+        Assert.Null(t.Failure);
+        Assert.True(t.Succeeded);
+
+        ActionOutcome ix = ActionExecutor.Execute(createIndexSql, db);
+        Assert.Null(ix.Failure);
+        Assert.True(ix.Succeeded);
+        Assert.Equal(0, ix.RecordsAffected);
+
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
     [Fact]
     public void Create_table_then_insert_and_select_readback_works_end_to_end()
     {
@@ -335,7 +504,13 @@ public sealed class DdlTests
 
         // Other named NotModelled.Ddl* refusals for valid DDL shapes outside SchemaWriter's current scope.
         AssertNotModelled(db, "CREATE TABLE Tz (s TEXT(0))", "NotModelled.DdlTextZeroSize");
-        AssertNotModelled(db, "CREATE TABLE Dt (d DATETIME)", "NotModelled.DdlFieldType");
+        AssertNotModelled(db, "CREATE TABLE Nm (n NUMERIC)", "NotModelled.DdlFieldType");
+        AssertNotModelled(db, "CREATE TABLE Vb (b VARBINARY)", "NotModelled.DdlVarBinaryDefaultSize");
+        AssertNotModelled(db, "CREATE TABLE B0 (b BINARY(0))", "NotModelled.DdlBinarySize");
+        AssertNotModelled(db, "CREATE TABLE B511 (b BINARY(511))", "NotModelled.DdlBinarySize");
+        AssertNotModelled(db, "CREATE TABLE Vb0 (b VARBINARY(0))", "NotModelled.DdlBinarySize");
+        AssertNotModelled(db, "CREATE TABLE Cs1 (a COUNTER(1))", "NotModelled.DdlCounterSingleArg");
+        AssertNotModelled(db, "CREATE TABLE LvalPk (a MEMO, b LONG CONSTRAINT PK_Lval PRIMARY KEY)", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE Bi (x BIGINT)", "NotModelled.DdlBigIntOrDateTime2");
         AssertNotModelled(db, "CREATE TABLE Un (a LONG UNIQUE)", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE PkU (a LONG PRIMARY KEY)", "NotModelled.DdlUnnamedPrimaryKey");
@@ -347,11 +522,16 @@ public sealed class DdlTests
         string uq33 = string.Join(", ", Enumerable.Range(1, 33).Select(i => $"c{i:D2} LONG UNIQUE"));
         AssertNotModelled(db, $"CREATE TABLE C33 ({uq33})", "NotModelled.DdlTooManyTableConstraints");
 
-        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG)", db).Succeeded);
-        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN b LONG", "NotModelled.DdlAlterTable");
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b LONG, c LONG, d DOUBLE)", db).Succeeded);
+        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN e LONG", "NotModelled.DdlAlterTable");
+        AssertNotModelled(db, "CREATE INDEX IX_DI ON T (a) WITH DISALLOW NULL IGNORE NULL", "NotModelled.DdlIndexOptions");
+        AssertNotModelled(db, "CREATE INDEX IX_PI ON T (a) WITH PRIMARY IGNORE NULL", "NotModelled.DdlIndexOptions");
+        AssertNotModelled(db, "CREATE INDEX IX_3 ON T (a, b, c)", "NotModelled.DdlIndexShape");
+        AssertNotModelled(db, "CREATE INDEX IX_D ON T (d)", "NotModelled.DdlIndexKeyType");
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (a)", db).Succeeded);
         AssertNotModelled(db, "DROP INDEX IX_T ON T", "NotModelled.DdlDropIndex");
-        AssertNotModelled(db, "CREATE UNIQUE INDEX UX_T ON T (a)", "NotModelled.DdlIndexOptions");
+        // Second index on a table that already has one is refused by SchemaWriter (r-q21 Open).
+        AssertNotModelled(db, "CREATE UNIQUE INDEX UX_T ON T (b)", "NotModelled.SchemaWriter");
         // B11: multi-name DROP TABLE refuses by name even when one table is missing.
         AssertNotModelled(db, "DROP TABLE T, NoSuchTable", "NotModelled.DdlMultiDropTable");
         // B10: invalid index name against missing table refuses by name instead of assuming 3125 vs 3371 precedence.
@@ -400,15 +580,15 @@ public sealed class DdlTests
 
     private sealed record Kept(IReadOnlyList<(long Offset, byte[] Bytes)> Reads, long Length)
     {
-        public static Kept Of(string question)
+        public static Kept Of(string question, string card = "r-q11-ddl-closure")
         {
-            string folder = Path.Combine(SqlFixture.Root(), "evidence", "r-q11-ddl-closure", question);
+            string folder = Path.Combine(SqlFixture.Root(), "evidence", card, question);
             string record = Directory.GetFiles(folder, "*.a1.json").Single();
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
             List<(long, byte[])> reads = [];
             long length = -1;
             Walk(doc.RootElement, reads, ref length);
-            Assert.True(length > 0 && reads.Count > 0, $"{question}: the record keeps no pages");
+            Assert.True(length > 0 && reads.Count > 0, $"{card}/{question}: the record keeps no pages");
             return new Kept(reads, length);
         }
 
@@ -419,7 +599,11 @@ public sealed class DdlTests
                 if (e.TryGetProperty("op", out JsonElement op) && op.ValueKind == JsonValueKind.String && op.GetString() == "read"
                     && e.TryGetProperty("bytes", out JsonElement bytes) && e.TryGetProperty("offset", out JsonElement offset))
                 {
-                    reads.Add((offset.GetInt64(), Convert.FromHexString(bytes.GetString()!)));
+                    byte[] data = Convert.FromHexString(bytes.GetString()!);
+                    if (data.Length > 0)
+                    {
+                        reads.Add((offset.GetInt64(), data));
+                    }
                 }
                 if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
                 {
