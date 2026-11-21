@@ -10,6 +10,9 @@ namespace CalcDb.Oracle.Runner;
 /// <param name="PageSize">Bytes per page (4096 for ACE and Jet 4).</param>
 internal sealed record PagesRequest(IReadOnlySet<long>? Pages, string? Diff, int PageSize = 4096);
 
+/// <summary>Result of resolving the <c>input</c> baseline for <c>show --diff input</c>: either the verified fixture bytes or why they were unavailable.</summary>
+internal readonly record struct InputBaseline(byte[]? Bytes, string? Problem);
+
 /// <summary>
 /// <c>show --pages [N,...]</c> and <c>show --diff [input|POINT]</c> (task 8jq6): the page images a probe kept with
 /// <c>nativeRead keep:true</c>, read back from the record's own events. A <em>point</em> is one open handle's kept
@@ -17,7 +20,9 @@ internal sealed record PagesRequest(IReadOnlySet<long>? Pages, string? Diff, int
 /// "after-session-1" and "after Close" read as the probe named them. A kept read need not be a whole page: its bytes
 /// show under the page they fall in, at their offset in that page. A diff compares byte for byte and prints runs of
 /// bytes that differ as <c>page P offset O: old -> new</c>, grouped by page; against <c>input</c> the baseline is the
-/// question's input fixture, read through the <see cref="ArtifactStore"/>.
+/// question's input fixture, resolved by its SHA-256 through the content/artifact store for both <c>--attempt</c> and
+/// <c>--record</c> (task kddw; an attempt's <c>inputs/</c> copy is used only as a fallback when its hash still equals
+/// the question's input).
 /// </summary>
 internal static class ShowPages
 {
@@ -27,7 +32,103 @@ internal static class ShowPages
 
     private sealed record Point(string Name, List<Range> Ranges);
 
-    public static string Render(Capture capture, PagesRequest request, Func<byte[]?> input)
+    /// <summary>Render <c>show --pages</c> / <c>show --diff</c> for a retained evidence record.</summary>
+    public static string RenderRecord(JobStore store, string recordPath, PagesRequest request)
+    {
+        EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
+        string? evidence = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(recordPath))));
+        ArtifactStore? recordArtifacts = evidence is null ? null : new ArtifactStore(Path.Combine(evidence, "artifacts"), Path.Combine(store.Root, "cas"));
+        return Render(record.Capture, record.Question, request, sha => recordArtifacts?.Locate(sha) ?? store.FindContent(sha));
+    }
+
+    /// <summary>Render <c>show --pages</c> / <c>show --diff</c> for an attempt in <paramref name="store"/>.</summary>
+    public static string RenderAttempt(JobStore store, string attemptId, PagesRequest request)
+    {
+        string dir = store.AttemptDirectory(attemptId);
+        string capturePath = Path.Combine(dir, "capture.json");
+        Capture? capture = File.Exists(capturePath) ? EvidenceJson.Read<Capture>(capturePath) : null;
+        Question? question = LoadAttemptQuestion(store, dir);
+        return Render(capture, question, request, store.FindContent, Path.Combine(dir, "inputs"));
+    }
+
+    /// <summary>The one rendering path shared by <c>--attempt</c> and <c>--record</c>.</summary>
+    public static string Render(Capture? capture, Question? question, PagesRequest request, Func<string, string?> findContent, string? attemptInputsDir = null)
+    {
+        if (capture is null)
+        {
+            return "no capture\n";
+        }
+        return Render(capture, request, () => ResolveInput(question, findContent, attemptInputsDir));
+    }
+
+    /// <summary>
+    /// Locate the question's true input fixture by its SHA-256 through the content/artifact store, falling back to the
+    /// attempt's <c>inputs/</c> copy only when that copy still hashes to the question's input (ACE modifies
+    /// <c>inputs/</c> in place for writing probes; task kddw).
+    /// </summary>
+    internal static InputBaseline ResolveInput(Question? question, Func<string, string?> findContent, string? attemptInputsDir = null)
+    {
+        if (question is null)
+        {
+            return new(null, "the input fixture is not available (no question.json for this attempt)");
+        }
+        FixtureInput? main = question.Inputs.FirstOrDefault(i => i.Role == "main")
+            ?? (question.Inputs.Count == 1 ? question.Inputs[0] : null);
+        if (main is null)
+        {
+            string why = question.Inputs.Count == 0
+                ? "question has no inputs"
+                : $"question has no 'main' input; roles: {string.Join(", ", question.Inputs.Select(i => i.Role))}";
+            return new(null, $"the input fixture is not available ({why})");
+        }
+        if (findContent(main.Sha256) is { } storedPath)
+        {
+            byte[] bytes = File.ReadAllBytes(storedPath);
+            string actual = Hashing.Sha256Hex(bytes);
+            if (actual == main.Sha256)
+            {
+                return new(bytes, null);
+            }
+            return new(null, $"the input fixture '{main.FileName}' ({main.Sha256}) in the store has sha256 {actual}");
+        }
+        if (attemptInputsDir is not null)
+        {
+            string copy = Path.Combine(attemptInputsDir, main.FileName);
+            if (File.Exists(copy))
+            {
+                byte[] bytes = File.ReadAllBytes(copy);
+                string actual = Hashing.Sha256Hex(bytes);
+                if (actual == main.Sha256)
+                {
+                    return new(bytes, null);
+                }
+                return new(null, $"the input fixture '{main.FileName}' ({main.Sha256}) is not available (no store copy of it, and inputs/{main.FileName} was modified in place to {actual})");
+            }
+        }
+        return new(null, $"the input fixture '{main.FileName}' ({main.Sha256}) is not available (no store copy of it)");
+    }
+
+    private static Question? LoadAttemptQuestion(JobStore store, string attemptDir)
+    {
+        string questionPath = Path.Combine(attemptDir, "question.json");
+        if (File.Exists(questionPath))
+        {
+            return EvidenceJson.Read<Question>(questionPath);
+        }
+        string attemptPath = Path.Combine(attemptDir, "attempt.json");
+        if (File.Exists(attemptPath))
+        {
+            AttemptRecord attempt = EvidenceJson.Read<AttemptRecord>(attemptPath);
+            string byKey = Path.Combine(store.Root, "questions", attempt.QuestionKey + ".json");
+            if (File.Exists(byKey))
+            {
+                return EvidenceJson.Read<Question>(byKey);
+            }
+        }
+        return null;
+    }
+
+    private static string Render(Capture capture, PagesRequest request, Func<InputBaseline> input)
     {
         List<Point> points = KeptPoints(capture);
         var sb = new StringBuilder();
@@ -49,10 +150,10 @@ internal static class ShowPages
         }
         if (request.Diff == "input")
         {
-            byte[]? file = input();
-            if (file is null)
+            InputBaseline baseline = input();
+            if (baseline.Bytes is not { } file)
             {
-                return "the input fixture is not available (no store copy of it)\n";
+                return (baseline.Problem ?? "the input fixture is not available (no store copy of it)") + "\n";
             }
             foreach (Point point in points)
             {
@@ -65,14 +166,14 @@ internal static class ShowPages
         {
             return $"no kept point '{request.Diff}'; kept points: {string.Join(", ", points.Select(p => p.Name))}\n";
         }
-        Point baseline = points[baseIndex];
+        Point baselinePoint = points[baseIndex];
         for (int i = baseIndex + 1; i < points.Count; i++)
         {
-            Diff(sb, points[i], baseline.Name, (offset, length) => Covering(baseline, offset, length), null, request);
+            Diff(sb, points[i], baselinePoint.Name, (offset, length) => Covering(baselinePoint, offset, length), null, request);
         }
         if (baseIndex == points.Count - 1)
         {
-            sb.AppendLine($"'{baseline.Name}' is the last kept point: nothing to compare with");
+            sb.AppendLine($"'{baselinePoint.Name}' is the last kept point: nothing to compare with");
         }
         return sb.ToString();
     }

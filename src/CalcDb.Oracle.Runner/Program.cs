@@ -737,31 +737,17 @@ internal static partial class Program
 
     /// <summary>
     /// <c>show (--attempt ID | --record FILE) [--pages [N,...]] [--diff [input|POINT]]</c>: the kept page images of an
-    /// attempt, or their byte diff (<see cref="ShowPages"/>). The input fixture comes from the record's artifact store, or
-    /// from the attempt's <c>inputs</c> folder.
+    /// attempt, or their byte diff (<see cref="ShowPages"/>). For <c>--diff input</c>, both paths resolve the question's
+    /// input fixture by hash through the content/artifact store, falling back to an attempt's <c>inputs</c> copy only
+    /// when its SHA-256 still matches the question's input (task kddw).
     /// </summary>
     private static int ShowKeptPages(JobStore store, Options options)
     {
         var request = new PagesRequest(ShowPages.ParsePages(options.Get("pages")), options.Has("diff") ? options.Get("diff") ?? "input" : null);
-        Capture? capture;
-        Func<byte[]?> input;
-        if (options.Get("record") is { } recordPath)
-        {
-            EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
-            capture = record.Capture;
-            string evidence = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(recordPath))))!;
-            var artifactStore = new ArtifactStore(Path.Combine(evidence, "artifacts"), Path.Combine(store.Root, "cas"));
-            input = () => record.Question.Inputs.FirstOrDefault(i => i.Role == "main") is { } main && artifactStore.Locate(main.Sha256) is { } path ? File.ReadAllBytes(path) : null;
-        }
-        else
-        {
-            string attemptId = options.Require("attempt");
-            string dir = store.AttemptDirectory(attemptId);
-            string capturePath = Path.Combine(dir, "capture.json");
-            capture = File.Exists(capturePath) ? EvidenceJson.Read<Capture>(capturePath) : null;
-            input = () => Directory.Exists(Path.Combine(dir, "inputs")) && Directory.EnumerateFiles(Path.Combine(dir, "inputs"), "*", SearchOption.AllDirectories).ToArray() is [var only] ? File.ReadAllBytes(only) : null;
-        }
-        Console.Write(capture is null ? "no capture\n" : ShowPages.Render(capture, request, input));
+        string output = options.Get("record") is { } recordPath
+            ? ShowPages.RenderRecord(store, recordPath, request)
+            : ShowPages.RenderAttempt(store, options.Require("attempt"), request);
+        Console.Write(output);
         return 0;
     }
 

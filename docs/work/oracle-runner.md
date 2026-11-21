@@ -205,9 +205,11 @@ the attempt, as for the plain `show`.
   with `*`), for the listed page numbers or, bare, for all. A read that covers part of a page shows under that page at its
   offset. The page size is 4096.
 - `--diff [input|POINT] [--pages N,...]` prints the bytes that differ, as runs `page P offset O: old -> new` in hex,
-  grouped by page. `input` (the default) is the question's input fixture, read through the `ArtifactStore` (or the
-  attempt's `inputs` folder); every kept point is compared with it. A point name compares each later point with that one.
-  Pages beyond the input, or bytes the baseline point did not keep, say so on a line of their own.
+  grouped by page. `input` (the default) is the question's input fixture, resolved by its hash from the content/artifact
+  store for both `--attempt` and `--record` (falling back to the attempt's `inputs` copy only when its hash still equals
+  the question's input, and reporting the missing fixture by name otherwise); every kept point is compared with it. A
+  point name compares each later point with that one. Pages beyond the input, or bytes the baseline point did not keep,
+  say so on a line of their own.
 
 ```
 > show --record evidence/r-q15-ddl-open/dup-append-dao/<record>.json --diff after-session-1 --pages 0
