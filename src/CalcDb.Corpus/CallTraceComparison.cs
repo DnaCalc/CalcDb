@@ -19,7 +19,7 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 8,
+        Revision = 9,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key; or (revision 6, R-ORACLE-1 OR-REUSE) the same question asked of the native installation twice, fresh and after a prehistory, compared with each other.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -27,8 +27,8 @@ public static class CallTraceComparison
         Normalizations =
         [
             new("attempt-directory", "Each attempt works on its own copy of the inputs; the attempt directory is part of every path the question passes.",
-                "Only the exact attempt directory of each capture is replaced, in text, BSTR bytes and their length together.",
-                "A different file name or relative path under the directory still differs.", ["II-15 §4 attempt-local copies"]),
+                "Only the exact attempt directory of each capture is replaced, in both backslash and forward-slash forms (revision 9, task fgx5), in text, BSTR bytes and their length together, across arguments and results.",
+                "A different file name, relative path, or slash style after the directory still differs.", ["II-15 §4 attempt-local copies"]),
             new("run-time-fields", "Times, waits, thread and process identifiers, the file identities of each attempt's own copies and the class-registration view describe the run, not the behaviour.",
                 "atUtc, lastWriteUtc, startedUtc, waitedMs, threadId, processId, fileId, volumeSerial and registration are not compared.",
                 "Event order, kinds and all results are still compared.", ["II-15 §5"]),
@@ -321,11 +321,14 @@ public static class CallTraceComparison
                 }
             }
         }
-        Walk(node, attemptDirectory.TrimEnd('\\', '/'));
+        string trimmed = attemptDirectory.TrimEnd('\\', '/');
+        string backslash = trimmed.Replace('/', '\\');
+        string forward = trimmed.Replace('\\', '/');
+        Walk(node, backslash, forward);
         return node;
     }
 
-    private static void Walk(JsonNode? node, string directory)
+    private static void Walk(JsonNode? node, string backslash, string forward)
     {
         switch (node)
         {
@@ -337,10 +340,10 @@ public static class CallTraceComparison
                         o.Remove(name);
                     }
                 }
-                if (o["text"] is JsonValue tv && tv.TryGetValue(out string? text) && text.Contains(directory, StringComparison.OrdinalIgnoreCase))
+                if (o["text"] is JsonValue tv && tv.TryGetValue(out string? text) && ContainsDirectory(text, backslash, forward))
                 {
                     // A BSTR naming an attempt path: text, exact bytes and byte length change together.
-                    string replaced = Replace(text, directory);
+                    string replaced = Replace(text, backslash, forward);
                     o["text"] = replaced;
                     if (o.ContainsKey("bytes"))
                     {
@@ -353,26 +356,26 @@ public static class CallTraceComparison
                 }
                 foreach (KeyValuePair<string, JsonNode?> p in o.ToArray())
                 {
-                    if (p.Value is JsonValue v && v.TryGetValue(out string? s) && s.Contains(directory, StringComparison.OrdinalIgnoreCase))
+                    if (p.Value is JsonValue v && v.TryGetValue(out string? s) && ContainsDirectory(s, backslash, forward))
                     {
-                        o[p.Key] = Replace(s, directory);
+                        o[p.Key] = Replace(s, backslash, forward);
                     }
                     else
                     {
-                        Walk(p.Value, directory);
+                        Walk(p.Value, backslash, forward);
                     }
                 }
                 break;
             case JsonArray a:
                 for (int i = 0; i < a.Count; i++)
                 {
-                    if (a[i] is JsonValue v && v.TryGetValue(out string? s) && s.Contains(directory, StringComparison.OrdinalIgnoreCase))
+                    if (a[i] is JsonValue v && v.TryGetValue(out string? s) && ContainsDirectory(s, backslash, forward))
                     {
-                        a[i] = Replace(s, directory);
+                        a[i] = Replace(s, backslash, forward);
                     }
                     else
                     {
-                        Walk(a[i], directory);
+                        Walk(a[i], backslash, forward);
                     }
                 }
                 break;
@@ -455,7 +458,19 @@ public static class CallTraceComparison
         return events;
     }
 
-    private static string Replace(string s, string directory) => s.Replace(directory, "<attempt>", StringComparison.OrdinalIgnoreCase);
+    private static bool ContainsDirectory(string s, string backslash, string forward) =>
+        backslash.Length > 0 && (s.Contains(backslash, StringComparison.OrdinalIgnoreCase)
+            || (forward != backslash && s.Contains(forward, StringComparison.OrdinalIgnoreCase)));
+
+    private static string Replace(string s, string backslash, string forward)
+    {
+        if (backslash.Length == 0)
+        {
+            return s;
+        }
+        string replaced = s.Replace(backslash, "<attempt>", StringComparison.OrdinalIgnoreCase);
+        return forward == backslash ? replaced : replaced.Replace(forward, "<attempt>", StringComparison.OrdinalIgnoreCase);
+    }
 
     private sealed record PathDifference(string Path, string Expected, string Actual);
 
