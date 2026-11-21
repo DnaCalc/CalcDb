@@ -20,6 +20,7 @@ public sealed unsafe class TypeLibraryTests
     [ModuleInitializer]
     internal static void SaveImages()
     {
+        ComLibraries.EnsureRegistered();
         Directory.CreateDirectory(Images);
         TypeLibrary.ImageDirectory = Images;
         int hr = TypeLibrary.SaveImages(Images);

@@ -68,6 +68,10 @@ src/CalcDb.Evidence/            platform-neutral evidence and job contracts (W-0
 src/CalcDb.Oracle.Runner/       calcdb-oracle: submit, run, seal, show, freeze, retain
 src/CalcDb.Oracle.Worker/       Windows x64 ACE worker (raw IDispatch capture)
 src/CalcDb.Evidence.Index/      builds the derived .accdb evidence index (never committed)
+src/CalcDb.Com.Core/            shared COM layer (vtable/IDispatch, type library, sessions, declarations)
+src/CalcDb.Com.Dao/             DAO COM wrappers and generated DAO declarations (W-08)
+src/CalcDb.Com.Ado/             ADO COM wrappers and generated ADO declarations (W-09)
+src/CalcDb.Com/                 native CalcDb.dll shell (NativeAOT exports, activation, host anchor, manifests)
 tests/                          fast unit tests
 probes/                         oracle questions, by book card
 evidence/                       retained answer records; fixtures and small answer artifacts as <sha256>.gz

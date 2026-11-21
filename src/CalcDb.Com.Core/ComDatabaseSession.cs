@@ -1,6 +1,5 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
-using CalcDb.Com.Dao;
 using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Isam;
@@ -14,14 +13,19 @@ using CalcDb.Values.Windows;
 namespace CalcDb.Com;
 
 /// <summary>
-/// Native database session core shared by DAO (<see cref="DatabaseObject"/>) and ADO (<see cref="Ado.AdoOpenSession"/>):
+/// Native database session core shared by DAO and ADO:
 /// owns the positioned file, optional lock file, page cache, format profile, decoded header, committed catalog snapshot,
 /// extent tracking, cached TableDef/blob/query/relationship/collation/edit-context state, schema writer/reload,
 /// <see cref="IPublicationTarget"/> writer-lease dispatch, and the closing commit protocol
 /// (<see cref="TransactionCoordinator.NeedsCloseCommit"/> / <see cref="TransactionCoordinator.PublishCloseCommit"/>).
 /// </summary>
-internal sealed class ComDatabaseSession : IPublicationTarget
+public sealed class ComDatabaseSession : IPublicationTarget
 {
+    private static long s_lockers;
+
+    /// <summary>A locker identity for a new DAO Workspace or ADO Connection: unique in the process (II-09; D-TXN-1).</summary>
+    public static LockerId NextLocker() => new((ulong)Interlocked.Increment(ref s_lockers));
+
     private readonly string _ownerLabel;
     private readonly Action<TableEditContext, CatalogEntry, TableDefinition>? _onEditContextCreated;
     private SessionFile? _file;

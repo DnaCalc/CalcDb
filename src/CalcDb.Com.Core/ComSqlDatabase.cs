@@ -12,10 +12,10 @@ using CalcDb.Values.Scalar;
 namespace CalcDb.Com;
 
 /// <summary>
-/// Session surface shared by DAO (<see cref="Dao.DatabaseSql"/>) and ADO (<see cref="Ado.AdoOpenSession"/>)
-/// to back the single <see cref="ComSqlDatabase"/> implementation of <see cref="ISqlSchemaDatabase"/>.
+/// Session surface shared by DAO and ADO to back the single <see cref="ComSqlDatabase"/> implementation of
+/// <see cref="ISqlSchemaDatabase"/>.
 /// </summary>
-internal interface ISqlSessionHost
+public interface ISqlSessionHost
 {
     CatalogSnapshot Catalog { get; }
 
@@ -51,7 +51,7 @@ internal interface ISqlSessionHost
 /// exposes decoded local TableDefs (with calculated columns bound), saved queries, ISAM row/index readers and
 /// cursors over the session's overlay, edit contexts, schema publication, relationship checks, and table holds.
 /// </summary>
-internal class ComSqlDatabase(ISqlSessionHost host) : ISqlSchemaDatabase
+public class ComSqlDatabase(ISqlSessionHost host) : ISqlSchemaDatabase
 {
     private readonly Dictionary<string, TableDefinition?> _tables = new(StringComparer.OrdinalIgnoreCase);
 

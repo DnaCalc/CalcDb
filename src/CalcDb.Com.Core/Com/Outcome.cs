@@ -4,7 +4,7 @@ using CalcDb.Values;
 namespace CalcDb.Com.Com;
 
 /// <summary>Which kind of failure an operation produced; the two adapters publish them through their own channels.</summary>
-internal enum FailureKind
+public enum FailureKind
 {
     /// <summary>An ACE-equivalent DAO error: its number, source and text as the oracle gives them.</summary>
     Dao,
@@ -31,7 +31,7 @@ internal enum FailureKind
 /// argument-count failures of Database and Recordset members publish one (GUID zero); every other DAO failure carries
 /// EXCEPINFO alone.
 /// </summary>
-internal sealed record Failure(FailureKind Kind, int Scode, string Source, string Description, string? HelpFile = null, int HelpContext = 0)
+public sealed record Failure(FailureKind Kind, int Scode, string Source, string Description, string? HelpFile = null, int HelpContext = 0)
 {
     public bool PublishesErrorInfo { get; init; }
 
@@ -69,7 +69,7 @@ internal sealed record Failure(FailureKind Kind, int Scode, string Source, strin
 
 /// <summary>EXCEPINFO, Windows x64 layout (64 bytes).</summary>
 [StructLayout(LayoutKind.Sequential)]
-internal struct ExcepInfo
+public struct ExcepInfo
 {
     public ushort Code;
     public ushort Reserved;
