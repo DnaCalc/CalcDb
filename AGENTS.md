@@ -57,7 +57,12 @@ scope or design, the book wins.
 - A note that matters to a running child now is steered (`alta session send` without `--queue-if-busy`); a queued
   prompt waits for the end of its turn and then starts a new one. Check `alta session queued` before a child ends.
 - An organizer hands over to a fresh session at about 300 tool calls or 5 hours. The register, the process log and
-  a handoff prompt carry the state; rules that must outlast the handoff go into this file, not the handoff.
+  a handoff prompt carry the state; rules that must outlast the handoff go into this file, not the handoff. The old
+  organizer then only finishes what the handoff names as its own (pending compares, forwarding a running child's
+  answer) and stops: it does not review, steer or comment on the new organizer's work (owner, 2026-11-21).
+- One review layer per landing: for a stretch over about 1,000 lines the reviewer child checks the rules against the
+  records and the organizer checks that its findings were applied, the scope, the landing check and the compare; for
+  a smaller stretch the organizer's review is the only one.
 
 ## Tool practice
 
