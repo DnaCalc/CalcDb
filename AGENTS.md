@@ -52,11 +52,12 @@ scope or design, the book wins.
   writers. A child that still meets a byte no record decides, or a record that contradicts a note, stops and reports.
   The organizer then probes: a single discriminator itself, a larger round through a prober child that writes only
   cards, probes and evidence, and gives its qualified.md note in its report (process log, change 6, 2026-11-21).
-- Set the model and reasoning of every child (owner, 2026-11-21 evening). Implementation runs on Gemini 4 Neon
-  (`antigravity-acp:gemini-4-neon@high`), and on Opus where reviews of Neon's stretches in that area kept finding
-  generalizations. A review runs on a model other than the writer's: Opus (`claude-code:opus@high`) or Sonnet
-  (`claude-code:sonnet@high`) for a Neon writer. Tooling runs on Sonnet. The organizer, and the design of probes on
-  concurrency, locking, crashes and write ordering, stay on Opus. Keep Neon stretches to one deliverable each.
+- Set the model and reasoning of every child. Neon (`antigravity-acp:gemini-4-neon@high`) is the workhorse:
+  implementation, fixes, probe rounds, reviews and tooling, a Neon reviewer in a session other than the writer's. The
+  organizer stays on Opus. A Claude child (`claude-code:sonnet@high`, or Opus) only where it clearly adds value: a
+  second review of a large stretch whose Neon review missed a case a record decides, the design of probes on
+  concurrency, locking, crashes and write ordering, or when the owner asks (owner, 2026-11-21: Claude usage is the
+  scarce one). Keep Neon stretches to one deliverable each.
 - A child ends with the fixed report of landing-check.md: change, rules with their records, tests, bookkeeping lines,
   open branches.
 - One review layer per landing: check every rule the child wrote against a record that shows the very case the rule

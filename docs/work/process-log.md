@@ -763,3 +763,9 @@ area filter stops before.
 | Not adopted; agents navigate with grep as before | complete and cheaper on every task measured |
 | roscli fixed at its source: daemon routing and solution-wide search (RoslynSkills `r9bh`), the wedged host (`mbvr`), stale answers after edits (`49hc`), false diagnostics (`zzfs`), daemon state in the analysed repository (`vr3g`) | the gaps are in roscli, not in the idea of a persistent workspace |
 | Measure again after r9bh lands, on the same six tasks | this run is the "before" side |
+
+**Model choice corrected (owner, 2026-11-21 late evening).** The round above moved reviews, tooling and fix writers to
+Sonnet and Opus; the owner then saw only Claude children running and restated that Neon is the workhorse. Every child
+runs on Neon again, the reviewer in a session other than the writer's; a Claude child only where it clearly adds value
+(AGENTS.md, Sub-sessions). The two Claude children then running (the c7gn re-review, RoslynSkills r9bh) finish their
+tasks.

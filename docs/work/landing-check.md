@@ -14,7 +14,7 @@ persistent check worktree and gave code writers worktrees of their own.
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
    `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
 4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
-   its record, by a model other than the writer's. A stretch over about 1,000 lines gets a read-only reviewer child;
+   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). A stretch over about 1,000 lines gets a read-only reviewer child;
    the organizer then checks that its findings were applied. A smaller stretch has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
 6. **Compare.** The core compare set in the background after the landing; the wide set once a day.
