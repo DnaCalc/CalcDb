@@ -124,8 +124,18 @@ public sealed class SchemaWriterTests
         /// <summary>Database.Close of a session that allocated or dropped a table: its closing commit (see the Com Database).</summary>
         public void Close() => Assert.Equal(MutationOpen.None, Workspace.PublishCloseCommit(Cache).Open);
 
+        /// <summary>The 1-based publication this session refuses to write (0: none), to stop a multi-commit change midway.</summary>
+        public int RefusePublication { get; init; }
+
+        private int _publications;
+
         public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
         {
+            if (++_publications == RefusePublication)
+            {
+                failure = $"publication {_publications} refused by the test";
+                return null;
+            }
             failure = null;
             return File;
         }
@@ -572,9 +582,10 @@ public sealed class SchemaWriterTests
     }
 
     /// <summary>
-    /// Replay one DAO Long TableDefs.Append against ACE's kept pages: verifies page 42 (TableDef), page 44 (LVAL),
-    /// page 0 (N+2 commits), page 1, page 17 (including Commit 2's vacated inline prefix outside its 8-byte DateUpdate
-    /// clock field), and verifies unkept page 6 changed only at the two MSysObjects.LvProp map bits for LVAL page 44.
+    /// Replay one DAO Long TableDefs.Append against ACE's kept pages (0, 1, 2, 3, 7, 8, 10, 17, 18, 41-44): page 42
+    /// (TableDef), page 44 (LVAL), page 0 (N+2 commits), page 1 and page 17 (including commit 2's vacated inline prefix
+    /// outside its 8-byte DateUpdate clock field). Page 6, MSysObjects.LvProp's usage-map page, changes when LvProp
+    /// spills to page 44, and no record keeps it: it is allowed to change and not asserted (Open: what ACE writes there).
     /// </summary>
     private static void AssertDaoCreateTableMatchesAce(string card, string question, CreateTableRequest request)
     {
@@ -591,22 +602,8 @@ public sealed class SchemaWriterTests
         CatalogEntry entry = catalog.Entries.Single(e => e.Name == request.Name && e.ParentId == catalog.TablesContainer);
         ColumnDescriptor lvProp = catalog.ObjectTable.Columns.Single(c => c.Name == "LvProp");
         LvalColumnMapSpec lvMaps = catalog.ObjectTable.LongValueMaps.Single(m => m.PhysicalNumber == lvProp.PhysicalNumber);
-
-        // When LvProp spills to LVAL page 44, MSysObjects.LvProp's usage maps on page 6 (unkept by these probes) gain
-        // page 44 in both owned and free maps. Verify page 6 changed at those exact two bits and nowhere else.
-        HashSet<long>? allowedUnkept = null;
-        if (ours.Length > 44 * D.PageSize)
-        {
-            Assert.Equal(lvMaps.OwnedMap.Page, lvMaps.FreeMap.Page);
-            uint mapPage = lvMaps.OwnedMap.Page;
-            allowedUnkept = [mapPage];
-            byte[] expectedMapPage = fixture.AsSpan((int)(mapPage * D.PageSize), D.PageSize).ToArray();
-            Assert.True(MapPages.TryInlineBit(expectedMapPage, lvMaps.OwnedMap.Row, 44, D, out int ownOff, out byte ownMask, out _));
-            Assert.True(MapPages.TryInlineBit(expectedMapPage, lvMaps.FreeMap.Row, 44, D, out int freeOff, out byte freeMask, out _));
-            expectedMapPage[ownOff] |= ownMask;
-            expectedMapPage[freeOff] |= freeMask;
-            Assert.True(ours.AsSpan((int)(mapPage * D.PageSize), D.PageSize).SequenceEqual(expectedMapPage), $"{card}/{question}: unkept map page {mapPage} differed outside LvProp bits for page 44");
-        }
+        Assert.DoesNotContain((long)lvMaps.OwnedMap.Page, kept.Pages);
+        HashSet<long>? allowedUnkept = ours.Length > 44 * D.PageSize ? [lvMaps.OwnedMap.Page, lvMaps.FreeMap.Page] : null;
 
         // When Commit 2 wrote an inline 1-field LvProp (<= 64 bytes) and Commit 3 spilled to LVAL page 44, the vacated
         // prefix on page 17 holds Commit 2's 8-byte DateUpdate clock reading (which can differ by clock ticks from
@@ -662,10 +659,9 @@ public sealed class SchemaWriterTests
         using var session = new Session(fixture);
         SchemaWriter w = session.Writer();
 
-        // SQL CREATE TABLE: exact, ASCII case, non-ASCII case, and NFC/NFD duplicates are 3380
-        // (evidence/r-cat-1/names, evidence/r-def-expr-sql/ddl-column-clauses,
-        // evidence/r-q-cat-txn-lock/cat-b-names-fields-indexes-relations, evidence/r-q-cat-txn-lock/cat-b-names-normalization).
-        foreach ((string first, string second) in new[] { ("A", "A"), ("a", "A"), ("F\u00e9", "F\u00c9"), ("F\u00e9", "Fe\u0301") })
+        // SQL CREATE TABLE: exact and ASCII-case duplicates are 3380 (evidence/r-def-expr-sql/ddl-column-clauses Cc20
+        // A, A and Cc21 A, a; evidence/r-cat-1/names C2 a, A).
+        foreach ((string first, string second) in new[] { ("A", "A"), ("a", "A") })
         {
             SchemaOutcome outcome = w.CreateTable(session.Workspace, new("DupSql", [Long(first), Long(second)], SchemaRoute.Sql), 1, 1);
             Assert.False(outcome.Succeeded);
@@ -687,21 +683,77 @@ public sealed class SchemaWriterTests
             }
         }
 
-        // Accent-only pairs (same base letter, different diacritics) are unprobed (R-CAT-1 CAT-B Open) and stay refused by name.
+        // Field pairs no record decides stay refused by name on every route (R-CAT-1 CAT-B Open): non-ASCII case
+        // (recorded only for attached Fields.Append, 3191), NFC/NFD (recorded only for table names), accent-only pairs,
+        // a different non-ASCII letter in one place (recorded only for table names), and letters without a canonical
+        // decomposition.
+        (string, string)[] undecided =
+        [
+            ("F\u00e9", "F\u00c9"), ("F\u00e9", "Fe\u0301"), ("e", "\u00e9"), ("\u00e4", "\u00e1"),
+            ("T\u00e4", "T\u00e9"), ("o", "\u00f8"), ("d", "\u0111"),
+        ];
         foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao, SchemaRoute.Ado })
         {
-            foreach ((string first, string second) in new[] { ("e", "\u00e9"), ("\u00e4", "\u00e1") })
+            foreach ((string first, string second) in undecided)
             {
-                SchemaRefusal? refused = w.Check(new("AccentPair", [Long(first), Long(second)], route));
+                SchemaRefusal? refused = w.Check(new("Undecided", [Long(first), Long(second)], route));
                 Assert.NotNull(refused);
                 Assert.Null(refused.Value.Error);
-                Assert.NotNull(refused.Value.NotWritten);
+                Assert.Contains("not recorded", refused.Value.NotWritten);
+                Assert.Equal(FieldNameClash.Undecided, SchemaWriter.FieldNameClashOf([first], second, out _));
             }
         }
 
-        // Distinct accented letters (Tä vs Té, evidence/r-cat-1/names) are two distinct fields and succeed.
-        Assert.Null(w.Check(new("DistinctAccentSql", [Long("T\u00e4"), Long("T\u00e9")], SchemaRoute.Sql)));
-        Assert.Null(w.Check(new("DistinctAccentDao", [Long("T\u00e4"), Long("T\u00e9")], SchemaRoute.Dao)));
+        // Distinct ASCII names stay distinct, also beside a non-ASCII name of another length.
+        Assert.Equal(FieldNameClash.None, SchemaWriter.FieldNameClashOf(["A", "AB"], "B", out _));
+        Assert.Equal(FieldNameClash.None, SchemaWriter.FieldNameClashOf(["T\u00e9"], "n", out _));
+        Assert.Equal(FieldNameClash.Duplicate, SchemaWriter.FieldNameClashOf(["x", "Aa"], "aA", out _));
+    }
+
+    [Fact]
+    public void A_DAO_append_outside_the_recorded_range_is_refused_by_name()
+    {
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaWriter w = session.Writer();
+
+        // One commit per field is recorded for N = 1, 2, 3, 4 and 6 (r-q15-ddl-open/lv-dao-fields-*); seven is not.
+        SchemaRefusal? seven = w.Check(new("T", [.. "abcdefg".Select(c => Long(c.ToString()))], SchemaRoute.Dao));
+        Assert.Null(seven?.Error);
+        Assert.Contains("at most 6", seven?.NotWritten);
+        Assert.Null(w.Check(new("T", [.. "abcdef".Select(c => Long(c.ToString()))], SchemaRoute.Dao)));
+
+        // An 8-character name is recorded only as the one field (r-q15-ddl-open/lv-dao-name-8).
+        Assert.Null(w.Check(new("T", [Long("nnnnnnnn")], SchemaRoute.Dao)));
+        SchemaRefusal? longFirst = w.Check(new("T", [Long("nnnnnnnn"), Long("a")], SchemaRoute.Dao));
+        Assert.Null(longFirst?.Error);
+        Assert.Contains("first field nnnnnnnn", longFirst?.NotWritten);
+
+        // Inside BeginTrans the N+1 frames would join the level: no record (task 4nfc), refused before any change.
+        Assert.Null(session.Workspace.BeginTrans());
+        SchemaOutcome inLevel = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Dao), 1, 1);
+        Assert.Null(inLevel.Refused?.Error);
+        Assert.Contains("BeginTrans", inLevel.Refused?.NotWritten);
+        Assert.Equal(fixture, session.File.Snapshot());
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void A_failed_DAO_property_commit_returns_the_published_table_row(int failingPublication)
+    {
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture) { RefusePublication = failingPublication };
+        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long("a"), Long("b")], SchemaRoute.Dao), 1, 2);
+        Assert.Null(outcome.Refused);
+        Assert.False(outcome.Succeeded);
+        Assert.True(outcome.Accepted.Accepted);
+        Assert.Equal(MutationOpen.Publication, outcome.Accepted.Open);
+        Assert.Contains($"commit {failingPublication} of 3", outcome.Accepted.Detail);
+        Assert.Contains("after the table row was published", outcome.Accepted.Detail);
+        // Commit 1 allocated and published the TableDef and map pages 42 and 43; the refused commit wrote nothing.
+        Assert.Equal(44UL, outcome.ExtentPages);
+        Assert.Equal(44 * D.PageSize, session.File.Snapshot().Length);
     }
 }
 

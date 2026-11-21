@@ -75,6 +75,25 @@ public sealed class DdlTests
     }
 
     [Fact]
+    public void R_q15_columns_z_a_executes_byte_exact_through_sql_ddl()
+    {
+        // r-q15-ddl-open/columns-z-a: the column blocks in definition order (z, then a) on page 42.
+        Kept kept = Kept.Of("columns-z-a", "r-q15-ddl-open");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+
+        var timestamps = new Queue<ulong>([created, updated]);
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome outcome = ActionExecutor.Execute("CREATE TABLE T (z LONG, a LONG)", db);
+        Assert.Null(outcome.Failure);
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
     public void R_q11_ddl_closure_create_then_drop_executes_byte_exact_through_sql_ddl()
     {
         Kept kept = Kept.Of("create-then-drop");
@@ -564,7 +583,7 @@ public sealed class DdlTests
         using var db = new WritableSqlFixture(EmptyAccdbSha);
         Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b TEXT(10))", db).Succeeded);
 
-        // 3010: Table already exists (case-insensitive and NFC-normalized, r-q15-ddl-open/err-dup-table-sql).
+        // 3010: Table already exists (r-q15-ddl-open/dup-create-sql; table names compare without case: r-cat-1/names Tbl/TBL).
         AssertAceError(db, "CREATE TABLE t (x LONG)", 3010);
 
         // 3380: Duplicate column name in CREATE TABLE and ALTER TABLE ADD COLUMN.
@@ -630,8 +649,9 @@ public sealed class DdlTests
     {
         using var db = new WritableSqlFixture(EmptyAccdbSha);
 
-        // r-q15-ddl-open/columns-z-a: declaration order is preserved by DdlBinder; SchemaWriter currently
-        // refuses non-alphabetical field order instead of silently reordering.
+        // r-q15-ddl-open/columns-z-a: the binder keeps declaration order, and SchemaWriter writes the column blocks in it
+        // (page 42: z then a, PhysicalNumber and ColumnId 0 and 1, VariableIndex 0, FixedOffset 0 and 4, Long, Length 4,
+        // fixed, TypeInfo 09 04 00 00).
         DdlStatement? parsed = DdlParser.Parse("CREATE TABLE ZFirst (z LONG, a LONG)", out SqlFailure? pf);
         Assert.Null(pf);
         BoundDdl? bound = DdlBinder.Bind(parsed!, db, out SqlFailure? bf);
@@ -642,12 +662,29 @@ public sealed class DdlTests
         Assert.Equal(["z", "a"], bound.CreateTable!.Fields.Select(f => f.Name).ToArray());
 
         ActionOutcome executed = ActionExecutor.Execute("CREATE TABLE ZFirst (z LONG, a LONG)", db);
-        Assert.False(executed.Succeeded);
-        Assert.NotNull(executed.Failure);
-        Assert.Equal("NotModelled.SchemaWriter", executed.Failure!.NotModelled);
+        Assert.Null(executed.Failure);
+        Assert.True(executed.Succeeded);
+        IReadOnlyList<ColumnDescriptor> columns = db.Table("ZFirst")!.Columns;
+        Assert.Equal(["z", "a"], columns.Select(c => c.Name).ToArray());
+        Assert.Equal([0, 1], columns.Select(c => c.PhysicalNumber).ToArray());
+        Assert.Equal([0, 1], columns.Select(c => c.ColumnId).ToArray());
+        Assert.Equal([0, 0], columns.Select(c => c.VariableIndex).ToArray());
+        Assert.Equal([0, 4], columns.Select(c => c.FixedOffset).ToArray());
+        Assert.All(columns, c =>
+        {
+            Assert.Equal(NativeTypes.Long, c.TypeCode);
+            Assert.Equal(4, c.Length);
+            Assert.True(c.IsFixed);
+            Assert.Equal(0x409u, c.TypeInfo);
+        });
 
-        // r-q15-ddl-open/lv-sql-notnull-long: NOT NULL writes LvProp blob -> refused by name.
+        // r-q15-ddl-open/lv-sql-notnull-1: NOT NULL writes LvProp blob -> refused by name.
         AssertNotModelled(db, "CREATE TABLE Nn (a LONG NOT NULL)", "NotModelled.DdlColumnNotNull");
+
+        // Field pairs no record decides (SchemaWriter.FieldNameClashOf): non-ASCII case and NFC/NFD are refused by name;
+        // 3380 is recorded for exact and ASCII-case pairs only (r-def-expr-sql/ddl-column-clauses Cc20, Cc21).
+        AssertNotModelled(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", "NotModelled.DdlFieldNamePair");
+        AssertNotModelled(db, "CREATE TABLE Fe2 ([Fé] LONG, [Fé] LONG)", "NotModelled.DdlFieldNamePair");
 
         // Other named NotModelled.Ddl* refusals for valid DDL shapes outside SchemaWriter's current scope.
         AssertNotModelled(db, "CREATE TABLE Tz (s TEXT(0))", "NotModelled.DdlTextZeroSize");
