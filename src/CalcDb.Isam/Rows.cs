@@ -108,6 +108,13 @@ public static class RowResolver
                 return null;
             }
             ReadOnlySpan<byte> page = pin.Bytes;
+            if (atRoot && page[d.DataPage.Kind.Offset] == d.DataPage.ReleasedDataKind)
+            {
+                // Emptied data page released by row delete when FreeMap held a lower page Q < P
+                // (evidence/r-q20-delete-pages/where-empty-all, dynaset-empty-all-asc; evidence/r-q19-growth-open/split-empty-right-leaf, split-empty-left-leaf): all rows on it are deleted.
+                Drop(pin, hold);
+                return null;
+            }
             if (page[d.DataPage.Kind.Offset] != 0x01 || DataPages.IsLvalPage(page, d))
             {
                 Drop(pin, hold);

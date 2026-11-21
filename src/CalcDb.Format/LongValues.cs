@@ -40,6 +40,25 @@ public sealed record LongValuePlan(LongValueForm Form, uint Length, RowLocator F
         return field;
     }
 
+    /// <summary>
+    /// The 12-byte row reference of a value on LVAL pages (II-04 §7.1; R-FMT-2 "LV form selection", row bytes 6-17 of
+    /// evidence/r-q17-growth/lval-memo and lval-ole): the length word, <c>0x40000000 | length</c> for a single row and the
+    /// length alone for a chain; the first row's locator (slot, then the page in 3 bytes); and the +8 word, 0 for a single
+    /// row and the chain's millisecond tick stamp (bytes 8-11 of its first LVAL page) for a chain.
+    /// </summary>
+    public static byte[] EncodeReference(LongValueForm form, uint length, RowLocator first, uint stamp)
+    {
+        if (form is not (LongValueForm.SingleRow or LongValueForm.Chain) || length > 0x3FFFFFFF)
+        {
+            throw new ArgumentException($"a {form} reference of {length} bytes is not an LVAL reference", nameof(form));
+        }
+        byte[] field = new byte[DefinitionBytes];
+        BinaryPrimitives.WriteUInt32LittleEndian(field, (form == LongValueForm.SingleRow ? 0x40000000u : 0u) | length);
+        first.Encode(field.AsSpan(4, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(field.AsSpan(8), form == LongValueForm.SingleRow ? 0u : stamp);
+        return field;
+    }
+
     /// <summary>InspectLongValue: the definition from a bounded ordinary-row field extent.</summary>
     public static LongValuePlan? Inspect(ReadOnlySpan<byte> field, out string? failure)
     {

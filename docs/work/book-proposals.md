@@ -330,3 +330,24 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   retention or copied into its result store; a row deleted later is still produced. A row not yet populated shows the
   state published when it is populated. A snapshot whose definition orders its rows is produced completely at open
   (R-CURSOR-1 CUR-POP)."
+
+## II-11 §26 (DELETE, cascades and counts) and T-SQL-69: a DELETE without a predicate releases the table's pages (zfrp, 2026-11-21)
+
+- **Book.** "The sink does not substitute a table truncation or discard constraint traversal merely because the
+  predicate is absent." T-SQL-69 repeats "no table truncation substitute".
+- **Evidence.** On the reference build `DELETE FROM T` with no WHERE writes a different file form from a delete of
+  the same rows with a WHERE (qualified.md, R-FMT-2 "Overflow / deletion and Map ownership" and the DELETE-without-WHERE
+  note). It releases every data page, every long-value page and every non-root index page without writing them,
+  rewrites each index root as an empty leaf and zeroes the TableDef's counts; page 1 marks the pages free at Close.
+  A WHERE that removes the same rows deletes them row by row and releases an emptied page only when the table's
+  FreeMap already holds a lower page. Records: `r-q17-growth/retire-delete-au1`, `retire-delete-au1-where-all`;
+  `r-q19-growth-open/delete-all-*`; `r-q20-delete-pages/where-empty-*`.
+- **Implemented.** `EditFrame.DeleteEveryRow` (CalcDb.Isam), called by `ActionExecutor` for a single-table DELETE
+  without WHERE or join; every other DELETE keeps the row path. A related table is refused by name until relationship
+  checks exist (`r8dm`), so no constraint traversal is skipped.
+- **Proposed text.** "A DELETE target is a bound base-row route ... The sink still applies the constraint and
+  disposition rules to every target row. When the statement has no predicate and a single base table, its file effect
+  follows the native whole-table form: the table's data, long-value and non-root index pages are released and each
+  index root becomes an empty leaf (R-FMT-2). A predicate that selects every row keeps the row-by-row form." In
+  T-SQL-69, replace "no table truncation substitute" with "the whole-table form only for a predicate-free single-table
+  DELETE, with every constraint still applied".

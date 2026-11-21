@@ -6,6 +6,7 @@ using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
 
@@ -595,6 +596,15 @@ public static unsafe class ActionExecutor
         bool failOnError,
         NativeVariant[] paramValues)
     {
+        // R-FMT-2 (qualified.md: DELETE without WHERE; evidence/r-q17-growth/retire-delete-au1,
+        // evidence/r-q19-growth-open/delete-all-*): a single-table DELETE without WHERE and without a join
+        // (ActionSyntax.Delete already refuses joins and external databases) routes through EditFrame.DeleteEveryRow
+        // so ACE's page-release path runs instead of row-by-row deletion.
+        if (plan.Where is null)
+        {
+            return ExecuteDeleteAll(plan, database, failOnError);
+        }
+
         List<RowId>? candidates = CollectCandidates(plan, database, paramValues, out SqlFailure? scanFailure);
         if (candidates is null)
         {
@@ -696,6 +706,65 @@ public static unsafe class ActionExecutor
                     database.Workspace.Rollback();
                 }
             }
+        }
+    }
+
+    private static ActionOutcome ExecuteDeleteAll(
+        BoundAction plan,
+        ISqlActionDatabase database,
+        bool failOnError)
+    {
+        // qualified.md (DELETE without WHERE Open): DELETE without WHERE inside a transaction is not recorded.
+        if (database.Workspace.Depth > 0)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(
+                SqlPhase.Execute,
+                "NotModelled.DeleteAllInTransaction",
+                $"DELETE without WHERE inside an explicit transaction (depth {database.Workspace.Depth}) is not recorded (qualified.md: DELETE without WHERE Open)"));
+        }
+
+        if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
+        {
+            return ActionOutcome.Fail(openFailure!);
+        }
+
+        using (cursor!)
+        {
+            // qualified.md (DELETE without WHERE Open): MDB is not recorded.
+            if (editContext!.Footprints is { } footprints)
+            {
+                using PagePin? page0 = footprints.File.Pin(0).Pin;
+                if (page0 is null || !DatabaseHeader.IsAccdb(page0.Bytes, footprints.Format))
+                {
+                    return ActionOutcome.Fail(SqlFailure.Open(
+                        SqlPhase.Execute,
+                        "NotModelled.DeleteAllMdb",
+                        "DELETE without WHERE on a non-ACCDB (MDB) file is not recorded (qualified.md: DELETE without WHERE Open)"));
+                }
+            }
+
+            using var frame = new EditFrame(editContext!, cursor, database.Workspace) { ConflictSource = MutationErrorSource.Database };
+            UpdateOutcome outcome = frame.DeleteEveryRow(out int rows);
+            if (outcome.Succeeded)
+            {
+                return ActionOutcome.Ok(rows);
+            }
+            if (outcome.Open != MutationOpen.None)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.Edit." + outcome.Open,
+                    outcome.Detail ?? outcome.Open.ToString()));
+            }
+            MutationError err = outcome.Error!.Value;
+            if (!failOnError && IsSkippableRowError(err.Number))
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.DeleteAllConflictWithoutFailOnError",
+                    $"DELETE without WHERE encountered {err.Number} without dbFailOnError (disposition not recorded)"));
+            }
+            return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, err.Number, err.Describe()));
         }
     }
 

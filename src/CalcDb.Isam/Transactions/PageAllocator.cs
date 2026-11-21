@@ -89,12 +89,13 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
 
     /// <summary>
     /// Free <paramref name="page"/> in the global map (set its bit, evidence/r-q11-ddl-closure/create-then-drop); null with
-    /// the reason when the bit cannot be located. The page's bytes and the file's extent are not changed.
+    /// the reason when the bit cannot be located. The page's bytes and the file's extent are not changed. Without
+    /// <paramref name="seen"/> the committed global map is read (a session's closing commit).
     /// </summary>
-    public PageEdit? Free(PrivateOverlay seen, uint page, out string? failure)
+    public PageEdit? Free(PrivateOverlay? seen, uint page, out string? failure)
     {
         MapRules m = d.Map;
-        using PagePin? pin = seen.Pin(m.GlobalMapPage).Pin;
+        using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
         if (pin is null)
         {
             failure = $"the global map page {m.GlobalMapPage} could not be pinned";

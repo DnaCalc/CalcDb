@@ -36,6 +36,10 @@ public static unsafe class AssignmentConversion
             // leaves in the buffer is not recorded.
             return column.TypeCode == NativeTypes.Boolean ? Open(MutationOpen.ConversionNotRecorded) : new ConversionResult(NativeValue.Null);
         }
+        if (column.TypeCode == NativeTypes.Ole && vt == (VarType.Array | VarType.UI1))
+        {
+            return ByteArray(incoming);
+        }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {
             // Empty, Missing (VT_ERROR) and arrays/by-reference values: the adapter dereferences by-reference arguments
@@ -67,6 +71,30 @@ public static unsafe class AssignmentConversion
             default:
                 return Open(MutationOpen.ColumnType);
         }
+    }
+
+    /// <summary>
+    /// A one-dimensional VT_ARRAY|VT_UI1 into a Long Binary field: its bytes exactly, an empty array as Null (qualified.md
+    /// R-FMT-2 "Binary and OLE (public side)": table-recordset puts of all 256 byte values and 4,000 patterned bytes read
+    /// back exactly, empty arrays read back Null). Other shapes are not recorded.
+    /// </summary>
+    private static ConversionResult ByteArray(in NativeVariant incoming)
+    {
+        if (incoming.Pointer == 0)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
+        if (shape.Length != 1)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        if (shape[0].Count == 0)
+        {
+            return new ConversionResult(NativeValue.Null);
+        }
+        byte[] bytes = new ReadOnlySpan<byte>(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), shape[0].Count).ToArray();
+        return new ConversionResult(new NativeValue(NativeKind.LongBinary) { Bytes = bytes });
     }
 
     private static ConversionResult Scalar(in NativeVariant incoming, VarType target, uint lcid)

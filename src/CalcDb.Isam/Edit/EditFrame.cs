@@ -178,6 +178,8 @@ public sealed class EditFrame : IDisposable
     private LockResource? _editLock;
     private bool _conflictReported;
     private GeneratedTicket? _ticket;
+    private int _deferredRowCount;
+    private readonly List<int> _deferredDecrements = [];
 
     /// <param name="updatable">False for a snapshot or forward-only recordset (CUR-EDIT: Edit, AddNew, Update and CancelUpdate 3251, a put 3027).</param>
     public EditFrame(TableEditContext table, IRecordCursor cursor, TransactionCoordinator workspace, bool updatable = true)
@@ -677,8 +679,14 @@ public sealed class EditFrame : IDisposable
             UnlockFootprint(footprint, held);
             return Fail(MutationError.RecordDeleted);
         }
+        // A dynaset's own Delete, outside every level and statement, leaves the TableDef's counts to the recordset's Close
+        // (evidence/r-q17-growth/retire-rs-delete-au1; evidence/r-q20-delete-pages/dynaset-empty-all-asc, -desc); a SQL
+        // statement's delete writes them with the row. A table-type recordset (TableCursor) writes them at once, and
+        // emptying a data page of a multi-page table via a table-type recordset Delete is open and refused by name.
+        bool deferCounts = _cursor is PopulationCursor && _workspace.Depth == 0 && !_workspace.InStatement && _workspace.Publisher is not null;
+        bool tableCursorDelete = _cursor is TableCursor && !_workspace.InStatement;
         CompiledChange physical = _table.Writer is { } writer
-            ? writer.CompileDelete(s, row, _workspace.OverlayOf(writer.File))
+            ? writer.CompileDelete(s, row, _workspace.OverlayOf(writer.File), deferCounts, tableCursorDelete)
             : new CompiledChange(null, "no physical compiler for this table");
         if (physical.Change is null && _table.Writer is not null)
         {
@@ -697,11 +705,94 @@ public sealed class EditFrame : IDisposable
             UnlockFootprint(footprint, held);
             return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
         }
+        if (physical.Change?.DeferredEntryDecrements is { } decrements)
+        {
+            _deferredRowCount--;
+            _deferredDecrements.AddRange(decrements);
+        }
         if (physical.Change is not null && _cursor is IMutableCursor mutable)
         {
             mutable.OnRowDeleted();
         }
         return new UpdateOutcome(null, accepted.Open, accepted.Detail, change);
+    }
+
+    /// <summary>
+    /// <c>DELETE FROM T</c> without WHERE (W-05/growth-structural-closure; R-FMT-2 "only DELETE without WHERE releases a
+    /// table's data page"): every row of the table goes as one change that releases its data page
+    /// (<see cref="SameWidthWriter.CompileRelease"/>) instead of one delete per row; <paramref name="rows"/> is the count
+    /// removed (RecordsAffected). The caller is a SQL statement with no WHERE, join or other source (II-11 DELETE target);
+    /// a shape the writer has no record for is refused by name and nothing is deleted, and the caller may then delete row
+    /// by row only where that gives ACE's bytes, which it does not here.
+    /// </summary>
+    public UpdateOutcome DeleteEveryRow(out int rows)
+    {
+        rows = 0;
+        if (!Updatable)
+        {
+            return Fail(MutationError.NotSupported);
+        }
+        Discard();
+        MutationSemantics s = _table.Semantics;
+        if (_table.HasRelationships)
+        {
+            return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
+        }
+        if (_workspace.HasAcceptedChanges(s))
+        {
+            return new UpdateOutcome(null, MutationOpen.PrivateRow, $"{s.TableName} has rows this Workspace changed and did not publish");
+        }
+        if (_workspace.Depth > TransactionCoordinator.MaxWriteDepth)
+        {
+            return Fail(MutationError.TooManyTransactions);
+        }
+        if (_table.Writer is not { } writer)
+        {
+            return new UpdateOutcome(null, MutationOpen.Publication, "no physical compiler for this table");
+        }
+        CompiledChange physical = writer.CompileRelease(s, out rows, _workspace.OverlayOf(writer.File));
+        if (physical.Change is not { } compiled)
+        {
+            rows = 0;
+            return new UpdateOutcome(null, MutationOpen.Publication, physical.NotWritten);
+        }
+        LockLifetime held = _workspace.ChangeLifetime;
+        LockResource[] footprint = [];
+        if (LockClosure(compiled, ref footprint, held, reportLockedBySession: true) is { } refusedClosure)
+        {
+            rows = 0;
+            return refusedClosure;
+        }
+        var change = new AcceptedRowChange(s, RowChangeKind.Delete, null, [], [], null, physical);
+        AcceptOutcome accepted = _workspace.Accept(change);
+        if (!accepted.Accepted)
+        {
+            UnlockFootprint(footprint, held);
+            rows = 0;
+            return new UpdateOutcome(accepted.Error, accepted.Open, accepted.Detail);
+        }
+        return new UpdateOutcome(null, accepted.Open, accepted.Detail, change);
+    }
+
+    /// <summary>
+    /// The TableDef counts of this recordset's Deletes, written at its Close as one more commit
+    /// (evidence/r-q17-growth/retire-rs-delete-au1: page 107 byte 16 changes only at rs.Close, counter <c>0a</c> &gt; <c>0b</c>).
+    /// </summary>
+    private void PublishDeferredCounts()
+    {
+        if (_deferredRowCount == 0 || _table.Writer is not { } writer)
+        {
+            return;
+        }
+        CompiledChange counts = writer.CompileTableDefCounts(_deferredRowCount, [.. _deferredDecrements], _workspace.OverlayOf(writer.File));
+        _deferredRowCount = 0;
+        _deferredDecrements.Clear();
+        if (counts.Change is { } compiled)
+        {
+            // Close has no error channel for this write: a refusal leaves the count as the Deletes found it (named in
+            // the change's NotWritten for a caller that inspects it; the rows themselves are published).
+            _workspace.PublishNonTransactional(writer.File, compiled.Edits, compiled.Footprint, CommitMode.LazyBurst, ConflictSource, out _);
+        }
     }
 
     /// <summary>Lock the pages of the physical closure the footprint does not hold yet (II-09 §24); null when granted.</summary>
@@ -772,9 +863,11 @@ public sealed class EditFrame : IDisposable
     /// <summary>A Rollback of the Workspace drops the pending edit (TXN-CLOSE: EditMode 0, then Update 3020).</summary>
     internal void DropForRollback() => Discard();
 
+    /// <summary>The recordset's Close: a pending edit is discarded, and the TableDef counts its Deletes left are written.</summary>
     public void Dispose()
     {
         Discard();
+        PublishDeferredCounts();
         _workspace.Unregister(this);
     }
 

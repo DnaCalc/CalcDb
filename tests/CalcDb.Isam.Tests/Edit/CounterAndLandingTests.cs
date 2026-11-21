@@ -355,13 +355,26 @@ public sealed class CounterAndLandingTests
             Assert.Equal((0u, 8u), ReadWords(rig.Before, f.FirstPage, "PK_F"));
         }
 
+        // The records' deletes are SQL statements (DELETE FROM X WHERE ...): each is one StatementScope, which writes the
+        // TableDef with its rows (a recordset's Delete leaves the counts to its Close, r-q17-growth/retire-rs-delete-au1).
+        static void DeleteIds(Rig rig, TableDefinition f, EditFrame frame, TableCursor cursor, params long[] ids)
+        {
+            using StatementScope statement = rig.A.BeginStatement();
+            foreach (long id in ids)
+            {
+                SeekRowById(cursor, f, id);
+                UpdateOutcome deleted = frame.Delete();
+                Assert.True(deleted.Succeeded && deleted.Change?.Physical is not null, deleted.Change?.NotWritten ?? deleted.Detail);
+            }
+            Assert.Equal(MutationOpen.None, statement.Complete().Open);
+        }
+
         // 1. delete-duplicate (ID=4, N=40): IX_N (8,7) -> (7,7); PK_F stays (0,8)
         using (var rig = new Rig(BulkWordsFixture))
         {
             (TableDefinition f, _) = rig.Table("F");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable("F");
-            SeekRowById(cursor, f, 4);
-            Assert.True(frame.Delete().Succeeded);
+            DeleteIds(rig, f, frame, cursor, 4);
             byte[] after = rig.File.Image.Snapshot();
             Assert.Equal((7u, 7u), ReadWords(after, f.FirstPage, "IX_N"));
             Assert.Equal((0u, 8u), ReadWords(after, f.FirstPage, "PK_F"));
@@ -372,8 +385,7 @@ public sealed class CounterAndLandingTests
         {
             (TableDefinition f, _) = rig.Table("F");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable("F");
-            SeekRowById(cursor, f, 1);
-            Assert.True(frame.Delete().Succeeded);
+            DeleteIds(rig, f, frame, cursor, 1);
             Assert.Equal((7u, 7u), ReadWords(rig.File.Image.Snapshot(), f.FirstPage, "IX_N"));
         }
 
@@ -382,30 +394,21 @@ public sealed class CounterAndLandingTests
         {
             (TableDefinition f, _) = rig.Table("F");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable("F");
-            SeekRowById(cursor, f, 1);
-            Assert.True(frame.Delete().Succeeded);
-            SeekRowById(cursor, f, 2);
-            Assert.True(frame.Delete().Succeeded);
+            DeleteIds(rig, f, frame, cursor, 1, 2);
             Assert.Equal((6u, 6u), ReadWords(rig.File.Image.Snapshot(), f.FirstPage, "IX_N"));
         }
 
-        // 4. delete-all (all 8 rows; ACE: IX_N (8,7) -> (0,0), PK_F stays (0,8)): the 8th delete leaves F's only data
-        // page without a live row, and ACE then frees the page (r-fmt-2b/create-w-accdb Au4, r-q16-overflow lower-free),
-        // which is not written: that delete has no physical form, so ACE's final words are not reached here.
+        // 4. every row by a WHERE (ACE's delete-all is DELETE FROM X without WHERE, which releases the page: IX_K (8,7) ->
+        // (0,0)): row by row the last delete leaves the page owned and empty (r-q17-growth retire-delete-au1-where-all),
+        // and each removal lowers IX_N's word0 to (0,0); PK_F, built empty, stays (0,8).
         using (var rig = new Rig(BulkWordsFixture))
         {
             (TableDefinition f, _) = rig.Table("F");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable("F");
-            for (int id = 1; id <= 7; id++)
-            {
-                SeekRowById(cursor, f, id);
-                Assert.True(frame.Delete().Change?.Physical is not null);
-            }
-            SeekRowById(cursor, f, 8);
-            UpdateOutcome last = frame.Delete();
-            Assert.Equal(MutationOpen.Publication, last.Open);
-            Assert.Null(last.Change);
-            Assert.Contains("its page's last row", last.Detail);
+            DeleteIds(rig, f, frame, cursor, 1, 2, 3, 4, 5, 6, 7, 8);
+            byte[] after = rig.File.Image.Snapshot();
+            Assert.Equal((0u, 0u), ReadWords(after, f.FirstPage, "IX_N"));
+            Assert.Equal((0u, 8u), ReadWords(after, f.FirstPage, "PK_F"));
         }
 
         // 5. insert-new (ID=9, N=80): IX_N (8,7) -> (8,8); PK_F (0,8) -> (0,9)

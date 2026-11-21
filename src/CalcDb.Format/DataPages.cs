@@ -50,6 +50,17 @@ public static class DataPages
     }
 
     /// <summary>
+    /// Initialize a blank LVAL page (II-04 §7; R-FMT-2 "LV form selection": <c>01 01</c>, the free word, <c>LVAL</c> at
+    /// 4-7, <paramref name="stamp"/> at 8-11, the row count at 12-13, slots from 14 with no flag bits;
+    /// evidence/r-q17-growth/lval-memo and lval-ole pages 45 and 47-50). The stamp is the millisecond tick of a chained
+    /// value's first page and 0 on its continuation pages and on a page of single rows.
+    /// </summary>
+    public static void InitializeLval(Span<byte> page, uint stamp, FormatDescriptor d)
+    {
+        Initialize(page, 0, d);
+        d.DataPage.LvalSubtype.CopyTo(page.Slice(d.DataPage.Owner.Offset, 4));
+        d.DataPage.Stamp.Write(page, stamp);
+    }
     /// CheckedSlot (II-03 §3.3): the count against the structural 256-slot domain, the directory inside the page, the
     /// masked start, and the end from the previous slot (slot 0 ends at the page end). A count of 256 is admitted by the
     /// reader; 257 is not representable. Returns null and the failed predicate when the page or slot is malformed.
@@ -108,14 +119,15 @@ public static class DataPages
     /// evidence/r-q7-index-prefix/long-split pages 45–47 and 50, r-fmt-2b/create-w-accdb IxM pages 71 and 72), pages
     /// whose FreeCount does not match the contiguous gap, or pages without room for <c>rowBytes.Length + 2</c> bytes.
     /// </summary>
-    public static bool TryAppendRow(Span<byte> page, ReadOnlySpan<byte> rowBytes, FormatDescriptor d, out byte slot, out string? failure)
+    /// <remarks>With <paramref name="lval"/> the page must be an LVAL page and the row an LVAL row (the same slot directory, R-FMT-2 "LV form selection").</remarks>
+    public static bool TryAppendRow(Span<byte> page, ReadOnlySpan<byte> rowBytes, FormatDescriptor d, out byte slot, out string? failure, bool lval = false)
     {
         DataPageRules r = d.DataPage;
         slot = 0;
         failure = null;
-        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d) != lval)
         {
-            failure = "page is not an ordinary data page";
+            failure = lval ? "page is not an LVAL page" : "page is not an ordinary data page";
             return false;
         }
         if (rowBytes.IsEmpty)
@@ -163,12 +175,17 @@ public static class DataPages
     }
 
     /// <summary>
-    /// Delete one ordinary (non-overflow) slot in place (II-03 §§1.3, 3.3; verified with 0/4,096 byte diffs against ACE
-    /// on <c>4f42d3fa</c> Au1→Au2 tail deletes and Au1→Au3 middle delete): shifts later rows' bodies up by the deleted
-    /// length, marks the slot <c>0xC000 | end</c> (zero length), shifts every later slot offset up by the deleted length
-    /// while preserving flags, adds the deleted length to <see cref="DataPageRules.FreeCount"/>, keeps
-    /// <see cref="DataPageRules.RowCount"/> and <see cref="DataPageRules.Stamp"/> unchanged, and leaves freed gap bytes
-    /// untouched.
+    /// Delete one ordinary (non-overflow) slot in place (II-03 §§1.3, 3.3; R-FMT-2 "deleted row slot word",
+    /// <c>evidence/r-q20-delete-pages/slot-delete-*</c>, <c>dynaset-empty-all-desc</c>,
+    /// <c>evidence/r-q19-growth-open/lv-op-delete-row-chain</c>, <c>lv-op-delete-row-single</c>,
+    /// <c>evidence/r-q17-growth/retire-*</c>):
+    /// sets slot <paramref name="slot"/> (offset <c>o</c>, length <c>len</c>, <c>end = o + len</c>) to
+    /// <c>0xC000 | (o + len)</c> (<c>0xD000</c> at the page's top row where <c>o + len == 0x1000</c>); raises every
+    /// later slot <c>j &gt; slot</c> — live or already deleted — by <c>len</c> keeping its flag bits (<c>0xC000</c> on
+    /// deleted slots); moves live rows below upward by <c>len</c>; adds <c>len</c> to
+    /// <see cref="DataPageRules.FreeCount"/>; keeps <see cref="DataPageRules.RowCount"/> and
+    /// <see cref="DataPageRules.Stamp"/> unchanged; and leaves vacated bottom bytes untouched. Refuses LVAL pages,
+    /// already-deleted / overflow-target slots, overflow-root slots, and pages with a non-contiguous gap.
     /// </summary>
     public static bool TryDeleteSlot(Span<byte> page, int slot, FormatDescriptor d, out string? failure)
     {
@@ -217,6 +234,10 @@ public static class DataPages
         {
             page.Slice(minStart, target.Start - minStart).CopyTo(page.Slice(minStart + length, target.Start - minStart));
         }
+        // R-FMT-2 "deleted row slot word" (evidence/r-q20-delete-pages/slot-delete-*, dynaset-empty-all-desc;
+        // evidence/r-q19-growth-open/lv-op-delete-row-chain page 46 slot 2: b5 0f -> ce cf):
+        // deleted slot word is 0xC000 | (o + len), which equals 0xD000 at the top row (o + len == 0x1000);
+        // every later slot j > slot (live or already deleted) rises by len, preserving its upper flag bits (0xC000).
         WriteSlotWord(page, r.SlotBase + (slot * r.SlotEntryBytes), (ushort)(r.DeletedFlag | r.OverflowFlag | target.End));
         ushort flagMask = (ushort)~r.RowOffsetMask;
         for (int j = slot + 1; j < count; j++)
@@ -231,14 +252,50 @@ public static class DataPages
     }
 
     /// <summary>
-    /// Replace one live ordinary slot's body in place with a body as long or longer (II-03 §§1.3, 3.3, II-04 §8: "An
-    /// in-place update is used when the existing final-row extent suffices"; W-05/growth-structural-closure): the bodies
-    /// of the later slots, which lie below it, move down by the growth, the slot keeps its end and its flags and starts
-    /// that much lower, every later slot offset moves down by the growth, and <see cref="DataPageRules.FreeCount"/> falls
-    /// by it. <see cref="DataPageRules.RowCount"/> and <see cref="DataPageRules.Stamp"/> are unchanged. Decided by
-    /// evidence/r-fmt-2b/pg-grow-row2-plus-1 and pg-grow-row2-plus-29 (a 1004-byte row of page 55 grown by 2 and by 58
-    /// bytes, the second filling the page's 58 free bytes exactly; whole-file SHA-256 equal to ACE's, AceImageHashTests).
-    /// A shorter body is refused: which bytes ACE leaves in the freed gap of a shrinking row is not recorded.
+    /// Whether an ordinary data page holds no live row, overflow root or overflow target (every slot is a deleted
+    /// zero-length slot). Used by delete compilation to detect an emptied data page.
+    /// </summary>
+    public static bool IsEmpty(ReadOnlySpan<byte> page, FormatDescriptor d)
+    {
+        DataPageRules r = d.DataPage;
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        {
+            return false;
+        }
+        int count = (int)r.RowCount.Read(page);
+        if (count > r.ReaderSlotCapacity)
+        {
+            return false;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            if (CheckedSlot(page, i, d, out _) is not { } s || !s.Deleted || !s.Overflow || s.Length != 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Mark an emptied ordinary data page released: page type byte <c>0x01</c> &gt; <c>0x09</c>, leaving its compacted
+    /// <c>0xD000</c> slots, free count and vacated body bytes intact (R-FMT-2 "Overflow / deletion and Map ownership",
+    /// evidence/r-q20-delete-pages/where-empty-all, where-empty-last-after-partial-first, where-empty-last-after-empty-first,
+    /// dynaset-empty-all-asc; evidence/r-q19-growth-open/split-empty-right-leaf pages 50 and 51, split-empty-left-leaf page 46).
+    /// </summary>
+    public static void MarkReleased(Span<byte> page, FormatDescriptor d) =>
+        d.DataPage.Kind.Write(page, d.DataPage.ReleasedDataKind);
+
+    /// <summary>
+    /// Replace one live ordinary slot's body in place (II-03 §§1.3, 3.3, II-04 §8: "An in-place update is used when the
+    /// existing final-row extent suffices"; W-05/growth-structural-closure): the slot keeps its end and its flags, and the
+    /// bodies of the later slots, which lie below it, move with its start. A row grown by g starts g lower, the later
+    /// bodies and slot offsets move down by g and <see cref="DataPageRules.FreeCount"/> falls by g (evidence/r-fmt-2b
+    /// pg-grow-row2-plus-1 and pg-grow-row2-plus-29, the second filling the page's 58 free bytes exactly). A row shrunk by
+    /// d starts d higher, the later bodies and slot offsets move up by d, FreeCount rises by d, and the vacated d bytes at
+    /// the bottom keep their old content (R-FMT-2 "a row made smaller is rewritten in place, ending where it ended":
+    /// evidence/r-q17-growth/shrink-row2-minus-30 and shrink-row4-minus-30). <see cref="DataPageRules.RowCount"/> and
+    /// <see cref="DataPageRules.Stamp"/> are unchanged. Whole-file SHA-256 equal to ACE's in each (AceImageHashTests).
     /// </summary>
     public static bool TryReplaceRow(Span<byte> page, int slot, ReadOnlySpan<byte> body, FormatDescriptor d, out string? failure)
     {
@@ -259,11 +316,6 @@ public static class DataPages
             return false;
         }
         int growth = body.Length - target.Length;
-        if (growth < 0)
-        {
-            failure = $"the new body is {-growth} bytes shorter: the bytes ACE leaves in a shrinking row's freed gap are not recorded";
-            return false;
-        }
         int count = (int)r.RowCount.Read(page);
         int minStart = d.PageSize;
         for (int i = 0; i < count; i++)
@@ -286,7 +338,7 @@ public static class DataPages
             failure = $"the row grows by {growth} bytes and the page has {free} free";
             return false;
         }
-        if (growth > 0 && target.Start > minStart)
+        if (growth != 0 && target.Start > minStart)
         {
             page.Slice(minStart, target.Start - minStart).CopyTo(page.Slice(minStart - growth, target.Start - minStart));
         }

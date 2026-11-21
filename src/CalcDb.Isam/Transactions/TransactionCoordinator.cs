@@ -257,9 +257,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly List<AcceptedRowChange> _pending = [];
     private readonly HashSet<PageCache> _locked = [];
     private readonly Dictionary<PageCache, TimeSpan> _lazyBursts = [];
+    private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
+
+    /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
+    public bool InStatement => _statement is not null;
+
+    /// <summary>
+    /// Whether published changes of this Workspace released data pages of <paramref name="cache"/> whose global-map free bits
+    /// its closing commit sets (<see cref="PhysicalChange.ReleasedAtClose"/>): the Database's Close then commits once more
+    /// even when page 1 is unchanged (evidence/r-q17-growth/retire-delete-au1-read-open).
+    /// </summary>
+    public bool ReleasesAtClose(PageCache cache) => _releaseAtClose.ContainsKey(cache);
 
     public LockerId Locker { get; } = locker;
 
@@ -675,6 +686,23 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             ReleasePublished(f);
         }
+        foreach (AcceptedRowChange c in _pending)
+        {
+            if (c.Physical is { ReleasedAtClose.Count: > 0 } released)
+            {
+                if (!_releaseAtClose.TryGetValue(released.File, out List<uint>? pages))
+                {
+                    _releaseAtClose[released.File] = pages = [];
+                }
+                foreach (uint page in released.ReleasedAtClose)
+                {
+                    if (!pages.Contains(page))
+                    {
+                        pages.Add(page);
+                    }
+                }
+            }
+        }
         _pending.Clear();
         ReleaseParticipants();
         return (MutationOpen.None, null);
@@ -884,10 +912,41 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// step whose pages an earlier publication of the same statement already wrote, or a session's closing commit
     /// (the callers name the records). Nothing when the file has no such counter.
     /// </summary>
-    public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache) =>
-        _participants.ContainsKey(cache)
-            ? (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them")
-            : PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out _);
+    /// <remarks>
+    /// A session's closing commit also sets the global-map free bits of the data pages its published changes released
+    /// (<see cref="ReleasesAtClose"/>; R-FMT-2 "Overflow / deletion and Map ownership": DELETE without WHERE in
+    /// evidence/r-q17-growth/retire-delete-au1-read-open, page 1 byte 4045 <c>00</c> &gt; <c>40</c>, and a row-by-row
+    /// delete emptying data page P while the table's FreeMap holds a page Q &lt; P in
+    /// evidence/r-q20-delete-pages/where-empty-all, where-empty-last-after-partial-first, where-empty-last-after-empty-first,
+    /// dynaset-empty-all-asc and evidence/r-q19-growth-open/split-empty-right-leaf, split-empty-left-leaf).
+    /// </remarks>
+    public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache)
+    {
+        if (_participants.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them");
+        }
+        List<PageEdit> frees = [];
+        if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
+        {
+            var allocator = new PageAllocator(cache, FormatDescriptor.Jet4Family, cache.KnownExtentPages);
+            foreach (uint page in released)
+            {
+                if (allocator.Free(null, page, out string? failure) is not { } free)
+                {
+                    return (MutationOpen.Publication, $"the closing commit cannot free released page {page}: {failure}");
+                }
+                frees.Add(free);
+            }
+        }
+        LockResource[] footprint = frees.Count > 0 ? [new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map)] : [];
+        (MutationOpen open, string? detail) = PublishNonTransactional(cache, frees, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
+        if (open == MutationOpen.None && error is null)
+        {
+            _releaseAtClose.Remove(cache);
+        }
+        return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
+    }
 
     internal FileParticipant EnlistFor(OperationFrame operation, PageCache cache)
     {

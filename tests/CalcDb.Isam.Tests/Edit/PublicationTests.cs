@@ -348,24 +348,16 @@ public sealed class PublicationTests
     [Fact]
     public void A_change_the_slice_does_not_write_stays_pending_and_the_commit_is_named()
     {
-        // The boundary of the slice: a row that shrinks has no physical form (the bytes ACE leaves in its freed gap are not
-        // recorded); nothing is written.
+        // The boundary of the slice: a fixed field becoming Null has no physical form (the bytes ACE leaves in a Null fixed
+        // field are not observed); nothing is written.
         using var rig = new Rig();
         EditFrame frame = rig.On(rig.A, "G", 1);
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.Edit().Succeeded);
-        nint bstr = Bstrs.FromUnits(1, "n", static (span, t) => t.AsSpan().CopyTo(span));
-        try
-        {
-            Assert.True(frame.Assign(Column(frame, "T"), new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr }).Succeeded);
-        }
-        finally
-        {
-            Bstrs.Free(bstr);
-        }
+        Assert.True(frame.Assign(Column(frame, "N"), new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
         UpdateOutcome update = frame.Update();
         Assert.Equal(MutationOpen.Publication, update.Open);
-        Assert.Contains("shorter", update.Detail, StringComparison.Ordinal);
+        Assert.Contains("becomes Null", update.Detail, StringComparison.Ordinal);
         Assert.Equal(EditMode.Edit, frame.Mode); // refused and withdrawn (task sjws): the edit stays, the level holds nothing
         Assert.Empty(rig.A.Frames[0].AcceptedChanges);
         ResolutionOutcome commit = rig.A.CommitTrans();

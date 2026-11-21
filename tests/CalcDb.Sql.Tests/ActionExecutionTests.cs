@@ -24,6 +24,8 @@ public sealed class ActionExecutionTests
     private const string DefSqlAccdb = "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70";
     private const string CatQdAccdb = "54d09662048f566a7c2de5f0128cf3b8891a6e0452d18f60ec7a6f247b552616";
     private const string FxByteAccdb = "53afa2ada2f2b1506bc287fa2dc2a561c269145fe9583bbc55ad02adce4a8f03";
+    private const string Fmt2bAccdb = "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be";
+    private const string Sort3CorpusMdb = "3e2357003d810aa2065a6ce8ab49034dae83b23885abdeeacca3619087bccc0c";
 
     private static NativeVariant I4(int v) => new() { Vt = (ushort)VarType.I4, Int64 = (uint)v };
 
@@ -338,6 +340,7 @@ public sealed class ActionExecutionTests
     {
         using var db = new WritableSqlFixture(ActAccdb);
 
+        // r-def-expr-sql/sql-delete-forms: DELETE *, DELETE alias.*, DELETE col FROM T WHERE ...
         ActionOutcome d1 = ActionExecutor.Execute("DELETE * FROM T WHERE ID = 1", db, options: 128);
         Assert.True(d1.Succeeded, d1.Failure?.ToString());
         Assert.Equal(1, d1.RecordsAffected);
@@ -346,12 +349,73 @@ public sealed class ActionExecutionTests
         Assert.True(d2.Succeeded, d2.Failure?.ToString());
         Assert.Equal(2, d2.RecordsAffected);
 
-        // Deleting a page's last row: ACE frees the page (r-fmt-2b Au4 page 122, r-q16-overflow lower-free), which
-        // W-05/growth-structural-closure refuses by name until it is written; the statement leaves the row in place.
-        ActionOutcome d3 = ActionExecutor.Execute("DELETE ID FROM T", db, options: 128);
-        Assert.False(d3.Succeeded);
-        Assert.Equal("NotModelled.Edit.Publication", d3.Failure!.NotModelled);
-        Assert.Single(db.ReadSelect("SELECT ID FROM T"));
+        // r-def-expr-sql/sql-delete-forms (#65 DELETE ID FROM Dm WHERE ID = 4),
+        // r-q17-growth/retire-delete-au1-nine-then-last, r-q20-delete-pages/where-empty-last:
+        // row-by-row DELETE ... WHERE of a single data page's last row succeeds and keeps the page owned
+        // (never queued for page-1 release at Close).
+        ActionOutcome d3 = ActionExecutor.Execute("DELETE ID FROM T WHERE ID = 4", db, options: 128);
+        Assert.True(d3.Succeeded, d3.Failure?.ToString());
+        Assert.Equal(1, d3.RecordsAffected);
+        Assert.Empty(db.ReadSelect("SELECT ID FROM T"));
+        Assert.False(db.Workspace.ReleasesAtClose(db.Cache));
+    }
+
+    [Fact]
+    public void Delete_without_where_uses_delete_every_row_and_refuses_open_cases()
+    {
+        // evidence/r-q17-growth/retire-delete-au1: DELETE FROM Au1 (without WHERE) takes EditFrame.DeleteEveryRow,
+        // removes all 10 rows (RecordsAffected 10), and queues data page 110 for page-1 release at Close.
+        using (var db = new WritableSqlFixture(Fmt2bAccdb))
+        {
+            ActionOutcome del = ActionExecutor.Execute("DELETE FROM Au1", db, options: 128);
+            Assert.True(del.Succeeded, del.Failure?.ToString());
+            Assert.Equal(10, del.RecordsAffected);
+            Assert.Empty(db.ReadSelect("SELECT ID FROM Au1"));
+            Assert.True(db.Workspace.ReleasesAtClose(db.Cache));
+        }
+
+        // evidence/r-def-expr-sql/sql-delete-forms + evidence/r-q17-growth/retire-delete-au1:
+        // single-table column-spec form without WHERE also routes through EditFrame.DeleteEveryRow.
+        using (var db = new WritableSqlFixture(Fmt2bAccdb))
+        {
+            ActionOutcome del = ActionExecutor.Execute("DELETE ID FROM Au1", db, options: 128);
+            Assert.True(del.Succeeded, del.Failure?.ToString());
+            Assert.Equal(10, del.RecordsAffected);
+            Assert.Empty(db.ReadSelect("SELECT ID FROM Au1"));
+            Assert.True(db.Workspace.ReleasesAtClose(db.Cache));
+        }
+
+        // evidence/r-q17-growth/retire-delete-au1-where-all: DELETE ... WHERE keeps the row-by-row path
+        // and leaves the single data page owned (ReleasesAtClose is false).
+        using (var db = new WritableSqlFixture(Fmt2bAccdb))
+        {
+            ActionOutcome del = ActionExecutor.Execute("DELETE FROM Au1 WHERE ID > 0", db, options: 128);
+            Assert.True(del.Succeeded, del.Failure?.ToString());
+            Assert.Equal(10, del.RecordsAffected);
+            Assert.Empty(db.ReadSelect("SELECT ID FROM Au1"));
+            Assert.False(db.Workspace.ReleasesAtClose(db.Cache));
+        }
+
+        // qualified.md (DELETE without WHERE Open): DELETE without WHERE inside a transaction is refused by name.
+        using (var db = new WritableSqlFixture(Fmt2bAccdb))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxn = ActionExecutor.Execute("DELETE FROM Au1", db, options: 128);
+            Assert.False(inTxn.Succeeded);
+            Assert.Equal("NotModelled.DeleteAllInTransaction", inTxn.Failure!.NotModelled);
+            Assert.Equal(0, inTxn.RecordsAffected);
+            Assert.Equal(10, db.ReadSelect("SELECT ID FROM Au1").Count);
+            db.Workspace.Rollback();
+        }
+
+        // qualified.md (DELETE without WHERE Open): DELETE without WHERE on an MDB file is refused by name.
+        using (var mdb = new WritableSqlFixture(Sort3CorpusMdb))
+        {
+            ActionOutcome onMdb = ActionExecutor.Execute("DELETE FROM T", mdb, options: 128);
+            Assert.False(onMdb.Succeeded);
+            Assert.Equal("NotModelled.DeleteAllMdb", onMdb.Failure!.NotModelled);
+            Assert.Equal(0, onMdb.RecordsAffected);
+        }
     }
 
     // ---- Saved Action QueryDef & Parameters ----------------------------------------------------------------------------

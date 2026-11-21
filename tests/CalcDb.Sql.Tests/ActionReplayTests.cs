@@ -43,11 +43,21 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
         "r-sort-3",
     ];
 
+    private static readonly string[] ExtraRecordDirs =
+    [
+        "r-q17-growth/retire-delete-au1",
+        "r-q19-growth-open/delete-all-no-index",
+        "r-q19-growth-open/delete-all-pk",
+        "r-q19-growth-open/delete-all-two-indexes",
+        "r-q19-growth-open/delete-all-long-values",
+        "r-q19-growth-open/delete-all-intermediate-root",
+    ];
+
     public static TheoryData<string> Records()
     {
         var data = new TheoryData<string>();
         string evidence = Path.Combine(SqlFixture.Root(), "evidence");
-        foreach (string folder in Folders)
+        foreach (string folder in Folders.Concat(ExtraRecordDirs))
         {
             string dir = Path.Combine(evidence, folder);
             if (!Directory.Exists(dir))
@@ -296,6 +306,12 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                     continue;
                 }
 
+                if (e.Member == "CreateDatabase" && e.Bind is { } createdDb && e.ExcepInfo is null)
+                {
+                    CreateDatabase(e, createdDb);
+                    continue;
+                }
+
                 if (e.Member == "OpenDatabase" && e.Bind is { } dbName && e.ExcepInfo is null)
                 {
                     OpenDatabase(e, inputs, dbName);
@@ -383,6 +399,32 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             coord?.Close();
         }
 
+        private const string EmptyAccdbSha = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
+        private const string GeneralLocale = ";LANGID=0x0409;CP=1252;COUNTRY=0";
+
+        private void CreateDatabase(InvokeEvent e, string dbName)
+        {
+            string? file = e.Args.Count > 0 && e.Args[0].Text is { } path ? Path.GetFileName(path) : null;
+            string? locale = e.Args.Count > 1 ? e.Args[1].Text : null;
+            int? version = e.Args.Count > 2 && e.Args[2].Integer is { } v ? int.Parse(v, CultureInfo.InvariantCulture) : null;
+            WorkspaceState ws = _objects.TryGetValue(e.Target, out object? t) && t is WorkspaceState w ? w : _defaultWorkspace;
+
+            FileState? state = null;
+            if (file is not null
+                && string.Equals(locale, GeneralLocale, StringComparison.OrdinalIgnoreCase)
+                && version == 128
+                && SqlFixture.Retained(EmptyAccdbSha))
+            {
+                state = new FileState(new WritableSqlFixture(EmptyAccdbSha)) { Dirty = _globalDirty };
+                _files[file] = state;
+            }
+            if (ws != _defaultWorkspace && state is not null && ws.Custom is null)
+            {
+                ws.Custom = state.Fixture.CreatePeerWorkspace(_nextLocker++);
+            }
+            _objects[dbName] = new DatabaseState(state, ws, readOnly: false, HasOpenRecordsetOnTable);
+        }
+
         private void OpenDatabase(InvokeEvent e, IReadOnlyList<FileObservation> inputs, string dbName)
         {
             string? file = e.Args.Count > 0 && e.Args[0].Text is { } path ? Path.GetFileName(path) : null;
@@ -391,13 +433,10 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             WorkspaceState ws = _objects.TryGetValue(e.Target, out object? t) && t is WorkspaceState w ? w : _defaultWorkspace;
 
             FileState? state = null;
-            if (file is not null && sha is not null && SqlFixture.Retained(sha))
+            if (file is not null && !_files.TryGetValue(file, out state) && sha is not null && SqlFixture.Retained(sha))
             {
-                if (!_files.TryGetValue(file, out state))
-                {
-                    state = new FileState(new WritableSqlFixture(sha)) { Dirty = _globalDirty };
-                    _files[file] = state;
-                }
+                state = new FileState(new WritableSqlFixture(sha)) { Dirty = _globalDirty };
+                _files[file] = state;
             }
             if (ws != _defaultWorkspace && state is not null && ws.Custom is null)
             {
@@ -473,6 +512,10 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
         {
             if (e.Member == "Close")
             {
+                if (e.ExcepInfo is null && db.File is { Dirty: null } && db.Workspace.Depth == 0 && db.Workspace.ReleasesAtClose(db.File.Fixture.Cache))
+                {
+                    db.Workspace.PublishCounterCommit(db.File.Fixture.Cache);
+                }
                 return;
             }
             if (e.Member == "Execute")

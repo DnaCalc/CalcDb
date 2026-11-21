@@ -68,7 +68,7 @@ public sealed record FormatDescriptor
         },
         DataPage = new DataPageRules
         {
-            Kind = new("jet4.page.kind", "page", 0, 1, ByteOrder.Little, "Broad page kind: 00 invalid, 01 data, 02 TableDef, 03 index interior, 04 index leaf, 05 usage bitmap.", Reference + "; II-03 §1.2"),
+            Kind = new("jet4.page.kind", "page", 0, 1, ByteOrder.Little, "Broad page kind: 00 invalid, 01 data, 02 TableDef, 03 index interior, 04 index leaf, 05 usage bitmap, 09 released data.", Reference + "; II-03 §1.2; evidence/r-q20-delete-pages/where-empty-all, dynaset-empty-all-asc; evidence/r-q19-growth-open/split-empty-right-leaf, split-empty-left-leaf"),
             FreeCount = new("jet4.data.free_count", "data page", 2, 2, ByteOrder.Little, "Free byte count.", Reference + "; II-03 §1.3"),
             Owner = new("jet4.data.owner", "data page", 4, 4, ByteOrder.Little, "Owning TableDef page (ordinary rows); zero or 'LVAL' for other data pages.", Reference + "; II-03 §1.2"),
             Stamp = new("jet4.data.stamp", "data page", 8, 4, ByteOrder.Little, "Write stamp: opaque, preserved; not a checksum or generation.", Reference + "; II-03 §1.3"),
@@ -81,6 +81,7 @@ public sealed record FormatDescriptor
             ReaderSlotCapacity = 256,
             WriterSlotLimit = 255,
             LvalSubtype = "LVAL"u8.ToArray(),
+            ReleasedDataKind = 0x09,
         },
         TableDef = new TableDefRules
         {
@@ -279,6 +280,9 @@ public sealed record DataPageRules
     public required int WriterSlotLimit { get; init; }
 
     public required byte[] LvalSubtype { get; init; }
+
+    /// <summary>Page kind byte written when a non-first data page is emptied and released by a row delete (0x09; evidence/r-q19-growth-open/split-empty-right-leaf, split-empty-left-leaf).</summary>
+    public byte ReleasedDataKind { get; init; } = 0x09;
 
     public IEnumerable<FieldRule> Rules => [Kind, FreeCount, Owner, Stamp, RowCount];
 }

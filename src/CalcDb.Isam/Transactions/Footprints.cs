@@ -26,6 +26,14 @@ public sealed class TableFootprints(PageCache file, FormatDescriptor d, TableDef
     /// <summary>The file's page count for usage-map traversal during insert and delete compilation (0 when not supplied).</summary>
     public ulong PageCount { get; } = pageCount;
 
+    /// <summary>
+    /// The millisecond tick clock a chained long value is stamped with (its reference's +8 word and its first LVAL page's
+    /// bytes 8-11; R-FMT-2 "LV form selection": two chains of one run 31 ms apart, evidence/r-q17-growth/lval-memo a1 and
+    /// a2). The system tick by default; a replay injects the recorded stamp. Corpus comparison sets the field aside
+    /// (CalcDb.Corpus AceClockFields).
+    /// </summary>
+    public Func<uint> LongValueTicks { get; init; } = static () => (uint)Environment.TickCount;
+
     /// <summary>The data page of <paramref name="row"/>'s root.</summary>
     public static LockResource Row(RowId row) => new(row.Page, LockPurpose.DataPage);
 
