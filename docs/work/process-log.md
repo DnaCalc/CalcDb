@@ -769,3 +769,14 @@ Sonnet and Opus; the owner then saw only Claude children running and restated th
 runs on Neon again, the reviewer in a session other than the writer's; a Claude child only where it clearly adds value
 (AGENTS.md, Sub-sessions). The two Claude children then running (the c7gn re-review, RoslynSkills r9bh) finish their
 tasks.
+
+**roscli adopted for semantic questions (owner, 2026-11-21 late evening).** RoslynSkills `r9bh` (004667b) routed every
+read-only semantic command to the warm daemon and made the searches solution-wide; installed as 0.1.6-preview.21.local1.
+On CalcDb, warm: `call_hierarchy` 56.8 s to 1.2 s (2 to 25 nodes), `impact_slice` 57.3 s to 1.5 s (4 to 84 hits),
+`find_implementations` 54.1 s and 0 found to 0.3 s and all 5, `find_invocations` all 41 callers in 0.4 s; an edit is seen
+by the next query. One-time: about 53 s load, 45 s for the first call graph, about 800 MB. The Plan §4 and AGENTS.md
+(Tool practice) name the query classes; grep stays for names and text. A second trial (Neon, a timing matrix of eight
+queries across git grep, ripgrep, Select-String, the harness's search tool, roscli cold and warm, and csharp-ls) sets the
+boundaries. The owner added the editing and refactoring commands (rename, signature change, member-scoped and batch
+exact edits, file creation, diagnostics-driven repair): adopted in the same guidance, and measured in that trial as six
+edit tasks done both ways and checked by a build.

@@ -86,6 +86,15 @@ scope or design, the book wins.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
+- Navigate C# with grep for names and text. For call hierarchies, impact, implementers, a type whose name repeats, and the
+  compile errors a signature change causes across projects, use roscli on its warm daemon: `roscli workspace.use
+  CalcDb.slnx` once in your worktree (about a minute), `ROSCLI_DAEMON=required` so no call reloads, and
+  `roscli daemon.stop` before you end (each daemon holds about 800 MB). Confirm compile errors with `dotnet build`.
+- Edit through roscli where an edit follows a symbol: `edit.rename_symbol` and `edit.change_signature` for a rename or a
+  signature change (every use, across projects), `edit.replace_in_member` for a change inside one member of a large
+  file, `edit.batch_exact` or `edit.transaction` for coordinated exact edits in several files. Make small local edits
+  with your own file tools. Build and run the affected tests after every roscli edit, and read its diff: a refactoring
+  is checked like any other change. Each child has its own worktree, so no `edit.claim` is needed.
 - Inspect oracle results with `calcdb-oracle show`, not with one-off scripts; `--pages` and `--diff` print a record's
   kept page bytes and what changed against the input or an earlier point.
 - At each organizer handover, put the table of `pwsh tools/process-indicators.ps1` in
