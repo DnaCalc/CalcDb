@@ -25,10 +25,12 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
 /// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
-/// <item><c>batch --dir DIR --env windows-x64-calcdb-local [--deployment DIR] [--rerun] --compare</c>: run the same unchanged questions
+/// <item><c>batch --dir DIR --env windows-x64-calcdb-local [--deployment DIR] [--rerun] [--parallel N] --compare</c>: run the same unchanged questions
 /// against CalcDb's published deployment (default <c>artifacts/native</c>) and compare each capture with the retained
 /// oracle capture of the same question key under <c>calls.trace</c> (W-08/native-read, T-OBJ-02). Candidate attempts are
-/// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store.</item>
+/// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store. Candidate
+/// attempts run <see cref="BatchLanes.DefaultDegree"/> at a time unless <c>--parallel N</c> says otherwise; the report is
+/// the sequential one (<see cref="BatchLanes"/>).</item>
 /// <item><c>compare-set [--set FILE] [--dirs A,B] [--deployment DIR] [--rerun] [--name NAME] [--against RUN|FILE|none] [--record]</c>:
 /// run <c>batch --compare</c> against CalcDb over the standing compare set (<c>probes/compare-set.json</c>), write the run
 /// as one line per question to <c>compare-sets/NAME.tsv</c> in the store, and diff it per question against an earlier run
@@ -145,9 +147,20 @@ internal static partial class Program
         return manifest.IsComplete ? 0 : 3;
     }
 
-    private static CaptureManifest RunAttempt(JobStore store, string token, Options options, string repo)
+    /// <summary>
+    /// What every attempt of one command records about the binaries and book it runs with. A batch takes it once, so its
+    /// attempts answer for one candidate module: a deployment republished part way is refused by the worker's hash check
+    /// (CandidateDeployment), never mixed into the run.
+    /// </summary>
+    private sealed record AttemptSetup(string ToolingRevision, string BookRevision, ImplementationSelection? Implementation);
+
+    private static AttemptSetup SetupFor(string environment, string repo, Options options) =>
+        new(ToolingRevision(repo), BookRevision(repo), SelectImplementation(environment, repo, options));
+
+    private static CaptureManifest RunAttempt(JobStore store, string token, Options options, string repo, AttemptSetup? setup = null)
     {
-        AttemptRecord attempt = store.PrepareAttempt(token, ToolingRevision(repo), BookRevision(repo), SelectImplementation(store.GetJob(token).RequestedEnvironment, repo, options));
+        setup ??= SetupFor(store.GetJob(token).RequestedEnvironment, repo, options);
+        AttemptRecord attempt = store.PrepareAttempt(token, setup.ToolingRevision, setup.BookRevision, setup.Implementation);
         string worker = options.Get("worker") ?? DefaultWorker(repo);
         TimeSpan timeout = TimeSpan.FromSeconds(int.Parse(options.Get("timeout") ?? "300", System.Globalization.CultureInfo.InvariantCulture));
         Question question = store.GetQuestion(attempt.QuestionKey);
@@ -227,9 +240,24 @@ internal static partial class Program
     /// <summary>One question of a batch: its attempt and, when compared, the verdict and the oracle capture it used.</summary>
     internal sealed record BatchOutcome(Question Question, CaptureManifest Manifest, Corpus.ComparisonRecord? Verdict, Capture? Oracle);
 
+    /// <summary>What one question of a batch produced before anything about it is printed, appended or retained.</summary>
+    private sealed record BatchRun(Question Question, CaptureManifest Manifest, string Failed, Corpus.ComparisonRecord? Verdict, Capture? Oracle);
+
     private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir, Action<BatchOutcome>? observe = null)
     {
         string dir = Path.GetFullPath(options.Require("dir"));
+        var files = Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList();
+        return Batch(store, options, repo, evidenceDir, artifactsDir, files, observe);
+    }
+
+    /// <summary>
+    /// The one batch path over question files in the given order. Each question runs (<see cref="RunBatchQuestion"/>) and
+    /// is then reported in file order: its line, the ledger, <c>comparisons.jsonl</c>, retention and fixtures. With
+    /// <c>--parallel N</c> (candidate attempts only; <see cref="BatchLanes"/>) up to N questions run at once and the report
+    /// is the same, in the same order, as one at a time.
+    /// </summary>
+    private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir, IReadOnlyList<string> files, Action<BatchOutcome>? observe)
+    {
         bool retain = options.Has("retain");
         bool freeze = options.Has("freeze");
         string environment = options.Get("env") ?? "windows-x64-ace-local";
@@ -238,52 +266,18 @@ internal static partial class Program
         {
             throw new ArgumentException("Candidate (CalcDb) attempts are compared, never retained as evidence or frozen as fixtures.");
         }
+        int parallel = BatchLanes.Degree(options, candidate);
         bool compare = options.Has("compare");
+        AttemptSetup setup = SetupFor(environment, repo, options);
         var ledger = new Corpus.ComparisonLedger();
-        var files = Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList();
         int complete = 0, incomplete = 0;
-        foreach (string file in files)
+        IEnumerable<BatchRun> runs = parallel == 1
+            ? files.Select(file => RunBatchQuestion(store, options, repo, evidenceDir, environment, setup, EvidenceJson.Read<Question>(file), compare))
+            : BatchLanes.Run([.. files.Select(EvidenceJson.Read<Question>)], q => TokenOf(q, environment), parallel,
+                q => RunBatchQuestion(store, options, repo, evidenceDir, environment, setup, q, compare));
+        foreach (BatchRun run in runs)
         {
-            Question question = EvidenceJson.Read<Question>(file);
-            string token = TokenOf(question, environment);
-            (JobRecord job, _) = store.SubmitOrQuery(token, question, environment);
-            CaptureManifest? existing = job.Attempts.Count > 0 ? store.GetManifest(job.Attempts[^1]) : null;
-            // A capture the sealer could not read because of a tooling defect is not an uncertain native
-            // outcome: with --retry-unreadable it gets a new attempt on fresh input copies; the old attempt stays.
-            // NotStarted means no worker was admitted, so nothing ran.
-            // Aborted means the worker itself threw (a tooling exception), not that ACE answered.
-            bool unreadable = existing is not null && (existing.Execution is Execution.NotStarted or Execution.Aborted
-                || existing.Problems.Any(x => x.Contains("is not a valid capture", StringComparison.Ordinal)));
-            // --retry-when TEXT: a new attempt for seals with a problem containing TEXT, named per run for a
-            // diagnosed harness defect (for example a missing identity observation fixed in the worker).
-            if (existing is not null && options.Get("retry-when") is { } when && existing.Problems.Any(x => x.Contains(when, StringComparison.Ordinal)))
-            {
-                unreadable = true;
-            }
-            // A candidate attempt answers for the module it ran: a different deployed build is a new attempt, and
-            // --rerun asks for a new one anyway (after a worker change, which the module hash does not name).
-            if (candidate && existing is not null && (options.Has("rerun")
-                || EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
-                    != SelectImplementation(environment, repo, options)!.ModuleSha256))
-            {
-                existing = null;
-            }
-            CaptureManifest manifest = existing is not null && !(unreadable && (options.Has("retry-unreadable") || options.Has("retry-when")))
-                ? existing
-                : RunAttempt(store, token, options, repo);
-            string attemptDir = store.AttemptDirectory(manifest.AttemptId);
-            var failures = new List<string>();
-            foreach (string capturePath in Directory.EnumerateFiles(attemptDir, "capture*.json").Order(StringComparer.Ordinal))
-            {
-                Capture capture = EvidenceJson.Read<Capture>(capturePath);
-                string who = capture.Participant == "a" ? "" : capture.Participant + ":";
-                failures.AddRange(capture.Events.OfType<InvokeEvent>()
-                    .Where(i => i.InvokeHresult is null || i.InvokeHresult.StartsWith("0x8", StringComparison.Ordinal))
-                    .Select(i => $"{who}{i.Member}:{(i.ExcepInfo is { } x ? x.Scode : i.InvokeHresult ?? "GetIDsOfNames " + i.GetIdsOfNamesHresult)}"));
-                failures.AddRange(capture.Events.OfType<HandleEvent>().Where(h => !h.Success).Select(h => $"{who}{h.Op}({h.Handle}):w32={h.Win32Error}"));
-                failures.AddRange(capture.Events.OfType<SyncEvent>().Where(s => s.TimedOut).Select(s => $"{who}await({s.Name}):timeout"));
-            }
-            string failed = string.Join(" ", failures);
+            (Question question, CaptureManifest manifest, string failed, _, _) = run;
             Console.WriteLine($"{(manifest.IsComplete ? "OK  " : "INC ")} {question.Probe,-58} {manifest.Execution,-15} {failed}");
             if (!manifest.IsComplete)
             {
@@ -296,10 +290,9 @@ internal static partial class Program
                 continue;
             }
             complete++;
-            if (compare)
+            if (run.Verdict is { } verdict)
             {
-                (Corpus.ComparisonRecord verdict, Capture? oracleCapture) = CompareWithOracle(store, manifest, question, evidenceDir);
-                observe?.Invoke(new BatchOutcome(question, manifest, verdict, oracleCapture));
+                observe?.Invoke(new BatchOutcome(question, manifest, verdict, run.Oracle));
                 ledger.Append(verdict);
                 File.AppendAllText(Path.Combine(store.Root, "comparisons.jsonl"), EvidenceJson.SerializeLine(verdict) + "\n");
                 Console.WriteLine($"       {verdict.Status} against {verdict.OracleCapture}{(verdict.DifferencesTruncated ? " (differences truncated)" : "")}");
@@ -331,6 +324,59 @@ internal static partial class Program
             Console.WriteLine($"{Corpus.CallTraceComparison.Rule.Key}: " + string.Join(", ", ledger.Account(Corpus.CallTraceComparison.Rule.RuleId).Where(kv => kv.Value > 0).Select(kv => $"{kv.Value} {kv.Key}")) + (incomplete > 0 ? $", {incomplete} not compared (incomplete)" : ""));
         }
         return incomplete == 0 ? 0 : 3;
+    }
+
+    /// <summary>
+    /// One question of a batch: admit it, reuse its sealed attempt or run a new one, and compare a complete capture with
+    /// the retained oracle answer. It writes only its own job, attempt and the store's content cache, never the console
+    /// or the store's ledgers, so batch lanes may run it for several questions at once.
+    /// </summary>
+    private static BatchRun RunBatchQuestion(JobStore store, Options options, string repo, string evidenceDir, string environment, AttemptSetup setup, Question question, bool compare)
+    {
+        string token = TokenOf(question, environment);
+        (JobRecord job, _) = store.SubmitOrQuery(token, question, environment);
+        CaptureManifest? existing = job.Attempts.Count > 0 ? store.GetManifest(job.Attempts[^1]) : null;
+        // A capture the sealer could not read because of a tooling defect is not an uncertain native
+        // outcome: with --retry-unreadable it gets a new attempt on fresh input copies; the old attempt stays.
+        // NotStarted means no worker was admitted, so nothing ran.
+        // Aborted means the worker itself threw (a tooling exception), not that ACE answered.
+        bool unreadable = existing is not null && (existing.Execution is Execution.NotStarted or Execution.Aborted
+            || existing.Problems.Any(x => x.Contains("is not a valid capture", StringComparison.Ordinal)));
+        // --retry-when TEXT: a new attempt for seals with a problem containing TEXT, named per run for a
+        // diagnosed harness defect (for example a missing identity observation fixed in the worker).
+        if (existing is not null && options.Get("retry-when") is { } when && existing.Problems.Any(x => x.Contains(when, StringComparison.Ordinal)))
+        {
+            unreadable = true;
+        }
+        // A candidate attempt answers for the module it ran: a different deployed build is a new attempt, and
+        // --rerun asks for a new one anyway (after a worker change, which the module hash does not name).
+        if (setup.Implementation is { } implementation && existing is not null && (options.Has("rerun")
+            || EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
+                != implementation.ModuleSha256))
+        {
+            existing = null;
+        }
+        CaptureManifest manifest = existing is not null && !(unreadable && (options.Has("retry-unreadable") || options.Has("retry-when")))
+            ? existing
+            : RunAttempt(store, token, options, repo, setup);
+        string attemptDir = store.AttemptDirectory(manifest.AttemptId);
+        var failures = new List<string>();
+        foreach (string capturePath in Directory.EnumerateFiles(attemptDir, "capture*.json").Order(StringComparer.Ordinal))
+        {
+            Capture capture = EvidenceJson.Read<Capture>(capturePath);
+            string who = capture.Participant == "a" ? "" : capture.Participant + ":";
+            failures.AddRange(capture.Events.OfType<InvokeEvent>()
+                .Where(i => i.InvokeHresult is null || i.InvokeHresult.StartsWith("0x8", StringComparison.Ordinal))
+                .Select(i => $"{who}{i.Member}:{(i.ExcepInfo is { } x ? x.Scode : i.InvokeHresult ?? "GetIDsOfNames " + i.GetIdsOfNamesHresult)}"));
+            failures.AddRange(capture.Events.OfType<HandleEvent>().Where(h => !h.Success).Select(h => $"{who}{h.Op}({h.Handle}):w32={h.Win32Error}"));
+            failures.AddRange(capture.Events.OfType<SyncEvent>().Where(s => s.TimedOut).Select(s => $"{who}await({s.Name}):timeout"));
+        }
+        if (!manifest.IsComplete || !compare)
+        {
+            return new BatchRun(question, manifest, string.Join(" ", failures), null, null);
+        }
+        (Corpus.ComparisonRecord verdict, Capture? oracle) = CompareWithOracle(store, manifest, question, evidenceDir);
+        return new BatchRun(question, manifest, string.Join(" ", failures), verdict, oracle);
     }
 
     /// <summary>

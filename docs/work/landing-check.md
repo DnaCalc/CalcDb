@@ -20,7 +20,8 @@ procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scrat
    `%LOCALAPPDATA%\CalcDb\compare-bin\<name>\runner`, `\worker` and `\native` (31 MB, seconds), and run the full
    compare set from the repository folder as an `alta job`:
    `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`
-   (about 15 min). The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
+   (about 5 min: candidate attempts run six at a time, `--parallel N`; 17 min one at a time with `--parallel 1`;
+   task mvgk, 2026-11-21). The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
    `docs/work/compare-baseline.tsv` when nothing is lost, and investigate every loss first. Its `source` line names the
    integration checkout's state, not the candidate's: the commit message names the commit compared.
 6. The job blocks nothing: children build, the next child starts and probes run while it runs. A later landing waits

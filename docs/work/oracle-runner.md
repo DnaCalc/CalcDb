@@ -125,6 +125,15 @@ attempt is reused while the module is unchanged; add `--rerun` after a worker or
 ends with a module observation, so an answer that came from ACE's own modules (an ADODB route reaching the ACE OLE DB
 provider) is a provenance difference, not a match.
 
+**Parallel candidate attempts (task mvgk, [BatchLanes](../../src/CalcDb.Oracle.Runner/BatchLanes.cs)).** A candidate
+batch runs six questions at once by default (`--parallel N`; `--parallel 1` runs one at a time). ACE attempts always run
+one at a time, and `--parallel` with them is refused. The batch lines, the ledger, `comparisons.jsonl` and the compare-set
+run are written in file order and equal a sequential run's. Questions of one token run in file order in one lane.
+Questions with further participants, ETW recording, a dialog policy or a claimed server run alone after the others,
+because their timing or their recorder, desktop or COM server is shared. A batch reads the tooling revision and the
+candidate module's hash once, so all its attempts answer for one module. Workers inherit only their own pipe and log
+handles (launches are serialized), and records and cached content are created by a rename that never replaces.
+
 **The comparison rule (`calls.trace@8`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
 relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
 is an accepted difference, counted apart. Revision 8 adds `ace-clock-fields` (task c4rv). ACE writes its clock into every
@@ -144,15 +153,19 @@ against the one before: on 2026-11-21 all 33 created or changed files of ACE rep
 r-q8-header-counter two-deletes-500ms-apart still differs (two pairs), at the page-0 commit counter (a timing boundary,
 not a clock field).
 
-**The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch over every folder
-of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset), writes the run as one line per
+**The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch once over the questions
+of every folder of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset; `--parallel N` as
+for batch), prints the time it took, writes the run as one line per
 question (status, difference count, the oracle member the first difference stops at, the first difference) to
 `.oracle-runs/compare-sets/NAME.tsv`, prints counts per folder and the census of first stops, and diffs the run per
 question against an earlier one: gained, lost (a regression until explained), status changes, moved first differences,
 added and removed questions. `--against` takes a run name, a file, `git:REV` (the baseline as committed at REV) or
 `none`; the default is the committed baseline [compare-baseline.tsv](compare-baseline.tsv). `--record` makes the run
 the baseline, committed with the change it measures, so its git diff shows the per-question change. `--diff NAME` diffs
-a written run without running anything; `--verbose` shows the batch lines.
+a written run without running anything; `--verbose` shows the batch lines. CalcDb writes different bytes into a file it
+creates on every run, so a question whose first difference is that file's hash moves in every diff, also between two
+sequential runs of one build: on 2026-11-21 five questions (sort3b-dao-index-flags, create-membership-refresh,
+create-held-databases-before-engine-create, create-suspend-mid-call-early and -late).
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and

@@ -69,17 +69,27 @@ public static class EvidenceJson
     public static bool TryCreateNew<T>(string path, T value) => TryCreateNewText(path, Serialize(value));
 
     /// <summary>Create a file with this text that must not exist yet (a retained record in its slim form, for example).</summary>
+    /// <remarks>
+    /// The text is written to a temporary file and renamed into place without replacing, so creation stays exclusive and
+    /// a reader never sees the record partly written. Created in place, a second thread or process that lost the creation
+    /// (the same question record from two batch lanes) could read it while the first was still writing.
+    /// </remarks>
     public static bool TryCreateNewText(string path, string text)
     {
+        if (File.Exists(path))
+        {
+            return false;
+        }
+        string temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        File.WriteAllText(temp, text);
         try
         {
-            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            using var writer = new StreamWriter(stream);
-            writer.Write(text);
+            File.Move(temp, path, overwrite: false);
             return true;
         }
         catch (IOException) when (File.Exists(path))
         {
+            File.Delete(temp);
             return false;
         }
     }

@@ -68,7 +68,7 @@ public sealed class ArtifactStore
             File.Delete(temp);
             throw new IOException($"Content of '{sourcePath}' changed while it was stored.");
         }
-        File.Move(temp, target, overwrite: false);
+        JobStore.MoveUnlessPresent(temp, target);
         return sha;
     }
 
@@ -101,16 +101,8 @@ public sealed class ArtifactStore
             File.Delete(temp);
             throw new InvalidDataException($"Stored artifact {sha256} does not decompress to its digest.");
         }
-        try
-        {
-            // Never replace a cached copy: a reader (a parallel test run or thread) may have it open.
-            File.Move(temp, cached, overwrite: false);
-        }
-        catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(cached))
-        {
-            // Another process or thread decompressed the same artifact first: its copy has the same digest, so this one goes.
-            File.Delete(temp);
-        }
+        // Never replace a cached copy: a reader (a parallel test run or thread) may have it open.
+        JobStore.MoveUnlessPresent(temp, cached);
         return cached;
     }
 

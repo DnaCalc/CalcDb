@@ -23,7 +23,7 @@ internal static partial class Program
     /// baseline as committed at REV, or <c>none</c>; the default is the committed baseline. <c>--diff RUN</c> diffs a written
     /// run without running anything. Batch output per question is shown with <c>--verbose</c>.
     /// </summary>
-    private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store"];
+    private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store", "parallel"];
 
     private static int CompareSetCommand(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
     {
@@ -47,7 +47,7 @@ internal static partial class Program
             ? dirs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : EvidenceJson.Read<CompareSetDefinition>(options.Get("set") ?? Path.Combine(repo, "probes", "compare-set.json")).Folders;
         var environmentOptions = new List<string> { "--env", ImplementationSelection.CalcDbEnvironment, "--compare" };
-        foreach (string pass in new[] { "deployment", "timeout", "worker" })
+        foreach (string pass in new[] { "deployment", "timeout", "worker", "parallel" })
         {
             if (options.Get(pass) is { } value)
             {
@@ -60,9 +60,10 @@ internal static partial class Program
         }
         string moduleSha = SelectImplementation(ImplementationSelection.CalcDbEnvironment, repo, Options.Parse(environmentOptions))!.ModuleSha256;
 
-        var entries = new List<CompareSet.Entry>();
-        bool verbose = options.Has("verbose");
-        TextWriter console = Console.Out;
+        // One batch over every folder's questions, in folder order and file order inside a folder, so batch lanes stay
+        // full across folder ends; each folder's counts are printed when its last question is reported.
+        var files = new List<string>();
+        var folderOf = new List<string>();
         foreach (string folder in folders)
         {
             string dir = Path.Combine(repo, "probes", folder);
@@ -70,20 +71,39 @@ internal static partial class Program
             {
                 throw new DirectoryNotFoundException($"Compare-set folder probes/{folder} does not exist.");
             }
-            int before = entries.Count;
-            Console.SetOut(verbose ? console : TextWriter.Null);
-            try
+            foreach (string file in Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
             {
-                Batch(store, Options.Parse(["--dir", dir, .. environmentOptions]), repo, evidenceDir, artifactsDir, o => entries.Add(o.Verdict is { } verdict
-                    ? CompareSet.FromComparison(folder, verdict, o.Oracle)
-                    : CompareSet.Incomplete(folder, o.Question.Probe, o.Manifest.Execution.ToString())));
+                files.Add(file);
+                folderOf.Add(folder);
             }
-            finally
-            {
-                Console.SetOut(console);
-            }
-            Console.WriteLine($"{folder,-24} {CompareSet.Counts(entries.Skip(before))}");
         }
+        var entries = new List<CompareSet.Entry>();
+        bool verbose = options.Has("verbose");
+        TextWriter console = Console.Out;
+        int folderStart = 0;
+        void Report(BatchOutcome o)
+        {
+            string folder = folderOf[entries.Count];
+            entries.Add(o.Verdict is { } verdict
+                ? CompareSet.FromComparison(folder, verdict, o.Oracle)
+                : CompareSet.Incomplete(folder, o.Question.Probe, o.Manifest.Execution.ToString()));
+            if (entries.Count == folderOf.Count || folderOf[entries.Count] != folder)
+            {
+                console.WriteLine($"{folder,-24} {CompareSet.Counts(entries.Skip(folderStart))}");
+                folderStart = entries.Count;
+            }
+        }
+        Console.SetOut(verbose ? console : TextWriter.Null);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            Batch(store, Options.Parse(environmentOptions), repo, evidenceDir, artifactsDir, files, Report);
+        }
+        finally
+        {
+            Console.SetOut(console);
+        }
+        Console.WriteLine($"{files.Count} questions in {clock.Elapsed.TotalSeconds:F0} s, {BatchLanes.Degree(Options.Parse(environmentOptions), candidate: true)} at once");
 
         string head = Git(repo, "rev-parse --short=10 HEAD").Trim();
         bool dirty = Git(repo, "status --porcelain --untracked-files=no -- src Directory.Build.props global.json").Trim().Length > 0;

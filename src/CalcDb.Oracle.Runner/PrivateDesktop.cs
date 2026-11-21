@@ -107,6 +107,14 @@ internal static partial class PrivateDesktop
         }
     }
 
+    /// <summary>
+    /// Serializes launches. CreateProcessW with handle inheritance gives the child every inheritable handle of the runner at
+    /// that moment, and the pipe and log handles of a launch are inheritable from their creation until the call returns.
+    /// Two launches at once (batch lanes, <see cref="BatchLanes"/>) would each give its worker the other's stdin and log
+    /// handles: a worker would hold another attempt's pipe open, and a stdout channel would not end with its worker.
+    /// </summary>
+    private static readonly Lock LaunchLock = new();
+
     /// <param name="pipeStdout">Give the worker a stdout pipe (the calcdb-oracle/1 channel of a long-lived worker); stderr still goes to the log.</param>
     public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop = Name, bool pipeStdout = false)
     {
@@ -114,6 +122,14 @@ internal static partial class PrivateDesktop
         {
             _ = HandleOf(desktop);
         }
+        lock (LaunchLock)
+        {
+            return StartSuspendedLocked(exe, args, workingDirectory, logPath, desktop, pipeStdout);
+        }
+    }
+
+    private static Launched StartSuspendedLocked(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop, bool pipeStdout)
+    {
         var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), InheritHandle = 1 };
         if (!CreatePipe(out SafeFileHandle readEnd, out SafeFileHandle writeEnd, ref sa, 0))
         {

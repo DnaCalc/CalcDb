@@ -103,9 +103,26 @@ public sealed partial class JobStore
                 File.Delete(temp);
                 throw new IOException($"Content of '{sourcePath}' changed while it was imported.");
             }
-            File.Move(temp, target, overwrite: false);
+            MoveUnlessPresent(temp, target);
         }
         return new FixtureInput(role, fileName, sha, new FileInfo(target).Length) { Provenance = provenance };
+    }
+
+    /// <summary>
+    /// Move a verified temporary copy of content-addressed bytes to its name, unless that name already exists: another
+    /// process or thread stored the same hash first, its copy has the same digest, and a reader may have it open, so this
+    /// copy goes.
+    /// </summary>
+    internal static void MoveUnlessPresent(string temp, string target)
+    {
+        try
+        {
+            File.Move(temp, target, overwrite: false);
+        }
+        catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(target))
+        {
+            File.Delete(temp);
+        }
     }
 
     /// <summary>Find content by hash in the store CAS or a content source.</summary>
