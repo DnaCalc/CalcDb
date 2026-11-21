@@ -44,147 +44,42 @@ internal enum TableHold : byte
 }
 
 /// <summary>
-/// The open Database as the SQL layer sees it (II-11 §1: SQL is a client of native storage; W-06/parser-binder-scan): its
-/// local tables by name with their decoded TableDefs (calculated columns bound to their result types), its saved queries
-/// (II-06 §8, the catalog's MSysQueries through <see cref="DatabaseObject.Queries"/>), the ISAM's row reader over its
-/// page cache, and the expression context of a query (Database compare with the file's sort order).
+/// The open DAO Database as the SQL layer sees it (II-11 §1: SQL is a client of native storage; W-06/parser-binder-scan):
+/// delegates to the shared <see cref="ComSqlDatabase"/> implementation over <see cref="DatabaseObject"/>.
 /// </summary>
-internal sealed class DatabaseSql(DatabaseObject database) : ISqlSchemaDatabase
+internal sealed class DatabaseSql(DatabaseObject database) : ComSqlDatabase(new Host(database))
 {
-    private readonly Dictionary<string, TableDefinition?> _tables = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// A catalog change of this Database was published (DDL through SQL, or TableDefs.Append): the decoded TableDefs
-    /// this view kept are dropped, so the next statement binds against the new catalog.
-    /// </summary>
-    public void Forget() => _tables.Clear();
-
-    public ExpressionContext Context { get; } = database.CreateExpressionContext(ExpressionUse.Query);
-
-    public TableDefinition? Table(string name)
+    private sealed class Host(DatabaseObject database) : ISqlSessionHost
     {
-        if (_tables.TryGetValue(name, out TableDefinition? known))
-        {
-            return known;
-        }
-        CatalogEntry? entry = database.Catalog.LocalTables(database.Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-        TableDefinition? table = entry is null ? null : database.Definition(entry, out _);
-        _tables[name] = table;
-        return table;
+        public CatalogSnapshot Catalog => database.Catalog;
+
+        public FormatDescriptor Format => database.Format;
+
+        public PageCache Cache => database.Cache;
+
+        public ulong PageCount => database.PageCount;
+
+        public bool ReadOnly => database.ReadOnly;
+
+        public TransactionCoordinator Transactions => database.Workspace.Transactions;
+
+        public QueryCatalog? Queries => database.Queries;
+
+        public ExpressionContext CreateExpressionContext(ExpressionUse use) => database.CreateExpressionContext(use);
+
+        public TableDefinition? Definition(CatalogEntry entry, out string? failure) => database.Definition(entry, out failure);
+
+        public TableEditContext? EditContext(CatalogEntry entry, out string? failure) => database.EditContext(entry, out failure);
+
+        public SchemaWriter? OpenSchemaWriter(out string? failure) => database.OpenSchemaWriter(out failure);
+
+        public void SqlSchemaPublished(ulong extentPages) => database.SqlSchemaPublished(extentPages);
+
+        public IReadOnlyList<Relationship>? Relationships(out string? failure) => database.Relationships(out failure);
+
+        /// <summary>An open recordset of this Database locks the table (<see cref="TableHold.Locked"/>; ACE's 3211).</summary>
+        public bool IsTableInUse(string tableName) => database.Hold(tableName) == TableHold.Locked;
     }
-
-    /// <summary>A saved query of that name; when MSysQueries cannot be read, any name is taken as one, so the source is named rather than answered 3078.</summary>
-    public bool IsQuery(string name) => database.Queries is not { } catalog || catalog.Queries.Any(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// The pages a statement reads: the Workspace's overlay of the file when it has one, so a statement sees the
-    /// Workspace's own unpublished rows and keys (Isam PageSource, task rf2n), else the committed images.
-    /// </summary>
-    public PageSource Source => new(database.Cache, database.Workspace.Transactions.OverlayOf(database.Cache));
-
-    public RowReader? OpenRows(TableDefinition table, out string? failure)
-    {
-        RowReader? reader = RowReader.Open(Source, database.Format, table, database.PageCount, out TraversalFailure? f);
-        failure = f?.Predicate;
-        return reader;
-    }
-
-    /// <summary>A navigator over one physical index of the table, for a join's indexed inner side (R-SQL-1 SQL-J).</summary>
-    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
-    {
-        failure = null;
-        return new IndexNavigator(Source, database.Format, index, table.FirstPage);
-    }
-
-    // ---- ISqlActionDatabase (W-07/actions): statements write through the Database's own edit state and Workspace ----
-
-    public bool ReadOnly => database.ReadOnly;
-
-    public TransactionCoordinator Workspace => database.Workspace.Transactions;
-
-    /// <summary>The table's shared edit state, the one its recordsets of this Database use (<see cref="DatabaseObject.EditContext"/>).</summary>
-    public TableEditContext? EditContext(string tableName, out string? failure)
-    {
-        CatalogEntry? entry = LocalTable(tableName);
-        if (entry is null)
-        {
-            failure = $"no local table '{tableName}'";
-            return null;
-        }
-        return database.EditContext(entry, out failure);
-    }
-
-    /// <summary>A table cursor over the Workspace's overlay, as a table-type recordset opens one (its incarnation is the TableDef page).</summary>
-    public TableCursor? OpenCursor(TableDefinition table, out string? failure)
-    {
-        TableCursor? cursor = TableCursor.Open(Source, database.Format, table, database.PageCount, table.FirstPage, out TraversalFailure? f);
-        failure = f?.Predicate;
-        return cursor;
-    }
-
-    // ---- ISqlSchemaDatabase (W-07/native-metadata-write stretch 2): the one SchemaWriter route of the Database ----
-
-    public ulong PageCount => database.PageCount;
-
-    public SchemaWriter? OpenSchemaWriter(out string? failure) => database.OpenSchemaWriter(out failure);
-
-    /// <summary>The catalog change is published as TableDefs.Append's is (<see cref="DatabaseObject.SchemaPublished"/>).</summary>
-    public void OnSchemaPublished(ulong extentPages) => database.SqlSchemaPublished(extentPages);
-
-    /// <summary>The clock, read at each call (CREATE TABLE reads it for DateCreate and DateUpdate).</summary>
-    public ulong NowDateBits() => SchemaWriter.DateBits(DateTime.Now);
-
-    /// <summary>A linked table: an MSysObjects row of type 4 (ODBC) or 6 (Access) under Tables.</summary>
-    public bool IsLinkedTable(string name) =>
-        database.Catalog.TablesContainer is int container
-        && database.Catalog.Entries.Any(e => e.ParentId == container && e.Type is 4 or 6 && NamesEqual(e.Name, name));
-
-    public bool IsTableInRelationship(string tableName) =>
-        Relationships.Any(r => NamesEqual(r.Table, tableName) || NamesEqual(r.ForeignTable, tableName));
-
-    public bool IsColumnInRelationship(string tableName, string columnName) =>
-        Relationships.Any(r =>
-            (NamesEqual(r.Table, tableName) && r.Columns.Any(c => NamesEqual(c.Referenced, columnName)))
-            || (NamesEqual(r.ForeignTable, tableName) && r.Columns.Any(c => NamesEqual(c.Foreign, columnName))));
-
-    /// <summary>
-    /// Whether the index backs a relationship: a relationship's own Foreign index (type 2), or an index whose columns,
-    /// in order, are the relationship's columns on that side (the binder's 3281 for DROP INDEX and DROP CONSTRAINT).
-    /// </summary>
-    public bool IsIndexInRelationship(string tableName, string indexName)
-    {
-        if (Table(tableName) is not { } table || table.LogicalIndexes.FirstOrDefault(x => NamesEqual(x.Name, indexName)) is not { } logical)
-        {
-            return false;
-        }
-        if (logical.IndexType == 2)
-        {
-            return true;
-        }
-        if (table.PhysicalIndexes.FirstOrDefault(x => x.Number == logical.PhysicalNumber) is not { } physical)
-        {
-            return false;
-        }
-        string[] columns = [.. physical.Columns.Select(ic => table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber)?.Name ?? "")];
-        return Relationships.Any(r => r.Columns.Count == columns.Length
-            && ((NamesEqual(r.Table, tableName) && Enumerable.Range(0, columns.Length).All(i => NamesEqual(r.Columns[i].Referenced, columns[i])))
-                || (NamesEqual(r.ForeignTable, tableName) && Enumerable.Range(0, columns.Length).All(i => NamesEqual(r.Columns[i].Foreign, columns[i])))));
-    }
-
-    public bool HasRelationshipNamed(string tableName, string constraintName) =>
-        Relationships.Any(r => NamesEqual(r.Name, constraintName) && (NamesEqual(r.Table, tableName) || NamesEqual(r.ForeignTable, tableName)));
-
-    /// <summary>An open recordset of this Database locks the table (<see cref="TableHold.Locked"/>; ACE's 3211).</summary>
-    public bool IsTableInUse(string tableName) => database.Hold(tableName) == TableHold.Locked;
-
-    /// <summary>MSysRelationships; Database.Execute reads it before a DDL statement and refuses by name when it cannot.</summary>
-    private IReadOnlyList<Relationship> Relationships => database.Relationships(out _) ?? [];
-
-    private CatalogEntry? LocalTable(string name) =>
-        database.Catalog.LocalTables(database.Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    private static bool NamesEqual(string a, string b) =>
-        string.Equals(a.Normalize(System.Text.NormalizationForm.FormC), b.Normalize(System.Text.NormalizationForm.FormC), StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

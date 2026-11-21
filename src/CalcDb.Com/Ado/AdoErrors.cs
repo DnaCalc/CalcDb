@@ -15,8 +15,8 @@ internal readonly record struct AdoErrorEntry(
     string Description,
     string HelpFile,
     int HelpContext,
-    string SqlState,
-    int NativeError);
+    string? SqlState,
+    int? NativeError);
 
 /// <summary>
 /// ADODB.Error (Error, dual): read-only snapshot of one provider error entry.
@@ -31,8 +31,16 @@ internal sealed class AdoErrorObject : AdoObject
         .Get("Description", (self, args) => Text(((AdoErrorObject)self)._entry.Description))
         .Get("HelpFile", (self, args) => OptionalText(((AdoErrorObject)self)._entry.HelpFile))
         .Get("HelpContext", (self, args) => Int32(((AdoErrorObject)self)._entry.HelpContext))
-        .Get("SQLState", (self, args) => OptionalText(((AdoErrorObject)self)._entry.SqlState))
-        .Get("NativeError", (self, args) => Int32(((AdoErrorObject)self)._entry.NativeError));
+        .Get("SQLState", (self, args) => ((AdoErrorObject)self).GetSqlState())
+        .Get("NativeError", (self, args) => ((AdoErrorObject)self).GetNativeError());
+
+    private CallResult GetSqlState() => _entry.SqlState is { } sqlState
+        ? OptionalText(sqlState)
+        : CallResult.Fail(Failure.NotModelled("NotModelled.AdoErrorDetail", $"Error.SQLState for provider error {_entry.HelpContext} ('{_entry.Description}') is not recorded"));
+
+    private CallResult GetNativeError() => _entry.NativeError is int nativeError
+        ? Int32(nativeError)
+        : CallResult.Fail(Failure.NotModelled("NotModelled.AdoErrorDetail", $"Error.NativeError for provider error {_entry.HelpContext} ('{_entry.Description}') is not recorded"));
 
     private static CallResult OptionalText(string value) => value.Length == 0 ? CallResult.OfOwnedBstr(0) : Text(value);
 

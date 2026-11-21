@@ -45,11 +45,11 @@ public enum ActionErrorSource : byte
 /// <c>NotModelled.*</c> refusal), and <see cref="PreservesRecordsAffected"/> (true for a successful DDL statement,
 /// which does not replace the database's last successful DML count).
 /// </summary>
-public readonly record struct ActionOutcome(int RecordsAffected, SqlFailure? Failure, bool PreservesRecordsAffected = false)
+public readonly record struct ActionOutcome(int RecordsAffected, SqlFailure? Failure, bool PreservesRecordsAffected = false, long? LastIdentity = null)
 {
     public bool Succeeded => Failure is null;
 
-    public static ActionOutcome Ok(int recordsAffected) => new(recordsAffected, null, PreservesRecordsAffected: false);
+    public static ActionOutcome Ok(int recordsAffected, long? lastIdentity = null) => new(recordsAffected, null, PreservesRecordsAffected: false, LastIdentity: lastIdentity);
 
     /// <summary>Successful DDL statement: leaves the caller's last successful DML <c>RecordsAffected</c> intact (<see cref="RecordsAffectedState"/>).</summary>
     public static ActionOutcome OkDdl() => new(0, null, PreservesRecordsAffected: true);
@@ -270,10 +270,13 @@ public static unsafe class ActionExecutor
                     return ActionOutcome.Fail(reseedOpen);
                 }
 
+                long? beforeCounter = editContext!.Counter?.Last;
                 return InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted)
                     is { } rowFail
                     ? ActionOutcome.Fail(rowFail)
-                    : ActionOutcome.Ok(inserted ? 1 : 0);
+                    : ActionOutcome.Ok(
+                        inserted ? 1 : 0,
+                        editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
             }
             finally
             {
@@ -381,6 +384,7 @@ public static unsafe class ActionExecutor
                 }
 
                 int affected = 0;
+                long? beforeCounter = editContext!.Counter?.Last;
                 var converted = new NativeVariant[plan.InsertColumns.Count];
                 try
                 {
@@ -448,7 +452,9 @@ public static unsafe class ActionExecutor
                             return ActionOutcome.Fail(MapResolutionFailure(commit));
                         }
                     }
-                    return ActionOutcome.Ok(affected);
+                    return ActionOutcome.Ok(
+                        affected,
+                        editContext.Counter is { } ctr && ctr.Last != beforeCounter ? ctr.Last : null);
                 }
                 finally
                 {

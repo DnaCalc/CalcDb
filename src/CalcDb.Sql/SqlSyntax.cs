@@ -488,7 +488,16 @@ public static class SqlParser
             {
                 return bodyFailure;
             }
-            TakeSymbol(';');
+            if (TakeSymbol(';'))
+            {
+                if (!AtEnd())
+                {
+                    // r-def-expr-sql/sql-text-framing-forms (#93, #150, #163), r-fix-wire-ado/ado-execute-update-compound (#29),
+                    // r-str-ado-act/ado-execute-results (#42): tokens after the terminating semicolon fail 3142.
+                    return SqlFailure.Ace(SqlPhase.Parse, 3142, SqlMessages.CharactersAfterEnd);
+                }
+                return null;
+            }
             if (!AtEnd())
             {
                 return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
@@ -682,6 +691,14 @@ public static class SqlParser
                 {
                     return null;
                 }
+                if (_armDepth == 0 && TakeSymbol(';'))
+                {
+                    // r-fix-wire-ado/ado-execute-update-compound (#29), r-str-ado-act/ado-execute-results (#42):
+                    // "SELECT 1 AS A; SELECT 2 AS B" -> 3142; bare "SELECT 1 AS v;" -> NotModelled.NoFrom (r-def-expr-sql/sql-text-framing-forms #42).
+                    return !AtEnd()
+                        ? SqlFailure.Ace(SqlPhase.Parse, 3142, SqlMessages.CharactersAfterEnd)
+                        : Open("NotModelled.NoFrom", "a SELECT without FROM");
+                }
                 return AtEnd() ? Open("NotModelled.NoFrom", "a SELECT without FROM") : MissingOperator(statement.Items[^1].Offset);
             }
             hasFrom = true;
@@ -822,7 +839,7 @@ public static class SqlParser
                 }
             }
             statement.Items.Add(new SelectItem(expression, false, null, alias, offset));
-            if (!IsSymbol(',') && !IsWord("FROM") && !AtEnd() && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
+            if (!IsSymbol(',') && !IsWord("FROM") && !AtEnd() && !(_armDepth == 0 && IsSymbol(';')) && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
             {
                 return MissingOperator(offset);
             }

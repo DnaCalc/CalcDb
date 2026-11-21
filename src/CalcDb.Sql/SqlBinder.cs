@@ -317,6 +317,20 @@ public enum ColumnOrigin : byte
     DerivedColumn,
 }
 
+/// <summary>Which SQL aggregate function a <see cref="ColumnOrigin.Aggregate"/> <see cref="ResultColumn"/> computes.</summary>
+public enum ResultAggregateKind : byte
+{
+    None,
+    CountRows,
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
+    First,
+    Last,
+}
+
 /// <summary>A result column (II-11 §3 result schema): its name, its DAO metadata and the program that computes it.</summary>
 public sealed class ResultColumn
 {
@@ -345,6 +359,18 @@ public sealed class ResultColumn
 
     /// <summary>How this column derives from its sources (base column, GROUP BY key, expression, aggregate, union, parameter, derived).</summary>
     public ColumnOrigin Origin { get; internal set; }
+
+    /// <summary>When <see cref="Origin"/> is <see cref="ColumnOrigin.Aggregate"/>, the aggregate function computed.</summary>
+    public ResultAggregateKind Aggregate { get; internal set; }
+
+    /// <summary>When <see cref="Origin"/> is <see cref="ColumnOrigin.Aggregate"/> over a bare base column, that column's descriptor.</summary>
+    public ColumnDescriptor? AggregateColumn { get; internal set; }
+
+    /// <summary>Static ADO/OLE DB Decimal precision when bound from a recorded Decimal expression or aggregate shape, else null.</summary>
+    public byte? DecimalPrecision { get; internal set; }
+
+    /// <summary>Static ADO/OLE DB Decimal scale when bound from a recorded Decimal expression or aggregate shape, else null.</summary>
+    public byte? DecimalScale { get; internal set; }
 
     /// <summary>
     /// The resolved base-table column when <see cref="Origin"/> is <see cref="ColumnOrigin.BaseColumn"/> or
@@ -388,7 +414,7 @@ internal enum AggregateKind : byte
 }
 
 /// <summary>An aggregate occurrence: its function, its argument over the input row, and its result type.</summary>
-internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType)
+internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType, ColumnDescriptor? sourceColumn = null)
 {
     public AggregateKind Kind { get; } = kind;
 
@@ -400,6 +426,8 @@ internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundEx
     public VarType Result { get; } = result;
 
     public int FieldType { get; } = fieldType;
+
+    public ColumnDescriptor? SourceColumn { get; } = sourceColumn;
 }
 
 /// <summary>An ORDER BY key, bound over the input row or, in a grouped SELECT, over the group's slots.</summary>
@@ -2350,6 +2378,10 @@ public sealed class BoundSelect : IDisposable
             column.TypeOpen = column.TypeRule == ColumnTypeRule.Bound ? null : "NotModelled.ExpressionFieldType";
             bool isAggregate = root.Kind == SyntaxKind.Call && AggregateOf(root) is not null;
             column.Origin = isAggregate ? ColumnOrigin.Aggregate : ColumnOrigin.Expression;
+            if (!isAggregate && (type == 20 || root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal }))
+            {
+                AssignStaticDecimalMetadata(column, root, result.Kind);
+            }
             if (isAggregate)
             {
                 column.SourceTable = "";
@@ -3123,8 +3155,11 @@ public sealed class BoundSelect : IDisposable
                     }
                     else if (slot < ParameterSlot0)
                     {
-                        int aggType = bound.Aggregates[slot - keys.Count].FieldType;
+                        AggregateSpec agg = bound.Aggregates[slot - keys.Count];
+                        int aggType = agg.FieldType;
                         column.Origin = ColumnOrigin.Aggregate;
+                        column.Aggregate = ToResultAggregateKind(agg.Kind);
+                        column.AggregateColumn = agg.SourceColumn;
                         column.TypeRule = ColumnTypeRule.Bound;
                         column.FieldType = aggType;
                         column.Size = AggregateSize(aggType);
@@ -3180,10 +3215,116 @@ public sealed class BoundSelect : IDisposable
             return null;
         }
 
+        private static ResultAggregateKind ToResultAggregateKind(AggregateKind kind) => kind switch
+        {
+            AggregateKind.CountRows => ResultAggregateKind.CountRows,
+            AggregateKind.Count => ResultAggregateKind.Count,
+            AggregateKind.Sum => ResultAggregateKind.Sum,
+            AggregateKind.Avg => ResultAggregateKind.Avg,
+            AggregateKind.Min => ResultAggregateKind.Min,
+            AggregateKind.Max => ResultAggregateKind.Max,
+            AggregateKind.First => ResultAggregateKind.First,
+            AggregateKind.Last => ResultAggregateKind.Last,
+            _ => ResultAggregateKind.None,
+        };
+
+        /// <summary>
+        /// Compute static ADO/OLE DB Decimal Precision &amp; NumericScale for expression shapes decided by retained records
+        /// (r-fix-wire-ado/fields-meta-decimal-expressions, r-ado-1b/fields-meta-expressions), never inspecting runtime row values.
+        /// </summary>
+        private static void AssignStaticDecimalMetadata(ResultColumn column, SyntaxNode root, OperandKind resultKind)
+        {
+            // Bare Decimal literal (e.g. 1.5 -> Precision=28, Scale=1; r-ado-1b/fields-meta-expressions e14).
+            if (root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal }
+                && TryDecimalLiteralScale(root.Text, out byte litScale))
+            {
+                column.DecimalPrecision = 28;
+                column.DecimalScale = litScale;
+                return;
+            }
+            // Stored Decimal unary negation (-N) or binary arithmetic over stored Decimal column(s) with identical (P, S)
+            // (r-fix-wire-ado/fields-meta-decimal-expressions x1/x3/x4/x5: Precision=18, Scale=4).
+            if (resultKind == OperandKind.StoredDecimal && column.Program.Fields.Count > 0)
+            {
+                ColumnDescriptor? stored = null;
+                foreach (ColumnBinding fb in column.Program.Fields)
+                {
+                    if (fb.Column.TypeCode != NativeTypes.Numeric || fb.Column.CalculatedResultType is not null)
+                    {
+                        continue;
+                    }
+                    if (stored is null)
+                    {
+                        stored = fb.Column;
+                    }
+                    else if (stored.NumericPrecision != fb.Column.NumericPrecision || stored.NumericScale != fb.Column.NumericScale)
+                    {
+                        return; // mixed precision/scale not recorded
+                    }
+                }
+                if (stored is not null)
+                {
+                    column.DecimalPrecision = stored.NumericPrecision;
+                    column.DecimalScale = stored.NumericScale;
+                }
+                return;
+            }
+            // Binary arithmetic involving a single DecimalLiteral and integer operands (e.g. L * 1.5, 0.1 * 3; r-ado-1b/fields-meta-expressions e2).
+            if (resultKind == OperandKind.DecimalLiteral && root.Kind == SyntaxKind.Binary)
+            {
+                byte? foundScale = null;
+                if (root.Left is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal }
+                    && TryDecimalLiteralScale(root.Left.Text, out byte ls))
+                {
+                    foundScale = ls;
+                }
+                if (root.Right is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal }
+                    && TryDecimalLiteralScale(root.Right.Text, out byte rs))
+                {
+                    if (foundScale is not null && foundScale != rs)
+                    {
+                        return;
+                    }
+                    foundScale = rs;
+                }
+                if (foundScale is byte s)
+                {
+                    column.DecimalPrecision = 28;
+                    column.DecimalScale = s;
+                }
+            }
+        }
+
+        private static bool TryDecimalLiteralScale(string? text, out byte scale)
+        {
+            scale = 0;
+            if (string.IsNullOrEmpty(text) || text.IndexOfAny(['e', 'E']) >= 0)
+            {
+                return false;
+            }
+            int dot = text.IndexOf('.');
+            if (dot < 0)
+            {
+                scale = 0;
+                return true;
+            }
+            int frac = text.Length - dot - 1;
+            if (frac < 0 || frac > 28)
+            {
+                return false;
+            }
+            scale = (byte)frac;
+            return true;
+        }
+
         /// <summary>A column under another name (a bare key column takes the key's name, not ExprNNNN; a qualified one its qualified name).</summary>
         private static ResultColumn Renamed(ResultColumn c, string name) => new(name, c.Program, c.Root)
         {
             Origin = c.Origin,
+            Aggregate = c.Aggregate,
+            AggregateColumn = c.AggregateColumn,
+            DecimalPrecision = c.DecimalPrecision,
+            DecimalScale = c.DecimalScale,
             SourceColumn = c.SourceColumn,
             TypeRule = c.TypeRule,
             FieldType = c.FieldType,
@@ -3254,7 +3395,7 @@ public sealed class BoundSelect : IDisposable
             }
             if (kind == AggregateKind.Count)
             {
-                bound.Aggregates.Add(new AggregateSpec(kind, node, argument, VarType.I4, 4));
+                bound.Aggregates.Add(new AggregateSpec(kind, node, argument, VarType.I4, 4, argument!.BareField?.Column));
                 return null;
             }
             if (argument!.BareField is not { } field)
@@ -3285,7 +3426,7 @@ public sealed class BoundSelect : IDisposable
                 argument.Dispose();
                 return Open("NotModelled.AggregateArgumentType", $"{node.Text} of a native type {t} field: no recorded rule");
             }
-            bound.Aggregates.Add(new AggregateSpec(kind, node, argument, r.result, r.type));
+            bound.Aggregates.Add(new AggregateSpec(kind, node, argument, r.result, r.type, field.Column));
             return null;
         }
     }

@@ -53,20 +53,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static List<DatabaseObject>? _openOnThread;
 
     private readonly WorkspaceObject _workspace;
+    private readonly ComDatabaseSession _session;
     private readonly List<IDatabaseRecordset> _recordsets = [];
-    private SessionFile? _file;
-    private LockFile? _lockFile;
     private DefinitionCollection? _tableDefs;
     private DefinitionCollection? _queryDefs;
     private DefinitionCollection? _containers;
     private DefinitionCollection? _relations;
     private PropertiesObject? _properties;
-    private QueryCatalog? _queries;
-    private string? _queriesFailure;
     private DatabaseSql? _sql;
-    private Dictionary<int, TableEditContext>? _editContexts;
-    private ExpressionRuleBinder? _ruleBinder;
-    private IReadOnlyList<Relationship>? _relationships;
 
     /// <summary>
     /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
@@ -84,17 +78,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         _workspace = workspace;
         Name = name;
-        ReadOnly = readOnly;
-        _file = file;
-        _lockFile = lockFile;
-        Cache = cache;
-        Profile = profile;
-        Header = header;
-        Format = profile.Descriptor;
-        _extentPages = pageCount;
-        Catalog = catalog;
+        _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated);
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
+    }
+
+    private void OnEditContextCreated(TableEditContext context, CatalogEntry entry, TableDefinition table)
+    {
+        Engine.Changes.Register(context.Semantics, Name);
+        if (context.Counter is { } counter)
+        {
+            Engine.Changes.Register(Name, entry.Name, counter, table.AutoNumber);
+        }
     }
 
     /// <summary>
@@ -102,21 +97,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <see cref="SessionFile.TakeWriterLease"/>): a read-only session never writes; otherwise the writer lease is taken
     /// on the explicit reopen path at the first publication and kept until Close.
     /// </summary>
-    public IPositionedFile? Writable(IReadOnlyCollection<ulong> pages, out string? failure)
-    {
-        if (_file is not { } file)
-        {
-            failure = "the Database is closed";
-            return null;
-        }
-        if (ReadOnly)
-        {
-            failure = "the Database was opened read-only";
-            return null;
-        }
-        failure = file.TakeWriterLease(Cache, pages);
-        return failure is null ? file : null;
-    }
+    public IPositionedFile? Writable(IReadOnlyCollection<ulong> pages, out string? failure) => _session.Writable(pages, out failure);
 
     /// <summary>The live caches' probes, hits, misses and loads on this thread, not yet folded into the cost counters.</summary>
     public static (long Probes, long Hits, long Misses, long Loads) LiveCacheWork()
@@ -133,12 +114,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>The canonical path (R-DAO-1 DAO-BOOT: Database.Name is the full path, original case).</summary>
     public string Name { get; }
 
-    public PageCache Cache { get; }
+    public PageCache Cache => _session.Cache;
 
-    public FormatDescriptor Format { get; }
+    public FormatDescriptor Format => _session.Format;
 
     /// <summary>The file's profile, selected from its header at open (R-FMT-1).</summary>
-    public FileProfile Profile { get; }
+    public FileProfile Profile => _session.Profile;
 
     /// <summary>
     /// Version: the file format's engine version, "4.0" for a Jet 4 MDB, "12.0" and "14.0" for the ACE formats of
@@ -154,7 +135,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     };
 
     /// <summary>The decoded page-0 fields, read at open through the header mask (II-03 §1.2).</summary>
-    public DatabaseHeader Header { get; }
+    public DatabaseHeader Header => _session.Header;
 
     /// <summary>
     /// CollatingOrder: the database sort identifier of page 0 as VT_I4, the LANGID requested at creation (qualified,
@@ -172,43 +153,26 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// W-07/native-metadata-write) and the extent the cache's writers have allocated (<see cref="PageCache.KnownExtentPages"/>:
     /// a row publication that took a page past the file, W-05/growth-structural-closure, r-q16-overflow).
     /// </summary>
-    public ulong PageCount => Math.Max(_extentPages, Cache.KnownExtentPages);
-
-    private ulong _extentPages;
+    public ulong PageCount => _session.PageCount;
 
     /// <summary>The catalog as committed; read again after each published catalog change.</summary>
-    public CatalogSnapshot Catalog { get; private set; }
+    public CatalogSnapshot Catalog => _session.Catalog;
 
     /// <summary>
     /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
     /// made once per database from page 0's sort descriptor; null outside the General family (the kernel then names
     /// DatabaseCollationMissing).
     /// </summary>
-    public CalcDb.Expressions.DatabaseCollation? Collation
-    {
-        get
-        {
-            if (!_collationMade)
-            {
-                _collation = CalcDb.Expressions.DatabaseCollation.For(Header.SortOrder);
-                _collationMade = true;
-            }
-            return _collation;
-        }
-    }
-
-    private CalcDb.Expressions.DatabaseCollation? _collation;
-    private bool _collationMade;
+    public CalcDb.Expressions.DatabaseCollation? Collation => _session.Collation;
 
     /// <summary>
     /// The one <see cref="ExpressionContext"/> factory for this Database (R-EXPR-1 EXPR-LOCALE: <see cref="SessionLocale.Lcid"/>,
     /// never the thread's; II-10 §14: Database compare with the file's sort order, plus Windows Text compare for
     /// <c>InStr</c>/<c>StrComp</c> compare=1 and omitted compare).
     /// </summary>
-    public ExpressionContext CreateExpressionContext(ExpressionUse use) =>
-        new(SessionLocale.Lcid, TextCompareMode.Database, Collation, use, WindowsTextCollation.For(SessionLocale.Lcid));
+    public ExpressionContext CreateExpressionContext(ExpressionUse use) => _session.CreateExpressionContext(use);
 
-    public bool Closed => _file is null;
+    public bool Closed => _session.Closed;
 
     public override bool Invalid => Closed;
 
@@ -216,7 +180,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// Whether the session was opened read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE: ReadOnly counts
     /// only when Options is given). CalcDb reads either way (W-10/native-readers-only); writes are W-05.
     /// </summary>
-    public bool ReadOnly { get; }
+    public bool ReadOnly => _session.ReadOnly;
 
     public WorkspaceObject Workspace => _workspace;
 
@@ -419,55 +383,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// relationship names it (MSysRelationships). Made at the first edit member of a recordset over the table and shared by
     /// every recordset of this Database over it; null with the reason when the table's definition or blob cannot be read.
     /// </summary>
-    public TableEditContext? EditContext(CatalogEntry entry, out string? failure)
-    {
-        failure = null;
-        if ((_editContexts ??= []).TryGetValue(entry.Id, out TableEditContext? known))
-        {
-            return known;
-        }
-        if (Definition(entry, out failure) is not { } table)
-        {
-            return null;
-        }
-        PropertyBlob? blob = Blob(entry, out failure);
-        if (failure is not null)
-        {
-            return null;
-        }
-        if (Relationships(out failure) is null)
-        {
-            return null;
-        }
-        // The text compare and session LCID (R-EXPR-1 EXPR-LOCALE: user default, never the thread's), as Find binds its criteria.
-        _ruleBinder ??= new ExpressionRuleBinder(CreateExpressionContext(ExpressionUse.Query));
-        var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
-        bool related = _relationships!.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
-        // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).
-        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, related, new TableFootprints(Cache, Format, table, PageCount));
-        Engine.Changes.Register(semantics, Name);
-        if (context.Counter is { } counter)
-        {
-            Engine.Changes.Register(Name, entry.Name, counter, table.AutoNumber);
-        }
-        _editContexts.Add(entry.Id, context);
-        return context;
-    }
+    public TableEditContext? EditContext(CatalogEntry entry, out string? failure) => _session.EditContext(entry, out failure);
 
     /// <summary>MSysRelationships, read once per Database at first use; null with the reason when it cannot be read.</summary>
-    public IReadOnlyList<Relationship>? Relationships(out string? failure)
-    {
-        failure = null;
-        if (_relationships is null)
-        {
-            _relationships = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out failure);
-            if (_relationships is null)
-            {
-                failure = "MSysRelationships cannot be read: " + failure;
-            }
-        }
-        return _relationships;
-    }
+    public IReadOnlyList<Relationship>? Relationships(out string? failure) => _session.Relationships(out failure);
 
     /// <summary>How the open recordsets of this Database hold <paramref name="table"/>: locked by any one locks it; else the first hold no record decides.</summary>
     public TableHold Hold(string table)
@@ -664,28 +583,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// A SchemaWriter over this Database's cache, catalog and extent, the one route of TableDefs.Append and SQL DDL
     /// (W-07/native-metadata-write). Null with the reason when the session cannot write.
     /// </summary>
-    public SchemaWriter? OpenSchemaWriter(out string? failure)
-    {
-        if (_schemaFailure is { } stale)
-        {
-            failure = stale;
-            return null;
-        }
-        failure = null;
-        return new SchemaWriter(Cache, Format, Catalog, PageCount, Header.SortOrder);
-    }
+    public SchemaWriter? OpenSchemaWriter(out string? failure) => _session.OpenSchemaWriter(out failure);
 
     /// <summary>
     /// A SQL DDL statement's catalog change was published (<see cref="DatabaseSql.OnSchemaPublished"/>). A catalog that
-    /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="_schemaFailure"/>).
+    /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="SchemaFailure"/>).
     /// </summary>
-    public void SqlSchemaPublished(ulong extentPages) => _schemaFailure = SchemaPublished(extentPages);
-
-    /// <summary>Why the catalog could not be read after this session's last catalog change; nothing more is written then.</summary>
-    private string? _schemaFailure;
+    public void SqlSchemaPublished(ulong extentPages) =>
+        _session.SqlSchemaPublished(extentPages, IsTableHeld, OnCatalogReloaded);
 
     /// <summary>The reason a statement cannot run against this Database's current catalog, or null.</summary>
-    public string? SchemaFailure => _schemaFailure;
+    public string? SchemaFailure => _session.SchemaFailure;
 
     /// <summary>
     /// Whether DDL statement <paramref name="sql"/> may run beside the open recordsets: an existing table it changes or
@@ -717,15 +625,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
-    public TableDefinition? Definition(CatalogEntry entry, out string? failure)
-    {
-        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Cache.Pin(p).Pin is { } pin ? Copy(pin) : null, Format, 64, out failure);
-        TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out failure);
-        // A calculated column reads by its ResultType property (II-04 §5.6, CAT-P); an unreadable blob leaves it unbound.
-        return table is null || !table.Columns.Any(c => ScalarCodecs.IsCalculated(c, Format.Payload))
-            ? table
-            : ScalarCodecs.BindCalculatedResults(table, Blob(entry, out _), Format.Payload);
-    }
+    public TableDefinition? Definition(CatalogEntry entry, out string? failure) => _session.Definition(entry, out failure);
 
     /// <summary>
     /// TableDefs: the local tables of the catalog, system tables included, in name order as ACE lists them
@@ -846,54 +746,19 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// from the committed images, and the one TableDefs collection lists its members again (r-q15-ddl-open/lv-rewrite-
     /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
     /// </summary>
-    private string? SchemaPublished(ulong extentPages)
+    private string? SchemaPublished(ulong extentPages) =>
+        _session.SchemaPublished(extentPages, IsTableHeld, OnCatalogReloaded);
+
+    private bool IsTableHeld(string table) => Hold(table) != TableHold.None;
+
+    private void OnCatalogReloaded()
     {
-        _extentPages = Math.Max(_extentPages, extentPages);
-        if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
-        {
-            return "the catalog cannot be read after the catalog change: " + failure;
-        }
-        Catalog = catalog;
         _tableDefs?.Relist();
         _sql?.Forget();
-        ForgetEditContexts();
-        return null;
-    }
-
-    /// <summary>
-    /// After a catalog change the edit state of a table its recordsets do not hold is compiled again at its next use: a
-    /// dropped table's goes, and a table that gained an index gets probes and footprints over its new definition. A held
-    /// table's stays: its recordsets' frames use it, and DDL on a held table fails 3211 before it writes.
-    /// </summary>
-    private void ForgetEditContexts()
-    {
-        if (_editContexts is not { } contexts)
-        {
-            return;
-        }
-        foreach ((int id, TableEditContext context) in contexts.ToArray())
-        {
-            string name = context.Semantics.TableName;
-            if (Hold(name) == TableHold.None)
-            {
-                context.Semantics.Dispose();
-                contexts.Remove(id);
-            }
-        }
     }
 
     /// <summary>The saved queries (II-06 §8), read once per Database at first use; null with the reason when they cannot be.</summary>
-    public QueryCatalog? Queries
-    {
-        get
-        {
-            if (_queries is null && _queriesFailure is null)
-            {
-                _queries = QueryCatalog.Read(Cache, Format, Catalog, PageCount, out _queriesFailure);
-            }
-            return _queries;
-        }
-    }
+    public QueryCatalog? Queries => _session.Queries;
 
     /// <summary>
     /// QueryDefs: the saved queries in name order, case-insensitively, as ACE lists them (r-cat-1/querydefs: QAlias,
@@ -905,7 +770,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             if (Queries is not { } catalog)
             {
-                return CallResult.Fail(Failure.NotImplemented("QueryDefs when MSysQueries cannot be read: " + _queriesFailure));
+                return CallResult.Fail(Failure.NotImplemented("QueryDefs when MSysQueries cannot be read: " + _session.QueriesFailure));
             }
             SavedQuery[] queries = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
             _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, [.. queries.Select(q => q.Name)], (c, i) => new QueryDefObject(c, queries[i]), holdsDatabase: false);
@@ -944,11 +809,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>A catalog object's MR2 property blob (CAT-P), or null when it stores none; a blob that does not frame is a failure.</summary>
-    public PropertyBlob? Blob(CatalogEntry entry, out string? failure)
-    {
-        failure = null;
-        return entry.Properties is { Length: > 0 } raw ? PropertyBlob.Read(raw, out failure) : null;
-    }
+    public PropertyBlob? Blob(CatalogEntry entry, out string? failure) => _session.Blob(entry, out failure);
 
     /// <summary>The object's own stored map (kind 0000), or null.</summary>
     public PropertyMap? StoredProperties(CatalogEntry entry, out string? failure) => Blob(entry, out failure)?.ObjectMap;
@@ -1010,14 +871,6 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return failure is not null || stored is { Properties.Count: > 0 };
     }
 
-    private static ReadOnlyMemory<byte> Copy(PagePin pin)
-    {
-        using (pin)
-        {
-            return pin.Bytes.ToArray();
-        }
-    }
-
     public void Forget(IDatabaseRecordset recordset) => _recordsets.Remove(recordset);
 
     /// <summary>A Rollback of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets (TXN-CLOSE).</summary>
@@ -1037,7 +890,6 @@ internal sealed unsafe class DatabaseObject : DaoObject
             r.CloseCursor();
         }
         _recordsets.Clear();
-        _workspace.Transactions.EndLazyBurst(Cache);
         CallResult closing = CallResult.Nothing;
         // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
         // ReleasedAtClose pages (deferred page frees or page-1 reservation return): Close commits once more and sets
@@ -1045,13 +897,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
         // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
         // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
-        if (_workspace.Transactions.NeedsCloseCommit(Cache))
+        (MutationOpen open, string? detail) = _session.CloseCommit(_workspace.Transactions);
+        if (open != MutationOpen.None)
         {
-            (MutationOpen open, string? detail) = _workspace.Transactions.PublishCloseCommit(Cache);
-            if (open != MutationOpen.None)
-            {
-                closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
-            }
+            closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
         }
         if (_openOnThread?.Remove(this) == true)
         {
@@ -1062,11 +911,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             counters.CacheMisses += c.Misses;
             counters.CacheLoads += c.Loads;
         }
-        _file?.Dispose();
-        _file = null;
+        _session.DisposeFile();
         Engine.Sessions.Remove(this);
-        _lockFile?.Dispose();
-        _lockFile = null;
+        _session.DisposeLockFile();
         _workspace.Forget(this);
         _tableDefs?.Release();
         _tableDefs = null;
@@ -1079,14 +926,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _properties?.Release();
         _properties = null;
         // Database.Close keeps the Workspace's level (TXN-CLOSE): accepted changes keep their semantics; the bound rules go.
-        if (_editContexts is { } contexts)
-        {
-            foreach (TableEditContext context in contexts.Values)
-            {
-                context.Semantics.Dispose();
-            }
-            _editContexts = null;
-        }
+        _session.DisposeEditContexts();
         return closing;
     }
 
