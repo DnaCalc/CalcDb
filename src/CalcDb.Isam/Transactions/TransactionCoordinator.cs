@@ -151,8 +151,9 @@ public sealed class ExplicitFrame
 /// Rollback writes to TableDef 0x14 when the file does not hold it yet. Only the case
 /// <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c> shows is written: values a SQL statement generated and
 /// inserted under unit increment, in a level that took a new page. <see cref="Unrecorded"/> names any other consumption
-/// of the level (a recordset AddNew, a refused row, an explicit value, a non-unit increment, a reseed), and a Rollback
-/// that would drop such a value refuses before it acts (<see cref="MutationOpen.CounterWrite"/>).
+/// of the level (a recordset AddNew, a refused row, an explicit value, a non-unit increment, a reseed, an inner
+/// Rollback): under unit increment, Rollback succeeds and writes nothing (keeping the in-memory counter consumed); only
+/// a non-unit increment refuses before acting (<see cref="MutationOpen.AutoNumberIncrement"/>).
 /// </summary>
 internal readonly record struct AutoNumberMark(uint Value, int Increment, bool Reseed, string? Unrecorded)
 {
@@ -360,7 +361,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private StatementScope? _statement;
     private int _statementChanges;
     private bool _statementHasSideEffect;
-    private PageCache? _statementEmptyCommitCache;
     private int? _statementRefusal;
     private ResolutionOutcome? _statementFailure;
     private int _unwrittenPendingCount;
@@ -806,8 +806,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Record an AutoNumber value consumed or reseeded inside an explicit transaction level (<see cref="AutoNumberMark"/>):
     /// the outermost <see cref="Rollback"/> writes it to TableDef 0x14 when the file does not hold it yet and
-    /// <paramref name="unrecorded"/> is null (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>), and refuses by
-    /// name before it acts when the value would be lost and <paramref name="unrecorded"/> names another case.
+    /// <paramref name="unrecorded"/> is null (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>), succeeds
+    /// writing nothing for every other unit-increment case (keeping the in-memory counter consumed), and refuses before
+    /// acting when <paramref name="increment"/> is not 1 (<see cref="MutationOpen.AutoNumberIncrement"/>).
     /// </summary>
     internal void RecordConsumedAutoNumber(PageCache cache, uint tableDefPage, uint value, int increment, bool reseed, string? unrecorded)
     {
@@ -819,8 +820,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// The error of a refused Update of the open statement (R-TXN-1 TXN-STMT): a Rollback of the statement's own level
-    /// writes the counters the refused INSERT reached only after a 3022 (<c>evidence/r-q18-statements/ins-dup-fail</c>,
-    /// <c>ins-dup-fail-txn</c>).
+    /// writes the counters the refused INSERT reached after a 3022 (<c>evidence/r-q18-statements/ins-dup-fail</c>,
+    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>) or a 3201 (bytes not recorded;
+    /// <c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c> decides the error and next ID 5 only).
     /// </summary>
     internal void NoteStatementRefusal(int number)
     {
@@ -833,7 +835,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Fold a refused 3022 unique insert's TableDef side effects into the active SQL statement's or transaction's single
     /// write group (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; <c>evidence/r-q18-statements/ins-dup-plain</c>,
-    /// <c>ins-dup-plain-txn</c>, <c>ins-dup-fail</c>, <c>ins-dup-fail-txn</c>).
+    /// <c>evidence/r-q18-statements/ins-dup-plain-txn</c>, <c>evidence/r-q18-statements/ins-dup-fail</c>,
+    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>). When <paramref name="edits"/> is empty, writes nothing:
+    /// <c>evidence/r-err-1b/con-pk-duplicate-insert</c> and
+    /// <c>evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror</c> keep identical before-open and after-close
+    /// file hashes (<c>33192b8c7ea7</c>), unlike a recordset AddNew refused 3022
+    /// (<c>evidence/r-q10-commit-counter-edits</c>).
     /// </summary>
     internal (MutationOpen Open, string? Detail) RecordStatementSideEffect(
         PageCache cache,
@@ -853,10 +860,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (edits.Count == 0)
         {
-            if (_frames.Count == 0 && !_participants.ContainsKey(cache))
-            {
-                _statementEmptyCommitCache ??= cache;
-            }
+            // A SQL statement whose refused 3022 unique insert changes no TableDef word writes nothing
+            // (evidence/r-err-1b/con-pk-duplicate-insert and
+            // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror keep identical file hashes 33192b8c7ea7).
             return (MutationOpen.None, null);
         }
         if ((_participants.ContainsKey(cache) || _frames.Count > 0) && AccdbHeader(cache) is false)
@@ -902,7 +908,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_frames.Count == 0)
         {
             _statementHasSideEffect = true;
-            _statementEmptyCommitCache = null;
         }
         return (MutationOpen.None, null);
     }
@@ -1092,9 +1097,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// EditMode 0, Update then 3020); at an inner level that is not recorded and is named. The outermost Rollback writes
     /// the AutoNumber its level's SQL inserts consumed when the file does not hold it yet, with page 1, as one commit, and
     /// the file's Close commits page 1 again (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>: no row, row and
-    /// index counts unchanged, AutoNumber 4, +2). A Rollback that would drop an AutoNumber of any other case refuses
-    /// before it acts and leaves the level as it was (<see cref="MutationOpen.CounterWrite"/>). The level a SQL statement
-    /// opened for itself is always rolled back (<see cref="RollbackStatementFrame"/>).
+    /// index counts unchanged, AutoNumber 4, +2). Every other unit-increment case whose bytes are not recorded (no new
+    /// page as in <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c>, an inner Rollback, a reseed, an MDB, a refused row,
+    /// a rolled-back statement level, a recordset AddNew, an explicit value, several files) succeeds and writes nothing,
+    /// keeping the in-memory counter consumed. Only a level that consumed an AutoNumber under a non-1 increment refuses
+    /// before it acts and leaves the level as it was (<see cref="MutationOpen.AutoNumberIncrement"/>). The level a SQL
+    /// statement opened for itself is always rolled back (<see cref="RollbackStatementFrame"/>).
     /// </summary>
     public ResolutionOutcome Rollback()
     {
@@ -1123,7 +1131,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         UnindexChanges(top.Changes);
         if (_frames.Count > 0)
         {
-            _frames[^1].MergeAutoNumbersFrom(top);
+            _frames[^1].MergeAutoNumbersFrom(top, "an inner Rollback");
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.RollbackScope();
@@ -1146,15 +1154,34 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value)> Words);
 
     /// <summary>
-    /// Decide what Rollback of <paramref name="top"/> writes, before anything is dropped: the marks the file does not hold
-    /// yet (<see cref="AutoNumberMark.IsLostAgainst"/>), all of the recorded case of ins-clean-fail-txn-rollback (SQL
-    /// inserts of generated values under unit increment, the outermost level, one ACCDB file, a level that took a new
-    /// page), or the named refusal.
+    /// Decide what Rollback of <paramref name="top"/> writes, before anything is dropped.
+    /// A level that consumed an AutoNumber under a non-1 increment refuses before it acts
+    /// (<see cref="MutationOpen.AutoNumberIncrement"/>): no record decides whether the counter reverts or stays
+    /// consumed (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open, <c>evidence/r-q23-counter-step/</c>).
+    /// Under unit increment, the answer is decided (the in-memory counter stays consumed) and only the case
+    /// <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c> shows is written: the outermost Rollback of one ACCDB
+    /// file whose level took a new page, for SQL inserts of generated values whose AutoNumber the file does not hold yet
+    /// (<see cref="AutoNumberMark.IsLostAgainst"/>). Every other unit-increment case whose bytes are not recorded
+    /// succeeds and writes nothing.
     /// </summary>
     private ResolutionOutcome? PlanRolledBackAutoNumbers(ExplicitFrame top, out RolledBackAutoNumbers? write)
     {
         write = null;
-        if (Publisher is null || top.ConsumedAutoNumbers is not { Count: > 0 } marks)
+        if (top.ConsumedAutoNumbers is not { Count: > 0 } marks)
+        {
+            return null;
+        }
+        foreach (((_, uint tdefPage), AutoNumberMark mark) in marks)
+        {
+            if (mark.Increment != 1)
+            {
+                return new ResolutionOutcome(
+                    null,
+                    MutationOpen.AutoNumberIncrement,
+                    $"Rollback after an AutoNumber consumed on TableDef page {tdefPage} under non-1 increment ({mark.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
+            }
+        }
+        if (Publisher is null || top.Level > 1)
         {
             return null;
         }
@@ -1168,7 +1195,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 if (tdef is null || tdef.Bytes.Length != d.PageSize || tdef.Bytes[d.DataPage.Kind.Offset] != 0x02)
                 {
-                    return new ResolutionOutcome(null, MutationOpen.CounterWrite, $"TableDef page {tdefPage} cannot be read to decide what the Rollback writes");
+                    return null;
                 }
                 stored = (uint)d.TableDef.AutoNumber.Read(tdef.Bytes);
             }
@@ -1176,19 +1203,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 continue;
             }
-            string? unrecorded = mark.Unrecorded
-                ?? (mark.Reseed ? "a reseeded AutoNumber" : null)
-                ?? (mark.Increment != 1 ? $"an AutoNumber under increment {mark.Increment}" : null)
-                ?? (top.Level > 1 ? "an inner Rollback, whose AutoNumber would be lost to the enclosing level" : null)
-                ?? (file is not null && !ReferenceEquals(file, cache) ? "AutoNumbers of several files" : null)
-                ?? (AccdbHeader(cache) is false ? "an MDB file" : null)
-                ?? (!TookGlobalMapPage(top, cache) ? "a level that took no new page" : null);
-            if (unrecorded is not null)
+            if (mark.Unrecorded is not null
+                || mark.Reseed
+                || (file is not null && !ReferenceEquals(file, cache))
+                || AccdbHeader(cache) is not true
+                || !TookGlobalMapPage(top, cache))
             {
-                return new ResolutionOutcome(
-                    null,
-                    MutationOpen.CounterWrite,
-                    $"the Rollback would drop AutoNumber {unchecked((int)mark.Value)} of TableDef page {tdefPage} (stored {unchecked((int)stored)}) after {unrecorded}: only SQL inserts of generated values that took a new page are recorded (evidence/r-q18-statements/ins-clean-fail-txn-rollback)");
+                return null;
             }
             file = cache;
             words.Add((tdefPage, mark.Value));
@@ -1363,13 +1384,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Decide, before the statement's level is dropped, what its Rollback writes: nothing for a level with no rows and no
     /// counters, or one of UPDATE or DELETE changes (TXN-STMT: no candidate changed); the reached counters
-    /// (<see cref="StatementCounters"/>) for an INSERT level in one ACCDB file, on one data page, after a 3022 (ins-dup-fail
-    /// and ins-dup-fail-txn show the bytes on a new page; evidence/r-txn-1/stmt-unique-middle-fail-d0, -d1, -d2,
-    /// stmt-unique-last-fail-d1, evidence/r-txn-1b/implicit-unique-first-failonerror and rb-unique-failonerror-d1 the answers
-    /// with no new page) or a 3201 (evidence/r-txn-1/stmt-fk-counter-fail-d1, answers only); else the named
-    /// <paramref name="limitation"/>: several files, an MDB, several data pages, another refusal after earlier rows (3314,
-    /// 3315, 3316, an Assign's 3464), or a stop of the statement itself (a later conversion failure, an explicit AutoNumber
-    /// below the counter). Division by zero (ins-div0-fail) does not reach here: a source row that fails to read stops the
+    /// (<see cref="StatementCounters"/>) for an INSERT level in one ACCDB file, on one data page, after a 3022
+    /// (<c>evidence/r-q18-statements/ins-dup-fail</c> and <c>evidence/r-q18-statements/ins-dup-fail-txn</c> show the
+    /// bytes on a new page; for no new page the bytes are not recorded, while
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>, <c>evidence/r-txn-1/stmt-unique-middle-fail-d1</c>,
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d2</c>, <c>evidence/r-txn-1/stmt-unique-last-fail-d1</c>,
+    /// <c>evidence/r-txn-1b/implicit-unique-first-failonerror</c> and <c>evidence/r-txn-1b/rb-unique-failonerror-d1</c>
+    /// decide the answers) or a 3201 (the bytes are not recorded; <c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>
+    /// decides the error and the next ID 5 only); else the named <paramref name="limitation"/>: several files, an MDB,
+    /// several data pages, another refusal after earlier rows (3314, 3315, 3316, an Assign's 3464), or a stop of the
+    /// statement itself (a later conversion failure, an explicit AutoNumber below the counter). Division by zero
+    /// (<c>evidence/r-q18-statements/ins-div0-fail</c>) does not reach here: a source row that fails to read stops the
     /// statement before its target opens.
     /// </summary>
     private StatementCounters? PlanStatementCounters(ExplicitFrame top, out ResolutionOutcome? limitation)
@@ -1460,7 +1485,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
         _statementHasSideEffect = false;
-        _statementEmptyCommitCache = null;
         _statementRefusal = null;
         _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
@@ -1509,7 +1533,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         _statementChanges = 0;
         _statementHasSideEffect = false;
-        _statementEmptyCommitCache = null;
         _statementRefusal = null;
         _statementFailure = null;
         return _statement = new StatementScope(this);
@@ -1522,8 +1545,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementChanges = 0;
         bool hasSideEffect = _statementHasSideEffect;
         _statementHasSideEffect = false;
-        PageCache? emptyCommitCache = _statementEmptyCommitCache;
-        _statementEmptyCommitCache = null;
         ResolutionOutcome? stmtFailure = _statementFailure;
         _statementFailure = null;
         _statementRefusal = null;
@@ -1539,16 +1560,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
             return new ResolutionOutcome(null, open, detail, changes);
-        }
-        if (emptyCommitCache is not null)
-        {
-            // A statement whose only effect is a refused unique insert that changes no TableDef word commits page 0 as a
-            // recordset's refused insert does (evidence/r-q10-commit-counter-edits). Its answers are recorded, with and
-            // without dbFailOnError (evidence/r-err-1b/con-pk-duplicate-insert,
-            // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror); its page-0 byte is not (qualified.md, the r-q18
-            // note Open).
-            (MutationOpen open, string? detail) = PublishNonTransactional(emptyCommitCache, [], [], CommitMode.Immediate, MutationErrorSource.Database, out MutationError? error);
-            return new ResolutionOutcome(error, open, detail, changes);
         }
         return new ResolutionOutcome(ResolvedChanges: changes);
     }

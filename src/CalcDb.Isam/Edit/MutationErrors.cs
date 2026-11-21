@@ -226,8 +226,8 @@ public enum MutationOpen : byte
     /// <summary>
     /// Unrecorded AutoNumber non-1 increment edge cases (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open,
     /// <c>evidence/r-q23-counter-step/</c>): a zero TDEF increment at offset +0x18 (ACE refuses <c>COUNTER(seed, 0)</c>
-    /// with 3001 at DDL), an explicit AutoNumber value under a non-1 increment, a cancelled <c>AddNew</c> under a non-1
-    /// increment, or a non-1 increment in a Jet 4 MDB file.
+    /// with 3001 at DDL), an explicit AutoNumber value under a non-1 increment, a cancelled <c>AddNew</c> or rolled-back
+    /// transaction under a non-1 increment, or a non-1 increment in a Jet 4 MDB file.
     /// </summary>
     AutoNumberIncrement,
 
@@ -240,17 +240,17 @@ public enum MutationOpen : byte
 
     /// <summary>
     /// An explicit AutoNumber value whose effect on the counter no record shows (R-FMT-2 Generated values): one accepted
-    /// below the counter, or one refused 3022 by an index other than the AutoNumber's own primary key. The records show an
-    /// accepted value above the counter (<c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c>) and a refused
-    /// duplicate of the primary key (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>).
+    /// below the counter, one refused 3022 under a non-1 increment, or one refused 3022 by an index other than the
+    /// AutoNumber's own primary key. The records show an accepted value above the counter
+    /// (<c>evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder</c>) and a unit-increment refused duplicate of the
+    /// primary key (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>).
     /// </summary>
     AutoNumberReseed,
 
     /// <summary>
-    /// A TableDef counter or page-0 commit-counter write that no record shows for a refused statement or a Rollback
+    /// A TableDef counter or page-0 commit-counter write that no record shows for a refused statement
     /// (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; qualified.md, the r-q18 statement-publication note): a refusal other than
-    /// 3022 or 3201 after earlier rows, a refused INSERT whose rows span data pages, an MDB or several files, or a Rollback
-    /// that would drop an AutoNumber of a case other than <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>.
+    /// 3022 or 3201 after earlier rows, a refused INSERT whose rows span data pages, or an MDB or several files.
     /// </summary>
     CounterWrite,
 }

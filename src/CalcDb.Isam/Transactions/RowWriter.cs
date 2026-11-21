@@ -358,6 +358,20 @@ public sealed class TableDefCountsDelta(int rowCountDelta, uint? autoNumberFloor
         FormatDescriptor d,
         out string? failure)
     {
+        if (reseedAutoNumber && autoNumberFloor is not null)
+        {
+            if (firstPage.Length != d.PageSize || firstPage[d.DataPage.Kind.Offset] != 0x02)
+            {
+                failure = "page is not a TableDef page";
+                return false;
+            }
+            int increment = unchecked((int)(uint)d.TableDef.AutoNumberIncrement.Read(firstPage));
+            if (increment != 1)
+            {
+                failure = $"AutoNumber reseed under non-1 increment ({increment}) is not recorded";
+                return false;
+            }
+        }
         if (!TableDefUpdater.TryUpdateCounts(firstPage, rowCountDelta, reseedAutoNumber ? null : autoNumberFloor, incrementUniqueEntryCounts, decrementEntryCounts, d, out failure))
         {
             return false;

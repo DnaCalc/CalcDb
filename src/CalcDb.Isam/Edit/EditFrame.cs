@@ -534,11 +534,14 @@ public sealed class EditFrame : IDisposable
             // evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain, ins-dup-plain-txn,
             // ins-dup-fail, ins-dup-fail-txn): a refused 3022 unique insert on AddNew persists UniqueEntryCount
             // increments of physical indexes strictly before the refusing index and the AutoNumber floor, and outside a
-            // SQL statement commits immediately (+1 on ACCDB page 0 offset 3586); inside a SQL statement it folds into the
-            // statement's or transaction's single write group. An explicit AutoNumber refused as a duplicate of the
-            // AutoNumber's own primary key reseeds the counter to it, also downward (evidence/r-q-expr-sql/act-ins-autonumber
-            // seq 349 and 441, evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 257 and 283,
-            // evidence/r-sql-2-3/act-ins-defaults seq 81 and 91); one refused by another index is not recorded.
+            // SQL statement commits immediately (+1 on ACCDB page 0 offset 3586); inside a SQL statement it folds
+            // non-empty TableDef edits into the statement's or transaction's single write group, and writes nothing when
+            // no TableDef word changes (evidence/r-err-1b/con-pk-duplicate-insert,
+            // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror). An explicit AutoNumber under unit increment
+            // refused as a duplicate of the AutoNumber's own primary key reseeds the counter to it, also downward
+            // (evidence/r-q-expr-sql/act-ins-autonumber seq 349 and 441, evidence/r-q-fmt-sort/auto-cancel-fail-accdb
+            // seq 257 and 283, evidence/r-sql-2-3/act-ins-defaults seq 81 and 91); a non-unit increment or refusal by
+            // another index is not recorded.
             if (failure.Error?.Number == MutationError.Duplicate
                 && Mode == EditMode.AddNew
                 && refusingPhysical is int refPhys
@@ -556,9 +559,9 @@ public sealed class EditFrame : IDisposable
                 {
                     if (_cells[autoCol.Ordinal].Assigned)
                     {
-                        if (!refusingIsPrimary || !IsKeyOf(refPhys, autoCol))
+                        if (CheckExplicitAutoNumberReseed(s.TableName, candidateValues[autoCol.Ordinal].Integer, _table.Counter, refusingIsPrimary, IsKeyOf(refPhys, autoCol)) is { } reseedOpen)
                         {
-                            return new UpdateOutcome(null, MutationOpen.AutoNumberReseed, $"an explicit AutoNumber {candidateValues[autoCol.Ordinal].Integer} refused 3022 by an index other than {s.TableName}'s AutoNumber primary key: its effect on the counter is not recorded");
+                            return reseedOpen;
                         }
                         reseedRefuseAuto = true;
                     }
@@ -1384,6 +1387,38 @@ public sealed class EditFrame : IDisposable
     /// <summary>Whether physical index <paramref name="physical"/> is the index of <paramref name="column"/> alone.</summary>
     private bool IsKeyOf(int physical, ColumnDescriptor column) =>
         _table.Semantics.Indexes.Any(x => x.Physical.Number == physical && x.Columns.Count == 1 && x.Columns[0].Ordinal == column.Ordinal);
+
+    /// <summary>
+    /// Decide whether an explicit AutoNumber refused 3022 may reseed the counter (R-FMT-2 Generated values): only under
+    /// unit increment when the refusing index is the AutoNumber's own primary key
+    /// (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>, <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c>,
+    /// <c>evidence/r-sql-2-3/act-ins-defaults</c>). Under a non-unit increment (where TableDef 0x14 and
+    /// <see cref="AutoNumberCounter.Reseed"/> would disagree and no record covers it) or refusal by another index,
+    /// refuses with <see cref="MutationOpen.AutoNumberReseed"/>.
+    /// </summary>
+    internal static UpdateOutcome? CheckExplicitAutoNumberReseed(
+        string tableName,
+        long explicitValue,
+        AutoNumberCounter? counter,
+        bool refusingIsPrimary,
+        bool refusingIndexCoversAuto)
+    {
+        if (counter is not { Increment: 1 })
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.AutoNumberReseed,
+                $"an explicit AutoNumber {explicitValue} refused 3022 on {tableName} under non-1 increment ({counter?.Increment}): reseed under non-1 increment is not recorded");
+        }
+        if (!refusingIsPrimary || !refusingIndexCoversAuto)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.AutoNumberReseed,
+                $"an explicit AutoNumber {explicitValue} refused 3022 by an index other than {tableName}'s AutoNumber primary key: its effect on the counter is not recorded");
+        }
+        return null;
+    }
 
     private UpdateOutcome FieldRuleChecks()
     {

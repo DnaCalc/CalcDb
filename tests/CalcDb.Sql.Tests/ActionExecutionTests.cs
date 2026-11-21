@@ -496,4 +496,62 @@ public sealed class ActionExecutionTests
         Assert.Equal(1, ok.RecordsAffected);
         Assert.Equal("27", actDb.ReadSelect("SELECT V FROM T WHERE ID = 2")[0][0].Integer);
     }
+
+    [Fact]
+    public void Refused_pk_duplicate_insert_with_no_TableDef_change_writes_nothing()
+    {
+        // evidence/r-err-1b/con-pk-duplicate-insert (options 0) and
+        // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror (options 128):
+        // before-open and after-close hashes are identical (33192b8c7ea7), proving ACE writes nothing.
+        const string sql = "INSERT INTO P (ID, Code, Req) VALUES (1, 'x1', 'r')";
+
+        using (var plainDb = new WritableSqlFixture(ErrBaseAccdb))
+        {
+            byte[] before = plainDb.Image.Snapshot();
+            ActionOutcome res = ActionExecutor.Execute(sql, plainDb, options: 0);
+            Assert.True(res.Succeeded, res.Failure?.ToString());
+            Assert.Equal(0, res.RecordsAffected);
+            Assert.Empty(plainDb.Workspace.Publications);
+            Assert.Equal(before, plainDb.Image.Snapshot());
+        }
+
+        using (var failDb = new WritableSqlFixture(ErrBaseAccdb))
+        {
+            byte[] before = failDb.Image.Snapshot();
+            ActionOutcome res = ActionExecutor.Execute(sql, failDb, options: 128);
+            Assert.False(res.Succeeded);
+            Assert.Equal(MutationError.Duplicate, res.Failure!.Number);
+            Assert.Equal(0, res.RecordsAffected);
+            Assert.Empty(failDb.Workspace.Publications);
+            Assert.Equal(before, failDb.Image.Snapshot());
+        }
+    }
+
+    [Fact]
+    public void Rollback_of_sql_insert_without_new_page_succeeds_writes_nothing_and_keeps_autonumber_consumed()
+    {
+        // evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 82-101: BeginTrans, SQL INSERT into an AutoNumber table
+        // fitting on the existing page (no new page), Rollback succeeds writing nothing, and the next insert receives
+        // the following AutoNumber.
+        using var db = new WritableSqlFixture(Fmt2bAccdb);
+        int maxBefore = int.Parse(db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer!);
+        byte[] before = db.Image.Snapshot();
+
+        Assert.Null(db.Workspace.BeginTrans());
+        ActionOutcome inTxn = ActionExecutor.Execute("INSERT INTO Au1 (S) VALUES ('in-txn')", db, options: 128);
+        Assert.True(inTxn.Succeeded, inTxn.Failure?.ToString());
+        Assert.Equal(1, inTxn.RecordsAffected);
+        Assert.Equal((maxBefore + 1).ToString(), db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer);
+
+        ResolutionOutcome rb = db.Workspace.Rollback();
+        Assert.True(rb.Succeeded, rb.ToString());
+        Assert.Empty(db.Workspace.Publications);
+        Assert.Equal(before, db.Image.Snapshot());
+        Assert.Equal(maxBefore.ToString(), db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer);
+
+        ActionOutcome after = ActionExecutor.Execute("INSERT INTO Au1 (S) VALUES ('after-rb')", db, options: 128);
+        Assert.True(after.Succeeded, after.Failure?.ToString());
+        Assert.Equal(1, after.RecordsAffected);
+        Assert.Equal((maxBefore + 2).ToString(), db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer);
+    }
 }
