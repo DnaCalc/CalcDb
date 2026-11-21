@@ -13,6 +13,7 @@ param(
     [string[]] $Questions = @(),                    # question folders for the candidate check
     [switch] $Publish,                              # publish CalcDb.Com into the export's artifacts/native
     [switch] $Snapshot,                             # copy runner, worker, native to compare-bin\<Name>
+    [switch] $KeepExport,                           # keep the export (about 1 GB) after a run with no failed step
     [string] $Filter = "",                         # dotnet test --filter while iterating on new tests; never on a landing run
     [string] $Export = "")
 $ErrorActionPreference = 'Stop'
@@ -207,5 +208,18 @@ try {
             "--worker $snap\worker\CalcDb.Oracle.Worker.exe --deployment $snap\native --store $env:LOCALAPPDATA\CalcDb\compare-store"
     }
 } finally { Pop-Location }
+# Each export is about 1 GB; 82 of them filled the disk on 2026-11-21 and stopped a compare (process log). The logs
+# (test output, trx) move to calcdb-land-out; a passing run's export goes, a failing one stays for inspection.
+$logs = Join-Path $env:TEMP "calcdb-land-out\$Name-$head"
+if (Test-Path (Join-Path $Export 'landing-out')) {
+    if (Test-Path $logs) { Remove-Item $logs -Recurse -Force }
+    New-Item -ItemType Directory -Force (Split-Path $logs) | Out-Null
+    Copy-Item (Join-Path $Export 'landing-out') $logs -Recurse
+    Step "logs $logs"
+}
+if ($failed -eq 0 -and -not $KeepExport -and -not (Get-ChildItem $Export -Recurse -Attributes ReparsePoint -ErrorAction SilentlyContinue)) {
+    Remove-Item $Export -Recurse -Force -ErrorAction SilentlyContinue
+    Step "export removed (-KeepExport keeps it)"
+}
 if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)" } else { Step "done, $failed failed steps" }
 exit $failed
