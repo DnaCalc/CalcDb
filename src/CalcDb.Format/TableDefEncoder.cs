@@ -208,6 +208,39 @@ public static class TableDefEncoder
         return pos;
     }
 
+    /// <summary>
+    /// The spec of a decoded single-page TableDef, for a writer that changes one part of it (CREATE INDEX: W-07/native-metadata-write);
+    /// null with the reason when the definition has parts a spec does not carry (Memo or OLE columns, whose LVAL map
+    /// locators the decoder does not keep, or a continuation page). A caller re-encodes the spec and compares it with
+    /// the stored page before it writes a changed one, so that no byte it does not model is lost (R-PRESERVE-1).
+    /// </summary>
+    public static TableDefSpec? SpecOf(TableDefinition t, out string? failure)
+    {
+        failure = null;
+        if (t.Segments.Count != 1)
+        {
+            failure = $"the TableDef spans {t.Segments.Count} pages";
+            return null;
+        }
+        if (t.Columns.Any(c => c.TypeCode is NativeTypes.Memo or NativeTypes.Ole))
+        {
+            failure = "a Memo or OLE column's LVAL map locators are not kept by the decoder";
+            return null;
+        }
+        return new TableDefSpec(
+            TableType: t.TableType,
+            RowCount: t.RowCount,
+            AutoNumber: t.AutoNumber,
+            MaxColumns: (ushort)t.MaxColumns,
+            VariableColumns: (ushort)t.VariableColumns,
+            OwnedMap: t.OwnedMap,
+            FreeMap: t.FreeMap,
+            Columns: [.. t.Columns.Select(c => new ColumnSpec(c.Name, c.TypeCode, (ushort)c.PhysicalNumber, (ushort)c.VariableIndex, (ushort)c.ColumnId, c.TypeInfo, c.Flags, c.ExtendedFlags, (ushort)c.FixedOffset, (ushort)c.Length))],
+            PhysicalIndexes: [.. t.PhysicalIndexes.Select(p => new PhysicalIndexSpec(p.Columns, p.OwnedMap, p.RootPage, p.Flags, p.EntryCount, p.UniqueEntryCount))],
+            LogicalIndexes: [.. t.LogicalIndexes.Select(l => new LogicalIndexSpec(l.Name, (uint)l.Number, (uint)l.PhysicalNumber, l.IndexType, l.RelatedTableType, l.RelatedIndex, l.RelatedTable))],
+            LvalColumnMaps: []);
+    }
+
     private static int WriteName(Span<byte> page, int pos, string name, int lengthBytes)
     {
         int byteCount = Encoding.Unicode.GetByteCount(name);

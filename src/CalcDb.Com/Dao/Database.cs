@@ -31,6 +31,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
         .Method("Execute", (self, args) => { nint query = args[0], options = args.Length > 1 ? args[1] : 0; return Live(self, d => d.Execute(query, options)); })
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
+        .Method("CreateTableDef", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, d => d.CreateTableDef(name)); })
         .Get("QueryDefs", (self, args) => Live(self, d => d.QueryDefsCollection()))
         .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
         .Get("Relations", (self, args) => Live(self, d => d.RelationsCollection()))
@@ -156,9 +157,21 @@ internal sealed unsafe class DatabaseObject : DaoObject
         ? Int32(Header.SortOrder.Identifier)
         : CallResult.Fail(Failure.NotImplemented($"Database.CollatingOrder of sort descriptor {Header.SortOrder} with byte +2 = {Header.SortOrder.Reserved} (not observed)"));
 
-    public ulong PageCount { get; }
+    /// <summary>The file's extent in pages; a catalog change that allocates grows it (W-07/native-metadata-write).</summary>
+    public ulong PageCount { get; private set; }
 
-    public CatalogSnapshot Catalog { get; }
+    /// <summary>The catalog as committed; read again after each published catalog change.</summary>
+    public CatalogSnapshot Catalog { get; private set; }
+
+    /// <summary>
+    /// Whether a publication of this session changed the global allocation map: its Close then commits once more
+    /// (evidence/r-q11-ddl-closure: the page-0 counter ends one above the statements' commits in every session that
+    /// allocated, create-one-long 2, create-two-tables, create-then-index and create-then-drop 3; R-CRASH-1 CRASH-ORDER
+    /// issued order: "Close writes pending pages, page 1 and a 2-byte field of page 0"). Here page 1 was published with
+    /// the statement, so the Close writes the counter alone; whether the extra commit belongs to Close or to the first
+    /// allocation of the session is not decided by a record (the final bytes are the same).
+    /// </summary>
+    private bool _globalMapChanged;
 
     /// <summary>
     /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
@@ -248,7 +261,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         FormatDescriptor format = profile.Descriptor;
         ulong pages = file.GetExtent() / (ulong)format.PageSize;
-        var cache = new PageCache(new FilePageSource(file, (uint)format.PageSize, 0xFFFFFF, uint.MaxValue), file.Incarnation, format.PageSize, CachePages);
+        var cache = file.CreateCache(format.PageSize, CachePages);
         CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? failure, readProperties: true);
         if (catalog is null)
         {
@@ -346,7 +359,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
 
             ulong pageCount = (ulong)synthesizedPages.Length;
-            var cache = new PageCache(new FilePageSource(file, (uint)format.PageSize, 0xFFFFFF, uint.MaxValue), file.Incarnation, format.PageSize, CachePages);
+            var cache = file.CreateCache(format.PageSize, CachePages);
             CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pageCount, out CatalogFailure? failure, readProperties: true);
             if (catalog is null)
             {
@@ -606,9 +619,112 @@ internal sealed unsafe class DatabaseObject : DaoObject
             // ACE does not list the tables whose catalog flags carry 0x00030000 (the MSysComplexType_* tables, flags
             // 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
             CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-            _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, [.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), holdsDatabase: false);
+            _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, [.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), holdsDatabase: false)
+            {
+                Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
+            };
         }
         return _tableDefs;
+    }
+
+    /// <summary>
+    /// CreateTableDef(Name, ...): a draft TableDef (r-dao-1-err-1/draft-tabledef-field: a missing, empty or Empty name
+    /// reads ""; Null is 3421). Attributes, SourceTableName and Connect (linked tables, W-L2) are not taken yet.
+    /// </summary>
+    private CallResult CreateTableDef(nint name)
+    {
+        string? text = name == 0 ? "" : Args.TypeOf(name) == CalcDb.Foundation.VarType.Null ? null : Args.Text(name);
+        if (text is null)
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        var draft = new NewTableDefObject(this, text);
+        CallResult result = Object(draft);
+        draft.Release();
+        return result;
+    }
+
+    /// <summary>
+    /// TableDefs.Append of a draft (W-07/native-metadata-write; R-CAT-1 CAT-X; r-q11-ddl-closure/append-dao): no fields
+    /// is 3264 from DAO.TableDefs (r-dao-1-err-1/draft-tabledef-field); otherwise the draft is lowered to a typed
+    /// CREATE TABLE on the DAO route and accepted by the Workspace's coordinator, which publishes it at once outside a
+    /// level. The new table's dates are the draft's creation and the Append's clock readings. Inside a BeginTrans level
+    /// the level's own catalog view (TXN-DDL) is not built yet, so Append there is named.
+    /// </summary>
+    public CallResult AppendTableDef(DefinitionCollection tableDefs, nint arg)
+    {
+        if (Args.ObjectOf<NewTableDefObject>(arg) is not { } draft)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append of an argument that is not a CalcDb draft TableDef"));
+        }
+        bool validName = SchemaWriter.IsValidName(draft.Name);
+        if (draft.Fields.Members.Count == 0)
+        {
+            // A valid name and no fields is 3264 (r-dao-1-err-1/draft-tabledef-field); with an invalid name the order of
+            // 3125 and 3264 is not recorded.
+            return validName ? tableDefs.Fail(3264, DaoErrors.NoFieldDefined)
+                : CallResult.Fail(Failure.NotImplemented("TableDefs.Append of a draft with no fields and an invalid name (the order of 3125 and 3264 is not recorded)"));
+        }
+        if (draft.Fields.Members.FirstOrDefault(f => !SchemaWriter.IsValidName(f.Name)) is { } badField)
+        {
+            // A field named "" is 3125 from DAO.TableDef, naming the field (r-dao-1-err-1/draft-tabledef-field, call 45);
+            // with an invalid table name as well, which is reported is not recorded.
+            return validName ? CallResult.Fail(Failure.Dao(3125, "DAO.TableDef", DaoErrors.InvalidName(badField.Name)))
+                : CallResult.Fail(Failure.NotImplemented("TableDefs.Append of a draft whose table and field names are both invalid (which ACE reports is not recorded)"));
+        }
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append inside a transaction: the level's own catalog view (R-TXN-1 TXN-DDL) is not built yet"));
+        }
+        if (draft.Request(out string? notWritten) is not { } request)
+        {
+            return CallResult.Fail(Failure.NotImplemented(notWritten!));
+        }
+        var writer = new SchemaWriter(Cache, Format, Catalog, PageCount, Header.SortOrder);
+        SchemaOutcome outcome = writer.CreateTable(workspace, request, SchemaWriter.DateBits(draft.Created), SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.Refused is { } refused)
+        {
+            return refused.Error switch
+            {
+                3010 => tableDefs.Fail(3010, DaoErrors.TableExists(request.Name)),
+                // An invalid table name is 3125 from DAO.TableDefs (r-cat-1/names, err-invalid-names); an empty one is not recorded.
+                3125 when request.Name.Length > 0 => tableDefs.Fail(3125, DaoErrors.InvalidName(request.Name)),
+                _ => CallResult.Fail(Failure.NotImplemented("TableDefs.Append: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.Succeeded && SchemaPublished(outcome.ExtentPages) is { } stale)
+        {
+            return CallResult.Fail(Failure.NotImplemented(stale));
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// A catalog change of this session was published: every one this slice writes changes the global allocation map (a
+    /// new table or index allocates, a drop frees), the extent grows to what it allocated, the catalog is read again
+    /// from the committed images, and the TableDefs collection is made again at its next use (a collection the client
+    /// holds keeps the members it listed).
+    /// </summary>
+    private string? SchemaPublished(ulong extentPages)
+    {
+        _globalMapChanged = true;
+        PageCount = extentPages;
+        _tableDefs?.Release();
+        _tableDefs = null;
+        if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
+        {
+            return "the catalog cannot be read after the catalog change: " + failure;
+        }
+        Catalog = catalog;
+        return null;
     }
 
     /// <summary>The saved queries (II-06 §8), read once per Database at first use; null with the reason when they cannot be.</summary>
@@ -764,6 +880,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _recordsets.Clear();
         _workspace.Transactions.EndLazyBurst(Cache);
+        CallResult closing = CallResult.Nothing;
+        if (_globalMapChanged)
+        {
+            _globalMapChanged = false;
+            (MutationOpen open, string? detail) = _workspace.Transactions.PublishCounterCommit(Cache);
+            if (open != MutationOpen.None)
+            {
+                closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
+            }
+        }
         if (_openOnThread?.Remove(this) == true)
         {
             CacheCounters c = Cache.Counters;
@@ -798,7 +924,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             _editContexts = null;
         }
-        return CallResult.Nothing;
+        return closing;
     }
 
     /// <summary>The last Release frees the file (R-DAO-1 DAO-LIFE).</summary>

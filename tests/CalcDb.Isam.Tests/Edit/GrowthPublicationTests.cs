@@ -780,12 +780,17 @@ public sealed class GrowthPublicationTests
             Assert.True(foundNonNullMemo, "expected a row of Mm with non-Null Memo");
             AssertNotWritten(mmFrame.Delete(), rig.A, "LVAL", rig.Before, rig.File.Image);
 
-            // OLE insert refused
+            // An OLE insert whose long value is Null compiles: a Null long value is a Null field of the row, as in the
+            // catalog rows ACE writes with Null Memo and OLE fields (evidence/r-q11-ddl-closure, W-07/native-metadata-write).
+            // It waits behind the change set's earlier unwritten Memo changes, so the file is unchanged.
             (TableDefinition lo, _) = rig.Table("Lo");
             (EditFrame loFrame, _) = rig.OpenTable(rig.A, "Lo");
             Assert.True(loFrame.AddNew().Succeeded);
             Assert.True(loFrame.Assign(Col(lo, "ID"), I4(999)).Succeeded);
-            AssertNotWritten(loFrame.Update(), rig.A, "LVAL", rig.Before, rig.File.Image);
+            UpdateOutcome loUpdate = loFrame.Update();
+            Assert.True(loUpdate.Succeeded, loUpdate.ToString());
+            Assert.NotNull(loUpdate.Change!.Physical);
+            Assert.Equal(rig.Before, rig.File.Image.Snapshot());
         }
 
         // 2. Leading U+FEFF Text, Overflow-body Delete, and Relationship on EditFixture.

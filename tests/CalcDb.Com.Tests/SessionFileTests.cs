@@ -96,6 +96,78 @@ public sealed class SessionFileTests : IDisposable
         Assert.Equal(0, after.Length % D.PageSize);
     }
 
+    /// <summary>
+    /// 5tw7: a publication beside a registered read view (a table snapshot, 52qh) retains the old image of every page it
+    /// overwrites, beside the overlay's private images and the final images it reserves (II-03 §4.2, II-09 §12). Five pages
+    /// need 15 such images; the session's cache has 12 frames. Without a spill store the publication is abandoned; the
+    /// session's cache (<see cref="SessionFile.CreateCache"/>) spills the retained images to its own temporary file,
+    /// publishes, and the view still reads every old page. (A publication cannot change more pages than the cache has
+    /// frames at all: it reserves one frame per final image before any freeze, II-03 §4.2.)
+    /// </summary>
+    [Fact]
+    public void A_publication_beside_a_read_view_spills_the_images_it_retains()
+    {
+        const int Frames = 12;
+        ulong[] pages = [.. Enumerable.Range(1, 5).Select(p => (ulong)p)];
+        byte[] before = File.ReadAllBytes(_path);
+        Assert.True(before.Length / D.PageSize > pages.Length);
+
+        using (SessionFile unspilled = SessionFile.OpenReader(_path, out _)!)
+        {
+            var cache = new PageCache(new FilePageSource(unspilled, (uint)D.PageSize, 0xFFFFFF, uint.MaxValue), unspilled.Incarnation, D.PageSize, Frames);
+            PublicationOutcome refused = PublishBesideView(cache, unspilled, pages, out ReadView view);
+            view.Dispose();
+            Assert.False(refused.Succeeded);
+            Assert.Contains("Preservation capacity could not be reserved", refused.Failure, StringComparison.Ordinal);
+        }
+        Assert.Equal(before, File.ReadAllBytes(_path));
+
+        string spillPath;
+        using (SessionFile file = SessionFile.OpenReader(_path, out _)!)
+        {
+            PageCache cache = file.CreateCache(D.PageSize, Frames);
+            PublicationOutcome published = PublishBesideView(cache, file, pages, out ReadView view);
+            Assert.True(published.Succeeded, published.Failure);
+            Assert.True(cache.Counters.SpillWrites > 0);
+            spillPath = file.SpillPath!;
+            Assert.True(File.Exists(spillPath));
+            byte[] after = ReadThrough(file);
+            foreach (ulong page in pages)
+            {
+                int end = (int)((page + 1) * (ulong)D.PageSize) - 1;
+                Assert.Equal((byte)(before[end] ^ 0xFF), after[end]);
+                using PagePin old = view.Pin(page).Pin!;
+                Assert.Equal(before.AsSpan((int)page * D.PageSize, D.PageSize).ToArray(), old.Bytes.ToArray());
+            }
+            view.Dispose();
+        }
+        Assert.False(File.Exists(spillPath)); // the session owned the spill file and deleted it with itself
+    }
+
+    /// <summary>Register a view, then publish one byte change (the page's last byte inverted) to each page of <paramref name="pages"/>.</summary>
+    private static PublicationOutcome PublishBesideView(PageCache cache, SessionFile file, ulong[] pages, out ReadView view)
+    {
+        foreach (ulong page in pages)
+        {
+            using PagePin pin = cache.Pin(page).Pin!; // the view's pages were read before it was taken, as a snapshot reads them
+        }
+        view = cache.RegisterView().View!;
+        PrivateOverlay overlay = cache.CreateOverlay(new LockerId(78));
+        foreach (ulong page in pages)
+        {
+            byte last;
+            using (PagePin pin = overlay.Pin(page).Pin!)
+            {
+                last = pin.Bytes[D.PageSize - 1];
+            }
+            Assert.True(overlay.Edit(page, new BytePatch(D.PageSize - 1, [(byte)(last ^ 0xFF)])).Image is not null);
+        }
+        Assert.Null(file.TakeWriterLease(cache, pages));
+        PublicationOutcome outcome = cache.Publish(overlay, file);
+        overlay.Dispose();
+        return outcome;
+    }
+
     /// <summary>The file's bytes read through the session's own handle (the exclusive lease admits no other open).</summary>
     private static byte[] ReadThrough(SessionFile file)
     {

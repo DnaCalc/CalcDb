@@ -81,6 +81,10 @@ public sealed unsafe class DaoWiringTests : IDisposable
             case DBNull:
                 v->Vt = (ushort)VarType.Null;
                 break;
+            case Held held:
+                v->Vt = (ushort)VarType.Dispatch;
+                v->Pointer = held.Pointer;
+                break;
         }
         _cells.Add((nint)v);
         return (nint)v;
@@ -399,5 +403,50 @@ public sealed unsafe class DaoWiringTests : IDisposable
         {
             Thread.CurrentThread.CurrentCulture = previous;
         }
+    }
+
+    /// <summary>An object argument: the IDispatch a successful call returned, which the test holds.</summary>
+    private readonly record struct Held(nint Pointer);
+
+    private Held Hold(CallResult result)
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.Dispatch, result.Failure?.Description);
+        _held.Add(result.Scalar.Pointer);
+        return new Held(result.Scalar.Pointer);
+    }
+
+    /// <summary>
+    /// W-07/native-metadata-write on the DAO route (r-q11-ddl-closure/append-dao): CreateTableDef, CreateField(dbLong),
+    /// Fields.Append and TableDefs.Append write the table to the file at once; Close adds the session's closing commit
+    /// (page-0 offset 3586 ends at 3 as ACE's does); a reopened Database lists T with its one Long field. Appending it
+    /// again is 3010 from DAO.TableDefs; a draft without fields 3264 (r-dao-1-err-1/draft-tabledef-field).
+    /// </summary>
+    [Fact]
+    public void TableDefs_Append_of_a_draft_writes_the_table_and_a_reopen_lists_it()
+    {
+        const string EmptyAccdb = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8"; // r-cat-1-accdb-empty.accdb
+        DatabaseObject db = Open(EmptyAccdb);
+        string path = db.Name;
+        Held td = Hold(Method(db, "CreateTableDef", "T"));
+        var draft = ComObject.Recover<NewTableDefObject>(td.Pointer);
+        Held field = Hold(Method(draft, "CreateField", "n", 4));
+        Held fields = Hold(Get(draft, "Fields"));
+        Ok(Method(ComObject.Recover<NewFieldsObject>(fields.Pointer), "Append", field));
+        DefinitionCollection tableDefs = Object<DefinitionCollection>(db, "TableDefs");
+        Ok(Method(tableDefs, "Append", td));
+        CallResult again = Method(Object<DefinitionCollection>(db, "TableDefs"), "Append", td);
+        Assert.Equal(3010, again.Failure?.Number);
+        Held empty = Hold(Method(db, "CreateTableDef", "E"));
+        Assert.Equal(3264, Method(tableDefs, "Append", empty).Failure?.Number);
+        Ok(Method(db, "Close"));
+
+        byte[] file = File.ReadAllBytes(path);
+        Assert.Equal(44 * 4096, file.Length);
+        Assert.Equal(3, file[3586]);
+        DatabaseObject reopened = Recover<DatabaseObject>(Ok(_engine.DefaultWorkspace.OpenDatabase([Arg(path), Arg(false), Arg(true)])));
+        DispatchObject t = Object<DispatchObject>(Object<DispatchObject>(reopened, "TableDefs"), "Item", "T");
+        DispatchObject n = Object<DispatchObject>(Object<DispatchObject>(t, "Fields"), "Item", 0);
+        Assert.Equal("n", Text(Get(n, "Name")));
+        Ok(Method(reopened, "Close"));
     }
 }

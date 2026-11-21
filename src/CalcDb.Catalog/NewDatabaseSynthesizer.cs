@@ -57,10 +57,10 @@ public static class NewDatabaseSynthesizer
     // Built-in Jet/ACE 2-byte SIDs before XOR with the per-database RC4 SID keystream: observed in the four retained
     // empty ACCDB fixtures ACE created on different dates (r-fmt-1-accdb-empty, r-cat-1-accdb-empty, r-cat-1
     // create-accdb-option and create-accdb-work; NewDatabaseSynthesizerTests).
-    private static readonly byte[] SidEngine = [0x02, 0x03];
-    private static readonly byte[] SidAdmin = [0x03, 0x01];
-    private static readonly byte[] SidUsers = [0x02, 0x01];
-    private static readonly byte[] SidAdmins = [0x02, 0x04];
+    private static readonly byte[] SidEngine = DefaultAdminSecurity.Engine.ToArray();
+    private static readonly byte[] SidAdmin = DefaultAdminSecurity.Admin.ToArray();
+    private static readonly byte[] SidUsers = DefaultAdminSecurity.Users.ToArray();
+    private static readonly byte[] SidAdmins = DefaultAdminSecurity.Admins.ToArray();
 
     private const int SystemObjectFlag = unchecked((int)0x80000000);
     private const int ComplexTypeObjectFlag = unchecked((int)0x80030000);
@@ -247,14 +247,7 @@ public static class NewDatabaseSynthesizer
     private static uint PackSortOrder(TextSortOrder order) =>
         (uint)order.Identifier | ((uint)order.Reserved << 16) | ((uint)(byte)order.Version << 24);
 
-    private static void WriteUsageMapPage(Span<byte> page, FormatDescriptor d, params uint[][] slotPages)
-    {
-        DataPages.Initialize(page, owner: 0, d);
-        foreach (uint[] used in slotPages)
-        {
-            AppendMap(page, MapDeclaration.EncodeInline(0, used, d), d);
-        }
-    }
+    private static void WriteUsageMapPage(Span<byte> page, FormatDescriptor d, params uint[][] slotPages) => MapPages.Initialize(page, slotPages, d);
 
     private static void AppendMap(Span<byte> page, byte[] mapBytes, FormatDescriptor d)
     {
@@ -340,7 +333,7 @@ public static class NewDatabaseSynthesizer
                 EncodedField.Null,
                 EncodedField.Null,
                 EncodedField.OfBytes(nameBytes),
-                row.PlaintextOwnerSid is { } sid ? EncodedField.OfBytes(MaskSid(sid, sidKeystream)) : EncodedField.Null,
+                row.PlaintextOwnerSid is { } sid ? EncodedField.OfBytes(DefaultAdminSecurity.Mask(sid, sidKeystream)) : EncodedField.Null,
                 EncodedField.OfBytes(EncodeInt32LE(row.ParentId)),
                 EncodedField.Null,
                 EncodedField.Null,
@@ -374,7 +367,7 @@ public static class NewDatabaseSynthesizer
                 EncodedField.OfBytes(EncodeInt32LE(ace.Acm)),
                 EncodedField.OfBoolean(ace.Inheritable),
                 EncodedField.OfBytes(EncodeInt32LE(ace.ObjectId)),
-                EncodedField.OfBytes(MaskSid(ace.PlaintextSid, sidKeystream)),
+                EncodedField.OfBytes(DefaultAdminSecurity.Mask(ace.PlaintextSid, sidKeystream)),
             ];
 
             if (!RowEncoder.TryEncode(def, fields, d, out byte[]? body, out string? rowFailure) || body is null)
@@ -470,9 +463,6 @@ public static class NewDatabaseSynthesizer
         trailer[2] = (byte)dataPage;
         trailer[3] = slot;
     }
-
-    private static byte[] MaskSid(byte[] plaintextSid, ReadOnlySpan<byte> keystream) =>
-        [(byte)(plaintextSid[0] ^ keystream[0]), (byte)(plaintextSid[1] ^ keystream[1])];
 
     private static byte[] EncodeInt16LE(short value)
     {

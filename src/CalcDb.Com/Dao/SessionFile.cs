@@ -17,6 +17,7 @@ internal sealed class SessionFile : IPositionedFile
 {
     private readonly string _path;
     private WindowsFile _handle;
+    private TemporarySpillFile? _spill;
 
     private SessionFile(string path, WindowsFile handle)
     {
@@ -39,6 +40,25 @@ internal sealed class SessionFile : IPositionedFile
         opened = WindowsFile.CreateFresh(path, Admission.Exclusive);
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
+
+    /// <summary>
+    /// The session's page cache (II-03 §4.1, §5.2): <paramref name="frames"/> frames over this file, with a spill store the
+    /// session owns, so images that the cache retains (private overlays, the old images registered read views select)
+    /// can leave their frames when a publication needs them (5tw7). The spill file is created at the first spill and
+    /// deleted when the session is disposed. One cache per session.
+    /// </summary>
+    public PageCache CreateCache(int pageSize, int frames)
+    {
+        if (_spill is not null)
+        {
+            throw new InvalidOperationException("The session already has its cache.");
+        }
+        _spill = TemporarySpillFile.Deferred(pageSize);
+        return new PageCache(new FilePageSource(this, (uint)pageSize, 0xFFFFFF, uint.MaxValue), Incarnation, pageSize, frames, spill: _spill);
+    }
+
+    /// <summary>The path of the session's spill file, once <see cref="CreateCache"/> chose it (the file exists from the first spill).</summary>
+    public string? SpillPath => _spill?.Path;
 
     /// <summary>The session's own incarnation: the first handle's, kept across the reopen (the cache's images stay valid).</summary>
     public ulong Incarnation { get; }
@@ -75,8 +95,13 @@ internal sealed class SessionFile : IPositionedFile
         }
         _handle = file;
         byte[] onDisk = new byte[cache.PageSize];
+        ulong extent = file.GetExtent();
         foreach (ulong page in pages)
         {
+            if ((page + 1) * (ulong)cache.PageSize > extent)
+            {
+                continue; // a page the publication appends (W-07/native-metadata-write): nothing on disk to compare, its program grows the file
+            }
             using PagePin? pin = cache.Pin(page).Pin;
             TransferReceipt read = ReadAt(page * (ulong)cache.PageSize, onDisk);
             if (pin is null || read.Status != TransferStatus.Complete || !pin.Bytes.SequenceEqual(onDisk))
@@ -109,7 +134,11 @@ internal sealed class SessionFile : IPositionedFile
 
     public FileOperationResult SetExtent(ulong extent) => _handle.SetExtent(extent);
 
-    public void Dispose() => _handle.Dispose();
+    public void Dispose()
+    {
+        _handle.Dispose();
+        _spill?.Dispose();
+    }
 
     /// <summary>A receipt of the current handle, named by the session's incarnation (the program and cache check it).</summary>
     private TransferReceipt Own(TransferReceipt receipt) => receipt with { FileIncarnation = Incarnation };

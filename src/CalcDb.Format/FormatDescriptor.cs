@@ -207,6 +207,8 @@ public sealed record FormatDescriptor
             ReferencePointersOffset = 1,
             ReferencePointerBytes = 4,
             BitmapPageBodyOffset = 4,
+            GlobalMapPage = 1,
+            GlobalFreeSlot = 0,
         },
         Catalog = new CatalogRules
         {
@@ -463,6 +465,16 @@ public sealed record MapRules
     public required int ReferencePointersOffset { get; init; }
     public required int ReferencePointerBytes { get; init; }
     public required int BitmapPageBodyOffset { get; init; }
+
+    /// <summary>
+    /// The page of the global allocation map (II-04 "Global allocation/free map"): a data page whose slot
+    /// <see cref="GlobalFreeSlot"/> declares the free pages, a set bit for a free page (the four retained empty ACCDBs:
+    /// inline base 0, pages [42, 512) set; evidence/r-q11-ddl-closure/create-one-long: allocating pages 42 and 43 clears
+    /// their bits, page 1 byte 4037 FC to F0; create-then-drop: dropping the table sets them again).
+    /// </summary>
+    public required uint GlobalMapPage { get; init; }
+
+    public required byte GlobalFreeSlot { get; init; }
 
     public IEnumerable<FieldRule> Rules => [Type, InlineBase];
 }

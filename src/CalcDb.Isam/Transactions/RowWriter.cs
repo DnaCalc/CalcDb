@@ -427,10 +427,6 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 return NotWritten($"calculated column {c.Name}: calculated-column insert is not written (W-05/growth-structural-closure)");
             }
-            if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
-            {
-                return NotWritten($"long-value column {c.Name} (Memo/OLE): LVAL pages are not written (W-05/growth-structural-closure)");
-            }
             if (c.IsMaskBoolean)
             {
                 if (v.Kind != NativeKind.Boolean)

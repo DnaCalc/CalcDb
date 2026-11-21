@@ -753,6 +753,58 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return new AcceptOutcome(true, null, open, detail);
     }
 
+    /// <summary>
+    /// Accept a catalog change through its own operation frame (W-07/native-metadata-write; II-11 §28: DDL lowers to the
+    /// catalog mutation service; R-TXN-1 TXN-DDL: catalog changes are transactional). <paramref name="compile"/> makes the
+    /// change on the file's participant, applying each page edit through it so that its later reads see the earlier
+    /// ones (two rows of one table, a page and the map that allocates it), and returns the whole change for its roles
+    /// and lock closure; <paramref name="catalogTable"/> is the catalog table it changes (MSysObjects). A change that
+    /// cannot be compiled abandons the frame and accepts nothing. Inside a level the change joins it; outside every level
+    /// the statement publishes at its end as an immediate commit (+1 on the ACCDB page-0 counter per DDL statement:
+    /// evidence/r-q11-ddl-closure two-tables, then-index, then-drop each add one per statement).
+    /// </summary>
+    public AcceptOutcome AcceptSchemaChange(PageCache file, MutationSemantics catalogTable, Func<FileParticipant, CompiledChange> compile)
+    {
+        if (_unresolved.Contains(file))
+        {
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+        }
+        OperationFrame? op = BeginOperation(out MutationError? refused);
+        if (op is null)
+        {
+            return new AcceptOutcome(false, refused);
+        }
+        CompiledChange compiled = compile(op.Enlist(file));
+        if (compiled.Change is not { } physical)
+        {
+            op.Abandon();
+            return new AcceptOutcome(false, null, MutationOpen.Publication, compiled.NotWritten);
+        }
+        LockResource[] footprint = [.. physical.Footprint];
+        if (footprint.Length > 0 && Lock(file, footprint, ChangeLifetime).Conflict is { } conflict)
+        {
+            op.Abandon();
+            return new AcceptOutcome(false, null, MutationOpen.Conflict, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) is held by locker {conflict.Holder.Value}: a catalog change beside another Workspace's change is R-LOCK-4 WRITE-DDL's");
+        }
+        op.Complete(new AcceptedRowChange(catalogTable, RowChangeKind.Insert, null, [], [], null, compiled));
+        if (_frames.Count > 0 || Publisher is null || _pending.Exists(c => c.Physical is null))
+        {
+            return new AcceptOutcome(true);
+        }
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+        return new AcceptOutcome(true, null, open, detail);
+    }
+
+    /// <summary>
+    /// Publish a commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket): the commit of a catalog
+    /// step whose pages an earlier publication of the same statement already wrote, or a session's closing commit
+    /// (the callers name the records). Nothing when the file has no such counter.
+    /// </summary>
+    public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache) =>
+        _participants.ContainsKey(cache)
+            ? (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them")
+            : PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out _);
+
     internal FileParticipant EnlistFor(OperationFrame operation, PageCache cache)
     {
         if (!_participants.TryGetValue(cache, out FileParticipant? p))

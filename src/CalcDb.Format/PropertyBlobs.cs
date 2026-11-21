@@ -54,6 +54,81 @@ public sealed class PropertyBlob
     /// <summary>The map of a column or an index by its exact stored name.</summary>
     public PropertyMap? Map(PropertySectionKind kind, string name) => Maps.FirstOrDefault(m => m.Kind == kind && m.MapName == name);
 
+    /// <summary>
+    /// Encode a blob in the grammar <see cref="Read"/> reads (F-40): the signature, one names section (0x80) holding
+    /// every property name in first-use order, then one value section per map with its map-name block and records
+    /// (2-byte length, flags, native type, 2-byte name ordinal, 2-byte payload length, payload). The one recorded write
+    /// is a DAO-appended TableDef's: the column map <c>n</c> with <c>Required</c> (flags 01, Boolean, 00)
+    /// (evidence/r-q11-ddl-closure/append-dao, 51 bytes); a blob with several names sections is not written.
+    /// </summary>
+    public static byte[] Encode(IReadOnlyList<PropertyMap> maps)
+    {
+        List<string> names = [];
+        foreach (PropertyMap map in maps)
+        {
+            foreach (StoredProperty p in map.Properties)
+            {
+                if (!names.Contains(p.Name))
+                {
+                    names.Add(p.Name);
+                }
+            }
+        }
+        var blob = new List<byte>(Signature.ToArray());
+        var section = new List<byte>();
+        foreach (string name in names)
+        {
+            AppendName(section, name);
+        }
+        AppendSection(blob, PropertySectionKind.Names, section);
+        foreach (PropertyMap map in maps)
+        {
+            section.Clear();
+            int nameBytes = map.MapName.Length * 2;
+            AppendU32(section, (uint)(6 + nameBytes));
+            AppendName(section, map.MapName);
+            foreach (StoredProperty p in map.Properties)
+            {
+                AppendU16(section, (ushort)(8 + p.Payload.Length));
+                section.Add(p.Flags);
+                section.Add(p.NativeType);
+                AppendU16(section, (ushort)names.IndexOf(p.Name));
+                AppendU16(section, (ushort)p.Payload.Length);
+                section.AddRange(p.Payload);
+            }
+            AppendSection(blob, map.Kind, section);
+        }
+        return [.. blob];
+    }
+
+    private static void AppendSection(List<byte> blob, PropertySectionKind kind, List<byte> body)
+    {
+        AppendU32(blob, (uint)(6 + body.Count));
+        AppendU16(blob, (ushort)kind);
+        blob.AddRange(body);
+    }
+
+    private static void AppendName(List<byte> to, string name)
+    {
+        AppendU16(to, (ushort)(name.Length * 2));
+        foreach (char c in name)
+        {
+            AppendU16(to, c);
+        }
+    }
+
+    private static void AppendU16(List<byte> to, ushort value)
+    {
+        to.Add((byte)value);
+        to.Add((byte)(value >> 8));
+    }
+
+    private static void AppendU32(List<byte> to, uint value)
+    {
+        AppendU16(to, (ushort)value);
+        AppendU16(to, (ushort)(value >> 16));
+    }
+
     public static PropertyBlob? Read(ReadOnlySpan<byte> raw, out string? failure)
     {
         failure = null;

@@ -51,6 +51,21 @@ internal static class DaoErrors
     /// <summary>3421 (r-cursor-1/seek-arguments: a non-numeric text key for a Long column).</summary>
     public const string ConversionError = "Data type conversion error.";
 
+    /// <summary>3010 (R-CAT-1 CAT-B: a table name the catalog already lists, compared without case).</summary>
+    public static string TableExists(string name) => $"Table '{name}' already exists.";
+
+    /// <summary>3125 (R-CAT-1 CAT-B; r-cat-1/names, r-dao-1-err-1/err-invalid-names: an invalid object name).</summary>
+    public static string InvalidName(string name) => $"'{name}' is not a valid name. Make sure that it does not include invalid characters or punctuation and that it is not too long.";
+
+    /// <summary>3264 (r-dao-1-err-1/draft-tabledef-field: TableDefs.Append of a TableDef with no fields).</summary>
+    public const string NoFieldDefined = "No field defined--cannot append TableDef or Index.";
+
+    /// <summary>3259 (r-dao-1-err-1/draft-tabledef-field: CreateField with Type 9999).</summary>
+    public const string InvalidFieldType = "Invalid field data type.";
+
+    /// <summary>3367 (r-dao-1-err-1/draft-tabledef-field: Fields.Append of a field the collection already holds).</summary>
+    public const string AlreadyInCollection = "Cannot append. An object with that name already exists in the collection.";
+
     /// <summary>3162 (r-sort-3b/mix-seek-b, r-cursor-1-seek-keys/yes-no-null-key: a Null or Empty key for a Yes/No index column).</summary>
     public const string NullToNonVariant = "You tried to assign the Null value to a variable that is not a Variant data type.";
 

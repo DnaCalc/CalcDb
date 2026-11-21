@@ -21,6 +21,25 @@ public sealed record LongValuePlan(LongValueForm Form, uint Length, RowLocator F
 {
     public const int DefinitionBytes = 12;
 
+    /// <summary>
+    /// The largest inline payload a record shows ACE storing: the 51-byte MR2 property blob of a DAO-appended TableDef,
+    /// in its MSysObjects LvProp (evidence/r-q11-ddl-closure/append-dao, page 17 offset 2272: <c>33 00 00 80</c>, eight
+    /// zero bytes, the blob). The size from which ACE uses an LVAL page instead is not recorded.
+    /// </summary>
+    public const int ObservedInlinePayloadMax = 51;
+
+    /// <summary>
+    /// An inline long value (II-04 §7.1): the length with the inline flag <c>0x80000000</c>, then the row locator and the
+    /// opaque word, both zero in the recorded inline value (evidence/r-q11-ddl-closure/append-dao), then the payload.
+    /// </summary>
+    public static byte[] EncodeInline(ReadOnlySpan<byte> payload)
+    {
+        byte[] field = new byte[DefinitionBytes + payload.Length];
+        BinaryPrimitives.WriteUInt32LittleEndian(field, 0x80000000u | (uint)payload.Length);
+        payload.CopyTo(field.AsSpan(DefinitionBytes));
+        return field;
+    }
+
     /// <summary>InspectLongValue: the definition from a bounded ordinary-row field extent.</summary>
     public static LongValuePlan? Inspect(ReadOnlySpan<byte> field, out string? failure)
     {

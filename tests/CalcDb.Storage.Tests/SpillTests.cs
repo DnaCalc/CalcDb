@@ -135,7 +135,7 @@ public sealed class SpillTests
     {
         using TemporarySpillFile temp = TemporarySpillFile.Create(PageSize);
         var file = new ControlledFile(PageSize);
-        var cache = new PageCache(file, 1, PageSize, 2, spill: temp.Store);
+        var cache = new PageCache(file, 1, PageSize, 2, spill: temp);
         PrivateOverlay a = cache.CreateOverlay(A);
         ImageId revision = a.Edit(3, new BytePatch(4095, [0x5A])).Image!.Value;
         Assert.True(cache.Spill(revision).Succeeded);
@@ -150,7 +150,7 @@ public sealed class SpillTests
             Assert.Equal(ControlledFile.Marker(3), back.Bytes[0]);
         }
         a.Dispose();
-        Conservation.Settled(cache, temp.Store);
+        Conservation.Settled(cache, temp);
         Assert.True(File.Exists(temp.Path));
     }
 }

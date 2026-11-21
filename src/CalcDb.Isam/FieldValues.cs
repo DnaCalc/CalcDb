@@ -166,7 +166,16 @@ public static class FieldEncoder
         }
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            failure = "long-value column (Memo/OLE): LVAL pages are not written yet";
+            // An inline long value (II-04 §7.1). Which payloads ACE keeps inline rather than on an LVAL page is recorded
+            // only for the one blob below its observed size; longer values and Memo text need LVAL pages
+            // (W-05/growth-structural-closure).
+            if (column.TypeCode == NativeTypes.Ole && value.Kind is NativeKind.Binary or NativeKind.LongBinary && value.Bytes is { Length: > 0 } payload
+                && payload.Length <= LongValuePlan.ObservedInlinePayloadMax)
+            {
+                bytes = LongValuePlan.EncodeInline(payload);
+                return true;
+            }
+            failure = $"long-value column (Memo/OLE): a {value.Kind} value needs an LVAL page or an inline form no record shows (W-05/growth-structural-closure)";
             return false;
         }
         switch (column.TypeCode, value.Kind)

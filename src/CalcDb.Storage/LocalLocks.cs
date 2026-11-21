@@ -15,6 +15,9 @@ public enum LockPurpose : byte
 
     /// <summary>The table's TableDef first page whose row count, AutoNumber counter or index counters change.</summary>
     TableDef,
+
+    /// <summary>A map page whose bits an allocation or a release changes (the global allocation map, an owner's map page).</summary>
+    Map,
 }
 
 /// <summary>One page of a lock footprint.</summary>

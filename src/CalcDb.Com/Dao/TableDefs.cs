@@ -45,6 +45,9 @@ internal sealed unsafe class DefinitionCollection : DaoObject
 
     private readonly bool _holdsDatabase;
 
+    /// <summary>The collection's Append (TableDefs.Append, W-07/native-metadata-write); null where the slice has none.</summary>
+    public Func<DefinitionCollection, nint, CallResult>? Appender { get; init; }
+
     /// <summary>The failure every member gives instead of an answer (number and text), or null.</summary>
     public (int Number, string Text)? Denied { get; init; }
 
@@ -69,11 +72,16 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         {
             if (!Shapes.TryGetValue(decl, out (nint, OperationTable) shape))
             {
-                shape = (DualEntries.Build(decl), new OperationTable(decl)
+                OperationTable operations = new OperationTable(decl)
                     .Get("Count", (self, args) => Live(self, c => c.Gap is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
                     .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap)) : c.Item(index)); })
-                    .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing)));
+                    .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing));
+                if (decl.MembersNamed("Append").Length > 0)
+                {
+                    operations = operations.Method("Append", (self, args) => { nint item = args[0]; return Live(self, c => c.Appender is { } append ? append(c, item) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Append"))); });
+                }
+                shape = (DualEntries.Build(decl), operations);
                 Shapes[decl] = shape;
             }
             return shape;
