@@ -219,7 +219,10 @@ A question whose observation recipe holds `etwFileIo` (probe property `RecordFil
 file-I/O recorder: every create, read, write and flush on the attempt's files, with offsets and sizes, becomes the
 artifact `etw:file-io`. The recorder needs an elevated token, so it runs through a scheduled task installed once by the
 owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check` tests it. Without it, such a
-question seals Incomplete with the reason. `calcdb-oracle show --etw --attempt ID` (or `--record FILE`, with
+question seals Incomplete with the reason. The recorder creates `done-ID` before it writes its line, so the runner
+reads it only when it opens and is not empty, waiting up to 60 s; a recorder that never finishes, or a stop that fails,
+is written to `etw-status.txt` and seals Incomplete, never an exception that leaves the attempt Running (task vqs3).
+`calcdb-oracle show --etw --attempt ID` (or `--record FILE`, with
 `--file TEXT` and `--all-io`) shows the trace in order, with each operation's process and thread. The workers'
 lifecycle traces are kept as artifacts `trace:<participant>`, so each operation is placed inside the native call that
 issued it. Writes are marked cached (WriteFile into the system cache) or paging (to disk). The recorder names an event's file by

@@ -22,6 +22,7 @@ internal sealed class EtwBridge
     private readonly string _queue = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CalcDb", "etw");
     private readonly string _artifacts;
     private readonly string _id = Guid.NewGuid().ToString("N");
+    private TimeSpan _doneTimeout = TimeSpan.FromSeconds(60);
     private bool _started;
 
     private EtwBridge(string attemptDir)
@@ -29,6 +30,17 @@ internal sealed class EtwBridge
         _artifacts = Path.Combine(attemptDir, "artifacts");
         Directory.CreateDirectory(_artifacts);
     }
+
+    private EtwBridge(string attemptDir, string queue, string id, TimeSpan doneTimeout) : this(attemptDir)
+    {
+        _queue = queue;
+        _id = id;
+        _doneTimeout = doneTimeout;
+        _started = true;
+    }
+
+    /// <summary>A bridge on a recorder already running with request <paramref name="id"/> in <paramref name="queue"/>; for tests of <see cref="Stop"/>.</summary>
+    internal static EtwBridge Attach(string attemptDir, string queue, string id, TimeSpan doneTimeout) => new(attemptDir, queue, id, doneTimeout);
 
     /// <summary>Start recording the attempt's files; on failure the reason is written and recording is skipped.</summary>
     public static EtwBridge Start(string attemptDir, int maxSeconds)
@@ -71,25 +83,81 @@ internal sealed class EtwBridge
         _started = true;
     }
 
-    /// <summary>Stop recording and wait for the recorder to finish writing.</summary>
+    /// <summary>
+    /// Stop recording and wait for the recorder to finish writing. It never throws: whatever goes wrong is written to
+    /// the status file with its reason, and the sealer turns a status other than "recorder: ok" into an Incomplete
+    /// capture (The Plan §2.3), so the attempt is never left Running by the bridge.
+    /// </summary>
+    /// <remarks>
+    /// The recorder (tools/CalcDb.EtwRecorder) writes <c>done-ID</c> with <c>File.WriteAllText</c>: the file exists, empty and
+    /// open for writing, before its line is written. So the bridge reads it only once it can be opened and is not empty,
+    /// retrying a sharing violation until the deadline.
+    /// </remarks>
     public void Stop()
     {
         if (!_started)
         {
             return;
         }
-        File.WriteAllText(Path.Combine(_queue, "stop-" + _id), "stop");
+        try
+        {
+            File.WriteAllText(Path.Combine(_queue, "stop-" + _id), "stop");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Status("recorder could not be told to stop: " + ex.Message);
+            return;
+        }
         string done = Path.Combine(_queue, "done-" + _id);
-        Status(WaitFor(done, TimeSpan.FromSeconds(60)) ? "recorder: " + File.ReadAllText(done) : "recorder did not finish in 60 s after stop");
+        (string? text, string lastProblem) = ReadDone(done, _doneTimeout);
+        Status(text is not null
+            ? "recorder: " + text
+            : $"recorder did not finish in {_doneTimeout.TotalSeconds:0.##} s after stop ({lastProblem})");
         foreach (string f in new[] { "ready-", "stop-", "done-" })
         {
             try
             {
                 File.Delete(Path.Combine(_queue, f + _id));
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
             }
+        }
+    }
+
+    /// <summary>The recorder's one-line outcome once the file exists, can be opened and has its content; else null with the last obstacle.</summary>
+    private static (string? Text, string Problem) ReadDone(string file, TimeSpan timeout)
+    {
+        var clock = Stopwatch.StartNew();
+        string problem = "done file never appeared";
+        while (true)
+        {
+            try
+            {
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                string text = reader.ReadToEnd().Trim();
+                if (text.Length > 0)
+                {
+                    return (text, "");
+                }
+                problem = "done file stayed empty";
+            }
+            catch (FileNotFoundException)
+            {
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+            catch (IOException ex)
+            {
+                problem = "done file stayed locked: " + ex.Message;
+            }
+            if (clock.Elapsed > timeout)
+            {
+                return (null, problem);
+            }
+            Thread.Sleep(50);
         }
     }
 
