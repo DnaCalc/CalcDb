@@ -780,3 +780,17 @@ queries across git grep, ripgrep, Select-String, the harness's search tool, rosc
 boundaries. The owner added the editing and refactoring commands (rename, signature change, member-scoped and batch
 exact edits, file creation, diagnostics-driven repair): adopted in the same guidance, and measured in that trial as six
 edit tasks done both ways and checked by a build.
+
+**Trial after r9bh (Neon child 01a2000f, roscli 0.1.6-preview.21.local1).** A matrix of eight queries across git grep,
+ripgrep, PowerShell Select-String, the harness's search tool, roscli cold and warm, and csharp-ls, plus six edit tasks done
+both ways. Navigation: ripgrep 70 to 100 ms per query (git grep 110 to 250 ms, the harness's grep 120 to 190 ms and cut at
+200 matches, Select-String 1 to 2.6 s); roscli warm 0.3 to 2 s and exact for implementers (5 of 5), the 41 callers and the
+7 constructions of RecordsetObject with its method groups, but no `new` sites of a class, no go-to-definition, a call
+hierarchy that misses method groups and a lambda, and a workspace snapshot of "." that checks one project; roscli cold 50 to
+97 s per call; csharp-ls 7 to 111 ms warm and exact where its projects were built, silently incomplete across unbuilt test
+projects. Warm-up 75 s, memory up to 950 MB. Edits: by hand 1 to 2 s and correct in all six; roscli renamed one file of
+eleven (41 callers broken), its signature change pulled a brace onto the parameter line, batch edits leaked CRLF into LF
+files, the daemon did not see a created file, and repair proposed TODO stubs. The guidance of earlier this evening
+(roscli for renames and signature changes) was wrong and is corrected: The Plan §4 and AGENTS.md keep roscli for the
+semantic queries above, ripgrep and the harness's file tools for the rest. The editing and navigation gaps are RoslynSkills
+tasks; the edit tasks are measured again when they land.

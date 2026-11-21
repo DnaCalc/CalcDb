@@ -86,15 +86,15 @@ scope or design, the book wins.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
-- Navigate C# with grep for names and text. For call hierarchies, impact, implementers, a type whose name repeats, and the
-  compile errors a signature change causes across projects, use roscli on its warm daemon: `dotnet restore CalcDb.slnx`
-  in a fresh worktree, then `roscli workspace.use CalcDb.slnx` once (about a minute), `ROSCLI_DAEMON=required` so no call reloads, and
-  `roscli daemon.stop` before you end (each daemon holds about 800 MB). Confirm compile errors with `dotnet build`.
-- Edit through roscli where an edit follows a symbol: `edit.rename_symbol` and `edit.change_signature` for a rename or a
-  signature change (every use, across projects), `edit.replace_in_member` for a change inside one member of a large
-  file, `edit.batch_exact` or `edit.transaction` for coordinated exact edits in several files. Make small local edits
-  with your own file tools. Build and run the affected tests after every roscli edit, and read its diff: a refactoring
-  is checked like any other change. Each child has its own worktree, so no `edit.claim` is needed.
+- Navigate C# with ripgrep (`rg -n -w`) for names, text and string literals, and edit with your own file tools; a rename
+  is ripgrep plus edits, checked by `dotnet build` of the area filter. Use roscli on its warm daemon only for what text
+  cannot answer, in a session that asks it several times: implementers (`nav.find_implementations`), the uses of an
+  overloaded or same-named member or of a method group (`nav.find_invocations`, `nav.find_references`), and the compile
+  errors of one project at a time (`diag.get_workspace_snapshot <project dir>`, never `.`). It finds no `new` sites of a
+  class, and its `edit.*` and `repair.*` commands are not used yet (measured 2026-11-21: a rename changed one file;
+  RoslynSkills tasks). Setup: `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 75 s, up to 950 MB),
+  then `ROSCLI_DAEMON=required` with `--workspace-path CalcDb.slnx` on each call in a worktree; `roscli daemon.stop`
+  before you end.
 - roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills
   (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a writer in its worktree, landed on its main and
   released), never worked around in CalcDb.
