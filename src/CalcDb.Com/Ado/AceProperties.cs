@@ -18,6 +18,19 @@ internal enum PropertySlotKind
 
     /// <summary>Open-phase Jet OLEDB session property ([80..100]: mutating while open was not asked).</summary>
     OpenSession,
+
+    /// <summary>
+    /// Server Recordset / bound Command property whose name and ordinal are recorded (r-q-ado-misc/props-lookup-refresh)
+    /// while Type, Attributes, and Value were not recorded and refuse by name.
+    /// </summary>
+    NameOnlyUnrecorded,
+
+    /// <summary>
+    /// Client Recordset writable Int32 property whose default and recorded values are known
+    /// (r-ado-1b/batch-update-criteria "Update Criteria", r-ado-1b/batch-update-resync "Update Resync");
+    /// Type and Attributes were not recorded and refuse by name.
+    /// </summary>
+    ClientRecordsetWritable,
 }
 
 /// <summary>A property's current value; the collection owns it, so every wrapper of the entry sees the same value.</summary>
@@ -244,13 +257,147 @@ internal static class AceProperties
         }
         return [.. slots];
     }
+
+    /// <summary>
+    /// Exact 88 property names in order [0..87] for an open server ACE Recordset and a bound ACE Command
+    /// (r-q-ado-misc/props-lookup-refresh #37, #43). Only Count and Item(i).Name are recorded; Type/Attributes/Value refuse.
+    /// </summary>
+    public static readonly string[] ServerRecordsetOrCommandPropertyNames =
+    [
+        "Preserve on Abort",
+        "Blocking Storage Objects",
+        "Use Bookmarks",
+        "Skip Deleted Bookmarks",
+        "Bookmark Type",
+        "Cache Deferred Columns",
+        "Fetch Backwards",
+        "Hold Rows",
+        "Scroll Backwards",
+        "Column Privileges",
+        "Preserve on Commit",
+        "Defer Column",
+        "Delay Storage Object Updates",
+        "Immobile Rows",
+        "Literal Bookmarks",
+        "Literal Row Identity",
+        "Maximum Open Rows",
+        "Maximum Pending Rows",
+        "Maximum Rows",
+        "Column Writable",
+        "Memory Usage",
+        "Notification Phases",
+        "Bookmarks Ordered",
+        "Others' Inserts Visible",
+        "Others' Changes Visible",
+        "Own Inserts Visible",
+        "Own Changes Visible",
+        "Quick Restart",
+        "Reentrant Events",
+        "Remove Deleted Rows",
+        "Report Multiple Changes",
+        "Row Privileges",
+        "Row Threading Model",
+        "Objects Transacted",
+        "Updatability",
+        "Strong Row Identity",
+        "IAccessor",
+        "IColumnsInfo",
+        "IColumnsRowset",
+        "IConnectionPointContainer",
+        "IRowset",
+        "IRowsetChange",
+        "IRowsetIdentity",
+        "IRowsetInfo",
+        "IRowsetLocate",
+        "IRowsetResynch",
+        "IRowsetScroll",
+        "IRowsetUpdate",
+        "ISupportErrorInfo",
+        "ILockBytes",
+        "ISequentialStream",
+        "IStorage",
+        "IStream",
+        "IRowsetIndex",
+        "Column Set Notification",
+        "Row Delete Notification",
+        "Row First Change Notification",
+        "Row Insert Notification",
+        "Row Resynchronization Notification",
+        "Rowset Release Notification",
+        "Rowset Fetch Position Change Notification",
+        "Row Undo Change Notification",
+        "Row Undo Delete Notification",
+        "Row Undo Insert Notification",
+        "Row Update Notification",
+        "Append-Only Rowset",
+        "Change Inserted Rows",
+        "Return Pending Inserts",
+        "IConvertType",
+        "Notification Granularity",
+        "Access Order",
+        "Lock Mode",
+        "Server Data on Insert",
+        "IRowsetCurrentIndex",
+        "Jet OLEDB:Validate Rules On Set",
+        "Jet OLEDB:Fat Cursor Cache Size",
+        "Jet OLEDB:Enable Fat Cursors",
+        "Jet OLEDB:Partial Bulk Ops",
+        "Jet OLEDB:Pass Through Query Connect String",
+        "Jet OLEDB:ODBC Pass-Through Statement",
+        "Jet OLEDB:Grbit Value",
+        "Jet OLEDB:Use Grbit",
+        "Jet OLEDB:Stored Query",
+        "Jet OLEDB:Locking Granularity",
+        "Jet OLEDB:Bulk Transactions",
+        "Jet OLEDB:Inconsistent",
+        "Jet OLEDB:Pass Through Query Bulk-Op",
+        "Bookmarkable",
+    ];
+
+    public static PropertySlot[] CreateServerRecordsetOrCommandSlots()
+    {
+        var slots = new PropertySlot[ServerRecordsetOrCommandPropertyNames.Length];
+        for (int i = 0; i < ServerRecordsetOrCommandPropertyNames.Length; i++)
+        {
+            slots[i] = new PropertySlot(
+                new PropertyDescriptor(ServerRecordsetOrCommandPropertyNames[i], 0, 0),
+                OwnedVariant.Empty(),
+                PropertySlotKind.NameOnlyUnrecorded);
+        }
+        return slots;
+    }
+
+    public static PropertySlot[] CreateClientRecordsetSlots() =>
+    [
+        new PropertySlot(new PropertyDescriptor("Update Criteria", 3, ReadWriteAttr), OwnedVariant.FromInt32(2), PropertySlotKind.ClientRecordsetWritable),
+        new PropertySlot(new PropertyDescriptor("Update Resync", 3, ReadWriteAttr), OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetWritable),
+    ];
+}
+
+internal enum PropertiesMode : byte
+{
+    /// <summary>Connection.Properties: full closed/open inventory, lazy phase refresh, Item miss -> 0x800A0CC1, Refresh -> S_OK.</summary>
+    Connection,
+
+    /// <summary>
+    /// Server Recordset (Keyset 1,3) and bound Command with CommandText: 88-name inventory from
+    /// evidence/r-q-ado-misc/props-lookup-refresh (#36-44). Only Count and valid ordinal Item(0..87).Name are recorded;
+    /// Refresh and string/out-of-range Item lookups refuse by name.
+    /// </summary>
+    ServerRecordsetOrCommand,
+
+    /// <summary>
+    /// Client batch-optimistic (3,4) Recordset: partial inventory ("Update Criteria", "Update Resync") from
+    /// evidence/r-ado-1b/batch-update-criteria and batch-update-resync.
+    /// </summary>
+    ClientRecordsetPartial,
 }
 
 /// <summary>
-/// A Connection's Properties collection (II-12 §16; r-q-ado-misc/props-conn-inventory, props-lookup-refresh,
-/// r-fix-wire-ado/ado-open-provider-property-ace-first, r-oledb-odbc/prop-jet-options).
-/// Preserves the same COM identity across Open and Close, refreshes lazily on Count/Item/Refresh after a phase
-/// transition, and invalidates prior Property wrappers (0x800A0D5C) upon refresh.
+/// A Connection's, Recordset's, or Command's Properties collection (II-12 §16; r-q-ado-misc/props-conn-inventory,
+/// props-lookup-refresh, r-fix-wire-ado/ado-open-provider-property-ace-first, r-oledb-odbc/prop-jet-options).
+/// Connection.Properties preserves COM identity across Open/Close and refreshes lazily; Recordset and Command
+/// Properties invalidate both the collection and held Property wrappers (0x800A0D5C) on Close or ActiveConnection change.
 /// </summary>
 internal sealed class PropertiesObject : AdoObject
 {
@@ -263,21 +410,25 @@ internal sealed class PropertiesObject : AdoObject
 
     private readonly Action _onLookupMiss;
     private readonly Action<AdoErrorEntry[]> _onReadOnlyPropertyPut;
+    private readonly PropertiesMode _mode;
     private PropertySlot[] _slots;
     private PropertyObject?[] _wrappers;
     private string[] _names;
     private Func<PropertySlot[]>? _pendingFactory;
+    private bool _invalid;
 
     public PropertiesObject(
         PropertySlot[] initialSlots,
         Action onLookupMiss,
-        Action<AdoErrorEntry[]> onReadOnlyPropertyPut) : base(Decl, Vtable, "ADODB.Properties")
+        Action<AdoErrorEntry[]> onReadOnlyPropertyPut,
+        PropertiesMode mode = PropertiesMode.Connection) : base(Decl, Vtable, "ADODB.Properties")
     {
         _slots = initialSlots;
         _wrappers = new PropertyObject?[initialSlots.Length];
         _names = [.. initialSlots.Select(s => s.Descriptor.Name)];
         _onLookupMiss = onLookupMiss;
         _onReadOnlyPropertyPut = onReadOnlyPropertyPut;
+        _mode = mode;
     }
 
     protected override OperationTable Table => Operations;
@@ -288,6 +439,25 @@ internal sealed class PropertiesObject : AdoObject
     /// r-fix-wire-ado/ado-open-provider-property-ace-first).
     /// </summary>
     public void MarkStale(Func<PropertySlot[]> nextSlots) => _pendingFactory = nextSlots;
+
+    /// <summary>
+    /// Invalidate this Properties collection and all held Property wrappers (0x800A0D5C, IErrorInfo absent) when the
+    /// owning Recordset closes or Command's ActiveConnection changes/closes (evidence/r-q-ado-misc/props-lookup-refresh #40-43).
+    /// </summary>
+    public void Invalidate()
+    {
+        if (_invalid)
+        {
+            return;
+        }
+        _invalid = true;
+        _pendingFactory = null;
+        InvalidateAndReleaseWrappers();
+        DisposeSlots();
+        _slots = [];
+        _wrappers = [];
+        _names = [];
+    }
 
     public IReadOnlyList<PropertySlot> ReadSlotsForOpen()
     {
@@ -313,19 +483,63 @@ internal sealed class PropertiesObject : AdoObject
 
     private CallResult GetCount()
     {
+        if (_invalid)
+        {
+            return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
+        }
         EnsureFresh();
+        if (_mode == PropertiesMode.ClientRecordsetPartial)
+        {
+            return NotImplemented("Client Recordset.Properties.Count (full client Recordset property inventory is not recorded)");
+        }
         return Int32(_slots.Length);
     }
 
     private CallResult Refresh()
     {
+        if (_invalid)
+        {
+            return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
+        }
+        if (_mode != PropertiesMode.Connection)
+        {
+            return NotImplemented("Recordset/Command.Properties.Refresh (not recorded)");
+        }
         EnsureFresh();
         return CallResult.Nothing;
     }
 
     private CallResult Item(nint index)
     {
+        if (_invalid)
+        {
+            return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
+        }
         EnsureFresh();
+        if (_mode == PropertiesMode.ClientRecordsetPartial)
+        {
+            string? name = Args.Text(index);
+            if (name is null)
+            {
+                return NotImplemented("Client Recordset.Properties.Item by ordinal (full client Recordset property inventory is not recorded)");
+            }
+            for (int i = 0; i < _names.Length; i++)
+            {
+                if (string.Equals(_names[i], name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Object(_wrappers[i] ??= new PropertyObject(_slots[i], _onReadOnlyPropertyPut));
+                }
+            }
+            return NotImplemented($"Client Recordset.Properties.Item('{name}') (not recorded)");
+        }
+        if (_mode == PropertiesMode.ServerRecordsetOrCommand)
+        {
+            if (AdoArgs.Int32(index) is int ord && ord >= 0 && ord < _slots.Length)
+            {
+                return Object(_wrappers[ord] ??= new PropertyObject(_slots[ord], _onReadOnlyPropertyPut));
+            }
+            return NotImplemented("Server Recordset/Command.Properties.Item by name or out-of-range ordinal (not recorded)");
+        }
         switch (AdoLookup.Find(index, _names, out int ordinal))
         {
             case AdoLookup.Outcome.Found:
@@ -369,7 +583,7 @@ internal sealed class PropertiesObject : AdoObject
 
 /// <summary>
 /// A dynamic ADODB.Property wrapper: Name, Type, Attributes and Value of its slot. Becomes invalid (0x800A0D5C,
-/// IErrorInfo absent) once its owning Properties collection refreshes across Open or Close.
+/// IErrorInfo absent) once its owning Properties collection refreshes across Open/Close or is invalidated.
 /// </summary>
 internal sealed unsafe class PropertyObject : AdoObject
 {
@@ -377,9 +591,9 @@ internal sealed unsafe class PropertyObject : AdoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => ((PropertyObject)self).Live(p => Text(p._slot.Descriptor.Name)))
-        .Get("Type", (self, args) => ((PropertyObject)self).Live(p => Int32(p._slot.Descriptor.Type)))
-        .Get("Attributes", (self, args) => ((PropertyObject)self).Live(p => Int32(p._slot.Descriptor.Attributes)))
-        .Get("Value", (self, args) => ((PropertyObject)self).Live(p => CallResult.Of(p._slot.Value.CopyPreservingReference())))
+        .Get("Type", (self, args) => ((PropertyObject)self).Live(p => p.GetTypeValue()))
+        .Get("Attributes", (self, args) => ((PropertyObject)self).Live(p => p.GetAttributes()))
+        .Get("Value", (self, args) => ((PropertyObject)self).Live(p => p.GetValue()))
         .Put("Value", (self, args) =>
         {
             nint arg = args[0];
@@ -403,11 +617,52 @@ internal sealed unsafe class PropertyObject : AdoObject
     private CallResult Live(Func<PropertyObject, CallResult> op) =>
         _invalid ? Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false) : op(this);
 
+    private CallResult GetTypeValue() =>
+        _slot.Kind is PropertySlotKind.NameOnlyUnrecorded or PropertySlotKind.ClientRecordsetWritable
+            ? NotImplemented($"Property.Type of '{_slot.Descriptor.Name}' (not recorded)")
+            : Int32(_slot.Descriptor.Type);
+
+    private CallResult GetAttributes() =>
+        _slot.Kind is PropertySlotKind.NameOnlyUnrecorded or PropertySlotKind.ClientRecordsetWritable
+            ? NotImplemented($"Property.Attributes of '{_slot.Descriptor.Name}' (not recorded)")
+            : Int32(_slot.Descriptor.Attributes);
+
+    private CallResult GetValue() =>
+        _slot.Kind == PropertySlotKind.NameOnlyUnrecorded
+            ? NotImplemented($"Property.Value of '{_slot.Descriptor.Name}' (not recorded)")
+            : CallResult.Of(_slot.Value.CopyPreservingReference());
+
     private CallResult PutValue(nint arg)
     {
         if (arg == 0)
         {
             return NotImplemented("Property.Value = Missing");
+        }
+        if (_slot.Kind == PropertySlotKind.NameOnlyUnrecorded)
+        {
+            return NotImplemented($"Property.Value = ... on '{_slot.Descriptor.Name}' (not recorded)");
+        }
+        if (_slot.Kind == PropertySlotKind.ClientRecordsetWritable)
+        {
+            if (AdoArgs.Int32(arg) is not int intVal)
+            {
+                return NotImplemented($"Property.Value = non-integer on '{_slot.Descriptor.Name}' (not recorded)");
+            }
+            // evidence/r-ado-1b/batch-update-criteria (0..3) and evidence/r-ado-1b/batch-update-resync (0, 1, 2, 4, 8, 15).
+            bool valid = _slot.Descriptor.Name switch
+            {
+                "Update Criteria" => intVal is 0 or 1 or 2 or 3,
+                "Update Resync" => intVal is 0 or 1 or 2 or 4 or 8 or 15,
+                _ => false,
+            };
+            if (!valid)
+            {
+                return NotImplemented($"Property.Value = {intVal} on '{_slot.Descriptor.Name}' (not recorded)");
+            }
+            _slot.Value.Dispose();
+            _slot.Value = OwnedVariant.FromInt32(intVal);
+            _slot.Modified = true;
+            return CallResult.Nothing;
         }
         if (_slot.Kind == PropertySlotKind.OpenReadOnly)
         {

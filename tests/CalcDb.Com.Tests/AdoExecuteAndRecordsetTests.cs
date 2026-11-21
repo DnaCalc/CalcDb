@@ -534,16 +534,16 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Seek", 1).Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Index", "PK_K").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Clone").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Filter", "ID = 1").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Sort", "ID DESC").Failure!.Value.Scode);
+            Assert.Null(Put(rs, "Filter", "ID = 1").Failure);
+            Assert.Null(Put(rs, "Filter", 0).Failure);
+            Assert.Equal(unchecked((int)0x800A0CB3), Put(rs, "Sort", "ID DESC").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Find", "ID = 1").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "GetRows").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "GetString").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Save", "out.xml", 1).Failure!.Value.Scode);
 
             nint flds = (nint)Get(rs, "Fields")!;
             nint fT = (nint)Get(flds, "Item", "T")!;
             Assert.Equal(HResults.E_NOTIMPL, Put(fT, "Value", "edited").Failure!.Value.Scode);
+            Assert.Equal(HResults.E_NOTIMPL, Invoke(fT, "Properties", 2).Failure!.Value.Scode);
             Release(fT);
             Release(flds);
 

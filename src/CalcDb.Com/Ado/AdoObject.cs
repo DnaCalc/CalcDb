@@ -41,6 +41,12 @@ internal static class AdoErrors
     /// <summary>0x800A0CB3 (Recordset.NextRecordset on ACE; r-q-ado-misc/results-nextrecordset-requery #42).</summary>
     public static readonly AdoError MultipleRecordsetsNotSupported = BookmarksNotSupported.WithText("Current provider does not support returning multiple recordsets from a single execution.");
 
+    /// <summary>0x800A0CB3 (Field.Value put / AddNew / Update / Delete on a read-only Recordset; r-ado-1b/rs-readonly-mode-edit).</summary>
+    public static readonly AdoError UpdatingNotSupported = BookmarksNotSupported.WithText("Current Recordset does not support updating. This may be a limitation of the provider, or of the selected locktype.");
+
+    /// <summary>0x800A0CB3 (Recordset.Sort on a server cursor; r-ado-1b/view-sort-server).</summary>
+    public static readonly AdoError SortOrFilterNotSupported = BookmarksNotSupported.WithText("Current provider does not support the necessary interfaces for sorting or filtering.");
+
     /// <summary>0x800A0CC1 (an Errors, Properties, Parameters or Fields index that names nothing).</summary>
     public static readonly AdoError ItemNotFound = new(0x0CC1, 1240649, "Item cannot be found in the collection corresponding to the requested name or ordinal.");
 
@@ -98,6 +104,9 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>Source string reported by OLE DB provider-layer failures before engine init (Authentication failed, Type mismatch, Mode 15).</summary>
     public const string ProviderSource = "Provider";
 
+    /// <summary>Source string reported by client cursor engine failures (r-ado-1b/view-sort-grammar #77, #81).</summary>
+    public const string CursorEngineSource = "Microsoft Cursor Engine";
+
     /// <summary>HelpContext of OLE DB provider-layer and read-only-property errors (r-ado-1b/conn-open-args, conn-set-while-open, r-oledb-odbc/error-open-failures).</summary>
     public const int ProviderHelpContext = 1240640;
 
@@ -124,6 +133,9 @@ internal abstract class AdoObject : DispatchObject
 
     /// <summary>DB_SEC_E_AUTH_FAILED / 0x80040E4D.</summary>
     public const int HResultAuthFailed = unchecked((int)0x80040E4D);
+
+    /// <summary>0x80040E60 (Sort order cannot be applied on Memo or Binary column; r-ado-1b/view-sort-grammar #77, #81).</summary>
+    public const int HResultCannotSort = unchecked((int)0x80040E60);
 
     /// <summary>E_FAIL / 0x80004005.</summary>
     public const int HResultFail = unchecked((int)0x80004005);
@@ -183,6 +195,14 @@ internal abstract class AdoObject : DispatchObject
         {
             PublishesErrorInfo = true,
             ErrorInfoIid = iid,
+        };
+
+    /// <summary>A client Cursor Engine failure (Source "Microsoft Cursor Engine", HelpContext 0, IErrorInfo GUID = Guid.Empty; r-ado-1b/view-sort-grammar #77, #81).</summary>
+    public static Failure CursorEngineFailure(int scode, string description) =>
+        new(FailureKind.Ado, scode, CursorEngineSource, description, null, 0)
+        {
+            PublishesErrorInfo = true,
+            ErrorInfoIid = Guid.Empty,
         };
 
     /// <summary>0x80040E21 read-only property put while open (r-ado-1b/conn-set-while-open: Connection publishes IErrorInfo; Property does not).</summary>

@@ -12,7 +12,7 @@ namespace CalcDb.Com.Ado;
 /// CommandType 8 (adCmdUnknown), CommandText a null BSTR, CommandTimeout 30, Prepared and NamedParameters False, a null
 /// ActiveConnection, an empty Parameters collection that Refresh leaves unchanged, and Execute 0x800A0E7D.
 /// </summary>
-internal sealed class CommandObject : AdoObject
+internal sealed unsafe class CommandObject : AdoObject
 {
     private static readonly InterfaceDecl Decl = AdoTypes.Command;
     private static readonly nint Vtable = DualEntries.Build(Decl);
@@ -23,13 +23,15 @@ internal sealed class CommandObject : AdoObject
         .Get("CommandText", (self, args) => ((CommandObject)self)._commandText is { } text ? Text(text) : CallResult.OfOwnedBstr(0))
         .Put("CommandText", (self, args) => ((CommandObject)self).PutCommandText(args[0]))
         .Get("CommandTimeout", (self, args) => Int32(((CommandObject)self)._commandTimeout))
+        .Put("CommandTimeout", (self, args) => ((CommandObject)self).PutCommandTimeout(args[0]))
         .Get("Prepared", (self, args) => Bool(((CommandObject)self)._prepared))
         .Put("Prepared", (self, args) => ((CommandObject)self).PutFlag(args[0], ref ((CommandObject)self)._prepared, "Prepared"))
         .Get("NamedParameters", (self, args) => Bool(((CommandObject)self)._namedParameters))
         .Put("NamedParameters", (self, args) => ((CommandObject)self).PutFlag(args[0], ref ((CommandObject)self)._namedParameters, "NamedParameters"))
-        .Get("ActiveConnection", (self, args) => Results.NullObject)
+        .Get("ActiveConnection", (self, args) => ((CommandObject)self).GetActiveConnection())
         .Put("ActiveConnection", (self, args) => ((CommandObject)self).PutActiveConnection(args[0]))
         .PutRef("ActiveConnection", (self, args) => ((CommandObject)self).PutActiveConnection(args[0]))
+        .Get("Properties", (self, args) => ((CommandObject)self).GetProperties())
         .Get("Parameters", (self, args) => Object(((CommandObject)self).ParameterCollection))
         .Method("CreateParameter", (self, args) => ((CommandObject)self).CreateParameter(args))
         .Method("Execute", (self, args) => ((CommandObject)self).Execute(args));
@@ -40,6 +42,8 @@ internal sealed class CommandObject : AdoObject
     private int _commandTimeout = 30;
     private bool _prepared;
     private bool _namedParameters;
+    private ConnectionObject? _activeConnection;
+    private PropertiesObject? _properties;
     private ParametersObject? _parameters;
 
     private CommandObject() : base(Decl, Vtable, "ADODB.Command")
@@ -48,9 +52,18 @@ internal sealed class CommandObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
+    internal string CommandTextValue => _commandText ?? "";
+
+    internal int CommandTypeValue => _commandType;
+
+    internal ConnectionObject? ActiveConnectionObject => _activeConnection;
+
+    internal bool HasParametersOrPlaceholders =>
+        (_parameters?.Count ?? 0) > 0 || (_commandText?.Contains('?') ?? false);
+
     public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new CommandObject(), outer, iid, result);
 
-    private ParametersObject ParameterCollection => _parameters ??= new ParametersObject();
+    private ParametersObject ParameterCollection => _parameters ??= new ParametersObject(this);
 
     private CallResult PutCommandType(nint arg)
     {
@@ -74,6 +87,21 @@ internal sealed class CommandObject : AdoObject
         return CallResult.Nothing;
     }
 
+    /// <summary>r-q-ado-misc/results-timeout-values #67: independent of Connection.CommandTimeout; negative values are not recorded.</summary>
+    private CallResult PutCommandTimeout(nint arg)
+    {
+        if (AdoArgs.Int32(arg) is not int seconds)
+        {
+            return NotImplemented("Command.CommandTimeout = a value that is not a number");
+        }
+        if (seconds < 0)
+        {
+            return NotImplemented("Command.CommandTimeout < 0 (not recorded)");
+        }
+        _commandTimeout = seconds;
+        return CallResult.Nothing;
+    }
+
     private CallResult PutFlag(nint arg, ref bool field, string member)
     {
         if (AdoArgs.Bool(arg) is not bool value)
@@ -84,24 +112,84 @@ internal sealed class CommandObject : AdoObject
         return CallResult.Nothing;
     }
 
+    private CallResult GetActiveConnection() =>
+        _activeConnection is null ? Results.NullObject : Object(_activeConnection);
+
     /// <summary>
-    /// ActiveConnection = a Connection. A fresh Connection whose provider is ADO's default is refused 0x800A0E7D
-    /// "Requested operation requires an OLE DB Session object" (r-ado-1b/param-connection-change). Any other closed
-    /// Connection, a connection string (an implicit Connection, ADO-SESSION) and Nothing were not asked.
+    /// ActiveConnection = a Connection. Open ACE Connection binds (r-ado-1b/rs-source-kinds #254,
+    /// r-q-ado-misc/results-timeout-values #63, r-q-ado-misc/props-lookup-refresh #40); a fresh default-provider
+    /// Connection is refused 0x800A0E7D NeedsSession (r-ado-1b/param-connection-change #57); Nothing is not recorded.
     /// </summary>
     private CallResult PutActiveConnection(nint arg)
     {
+        if (arg == 0 || (AdoArgs.IsObject(arg) && Args.Cell(arg)->Pointer == 0))
+        {
+            return NotImplemented("Command.ActiveConnection = Nothing (not recorded)");
+        }
         if (AdoArgs.ObjectOf<ConnectionObject>(arg) is { } connection)
         {
             if (connection.IsOpen)
             {
-                return NotImplemented("Command.ActiveConnection = an open Connection (next stretch of W-09/native-read-query)");
+                SetActiveConnectionInternal(connection);
+                return CallResult.Nothing;
             }
             return connection.Effective().Route == ProviderRoute.Refused && connection.Effective().Name == EffectiveProvider.Default
                 ? Fail(AdoErrors.NeedsSession)
-                : NotImplemented("Command.ActiveConnection = a closed Connection of an admitted provider (next stretch of W-09/native-read-query)");
+                : NotImplemented("Command.ActiveConnection = a closed Connection of an admitted provider (not recorded)");
         }
-        return NotImplemented("Command.ActiveConnection = a connection string or Nothing (ADO-SESSION, not asked here)");
+        return NotImplemented("Command.ActiveConnection = a connection string (implicit connection open, not recorded)");
+    }
+
+    private void SetActiveConnectionInternal(ConnectionObject? cn)
+    {
+        if (ReferenceEquals(_activeConnection, cn))
+        {
+            return;
+        }
+        _activeConnection?.OpenSession?.UnregisterCommand(this);
+        _properties?.Invalidate();
+        _properties?.Release();
+        _properties = null;
+        cn?.AddRef();
+        _activeConnection?.Release();
+        _activeConnection = cn;
+        _activeConnection?.OpenSession?.RegisterCommand(this);
+    }
+
+    /// <summary>
+    /// Called by <see cref="AdoOpenSession.CloseSession"/> when the bound <c>Connection</c> closes:
+    /// clears <c>Parameters</c> (evidence/r-ado-1b/param-connection-change #48-49) and invalidates held
+    /// <c>Properties</c>/<c>Property</c> wrappers (evidence/r-q-ado-misc/props-lookup-refresh #40-43).
+    /// </summary>
+    internal void OnConnectionClosed()
+    {
+        _parameters?.ClearAll();
+        _properties?.Invalidate();
+        _properties?.Release();
+        _properties = null;
+    }
+
+    /// <summary>
+    /// Command.Properties when bound to an open ACE Connection with CommandText set: the 88-name OLE DB rowset/command
+    /// property inventory (evidence/r-q-ado-misc/props-lookup-refresh #40-44). Only Count and ordinal Item(0..87).Name
+    /// are recorded.
+    /// </summary>
+    private CallResult GetProperties()
+    {
+        if (_activeConnection is not { IsOpen: true } cn)
+        {
+            return NotImplemented("Command.Properties without an open ACE ActiveConnection (not recorded)");
+        }
+        if (string.IsNullOrEmpty(_commandText))
+        {
+            return NotImplemented("Command.Properties with empty CommandText (not recorded)");
+        }
+        _properties ??= new PropertiesObject(
+            AceProperties.CreateServerRecordsetOrCommandSlots(),
+            cn.ClearErrors,
+            entries => cn.SetProviderError(entries[0]),
+            PropertiesMode.ServerRecordsetOrCommand);
+        return Object(_properties);
     }
 
     /// <summary>
@@ -138,45 +226,102 @@ internal sealed class CommandObject : AdoObject
         return result;
     }
 
-    /// <summary>Execute with no connection: 0x800A0E7D (cmd-before-connection, param-connection-change). With arguments, not asked.</summary>
+    /// <summary>
+    /// Execute(RecordsAffected, Parameters, Options):
+    /// 0x800A0E7D with no open connection (cmd-before-connection, param-connection-change #52, #59);
+    /// open-connection execution refuses by name (parameterized execution belongs to a later stretch; non-parameterized
+    /// Command.Execute is not recorded).
+    /// </summary>
     private CallResult Execute(ReadOnlySpan<nint> args)
     {
-        foreach (nint a in args)
+        if (_activeConnection is null)
         {
-            if (a != 0)
+            foreach (nint a in args)
             {
-                return NotImplemented("Command.Execute with arguments and no connection (not asked)");
+                if (a != 0)
+                {
+                    return NotImplemented("Command.Execute with arguments and no connection (not asked)");
+                }
             }
+            return Fail(AdoErrors.ConnectionCannotBeUsed);
         }
-        return Fail(AdoErrors.ConnectionCannotBeUsed);
+        if (!_activeConnection.IsOpen)
+        {
+            return Fail(AdoErrors.ConnectionCannotBeUsed);
+        }
+        nint parametersArg = args.Length > 1 ? args[1] : 0;
+        if (parametersArg != 0 && Args.TypeOf(parametersArg) != VarType.Empty)
+        {
+            return NotImplemented("Command.Execute with a Parameters argument (parameterized Command execution belongs to a later stretch)");
+        }
+        if (HasParametersOrPlaceholders)
+        {
+            return NotImplemented("Command.Execute with parameters (parameterized Command execution belongs to a later stretch)");
+        }
+        return NotImplemented("Command.Execute of a non-parameterized Command (not recorded)");
     }
 
-    protected override void OnFinalRelease() => _parameters?.Release();
+    protected override void OnFinalRelease()
+    {
+        _activeConnection?.OpenSession?.UnregisterCommand(this);
+        _parameters?.Release();
+        _properties?.Invalidate();
+        _properties?.Release();
+        _activeConnection?.Release();
+    }
 }
 
 /// <summary>
 /// A Command's Parameters (II-12 §17): manual parameters in Append order. Append refuses an untyped parameter and an
 /// adVarWChar one with Size 0 (0x800A0E7C, r-ado-1b/param-create-forms); Item and Delete of an index that names
-/// nothing fail 0x800A0CC1; Refresh without a connection changes nothing (cmd-before-connection).
+/// nothing fail 0x800A0CC1; Refresh without an open connection or with manually appended parameters succeeds and keeps
+/// Count (cmd-before-connection #37-38, param-connection-change #51).
 /// </summary>
 internal sealed class ParametersObject : AdoObject
 {
     private static readonly InterfaceDecl Decl = AdoTypes.Parameters;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Count", (self, args) => Int32(((ParametersObject)self)._items.Count))
+        .Get("Count", (self, args) => ((ParametersObject)self).GetCount())
         .Get("Item", (self, args) => ((ParametersObject)self).Item(args[0]))
         .Method("Append", (self, args) => ((ParametersObject)self).Append(args[0]))
         .Method("Delete", (self, args) => ((ParametersObject)self).Delete(args[0]))
-        .Method("Refresh", (self, args) => CallResult.Nothing);
+        .Method("Refresh", (self, args) => ((ParametersObject)self).Refresh());
 
+    private readonly CommandObject _owner;
     private readonly List<ParameterObject> _items = [];
 
-    public ParametersObject() : base(Decl, Vtable, "ADODB.Parameters")
+    public ParametersObject(CommandObject owner) : base(Decl, Vtable, "ADODB.Parameters") => _owner = owner;
+
+    public int Count => _items.Count;
+
+    internal void ClearAll()
     {
+        foreach (ParameterObject p in _items)
+        {
+            p.Appended = false;
+            p.Release();
+        }
+        _items.Clear();
     }
 
     protected override OperationTable Table => Operations;
+
+    private CallResult GetCount() => _items.Count == 0 && _owner.ActiveConnectionObject is { IsOpen: true } && _owner.CommandTextValue.Length > 0
+        ? NotImplemented("Parameters.Count triggers implicit Parameters.Refresh on a Command with an open ActiveConnection and CommandText (parameterized Command execution belongs to a later stretch)")
+        : Int32(_items.Count);
+
+    private CallResult Refresh()
+    {
+        // evidence/r-ado-1b/cmd-before-connection #37-38: Refresh on an open connection with an appended parameter succeeds and preserves Count.
+        if (_items.Count > 0)
+        {
+            return CallResult.Nothing;
+        }
+        return _owner.ActiveConnectionObject is { IsOpen: true }
+            ? NotImplemented("Parameters.Refresh on an open ActiveConnection with an empty Parameters collection (parameterized Command execution belongs to a later stretch)")
+            : CallResult.Nothing;
+    }
 
     private string[] Names => [.. _items.Select(p => p.Name)];
 

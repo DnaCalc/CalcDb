@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam;
@@ -80,7 +81,12 @@ internal sealed record AdoFieldDescriptor(
     /// aggregate shapes, or Decimal expression metadata carry an explicit <see cref="MetadataRefusal"/> rather than
     /// falling back to a guessed type or inspecting row values.
     /// </summary>
-    public static AdoFieldDescriptor FromSelectColumn(ResultColumn col, int? daoType, string? typeOpen)
+    public static AdoFieldDescriptor FromSelectColumn(
+        ResultColumn col,
+        int? daoType,
+        string? typeOpen,
+        SyntaxNode? expressionRoot = null,
+        IReadOnlyList<SourceSlot>? sources = null)
     {
         if (col.Origin == ColumnOrigin.BaseColumn && col.SourceColumn is { } src)
         {
@@ -94,6 +100,11 @@ internal sealed record AdoFieldDescriptor(
 
         if (daoType is null)
         {
+            if (expressionRoot is not null && sources is not null
+                && TryResolveDecimalExpression(col.Name, expressionRoot, sources) is { } decimalDesc)
+            {
+                return decimalDesc;
+            }
             return Refused(
                 col.Name,
                 typeOpen ?? "NotModelled.ExpressionFieldType",
@@ -158,18 +169,12 @@ internal sealed record AdoFieldDescriptor(
                 new(col.Name, 5, 8, 15, 255, AttrBaseFixedNullable, false, null, -1),
             (ResultAggregateKind.Sum, 5) =>
                 new(col.Name, 6, 8, 19, 255, AttrBaseFixedNullable, false, null, -1),
-            (ResultAggregateKind.Sum, 20) when col.DecimalScale is byte sumScale =>
-                new(col.Name, 131, 19, 28, sumScale, AttrBaseFixedNullable, false, null, -1, DecimalActualSize19OnServer: true),
             (ResultAggregateKind.Avg, 7) =>
                 new(col.Name, 5, 8, 15, 255, AttrExprFixed, false, null, -1),
-            (ResultAggregateKind.Avg, 20) when col.DecimalScale is byte avgScale =>
-                new(col.Name, 131, 19, 28, avgScale, AttrExprFixed, false, null, -1, DecimalActualSize19OnServer: false),
             (ResultAggregateKind.Min or ResultAggregateKind.Max, 10) =>
                 new(col.Name, 202, 255, 255, 255, AttrBaseVarNullable, false, null, -1),
             (ResultAggregateKind.Min or ResultAggregateKind.Max, 8) =>
                 new(col.Name, 7, 8, 255, 255, AttrBaseFixedNullable, false, null, -1),
-            (ResultAggregateKind.Min or ResultAggregateKind.Max, 20) when col.DecimalPrecision is byte mmPrec && col.DecimalScale is byte mmScale =>
-                new(col.Name, 131, 19, mmPrec, mmScale, AttrBaseFixedNullable, false, null, -1, DecimalActualSize19OnServer: true),
             (ResultAggregateKind.First or ResultAggregateKind.Last, 12) =>
                 new(col.Name, 203, 536870910, 255, 255, AttrBaseLongNullable, false, null, -1),
             _ => Refused(
@@ -177,6 +182,68 @@ internal sealed record AdoFieldDescriptor(
                 "NotModelled.AdoAggregateFieldMetadata",
                 $"ADO Field metadata for aggregate {col.Aggregate} of DAO type {daoType} ('{col.Name}') is not recorded"),
         };
+    }
+
+    /// <summary>
+    /// Resolve recorded ADO metadata for unary negation of a stored Decimal column (<c>-N</c>, which CalcDb.Sql
+    /// evaluates end-to-end; evidence/r-fix-wire-ado/fields-meta-decimal-expressions #151-168):
+    /// <c>adNumeric(131)</c> (DefinedSize=19, Precision=col.Precision, NumericScale=col.Scale, Attr=114, server ActualSize=16).
+    /// Binary Decimal arithmetic and Decimal aggregates are currently refused by CalcDb.Sql and are not resolved here.
+    /// </summary>
+    private static AdoFieldDescriptor? TryResolveDecimalExpression(
+        string name,
+        SyntaxNode root,
+        IReadOnlyList<SourceSlot> sources)
+    {
+        if (root.Kind == SyntaxKind.Unary && root.Operation == ScalarOperation.Negate && root.Left is not null
+            && TryResolveStoredDecimalColumn(root.Left, sources) is { } negCol)
+        {
+            return new(name, 131, 19, negCol.NumericPrecision, negCol.NumericScale, AttrExprFixed, false, null, -1, DecimalActualSize19OnServer: false);
+        }
+        return null;
+    }
+
+    private static ColumnDescriptor? TryResolveStoredDecimalColumn(SyntaxNode node, IReadOnlyList<SourceSlot> sources)
+    {
+        if (node.Kind != SyntaxKind.Name || string.IsNullOrEmpty(node.Text))
+        {
+            return null;
+        }
+        string raw = node.Text;
+        int dot = raw.IndexOf('.');
+        ColumnDescriptor? found = null;
+        if (dot >= 0)
+        {
+            string qualifier = raw[..dot];
+            string colName = raw[(dot + 1)..];
+            foreach (SourceSlot slot in sources)
+            {
+                if (string.Equals(slot.ScopeName, qualifier, StringComparison.OrdinalIgnoreCase)
+                    && slot.Column(colName) is { } col)
+                {
+                    if (found is not null)
+                    {
+                        return null;
+                    }
+                    found = col;
+                }
+            }
+        }
+        else
+        {
+            foreach (SourceSlot slot in sources)
+            {
+                if (slot.Column(raw) is { } col)
+                {
+                    if (found is not null)
+                    {
+                        return null;
+                    }
+                    found = col;
+                }
+            }
+        }
+        return found is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null } ? found : null;
     }
 
     private static AdoFieldDescriptor Refused(string name, string predicate, string detail) =>
@@ -614,8 +681,9 @@ internal sealed unsafe class AdoFieldObject : AdoObject
         .Get("Attributes", (self, args) => Meta(self, d => Int32(d.Attributes)))
         .Get("ActualSize", (self, args) => Live(self, f => f.ActualSize()))
         .Get("Value", (self, args) => Live(self, f => f.GetValue()))
-        .Put("Value", (self, args) => Live(self, f => NotImplemented("Field.Value put (editing through ADO belongs to a later stretch)")))
-        .Get("Status", (self, args) => Live(self, _ => NotImplemented("Field.Status (not recorded)")));
+        .Put("Value", (self, args) => Live(self, f => f.PutValue()))
+        .Get("Status", (self, args) => Live(self, _ => NotImplemented("Field.Status (not recorded)")))
+        .Get("Properties", (self, args) => Live(self, _ => NotImplemented("Field.Properties (not recorded for ADO)")));
 
     private readonly AdoFieldsObject _fields;
     private readonly int _ordinal;
@@ -657,6 +725,27 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             return Fail(AdoErrors.NoCurrentRecord);
         }
         return _fields.Recordset.ReadFieldValue(_ordinal, this);
+    }
+
+    private CallResult PutValue()
+    {
+        if (!_fields.Recordset.IsOpen)
+        {
+            // evidence/r-str-ado-act/ado-rs-read-close #284-285: closed Recordset operations fail 0x800A0E78.
+            _fields.Recordset.ClearConnectionErrors();
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_fields.Recordset.IsAtBofOrEof)
+        {
+            return NotImplemented("Field.Value put at BOF/EOF (not recorded)");
+        }
+        if (_fields.Recordset.IsReadOnlyLock)
+        {
+            // evidence/r-ado-1b/rs-readonly-mode-edit: Field.Value put on a read-only open Recordset fails 0x800A0CB3.
+            _fields.Recordset.ClearConnectionErrors();
+            return Fail(AdoErrors.UpdatingNotSupported);
+        }
+        return NotImplemented("Field.Value put (editing through ADO belongs to a later stretch)");
     }
 
     private CallResult ActualSize()

@@ -254,6 +254,8 @@ internal sealed class AdoOpenSession : ISqlSessionHost
     public void SqlSchemaPublished(ulong extentPages) =>
         _core.SqlSchemaPublished(extentPages, IsTableHeldByServerCursor, onCatalogReloaded: () => _sql?.Forget());
 
+    private readonly List<CommandObject> _boundCommands = [];
+
     public void RegisterRecordset(RecordsetObject recordset)
     {
         if (!_openRecordsets.Contains(recordset))
@@ -263,6 +265,16 @@ internal sealed class AdoOpenSession : ISqlSessionHost
     }
 
     public void UnregisterRecordset(RecordsetObject recordset) => _openRecordsets.Remove(recordset);
+
+    public void RegisterCommand(CommandObject command)
+    {
+        if (!_boundCommands.Contains(command))
+        {
+            _boundCommands.Add(command);
+        }
+    }
+
+    public void UnregisterCommand(CommandObject command) => _boundCommands.Remove(command);
 
     public bool IsTableInUse(string tableName) => IsTableHeldByServerCursor(tableName);
 
@@ -278,7 +290,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         return false;
     }
 
-    /// <summary>Close all open recordsets, flush closing commit if needed, and release file/lock/edit resources.</summary>
+    /// <summary>Close all open recordsets, notify bound commands, flush closing commit if needed, and release file/lock/edit resources.</summary>
     public CallResult CloseSession()
     {
         foreach (RecordsetObject rs in _openRecordsets.ToArray())
@@ -286,6 +298,11 @@ internal sealed class AdoOpenSession : ISqlSessionHost
             rs.CloseFromConnection();
         }
         _openRecordsets.Clear();
+        foreach (CommandObject cmd in _boundCommands.ToArray())
+        {
+            cmd.OnConnectionClosed();
+        }
+        _boundCommands.Clear();
 
         CallResult closing = CallResult.Nothing;
         (MutationOpen open, string? detail) = _core.CloseCommit(Transactions);
@@ -304,6 +321,11 @@ internal sealed class AdoOpenSession : ISqlSessionHost
             rs.CloseFromConnection();
         }
         _openRecordsets.Clear();
+        foreach (CommandObject cmd in _boundCommands.ToArray())
+        {
+            cmd.OnConnectionClosed();
+        }
+        _boundCommands.Clear();
         _core.DisposeAll();
         foreach (OwnedVariant value in OpenInitValues.Values)
         {
@@ -1134,12 +1156,26 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 : NotImplemented("Connection.Execute on a closed Connection with these Options (not asked)");
         }
 
-        AdoOpenSession session = _session!;
         string? commandText = args[0] == 0 ? null : Args.Text(args[0]);
         if (commandText is null)
         {
             return NotImplemented("Connection.Execute with a null or non-text CommandText");
         }
+        return ExecuteCommandText(commandText, AdoSqlText.AdCmdUnspecified, args[1], args[2], "Connection.Execute");
+    }
+
+    /// <summary>
+    /// Shared SQL / saved-query / table execution path for <c>Connection.Execute</c> and non-parameterized
+    /// <c>Command.Execute</c> (r-ado-1b/rs-source-kinds, r-q-ado-misc/results-timeout-values).
+    /// </summary>
+    internal CallResult ExecuteCommandText(
+        string commandText,
+        int defaultCommandType,
+        nint recordsAffectedArg,
+        nint optionsArg,
+        string callerName)
+    {
+        AdoOpenSession session = _session!;
         if (string.IsNullOrWhiteSpace(commandText))
         {
             MappedProviderError emptyErr = AdoSqlErrors.CommandTextNotSet();
@@ -1148,17 +1184,21 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
 
         int options = AdoSqlText.AdCmdUnspecified;
-        if (args[2] != 0)
+        if (optionsArg != 0)
         {
-            if (AdoArgs.Int32(args[2]) is not int parsedOpt)
+            if (AdoArgs.Int32(optionsArg) is not int parsedOpt)
             {
-                return NotImplemented("Connection.Execute with non-numeric Options");
+                return NotImplemented($"{callerName} with non-numeric Options");
             }
             options = parsedOpt;
         }
-        if (!AdoSqlText.TryDecodeOptions(options, "Connection.Execute", allowNoRecords: true, out int cmdType, out bool noRecords, out Failure? optRefusal))
+        if (!AdoSqlText.TryDecodeOptions(options, callerName, allowNoRecords: true, out int cmdType, out bool noRecords, out Failure? optRefusal))
         {
             return CallResult.Fail(optRefusal!);
+        }
+        if (cmdType == AdoSqlText.AdCmdUnspecified && defaultCommandType != AdoSqlText.AdCmdUnspecified)
+        {
+            cmdType = defaultCommandType;
         }
 
         string effectiveText = cmdType switch
@@ -1181,7 +1221,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (session.Queries is null)
             {
-                return NotImplemented("Connection.Execute of a saved query when MSysQueries cannot be read");
+                return NotImplemented($"{callerName} of a saved query when MSysQueries cannot be read");
             }
             if (session.FindSavedQuery(queryName) is not { } saved)
             {
@@ -1190,8 +1230,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return CallResult.Fail(err.ComFailure);
             }
             return saved.Family is QueryFamily.Select or QueryFamily.Union
-                ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, args[1])
-                : ExecuteSavedAction(session, saved, noRecords, args[1]);
+                ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
+                : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
         }
 
         // TableDirect, adCmdTable, SELECT @@IDENTITY, or SELECT SQL -> row-returning.
@@ -1199,7 +1239,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             || AdoSqlText.IsSelectIdentity(effectiveText)
             || AdoSqlText.IsSelect(effectiveText))
         {
-            return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, args[1]);
+            return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
         }
 
         // adCmdUnknown / adCmdUnspecified: bare local table or saved query name.
@@ -1207,13 +1247,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (session.Sql.Table(effectiveText) is not null)
             {
-                return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, args[1]);
+                return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
             }
             if (session.FindSavedQuery(effectiveText) is { } saved)
             {
                 return saved.Family is QueryFamily.Select or QueryFamily.Union
-                    ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, args[1])
-                    : ExecuteSavedAction(session, saved, noRecords, args[1]);
+                    ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
+                    : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
             }
         }
 
@@ -1225,7 +1265,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(err.ComFailure);
         }
 
-        return ExecuteAction(session, effectiveText, isSavedQuery: false, noRecords, args[1]);
+        return ExecuteAction(session, effectiveText, isSavedQuery: false, noRecords, recordsAffectedArg);
     }
 
     private CallResult ExecuteRowReturning(

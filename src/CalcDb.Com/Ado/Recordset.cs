@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
@@ -83,10 +84,37 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
 
         int colCount = cursor.Columns.Count;
         var columns = new AdoFieldDescriptor[colCount];
-        for (int i = 0; i < colCount; i++)
+        SelectSyntax? parsedSelect = null;
+        bool checkedParsedSelect = false;
+        try
         {
-            int? daoType = cursor.FieldType(i, out string? typeOpen);
-            columns[i] = AdoFieldDescriptor.FromSelectColumn(cursor.Columns[i], daoType, typeOpen);
+            for (int i = 0; i < colCount; i++)
+            {
+                int? daoType = cursor.FieldType(i, out string? typeOpen);
+                SyntaxNode? exprRoot = null;
+                if (daoType is null && cursor.Columns[i].Origin == ColumnOrigin.Expression)
+                {
+                    if (!checkedParsedSelect)
+                    {
+                        checkedParsedSelect = true;
+                        SelectSyntax? s = SqlParser.Parse(sql, out _);
+                        if (s is not null && !s.IsUnion && s.Items.Count == colCount && s.Items.All(it => !it.Star))
+                        {
+                            parsedSelect = s;
+                        }
+                        else
+                        {
+                            s?.Dispose();
+                        }
+                    }
+                    exprRoot = parsedSelect?.Items[i].Expression?.Syntax.Root;
+                }
+                columns[i] = AdoFieldDescriptor.FromSelectColumn(cursor.Columns[i], daoType, typeOpen, exprRoot, plan.Sources);
+            }
+        }
+        finally
+        {
+            parsedSelect?.Dispose();
         }
 
         string[] heldTables = [.. plan.Sources.Where(s => s.TableName.Length > 0).Select(s => s.TableName).Distinct(StringComparer.OrdinalIgnoreCase)];
@@ -461,6 +489,8 @@ internal sealed class MemoryRowSource : IAdoRowSource
 
     public AdoFieldDescriptor[] Columns => _columns;
 
+    internal IReadOnlyList<OwnedVariant[]> SnapshotRows => _rows;
+
     public IReadOnlyList<string> HeldTables => [];
 
     public int KnownCount => _rows.Count;
@@ -510,7 +540,152 @@ internal sealed class MemoryRowSource : IAdoRowSource
 internal sealed unsafe class RecordsetObject : AdoObject
 {
     private static readonly InterfaceDecl Decl = AdoTypes.Recordset;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int> _baseInvoke;
+    private static readonly nint Vtable = BuildVtable();
+
+    private static nint BuildVtable()
+    {
+        nint* table = (nint*)DualEntries.Build(Decl);
+        _baseInvoke = (delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)table[6];
+        table[6] = (nint)(delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)&InvokeRecordset;
+        return (nint)table;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int InvokeRecordset(
+        nint self,
+        int dispId,
+        Guid* iid,
+        uint lcid,
+        ushort flags,
+        DispParams* parameters,
+        NativeVariant* result,
+        ExcepInfo* info,
+        uint* argError)
+    {
+        // Inspect raw parameter 0 before DispatchObject coerces BSTR parameters so only recorded
+        // Sort(VT_NULL) and Find(VT_NULL) map to Provider 0x80020005 (r-ado-1b/view-sort-grammar, view-find-client).
+        if ((dispId == 1031 && (flags & 4) != 0) || (dispId == 1058 && (flags & 1) != 0))
+        {
+            RecordsetObject rs = Recover<RecordsetObject>(self);
+            rs._rawParam0WasNull = IsRawParam0Null(parameters, isPropertyPut: dispId == 1031);
+            rs._coercionParam = -1;
+            try
+            {
+                return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+            }
+            finally
+            {
+                rs._rawParam0WasNull = false;
+                rs._coercionParam = -1;
+            }
+        }
+        // Inspect raw GetString delimiter parameters (2..4) before DispatchObject coerces non-BSTR values to BSTR.
+        if (dispId == 1062 && (flags & 1) != 0)
+        {
+            RecordsetObject rs = Recover<RecordsetObject>(self);
+            rs._getStringNonBstrDelimiter = HasNonBstrGetStringDelimiter(parameters);
+            try
+            {
+                return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+            }
+            finally
+            {
+                rs._getStringNonBstrDelimiter = false;
+            }
+        }
+        return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+    }
+
+    private static bool HasNonBstrGetStringDelimiter(DispParams* parameters)
+    {
+        if (parameters is null || parameters->ArgCount == 0 || parameters->Args == 0)
+        {
+            return false;
+        }
+        uint count = parameters->ArgCount;
+        uint named = parameters->NamedArgCount;
+        if (named > count)
+        {
+            return false;
+        }
+        NativeVariant* rgvarg = (NativeVariant*)parameters->Args;
+        uint positional = count - named;
+        for (uint p = 2; p <= 4 && p < positional; p++)
+        {
+            if (IsNonBstrDelimiter(rgvarg + (count - 1 - p)))
+            {
+                return true;
+            }
+        }
+        if (named > 0 && parameters->NamedArgs != 0)
+        {
+            int* namedIds = (int*)parameters->NamedArgs;
+            for (uint j = 0; j < named; j++)
+            {
+                if (namedIds[j] is >= 2 and <= 4 && IsNonBstrDelimiter(rgvarg + j))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool IsNonBstrDelimiter(NativeVariant* raw)
+    {
+        NativeVariant* cell = Args.Cell((nint)raw);
+        VarType vt = (VarType)cell->Vt & ~VarType.ByRef;
+        if (vt is VarType.Bstr or VarType.Empty)
+        {
+            return false;
+        }
+        if (vt == VarType.Error && (int)cell->Int64 == HResults.DISP_E_PARAMNOTFOUND)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private static bool IsRawParam0Null(DispParams* parameters, bool isPropertyPut)
+    {
+        if (parameters is null || parameters->ArgCount == 0 || parameters->Args == 0)
+        {
+            return false;
+        }
+        uint count = parameters->ArgCount;
+        uint named = parameters->NamedArgCount;
+        if (named > count)
+        {
+            return false;
+        }
+        NativeVariant* rgvarg = (NativeVariant*)parameters->Args;
+        NativeVariant* target = null;
+        uint positional = count - named;
+        if (positional > 0)
+        {
+            target = rgvarg + (count - 1);
+        }
+        else if (named > 0 && parameters->NamedArgs != 0)
+        {
+            int* namedIds = (int*)parameters->NamedArgs;
+            int wanted = isPropertyPut ? -3 : 0;
+            for (uint j = 0; j < named; j++)
+            {
+                if (namedIds[j] == wanted)
+                {
+                    target = rgvarg + j;
+                    break;
+                }
+            }
+        }
+        if (target is null)
+        {
+            return false;
+        }
+        NativeVariant* cell = Args.Cell((nint)target);
+        return ((VarType)cell->Vt & ~VarType.ByRef) == VarType.Null;
+    }
 
     // CursorOptionEnum flags (Ado.g.cs):
     private const int AdHoldRecords = 256;
@@ -551,6 +726,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         .Get("ActiveConnection", (self, args) => ((RecordsetObject)self).GetActiveConnection())
         .PutRef("ActiveConnection", (self, args) => ((RecordsetObject)self).PutActiveConnectionRef(args[0]))
         .Put("ActiveConnection", (self, args) => ((RecordsetObject)self).PutActiveConnection(args[0]))
+        .Get("Properties", (self, args) => ((RecordsetObject)self).GetProperties())
         .Get("Fields", (self, args) => Object(((RecordsetObject)self).FieldsCollection))
         .Get("BOF", (self, args) => ((RecordsetObject)self).GetBof())
         .Get("EOF", (self, args) => ((RecordsetObject)self).GetEof())
@@ -572,11 +748,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
         .Method("MovePrevious", (self, args) => ((RecordsetObject)self).MovePrevious())
         .Method("Move", (self, args) => ((RecordsetObject)self).Move(args[0], args.Length > 1 ? args[1] : 0))
         .Method("NextRecordset", (self, args) => ((RecordsetObject)self).NextRecordset())
-        // Refused by name when open; 0x800A0E78 when closed (preserving AdoConstructionTests):
-        .Method("AddNew", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.AddNew (editing through ADO belongs to a later stretch)"))
-        .Method("Update", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Update (editing through ADO belongs to a later stretch)"))
-        .Method("Delete", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Delete (editing through ADO belongs to a later stretch)"))
-        .Method("CancelUpdate", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.CancelUpdate (editing through ADO belongs to a later stretch)"))
+        // Read-only lock refuses AddNew/Update/Delete with 0x800A0CB3 and accepts CancelUpdate (r-ado-1b/rs-readonly-mode-edit);
+        // writable cursors stay refused by name (editing through ADO belongs to a later stretch).
+        .Method("AddNew", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.AddNew"))
+        .Method("Update", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.Update"))
+        .Method("Delete", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.Delete"))
+        .Method("CancelUpdate", (self, args) => ((RecordsetObject)self).CancelUpdate())
         .Method("UpdateBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.UpdateBatch (editing through ADO belongs to a later stretch)"))
         .Method("CancelBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.CancelBatch (editing through ADO belongs to a later stretch)"))
         .Method("Resync", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Resync (belongs to a later stretch)"))
@@ -587,13 +764,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         .Put("Index", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Index put (belongs to a later stretch)"))
         .Method("Clone", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Clone (belongs to a later stretch)"))
         .Method("_xClone", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Clone (belongs to a later stretch)"))
-        .Get("Filter", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Filter get (belongs to a later stretch)"))
-        .Put("Filter", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Filter put (belongs to a later stretch)"))
-        .Get("Sort", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Sort get (belongs to a later stretch)"))
-        .Put("Sort", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Sort put (belongs to a later stretch)"))
-        .Method("Find", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Find (belongs to a later stretch)"))
-        .Method("GetRows", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.GetRows (belongs to a later stretch)"))
-        .Method("GetString", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.GetString (belongs to a later stretch)"))
+        .Get("Filter", (self, args) => ((RecordsetObject)self).GetFilter())
+        .Put("Filter", (self, args) => ((RecordsetObject)self).PutFilter(args[0]))
+        .Get("Sort", (self, args) => ((RecordsetObject)self).GetSort())
+        .Put("Sort", (self, args) => ((RecordsetObject)self).PutSort(args[0]))
+        .Method("Find", (self, args) => ((RecordsetObject)self).Find(args))
+        .Method("GetRows", (self, args) => AdoBulk.GetRows((RecordsetObject)self, args))
+        .Method("GetString", (self, args) => AdoBulk.GetString((RecordsetObject)self, args))
         .Method("Save", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Save (persisted local store belongs to a later stretch)"))
         .Method("_xSave", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Save (persisted local store belongs to a later stretch)"));
 
@@ -607,6 +784,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private string? _source;
     private ConnectionObject? _activeConnection;
     private bool _wasEverOpened;
+    private bool _closedAfterOpen;
+    private bool _rawParam0WasNull;
+    private bool _getStringNonBstrDelimiter;
+    private int _coercionParam = -1;
 
     // Open-state cursor fields:
     private IAdoRowSource? _rows;
@@ -619,8 +800,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private bool _eof;
     private bool _bothBofEofAfterForwardMove;
     private bool _suspendedAfterForwardMoveLast;
-    private int _position; // 0-based index when !_bof && !_eof
+    private int _position; // 0-based index into current view when !_bof && !_eof
     private AdoFieldsObject? _fields;
+    private PropertiesObject? _properties;
+    private string? _filterText;
+    private AdoFilterExpression? _filterExpr;
+    private string? _sortText;
+    private AdoSortSpec? _sortSpec;
+    private int[]? _viewMap;
 
     private RecordsetObject() : base(Decl, Vtable, "ADODB.Recordset")
     {
@@ -634,6 +821,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     public bool IsClientCursor => _effectiveCursorLocation == 3;
 
+    internal bool IsReadOnlyLock => _effectiveLockType == 1;
+
+    internal AdoFieldDescriptor[] ColumnDescriptors => _rows!.Columns;
+
+    internal bool IsAtBofOrEof => _bof || _eof || _suspendedAfterForwardMoveLast;
+
+    internal int CurrentViewPosition => _position;
+
+    internal bool HasGetStringNonBstrDelimiter => _getStringNonBstrDelimiter;
+
+    private bool ViewIsEmpty => _viewMap is not null ? _viewMap.Length == 0 : _rows!.IsEmpty;
+
+    private int ViewKnownCount => _viewMap is not null ? _viewMap.Length : _rows!.KnownCount;
+
     private int CurrentCursorType => IsOpen ? _effectiveCursorType : _requestedCursorType;
 
     private int CurrentLockType => IsOpen ? _effectiveLockType : _requestedLockType;
@@ -641,6 +842,43 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int CurrentCursorLocation => IsOpen ? _effectiveCursorLocation : _cursorLocation;
 
     private AdoFieldsObject FieldsCollection => _fields ??= new AdoFieldsObject(this);
+
+    protected override ushort CoercionFlags(MemberDecl member, int parameter)
+    {
+        _coercionParam = parameter;
+        return 0;
+    }
+
+    /// <summary>
+    /// Handle IDispatch coercion failure on Sort, Find, and GetString:
+    /// - Only recorded open client <c>Sort(VT_NULL)</c> (evidence/r-ado-1b/view-sort-grammar #87-97) and
+    ///   <c>Find(VT_NULL)</c> (evidence/r-ado-1b/view-find-client #223-234) map to Provider 0x80020005 with a
+    ///   Connection.Errors entry.
+    /// - Any other argument conversion failure on Sort, Find, or GetString is refused by name.
+    /// </summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing)
+    {
+        if (member.Name is "Sort" or "Find")
+        {
+            if (!missing && _coercionParam == 0 && _rawParam0WasNull)
+            {
+                if (IsOpen && IsClientCursor)
+                {
+                    _activeConnection?.SetProviderError(new AdoErrorEntry(
+                        HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+                    return ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid);
+                }
+                return Failure.NotImplemented(
+                    $"Recordset.{member.Name}(VT_NULL) on {(IsOpen ? "a server cursor" : "a closed Recordset")} (not recorded)");
+            }
+            return Failure.NotImplemented($"Recordset.{member.Name} argument conversion failure (not recorded)");
+        }
+        if (member.Name == "GetString")
+        {
+            return Failure.NotImplemented("Recordset.GetString argument conversion failure (not recorded)");
+        }
+        return null;
+    }
 
     public static int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new RecordsetObject(), outer, iid, result);
 
@@ -726,6 +964,78 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     public void ReportProviderError(MappedProviderError err) => _activeConnection?.SetProviderError(err.ErrorEntry);
 
+    internal CallResult FailClosed() => FailAdo(AdoErrors.ObjectClosed);
+
+    internal CallResult FailWrongType() => FailAdo(AdoErrors.ArgumentsWrongType);
+
+    internal CallResult FailItemNotFound() => FailAdo(AdoErrors.ItemNotFound);
+
+    internal bool TryGetKnownViewCount(out int count)
+    {
+        int known = ViewKnownCount;
+        if (known >= 0)
+        {
+            count = known;
+            return true;
+        }
+        count = 0;
+        return false;
+    }
+
+    internal int GetViewRowCount()
+    {
+        if (_viewMap is not null)
+        {
+            return _viewMap.Length;
+        }
+        if (_rows!.KnownCount >= 0)
+        {
+            return _rows.KnownCount;
+        }
+        return _rows.IsEmpty ? 0 : ScanToLast() + 1;
+    }
+
+    internal bool TrySeekView(int viewIndex, out Failure? failure)
+    {
+        failure = null;
+        if (viewIndex < 0)
+        {
+            return false;
+        }
+        if (_viewMap is not null)
+        {
+            if (viewIndex >= _viewMap.Length)
+            {
+                return false;
+            }
+            return _rows!.TrySeek(_viewMap[viewIndex], out failure);
+        }
+        return _rows!.TrySeek(viewIndex, out failure);
+    }
+
+    internal OwnedVariant? ReadCurrentRowCell(int ordinal, out Failure? failure) =>
+        _rows!.ReadValue(ordinal, IsClientCursor, out failure);
+
+    internal void AdvancePositionAfterBulk(int nextViewIndex)
+    {
+        if (TrySeekView(nextViewIndex, out _))
+        {
+            _bof = false;
+            _eof = false;
+            _bothBofEofAfterForwardMove = false;
+            _suspendedAfterForwardMoveLast = false;
+            _position = nextViewIndex;
+        }
+        else
+        {
+            _bof = ViewIsEmpty;
+            _eof = true;
+            _bothBofEofAfterForwardMove = false;
+            _suspendedAfterForwardMoveLast = false;
+            _position = nextViewIndex;
+        }
+    }
+
     private CallResult FailAdo(AdoError error)
     {
         ClearConnectionErrors();
@@ -733,6 +1043,459 @@ internal sealed unsafe class RecordsetObject : AdoObject
     }
 
     private CallResult OpenOrRefuse(string what) => IsOpen ? NotImplemented(what) : FailAdo(AdoErrors.ObjectClosed);
+
+    private CallResult EditRefusal(string member)
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        return IsReadOnlyLock
+            ? FailAdo(AdoErrors.UpdatingNotSupported)
+            : NotImplemented($"{member} (editing through ADO belongs to a later stretch)");
+    }
+
+    private CallResult CancelUpdate()
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        return IsReadOnlyLock
+            ? CallResult.Nothing
+            : NotImplemented("Recordset.CancelUpdate (editing through ADO belongs to a later stretch)");
+    }
+
+    /// <summary>
+    /// Recordset.Properties:
+    /// - Open server Keyset (1, 3) cursor: 88-name OLE DB rowset inventory (evidence/r-q-ado-misc/props-lookup-refresh #34-38).
+    /// - Open client batch-optimistic (3, 4) cursor: "Update Criteria" (default 2, 0..3) and "Update Resync"
+    ///   (default 1, recorded values 0, 1, 2, 4, 8, 15) (evidence/r-ado-1b/batch-update-criteria, batch-update-resync).
+    /// - All other cursor/lock combinations refuse by name.
+    /// </summary>
+    private CallResult GetProperties()
+    {
+        if (!IsOpen)
+        {
+            return NotImplemented("Recordset.Properties on a closed Recordset (not recorded)");
+        }
+        if (IsClientCursor)
+        {
+            if (_effectiveLockType != 4)
+            {
+                return NotImplemented($"Recordset.Properties on client cursor with LockType={_effectiveLockType} (only adLockBatchOptimistic=4 is recorded)");
+            }
+            _properties ??= new PropertiesObject(
+                AceProperties.CreateClientRecordsetSlots(),
+                ClearConnectionErrors,
+                _ => { },
+                PropertiesMode.ClientRecordsetPartial);
+            return Object(_properties);
+        }
+        if (_effectiveCursorType != 1 || _effectiveLockType != 3)
+        {
+            return NotImplemented($"Recordset.Properties on server cursor ({_effectiveCursorType}, {_effectiveLockType}) (only Keyset (1, 3) is recorded)");
+        }
+        _properties ??= new PropertiesObject(
+            AceProperties.CreateServerRecordsetOrCommandSlots(),
+            ClearConnectionErrors,
+            entries => _activeConnection?.SetProviderError(entries[0]),
+            PropertiesMode.ServerRecordsetOrCommand);
+        return Object(_properties);
+    }
+
+    // ---- Filter / Sort / Find (evidence/r-ado-1b/view-*, evidence/r-q-ado-misc/view-*, evidence/r-str-ado-act/ado-view) ----
+
+    private CallResult GetFilter()
+    {
+        if (!IsOpen && _closedAfterOpen)
+        {
+            return NotImplemented("Recordset.Filter get after Close (not recorded)");
+        }
+        return _filterText is not null ? Text(_filterText) : Int32(0);
+    }
+
+    private CallResult PutFilter(nint arg)
+    {
+        if (!IsOpen && _closedAfterOpen)
+        {
+            return NotImplemented("Recordset.Filter put after Close (not recorded)");
+        }
+        if (arg == 0)
+        {
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+        VarType vt = (VarType)Args.Cell(arg)->Vt & ~VarType.ByRef;
+        if (vt is VarType.I2 or VarType.I4)
+        {
+            int code = AdoArgs.Int32(arg) ?? int.MinValue;
+            if (code == 0) // adFilterNone
+            {
+                _filterText = null;
+                _filterExpr = null;
+                if (IsOpen)
+                {
+                    if (!RebuildView(out Failure? fail))
+                    {
+                        return CallResult.Fail(fail!);
+                    }
+                    ResetPositionAfterViewChange();
+                }
+                return CallResult.Nothing;
+            }
+            if (code is 1 or 2 or 3 or 5)
+            {
+                return NotImplemented($"Recordset.Filter = FilterGroupEnum({code}) (edit-status filters belong to a later stretch)");
+            }
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+        if (vt != VarType.Bstr)
+        {
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+
+        string text = Args.Text(arg) ?? "";
+        if (text.Length == 0)
+        {
+            // evidence/r-ado-1b/view-filter-constants #103-104: Filter = "" resets Filter to adFilterNone (vt3:0).
+            _filterText = null;
+            _filterExpr = null;
+            if (IsOpen)
+            {
+                if (!RebuildView(out Failure? fail))
+                {
+                    return CallResult.Fail(fail!);
+                }
+                ResetPositionAfterViewChange();
+            }
+            return CallResult.Nothing;
+        }
+
+        if (!IsOpen)
+        {
+            // evidence/r-str-ado-act/ado-view (#16, #20, #50 on never-opened Recordset): Filter = string succeeds before Open.
+            _filterText = text;
+            return CallResult.Nothing;
+        }
+
+        if (_sortSpec is not null)
+        {
+            return NotImplemented("Recordset.Filter combined with active Recordset.Sort (not recorded)");
+        }
+
+        AdoFilterExpression? parsed = AdoFilterExpression.Parse(
+            text, _rows!.Columns, singleClauseOnly: false, out AdoError? adoErr, out Failure? refusal);
+        if (parsed is null)
+        {
+            return adoErr is { } err ? FailAdo(err) : CallResult.Fail(refusal!);
+        }
+
+        AdoFilterExpression? prevExpr = _filterExpr;
+        string? prevText = _filterText;
+        int[]? prevView = _viewMap;
+        _filterExpr = parsed;
+        _filterText = text;
+        if (!RebuildView(out Failure? buildFail))
+        {
+            _filterExpr = prevExpr;
+            _filterText = prevText;
+            _viewMap = prevView;
+            return CallResult.Fail(buildFail!);
+        }
+        ResetPositionAfterViewChange();
+        return CallResult.Nothing;
+    }
+
+    // evidence/r-ado-1b/view-sort-server, evidence/r-ado-1b/view-sort-grammar #86, #90: empty/cleared Sort returns a null BSTR pointer.
+    private CallResult GetSort()
+    {
+        if (!IsOpen && _closedAfterOpen)
+        {
+            return NotImplemented("Recordset.Sort get after Close (not recorded)");
+        }
+        return string.IsNullOrEmpty(_sortText) ? CallResult.Of(OwnedVariant.NullBstr()) : Text(_sortText);
+    }
+
+    private CallResult PutSort(nint arg)
+    {
+        if (!IsOpen && _closedAfterOpen)
+        {
+            return NotImplemented("Recordset.Sort put after Close (not recorded)");
+        }
+        if (arg == 0)
+        {
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+        VarType vt = (VarType)Args.Cell(arg)->Vt & ~VarType.ByRef;
+        if (vt == VarType.Null)
+        {
+            if (IsOpen && IsClientCursor)
+            {
+                _activeConnection?.SetProviderError(new AdoErrorEntry(
+                    HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+                return CallResult.Fail(ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid));
+            }
+            return NotImplemented($"Recordset.Sort(VT_NULL) on {(IsOpen ? "a server cursor" : "a closed Recordset")} (not recorded)");
+        }
+        string? text = AdoArgs.IsObject(arg) ? null : Args.Text(arg);
+        if (text is null)
+        {
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+
+        if (!IsOpen)
+        {
+            // evidence/r-str-ado-act/ado-view (#25, #28 on never-opened Recordset): Sort = string succeeds before Open.
+            _sortText = text;
+            return CallResult.Nothing;
+        }
+
+        if (!IsClientCursor)
+        {
+            // evidence/r-ado-1b/view-sort-server: every server cursor refuses Sort with 0x800A0CB3.
+            return FailAdo(AdoErrors.SortOrFilterNotSupported);
+        }
+
+        if (text.Length > 0 && _filterExpr is not null)
+        {
+            return NotImplemented("Recordset.Sort combined with active Recordset.Filter (not recorded)");
+        }
+
+        AdoSortSpec? parsed = AdoSortSpec.Parse(
+            text, _rows!.Columns, out AdoError? adoErr, out Failure? cursorErr);
+        if (parsed is null)
+        {
+            if (adoErr is { } err)
+            {
+                return FailAdo(err);
+            }
+            ClearConnectionErrors();
+            return CallResult.Fail(cursorErr!);
+        }
+
+        AdoSortSpec? prevSpec = _sortSpec;
+        string? prevText = _sortText;
+        int[]? prevView = _viewMap;
+        _sortSpec = parsed.Keys.Length == 0 ? null : parsed;
+        _sortText = text;
+        if (!RebuildView(out Failure? buildFail))
+        {
+            _sortSpec = prevSpec;
+            _sortText = prevText;
+            _viewMap = prevView;
+            return CallResult.Fail(buildFail!);
+        }
+        ResetPositionAfterViewChange();
+        return CallResult.Nothing;
+    }
+
+    private CallResult Find(ReadOnlySpan<nint> args)
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        if (!IsClientCursor)
+        {
+            return NotImplemented("Recordset.Find on a server cursor (not recorded)");
+        }
+        if (_filterExpr is not null || _sortSpec is not null)
+        {
+            return NotImplemented("Recordset.Find on a filtered or sorted Recordset (not recorded)");
+        }
+        nint criteriaArg = args.Length > 0 ? args[0] : 0;
+        nint skipArg = args.Length > 1 ? args[1] : 0;
+        nint dirArg = args.Length > 2 ? args[2] : 0;
+        nint startArg = args.Length > 3 ? args[3] : 0;
+
+        if (criteriaArg != 0 && ((VarType)Args.Cell(criteriaArg)->Vt & ~VarType.ByRef) == VarType.Null)
+        {
+            _activeConnection?.SetProviderError(new AdoErrorEntry(
+                HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+            return CallResult.Fail(ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid));
+        }
+
+        string? criteria = criteriaArg == 0 || AdoArgs.IsObject(criteriaArg) ? null : Args.Text(criteriaArg);
+        if (criteria is null)
+        {
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+
+        AdoFilterExpression? expr = AdoFilterExpression.Parse(
+            criteria, _rows!.Columns, singleClauseOnly: true, out AdoError? adoErr, out Failure? refusal);
+        if (expr is null)
+        {
+            return adoErr is { } err ? FailAdo(err) : CallResult.Fail(refusal!);
+        }
+
+        int skipRecords = 0;
+        if (skipArg != 0 && Args.TypeOf(skipArg) != VarType.Empty)
+        {
+            if (AdoArgs.Int32(skipArg) is not int s)
+            {
+                return FailAdo(AdoErrors.ArgumentsWrongType);
+            }
+            skipRecords = s;
+        }
+
+        int dir = 1; // adSearchForward
+        if (dirArg != 0 && Args.TypeOf(dirArg) != VarType.Empty)
+        {
+            if (AdoArgs.Int32(dirArg) is not int d || d is not (1 or -1))
+            {
+                return FailAdo(AdoErrors.ArgumentsWrongType);
+            }
+            dir = d;
+        }
+
+        int count = ViewKnownCount;
+        int baseIdx;
+        if (startArg == 0 || Args.TypeOf(startArg) == VarType.Empty)
+        {
+            baseIdx = _bof ? -1 : _eof ? count : _position;
+        }
+        else if (AdoArgs.Int32(startArg) is int bm && bm is 0 or 1 or 2)
+        {
+            baseIdx = bm switch
+            {
+                1 => 0,                  // adBookmarkFirst
+                2 => count - 1,          // adBookmarkLast
+                _ => _bof ? -1 : _eof ? count : _position, // adBookmarkCurrent (0)
+            };
+        }
+        else
+        {
+            return NotImplemented("Recordset.Find with a non-enum Start bookmark");
+        }
+
+        IReadOnlyList<OwnedVariant[]> snapshot = ((MemoryRowSource)_rows).SnapshotRows;
+        int idx = baseIdx + skipRecords * dir;
+        while (idx >= 0 && idx < count)
+        {
+            int baseRow = _viewMap is not null ? _viewMap[idx] : idx;
+            bool matched = expr.MatchesSnapshotRow(snapshot[baseRow], out Failure? evalFail);
+            if (evalFail is not null)
+            {
+                return CallResult.Fail(evalFail);
+            }
+            if (matched)
+            {
+                _bof = false;
+                _eof = false;
+                _bothBofEofAfterForwardMove = false;
+                _suspendedAfterForwardMoveLast = false;
+                _position = idx;
+                _rows.TrySeek(baseRow, out _);
+                return CallResult.Nothing;
+            }
+            idx += dir;
+        }
+
+        // No match: forward lands at EOF, backward lands at BOF (evidence/r-ado-1b/view-find-client).
+        if (dir > 0)
+        {
+            _bof = count == 0;
+            _eof = true;
+            _position = count;
+        }
+        else
+        {
+            _bof = true;
+            _eof = count == 0;
+            _position = -1;
+        }
+        _bothBofEofAfterForwardMove = false;
+        _suspendedAfterForwardMoveLast = false;
+        return CallResult.Nothing;
+    }
+
+    private bool RebuildView(out Failure? failure)
+    {
+        failure = null;
+        if (_filterExpr is null && _sortSpec is null)
+        {
+            _viewMap = null;
+            return true;
+        }
+
+        var indices = new List<int>();
+        if (_rows is MemoryRowSource mem)
+        {
+            IReadOnlyList<OwnedVariant[]> rows = mem.SnapshotRows;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (_filterExpr is null)
+                {
+                    indices.Add(i);
+                }
+                else
+                {
+                    bool matched = _filterExpr.MatchesSnapshotRow(rows[i], out failure);
+                    if (failure is not null)
+                    {
+                        return false;
+                    }
+                    if (matched)
+                    {
+                        indices.Add(i);
+                    }
+                }
+            }
+            if (_sortSpec is not null && _sortSpec.Keys.Length > 0)
+            {
+                if (!_sortSpec.SortIndices(indices, rows, out failure))
+                {
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            // Server cursor filter (Sort is already refused 0x800A0CB3 on server cursors); zero closure per row.
+            for (int i = 0; ; i++)
+            {
+                if (!_rows!.TrySeek(i, out failure))
+                {
+                    if (failure is not null)
+                    {
+                        return false;
+                    }
+                    break;
+                }
+                bool matched = _filterExpr!.MatchesRowSource(_rows, out failure);
+                if (failure is not null)
+                {
+                    return false;
+                }
+                if (matched)
+                {
+                    indices.Add(i);
+                }
+            }
+        }
+
+        _viewMap = [.. indices];
+        return true;
+    }
+
+    private void ResetPositionAfterViewChange()
+    {
+        _bothBofEofAfterForwardMove = false;
+        _suspendedAfterForwardMoveLast = false;
+        if (ViewIsEmpty)
+        {
+            _bof = true;
+            _eof = true;
+            _position = 0;
+        }
+        else
+        {
+            _bof = false;
+            _eof = false;
+            _position = 0;
+            TrySeekView(0, out _);
+        }
+    }
 
     // ---- Property getters and setters ----
 
@@ -829,11 +1592,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (!_hasBookmarks || _rows!.KnownCount < 0)
+        int count = ViewKnownCount;
+        if (!_hasBookmarks || count < 0)
         {
             return Int32(-1);
         }
-        int count = _rows.KnownCount;
         return Int32(count == 0 ? 0 : (count + _pageSize - 1) / _pageSize);
     }
 
@@ -843,7 +1606,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (!_hasBookmarks || _rows!.KnownCount < 0)
+        if (!_hasBookmarks || ViewKnownCount < 0)
         {
             return Int32(-1);
         }
@@ -868,7 +1631,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (!_hasBookmarks || _rows!.KnownCount < 0)
+        int count = ViewKnownCount;
+        if (!_hasBookmarks || count < 0)
         {
             return FailAdo(AdoErrors.BookmarksNotSupported);
         }
@@ -876,7 +1640,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ArgumentsWrongType);
         }
-        int count = _rows.KnownCount;
         int pageCount = count == 0 ? 0 : (count + _pageSize - 1) / _pageSize;
         if (page > pageCount)
         {
@@ -886,7 +1649,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Nothing;
         }
         int target = (page - 1) * _pageSize;
-        if (!_rows.TrySeek(target, out Failure? fail))
+        if (!TrySeekView(target, out Failure? fail))
         {
             return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
         }
@@ -980,7 +1743,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private CallResult GetRecordCount() => !IsOpen
         ? FailAdo(AdoErrors.ObjectClosed)
-        : Int32(_hasBookmarks && _rows!.KnownCount >= 0 ? _rows.KnownCount : -1);
+        : Int32(_hasBookmarks && ViewKnownCount >= 0 ? ViewKnownCount : -1);
 
     private CallResult GetAbsolutePosition()
     {
@@ -1009,15 +1772,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (!_hasBookmarks || _rows!.KnownCount < 0)
+        int count = ViewKnownCount;
+        if (!_hasBookmarks || count < 0)
         {
             return FailAdo(AdoErrors.BookmarksNotSupported);
         }
-        if (AdoArgs.Int32(arg) is not int pos || pos <= 0 || pos > _rows.KnownCount)
+        if (AdoArgs.Int32(arg) is not int pos || pos <= 0 || pos > count)
         {
             return FailAdo(AdoErrors.ArgumentsWrongType);
         }
-        if (!_rows.TrySeek(pos - 1, out Failure? fail))
+        if (!TrySeekView(pos - 1, out Failure? fail))
         {
             return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
         }
@@ -1096,14 +1860,37 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(optRefusal!);
         }
 
-        // Source argument: Command as Source belongs to the next stretch (refuse cleanly rather than partially handling 0x800A0E7B).
+        if (_filterText is not null || _sortText is not null)
+        {
+            return NotImplemented("Recordset.Open with Filter or Sort pre-set while closed (not recorded)");
+        }
+
+        // Source argument: supports text or non-parameterized ADODB.Command (r-ado-1b/rs-source-kinds #258-277).
+        bool sourceWasCommand = false;
+        string? commandOriginalSource = null;
         if (sourceArg != 0 && AdoArgs.IsObject(sourceArg))
         {
-            if (AdoArgs.ObjectOf<CommandObject>(sourceArg) is not null)
+            if (AdoArgs.ObjectOf<CommandObject>(sourceArg) is { } cmd)
             {
-                return NotImplemented("Recordset.Open with a Command object as Source (Command execution belongs to the next stretch)");
+                if (cmd.HasParametersOrPlaceholders)
+                {
+                    return NotImplemented("Recordset.Open with a parameterized Command as Source (parameterized Command execution belongs to a later stretch)");
+                }
+                sourceWasCommand = true;
+                commandOriginalSource = cmd.CommandTextValue;
+                if (cmdType == AdoSqlText.AdCmdUnspecified && cmd.CommandTypeValue != AdoSqlText.AdCmdUnspecified)
+                {
+                    cmdType = cmd.CommandTypeValue;
+                }
+                _source = cmdType switch
+                {
+                    AdoSqlText.AdCmdTable => "select * from " + commandOriginalSource,
+                    AdoSqlText.AdCmdStoredProc => "exec " + commandOriginalSource,
+                    _ => commandOriginalSource,
+                };
+                SetActiveConnectionInternal(cmd.ActiveConnectionObject);
             }
-            if (Args.Cell(sourceArg)->Pointer != 0)
+            else if (Args.Cell(sourceArg)->Pointer != 0)
             {
                 return NotImplemented("Recordset.Open with a non-Command object as Source");
             }
@@ -1118,9 +1905,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _source = srcText;
         }
 
-        // ActiveConnection argument: bind BEFORE executing so it stays bound even if Open fails (r-str-ado-act/ado-session #13-21).
+        // ActiveConnection argument: bind BEFORE executing so it stays bound even if Open fails (r-str-ado-act/ado-session #13-21);
+        // supplying ActiveConnection when Source is a Command fails 0x800A0E7B after setting Source and ActiveConnection from the Command
+        // (r-ado-1b/rs-source-kinds #269-272).
         if (connArg != 0 && Args.TypeOf(connArg) != VarType.Empty)
         {
+            if (sourceWasCommand)
+            {
+                return FailAdo(AdoErrors.BoundToCommand);
+            }
             if (AdoArgs.IsObject(connArg))
             {
                 if (Args.Cell(connArg)->Pointer == 0)
@@ -1207,14 +2000,17 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         // Rewrite Source according to CommandTypeEnum (r-ado-1b/rs-source-kinds).
-        string originalSource = _source;
-        if (cmdType == AdoSqlText.AdCmdTable)
+        string originalSource = sourceWasCommand ? commandOriginalSource! : _source;
+        if (!sourceWasCommand)
         {
-            _source = "select * from " + originalSource;
-        }
-        else if (cmdType == AdoSqlText.AdCmdStoredProc)
-        {
-            _source = "exec " + originalSource;
+            if (cmdType == AdoSqlText.AdCmdTable)
+            {
+                _source = "select * from " + originalSource;
+            }
+            else if (cmdType == AdoSqlText.AdCmdStoredProc)
+            {
+                _source = "exec " + originalSource;
+            }
         }
 
         // Action SQL passed to Recordset.Open executes via CalcDb.Sql and leaves the Recordset closed
@@ -1528,6 +2324,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 case (1, 1): // r-str-ado-act/ado-rs-cursors c2
                     effectiveCursor = 1; effectiveLock = 1; hasBookmarks = true; supportedOptions = ServerScrollBase;
                     return true;
+                case (2, 1): // r-ado-1b/view-sort-server v4: Dynamic + ReadOnly on Mode=Read -> Keyset without bookmarks (RecordCount=-1)
+                    effectiveCursor = 1; effectiveLock = 1; hasBookmarks = false; supportedOptions = ServerNoBookmarkScroll;
+                    return true;
                 case (3, 1): // r-str-ado-act/ado-rs-cursors c4
                     effectiveCursor = 3; effectiveLock = 1; hasBookmarks = true; supportedOptions = ServerScrollBase;
                     return true;
@@ -1585,6 +2384,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         int supportedOptions)
     {
         _wasEverOpened = true;
+        _closedAfterOpen = false;
         _rows = rowSource;
         _effectiveCursorType = effectiveCursorType;
         _effectiveLockType = effectiveLockType;
@@ -1630,6 +2430,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _activeConnection?.OpenSession?.UnregisterRecordset(this);
         _rows.Dispose();
         _rows = null;
+        _closedAfterOpen = true;
+        _viewMap = null;
+        _filterExpr = null;
+        _filterText = null;
+        _sortSpec = null;
+        _sortText = null;
+        _properties?.Invalidate();
+        _properties?.Release();
+        _properties = null;
         _bof = false;
         _eof = false;
         _bothBofEofAfterForwardMove = false;
@@ -1647,11 +2456,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (_rows!.IsEmpty)
+        if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
-        if (!_rows.TrySeek(0, out Failure? fail))
+        if (!TrySeekView(0, out Failure? fail))
         {
             return fail is not null ? CallResult.Fail(fail) : FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -1674,7 +2483,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             // r-str-ado-act/ado-rs-cursors #36, r-oledb-odbc/fetch-moves #58, r-fix-wire-ado/book-position-readback #54-73:
             // ForwardOnly MoveLast fails 0x80040E24 (IRowset) and, when currently on a row, suspends current-row access
             // (Field.Value -> 0x800A0BCD) until the next MoveNext resumes on the same row.
-            if (!_bof && !_eof && !_rows!.IsEmpty)
+            if (!_bof && !_eof && !ViewIsEmpty)
             {
                 _suspendedAfterForwardMoveLast = true;
             }
@@ -1682,12 +2491,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ReportProviderError(err);
             return CallResult.Fail(err.ComFailure);
         }
-        if (_rows!.IsEmpty)
+        if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
-        int last = _rows.KnownCount >= 0 ? _rows.KnownCount - 1 : ScanToLast();
-        if (last < 0 || !_rows.TrySeek(last, out Failure? fail))
+        int known = ViewKnownCount;
+        int last = known >= 0 ? known - 1 : ScanToLast();
+        if (last < 0 || !TrySeekView(last, out Failure? fail))
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -1705,7 +2515,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (_rows!.IsEmpty)
+        if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -1713,7 +2523,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (_suspendedAfterForwardMoveLast)
         {
             _suspendedAfterForwardMoveLast = false;
-            if (!_rows.TrySeek(_position, out Failure? resumeFail))
+            if (!TrySeekView(_position, out Failure? resumeFail))
             {
                 if (resumeFail is not null)
                 {
@@ -1730,7 +2540,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         // r-oledb-odbc/fetch-moves #63-67: on ForwardOnly after Move(100) left BOF=True & EOF=True, MoveNext lands on row index 1 (ID=2).
         if (_bothBofEofAfterForwardMove)
         {
-            if (!_rows.TrySeek(1, out Failure? forwardResumeFail))
+            if (!TrySeekView(1, out Failure? forwardResumeFail))
             {
                 return forwardResumeFail is not null
                     ? CallResult.Fail(forwardResumeFail)
@@ -1750,7 +2560,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
         int target = _bof ? 0 : _position + 1;
-        if (!_rows.TrySeek(target, out Failure? fail))
+        if (!TrySeekView(target, out Failure? fail))
         {
             if (fail is not null)
             {
@@ -1777,14 +2587,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
-        if (_rows!.IsEmpty || _bof)
+        if (ViewIsEmpty || _bof)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
         int target;
         if (_eof)
         {
-            target = _rows.KnownCount >= 0 ? _rows.KnownCount - 1 : ScanToLast();
+            int known = ViewKnownCount;
+            target = known >= 0 ? known - 1 : ScanToLast();
         }
         else
         {
@@ -1798,7 +2609,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _position = -1;
             return CallResult.Nothing;
         }
-        if (!_rows.TrySeek(target, out Failure? fail))
+        if (!TrySeekView(target, out Failure? fail))
         {
             return fail is not null ? CallResult.Fail(fail) : FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -1836,7 +2647,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ReportProviderError(err);
             return CallResult.Fail(err.ComFailure);
         }
-        if (_rows!.IsEmpty)
+        if (ViewIsEmpty)
         {
             _bof = true;
             _eof = true;
@@ -1855,7 +2666,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Nothing;
         }
 
-        int current = _bof ? -1 : _eof ? (_rows.KnownCount >= 0 ? _rows.KnownCount : ScanToLast() + 1) : _position;
+        int known = ViewKnownCount;
+        int current = _bof ? -1 : _eof ? (known >= 0 ? known : ScanToLast() + 1) : _position;
         int target = current + delta;
         if (target < 0)
         {
@@ -1866,7 +2678,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _position = -1;
             return CallResult.Nothing;
         }
-        if (!_rows.TrySeek(target, out Failure? fail))
+        if (!TrySeekView(target, out Failure? fail))
         {
             if (fail is not null)
             {
@@ -1886,7 +2698,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 _bothBofEofAfterForwardMove = false;
             }
             _suspendedAfterForwardMoveLast = false;
-            _position = _rows.KnownCount >= 0 ? _rows.KnownCount : target;
+            int afterKnown = ViewKnownCount;
+            _position = afterKnown >= 0 ? afterKnown : target;
             return CallResult.Nothing;
         }
         _bof = false;
@@ -1899,6 +2712,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private int ScanToLast()
     {
+        if (_viewMap is not null)
+        {
+            return _viewMap.Length - 1;
+        }
         int last = -1;
         for (int i = Math.Max(0, _position); ; i++)
         {
@@ -1920,11 +2737,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
         }
-        if (!_rows!.TrySeek(_position, out Failure? seekFail))
+        if (!TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
-        OwnedVariant? val = _rows.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
+        OwnedVariant? val = _rows!.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
         if (val is null)
         {
             return CallResult.Fail(readFail!);
@@ -1944,7 +2761,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return CallResult.Fail(metaRefusal);
         }
-        if (!_rows.TrySeek(_position, out Failure? seekFail))
+        if (!TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
@@ -1962,6 +2779,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
     protected override void OnFinalRelease()
     {
         DisposeOpenRows();
+        _properties?.Invalidate();
+        _properties?.Release();
+        _properties = null;
         _fields?.Release();
         _fields = null;
         SetActiveConnectionInternal(null);
