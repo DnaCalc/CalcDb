@@ -35,11 +35,17 @@ internal static class AdoErrors
     /// <summary>0x800A0CC1 (an Errors, Properties or Parameters index that names nothing).</summary>
     public static readonly AdoError ItemNotFound = new(0x0CC1, 1240649, "Item cannot be found in the collection corresponding to the requested name or ordinal.");
 
+    /// <summary>0x800A0D5C (a Property wrapper invalidated when its Properties collection refreshed across Open or Close; r-fix-wire-ado/ado-open-provider-property-ace-first).</summary>
+    public static readonly AdoError ObjectNoLongerValid = new(0x0D5C, 1240651, "Object is no longer valid.");
+
     /// <summary>0x800A0D5D (a Parameter value that does not convert to its Type, or a text longer than its Size).</summary>
     public static readonly AdoError WrongValueType = new(0x0D5D, 1240652, "Application uses a value of the wrong type for the current operation.");
 
     /// <summary>0x800A0E78 (a member that needs an open object, on a closed one).</summary>
     public static readonly AdoError ObjectClosed = new(0x0E78, 1240653, "Operation is not allowed when the object is closed.");
+
+    /// <summary>0x800A0E79 (mutating ConnectionString, Provider or Mode on an open Connection; r-ado-1b/conn-set-while-open).</summary>
+    public static readonly AdoError ObjectOpen = new(0x0E79, 1240654, "Operation is not allowed when the object is open.");
 
     /// <summary>0x800A0E7C (Parameters.Append of an untyped parameter, or of adVarWChar with Size 0).</summary>
     public static readonly AdoError ParameterImproperlyDefined = new(0x0E7C, 1240657, "Parameter object is improperly defined. Inconsistent or incomplete information was provided.");
@@ -59,6 +65,34 @@ internal static class AdoErrors
 /// </summary>
 internal abstract class AdoObject : DispatchObject
 {
+    /// <summary>OLE DB IDBInitialize IID reported by ACE engine open failures in IErrorInfo (r-ado-1b/conn-datasource-spellings, conn-open-args, r-oledb-odbc/error-open-failures).</summary>
+    public static readonly Guid IidDbInitialize = new("0C733A8B-2A1C-11CE-ADE5-00AA0044773D");
+
+    /// <summary>Source string reported by ACE engine failures (EXCEPINFO, IErrorInfo, and Error.Source).</summary>
+    public const string AceEngineSource = "Microsoft Access Database Engine";
+
+    /// <summary>Source string reported by OLE DB provider-layer failures before engine init (Authentication failed, Type mismatch, Mode 15).</summary>
+    public const string ProviderSource = "Provider";
+
+    /// <summary>HelpContext of OLE DB provider-layer and read-only-property errors (r-ado-1b/conn-open-args, conn-set-while-open, r-oledb-odbc/error-open-failures).</summary>
+    public const int ProviderHelpContext = 1240640;
+
+    /// <summary>DB_E_ERRORSOCCURRED / 0x80040E21.</summary>
+    public const int HResultErrorsOccurred = unchecked((int)0x80040E21);
+
+    /// <summary>DB_SEC_E_AUTH_FAILED / 0x80040E4D.</summary>
+    public const int HResultAuthFailed = unchecked((int)0x80040E4D);
+
+    /// <summary>E_FAIL / 0x80004005.</summary>
+    public const int HResultFail = unchecked((int)0x80004005);
+
+    /// <summary>DISP_E_TYPEMISMATCH / 0x80020005.</summary>
+    public const int HResultTypeMismatch = unchecked((int)0x80020005);
+
+    public const string MultipleStepDescription = "Multiple-step OLE DB operation generated errors. Check each OLE DB status value, if available. No work was done.";
+
+    public const string ReadOnlyPropertyDescription = "Read-only property value was not set.";
+
     protected AdoObject(InterfaceDecl declaration, nint vtable, string source) : base(declaration, vtable)
     {
         Source = source;
@@ -71,13 +105,38 @@ internal abstract class AdoObject : DispatchObject
 
     protected override Operation? Find(MemberDecl member) => Table.Find(member);
 
-    public CallResult Fail(AdoError error) => CallResult.Fail(AdoFailure(error, Source, Declaration.Iid));
+    public CallResult Fail(AdoError error, bool publishesErrorInfo = true) =>
+        CallResult.Fail(AdoFailure(error, Source, Declaration.Iid, publishesErrorInfo));
 
-    /// <summary>An ADO error as published: scode 0x800A0000 | code, ADO270.CHM, and an IErrorInfo with the interface's IID.</summary>
-    public static Failure AdoFailure(AdoError error, string source, in Guid iid) =>
+    /// <summary>An ADO error as published: scode 0x800A0000 | code, ADO270.CHM, and optionally an IErrorInfo with the interface's IID.</summary>
+    public static Failure AdoFailure(AdoError error, string source, in Guid iid, bool publishesErrorInfo = true) =>
         new(FailureKind.Ado, unchecked((int)0x800A0000) | error.Code, source, error.Description, AdoErrors.HelpFile, error.HelpContext)
         {
+            PublishesErrorInfo = publishesErrorInfo,
+            ErrorInfoIid = iid,
+        };
+
+    /// <summary>An ACE engine failure during Connection.Open (IDBInitialize IErrorInfo, null EXCEPINFO helpFile).</summary>
+    public static Failure AceOpenFailure(int scode, string description, int helpContext) =>
+        new(FailureKind.Ado, scode, AceEngineSource, description, null, helpContext)
+        {
             PublishesErrorInfo = true,
+            ErrorInfoIid = IidDbInitialize,
+        };
+
+    /// <summary>An OLE DB provider-layer failure (Source "Provider", HelpContext 1240640, null EXCEPINFO helpFile).</summary>
+    public static Failure ProviderFailure(int scode, string description, in Guid iid) =>
+        new(FailureKind.Ado, scode, ProviderSource, description, null, ProviderHelpContext)
+        {
+            PublishesErrorInfo = true,
+            ErrorInfoIid = iid,
+        };
+
+    /// <summary>0x80040E21 read-only property put while open (r-ado-1b/conn-set-while-open: Connection publishes IErrorInfo; Property does not).</summary>
+    public static Failure ReadOnlyPropertyFailure(string source, in Guid iid, bool publishesErrorInfo) =>
+        new(FailureKind.Ado, HResultErrorsOccurred, source, ReadOnlyPropertyDescription, null, ProviderHelpContext)
+        {
+            PublishesErrorInfo = publishesErrorInfo,
             ErrorInfoIid = iid,
         };
 

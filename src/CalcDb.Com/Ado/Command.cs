@@ -93,9 +93,13 @@ internal sealed class CommandObject : AdoObject
     {
         if (AdoArgs.ObjectOf<ConnectionObject>(arg) is { } connection)
         {
+            if (connection.IsOpen)
+            {
+                return NotImplemented("Command.ActiveConnection = an open Connection (next stretch of W-09/native-read-query)");
+            }
             return connection.Effective().Route == ProviderRoute.Refused && connection.Effective().Name == EffectiveProvider.Default
                 ? Fail(AdoErrors.NeedsSession)
-                : NotImplemented("Command.ActiveConnection = a closed Connection of an admitted provider (an open one needs W-09/native-read-query)");
+                : NotImplemented("Command.ActiveConnection = a closed Connection of an admitted provider (next stretch of W-09/native-read-query)");
         }
         return NotImplemented("Command.ActiveConnection = a connection string or Nothing (ADO-SESSION, not asked here)");
     }

@@ -1,8 +1,15 @@
+using System.Globalization;
+using System.Text;
+using CalcDb.Catalog;
 using CalcDb.Com.Com;
+using CalcDb.Com.Dao;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Foundation.Diagnostics;
+using CalcDb.Storage;
+using CalcDb.Storage.Windows;
 using CalcDb.Values;
 
 namespace CalcDb.Com.Ado;
@@ -11,13 +18,14 @@ namespace CalcDb.Com.Ado;
 /// One key occurrence of a connection string, in order (II-12 §16): the key and the value as written (quotes kept, as
 /// the Provider getter shows them before Open) and decoded (the surrounding quotes and whitespace removed).
 /// </summary>
-internal readonly record struct ConnectionKey(string Key, string Raw, string Value);
+internal readonly record struct ConnectionKey(string Key, string Raw, string Value, bool HasEquals = true);
 
 /// <summary>
 /// The parsed connection text (II-12 §16, R-ADO-1 ADO-CONN): semicolon-separated <c>key=value</c> occurrences, a
 /// semicolon inside a quoted value kept, whitespace around keys and values dropped (r-str-ado-act/ado-connstring-keys:
-/// "  Mode = Read " is accepted). A fragment without '=' (a bare path) is a key with no value: ADO then has no
-/// Provider key and treats it as an ODBC DSN (r-ado-1b/conn-cs-bare-path).
+/// "  Mode = Read " is accepted). A fragment without '=' (a bare path) is recorded with <see cref="ConnectionKey.HasEquals"/>
+/// false: without an assigned ACE Provider property it falls through to ADO's default provider, and with ACE assigned it
+/// names the Data Source (r-ado-1b/conn-cs-bare-path, r-str-ado-act/ado-open-alt-orders).
 /// </summary>
 internal sealed class ConnectionText
 {
@@ -66,11 +74,11 @@ internal sealed class ConnectionText
             }
             if (equals < 0)
             {
-                keys.Add(new ConnectionKey(fragment.Trim(), "", ""));
+                keys.Add(new ConnectionKey(fragment.Trim(), "", "", HasEquals: false));
                 continue;
             }
             string raw = text[(equals + 1)..end].Trim();
-            keys.Add(new ConnectionKey(text[start..equals].Trim(), raw, Unquote(raw)));
+            keys.Add(new ConnectionKey(text[start..equals].Trim(), raw, Unquote(raw), HasEquals: true));
         }
         return new ConnectionText(keys);
     }
@@ -84,8 +92,8 @@ internal sealed class ConnectionText
     /// </summary>
     public ConnectionKey[] Named(string key, out bool caseVariant)
     {
-        caseVariant = Keys.Any(k => !string.Equals(k.Key, key, StringComparison.Ordinal) && string.Equals(k.Key, key, StringComparison.OrdinalIgnoreCase));
-        return [.. Keys.Where(k => string.Equals(k.Key, key, StringComparison.Ordinal))];
+        caseVariant = Keys.Any(k => k.HasEquals && !string.Equals(k.Key, key, StringComparison.Ordinal) && string.Equals(k.Key, key, StringComparison.OrdinalIgnoreCase));
+        return [.. Keys.Where(k => k.HasEquals && string.Equals(k.Key, key, StringComparison.Ordinal))];
     }
 }
 
@@ -143,28 +151,109 @@ internal readonly record struct EffectiveProvider(ProviderRoute Route, string Na
 }
 
 /// <summary>
-/// ADODB.Connection (_Connection, dual) before any data path (W-09/construction-policy; II-12 §16, R-ADO-1 ADO-CONN,
-/// ADO-PROVIDER, ADO-PROPS; R-ACT-1 ACT-ADO-SCOPE). Every value here is ADO's own state before Open; an Open of an
-/// admitted route is the named not-implemented outcome until W-09/native-read-query, and of any other route the
-/// counted NotModelled.AdoProvider refusal, which leaves the Connection closed with no provider activated.
+/// Live native ISAM session held by an open ACE <see cref="ConnectionObject"/> (W-09/native-read-query):
+/// the positioned file, optional companion lock file, page cache, format profile, decoded header, catalog snapshot,
+/// and the resolved open-phase initialization values for lazy <see cref="PropertiesObject"/> expansion.
 /// </summary>
-internal sealed class ConnectionObject : AdoObject
+internal sealed class AdoOpenSession
 {
+    public AdoOpenSession(
+        SessionFile file,
+        LockFile? lockFile,
+        PageCache cache,
+        FileProfile profile,
+        DatabaseHeader header,
+        CatalogSnapshot catalog,
+        ulong pageCount,
+        bool readOnly,
+        string dataSource,
+        string fullPath,
+        int effectiveMode,
+        int engineType,
+        int lockingMode,
+        Dictionary<string, OwnedVariant> openInitValues)
+    {
+        File = file;
+        LockFile = lockFile;
+        Cache = cache;
+        Profile = profile;
+        Header = header;
+        Catalog = catalog;
+        PageCount = pageCount;
+        ReadOnly = readOnly;
+        DataSource = dataSource;
+        FullPath = fullPath;
+        EffectiveMode = effectiveMode;
+        EngineType = engineType;
+        LockingMode = lockingMode;
+        OpenInitValues = openInitValues;
+    }
+
+    public SessionFile File { get; }
+
+    public LockFile? LockFile { get; }
+
+    public PageCache Cache { get; }
+
+    public FileProfile Profile { get; }
+
+    public DatabaseHeader Header { get; }
+
+    public CatalogSnapshot Catalog { get; }
+
+    public ulong PageCount { get; }
+
+    public bool ReadOnly { get; }
+
+    public string DataSource { get; }
+
+    public string FullPath { get; }
+
+    public int EffectiveMode { get; }
+
+    public int EngineType { get; }
+
+    public int LockingMode { get; }
+
+    public Dictionary<string, OwnedVariant> OpenInitValues { get; }
+
+    public void ReleaseResources()
+    {
+        LockFile?.Dispose();
+        File.Dispose();
+        foreach (OwnedVariant value in OpenInitValues.Values)
+        {
+            value.Dispose();
+        }
+        OpenInitValues.Clear();
+    }
+}
+
+/// <summary>
+/// ADODB.Connection (_Connection, dual) covering closed construction/policy and ACE Open/Close over CalcDb's native
+/// ISAM (W-09/construction-policy, W-09/native-read-query; II-12 §16, R-ADO-1 ADO-CONN, ADO-PROVIDER, ADO-PROPS;
+/// R-ACT-1 ACT-ADO-SCOPE). Non-ACE routes are refused with the counted NotModelled.AdoProvider outcome; Execute on an
+/// open Connection belongs to the next stretch of W-09/native-read-query and is refused by name.
+/// </summary>
+internal sealed unsafe class ConnectionObject : AdoObject
+{
+    private const int CachePages = 256;
+
     /// <summary>Connection.Version on the reference build (r-str-ado-act/act-ado-classes: "10.0").</summary>
     public const string AdoVersion = "10.0";
 
     private static readonly InterfaceDecl Decl = AdoTypes.Connection;
     private static readonly nint Vtable = DualEntries.Build(Decl);
 
-    /// <summary>Mode values accepted on a closed Connection in the records (ADO-CONN); 99 is refused 0x800A0C93.</summary>
-    private static readonly int[] AskedModes = [0, 1, 2, 3, 5, 15, 16, 19];
+    /// <summary>Mode values accepted on a closed Connection in the records (prop-modes, error-open-failures); 99 is refused 0x800A0C93.</summary>
+    private static readonly int[] AskedModes = [1, 2, 3, 5, 11, 15, 19];
 
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("State", (self, args) => Int32(0))
+        .Get("State", (self, args) => Int32(((ConnectionObject)self).IsOpen ? 1 : 0))
         .Get("Version", (self, args) => Text(AdoVersion))
         .Get("Provider", (self, args) => ((ConnectionObject)self).GetProvider())
         .Put("Provider", (self, args) => ((ConnectionObject)self).PutProvider(args[0]))
-        .Get("ConnectionString", (self, args) => ((ConnectionObject)self)._connectionString is { } text ? Text(text) : CallResult.OfOwnedBstr(0))
+        .Get("ConnectionString", (self, args) => ((ConnectionObject)self).GetConnectionString())
         .Put("ConnectionString", (self, args) => ((ConnectionObject)self).PutConnectionString(args[0]))
         .Get("Mode", (self, args) => Int32(((ConnectionObject)self)._mode))
         .Put("Mode", (self, args) => ((ConnectionObject)self).PutMode(args[0]))
@@ -175,12 +264,14 @@ internal sealed class ConnectionObject : AdoObject
         .Get("ConnectionTimeout", (self, args) => Int32(15))
         .Get("IsolationLevel", (self, args) => Int32(((ConnectionObject)self)._isolationLevel))
         .Put("IsolationLevel", (self, args) => ((ConnectionObject)self).PutIsolationLevel(args[0]))
-        .Get("Attributes", (self, args) => Int32(0))
-        .Get("DefaultDatabase", (self, args) => ((ConnectionObject)self).Fail(AdoErrors.ObjectClosed))
+        .Get("Attributes", (self, args) => Int32(((ConnectionObject)self)._attributes))
+        .Put("Attributes", (self, args) => ((ConnectionObject)self).PutAttributes(args[0]))
+        .Get("DefaultDatabase", (self, args) => ((ConnectionObject)self).GetDefaultDatabase())
+        .Put("DefaultDatabase", (self, args) => ((ConnectionObject)self).PutDefaultDatabase(args[0]))
         .Get("Errors", (self, args) => Object(((ConnectionObject)self).ErrorsCollection))
         .Get("Properties", (self, args) => ((ConnectionObject)self).GetProperties())
         .Method("Open", (self, args) => ((ConnectionObject)self).Open(args))
-        .Method("Close", (self, args) => ((ConnectionObject)self).Fail(AdoErrors.ObjectClosed))
+        .Method("Close", (self, args) => ((ConnectionObject)self).Close())
         .Method("Execute", (self, args) => ((ConnectionObject)self).Execute(args));
 
     /// <summary>The assigned text; null until one is assigned, which ADO reads as a null BSTR (r-str-ado-act/ado-open-provider-property).</summary>
@@ -191,6 +282,10 @@ internal sealed class ConnectionObject : AdoObject
     private int _cursorLocation = 2; // adUseServer
     private int _commandTimeout = 30;
     private int _isolationLevel = 4096; // adXactReadCommitted
+    private int _attributes;
+    private bool _failedOpenModeRefreshPending;
+    private bool _connectionStringFromFailedOpen;
+    private AdoOpenSession? _session;
     private AdoErrorsObject? _errors;
     private PropertiesObject? _properties;
 
@@ -200,12 +295,41 @@ internal sealed class ConnectionObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
+    public bool IsOpen => _session is not null;
+
+    public AdoOpenSession? OpenSession => _session;
+
     public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new ConnectionObject(), outer, iid, result);
 
     /// <summary>The route the Connection's accepted inputs select now (a pinned provider stays), for a dependent object.</summary>
     public EffectiveProvider Effective(string? openText = null) => _pinned ?? Resolve(openText);
 
     private AdoErrorsObject ErrorsCollection => _errors ??= new AdoErrorsObject();
+
+    /// <summary>
+    /// Handle IDispatch scalar coercion failure on Connection.Open (e.g., VT_NULL for UserID or Password in
+    /// r-ado-1b/conn-open-args of): compose the pre-open ConnectionString, populate Errors with Provider Type mismatch,
+    /// and fail with 0x80020005.
+    /// </summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing)
+    {
+        if (missing || member.Name != "Open" || IsOpen)
+        {
+            return null;
+        }
+        EffectiveProvider effective = Effective();
+        if (effective.Route != ProviderRoute.Ace)
+        {
+            return null;
+        }
+        if (!TryComposePreOpenConnectionStringIfUnset(effective.Name))
+        {
+            return Failure.NotImplemented($"Connection.Open composing pre-open ConnectionString with Mode={_mode} (not asked)");
+        }
+        ErrorsCollection.Replace(new AdoErrorEntry(
+            HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+        return ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid);
+    }
 
     /// <summary>
     /// The effective provider (II-12 §16: every applicable input resolved before classifying): the Provider key of the
@@ -249,9 +373,9 @@ internal sealed class ConnectionObject : AdoObject
     }
 
     /// <summary>
-    /// Provider before Open: the pinned provider's name, else the connection string's Provider key as written (its
-    /// quotes kept: ado-connstring-keys), else the property, else "MSDASQL". ADO reports a pinned MSDASQL as "MSDASQL.1";
-    /// CalcDb never pins it, as its Properties are refused.
+    /// Provider: the pinned provider's name (always set while open or after Properties was read), else the connection
+    /// string's Provider key as written (quotes kept: ado-connstring-keys) unless it was only populated by a failed
+    /// Open(text) (r-str-ado-act/ado-open-alt-orders cc), else the property, else "MSDASQL".
     /// </summary>
     private CallResult GetProvider()
     {
@@ -259,21 +383,32 @@ internal sealed class ConnectionObject : AdoObject
         {
             return Text(pinned.Name);
         }
-        ConnectionKey[] keys = ConnectionText.Parse(_connectionString ?? "").Named("Provider", out bool caseVariant);
-        string[] raws = [.. keys.Select(k => k.Raw).Distinct(StringComparer.Ordinal)];
-        if (caseVariant || raws.Length > 1 || (raws.Length == 1 && _providerProperty is not null && _providerProperty != raws[0]))
+        if (!_connectionStringFromFailedOpen)
         {
-            return NotImplemented("Connection.Provider with conflicting Provider settings (ADO-PROVIDER, not asked)");
+            ConnectionKey[] keys = ConnectionText.Parse(_connectionString ?? "").Named("Provider", out bool caseVariant);
+            string[] raws = [.. keys.Select(k => k.Raw).Distinct(StringComparer.Ordinal)];
+            if (caseVariant || raws.Length > 1 || (raws.Length == 1 && _providerProperty is not null && _providerProperty != raws[0]))
+            {
+                return NotImplemented("Connection.Provider with conflicting Provider settings (ADO-PROVIDER, not asked)");
+            }
+            if (raws.Length == 1)
+            {
+                return Text(raws[0]);
+            }
         }
-        return Text(raws.Length == 1 ? raws[0] : _providerProperty ?? EffectiveProvider.Default);
+        return Text(_providerProperty ?? EffectiveProvider.Default);
     }
 
     /// <summary>
-    /// Provider = name on a closed Connection: stored as given, whatever was read first (State, ConnectionString, Mode,
-    /// Provider: r-fix-wire-ado/ado-provider-pin-isolated); once Properties pinned another provider, 0x800A0C94.
+    /// Provider = name: 0x800A0E79 while open (r-ado-1b/conn-set-while-open); while closed, stored as given until
+    /// Properties pins another provider (0x800A0C94: r-fix-wire-ado/ado-provider-pin-isolated).
     /// </summary>
     private CallResult PutProvider(nint arg)
     {
+        if (IsOpen)
+        {
+            return Fail(AdoErrors.ObjectOpen);
+        }
         string? name = Args.Text(arg);
         if (name is null)
         {
@@ -289,20 +424,40 @@ internal sealed class ConnectionObject : AdoObject
         return CallResult.Nothing;
     }
 
-    /// <summary>ConnectionString = text on a closed Connection: kept exactly, read back unchanged before Open (ado-connstring-keys).</summary>
+    private CallResult GetConnectionString()
+    {
+        if (IsOpen)
+        {
+            AdoOpenSession s = _session!;
+            return BuildOpenConnectionString(_pinned!.Value.Name, s.DataSource, s.EffectiveMode, s.EngineType, s.LockingMode, s.OpenInitValues);
+        }
+        return _connectionString is { } text ? Text(text) : CallResult.OfOwnedBstr(0);
+    }
+
+    /// <summary>ConnectionString = text: 0x800A0E79 while open (conn-set-while-open); kept verbatim while closed.</summary>
     private CallResult PutConnectionString(nint arg)
     {
+        if (IsOpen)
+        {
+            return Fail(AdoErrors.ObjectOpen);
+        }
         string? text = Args.Text(arg);
         if (text is null)
         {
             return NotImplemented("Connection.ConnectionString = a value that is not text");
         }
         _connectionString = text;
+        _failedOpenModeRefreshPending = false;
+        _connectionStringFromFailedOpen = false;
         return CallResult.Nothing;
     }
 
     private CallResult PutMode(nint arg)
     {
+        if (IsOpen)
+        {
+            return Fail(AdoErrors.ObjectOpen);
+        }
         if (AdoArgs.Int32(arg) is not int mode)
         {
             return NotImplemented("Connection.Mode = a value that is not a number");
@@ -326,11 +481,11 @@ internal sealed class ConnectionObject : AdoObject
         {
             return NotImplemented("Connection.CursorLocation other than adUseServer or adUseClient (not asked)");
         }
-        _cursorLocation = location; // r-ado-1b/conn-cursorlocation-inherit
+        _cursorLocation = location; // r-ado-1b/conn-cursorlocation-inherit, conn-set-while-open
         return CallResult.Nothing;
     }
 
-    /// <summary>CommandTimeout: a negative value is refused 0x800A0BB9 (r-q-ado-misc/results-timeout-values: -1).</summary>
+    /// <summary>CommandTimeout: a negative value is refused 0x800A0BB9 (r-q-ado-misc/results-timeout-values: -1); accepted while open (conn-set-while-open).</summary>
     private CallResult PutCommandTimeout(nint arg)
     {
         if (AdoArgs.Int32(arg) is not int seconds)
@@ -356,19 +511,71 @@ internal sealed class ConnectionObject : AdoObject
         return CallResult.Nothing;
     }
 
+    /// <summary>Attributes: 0 or XactAttributeEnum flags (adXactCommitRetaining 131072, adXactAbortRetaining 262144; conn-set-while-open).</summary>
+    private CallResult PutAttributes(nint arg)
+    {
+        if (AdoArgs.Int32(arg) is not int attrs)
+        {
+            return NotImplemented("Connection.Attributes = a value that is not a number");
+        }
+        if ((attrs & ~(131072 | 262144)) != 0)
+        {
+            return NotImplemented($"Connection.Attributes = {attrs} (not asked)");
+        }
+        _attributes = attrs;
+        return CallResult.Nothing;
+    }
+
+    private CallResult GetDefaultDatabase() => IsOpen ? CallResult.OfOwnedBstr(0) : Fail(AdoErrors.ObjectClosed);
+
     /// <summary>
-    /// Properties on a closed Connection: the effective provider's initialization properties, and reading them pins that
-    /// provider (ADO-CONN, ACT-ADO-SCOPE). The ACE route has its captured 31-entry inventory (ADO-PROPS). Any other route
-    /// is the provider refusal: no provider is activated, so nothing is pinned.
+    /// DefaultDatabase = text: 0x800A0E78 while closed; while open, 0x80040E21 with IErrorInfo on _Connection and
+    /// two entries in Connection.Errors (r-ado-1b/conn-set-while-open).
+    /// </summary>
+    private CallResult PutDefaultDatabase(nint arg)
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        if (Args.Text(arg) is null)
+        {
+            return NotImplemented("Connection.DefaultDatabase = a value that is not text");
+        }
+        ErrorsCollection.Replace(
+        [
+            new AdoErrorEntry(HResultErrorsOccurred, AceEngineSource, MultipleStepDescription, "", 0, "", 0),
+            new AdoErrorEntry(HResultErrorsOccurred, "ADODB.Connection", ReadOnlyPropertyDescription, "", ProviderHelpContext, "", HResultErrorsOccurred),
+        ]);
+        return CallResult.Fail(ReadOnlyPropertyFailure("ADODB.Connection", Decl.Iid, publishesErrorInfo: true));
+    }
+
+    /// <summary>
+    /// Properties: same COM identity across closed (31) -> open (101) -> closed (31). Reading Properties while closed
+    /// pins an admitted ACE provider; non-ACE routes return NotModelled.AdoProvider without pinning.
     /// </summary>
     private CallResult GetProperties()
     {
+        if (IsOpen)
+        {
+            return Object(_properties ??= CreateProperties(BuildOpenSlots()));
+        }
         EffectiveProvider effective = Effective();
         switch (effective.Route)
         {
             case ProviderRoute.Ace:
                 _pinned = effective;
-                return Object(_properties ??= new PropertiesObject(AceInitializationProperties.Create()));
+                if (_failedOpenModeRefreshPending && string.IsNullOrEmpty(_connectionString) && _mode != 0)
+                {
+                    // r-ado-1b/conn-datasource-spellings sp_extended: reading Properties after a failed ACE open with Mode set materializes Provider+Mode;.
+                    if (TryFormatMode(_mode) is not { } modeName)
+                    {
+                        return NotImplemented($"Connection.Properties materializing ConnectionString with Mode={_mode} (not asked)");
+                    }
+                    _connectionString = $"Provider={effective.Name};Mode={modeName};";
+                    _failedOpenModeRefreshPending = false;
+                }
+                return Object(_properties ??= CreateProperties(AceProperties.CreateClosed(_mode == 0 ? null : _mode)));
             case ProviderRoute.Persistence:
                 return NotImplemented("Connection.Properties of the MSPersist route (ADO-PERSIST, W-09/events-persistence-inventory)");
             case ProviderRoute.Refused:
@@ -378,215 +585,711 @@ internal sealed class ConnectionObject : AdoObject
         }
     }
 
+    private PropertiesObject CreateProperties(PropertySlot[] slots) =>
+        new(slots, () => ErrorsCollection.Clear(), entries => ErrorsCollection.Replace(entries));
+
+    private PropertySlot[] BuildOpenSlots()
+    {
+        AdoOpenSession s = _session!;
+        return AceProperties.CreateOpen(s.OpenInitValues, s.DataSource, s.EffectiveMode, s.EngineType, s.LockingMode);
+    }
+
     /// <summary>
-    /// Open(ConnectionString, UserID, Password, Options): the effective provider of the accepted inputs (an explicit
-    /// text replaces ConnectionString) decides the route first (II-12 §16). A refused route fails with the counted
-    /// refusal and leaves the Connection closed, its Errors untouched.
+    /// Open(ConnectionString, UserID, Password, Options): resolves the effective provider first (II-12 §16), then opens
+    /// an ACE database natively through CalcDb's ISAM (W-09/native-read-query). Non-ACE providers are refused with
+    /// NotModelled.AdoProvider leaving the Connection closed and Errors untouched.
     /// </summary>
     private CallResult Open(ReadOnlySpan<nint> args)
     {
+        if (IsOpen)
+        {
+            return Fail(AdoErrors.ObjectOpen);
+        }
         string? openText = args[0] == 0 ? null : Args.Text(args[0]);
         if (args[0] != 0 && openText is null)
         {
             return NotImplemented("Connection.Open with a ConnectionString that is not text");
         }
         EffectiveProvider effective = Effective(openText);
-        return effective.Route switch
+        if (effective.Route == ProviderRoute.Refused)
         {
-            ProviderRoute.Refused => CallResult.Fail(effective.Refusal("Connection.Open")),
-            ProviderRoute.Ace => NotImplemented("Connection.Open of the ACE provider (a data path: W-09/native-read-query)"),
-            ProviderRoute.Persistence => NotImplemented("Connection.Open of the MSPersist route (ADO-PERSIST, W-09/events-persistence-inventory)"),
-            _ => NotImplemented("Connection.Open: " + effective.Why),
-        };
+            return CallResult.Fail(effective.Refusal("Connection.Open"));
+        }
+        if (effective.Route == ProviderRoute.Persistence)
+        {
+            return NotImplemented("Connection.Open of the MSPersist route (ADO-PERSIST, W-09/events-persistence-inventory)");
+        }
+        if (effective.Route != ProviderRoute.Ace)
+        {
+            return NotImplemented("Connection.Open: " + effective.Why);
+        }
+        if (openText is not null && string.IsNullOrWhiteSpace(openText))
+        {
+            return NotImplemented("Connection.Open with an empty or whitespace ConnectionString argument (not asked)");
+        }
+        if (openText is null && _connectionString is not null && _connectionString.Length > 0 && string.IsNullOrWhiteSpace(_connectionString))
+        {
+            return NotImplemented("Connection.Open with a whitespace-only ConnectionString property (not asked)");
+        }
+
+        string? userArg = args[1] == 0 ? null : Args.Text(args[1]);
+        if (args[1] != 0 && userArg is null)
+        {
+            if (!TryComposePreOpenConnectionStringIfUnset(effective.Name))
+            {
+                return NotImplemented($"Connection.Open composing pre-open ConnectionString with Mode={_mode} (not asked)");
+            }
+            ErrorsCollection.Replace(new AdoErrorEntry(
+                HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+            return CallResult.Fail(ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid));
+        }
+        string? passwordArg = args[2] == 0 ? null : Args.Text(args[2]);
+        if (args[2] != 0 && passwordArg is null)
+        {
+            if (!TryComposePreOpenConnectionStringIfUnset(effective.Name))
+            {
+                return NotImplemented($"Connection.Open composing pre-open ConnectionString with Mode={_mode} (not asked)");
+            }
+            ErrorsCollection.Replace(new AdoErrorEntry(
+                HResultTypeMismatch, ProviderSource, "Type mismatch.", "", ProviderHelpContext, "", HResultTypeMismatch));
+            return CallResult.Fail(ProviderFailure(HResultTypeMismatch, "Type mismatch.", Decl.Iid));
+        }
+
+        int options = -1;
+        if (args[3] != 0)
+        {
+            if (AdoArgs.Int32(args[3]) is not int parsedOptions)
+            {
+                return NotImplemented("Connection.Open with non-numeric Options (not asked)");
+            }
+            options = parsedOptions;
+        }
+        if (options == 16)
+        {
+            return NotImplemented("Connection.Open with adAsyncConnect (asynchronous connection is outside this slice)");
+        }
+        if (options == 99)
+        {
+            // r-ado-1b/conn-open-args oe: Options=99 succeeds without opening, clears Errors, and composes ConnectionString without trailing ';'.
+            if (!TryComposePreOpenConnectionStringIfUnset(effective.Name))
+            {
+                return NotImplemented($"Connection.Open composing pre-open ConnectionString with Mode={_mode} (not asked)");
+            }
+            ErrorsCollection.Clear();
+            return CallResult.Nothing;
+        }
+        if (options != -1)
+        {
+            return NotImplemented($"Connection.Open with Options={options} (not asked)");
+        }
+
+        var initValues = new Dictionary<string, OwnedVariant>(StringComparer.Ordinal);
+        bool propsModeModified = false;
+        int propsModeValue = 16;
+        bool lockingModeExplicit = false;
+        string? propsDataSource = null;
+
+        try
+        {
+            // Start from closed Properties values if initialized, else defaults.
+            if (_properties is not null)
+            {
+                foreach (PropertySlot slot in _properties.ReadSlotsForOpen())
+                {
+                    initValues[slot.Descriptor.Name] = slot.Value.CopyPreservingReference();
+                    if (slot.Descriptor.Name == "Mode" && slot.Modified)
+                    {
+                        propsModeModified = true;
+                        propsModeValue = ReadInt32(slot.Value, 16);
+                    }
+                    else if (slot.Descriptor.Name == "Jet OLEDB:Database Locking Mode" && slot.Modified)
+                    {
+                        lockingModeExplicit = true;
+                    }
+                    else if (slot.Descriptor.Name == "Data Source" && slot.Modified)
+                    {
+                        propsDataSource = ReadText(slot.Value);
+                    }
+                }
+            }
+            else
+            {
+                foreach (PropertySlot slot in AceProperties.CreateClosed())
+                {
+                    initValues[slot.Descriptor.Name] = slot.Value;
+                }
+            }
+
+            string sourceText = openText ?? _connectionString ?? "";
+            ConnectionText parsed = ConnectionText.Parse(sourceText);
+            int? csMode = null;
+            string? csDataSource = null;
+            bool persistSecurityInfo = ReadBool(initValues["Persist Security Info"], false);
+
+            foreach (ConnectionKey key in parsed.Keys)
+            {
+                if (!key.HasEquals)
+                {
+                    if (parsed.Keys.Count == 1)
+                    {
+                        csDataSource = key.Key;
+                        SetInitValue(initValues, "Data Source", OwnedVariant.FromText(key.Key));
+                        continue;
+                    }
+                    DisposeValues(initValues);
+                    return NotImplemented("Connection.Open with a connection string fragment without '=' (not asked)");
+                }
+                if (string.Equals(key.Key, "Provider", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (!AceProperties.TryFindInitEntry(key.Key, out int dataType, out bool caseVariant))
+                {
+                    DisposeValues(initValues);
+                    if (caseVariant)
+                    {
+                        return NotImplemented($"Connection.Open with case-variant key '{key.Key}' (not asked)");
+                    }
+                    // r-str-ado-act/ado-connstring-keys kb: unknown ACE key fails with 3170 "Could not find installable ISAM."
+                    return FailAceOpen(openText, persistSecurityInfo, HResultFail,
+                        "Could not find installable ISAM.", 5003170, "3170", -69141536);
+                }
+                if (key.Key == "Mode")
+                {
+                    if (!TryParseMode(key.Value, out int parsedMode))
+                    {
+                        DisposeValues(initValues);
+                        return NotImplemented($"Connection.Open with Mode='{key.Value}' (not asked)");
+                    }
+                    csMode = parsedMode;
+                    SetInitValue(initValues, "Mode", OwnedVariant.FromInt32(parsedMode));
+                    continue;
+                }
+                OwnedVariant? parsedValue = ParseInitPropertyValue(dataType, key.Value);
+                if (parsedValue is null)
+                {
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open with {key.Key}='{key.Value}' (not asked)");
+                }
+                SetInitValue(initValues, key.Key, parsedValue);
+                if (key.Key == "Data Source")
+                {
+                    csDataSource = key.Value;
+                }
+                else if (key.Key == "Jet OLEDB:Database Locking Mode")
+                {
+                    lockingModeExplicit = true;
+                }
+                else if (key.Key == "Persist Security Info")
+                {
+                    persistSecurityInfo = ReadBool(parsedValue, false);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(ReadText(initValues["Extended Properties"])))
+            {
+                DisposeValues(initValues);
+                return NotImplemented("Connection.Open with Extended Properties (external ISAMs are outside CalcDb)");
+            }
+
+            if (propsModeModified && !AskedModes.Contains(propsModeValue))
+            {
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open with Properties(\"Mode\")={propsModeValue} (not asked)");
+            }
+
+            bool defaultMode = csMode is null && _mode == 0 && !propsModeModified;
+            int effectiveMode = csMode ?? (_mode != 0 ? _mode : propsModeModified ? propsModeValue : 16);
+            if (effectiveMode is 2 or 5 or 11 or 15)
+            {
+                // r-oledb-odbc/prop-modes (ma2=2, ma5=15, ma6=11, ma7=5), error-open-failures (fh1/fh4=15):
+                // these modes fail before engine init with Provider 0x80040E21.
+                DisposeValues(initValues);
+                return FailProviderOpen(openText, persistSecurityInfo, HResultErrorsOccurred, MultipleStepDescription);
+            }
+            if (effectiveMode is not (1 or 3 or 16 or 19))
+            {
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open with Mode={effectiveMode} (not asked)");
+            }
+
+            if (csDataSource is not null && propsDataSource is not null)
+            {
+                DisposeValues(initValues);
+                return NotImplemented("Connection.Open with Data Source set in both ConnectionString and Properties(\"Data Source\") (not asked)");
+            }
+
+            string dataSource = csDataSource ?? propsDataSource ?? ReadText(initValues["Data Source"]);
+            if (string.IsNullOrEmpty(dataSource))
+            {
+                // r-str-ado-act/ado-open-alt-orders cc, r-ado-1b/conn-set-while-open: missing Data Source -> Provider 0x80040E4D.
+                DisposeValues(initValues);
+                return FailProviderOpen(openText, persistSecurityInfo, HResultAuthFailed, "Authentication failed.");
+            }
+
+            string userId = userArg ?? ReadText(initValues["User ID"]);
+            string password = passwordArg ?? ReadText(initValues["Password"]);
+            if (!string.IsNullOrEmpty(userId) && !string.Equals(userId, "Admin", StringComparison.Ordinal))
+            {
+                if (string.Equals(userId, "Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open with User ID='{userId}' (case variant of Admin not asked)");
+                }
+                // r-ado-1b/conn-open-args oc/og: non-Admin user -> ACE 3028.
+                DisposeValues(initValues);
+                return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
+                    "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
+                    5003028, "3028", -124520301);
+            }
+            if (!string.IsNullOrEmpty(password))
+            {
+                // r-ado-1b/conn-open-args ob, r-oledb-odbc/error-open-failures ff: non-empty password -> ACE 3028.
+                DisposeValues(initValues);
+                return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
+                    "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
+                    5003028, "3028", -124520301);
+            }
+
+            if (dataSource.StartsWith(@"\\?\", StringComparison.Ordinal))
+            {
+                // r-ado-1b/conn-datasource-spellings sp_extended: Win32 extended-length prefix -> ACE 3043.
+                DisposeValues(initValues);
+                return FailAceOpen(openText, persistSecurityInfo, HResultFail,
+                    "Your network access was interrupted. To continue, close the database, and then open it again.",
+                    5003043, "3043", -66913278);
+            }
+
+            string full;
+            try
+            {
+                full = Path.GetFullPath(dataSource);
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open with malformed path '{dataSource}' ({e.GetType().Name}, not asked)");
+            }
+
+            string? directory = Path.GetDirectoryName(full);
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
+                // r-act-1-thread/ado-main-sta, r-oledb-odbc/error-open-failures fe: nonexistent directory -> ACE 3044.
+                DisposeValues(initValues);
+                return FailAceOpen(openText, persistSecurityInfo, HResultFail,
+                    $"'{dataSource}' is not a valid path. Make sure that the path name is spelled correctly and that you are connected to the server on which the file resides.",
+                    5003044, "3044", -534774783);
+            }
+
+            if (!File.Exists(full))
+            {
+                // r-oledb-odbc/error-open-failures fa: nonexistent file -> ACE 3024.
+                DisposeValues(initValues);
+                return FailAceOpen(openText, persistSecurityInfo, HResultFail,
+                    $"Could not find file '{dataSource}'.",
+                    5003024, "3024", -534578963);
+            }
+
+            if ((File.GetAttributes(full) & FileAttributes.ReadOnly) != 0)
+            {
+                DisposeValues(initValues);
+                return NotImplemented("Connection.Open of a read-only file (Read-Only Data Source on read-only files was not asked)");
+            }
+
+            int localeId = ReadInt32(initValues["Locale Identifier"], 1033);
+            if (localeId != 1033)
+            {
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open with Locale Identifier={localeId} (only 1033 was asked)");
+            }
+
+            if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
+            {
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})");
+            }
+
+            byte[] headerBytes = new byte[4096];
+            if (file.GetExtent() < (ulong)headerBytes.Length || file.ReadAt(0, headerBytes).Status != TransferStatus.Complete)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented("Connection.Open of a file shorter than one page");
+            }
+
+            ProfileRefusal profileRefusal = ProfileSelector.Select(headerBytes, out FileProfile? profile);
+            if (profile is null)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open of this file profile ({profileRefusal})");
+            }
+
+            FormatDescriptor format = profile.Descriptor;
+            DatabaseHeader decodedHeader = DatabaseHeader.Decode(headerBytes, format);
+            if (decodedHeader.SortOrder.Identifier != TextSortOrder.GeneralIdentifier)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open of a database with sort identifier {decodedHeader.SortOrder.Identifier} (only General 1033 was asked)");
+            }
+
+            int engineType = profile.IsAce ? 6 : 5;
+            int lockingMode;
+            if (!profile.IsAce)
+            {
+                if (effectiveMode != 1 || lockingModeExplicit)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1 without explicit Database Locking Mode is recorded)");
+                }
+                lockingMode = 0;
+            }
+            else if (lockingModeExplicit)
+            {
+                int explicitLocking = ReadInt32(initValues["Jet OLEDB:Database Locking Mode"], -1);
+                if (!defaultMode || explicitLocking is not (0 or 1))
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open with explicit Jet OLEDB:Database Locking Mode={explicitLocking} and Mode={effectiveMode} (only 0 or 1 with default Mode is recorded)");
+                }
+                lockingMode = explicitLocking;
+            }
+            else
+            {
+                lockingMode = effectiveMode == 1 ? 0 : 1;
+            }
+
+            ulong pages = file.GetExtent() / (ulong)format.PageSize;
+            var cache = file.CreateCache(format.PageSize, CachePages);
+            CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? catalogFailure, readProperties: true);
+            if (catalog is null)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
+                    ? "Connection.Open of an encrypted database (W-L1)"
+                    : "Connection.Open when the catalog cannot be read: " + catalogFailure);
+            }
+
+            LockFile? lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
+            if (lockFile is null)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
+            }
+
+            SetInitValue(initValues, "User ID", OwnedVariant.FromText("Admin"));
+            SetInitValue(initValues, "Data Source", OwnedVariant.FromText(dataSource));
+            SetInitValue(initValues, "Mode", OwnedVariant.FromInt32(effectiveMode));
+            SetInitValue(initValues, "Jet OLEDB:Engine Type", OwnedVariant.FromInt32(engineType));
+            SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(lockingMode));
+
+            _session = new AdoOpenSession(
+                file, lockFile, cache, profile, decodedHeader, catalog, pages,
+                readOnly: effectiveMode == 1,
+                dataSource, full, effectiveMode, engineType, lockingMode, initValues);
+            _pinned = effective;
+            _mode = effectiveMode;
+            _failedOpenModeRefreshPending = false;
+            _connectionStringFromFailedOpen = false;
+            _connectionString = null;
+            ErrorsCollection.Clear();
+            _properties?.MarkStale(BuildOpenSlots);
+            return CallResult.Nothing;
+        }
+        catch
+        {
+            DisposeValues(initValues);
+            throw;
+        }
     }
 
-    /// <summary>Execute on a closed Connection: 0x800A0E78 with no options or adCmdText (1), adCmdText|adExecuteNoRecords (129).</summary>
+    private CallResult Close()
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        _session!.ReleaseResources();
+        _session = null;
+        _connectionString = null;
+        _failedOpenModeRefreshPending = false;
+        _connectionStringFromFailedOpen = false;
+        ErrorsCollection.Clear();
+        int closedMode = _mode == 0 ? 16 : _mode;
+        _properties?.MarkStale(() => AceProperties.CreateClosed(closedMode));
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// Execute: 0x800A0E78 while closed (with no options or adCmdText / adCmdText|adExecuteNoRecords); while open,
+    /// belongs to the next stretch of W-09/native-read-query and is refused by name.
+    /// </summary>
     private CallResult Execute(ReadOnlySpan<nint> args)
     {
+        if (IsOpen)
+        {
+            return NotImplemented("Connection.Execute on an open Connection (next stretch of W-09/native-read-query)");
+        }
         int? options = args[2] == 0 ? -1 : AdoArgs.Int32(args[2]);
         return options is -1 or 1 or 129
             ? Fail(AdoErrors.ObjectClosed)
             : NotImplemented("Connection.Execute on a closed Connection with these Options (not asked)");
     }
 
+    private CallResult FailAceOpen(
+        string? openText,
+        bool persistSecurityInfo,
+        int scode,
+        string description,
+        int helpContext,
+        string sqlState,
+        int nativeError)
+    {
+        UpdateStateAfterFailedOpen(openText, persistSecurityInfo);
+        ErrorsCollection.Replace(new AdoErrorEntry(scode, AceEngineSource, description, "", helpContext, sqlState, nativeError));
+        return CallResult.Fail(AceOpenFailure(scode, description, helpContext));
+    }
+
+    private CallResult FailProviderOpen(string? openText, bool persistSecurityInfo, int scode, string description)
+    {
+        UpdateStateAfterFailedOpen(openText, persistSecurityInfo);
+        ErrorsCollection.Replace(new AdoErrorEntry(scode, ProviderSource, description, "", ProviderHelpContext, "", scode));
+        return CallResult.Fail(ProviderFailure(scode, description, Decl.Iid));
+    }
+
+    private void UpdateStateAfterFailedOpen(string? openText, bool persistSecurityInfo)
+    {
+        int closedMode = _mode == 0 ? 16 : _mode;
+        _properties?.MarkStale(() => AceProperties.CreateClosed(closedMode));
+        if (openText is not null)
+        {
+            bool wasUnset = _connectionString is null;
+            _connectionString = FormatFailedConnectionString(openText, persistSecurityInfo);
+            _failedOpenModeRefreshPending = false;
+            _connectionStringFromFailedOpen = wasUnset;
+        }
+        else if (!string.IsNullOrEmpty(_connectionString))
+        {
+            _connectionString = FormatFailedConnectionString(_connectionString, persistSecurityInfo);
+            _failedOpenModeRefreshPending = false;
+        }
+        else
+        {
+            _connectionString = null;
+            _failedOpenModeRefreshPending = _mode != 0;
+            _connectionStringFromFailedOpen = false;
+        }
+    }
+
+    private static string FormatFailedConnectionString(string raw, bool persistSecurityInfo)
+    {
+        string trimmed = raw.Trim();
+        if (!persistSecurityInfo)
+        {
+            ConnectionText parsed = ConnectionText.Parse(trimmed);
+            if (parsed.Keys.Any(k => k.HasEquals && string.Equals(k.Key, "Password", StringComparison.OrdinalIgnoreCase)))
+            {
+                var sb = new StringBuilder();
+                foreach (ConnectionKey k in parsed.Keys)
+                {
+                    if (k.HasEquals && string.Equals(k.Key, "Password", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    sb.Append(k.HasEquals ? $"{k.Key}={k.Raw};" : $"{k.Key};");
+                }
+                return sb.ToString();
+            }
+        }
+        return trimmed.EndsWith(';') ? trimmed : trimmed + ";";
+    }
+
+    /// <summary>
+    /// Pre-open composed ConnectionString without trailing ';' (r-ado-1b/conn-open-args oe and of):
+    /// Provider=...;Data Source=...;Mode=... when the Connection was configured via Provider/Properties/Mode.
+    /// </summary>
+    private bool TryComposePreOpenConnectionStringIfUnset(string providerName)
+    {
+        if (!string.IsNullOrEmpty(_connectionString))
+        {
+            return true;
+        }
+        var parts = new List<string> { $"Provider={providerName}" };
+        if (_properties is not null)
+        {
+            foreach (PropertySlot slot in _properties.ReadSlotsForOpen())
+            {
+                if (slot.Descriptor.Name == "Data Source")
+                {
+                    string ds = ReadText(slot.Value);
+                    if (!string.IsNullOrEmpty(ds))
+                    {
+                        parts.Add($"Data Source={ds}");
+                    }
+                    break;
+                }
+            }
+        }
+        if (_mode != 0)
+        {
+            if (TryFormatMode(_mode) is not { } modeName)
+            {
+                return false;
+            }
+            parts.Add($"Mode={modeName}");
+        }
+        _connectionString = string.Join(';', parts);
+        return true;
+    }
+
+    private CallResult BuildOpenConnectionString(
+        string providerName,
+        string dataSource,
+        int mode,
+        int engineType,
+        int lockingMode,
+        IReadOnlyDictionary<string, OwnedVariant> init)
+    {
+        if (TryFormatMode(mode) is not { } modeName)
+        {
+            return NotImplemented($"Connection.ConnectionString while open with Mode={mode} (not asked)");
+        }
+        if (dataSource.IndexOfAny([';', '"', '\'']) >= 0)
+        {
+            return NotImplemented("Connection.ConnectionString while open with Data Source containing ';', '\"', or '\\'' (quoting not asked)");
+        }
+        foreach (string quotedKey in new[]
+        {
+            "Jet OLEDB:System database",
+            "Jet OLEDB:Registry Path",
+            "Jet OLEDB:Database Password",
+            "Jet OLEDB:New Database Password",
+        })
+        {
+            if (ReadText(init[quotedKey]).Length > 0)
+            {
+                return NotImplemented($"Connection.ConnectionString while open with non-empty '{quotedKey}' (quoting not asked)");
+            }
+        }
+
+        static string FormatBool(IReadOnlyDictionary<string, OwnedVariant> d, string name) =>
+            ReadBool(d[name], false) ? "True" : "False";
+
+        return Text(string.Create(CultureInfo.InvariantCulture,
+            $"Provider={providerName};" +
+            $"User ID=Admin;" +
+            $"Data Source={dataSource};" +
+            $"Mode={modeName};" +
+            $"Jet OLEDB:System database=\"\";" +
+            $"Jet OLEDB:Registry Path=\"\";" +
+            $"Jet OLEDB:Database Password=\"\";" +
+            $"Jet OLEDB:Engine Type={engineType};" +
+            $"Jet OLEDB:Database Locking Mode={lockingMode};" +
+            $"Jet OLEDB:Global Partial Bulk Ops={ReadInt32(init["Jet OLEDB:Global Partial Bulk Ops"], 2)};" +
+            $"Jet OLEDB:Global Bulk Transactions={ReadInt32(init["Jet OLEDB:Global Bulk Transactions"], 1)};" +
+            $"Jet OLEDB:New Database Password=\"\";" +
+            $"Jet OLEDB:Create System Database={FormatBool(init, "Jet OLEDB:Create System Database")};" +
+            $"Jet OLEDB:Encrypt Database={FormatBool(init, "Jet OLEDB:Encrypt Database")};" +
+            $"Jet OLEDB:Don't Copy Locale on Compact={FormatBool(init, "Jet OLEDB:Don't Copy Locale on Compact")};" +
+            $"Jet OLEDB:Compact Without Replica Repair={FormatBool(init, "Jet OLEDB:Compact Without Replica Repair")};" +
+            $"Jet OLEDB:SFP={FormatBool(init, "Jet OLEDB:SFP")};" +
+            $"Jet OLEDB:Support Complex Data={FormatBool(init, "Jet OLEDB:Support Complex Data")};" +
+            $"Jet OLEDB:Bypass UserInfo Validation={FormatBool(init, "Jet OLEDB:Bypass UserInfo Validation")};" +
+            $"Jet OLEDB:Limited DB Caching={FormatBool(init, "Jet OLEDB:Limited DB Caching")};" +
+            $"Jet OLEDB:Bypass ChoiceField Validation={FormatBool(init, "Jet OLEDB:Bypass ChoiceField Validation")};"));
+    }
+
+    private static bool TryParseMode(string raw, out int mode)
+    {
+        if (string.Equals(raw.Trim(), "Read", StringComparison.Ordinal))
+        {
+            mode = 1;
+            return true;
+        }
+        mode = 0;
+        return false;
+    }
+
+    private static string? TryFormatMode(int mode) => mode switch
+    {
+        1 => "Read",
+        16 => "Share Deny None",
+        _ => null,
+    };
+
+    private static OwnedVariant? ParseInitPropertyValue(int dataType, string text)
+    {
+        switch (dataType)
+        {
+            case 8:
+                return OwnedVariant.FromText(text);
+            case 2:
+                return short.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out short i2)
+                    ? OwnedVariant.FromInt16(i2) : null;
+            case 3:
+                return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i4)
+                    ? OwnedVariant.FromInt32(i4) : null;
+            case 20:
+                return long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long i8)
+                    ? OwnedVariant.FromInt64(i8) : null;
+            case 11:
+                if (string.Equals(text, "True", StringComparison.Ordinal))
+                {
+                    return OwnedVariant.FromBoolean(true);
+                }
+                if (string.Equals(text, "False", StringComparison.Ordinal))
+                {
+                    return OwnedVariant.FromBoolean(false);
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static void SetInitValue(Dictionary<string, OwnedVariant> map, string key, OwnedVariant value)
+    {
+        if (map.TryGetValue(key, out OwnedVariant? previous))
+        {
+            previous.Dispose();
+        }
+        map[key] = value;
+    }
+
+    private static void DisposeValues(Dictionary<string, OwnedVariant> map)
+    {
+        foreach (OwnedVariant value in map.Values)
+        {
+            value.Dispose();
+        }
+        map.Clear();
+    }
+
+    private static unsafe string ReadText(OwnedVariant variant) =>
+        variant.Type == VarType.Bstr ? Args.Text((nint)variant.Pointer) ?? "" : "";
+
+    private static unsafe int ReadInt32(OwnedVariant variant, int fallback) =>
+        variant.Type switch
+        {
+            VarType.I4 => (int)variant.Pointer->Int64,
+            VarType.I2 => (short)variant.Pointer->Int64,
+            _ => fallback,
+        };
+
+    private static unsafe bool ReadBool(OwnedVariant variant, bool fallback) =>
+        variant.Type == VarType.Bool ? (short)variant.Pointer->Int64 != 0 : fallback;
+
     protected override void OnFinalRelease()
     {
+        _session?.ReleaseResources();
+        _session = null;
         _errors?.Release();
         _properties?.Release();
-    }
-}
-
-/// <summary>
-/// A Connection's Errors (II-12 §28): provider errors of its latest failing operation. ADO's own errors are never added
-/// (ado-provider-pin-isolated), and no provider runs before a data path, so the collection stays empty in this slice.
-/// </summary>
-internal sealed class AdoErrorsObject : AdoObject
-{
-    private static readonly InterfaceDecl Decl = AdoTypes.Errors;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
-    private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Count", (self, args) => Int32(0))
-        .Get("Item", (self, args) => ((AdoErrorsObject)self).Item(args[0]))
-        .Method("Clear", (self, args) => CallResult.Nothing)
-        .Method("Refresh", (self, args) => CallResult.Nothing);
-
-    public AdoErrorsObject() : base(Decl, Vtable, "ADODB.Errors")
-    {
-    }
-
-    protected override OperationTable Table => Operations;
-
-    private CallResult Item(nint index) => AdoLookup.Find(index, [], out _) switch
-    {
-        AdoLookup.Outcome.NotFound => Fail(AdoErrors.ItemNotFound),
-        _ => NotImplemented("Errors.Item with this index form (not asked)"),
-    };
-}
-
-/// <summary>A dynamic property's descriptor (II-12 §16 PropertyDescriptor): exact public name, type and attributes.</summary>
-internal sealed record PropertyDescriptor(string Name, int Type, int Attributes);
-
-/// <summary>A property's current value; the collection owns it, so every wrapper of the entry sees the same value.</summary>
-internal sealed class PropertySlot(PropertyDescriptor descriptor, OwnedVariant value)
-{
-    public PropertyDescriptor Descriptor { get; } = descriptor;
-
-    public OwnedVariant Value { get; set; } = value;
-}
-
-/// <summary>
-/// The ACE provider's initialization properties of a closed Connection (R-ADO-1 ADO-PROPS,
-/// r-q-ado-misc/props-conn-inventory: 31 entries, in this order, with these types, attributes and values; Data Source
-/// is the attempt's path as assigned). The 70 entries an Open adds belong to the data path (W-09/native-read-query).
-/// </summary>
-internal static class AceInitializationProperties
-{
-    private const int Required = 513; // adPropRequired | adPropRead ... as captured
-    private const int ReadWrite = 1537;
-
-    private static readonly (string Name, int Type, int Attributes, Func<OwnedVariant> Value)[] Inventory =
-    [
-        ("Cache Authentication", 11, Required, () => OwnedVariant.FromBoolean(true)),
-        ("Encrypt Password", 11, Required, () => OwnedVariant.FromBoolean(false)),
-        ("Mask Password", 11, Required, () => OwnedVariant.FromBoolean(false)),
-        ("Password", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("User ID", 8, ReadWrite, () => OwnedVariant.FromText("Admin")),
-        ("Data Source", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Window Handle", 20, ReadWrite, () => OwnedVariant.FromInt64(0)),
-        ("Mode", 3, ReadWrite, () => OwnedVariant.FromInt32(16)),
-        ("Prompt", 2, ReadWrite, () => OwnedVariant.FromInt16(4)),
-        ("Extended Properties", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Locale Identifier", 3, ReadWrite, () => OwnedVariant.FromInt32(1033)),
-        ("OLE DB Services", 3, ReadWrite, () => OwnedVariant.FromInt32(-6)),
-        ("Persist Security Info", 11, ReadWrite, OwnedVariant.Empty),
-        ("Jet OLEDB:System database", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Jet OLEDB:Registry Path", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Jet OLEDB:Database Password", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Jet OLEDB:Engine Type", 3, ReadWrite, () => OwnedVariant.FromInt32(0)),
-        ("Jet OLEDB:Database Locking Mode", 3, ReadWrite, () => OwnedVariant.FromInt32(1)),
-        ("Jet OLEDB:Global Partial Bulk Ops", 3, ReadWrite, () => OwnedVariant.FromInt32(2)),
-        ("Jet OLEDB:Global Bulk Transactions", 3, ReadWrite, () => OwnedVariant.FromInt32(1)),
-        ("Jet OLEDB:New Database Password", 8, ReadWrite, () => OwnedVariant.FromText("")),
-        ("Jet OLEDB:Create System Database", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Encrypt Database", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Don't Copy Locale on Compact", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Compact Without Replica Repair", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:SFP", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Compact Reclaimed Space Amount", 3, Required, () => OwnedVariant.FromInt32(0)),
-        ("Jet OLEDB:Support Complex Data", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Bypass UserInfo Validation", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Limited DB Caching", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-        ("Jet OLEDB:Bypass ChoiceField Validation", 11, ReadWrite, () => OwnedVariant.FromBoolean(false)),
-    ];
-
-    public static PropertySlot[] Create() => [.. Inventory.Select(e => new PropertySlot(new PropertyDescriptor(e.Name, e.Type, e.Attributes), e.Value()))];
-}
-
-/// <summary>
-/// A Properties collection over its entries (II-12 §16): Count, Item by ordinal or exact name (0x800A0CC1 for a name
-/// that is not there), Refresh. Each entry has one wrapper for the collection's lifetime: Item returns the same
-/// identity again (props-conn-inventory: Item(5) is the Data Source wrapper read before).
-/// </summary>
-internal sealed class PropertiesObject : AdoObject
-{
-    private static readonly InterfaceDecl Decl = AdoTypes.Properties;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
-    private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Count", (self, args) => Int32(((PropertiesObject)self)._slots.Length))
-        .Get("Item", (self, args) => ((PropertiesObject)self).Item(args[0]))
-        .Method("Refresh", (self, args) => CallResult.Nothing);
-
-    private readonly PropertySlot[] _slots;
-    private readonly PropertyObject?[] _wrappers;
-    private readonly string[] _names;
-
-    public PropertiesObject(PropertySlot[] slots) : base(Decl, Vtable, "ADODB.Properties")
-    {
-        _slots = slots;
-        _wrappers = new PropertyObject?[slots.Length];
-        _names = [.. slots.Select(s => s.Descriptor.Name)];
-    }
-
-    protected override OperationTable Table => Operations;
-
-    private CallResult Item(nint index)
-    {
-        switch (AdoLookup.Find(index, _names, out int ordinal))
-        {
-            case AdoLookup.Outcome.Found:
-                return Object(_wrappers[ordinal] ??= new PropertyObject(_slots[ordinal]));
-            case AdoLookup.Outcome.NotFound:
-                return Fail(AdoErrors.ItemNotFound);
-            default:
-                return NotImplemented("Properties.Item with this index form (not asked)");
-        }
-    }
-
-    protected override void OnFinalRelease()
-    {
-        foreach (PropertyObject? p in _wrappers)
-        {
-            p?.Release();
-        }
-    }
-}
-
-/// <summary>A Property: Name, Type, Attributes and Value of its slot; Value put converts to the property's Type.</summary>
-internal sealed unsafe class PropertyObject : AdoObject
-{
-    private static readonly InterfaceDecl Decl = AdoTypes.Property;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
-    private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Text(((PropertyObject)self)._slot.Descriptor.Name))
-        .Get("Type", (self, args) => Int32(((PropertyObject)self)._slot.Descriptor.Type))
-        .Get("Attributes", (self, args) => Int32(((PropertyObject)self)._slot.Descriptor.Attributes))
-        .Get("Value", (self, args) => CallResult.Of(((PropertyObject)self)._slot.Value.CopyPreservingReference()))
-        .Put("Value", (self, args) => ((PropertyObject)self).PutValue(args[0]));
-
-    private readonly PropertySlot _slot;
-
-    public PropertyObject(PropertySlot slot) : base(Decl, Vtable, "ADODB.Property")
-    {
-        _slot = slot;
-    }
-
-    protected override OperationTable Table => Operations;
-
-    private CallResult PutValue(nint arg)
-    {
-        if (arg == 0)
-        {
-            return NotImplemented("Property.Value = Missing");
-        }
-        VarType target = AdoValues.VarTypeOf(_slot.Descriptor.Type) ?? VarType.Empty;
-        OwnedVariant? converted = target == VarType.Empty ? null : OwnedVariant.ChangeType(Args.Cell(arg), target, SessionLocale.Lcid, out _);
-        if (converted is null)
-        {
-            return NotImplemented($"Property.Value = a value that does not convert to type {_slot.Descriptor.Type} (not asked)");
-        }
-        _slot.Value.Dispose();
-        _slot.Value = converted;
-        return CallResult.Nothing;
     }
 }
 

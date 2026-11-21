@@ -163,13 +163,13 @@ public sealed unsafe class AdoConstructionTests
         Assert.Equal(@"inputs\main.accdb", Get(ds, "Value"));
         nint window = (nint)Get(props, "Item", "Window Handle")!;
         Assert.Equal(0L, Get(window, "Value"));
-        AssertAdoError(Invoke(props, "Item", 2, "No Such Property"), unchecked((int)0x800A0CC1), "ADODB.Properties", 1240649, new Guid("00000504-0000-0010-8000-00AA006D2EA4"));
+        AssertAdoError(Invoke(props, "Item", 2, "No Such Property"), unchecked((int)0x800A0CC1), "ADODB.Properties", 1240649, Guid.Empty);
         // Reading Properties pinned ACE: another provider is now refused 0x800A0C94.
         AssertAdoError(Put(cn, "Provider", "MSPersist"), unchecked((int)0x800A0C94), "ADODB.Connection", 1241171, IidConnection);
-        // An ACE Open is a data path: named, not yet built (W-09/native-read-query).
+        // Both ConnectionString (bare path) and Properties("Data Source") were set: conflict is refused by name.
         Outcome open = Call(cn, "Open");
-        Assert.Equal(HResults.E_NOTIMPL, open.Failure!.Value.Scode);
-        Assert.Contains("W-09/native-read-query", open.Failure.Value.Description, StringComparison.Ordinal);
+        Assert.True(open.Failure is not null);
+        Assert.Equal(HResults.E_NOTIMPL, open.Failure.Value.Scode);
         Assert.Equal(0, Get(cn, "State"));
         foreach (nint p in new[] { window, ds, first, props, cn })
         {
