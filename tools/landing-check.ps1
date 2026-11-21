@@ -140,8 +140,11 @@ try {
         Copy-Item (Split-Path $runner) "$snap\runner" -Recurse
         Copy-Item (Split-Path $worker) "$snap\worker" -Recurse
         Copy-Item (Join-Path $Export "artifacts\native") "$snap\native" -Recurse
+        # The set definition travels with the binaries: compare-set otherwise reads probes/compare-set.json from the
+        # working tree, where a child's unfinished edit changes a running compare (process log, 2026-11-21).
+        Copy-Item (Join-Path $Export "probes\compare-set.json") "$snap\compare-set.json"
         Step "snapshot $snap"
-        "  compare: $snap\runner\calcdb-oracle.exe compare-set --rerun --name $Name-1 --against baseline " +
+        "  compare: $snap\runner\calcdb-oracle.exe compare-set --rerun --name $Name-1 --against baseline --set $snap\compare-set.json " +
             "--worker $snap\worker\CalcDb.Oracle.Worker.exe --deployment $snap\native --store $env:LOCALAPPDATA\CalcDb\compare-store"
     }
 } finally { Pop-Location }

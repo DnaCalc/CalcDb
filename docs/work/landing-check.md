@@ -26,10 +26,13 @@ procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scrat
    not the build.)
 4. Commit only the child's files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`), push,
    update its register row and task.
-5. With `-Snapshot` the script has copied the export's runner, worker and `artifacts/native` to
-   `%LOCALAPPDATA%\CalcDb\compare-bin\<topic>\runner`, `\worker` and `\native` (31 MB, seconds) and printed the
-   compare command. Run it from the repository folder as an `alta job`:
-   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`
+5. With `-Snapshot` the script has copied the export's runner, worker, `artifacts/native` and
+   `probes/compare-set.json` to `%LOCALAPPDATA%\CalcDb\compare-bin\<topic>\runner`, `\worker`, `\native` and
+   `\compare-set.json` (31 MB, seconds) and printed the compare command. Run it from the repository folder as an
+   `alta job`:
+   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --set <snapshot>\compare-set.json --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`.
+   Without `--set` the run reads the working tree's set, where a child's unfinished edit changes it: on 2026-11-21 a
+   compare of old binaries took up a child's new folders before they landed and ran 30 min instead of 8.
    (about 5 min: candidate attempts run six at a time, `--parallel N`; 17 min one at a time with `--parallel 1`;
    task mvgk, 2026-11-21). The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
    `docs/work/compare-baseline.tsv` when nothing is lost, and investigate every loss first. Its `source` line names the
