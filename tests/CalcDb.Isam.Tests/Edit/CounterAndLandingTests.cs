@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 
+using CalcDb.Catalog;
 using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
@@ -28,6 +29,7 @@ public sealed class CounterAndLandingTests
     private const string PagesFixture = "640b1893caaa6a8450731932e84ffa0e2a8be91a00a0be188bae767d7a31db34";
     private const string BulkWordsFixture = "47f8fa36bfcd0df6185061dc39e47fd46cdac20f372942f9a8ff3a177a8bfbf6";
     private const string Jet4MdbFixture = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75";
+    private const string Err1bBaseFixture = "33192b8c7ea72f4d74393996eedd0b157654218c623c63c99de672149b49e5ed";
 
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
 
@@ -718,9 +720,9 @@ public sealed class CounterAndLandingTests
     /// Workspace, ignores direct page-1 frees (<c>BitDelta</c> with <c>Set != 0, Clear == 0</c>, as in DELETE freeing
     /// chain pages: <c>evidence/r-q22-lv-open/lv-free-timing-delete-chain</c>,
     /// <c>evidence/r-q19-growth-open/lv-op-delete-row-chain</c>), ignores another session's page-1 changes and rolled-back
-    /// allocations, and preserves the Close obligation across mid-session <see cref="TransactionCoordinator.PublishCounterCommit"/>
-    /// (DAO <c>TableDefs.Append</c>, <c>evidence/r-q11-ddl-closure/append-dao</c>) until
-    /// <see cref="TransactionCoordinator.PublishCloseCommit"/> runs.
+    /// allocations, and preserves the Close obligation across a mid-session commit that changes only the page-0 counter
+    /// (<see cref="TransactionCoordinator.PublishCounterCommit"/>, which no production path calls; DAO <c>TableDefs.Append</c>
+    /// publishes its commits through the schema writer) until <see cref="TransactionCoordinator.PublishCloseCommit"/> runs.
     /// </summary>
     [Fact]
     public void NeedsCloseCommit_tracks_per_session_allocations_releases_and_ignores_direct_frees_and_other_sessions()
@@ -765,7 +767,7 @@ public sealed class CounterAndLandingTests
         Assert.True(rig.A.NeedsCloseCommit(cache));
         Assert.False(other.NeedsCloseCommit(cache));
 
-        // 3. Mid-session PublishCounterCommit (DAO TableDefs.Append second commit) increments counter +1 and keeps
+        // 3. A mid-session commit of the page-0 counter alone (PublishCounterCommit) increments it +1 and keeps
         // NeedsCloseCommit true; PublishCloseCommit then increments counter +1 and clears NeedsCloseCommit.
         ushort counterAfterAlloc = BinaryPrimitives.ReadUInt16LittleEndian(rig.File.Image.Snapshot().AsSpan(3586, 2));
         Assert.Equal(MutationOpen.None, rig.A.PublishCounterCommit(cache).Open);
@@ -789,7 +791,7 @@ public sealed class CounterAndLandingTests
         Assert.False(other.ReleasesAtClose(cache));
 
         // 5. ReleasedAtClose without clearing page 1 (emptied data page retirement / DROP TABLE) sets NeedsCloseCommit
-        // and ReleasesAtClose. A mid-session PublishCounterCommit (e.g. DAO TableDefs.Append) increments page 0 by +1
+        // and ReleasesAtClose. A mid-session commit of the page-0 counter alone (PublishCounterCommit) increments it by +1
         // without freeing page 1 or clearing ReleasesAtClose / NeedsCloseCommit; PublishCloseCommit then frees the bit,
         // increments counter +1, and clears both flags.
         // First clear targetPage again via rig.A (and close rig.A) so ReleasedAtClose has a non-free bit to free.
@@ -822,5 +824,742 @@ public sealed class CounterAndLandingTests
         byte[] finalImage = rig.File.Image.Snapshot();
         Assert.Equal((ushort)(counterBeforeMidB + 2), BinaryPrimitives.ReadUInt16LittleEndian(finalImage.AsSpan(3586, 2)));
         Assert.NotEqual(0, finalImage[D.PageSize + bitOffset] & bitMask);
+    }
+
+    // ---- 7. W-05 c7gn: unset AllowZeroLength, the reseed of a refused AutoNumber duplicate, and r-q18-statements ----
+
+    /// <summary>Leave <paramref name="room"/> bytes free on G's first FreeMap page, so an insert that does not fit takes a new page.</summary>
+    private static void ShrinkFirstFreePage(Rig rig, TableDefinition g, int room)
+    {
+        IReadOnlyList<uint> freePages = UsageMaps.Pages(rig.File.Cache, D, g.FreeMap, rig.File.Image.PageCount, out _) ?? [];
+        Assert.NotEmpty(freePages);
+        uint existingPage = freePages[0];
+        byte[] page = rig.File.Image.Snapshot().AsSpan((int)(existingPage * D.PageSize), D.PageSize).ToArray();
+        int rc = (int)D.DataPage.RowCount.Read(page);
+        int dirEnd = D.DataPage.SlotBase + (rc * 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(page.AsSpan(D.DataPage.SlotBase + ((rc - 1) * 2), 2), (ushort)(dirEnd + room));
+        D.DataPage.FreeCount.Write(page, (uint)room);
+        WriteRawPage(rig.File, existingPage, page);
+    }
+
+    /// <summary>One SQL statement inserting <paramref name="rows"/> rows into G (generated IDs), optionally in a level of its own, as an INSERT ... SELECT with dbFailOnError opens.</summary>
+    private static void InsertRows(Rig rig, EditFrame frame, TableDefinition g, int rows, string prefix, bool ownLevel)
+    {
+        using StatementScope stmt = rig.A.BeginStatement();
+        if (ownLevel)
+        {
+            Assert.Null(rig.A.BeginTrans());
+        }
+        for (int i = 1; i <= rows; i++)
+        {
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), $"{prefix}-{i}");
+            AssignText(frame, Col(g, "U"), $"u-{prefix}-{i}");
+            UpdateOutcome inserted = frame.Update();
+            Assert.True(inserted.Succeeded, inserted.ToString());
+        }
+        if (ownLevel)
+        {
+            Assert.True(rig.A.CommitTrans().Succeeded);
+        }
+        Assert.True(stmt.Complete().Succeeded);
+    }
+
+    [Fact]
+    public void ZeroLength_unset_AllowZeroLength_admits_empty_stored_false_Text_refuses_3315_and_stored_false_Memo_is_named()
+    {
+        // R-CAT-1, R-SQL-2, R-CURSOR-1 CUR-EDIT:
+        // - No stored AllowZeroLength (SQL DDL columns) admits "" for Required False and True
+        //   (evidence/r-sql-2-3/act-ins-defaults seq 11-12 [R.Z] and 31-32 [R.Req]).
+        // - A Text storing False refuses "" with 3315 (evidence/r-cat-1b/field-zerolength-effect: TP.ZlOff at seq 9, 3315 at
+        //   seq 13; TP.Req at seq 18; evidence/r-fix-cursor-dao/con-zero-length-required-failonerror).
+        // - A Text storing True admits "" (field-zerolength-effect: TP.ZlOn at seq 5, no error at seq 7).
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+        ColumnDescriptor colT = Col(g, "T"); // Required=True, unset AllowZeroLength in EditFixture
+        ColumnDescriptor colU = Col(g, "U");
+        Assert.Null(ctx.Semantics.Columns[colT.Ordinal].AllowZeroLength);
+
+        (EditFrame frame, _) = rig.OpenTable("G");
+        Assert.True(frame.AddNew().Succeeded);
+        AssignText(frame, colT, "");
+        AssignText(frame, colU, "zl-unset");
+        UpdateOutcome unsetOk = frame.Update();
+        Assert.True(unsetOk.Succeeded, unsetOk.ToString());
+
+        const string PropsFixture = "be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4";
+        using var propsRig = new Rig(PropsFixture);
+        (TableDefinition tp, TableEditContext tpCtx) = propsRig.Table("TP");
+        ColumnDescriptor zlOff = Col(tp, "ZlOff");
+        ColumnDescriptor req = Col(tp, "Req");
+        ColumnDescriptor zlOn = Col(tp, "ZlOn");
+        Assert.Equal(false, tpCtx.Semantics.Columns[zlOff.Ordinal].AllowZeroLength);
+        Assert.Equal(false, tpCtx.Semantics.Columns[req.Ordinal].AllowZeroLength);
+        Assert.Equal(true, tpCtx.Semantics.Columns[zlOn.Ordinal].AllowZeroLength);
+
+        // Compile TP's real MR2 PropertyBlob with a null-default binder so TP's Date() default does not block AddNew
+        // and ZeroLengthCheck runs directly on the stored AllowZeroLength values.
+        CatalogEntry tpEntry = propsRig.File.Catalog.LocalTables(D).Single(e => e.Name == "TP");
+        PropertyBlob? tpBlob = PropertyBlob.Read(tpEntry.Properties!, out string? blobErr);
+        Assert.Null(blobErr);
+        using MutationSemantics tpSem = MutationSemantics.Compile("TP", tp, tpBlob, new NullDefaultBinder(), D.IndexDescriptor);
+        var tpContext = new TableEditContext(tpSem, new StoredUniqueProbe(propsRig.File.Cache, D, tp, propsRig.File.Image.PageCount), 7177, false, new TableFootprints(propsRig.File.Cache, D, tp, propsRig.File.Image.PageCount));
+        using var tpCursor = (TableCursor)propsRig.File.Open(tp, 1)!;
+        using var tpFrame = new EditFrame(tpContext, tpCursor, propsRig.A);
+
+        Assert.True(tpFrame.AddNew().Succeeded);
+        AssignText(tpFrame, req, "ok");
+        AssignText(tpFrame, zlOff, "");
+        UpdateOutcome zlOffRefused = tpFrame.Update();
+        Assert.Equal(MutationError.ZeroLength, zlOffRefused.Error?.Number);
+        Assert.True(tpFrame.CancelUpdate().Succeeded);
+
+        Assert.True(tpFrame.AddNew().Succeeded);
+        AssignText(tpFrame, req, "");
+        UpdateOutcome reqRefused = tpFrame.Update();
+        Assert.Equal(MutationError.ZeroLength, reqRefused.Error?.Number);
+        Assert.True(tpFrame.CancelUpdate().Succeeded);
+
+        Assert.True(tpFrame.AddNew().Succeeded);
+        AssignText(tpFrame, req, "ok");
+        AssignText(tpFrame, zlOn, "");
+        Assert.True(tpFrame.Assign(Col(tp, "BoolF"), new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = 0 }).Succeeded);
+        UpdateOutcome zlOnAccepted = tpFrame.Update();
+        Assert.True(zlOnAccepted.Succeeded, zlOnAccepted.ToString());
+
+        // A Memo storing False is recorded nowhere: refused by name. Synthetic: G.T read as a Memo, with a property blob
+        // storing only AllowZeroLength False for it.
+        TableDefinition gMemo = g with { Columns = [.. g.Columns.Select(c => c.Name == "T" ? c with { TypeCode = NativeTypes.Memo } : c)] };
+        byte[] memoRaw = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, "T", [new StoredProperty("AllowZeroLength", 0, NativeTypes.Boolean, [0])])]);
+        PropertyBlob? memoBlob = PropertyBlob.Read(memoRaw, out string? memoErr);
+        Assert.Null(memoErr);
+        using MutationSemantics memoSem = MutationSemantics.Compile("G", gMemo, memoBlob, new NullDefaultBinder(), D.IndexDescriptor);
+        Assert.Equal(false, memoSem.Columns[colT.Ordinal].AllowZeroLength);
+        // A rig of its own: this context's counter starts from G's stored value, which the insert above already used.
+        using var memoRig = new Rig(EditFixture);
+        var memoContext = new TableEditContext(memoSem, new StoredUniqueProbe(memoRig.File.Cache, D, g, memoRig.File.Image.PageCount), 7177, false, new TableFootprints(memoRig.File.Cache, D, g, memoRig.File.Image.PageCount));
+        using var memoCursor = (TableCursor)memoRig.File.Open(g, 1)!;
+        using var memoFrame = new EditFrame(memoContext, memoCursor, memoRig.A);
+        Assert.True(memoFrame.AddNew().Succeeded);
+        AssignText(memoFrame, Col(gMemo, "T"), "");
+        AssignText(memoFrame, Col(gMemo, "U"), "u-memo");
+        UpdateOutcome memoNamed = memoFrame.Update();
+        Assert.True(memoNamed.Open == MutationOpen.ZeroLength, memoNamed.ToString());
+        Assert.Contains("Memo", memoNamed.Detail, StringComparison.Ordinal);
+        Assert.True(memoFrame.CancelUpdate().Succeeded);
+    }
+
+    [Fact]
+    public void AutoNumber_refused_primary_key_duplicate_reseeds_and_unrecorded_explicit_cases_are_refused_by_name()
+    {
+        // Reseed (a refused duplicate of the AutoNumber's primary key) against Observe (every other value: only upward).
+        var counter = new AutoNumberCounter(10, 1);
+        counter.Observe(3);
+        Assert.Equal(10, counter.Last);
+        counter.Reseed(3);
+        Assert.Equal(3, counter.Last);
+        Assert.Equal(4, counter.Issue().Value);
+        var nonUnit = new AutoNumberCounter(10, 5);
+        nonUnit.Reseed(3);
+        Assert.Equal(10, nonUnit.Last);
+
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+        (EditFrame frame1, _) = rig.OpenTable("G");
+        (EditFrame frame2, _) = rig.OpenTable("G");
+        ColumnDescriptor id = Col(g, "ID");
+        ColumnDescriptor t = Col(g, "T");
+        ColumnDescriptor u = Col(g, "U");
+        uint Disk() => DecodeTableDef(rig.File.Image.Snapshot(), g.FirstPage).AutoNumber;
+
+        UpdateOutcome InsertExplicit(int value, string text, string unique)
+        {
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.True(frame1.AddNew().Succeeded);
+            Assert.True(frame1.Assign(id, I4(value)).Succeeded);
+            AssignText(frame1, t, text);
+            AssignText(frame1, u, unique);
+            UpdateOutcome outcome = frame1.Update();
+            if (!outcome.Succeeded)
+            {
+                Assert.True(frame1.CancelUpdate().Succeeded);
+            }
+            Assert.True(stmt.Complete().Succeeded);
+            return outcome;
+        }
+
+        // An accepted explicit value above the counter raises it (evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder
+        // seq 139, next generated value 101 at seq 302).
+        Assert.True(InsertExplicit(10, "ten", "u10").Succeeded);
+        Assert.Equal(10, ctx.Counter!.Last);
+        Assert.Equal(10u, Disk());
+
+        // A refused duplicate of the primary key reseeds the counter and TableDef 0x14 to the explicit value, also downward
+        // (evidence/r-q-expr-sql/act-ins-autonumber seq 349 and 441; evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 257
+        // and 283; evidence/r-sql-2-3/act-ins-defaults seq 81 and 91).
+        Assert.Equal(MutationError.Duplicate, InsertExplicit(1, "dup-low", "u-dup-low").Error?.Number);
+        Assert.Equal(1, ctx.Counter.Last);
+        Assert.Equal(1u, Disk());
+
+        // The next generated value 2 collides with row 2 (refused, counter 2); then 3 is accepted.
+        foreach ((long expected, bool accepted) in new[] { (2L, false), (3L, true) })
+        {
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.True(frame1.AddNew().Succeeded);
+            Assert.Equal(expected, frame1.Read(id).Value.Integer);
+            AssignText(frame1, t, $"auto-{expected}");
+            AssignText(frame1, u, $"u-auto-{expected}");
+            UpdateOutcome outcome = frame1.Update();
+            Assert.Equal(accepted, outcome.Succeeded);
+            if (!accepted)
+            {
+                Assert.Equal(MutationError.Duplicate, outcome.Error?.Number);
+                Assert.True(frame1.CancelUpdate().Succeeded);
+            }
+            Assert.True(stmt.Complete().Succeeded);
+            Assert.Equal(expected, ctx.Counter.Last);
+            Assert.Equal((uint)expected, Disk());
+        }
+
+        // An accepted explicit value below the counter is not recorded: refused by name, counter and TableDef untouched.
+        Assert.True(InsertExplicit(15, "fifteen", "u15").Succeeded);
+        Assert.Equal(15u, Disk());
+        UpdateOutcome below = InsertExplicit(5, "five-gap", "u5");
+        Assert.Equal(MutationOpen.AutoNumberReseed, below.Open);
+        Assert.Equal(15u, Disk());
+        long afterBelow = ctx.Counter.Last;
+
+        // An explicit value refused 3022 by another unique index (UX_U) is not recorded either.
+        UpdateOutcome otherIndex = InsertExplicit(40, "other-idx", "u15");
+        Assert.Equal(MutationOpen.AutoNumberReseed, otherIndex.Open);
+        Assert.Equal(15u, Disk());
+        Assert.Equal(afterBelow + 1, ctx.Counter.Last); // only the AddNew's own ticket moved it
+
+        // Two recordsets' generated tickets: the earlier ticket's Update does not lower the counter.
+        Assert.True(frame1.AddNew().Succeeded);
+        long first = frame1.Read(id).Value.Integer;
+        Assert.True(frame2.AddNew().Succeeded);
+        Assert.Equal(first + 1, frame2.Read(id).Value.Integer);
+        AssignText(frame1, t, "first");
+        AssignText(frame1, u, "u-first");
+        Assert.True(frame1.Update().Succeeded);
+        Assert.Equal(first + 1, ctx.Counter.Last);
+        Assert.Equal((uint)(first + 1), Disk());
+        Assert.True(frame2.CancelUpdate().Succeeded);
+    }
+
+    [Fact]
+    public void Statement_refused_3022_folds_into_single_write_group_autocommit_and_in_transaction()
+    {
+        // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q18-statements/ins-dup-plain, ins-dup-plain-txn):
+        // A multi-row statement without dbFailOnError whose 3rd row fails 3022 on UX_U consumes its AutoNumber and
+        // increments PK_G UniqueEntryCount inside the statement's single write group.
+        foreach (bool inTxn in new[] { false, true })
+        {
+            using var rig = new Rig(EditFixture);
+            (TableDefinition g, _) = rig.Table("G");
+            (EditFrame frame, _) = rig.OpenTable("G");
+            ColumnDescriptor t = Col(g, "T");
+            ColumnDescriptor u = Col(g, "U");
+            uint rowsBefore = g.RowCount;
+            uint autoBefore = g.AutoNumber;
+            uint pkBefore = g.PhysicalOf(g.FindIndex("PK_G")!)!.UniqueEntryCount;
+            uint uxBefore = g.PhysicalOf(g.FindIndex("UX_U")!)!.UniqueEntryCount;
+            byte p0Before = rig.Before[D.Header.CommitCounter.Offset];
+
+            if (inTxn)
+            {
+                Assert.Null(rig.A.BeginTrans());
+            }
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                // Row 1 accepted (ID 3)
+                Assert.True(frame.AddNew().Succeeded);
+                AssignText(frame, t, "r1");
+                AssignText(frame, u, "u-new-1");
+                Assert.True(frame.Update().Succeeded);
+
+                // Row 2 accepted (ID 4)
+                Assert.True(frame.AddNew().Succeeded);
+                AssignText(frame, t, "r2");
+                AssignText(frame, u, "u-new-2");
+                Assert.True(frame.Update().Succeeded);
+
+                // Row 3 refused 3022 on UX_U (ID 5 consumed, PK_G incremented, UX_U unchanged)
+                Assert.True(frame.AddNew().Succeeded);
+                AssignText(frame, t, "r3-dup");
+                AssignText(frame, u, "u-new-1");
+                UpdateOutcome dup = frame.Update();
+                Assert.Equal(MutationError.Duplicate, dup.Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                // Row 4 accepted (ID 6)
+                Assert.True(frame.AddNew().Succeeded);
+                AssignText(frame, t, "r4");
+                AssignText(frame, u, "u-new-4");
+                Assert.True(frame.Update().Succeeded);
+
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            if (inTxn)
+            {
+                Assert.Empty(rig.A.Publications);
+                Assert.True(rig.A.CommitTrans().Succeeded);
+            }
+
+            Assert.Single(rig.A.Publications);
+            byte[] after = rig.File.Image.Snapshot();
+            TableDefinition gAfter = DecodeTableDef(after, g.FirstPage);
+            Assert.Equal(rowsBefore + 3u, gAfter.RowCount);
+            Assert.Equal(autoBefore + 4u, gAfter.AutoNumber);
+            Assert.Equal(pkBefore + 4u, gAfter.PhysicalOf(gAfter.FindIndex("PK_G")!)!.UniqueEntryCount);
+            Assert.Equal(uxBefore + 3u, gAfter.PhysicalOf(gAfter.FindIndex("UX_U")!)!.UniqueEntryCount);
+            Assert.Equal(p0Before + 1, after[D.Header.CommitCounter.Offset]);
+        }
+    }
+
+    [Fact]
+    public void Statement_rollback_after_3022_on_a_new_page_writes_the_reached_counters_autocommit_and_in_transaction()
+    {
+        // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q18-statements/ins-dup-fail, ins-dup-fail-txn): a refused
+        // multi-row INSERT ... SELECT (dbFailOnError) whose rows took a new page stores no row and writes the TableDef
+        // counters as they stood at the refusal (row count +2, AutoNumber +3, PK +3, UK +2): outside a transaction in two
+        // groups and page 1 at Close (+3), inside one at CommitTrans and page 1 at Close (+2).
+        foreach (bool inTxn in new[] { false, true })
+        {
+            using var rig = new Rig(EditFixture);
+            (TableDefinition g, _) = rig.Table("G");
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable("G");
+            ColumnDescriptor t = Col(g, "T");
+            ColumnDescriptor u = Col(g, "U");
+            ShrinkFirstFreePage(rig, g, 4);
+            uint rowsBefore = g.RowCount;
+            uint autoBefore = g.AutoNumber;
+            uint pkBefore = g.PhysicalOf(g.FindIndex("PK_G")!)!.UniqueEntryCount;
+            uint uxBefore = g.PhysicalOf(g.FindIndex("UX_U")!)!.UniqueEntryCount;
+            byte p0Before = rig.Before[D.Header.CommitCounter.Offset];
+
+            if (inTxn)
+            {
+                Assert.Null(rig.A.BeginTrans());
+            }
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                Assert.Null(rig.A.BeginTrans());
+                foreach (string key in new[] { "u-fail-1", "u-fail-2" })
+                {
+                    Assert.True(frame.AddNew().Succeeded);
+                    AssignText(frame, t, key);
+                    AssignText(frame, u, key);
+                    Assert.True(frame.Update().Succeeded);
+                }
+
+                // Row 3 refused 3022 on UX_U (ID 5 consumed, PK_G +1, UX_U unchanged): the statement rolls back.
+                Assert.True(frame.AddNew().Succeeded);
+                AssignText(frame, t, "r3-dup");
+                AssignText(frame, u, "u-fail-1");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                Assert.True(rig.A.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            if (inTxn)
+            {
+                Assert.Empty(rig.A.Publications);
+                Assert.True(rig.A.CommitTrans().Succeeded);
+                Assert.Single(rig.A.Publications);
+            }
+            else
+            {
+                Assert.Equal(2, rig.A.Publications.Count);
+            }
+
+            byte[] after = rig.File.Image.Snapshot();
+            TableDefinition gAfter = DecodeTableDef(after, g.FirstPage);
+            Assert.Equal(rowsBefore + 2u, gAfter.RowCount);
+            Assert.Equal(autoBefore + 3u, gAfter.AutoNumber);
+            Assert.Equal(pkBefore + 3u, gAfter.PhysicalOf(gAfter.FindIndex("PK_G")!)!.UniqueEntryCount);
+            Assert.Equal(uxBefore + 2u, gAfter.PhysicalOf(gAfter.FindIndex("UX_U")!)!.UniqueEntryCount);
+            Assert.Equal(p0Before + (inTxn ? 1 : 2), after[D.Header.CommitCounter.Offset]);
+            Assert.True(rig.A.NeedsCloseCommit(rig.File.Cache));
+            Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(rig.File.Cache).Open);
+            Assert.Equal(p0Before + (inTxn ? 2 : 3), rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+
+            // No row of the statement is stored, though TableDef.RowCount keeps the reached counter.
+            int storedRows = 0;
+            for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
+            {
+                storedRows++;
+            }
+            Assert.Equal(2, storedRows);
+        }
+    }
+
+    [Fact]
+    public void Statement_rollback_of_an_unrecorded_case_completes_writes_nothing_and_the_statement_names_it()
+    {
+        // Each case beside ins-dup-fail, ins-dup-fail-txn and the answers of evidence/r-txn-1/stmt-unique-*-fail-* and
+        // stmt-fk-counter-fail-d1: the statement's own level is rolled back (Depth returns),
+        // no byte of the file changes, and the statement ends with MutationOpen.CounterWrite naming the case.
+        static void Check(Rig rig, StatementScope stmt, byte[] start, string named)
+        {
+            ResolutionOutcome rb = rig.A.Rollback();
+            Assert.True(rb.Succeeded, rb.ToString());
+            Assert.Equal(0, rig.A.Depth);
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            Assert.Contains(named, end.Detail, StringComparison.Ordinal);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+        }
+
+        void Rows(Rig rig, EditFrame frame, TableDefinition g, params string?[] keys)
+        {
+            foreach (string? key in keys)
+            {
+                Assert.True(frame.AddNew().Succeeded);
+                if (key is not null)
+                {
+                    AssignText(frame, Col(g, "T"), key);
+                }
+                AssignText(frame, Col(g, "U"), key ?? "u-req-miss");
+                UpdateOutcome outcome = frame.Update();
+                if (!outcome.Succeeded)
+                {
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                }
+            }
+        }
+
+        // 1. A refusal other than 3022 or 3201 after earlier rows (3314: G.T is Required), on a new page.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, _) = rig.Table("G");
+            (EditFrame frame, _) = rig.OpenTable("G");
+            ShrinkFirstFreePage(rig, g, 4);
+            byte[] start = rig.File.Image.Snapshot();
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.Null(rig.A.BeginTrans());
+            Rows(rig, frame, g, "req-1", "req-2", null);
+            Check(rig, stmt, start, "refusal 3314");
+        }
+
+        // 2. Synthetic MDB: a row of the statement's level in a Jet 4 MDB.
+        using (var mdb = new Rig(Jet4MdbFixture))
+        {
+            (TableDefinition lv, _) = mdb.Table("Lv");
+            (EditFrame frame, _) = mdb.OpenTable("Lv");
+            byte[] start = mdb.File.Image.Snapshot();
+            using StatementScope stmt = mdb.A.BeginStatement();
+            Assert.Null(mdb.A.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(lv, "ID"), I4(999)).Succeeded);
+            Assert.True(frame.Assign(Col(lv, "V"), I4(1)).Succeeded);
+            Assert.True(frame.Update().Succeeded);
+            Check(mdb, stmt, start, "MDB");
+        }
+
+        // 3. Synthetic: rows of the statement's level on two data pages.
+        using (var span = new Rig(EditFixture))
+        {
+            (TableDefinition g, _) = span.Table("G");
+            (EditFrame frame, _) = span.OpenTable("G");
+            ShrinkFirstFreePage(span, g, 48);
+            byte[] start = span.File.Image.Snapshot();
+            using StatementScope stmt = span.A.BeginStatement();
+            Assert.Null(span.A.BeginTrans());
+            // Row 1 fits on the shrunk page (about 30 bytes of 48); row 2 does not and takes a second data page.
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), "a");
+            AssignText(frame, Col(g, "U"), "u-sp1");
+            UpdateOutcome r1 = frame.Update();
+            Assert.True(r1.Succeeded, r1.ToString());
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), "b");
+            AssignText(frame, Col(g, "U"), "u-sp2");
+            UpdateOutcome r2 = frame.Update();
+            Assert.True(r2.Succeeded, r2.ToString());
+            Assert.NotEqual(r1.Change!.Inserted!.Value.Page, r2.Change!.Inserted!.Value.Page);
+            Check(span, stmt, start, "data pages");
+        }
+    }
+
+    [Fact]
+    public void Explicit_Rollback_persists_unwritten_statement_AutoNumber_counter_with_page1_and_Close_commit()
+    {
+        // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q18-statements/ins-clean-fail-txn-rollback):
+        // BeginTrans, a 4-row INSERT ... SELECT (dbFailOnError, its own level) into an AutoNumber table that takes a new
+        // page, Rollback: no row, row and index counts unchanged, AutoNumber +4 written with page 1 within Rollback (+1 on
+        // page 0), and page 1 again at Close (+2).
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable("G");
+        uint rowsBefore = g.RowCount;
+        uint autoBefore = g.AutoNumber;
+        uint pkBefore = g.PhysicalOf(g.FindIndex("PK_G")!)!.UniqueEntryCount;
+        uint uxBefore = g.PhysicalOf(g.FindIndex("UX_U")!)!.UniqueEntryCount;
+        byte p0Before = rig.Before[D.Header.CommitCounter.Offset];
+        ShrinkFirstFreePage(rig, g, 4);
+        int fileLengthBefore = rig.File.Image.Snapshot().Length;
+
+        Assert.Null(rig.A.BeginTrans());
+        InsertRows(rig, frame, g, 4, "rb", ownLevel: true);
+        Assert.Empty(rig.A.Publications);
+
+        ResolutionOutcome rb = rig.A.Rollback();
+        Assert.True(rb.Succeeded, rb.ToString());
+        Assert.Single(rig.A.Publications);
+        Assert.True(rig.A.NeedsCloseCommit(rig.File.Cache));
+
+        byte[] afterRb = rig.File.Image.Snapshot();
+        Assert.Equal(fileLengthBefore, afterRb.Length);
+        TableDefinition gAfterRb = DecodeTableDef(afterRb, g.FirstPage);
+        Assert.Equal(rowsBefore, gAfterRb.RowCount);
+        Assert.Equal(autoBefore + 4u, gAfterRb.AutoNumber);
+        Assert.Equal(pkBefore, gAfterRb.PhysicalOf(gAfterRb.FindIndex("PK_G")!)!.UniqueEntryCount);
+        Assert.Equal(uxBefore, gAfterRb.PhysicalOf(gAfterRb.FindIndex("UX_U")!)!.UniqueEntryCount);
+        Assert.Equal(p0Before + 1, afterRb[D.Header.CommitCounter.Offset]);
+        Assert.Equal(2, cursor.RecordCount);
+
+        Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(rig.File.Cache).Open);
+        Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+        Assert.Equal(p0Before + 2, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+
+        // The next insert receives AutoNumber + 5 (ins-clean-fail-txn-rollback: the next insert gets ID 5).
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal((long)(autoBefore + 5u), frame.Read(Col(g, "ID")).Value.Integer);
+        Assert.True(frame.CancelUpdate().Succeeded);
+    }
+
+    [Fact]
+    public void Rollback_writes_nothing_for_unrecorded_unit_increment_cases_and_refuses_non_unit_increment()
+    {
+        // 1. A level that took no new page (evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 82-101):
+        //    Rollback succeeds, writes nothing, drops the row, and keeps the in-memory counter consumed.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable("G");
+            uint autoBefore = g.AutoNumber;
+            byte[] start = rig.File.Image.Snapshot();
+
+            Assert.Null(rig.A.BeginTrans());
+            InsertRows(rig, frame, g, 1, "room", ownLevel: false);
+            ResolutionOutcome rb = rig.A.Rollback();
+            Assert.True(rb.Succeeded, rb.ToString());
+            Assert.Equal(0, rig.A.Depth);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+            Assert.Equal(2, cursor.RecordCount);
+            Assert.Equal((long)(autoBefore + 1u), ctx.Counter!.Last);
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal((long)(autoBefore + 2u), frame.Read(Col(g, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // 2. An inner Rollback succeeds writing nothing; a subsequent outer Rollback also writes nothing, while an
+        //    inner CommitTrans followed by outer Rollback stays the recorded ins-clean-fail-txn-rollback case.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            (EditFrame frame, _) = rig.OpenTable("G");
+            uint autoBefore = g.AutoNumber;
+            ShrinkFirstFreePage(rig, g, 4);
+            byte[] start = rig.File.Image.Snapshot();
+
+            Assert.Null(rig.A.BeginTrans());
+            Assert.Null(rig.A.BeginTrans());
+            InsertRows(rig, frame, g, 4, "inner", ownLevel: true);
+            ResolutionOutcome inner = rig.A.Rollback();
+            Assert.True(inner.Succeeded, inner.ToString());
+            Assert.Equal(1, rig.A.Depth);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+
+            ResolutionOutcome outer = rig.A.Rollback();
+            Assert.True(outer.Succeeded, outer.ToString());
+            Assert.Equal(0, rig.A.Depth);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+            Assert.Equal((long)(autoBefore + 4u), ctx.Counter!.Last);
+        }
+
+        // 3. A reseed (refused explicit PK duplicate) inside a transaction then Rollback succeeds writing nothing.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            (EditFrame frame, _) = rig.OpenTable("G");
+            byte[] start = rig.File.Image.Snapshot();
+
+            Assert.Null(rig.A.BeginTrans());
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(g, "ID"), I4(1)).Succeeded);
+                AssignText(frame, Col(g, "T"), "dup");
+                AssignText(frame, Col(g, "U"), "u-dup");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            ResolutionOutcome rb = rig.A.Rollback();
+            Assert.True(rb.Succeeded, rb.ToString());
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+            Assert.Equal(1L, ctx.Counter!.Last);
+        }
+
+        // 4. Non-unit increment: no record decides whether the counter reverts or stays consumed on Rollback
+        //    (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open), so Rollback refuses before acting and leaves the level intact.
+        using (var rig = new Rig(EditFixture))
+        {
+            uint gPage = (uint)rig.File.Catalog.LocalTables(D).Single(e => e.Name == "G").Id;
+            byte[] tdef = rig.File.Image.Snapshot().AsSpan((int)(gPage * D.PageSize), D.PageSize).ToArray();
+            D.TableDef.AutoNumberIncrement.Write(tdef, 2u);
+            WriteRawPage(rig.File, gPage, tdef);
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            Assert.Equal(2, ctx.Counter!.Increment);
+            (EditFrame frame, _) = rig.OpenTable("G");
+            Assert.Null(rig.A.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            AssignText(frame, Col(g, "T"), "addnew");
+            AssignText(frame, Col(g, "U"), "u-addnew");
+            Assert.True(frame.Update().Succeeded);
+            ResolutionOutcome rb = rig.A.Rollback();
+            Assert.Equal(MutationOpen.AutoNumberIncrement, rb.Open);
+            Assert.Contains("non-1 increment", rb.Detail, StringComparison.Ordinal);
+            Assert.Equal(1, rig.A.Depth);
+            Assert.Empty(rig.A.Publications);
+            Assert.True(rig.A.CommitTrans().Succeeded);
+            Assert.Equal(g.RowCount + 1u, DecodeTableDef(rig.File.Image.Snapshot(), g.FirstPage).RowCount);
+        }
+    }
+
+    [Fact]
+    public void Explicit_AutoNumber_reseed_requires_unit_increment()
+    {
+        // Under unit increment, an explicit PK duplicate reseeds the counter; under any non-1 increment (or null
+        // counter), EditFrame.CheckExplicitAutoNumberReseed refuses with MutationOpen.AutoNumberReseed and
+        // TableDefCountsDelta.TryApply refuses to write TableDef 0x14 so disk and AutoNumberCounter.Reseed cannot disagree.
+        Assert.Null(EditFrame.CheckExplicitAutoNumberReseed("G", 1, new AutoNumberCounter(10, 1), refusingIsPrimary: true, refusingIndexCoversAuto: true));
+
+        foreach (AutoNumberCounter? badCounter in new AutoNumberCounter?[] { new(10, 2), new(10, -2), null })
+        {
+            UpdateOutcome? outcome = EditFrame.CheckExplicitAutoNumberReseed("G", 1, badCounter, refusingIsPrimary: true, refusingIndexCoversAuto: true);
+            Assert.NotNull(outcome);
+            Assert.Equal(MutationOpen.AutoNumberReseed, outcome.Value.Open);
+            Assert.Contains("non-1 increment", outcome.Value.Detail, StringComparison.Ordinal);
+        }
+
+        UpdateOutcome? nonPk = EditFrame.CheckExplicitAutoNumberReseed("G", 1, new AutoNumberCounter(10, 1), refusingIsPrimary: false, refusingIndexCoversAuto: true);
+        Assert.NotNull(nonPk);
+        Assert.Equal(MutationOpen.AutoNumberReseed, nonPk.Value.Open);
+
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        byte[] unitPage = rig.Before.AsSpan((int)(g.FirstPage * D.PageSize), D.PageSize).ToArray();
+        Assert.True(TableDefCountsDelta.TryApply(unitPage, 0, 1u, reseedAutoNumber: true, [], [], D, out string? unitFail), unitFail);
+        Assert.Equal(1u, (uint)D.TableDef.AutoNumber.Read(unitPage));
+
+        foreach (int inc in new[] { 2, -2 })
+        {
+            byte[] nonUnitPage = rig.Before.AsSpan((int)(g.FirstPage * D.PageSize), D.PageSize).ToArray();
+            D.TableDef.AutoNumberIncrement.Write(nonUnitPage, unchecked((uint)inc));
+            uint storedBefore = (uint)D.TableDef.AutoNumber.Read(nonUnitPage);
+            Assert.False(TableDefCountsDelta.TryApply(nonUnitPage, 0, 1u, reseedAutoNumber: true, [], [], D, out string? fail));
+            Assert.Contains("non-1 increment", fail, StringComparison.Ordinal);
+            Assert.Equal(storedBefore, (uint)D.TableDef.AutoNumber.Read(nonUnitPage));
+        }
+    }
+
+    [Fact]
+    public void Refused_3022_with_no_TableDef_word_change_writes_nothing_in_statement_and_writes_page0_in_recordset()
+    {
+        // evidence/r-err-1b/con-pk-duplicate-insert and evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror:
+        // INSERT INTO P (ID, Code, Req) VALUES (1, 'x1', 'r') fails 3022 on PK_P with no prior index and no AutoNumber,
+        // so no TableDef word changes; before-open and after-close file hashes are identical (33192b8c7ea7).
+        using (var stmtRig = new Rig(Err1bBaseFixture))
+        {
+            (TableDefinition p, _) = stmtRig.Table("P");
+            (EditFrame frame, _) = stmtRig.OpenTable("P");
+            byte[] before = stmtRig.File.Image.Snapshot();
+
+            using (StatementScope stmt = stmtRig.A.BeginStatement())
+            {
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(p, "ID"), I4(1)).Succeeded);
+                AssignText(frame, Col(p, "Code"), "x1");
+                AssignText(frame, Col(p, "Req"), "r");
+                UpdateOutcome upd = frame.Update();
+                Assert.Equal(MutationError.Duplicate, upd.Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+
+            Assert.Empty(stmtRig.A.Publications);
+            Assert.Equal(before, stmtRig.File.Image.Snapshot());
+        }
+
+        // Contrast: a recordset AddNew refused 3022 with no TableDef word change still writes +1 on ACCDB page 0
+        // offset 3586 (evidence/r-q10-commit-counter-edits).
+        using (var rsRig = new Rig(Err1bBaseFixture))
+        {
+            (TableDefinition p, _) = rsRig.Table("P");
+            (EditFrame frame, _) = rsRig.OpenTable("P");
+            byte p0Before = rsRig.Before[D.Header.CommitCounter.Offset];
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(p, "ID"), I4(1)).Succeeded);
+            AssignText(frame, Col(p, "Code"), "x1");
+            AssignText(frame, Col(p, "Req"), "r");
+            UpdateOutcome upd = frame.Update();
+            Assert.Equal(MutationError.Duplicate, upd.Error?.Number);
+            Assert.True(frame.CancelUpdate().Succeeded);
+
+            Assert.Single(rsRig.A.Publications);
+            Assert.Equal(p0Before + 1, rsRig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+        }
+    }
+
+    private sealed class NullDefaultBinder : IMutationRuleBinder
+    {
+        private sealed class NullDefault : IFieldDefault
+        {
+            public bool Sample(out NativeVariant value, out string? failure)
+            {
+                value = new NativeVariant { Vt = (ushort)VarType.Null };
+                failure = null;
+                return true;
+            }
+
+            public void Dispose() { }
+        }
+
+        private sealed class AdmitRule : IMutationRule
+        {
+            public RuleResult Evaluate(IRecordCursor candidate) => new(RuleVerdict.Admit);
+
+            public void Dispose() { }
+        }
+
+        public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return new NullDefault();
+        }
+
+        public IMutationRule? BindFieldRule(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return new AdmitRule();
+        }
+
+        public IMutationRule? BindTableRule(TableDefinition table, string text, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return new AdmitRule();
+        }
     }
 }

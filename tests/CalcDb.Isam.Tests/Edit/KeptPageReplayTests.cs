@@ -2594,13 +2594,15 @@ public sealed class KeptPageReplayTests
             }
         }
 
-        // 1. 0-byte Memo and 0-byte OLE (EditFrame refuses empty Memo via ZeroLength and coerces empty OLE SAFEARRAY
-        // to Null per AssignmentConversion; FieldEncoder and RowWriter refuse 0-byte payloads directly by name).
+        // 1. 0-byte Memo and 0-byte OLE (unset AllowZeroLength admits "" through EditFrame.ZeroLengthCheck per
+        // evidence/r-q-cursor-dao/edit-required-memo-addnew, then RowWriter refuses 0-byte LV encoding by name;
+        // empty OLE SAFEARRAY coerces to Null per AssignmentConversion; FieldEncoder and RowWriter refuse 0-byte directly).
         using (var s = new Session(SeedGrowthOpen("lv-inline-memo")))
         {
             UpdateOutcome r = TryInsertLv(s, 1, memo: true, byteLength: 0);
             Assert.False(r.Succeeded);
-            Assert.Equal(MutationOpen.ZeroLength, r.Open);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("0-byte", r.Detail);
 
             TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
             var emptyMemo = new NativeValue(NativeKind.Text) { Text = "" };
