@@ -32,27 +32,43 @@ public static class TableBookmark
 /// delete (c1/id-key-change, id-relocation, id-delete-reinsert), and Requery numbers the new keyset again
 /// (c1/life-requery). A number that names no occurrence is 3159 (c1b/clone-bookmark-sharing,
 /// q/id-bookmark-assign-deleted-and-beyond, q2/id-bookmark-requery-populated).
-/// <para>The base: <see cref="FirstBase"/> (0x0200) for a dynaset opened with no open snapshot, forward-only or query
-/// recordset (first, sequential or concurrent beside open dynasets/table-types: c1/id-bookmark-shape,
-/// fix/id-bookmark-assign-fresh, c1b/clone-bookmark-sharing, r-q6-bookmarks/snapshot-base-neighbours) and for a snapshot
-/// over an unindexed 1- or 2-column LONG table (r-q6-bookmarks/first-snapshot-columns-longs-1, -2,
-/// snapshot-base-neighbours). <see cref="SnapshotBase"/> (0x0300) for a snapshot opened with no other open keyset,
-/// forward-only or query recordset over a recorded non-(1..2 LONG) schema (r-q6-bookmarks rounds 2-5,
-/// r-dao-1b/recordset-members-snapshot, c1/id-bookmark-shape, c1b/bookmark-walk-types, c1b/lastmodified-addnew,
-/// q/id-bookmark-assign-deleted-and-beyond). Other concurrent combinations (such as c1/life-requery 0x0600 and
-/// c1b/clone-bookmark-sharing 0x0900) and unrecorded snapshot schemas pass no base, whose bookmarks are then
-/// NotObserved.</para>
+/// <para>The base: <see cref="FirstBase"/> (0x0200) for every table-opened dynaset regardless of open neighbours
+/// (r-cursor-1/id-bookmark-shape, r-fix-cursor-dao/id-bookmark-assign-fresh, r-cursor-1b/clone-bookmark-sharing,
+/// r-q6-bookmarks/snapshot-base-neighbours, r-q24-bookmarks/q4-dyn-beside-snap-0300,
+/// r-q24-bookmarks/q4-dyn-beside-forwardonly, r-q24-bookmarks/q4-dyn-beside-select-dynaset,
+/// r-q24-bookmarks/q4-dyn-beside-select-snapshot, r-q24-bookmarks/r2-q4-dyn-beside-big-snapshot) and for every
+/// 1- or 2-column all-LONG (including COUNTER, indexed or unindexed) table snapshot beside any neighbour
+/// (r-q6-bookmarks/first-snapshot-columns-longs-1, r-q6-bookmarks/first-snapshot-columns-longs-2,
+/// r-q6-bookmarks/snapshot-base-neighbours, r-q24-bookmarks/q2-snap-long1-beside-moved-dynaset,
+/// r-q24-bookmarks/q2-snap-long2-beside-dynaset, r-q24-bookmarks/r2-q2-snap-long1-beside-fo-query-snapw,
+/// r-q24-bookmarks/r2-q2-snap-long2-beside-fo-query-snapw, r-q24-bookmarks/q3-schema-idx-long1-nonunique,
+/// r-q24-bookmarks/q3-schema-idx-long1-pk, r-q24-bookmarks/q3-schema-idx-long2-pk,
+/// r-q24-bookmarks/r2-q3-1col-counter, r-q24-bookmarks/r2-q3-2col-counter-long). Every other table snapshot over a
+/// recorded schema numbers from <see cref="SnapshotBaseForSlot"/> (<c>0x0300 + 0x0300 * slot</c>) where <c>slot</c>
+/// is the lowest free slot in ACE's per-engine temp-page allocator occupied by open table-opened dynaset and snapshot
+/// families (r-q24-bookmarks/q1-snap-w-alone, r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved,
+/// r-q24-bookmarks/q1b-snap-w-beside-2-dynasets, r-q24-bookmarks/q1c-snap-w-beside-snapshot,
+/// r-q24-bookmarks/r2-q1-gap-reuse, r-cursor-1/life-requery 0x0600 -> 0x0300,
+/// r-cursor-1b/clone-bookmark-sharing 0x0900). Unrecorded schemas (DECIMAL, VARBINARY) and snapshots opened beside a
+/// multi-page neighbour (r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset 0x0a00,
+/// r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot 0x4200) pass no base, whose bookmarks are then NotObserved.</para>
 /// </summary>
 public static class KeysetBookmark
 {
-    /// <summary>The base of a dynaset and of a snapshot over an unindexed 1- or 2-column LONG table.</summary>
+    /// <summary>The base of a table-opened dynaset and of a 1- or 2-column all-LONG table snapshot.</summary>
     public const uint FirstBase = 0x0200;
 
-    /// <summary>The base of a standalone snapshot over a recorded wider or non-LONG table.</summary>
+    /// <summary>The base of a slot-0 snapshot over any other recorded table schema.</summary>
     public const uint SnapshotBase = 0x0300;
+
+    /// <summary>Per-slot stride of ACE's per-engine temp-page allocator for 0x0300-class snapshots (r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved, r-q24-bookmarks/q1b-snap-w-beside-2-dynasets, r-q24-bookmarks/r2-q1-gap-reuse).</summary>
+    public const uint SnapshotSlotStep = 0x0300;
 
     /// <summary>Occurrences per numbering block, and the numbers each block takes.</summary>
     public const int BlockEntries = 453, BlockNumbers = 512;
+
+    /// <summary>Snapshot bookmark base for temp-page allocator slot <paramref name="slot"/> (0 -> 0x0300, 1 -> 0x0600, 2 -> 0x0900).</summary>
+    public static uint SnapshotBaseForSlot(int slot) => SnapshotBase + (uint)slot * SnapshotSlotStep;
 
     public static byte[] Encode(uint @base, int ordinal)
     {

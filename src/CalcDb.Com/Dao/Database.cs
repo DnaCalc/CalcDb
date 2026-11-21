@@ -123,8 +123,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     /// <summary>
     /// Version: the file format's engine version, "4.0" for a Jet 4 MDB, "12.0" and "14.0" for the ACE formats of
-    /// CreateDatabase options 128 and 256 (qualified, R-FMT-1 FMT1-CREATE: r-fmt-1/create-*-empty, r-q-fmt-sort/v64,
-    /// v128 and v256-corpus). The later ACE format codes are not observed.
+    /// CreateDatabase options 128 and 256 (qualified, R-FMT-1 FMT1-CREATE: r-fmt-1/create-*-empty,
+    /// r-q-fmt-sort/v64-corpus-mdb, r-q-fmt-sort/v128-corpus-accdb and r-q-fmt-sort/v256-corpus-accdb). The later ACE
+    /// format codes are not observed.
     /// </summary>
     private CallResult Version() => Profile.Format switch
     {
@@ -485,11 +486,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // an overlay or dynamic source), and its reads of the Workspace's own changes stay refused by name
         // (RecordsetObject.UnpublishedRead).
         PageSource source = recordsetType == 4 ? new PageSource(Cache) : new PageSource(Cache, _workspace.Transactions);
+        int? tempSlot = null;
         uint? bookmarkBase = null;
         (string Name, string Detail)? bookmarkBaseRefusal = null;
         if (recordsetType is 2 or 4)
         {
-            bookmarkBase = KeysetBookmarkBase(recordsetType, table, out bookmarkBaseRefusal);
+            tempSlot = Engine.PeekFreeTempSlot();
+            bookmarkBase = ResolveKeysetBookmarkBase(recordsetType, table, tempSlot.Value, excludingFamilyRoot: null, out bookmarkBaseRefusal);
         }
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
@@ -504,7 +507,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, bookmarkBaseRefusal);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, tempSlot, bookmarkBaseRefusal);
+        if (tempSlot is int claimedSlot)
+        {
+            Engine.OccupyTempSlot(claimedSlot, recordset);
+        }
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();
@@ -527,102 +534,110 @@ internal sealed unsafe class DatabaseObject : DaoObject
             : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
     }
 
-    /// <summary>Count this Database's live dynaset, snapshot, forward-only and SELECT query recordset families.</summary>
-    public void CountOpenKeysets(ref int dynasets, ref int snapshots, ref int forwardOnly, ref int queries)
-    {
-        foreach (IDatabaseRecordset r in _recordsets)
-        {
-            if (r is RecordsetObject rs)
-            {
-                switch (rs.RecordsetType)
-                {
-                    case 2: dynasets++; break;
-                    case 4: snapshots++; break;
-                    case 8: forwardOnly++; break;
-                }
-            }
-            else if (r is SelectRecordsetObject)
-            {
-                queries++;
-            }
-        }
-    }
-
     /// <summary>
-    /// Keyset bookmark base for a newly opened dynaset or snapshot (R-CURSOR-1 CUR-ID), strictly limited to the
-    /// open-neighbour states and table schemas recorded in ACE evidence:
+    /// Keyset bookmark base for a newly opened or requeried table dynaset or snapshot (R-CURSOR-1 CUR-ID), per
+    /// <c>r-q6-bookmarks</c> and <c>r-q24-bookmarks</c>:
     /// <list type="bullet">
-    /// <item>Dynaset (2): 0x0200 when no snapshot, forward-only or query recordset is open (first, sequential or beside
-    /// open dynasets/table-types: r-cursor-1/id-bookmark-shape, r-fix-cursor-dao/id-bookmark-assign-fresh,
-    /// r-cursor-1b/clone-bookmark-sharing call 17, r-q6-bookmarks/snapshot-base-neighbours calls 12/18/24/56/58).</item>
-    /// <item>Snapshot (4) over 1 unindexed LONG column: 0x0200 when no forward-only or query recordset is open
-    /// (r-q6-bookmarks/first-snapshot-columns-longs-1, narrow-*, reopened-3, snapshot-base-neighbours s1-s7a).</item>
-    /// <item>Snapshot (4) with no other open keyset, forward-only or query recordsets: 0x0200 for 2 unindexed LONG
-    /// columns (first-snapshot-columns-longs-2); 0x0300 for recorded 1-column unindexed BYTE/TEXT/MEMO
-    /// (first-snapshot-columns-only-*), 2-column unindexed (LONG, BIT|BYTE|CURRENCY|DATETIME|DOUBLE|GUID|TEXT|MEMO)
-    /// (first-snapshot-column-*, wide-*, created-600, reopened-600), and 3+-column tables of recorded types
-    /// LONG/TEXT/MEMO/DATETIME/DOUBLE (first-snapshot-columns-longs-3/-4/-8, r-dao-1b/recordset-members-snapshot,
-    /// r-cursor-1/id-bookmark-shape, r-cursor-1b/bookmark-walk-types, lastmodified-addnew,
-    /// r-q-cursor-dao/id-bookmark-assign-deleted-and-beyond).</item>
+    /// <item>Table-opened dynaset (2): always 0x0200 regardless of open neighbours (r-q24-bookmarks/q4-dyn-beside-snap-0300,
+    /// r-q24-bookmarks/q4-dyn-beside-forwardonly, r-q24-bookmarks/q4-dyn-beside-select-dynaset,
+    /// r-q24-bookmarks/q4-dyn-beside-select-snapshot, r-q24-bookmarks/r2-q4-dyn-beside-big-snapshot,
+    /// r-cursor-1/id-bookmark-shape, r-fix-cursor-dao/id-bookmark-assign-fresh, r-cursor-1b/clone-bookmark-sharing,
+    /// r-q6-bookmarks/snapshot-base-neighbours).</item>
+    /// <item>1- or 2-column all-LONG (including COUNTER, indexed or unindexed) table snapshot (4): always 0x0200 beside any
+    /// neighbour (r-q24-bookmarks/q2-snap-long1-beside-moved-dynaset, r-q24-bookmarks/q2-snap-long2-beside-dynaset,
+    /// r-q24-bookmarks/r2-q2-snap-long1-beside-fo-query-snapw, r-q24-bookmarks/r2-q2-snap-long2-beside-fo-query-snapw,
+    /// r-q24-bookmarks/q3-schema-idx-long1-nonunique, r-q24-bookmarks/q3-schema-idx-long1-pk,
+    /// r-q24-bookmarks/q3-schema-idx-long2-pk, r-q24-bookmarks/r2-q3-1col-counter,
+    /// r-q24-bookmarks/r2-q3-2col-counter-long, r-q6-bookmarks/first-snapshot-columns-longs-1,
+    /// r-q6-bookmarks/first-snapshot-columns-longs-2, r-q6-bookmarks/snapshot-base-neighbours), while still occupying a
+    /// temp-page slot (r-q24-bookmarks/r2-q1-snap-w-beside-l1-neighbours).</item>
+    /// <item>Every other table snapshot (4) over a recorded schema: <c>0x0300 + 0x0300 * slot</c> from the per-engine
+    /// temp-page allocator occupied by open table-opened dynaset and snapshot families (r-q24-bookmarks/q1-snap-w-alone,
+    /// r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved, r-q24-bookmarks/q1b-snap-w-beside-2-dynasets,
+    /// r-q24-bookmarks/q1c-snap-w-beside-snapshot, r-q24-bookmarks/r2-q1-gap-reuse,
+    /// r-q24-bookmarks/r2-q1-requery-partial-close, r-cursor-1/life-requery 0x0600 -&gt; 0x0300,
+    /// r-cursor-1b/clone-bookmark-sharing 0x0900; schemas in r-q6-bookmarks rounds 2-5,
+    /// r-q24-bookmarks/q3-schema-1col-bit, r-q24-bookmarks/q3-schema-1col-short, r-q24-bookmarks/q3-schema-1col-single,
+    /// r-q24-bookmarks/q3-schema-2col-long-ole, r-q24-bookmarks/r2-q3-1col-binary4, r-q24-bookmarks/r2-q3-2col-short-short,
+    /// r-q24-bookmarks/r2-q3-idx-text-pk).</item>
     /// </list>
-    /// Any other open-neighbour state or unrecorded schema returns null with a named NotModelled refusal.
+    /// Unprobed column types (DECIMAL, VARBINARY, ExtendedDateTime) refuse with <c>NotModelled.SnapshotBookmarkBaseSchema</c>;
+    /// an open neighbour populated past its first temp page refuses with <c>NotModelled.SnapshotBookmarkBaseWithMultiPageNeighbour</c>
+    /// (r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset 0x0a00, r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot 0x4200).
     /// </summary>
-    private uint? KeysetBookmarkBase(int recordsetType, TableDefinition table, out (string Name, string Detail)? refusal)
+    internal uint? ResolveKeysetBookmarkBase(int recordsetType, TableDefinition table, int slot, RecordsetObject? excludingFamilyRoot, out (string Name, string Detail)? refusal)
     {
-        OpenKeysetCounts open = Engine.OpenKeysets();
-        if (recordsetType == 2)
-        {
-            if (open is { Snapshots: 0, ForwardOnly: 0, Queries: 0 })
-            {
-                refusal = null;
-                return KeysetBookmark.FirstBase;
-            }
-            refusal = ("NotModelled.DynasetBookmarkBaseWithOpenNeighbour",
-                "Bookmark on a dynaset opened while a snapshot, forward-only or query recordset is open (not recorded)");
-            return null;
-        }
-        bool unindexed = table.PhysicalIndexes.Count == 0 && table.LogicalIndexes.Count == 0;
-        if (unindexed && table.Columns.Count == 1 && table.Columns[0].TypeCode == NativeTypes.Long)
-        {
-            if (open is { ForwardOnly: 0, Queries: 0 })
-            {
-                refusal = null;
-                return KeysetBookmark.FirstBase;
-            }
-            refusal = ("NotModelled.SnapshotBookmarkBaseWithOpenNeighbour",
-                "Bookmark on a 1-LONG snapshot opened while a forward-only or query recordset is open (not recorded)");
-            return null;
-        }
-        if (open is not { Dynasets: 0, Snapshots: 0, ForwardOnly: 0, Queries: 0 })
-        {
-            refusal = ("NotModelled.SnapshotBookmarkBaseWithOpenNeighbour",
-                "Bookmark on a snapshot opened while another dynaset, snapshot, forward-only or query recordset is open (r-cursor-1/life-requery 0x0600 and r-cursor-1b/clone-bookmark-sharing 0x0900 confound open dynasets, movement and clones)");
-            return null;
-        }
-        if (unindexed && table.Columns.Count == 2 && table.Columns[0].TypeCode == NativeTypes.Long && table.Columns[1].TypeCode == NativeTypes.Long)
+        if (recordsetType == 2 || IsLong1Or2Snapshot(table))
         {
             refusal = null;
             return KeysetBookmark.FirstBase;
         }
-        if (IsRecordedSnapshot0300Schema(table, unindexed))
+        if (!IsRecordedSnapshotSchema(table))
         {
-            refusal = null;
-            return KeysetBookmark.SnapshotBase;
+            refusal = ("NotModelled.SnapshotBookmarkBaseSchema",
+                "Bookmark on a snapshot whose table has a DECIMAL, VARBINARY or other unrecorded column type (not probed in r-q6-bookmarks or r-q24-bookmarks)");
+            return null;
         }
-        refusal = ("NotModelled.SnapshotBookmarkBaseSchema",
-            "Bookmark on a snapshot whose table column types or indexing are not recorded in r-q6-bookmarks or the fixture records");
-        return null;
+        if (Engine.HasMultiPageTempNeighbour(excludingFamilyRoot))
+        {
+            refusal = ("NotModelled.SnapshotBookmarkBaseWithMultiPageNeighbour",
+                "Bookmark on a snapshot opened while an open dynaset or snapshot neighbour has populated past its first temp page (r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset 0x0a00, r2-q1-snap-t-beside-big-snapshot 0x4200)");
+            return null;
+        }
+        refusal = null;
+        return KeysetBookmark.SnapshotBaseForSlot(slot);
     }
 
-    private static bool IsRecordedSnapshot0300Schema(TableDefinition table, bool unindexed) => table.Columns.Count switch
+    /// <summary>True for a 1- or 2-column table where every column is native LONG (including COUNTER, indexed or unindexed).</summary>
+    internal static bool IsLong1Or2Snapshot(TableDefinition table) =>
+        table.Columns.Count is 1 or 2 && table.Columns.All(static c => c.TypeCode == NativeTypes.Long);
+
+    /// <summary>
+    /// True when every column type of <paramref name="table"/> was probed in r-q6-bookmarks or r-q24-bookmarks
+    /// (excludes DECIMAL / NativeTypes.Numeric, VARBINARY / non-fixed NativeTypes.Binary, and ExtendedDateTime).
+    /// </summary>
+    private static bool IsRecordedSnapshotSchema(TableDefinition table) =>
+        table.Columns.Count > 0 && table.Columns.All(static c => c.TypeCode switch
+        {
+            NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
+                or NativeTypes.Currency or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime
+                or NativeTypes.Text or NativeTypes.Ole or NativeTypes.Memo or NativeTypes.Guid => true,
+            NativeTypes.Binary => c.IsFixed,
+            _ => false,
+        });
+
+    /// <summary>
+    /// Conservative upper-bound check that <paramref name="rowCount"/> materialized rows of a 0x0300-class snapshot
+    /// definitely fit within its first 4096-byte temp page (row 0 always fits: first-snapshot-created-600 call 611,
+    /// r2-q1-snap-t-beside-big-snapshot call 6; small tables like W/T/F fit; Big 2048 rows spills across 61 pages).
+    /// </summary>
+    internal static bool FitsOnSingleSnapshotTempPage(TableDefinition table, long rowCount)
     {
-        1 => unindexed && table.Columns[0].TypeCode is NativeTypes.Byte or NativeTypes.Text or NativeTypes.Memo,
-        2 => unindexed
-            && table.Columns[0].TypeCode == NativeTypes.Long
-            && table.Columns[1].TypeCode is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Currency or NativeTypes.DateTime or NativeTypes.Double or NativeTypes.Guid or NativeTypes.Text or NativeTypes.Memo,
-        >= 3 => table.Columns.All(static c => c.TypeCode is NativeTypes.Long or NativeTypes.Text or NativeTypes.Memo or NativeTypes.DateTime or NativeTypes.Double),
-        _ => false,
-    };
+        if (rowCount <= 1)
+        {
+            return true;
+        }
+        if (rowCount > 255)
+        {
+            return false;
+        }
+        long perRowBytes = 16 + table.Columns.Count * 2L;
+        foreach (ColumnDescriptor c in table.Columns)
+        {
+            perRowBytes += c.TypeCode switch
+            {
+                NativeTypes.Boolean or NativeTypes.Byte => 1,
+                NativeTypes.Integer => 2,
+                NativeTypes.Long or NativeTypes.Single => 4,
+                NativeTypes.Currency or NativeTypes.Double or NativeTypes.DateTime => 8,
+                NativeTypes.Guid => 16,
+                NativeTypes.Memo or NativeTypes.Ole => 128,
+                NativeTypes.Binary or NativeTypes.Text => Math.Max((long)c.Length, 4),
+                _ => 256,
+            };
+        }
+        return rowCount * perRowBytes <= 3000;
+    }
 
     /// <summary>A new SELECT query recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
     public CallResult Adopt(SelectRecordsetObject recordset)

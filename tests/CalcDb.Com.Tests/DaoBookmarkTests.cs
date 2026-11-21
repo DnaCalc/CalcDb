@@ -10,15 +10,18 @@ using CalcDb.Values;
 namespace CalcDb.Com.Tests;
 
 /// <summary>
-/// R-CURSOR-1 CUR-ID (register rows mbfm and hr7t): DAO bookmark bytes for AddNew <c>LastModified</c> on dynasets,
-/// sequential and concurrent dynaset bookmark bases, standalone and 1-LONG snapshot bookmark bases, recorded
-/// <c>Bookmark</c> put variant shapes, and named <c>NotModelled.*</c> refusals for unrecorded open-neighbour states
-/// and unrecorded snapshot schemas.
+/// R-CURSOR-1 CUR-ID (register rows mbfm and hr7t; evidence/r-q6-bookmarks, evidence/r-q24-bookmarks):
+/// DAO bookmark bytes for AddNew <c>LastModified</c> on dynasets, unconditional 0x0200 dynaset and 1-/2-LONG snapshot
+/// bases, per-engine temp-page slot allocator (<c>0x0300 + 0x0300 * slot</c>) with clone sharing, gap reuse and Requery
+/// reacquisition, recorded <c>Bookmark</c> put variant shapes, and named <c>NotModelled.*</c> refusals for unrecorded
+/// schemas (DECIMAL, VARBINARY), multi-page neighbours/snapshots, and in-transaction AddNew rollback.
 /// </summary>
 public sealed unsafe class DaoBookmarkTests : IDisposable
 {
     private const string Nav = "49288e9c099e3b28218a88a1c5a28a0053476f2e6d078898dd091510bc93be7d"; // r-cursor-1-nav.accdb
     private const string Cursor1bMain = "47f8fa36bfcd0df6185061dc39e47fd46cdac20f372942f9a8ff3a177a8bfbf6"; // r-cursor-1b-main.accdb
+    private const string QMain = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"; // r-q-cursor-dao-main.accdb
+    private const string RichFixture = "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95"; // r-dao-1b-rich.accdb
 
     private readonly List<string> _files = [];
     private readonly List<DatabaseObject> _databases = [];
@@ -101,121 +104,274 @@ public sealed unsafe class DaoBookmarkTests : IDisposable
     }
 
     [Fact]
-    public void Sequential_and_concurrent_dynasets_number_from_0x0200_and_standalone_snapshot_after_closed_dynaset_numbers_from_0x0300()
+    public void Dynasets_number_from_0x0200_unconditionally_beside_any_neighbour()
     {
-        // r-cursor-1/id-bookmark-shape (calls 16-34, 46), r-cursor-1b/bookmark-walk-types (calls 48-72),
-        // r-cursor-1b/clone-bookmark-sharing (calls 15-17 -> rq 02020000 beside open rp+rc),
-        // r-fix-cursor-dao/id-bookmark-assign-fresh (sequential dynasets all 0x0200).
+        // r-cursor-1/id-bookmark-shape, r-cursor-1b/clone-bookmark-sharing, r-q24-bookmarks/q4-dyn-beside-snap-0300,
+        // r-q24-bookmarks/q4-dyn-beside-forwardonly, r-q24-bookmarks/q4-dyn-beside-select-dynaset,
+        // r-q24-bookmarks/q4-dyn-beside-select-snapshot.
         DatabaseObject db = Open(Cursor1bMain, readOnly: true);
 
-        // Two concurrent dynasets plus a clone all use 0x0200.
+        RecordsetObject snap = OpenRecordset(db, "F", 4);
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(snap, "Bookmark")))));
+
+        RecordsetObject fo = OpenRecordset(db, "F", 8);
+        DispatchObject qDyn = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, S FROM F", 2)));
+        DispatchObject qSnap = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, S FROM F ORDER BY ID", 4)));
+
         RecordsetObject d1 = OpenRecordset(db, "F", 2);
         RecordsetObject c1 = Recover<RecordsetObject>(Ok(Method(d1, "Clone")));
         RecordsetObject d2 = OpenRecordset(db, "F", 2);
         Ok(Method(d2, "Move", 2));
+
         Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d1, "Bookmark")))));
         Assert.Equal("00020000", Hex(BytesValue(Ok(Get(c1, "Bookmark")))));
         Assert.Equal("02020000", Hex(BytesValue(Ok(Get(d2, "Bookmark")))));
 
-        // Close all dynasets; a standalone snapshot over F now uses 0x0300.
         Ok(Method(d2, "Close"));
         Ok(Method(c1, "Close"));
         Ok(Method(d1, "Close"));
-
-        RecordsetObject snap = OpenRecordset(db, "F", 4);
-        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(snap, "Bookmark")))));
-        Ok(Method(snap, "MoveNext"));
-        Assert.Equal("01030000", Hex(BytesValue(Ok(Get(snap, "Bookmark")))));
+        Ok(Method(qSnap, "Close"));
+        Ok(Method(qDyn, "Close"));
+        Ok(Method(fo, "Close"));
         Ok(Method(snap, "Close"));
-
-        // A dynaset opened after the snapshot closed uses 0x0200 again.
-        RecordsetObject d3 = OpenRecordset(db, "F", 2);
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d3, "Bookmark")))));
-        Ok(Method(d3, "Close"));
     }
 
     [Fact]
-    public void Snapshot_over_one_unindexed_LONG_uses_0x0200_alone_and_beside_dynasets_table_and_snapshot()
+    public void Snapshots_over_1_or_2_LONG_or_COUNTER_columns_use_0x0200_beside_any_neighbour_and_occupy_a_slot()
     {
-        // r-q6-bookmarks/snapshot-base-neighbours (calls 9-64: S (n LONG) -> 00020000 throughout).
+        // r-q6-bookmarks/snapshot-base-neighbours, r-q24-bookmarks/q2-snap-long1-beside-moved-dynaset,
+        // r-q24-bookmarks/q2-snap-long2-beside-dynaset, r-q24-bookmarks/r2-q2-snap-long1-beside-fo-query-snapw,
+        // r-q24-bookmarks/r2-q2-snap-long2-beside-fo-query-snapw, r-q24-bookmarks/r2-q1-snap-w-beside-l1-neighbours.
         DatabaseObject db = Open(Nav, readOnly: false);
-        Ok(Method(db, "Execute", "CREATE TABLE SL (n LONG)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO SL (n) VALUES (1)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO SL (n) VALUES (2)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE L1 (n LONG)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO L1 (n) VALUES (1)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO L1 (n) VALUES (2)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE L2 (c1 LONG, c2 LONG)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO L2 VALUES (1, 10)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO L2 VALUES (2, 20)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE W (n LONG, t TEXT(10))", 128));
+        Ok(Method(db, "Execute", "INSERT INTO W VALUES (1, 'a')", 128));
+        Ok(Method(db, "Execute", "INSERT INTO W VALUES (2, 'b')", 128));
 
-        RecordsetObject s1 = OpenRecordset(db, "SL", 4);
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(s1, "Bookmark")))));
-        Ok(Method(s1, "Close"));
+        // 1-LONG snapshot occupies slot 0 -> W snapshot beside it gets slot 1 (0x0600).
+        RecordsetObject sl1 = OpenRecordset(db, "L1", 4);
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(sl1, "Bookmark")))));
+        RecordsetObject sw1 = OpenRecordset(db, "W", 4);
+        Assert.Equal("00060000", Hex(BytesValue(Ok(Get(sw1, "Bookmark")))));
 
-        RecordsetObject d1 = OpenRecordset(db, "SL", 2);
-        RecordsetObject d2 = OpenRecordset(db, "SL", 2);
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d1, "Bookmark")))));
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d2, "Bookmark")))));
+        // 1-LONG and 2-LONG snapshots still get 0x0200 beside forward-only, SELECT queries, dynaset, and W snapshot.
+        RecordsetObject fo = OpenRecordset(db, "W", 8);
+        DispatchObject qDyn = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT n, t FROM W", 2)));
+        RecordsetObject dyn = OpenRecordset(db, "W", 2);
+        Ok(Method(dyn, "MoveNext"));
 
-        RecordsetObject s2 = OpenRecordset(db, "SL", 4);
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(s2, "Bookmark")))));
-        Ok(Method(s2, "Close"));
-        Ok(Method(d2, "Close"));
-        Ok(Method(d1, "Close"));
+        RecordsetObject sl1b = OpenRecordset(db, "L1", 4);
+        RecordsetObject sl2 = OpenRecordset(db, "L2", 4);
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(sl1b, "Bookmark")))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(sl2, "Bookmark")))));
 
-        // Two concurrent 1-LONG snapshots both use 0x0200.
-        RecordsetObject s7a = OpenRecordset(db, "SL", 4);
-        RecordsetObject s7 = OpenRecordset(db, "SL", 4);
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(s7a, "Bookmark")))));
-        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(s7, "Bookmark")))));
-        Ok(Method(s7, "Close"));
-        Ok(Method(s7a, "Close"));
+        Ok(Method(sl2, "Close"));
+        Ok(Method(sl1b, "Close"));
+        Ok(Method(dyn, "Close"));
+        Ok(Method(qDyn, "Close"));
+        Ok(Method(fo, "Close"));
+        Ok(Method(sw1, "Close"));
+        Ok(Method(sl1, "Close"));
     }
 
     [Fact]
-    public void Snapshot_bookmark_base_covers_recorded_column_shapes_and_refuses_unrecorded_schemas_by_name()
+    public void Snapshot_bookmark_base_covers_recorded_schemas_and_refuses_DECIMAL_and_VARBINARY_by_name()
     {
-        // r-q6-bookmarks rounds 2-5: 2 unindexed LONGs -> 0x0200; recorded 1- and 2-column shapes -> 0x0300;
-        // unrecorded column types (SHORT, SINGLE) and indexed 1..2 LONG tables refuse by name instead of generalizing.
+        // r-q6-bookmarks/first-snapshot-column-bit, r-q24-bookmarks/q3-schema-1col-bit, r-q24-bookmarks/q3-schema-1col-short,
+        // r-q24-bookmarks/q3-schema-1col-single, r-q24-bookmarks/q3-schema-2col-long-single,
+        // r-q24-bookmarks/q3-schema-idx-long1-pk, r-q24-bookmarks/q3-schema-idx-long2-pk,
+        // r-q24-bookmarks/r2-q3-1col-binary4, r-q24-bookmarks/r2-q3-1col-counter, r-q24-bookmarks/r2-q3-2col-counter-long,
+        // r-q24-bookmarks/r2-q3-2col-short-short, r-q24-bookmarks/r2-q3-idx-text-pk:
+        // 1- and 2-LONG/COUNTER (indexed or unindexed) -> 0x0200; all other probed column types -> 0x0300;
+        // unprobed DECIMAL and VARBINARY still refuse with NotModelled.SnapshotBookmarkBaseSchema.
         DatabaseObject db = Open(Nav, readOnly: false);
-        Ok(Method(db, "Execute", "CREATE TABLE TwoLongs (c1 LONG, c2 LONG)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO TwoLongs VALUES (1, 2)", 128));
-        Ok(Method(db, "Execute", "CREATE TABLE OnlyByte (c1 BYTE)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO OnlyByte VALUES (1)", 128));
-        Ok(Method(db, "Execute", "CREATE TABLE LongAndText (c1 LONG, c2 TEXT(10))", 128));
-        Ok(Method(db, "Execute", "INSERT INTO LongAndText VALUES (1, 'a')", 128));
-        Ok(Method(db, "Execute", "CREATE TABLE OnlyShort (c1 SHORT)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO OnlyShort VALUES (1)", 128));
-        Ok(Method(db, "Execute", "CREATE TABLE LongSingle (c1 LONG, c2 SINGLE)", 128));
-        Ok(Method(db, "Execute", "INSERT INTO LongSingle VALUES (1, 2)", 128));
         Ok(Method(db, "Execute", "CREATE TABLE IndexedLong (c1 LONG CONSTRAINT PK_IL PRIMARY KEY)", 128));
         Ok(Method(db, "Execute", "INSERT INTO IndexedLong VALUES (1)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE IndexedTwoLongs (c1 LONG CONSTRAINT PK_I2L PRIMARY KEY, c2 LONG)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO IndexedTwoLongs VALUES (1, 10)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE Counter1 (c1 COUNTER)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO Counter1 (c1) VALUES (1)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE CounterLong (c1 COUNTER, c2 LONG)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO CounterLong (c2) VALUES (10)", 128));
 
-        AssertStandaloneSnapshotBookmark(db, "TwoLongs", "00020000");
-        AssertStandaloneSnapshotBookmark(db, "OnlyByte", "00030000");
-        AssertStandaloneSnapshotBookmark(db, "LongAndText", "00030000");
+        Ok(Method(db, "Execute", "CREATE TABLE LongBit (c1 LONG, c2 BIT)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO LongBit VALUES (1, 1)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE OnlyShort (c1 SHORT)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO OnlyShort VALUES (1)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE OnlySingle (c1 SINGLE)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO OnlySingle VALUES (1)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE OnlyBinary4 (c1 BINARY(4))", 128));
+        Ok(Method(db, "Execute", "INSERT INTO OnlyBinary4 VALUES (NULL)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE TwoShorts (c1 SHORT, c2 SHORT)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO TwoShorts VALUES (1, 2)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE LongSingle (c1 LONG, c2 SINGLE)", 128));
+        Ok(Method(db, "Execute", "INSERT INTO LongSingle VALUES (1, 2)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE IndexedText (c1 LONG CONSTRAINT PK_IT PRIMARY KEY, c2 TEXT(10))", 128));
+        Ok(Method(db, "Execute", "INSERT INTO IndexedText VALUES (1, 'a')", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE LongVarBinary (c1 LONG, c2 VARBINARY(4))", 128));
+        Ok(Method(db, "Execute", "INSERT INTO LongVarBinary VALUES (1, NULL)", 128));
 
-        AssertStandaloneSnapshotRefusal(db, "OnlyShort", "NotModelled.SnapshotBookmarkBaseSchema");
-        AssertStandaloneSnapshotRefusal(db, "LongSingle", "NotModelled.SnapshotBookmarkBaseSchema");
-        AssertStandaloneSnapshotRefusal(db, "IndexedLong", "NotModelled.SnapshotBookmarkBaseSchema");
+        AssertStandaloneSnapshotBookmark(db, "IndexedLong", "00020000");
+        AssertStandaloneSnapshotBookmark(db, "IndexedTwoLongs", "00020000");
+        AssertStandaloneSnapshotBookmark(db, "Counter1", "00020000");
+        AssertStandaloneSnapshotBookmark(db, "CounterLong", "00020000");
+
+        AssertStandaloneSnapshotBookmark(db, "LongBit", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "OnlyShort", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "OnlySingle", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "OnlyBinary4", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "TwoShorts", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "LongSingle", "00030000");
+        AssertStandaloneSnapshotBookmark(db, "IndexedText", "00030000");
+
+        AssertStandaloneSnapshotRefusal(db, "LongVarBinary", "NotModelled.SnapshotBookmarkBaseSchema");
+
+        // DECIMAL column (r-dao-1b-rich.accdb Typed.TDec) stays refused by name.
+        DatabaseObject rich = Open(RichFixture, readOnly: true);
+        AssertStandaloneSnapshotRefusal(rich, "Typed", "NotModelled.SnapshotBookmarkBaseSchema");
     }
 
     [Fact]
-    public void Unrecorded_concurrent_neighbour_bookmark_bases_refuse_by_name()
+    public void Per_engine_temp_slot_allocator_assigns_0x0300_stride_shares_across_clones_reuses_gaps_and_requeries()
     {
-        // Snapshot over 0x0300 table beside open dynaset (r-cursor-1/life-requery 0x0600, r-cursor-1b/clone-bookmark-sharing 0x0900)
-        // and dynaset opened beside an open snapshot are refused by name rather than guessed.
-        DatabaseObject db = Open(Nav, readOnly: true);
+        // r-q24-bookmarks/q1-snap-w-alone, r-q24-bookmarks/q1d-snap-w-beside-table,
+        // r-q24-bookmarks/q1e-snap-w-beside-forwardonly, r-q24-bookmarks/r2-q1-snap-w-beside-queries,
+        // r-q24-bookmarks/r2-q1-snap-clone-neighbour, r-q24-bookmarks/r2-q1-snap-then-dyn-then-snap,
+        // r-q24-bookmarks/r2-q1-requery-partial-close, r-cursor-1b/clone-bookmark-sharing.
+        DatabaseObject db = Open(Cursor1bMain, readOnly: true);
 
-        RecordsetObject rd = OpenRecordset(db, "T", 2);
-        RecordsetObject snapBesideDynaset = OpenRecordset(db, "T", 4);
-        AssertNotModelled(Get(snapBesideDynaset, "Bookmark"), "NotModelled.SnapshotBookmarkBaseWithOpenNeighbour");
-        AssertNotModelled(Put(snapBesideDynaset, "Bookmark", new byte[] { 0x00, 0x06, 0x00, 0x00 }), "NotModelled.SnapshotBookmarkBaseWithOpenNeighbour");
-        Ok(Method(snapBesideDynaset, "Close"));
-        Ok(Method(rd, "Close"));
+        // Table-type, forward-only, and SELECT query recordsets take no slot.
+        RecordsetObject tbl = OpenRecordset(db, "F", 1);
+        RecordsetObject fo = OpenRecordset(db, "F", 8);
+        DispatchObject qDyn = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, S FROM F", 2)));
+        DispatchObject qSnap = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, S FROM F ORDER BY ID", 4)));
 
-        RecordsetObject snap = OpenRecordset(db, "T", 4);
-        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(snap, "Bookmark")))));
-        RecordsetObject dynBesideSnap = OpenRecordset(db, "T", 2);
-        AssertNotModelled(Get(dynBesideSnap, "Bookmark"), "NotModelled.DynasetBookmarkBaseWithOpenNeighbour");
-        AssertNotModelled(Put(dynBesideSnap, "Bookmark", new byte[] { 0x00, 0x02, 0x00, 0x00 }), "NotModelled.DynasetBookmarkBaseWithOpenNeighbour");
-        Ok(Method(dynBesideSnap, "Close"));
-        Ok(Method(snap, "Close"));
+        // r-q24-bookmarks/r2-q1-snap-clone-neighbour: clone shares s1's slot 0 -> s2 takes slot 1 (0x0600).
+        RecordsetObject s1 = OpenRecordset(db, "F", 4);
+        RecordsetObject sc1 = Recover<RecordsetObject>(Ok(Method(s1, "Clone")));
+        RecordsetObject s2 = OpenRecordset(db, "F", 4);
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(s1, "Bookmark")))));
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(sc1, "Bookmark")))));
+        Assert.Equal("00060000", Hex(BytesValue(Ok(Get(s2, "Bookmark")))));
+        Ok(Method(s2, "Close"));
+        Ok(Method(sc1, "Close"));
+        Ok(Method(s1, "Close"));
+
+        // r-q24-bookmarks/r2-q1-snap-then-dyn-then-snap + r-cursor-1b/clone-bookmark-sharing:
+        // s1 (slot 0 -> 0x0300), d1 (slot 1), s2 (slot 2 -> 0x0900, Move 2 -> 02090000, shared with clone s2c);
+        // close s1 -> s3 reuses slot 0 (0x0300); close d1 -> s4 reuses slot 1 (0x0600).
+        RecordsetObject m1 = OpenRecordset(db, "F", 4);
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(m1, "Bookmark")))));
+        RecordsetObject d1 = OpenRecordset(db, "F", 2);
+        RecordsetObject m2 = OpenRecordset(db, "F", 4);
+        Ok(Method(m2, "Move", 2));
+        Assert.Equal("02090000", Hex(BytesValue(Ok(Get(m2, "Bookmark")))));
+        RecordsetObject m2c = Recover<RecordsetObject>(Ok(Method(m2, "Clone")));
+        Ok(Method(m2c, "Move", 2));
+        Assert.Equal("02090000", Hex(BytesValue(Ok(Get(m2c, "Bookmark")))));
+        Ok(Method(m2c, "Close"));
+
+        Ok(Method(m1, "Close"));
+        RecordsetObject m3 = OpenRecordset(db, "F", 4);
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(m3, "Bookmark")))));
+
+        Ok(Method(d1, "Close"));
+        RecordsetObject m4 = OpenRecordset(db, "F", 4);
+        Assert.Equal("00060000", Hex(BytesValue(Ok(Get(m4, "Bookmark")))));
+
+        Ok(Method(m4, "Close"));
+        Ok(Method(m3, "Close"));
+        Ok(Method(m2, "Close"));
+
+        // r-q24-bookmarks/r2-q1-requery-partial-close: d1 (slot 0), d2 (slot 1), rs (slot 2 -> 0x0900);
+        // close d1 -> rs.Requery reacquires slot 0 (0x0300); close d2 -> rs.Requery stays on slot 0 (0x0300).
+        RecordsetObject rd1 = OpenRecordset(db, "F", 2);
+        RecordsetObject rd2 = OpenRecordset(db, "F", 2);
+        RecordsetObject rs = OpenRecordset(db, "F", 4);
+        Assert.Equal("00090000", Hex(BytesValue(Ok(Get(rs, "Bookmark")))));
+        Ok(Method(rd1, "Close"));
+        Ok(Method(rs, "Requery"));
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(rs, "Bookmark")))));
+        Ok(Method(rd2, "Close"));
+        Ok(Method(rs, "Requery"));
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(rs, "Bookmark")))));
+
+        Ok(Method(rs, "Close"));
+        Ok(Method(qSnap, "Close"));
+        Ok(Method(qDyn, "Close"));
+        Ok(Method(fo, "Close"));
+        Ok(Method(tbl, "Close"));
+    }
+
+    [Fact]
+    public void Multi_page_neighbours_and_multi_page_0x0300_snapshot_bookmarks_refuse_by_name()
+    {
+        // r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset (0x0a00),
+        // r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot (0x4200, sbig 073f0000),
+        // r-q24-bookmarks/r2-q4-dyn-beside-big-snapshot (dt 0x0200).
+        DatabaseObject db = Open(QMain, readOnly: true);
+
+        // Multi-page dynaset (2048 rows > 453) shifts T snapshot past 0x0600 -> refuse by name.
+        RecordsetObject dbig = OpenRecordset(db, "Big", 2);
+        Ok(Method(dbig, "MoveLast"));
+        Assert.Equal("eb0a0000", Hex(BytesValue(Ok(Get(dbig, "Bookmark")))));
+        RecordsetObject stBesideDyn = OpenRecordset(db, "T", 4);
+        AssertNotModelled(Get(stBesideDyn, "Bookmark"), "NotModelled.SnapshotBookmarkBaseWithMultiPageNeighbour");
+        AssertNotModelled(Put(stBesideDyn, "Bookmark", new byte[] { 0x00, 0x0a, 0x00, 0x00 }), "NotModelled.SnapshotBookmarkBaseWithMultiPageNeighbour");
+        Ok(Method(stBesideDyn, "Close"));
+        Ok(Method(dbig, "Close"));
+
+        // Multi-page 0x0300 snapshot (2048 rows): row 0 is 00030000, ordinal 2047 refuses by name,
+        // T snapshot beside it refuses by name, and T dynaset beside it still uses 0x0200.
+        RecordsetObject sbig = OpenRecordset(db, "Big", 4);
+        Assert.Equal("00030000", Hex(BytesValue(Ok(Get(sbig, "Bookmark")))));
+        Ok(Method(sbig, "MoveLast"));
+        AssertNotModelled(Get(sbig, "Bookmark"), "NotModelled.SnapshotBookmarkPastFirstPage");
+        AssertNotModelled(Put(sbig, "Bookmark", new byte[] { 0x07, 0x3f, 0x00, 0x00 }), "NotModelled.SnapshotBookmarkPastFirstPage");
+
+        RecordsetObject stBesideSnap = OpenRecordset(db, "T", 4);
+        AssertNotModelled(Get(stBesideSnap, "Bookmark"), "NotModelled.SnapshotBookmarkBaseWithMultiPageNeighbour");
+        Ok(Method(stBesideSnap, "Close"));
+
+        RecordsetObject dtBesideSnap = OpenRecordset(db, "T", 2);
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(dtBesideSnap, "Bookmark")))));
+        Ok(Method(dtBesideSnap, "Move", 2));
+        Assert.Equal("02020000", Hex(BytesValue(Ok(Get(dtBesideSnap, "Bookmark")))));
+        Ok(Method(dtBesideSnap, "Close"));
+        Ok(Method(sbig, "Close"));
+    }
+
+    [Fact]
+    public void Dynaset_with_in_transaction_AddNew_refuses_reads_after_Rollback_by_name()
+    {
+        // r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail: ACE reverts keyset rows populated during a rolled-back
+        // transaction and preserves the pre-transaction current row; refuse by name instead of answering 3021 or stale state.
+        DatabaseObject db = Open(Cursor1bMain, readOnly: false);
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+        RecordsetObject d = OpenRecordset(db, "F", 2);
+        FieldsObject fields = Recover<FieldsObject>(Ok(Get(d, "Fields")));
+        FieldObject idField = Recover<FieldObject>(Ok(Get(fields, "Item", "ID")));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(d, "AddNew"));
+        Ok(PutFieldValue(d, "ID", 9001));
+        Ok(PutFieldValue(d, "N", 9001));
+        Ok(PutFieldValue(d, "S", "added"));
+        Ok(Method(d, "Update"));
+        Ok(Method(ws, "Rollback"));
+
+        AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(d, "AbsolutePosition"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(d, "Bookmark"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(d, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(idField, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(d, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+        Ok(Method(d, "Close"));
     }
 
     [Fact]

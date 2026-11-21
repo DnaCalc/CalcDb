@@ -206,4 +206,67 @@ public sealed class KeysetBookmarkTests
             Assert.Equal(secondRow, rs.CurrentRow);
         }
     }
+
+    [Fact]
+    public void SnapshotBaseForSlot_steps_by_0x0300_and_Requery_updates_snapshot_bookmark_base()
+    {
+        // r-q24-bookmarks/q1-snap-w-alone, r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved,
+        // r-q24-bookmarks/q1b-snap-w-beside-2-dynasets, r-q24-bookmarks/r2-q1-gap-reuse,
+        // r-cursor-1/life-requery (0x0600 -> 0x0300), r-cursor-1b/clone-bookmark-sharing (0x0900).
+        Assert.Equal(0x0300u, KeysetBookmark.SnapshotBaseForSlot(0));
+        Assert.Equal(0x0600u, KeysetBookmark.SnapshotBaseForSlot(1));
+        Assert.Equal(0x0900u, KeysetBookmark.SnapshotBaseForSlot(2));
+        Assert.Equal("02060000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.SnapshotBaseForSlot(1), 2)));
+        Assert.Equal("02090000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.SnapshotBaseForSlot(2), 2)));
+
+        byte[] file = NativeFixtures.Read(Nav);
+        var image = new ImagePageSource(file, D.PageSize);
+        var cache = new PageCache(image, 1, D.PageSize, 64);
+        CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, image.PageCount, out _)!;
+        CatalogEntry entry = catalog.LocalTables(D).Single(e => e.Name == "T");
+        TableDefinition table = TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _)!;
+
+        using PopulationCursor snap = PopulationCursor.Open(cache, D, table, image.PageCount, forwardOnly: false, out _,
+            bookmarkBase: KeysetBookmark.SnapshotBaseForSlot(1), snapshot: true)!;
+        Assert.Equal("00060000", Bookmark(snap));
+        Assert.Equal(MoveOutcome.Moved, snap.Move(2));
+        Assert.Equal("02060000", Bookmark(snap));
+
+        // Requery with a reacquired base updates BookmarkBase for GetBookmark while keeping IsSnapshotRequeried set
+        // so SetBookmark returns NotObserved (Bookmark put on a snapshot after Requery is not recorded).
+        Assert.True(snap.Requery(KeysetBookmark.SnapshotBaseForSlot(0), out _));
+        Assert.True(snap.IsSnapshotRequeried);
+        Assert.Equal(0x0300u, snap.BookmarkBase);
+        Assert.Equal("00030000", Bookmark(snap));
+        Assert.Equal(CursorFailure.NotObserved, snap.SetBookmark(Convert.FromHexString("00060000")));
+        Assert.Equal(CursorFailure.NotObserved, snap.SetBookmark(Convert.FromHexString("00030000")));
+    }
+
+    [Fact]
+    public void OnRowInserted_on_unpopulated_2048_row_Big_table_completes_keyset_and_returns_ec0a0000()
+    {
+        // r-q24-bookmarks/q5-dyn-big-addnew-unmoved, r-q24-bookmarks/q5-dyn-big-addnew-unmoved-nopk,
+        // r-q24-bookmarks/r2-q5-dyn-big-addnew-jump-lm, r-q24-bookmarks/r2-q5-dyn-big-addnew-low-pk:
+        // AddNew+Update on an unpopulated 2048-row dynaset populates all 2048 existing rows and appends the new row at ordinal 2048 (ec0a0000).
+        using PopulationCursor rs = Open(QMain, "Big");
+        Assert.Equal(1, rs.RecordCount);
+        var synthetic = new RowId(0x00FF_FFFF, 0);
+
+        int? ordinal = rs.OnRowInserted(synthetic);
+        Assert.Equal(2048, ordinal);
+        Assert.Equal(2049, rs.RecordCount);
+        Assert.Equal(0, rs.Ordinal);
+        Assert.Equal("00020000", Bookmark(rs));
+        byte[] lm = rs.BookmarkForOrdinal(ordinal!.Value)!;
+        Assert.Equal("ec0a0000", Convert.ToHexStringLower(lm));
+
+        // Bookmark = LastModified lands on ordinal 2048; MovePrevious lands on ordinal 2047 (eb0a0000, ID 2048).
+        Assert.Null(rs.SetBookmark(lm));
+        Assert.Equal(2048, rs.Ordinal);
+        Assert.Equal(synthetic, rs.CurrentRow);
+        Assert.Equal(MoveOutcome.Moved, rs.MovePrevious());
+        Assert.Equal(2047, rs.Ordinal);
+        Assert.Equal("eb0a0000", Bookmark(rs));
+        Assert.Equal(2048, Id(rs));
+    }
 }

@@ -276,15 +276,27 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
     }
 
     [Fact]
-    public void Snapshot_Bookmark_after_Requery_refuses_by_name()
+    public void Snapshot_Bookmark_after_Requery_reacquires_lowest_free_temp_slot()
     {
-        // r-cursor-1/life-requery: ACE changes the snapshot bookmark base across Requery (0x0600 -> 0x0300).
+        // r-cursor-1/life-requery (calls 14, 36, 38, 48) and r-q24-bookmarks/q1f-snap-w-requery-with-dynaset:
+        // snapshot opened beside a dynaset gets slot 1 (0x0600); after closing the dynaset and calling Requery,
+        // it releases slot 1 and reacquires slot 0 (0x0300).
         DatabaseObject db = Open(Nav, readOnly: true);
+        RecordsetObject dyn = OpenRecordset(db, "T", 2);
         RecordsetObject snap = OpenRecordset(db, "T", 4);
-        byte[] beforeRequery = BytesValue(Ok(Get(snap, "Bookmark")));
+        Assert.Equal("00060000", Convert.ToHexStringLower(BytesValue(Ok(Get(snap, "Bookmark")))));
+
+        // Requery while dyn is still open reacquires slot 1 (0x0600).
         Ok(Method(snap, "Requery"));
-        AssertNotModelled(Get(snap, "Bookmark"), "NotModelled.SnapshotBookmarkAfterRequery");
-        AssertNotModelled(Put(snap, "Bookmark", beforeRequery), "NotModelled.SnapshotBookmarkAfterRequery");
+        Assert.Equal("00060000", Convert.ToHexStringLower(BytesValue(Ok(Get(snap, "Bookmark")))));
+
+        // Closing dyn frees slot 0; Requery now moves snap to slot 0 (0x0300).
+        // Bookmark put on a snapshot after Requery is not recorded, so both old and new bookmarks refuse by name.
+        Ok(Method(dyn, "Close"));
+        Ok(Method(snap, "Requery"));
+        Assert.Equal("00030000", Convert.ToHexStringLower(BytesValue(Ok(Get(snap, "Bookmark")))));
+        AssertNotModelled(Put(snap, "Bookmark", new byte[] { 0x00, 0x06, 0x00, 0x00 }), "NotModelled.SnapshotBookmarkPutAfterRequery");
+        AssertNotModelled(Put(snap, "Bookmark", new byte[] { 0x00, 0x03, 0x00, 0x00 }), "NotModelled.SnapshotBookmarkPutAfterRequery");
         Ok(Method(snap, "Close"));
     }
 

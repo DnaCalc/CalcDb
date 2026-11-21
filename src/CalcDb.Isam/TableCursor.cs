@@ -1012,12 +1012,14 @@ internal sealed class PopulationFamily : IDisposable
     /// Re-open the underlying scan, reset the shared occurrence store and snapshot views, and reposition every live
     /// family member (r-cursor-1b/requery-types-state, requery-family, clone-write-visibility,
     /// r-fix-cursor-dao/clone-write-visibility-same-row, r-cursor-1/life-requery, pop-visibility-snapshot,
-    /// r-q2-cursor-dao/id-bookmark-requery-populated): dynasets preserve their bookmark base, while snapshots clear it
-    /// (ACE changes a snapshot's bookmark base across Requery: r-cursor-1/life-requery, 0x0600 -> 0x0300); when the
-    /// original calls Requery it lands on row 1 (or Empty) and siblings enter Requeried; when a clone calls Requery in
-    /// a 2-member family the original lands on row 1 and the calling clone enters CloneRequeried (BOF=True, EOF=True).
+    /// r-q2-cursor-dao/id-bookmark-requery-populated): dynasets preserve their bookmark base (0x0200), while snapshots
+    /// either adopt the caller's reacquired temp-slot base (r-q24-bookmarks/q1f-snap-w-requery-with-dynaset,
+    /// r-q24-bookmarks/q1f-snap-w-requery-alone-then-dynaset, r-q24-bookmarks/r2-q1-requery-partial-close,
+    /// r-cursor-1/life-requery: 0x0600 -> 0x0300) or clear it when called without one; when the original calls Requery it
+    /// lands on row 1 (or Empty) and siblings enter Requeried; when a clone calls Requery in a 2-member family the original
+    /// lands on row 1 and the calling clone enters CloneRequeried (BOF=True, EOF=True).
     /// </summary>
-    public bool Requery(PopulationCursor caller, PageSource? newSource, ulong? pageCount, out TraversalFailure? failure)
+    public bool Requery(PopulationCursor caller, PageSource? newSource, ulong? pageCount, out TraversalFailure? failure, bool updateBookmarkBase = false, uint? newBookmarkBase = null)
     {
         if (!RootAlive)
         {
@@ -1063,8 +1065,10 @@ internal sealed class PopulationFamily : IDisposable
         _bookmarksInvalidatedByDelete = false;
         if (_isSnapshot)
         {
-            // r-cursor-1/life-requery: snapshot bookmark base changes after Requery (0x0600 -> 0x0300).
-            _bookmarkBase = null;
+            // GetBookmark uses the reacquired base (r-cursor-1/life-requery, r-q24-bookmarks/q1f-snap-w-requery-with-dynaset,
+            // r-q24-bookmarks/r2-q1-requery-partial-close); Bookmark put on a snapshot after Requery is not recorded, so
+            // _snapshotRequeried stays true to gate SetBookmark. Direct ISAM Requery without an allocator clears the base.
+            _bookmarkBase = updateBookmarkBase ? newBookmarkBase : null;
             _snapshotRequeried = true;
         }
         _snapshot?.Dispose();
@@ -1169,6 +1173,17 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     public bool Requery(out TraversalFailure? failure, PageSource? source = null, ulong? pageCount = null) =>
         _family.Requery(this, source, pageCount, out failure);
 
+    /// <summary>
+    /// Re-run the scan, reset the shared population, and set a snapshot's reacquired bookmark base
+    /// (r-q24-bookmarks/q1f-snap-w-requery-with-dynaset, r-q24-bookmarks/q1f-snap-w-requery-alone-then-dynaset,
+    /// r-q24-bookmarks/r2-q1-requery-partial-close, r-cursor-1/life-requery).
+    /// </summary>
+    public bool Requery(uint? bookmarkBase, out TraversalFailure? failure, PageSource? source = null, ulong? pageCount = null) =>
+        _family.Requery(this, source, pageCount, out failure, updateBookmarkBase: true, newBookmarkBase: bookmarkBase);
+
+    /// <summary>Current keyset bookmark base of this family, or null when unrecorded or cleared.</summary>
+    public uint? BookmarkBase => _family.BookmarkBase;
+
     /// <summary>Current position tag for DAO-level named refusals.</summary>
     public PositionTag PositionTag => _position.Tag;
 
@@ -1178,7 +1193,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>True when this cursor is a clone whose original cursor has already been disposed.</summary>
     public bool IsCloneOfClosedParent => !ReferenceEquals(this, _family.Root) && !_family.RootAlive;
 
-    /// <summary>True on a snapshot after Requery, where ACE changes the bookmark base (r-cursor-1/life-requery).</summary>
+    /// <summary>True on a snapshot after Requery; Bookmark put on a requeried snapshot is not recorded (r-cursor-1/life-requery).</summary>
     public bool IsSnapshotRequeried => _family.SnapshotRequeried;
 
     /// <summary>True after a row was deleted from this family's store, invalidating keyset bookmarks until Requery.</summary>
@@ -1282,7 +1297,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// MoveFirst+Move(2) before AddNew and take the already-complete <see cref="OccurrenceStore{T}.AppendIfComplete"/>
     /// path. When completing an incomplete store after Update has already published <paramref name="row"/> to the table
     /// pages, <c>ProduceAll</c> may scan <paramref name="row"/>; keep it once at the end of the keyset rather than
-    /// duplicating it. Behavior on an unpopulated &gt;500-row dynaset is not yet recorded.
+    /// duplicating it. Confirmed on 2,048-row (&gt;500-row) unpopulated dynasets in
+    /// <c>r-q24-bookmarks/q5-dyn-big-addnew-unmoved</c> (calls 17-37: Big with PK, RecordCount 1 -&gt; 2049, LastModified
+    /// ec0a0000, MoveLast -&gt; ordinal 2048 / ID 9001), <c>r-q24-bookmarks/q5-dyn-big-addnew-unmoved-nopk</c> (calls 17-37: BigNoPk),
+    /// <c>r-q24-bookmarks/r2-q5-dyn-big-addnew-jump-lm</c> (calls 12-17: Bookmark = LastModified lands at ordinal 2048),
+    /// <c>r-q24-bookmarks/r2-q5-dyn-big-addnew-low-pk</c> (calls 12-21: low PK 0 still appends at ordinal 2048 / ec0a0000), and inside
+    /// transactions in <c>r-q24-bookmarks/q5-dyn-big-addnew-unmoved-begintrans</c> / <c>r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open</c>
+    /// (Rollback keyset reversion in <c>r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail</c> is handled at the transaction/DAO layer).
     /// </summary>
     public int? OnRowInserted(RowId row)
     {
@@ -1407,7 +1428,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return null;
         }
-        if (_family.BookmarksInvalidatedByDelete || _family.BookmarkBase is not uint @base)
+        if (_family.BookmarksInvalidatedByDelete || _family.SnapshotRequeried || _family.BookmarkBase is not uint @base)
         {
             return CursorFailure.NotObserved;
         }

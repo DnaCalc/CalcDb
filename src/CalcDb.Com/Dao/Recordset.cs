@@ -99,16 +99,22 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     private sealed class RecordsetFamily
     {
-        public RecordsetFamily(RecordsetObject root, (string Name, string Detail)? bookmarkBaseRefusal)
+        public RecordsetFamily(RecordsetObject root, int? tempSlot, (string Name, string Detail)? bookmarkBaseRefusal)
         {
             Root = root;
+            TempSlot = tempSlot;
             BookmarkBaseRefusal = bookmarkBaseRefusal;
             Live.Add(root);
         }
 
         public RecordsetObject Root { get; }
 
-        public (string Name, string Detail)? BookmarkBaseRefusal { get; }
+        public int? TempSlot { get; private set; }
+
+        public (string Name, string Detail)? BookmarkBaseRefusal { get; set; }
+
+        /// <summary>Outermost explicit transaction frame in which this family executed an AddNew+Update (for Rollback refusal).</summary>
+        public ExplicitFrame? AddedInFrame { get; set; }
 
         public List<RecordsetObject> Live { get; } = [];
 
@@ -118,6 +124,25 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             Live.Remove(member);
             return Live.Count == 0;
+        }
+
+        public void ReleaseTempSlot()
+        {
+            if (TempSlot is int slot)
+            {
+                TempSlot = null;
+                Root.Database.Engine.ReleaseTempSlot(slot, Root);
+            }
+        }
+
+        public void ReassignTempSlot(int newSlot)
+        {
+            if (TempSlot is int oldSlot && oldSlot != newSlot)
+            {
+                Root.Database.Engine.ReleaseTempSlot(oldSlot, Root);
+            }
+            TempSlot = newSlot;
+            Root.Database.Engine.OccupyTempSlot(newSlot, Root);
         }
     }
 
@@ -140,10 +165,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
-    /// <param name="bookmarkBaseRefusal">Named refusal when a dynaset or snapshot opened without a recorded bookmark base.</param>
-    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, (string Name, string Detail)? bookmarkBaseRefusal = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    /// <param name="tempSlot">Slot in <see cref="EngineState"/>'s temp-page allocator for table-opened dynasets and snapshots.</param>
+    /// <param name="bookmarkBaseRefusal">Named refusal when a snapshot opened without a recorded bookmark base.</param>
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, int? tempSlot = null, (string Name, string Detail)? bookmarkBaseRefusal = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
-        _family = new RecordsetFamily(this, bookmarkBaseRefusal);
+        _family = new RecordsetFamily(this, tempSlot, bookmarkBaseRefusal);
         Database = database;
         _entry = entry;
         TableName = entry.Name;
@@ -168,6 +194,34 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _openLevels = [.. Database.Workspace.Transactions.Frames];
         _family.AddClone(this);
         Database.AddRef(); // each clone keeps its Database object alive independently
+    }
+
+    /// <summary>
+    /// True when this dynaset or snapshot family has populated past its first temp page, shifting a concurrently
+    /// opened 0x0300-class snapshot's base beyond the single-page stride 0x0300
+    /// (r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset 0x0a00, r2-q1-snap-t-beside-big-snapshot 0x4200).
+    /// </summary>
+    internal bool IsPastFirstTempPage()
+    {
+        RecordsetObject live = _family.Live.Count > 0 ? _family.Live[0] : this;
+        if (live.Cursor is not PopulationCursor pop)
+        {
+            return false;
+        }
+        if (RecordsetType == 2)
+        {
+            return pop.RecordCount > KeysetBookmark.BlockEntries;
+        }
+        if (RecordsetType == 4)
+        {
+            if (DatabaseObject.IsLong1Or2Snapshot(pop.Table))
+            {
+                int limit = pop.Table.Columns.Count == 1 ? KeysetBookmark.BlockEntries : 200;
+                return pop.RecordCount > limit;
+            }
+            return !DatabaseObject.FitsOnSingleSnapshotTempPage(pop.Table, pop.RecordCount);
+        }
+        return false;
     }
 
     private short EditModeValue() => _frame is { Mode: not EditMode.None } frame ? (short)frame.Mode
@@ -954,6 +1008,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             {
                 Database.Engine.Changes.MarkPublished([change]);
             }
+            else if (mode == EditMode.AddNew && Database.Workspace.Transactions.Depth > 0)
+            {
+                _family.AddedInFrame = Database.Workspace.Transactions.Frames[0];
+            }
             Modified(mode, outcome);
         }
         return result;
@@ -1070,8 +1128,17 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         else if (outermost && RecordsetType == 2 && _openLevels.Length == 0)
         {
-            _afterRollback = RecordsetAfterRollback.LostCurrentRecord;
-            _lastModified = LastModifiedMark.Cleared;
+            if (ReferenceEquals(_family.AddedInFrame, level))
+            {
+                _afterRollback = RecordsetAfterRollback.NotRecorded;
+                _notRecorded = "a dynaset with an AddNew inside a rolled-back transaction: ACE reverts keyset rows populated during the transaction (r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail)";
+                _lastModified = LastModifiedMark.Cleared;
+            }
+            else
+            {
+                _afterRollback = RecordsetAfterRollback.LostCurrentRecord;
+                _lastModified = LastModifiedMark.Cleared;
+            }
         }
     }
 
@@ -1339,7 +1406,19 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             Database.Workspace.Transactions.EndLazyBurst(Database.Cache);
         }
         PageSource source = RecordsetType == 4 ? new PageSource(Database.Cache) : new PageSource(Database.Cache, Transactions);
-        if (!pop.Requery(out TraversalFailure? failure, source, Database.PageCount))
+        int? newTempSlot = null;
+        uint? newBookmarkBase = null;
+        (string Name, string Detail)? newBookmarkBaseRefusal = null;
+        bool updateBookmarkBase = RecordsetType is 2 or 4;
+        if (updateBookmarkBase)
+        {
+            newTempSlot = Database.Engine.PeekFreeTempSlot(excludingSlot: _family.TempSlot);
+            newBookmarkBase = Database.ResolveKeysetBookmarkBase(RecordsetType, pop.Table, newTempSlot.Value, excludingFamilyRoot: _family.Root, out newBookmarkBaseRefusal);
+        }
+        bool requeried = updateBookmarkBase
+            ? pop.Requery(newBookmarkBase, out TraversalFailure? failure, source, Database.PageCount)
+            : pop.Requery(out failure, source, Database.PageCount);
+        if (!requeried)
         {
             if (failure?.Predicate is { } predicate && predicate.StartsWith("NotModelled.", StringComparison.Ordinal))
             {
@@ -1350,6 +1429,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             }
             return CallResult.Fail(Failure.NotImplemented("Requery when the table cannot be traversed: " + failure?.Predicate));
         }
+        if (newTempSlot is int claimedSlot)
+        {
+            _family.ReassignTempSlot(claimedSlot);
+            _family.BookmarkBaseRefusal = newBookmarkBaseRefusal;
+        }
+        _family.AddedInFrame = null;
         _frame?.Discard();
         foreach (RecordsetObject member in _family.Live)
         {
@@ -1389,10 +1474,6 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             }
             if (Cursor is PopulationCursor pop)
             {
-                if (pop.IsSnapshotRequeried)
-                {
-                    return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkAfterRequery", "Bookmark on a snapshot after Requery: ACE changes the snapshot bookmark base (r-cursor-1/life-requery)"));
-                }
                 if (pop.BookmarksInvalidatedByDelete)
                 {
                     return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
@@ -1403,6 +1484,15 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 }
             }
             return CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
+        }
+        if (RecordsetType == 4
+            && Cursor is PopulationCursor snapPop
+            && !DatabaseObject.IsLong1Or2Snapshot(snapPop.Table)
+            && snapPop.Ordinal is int ord
+            && !DatabaseObject.FitsOnSingleSnapshotTempPage(snapPop.Table, ord + 1))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkPastFirstPage",
+                "Bookmark on a 0x0300-class snapshot at a row past its first temp page: ACE encodes temp-table page and slot rather than 453-entry keyset blocks (r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot 073f0000, r-q24-bookmarks/r2-q4-dyn-beside-big-snapshot 073f0000)"));
         }
         nint array = SafeArrays.Create(VarType.UI1, (0, bookmark.Length));
         bookmark.CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), bookmark.Length));
@@ -1440,13 +1530,25 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return CallResult.Fail(Failure.NotImplemented("Bookmark put of a multi-dimensional array"));
         }
         byte[] bytes = shape[0].Count <= 0 ? [] : new Span<byte>(SafeArrays.ElementPointer(psa, shape[0].Lower), shape[0].Count).ToArray();
+        if (RecordsetType == 4
+            && bytes.Length > 0
+            && Cursor is PopulationCursor snapPop
+            && !DatabaseObject.IsLong1Or2Snapshot(snapPop.Table)
+            && !snapPop.BookmarksInvalidatedByDelete
+            && !snapPop.IsSnapshotRequeried
+            && _family.BookmarkBaseRefusal is null
+            && snapPop.BookmarkBase is uint snapBase
+            && !DatabaseObject.FitsOnSingleSnapshotTempPage(snapPop.Table, snapPop.RecordCount)
+            && (KeysetBookmark.Decode(bytes, snapBase) is not int decoded
+                || decoded >= snapPop.RecordCount
+                || !DatabaseObject.FitsOnSingleSnapshotTempPage(snapPop.Table, decoded + 1)))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkPastFirstPage",
+                "Bookmark put on a 0x0300-class snapshot populated past its first temp page (r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot 073f0000)"));
+        }
         CursorFailure? failure = Cursor.SetBookmark(bytes);
         if (failure == CursorFailure.NotObserved && Cursor is PopulationCursor pop)
         {
-            if (pop.IsSnapshotRequeried)
-            {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkAfterRequery", "Bookmark put on a snapshot after Requery: ACE changes the snapshot bookmark base (r-cursor-1/life-requery)"));
-            }
             if (pop.BookmarksInvalidatedByDelete)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark put on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
@@ -1454,6 +1556,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             if (_family.BookmarkBaseRefusal is { } refusal)
             {
                 return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
+            }
+            if (pop.IsSnapshotRequeried)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkPutAfterRequery",
+                    "Bookmark put on a snapshot after Requery (not recorded; r-cursor-1/life-requery, r-q24-bookmarks/q1f-snap-w-requery-with-dynaset, and r-q24-bookmarks/r2-q1-requery-partial-close record only Bookmark gets after Requery)"));
             }
         }
         return failure switch
@@ -1496,6 +1603,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         CloseOwnCursor();
         if (_family.Remove(this))
         {
+            _family.ReleaseTempSlot();
             Database.Forget(_family.Root);
         }
         return CallResult.Nothing;
@@ -1508,6 +1616,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             member.CloseOwnCursor();
             _family.Remove(member);
         }
+        _family.ReleaseTempSlot();
     }
 
     private void CloseOwnCursor()
@@ -1552,6 +1661,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             CloseOwnCursor();
             if (_family.Remove(this))
             {
+                _family.ReleaseTempSlot();
                 Database.Forget(_family.Root);
             }
         }

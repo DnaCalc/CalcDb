@@ -10,9 +10,6 @@ using CalcDb.Storage;
 
 namespace CalcDb.Com.Dao;
 
-/// <summary>Live open recordset family counts across an engine's open Databases (R-CURSOR-1 CUR-ID).</summary>
-internal readonly record struct OpenKeysetCounts(int Dynasets, int Snapshots, int ForwardOnly, int Queries);
-
 /// <summary>
 /// The engine state of one binding on one apartment thread: what survives the release of every DBEngine reference
 /// (R-ACT-1 ACT-RETAIN: a DBEngine created again still reports the earlier Errors), the Errors list (R-ORACLE-1 OR-OBS)
@@ -22,21 +19,54 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
 {
     private WorkspaceObject? _defaultWorkspace;
 
+    // Per-engine temp-page slot allocator for table-opened dynaset (2) and snapshot (4) families
+    // (r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved, r-q24-bookmarks/q1b-snap-w-beside-2-dynasets,
+    // r-q24-bookmarks/r2-q1-gap-reuse, r-cursor-1/life-requery, r-cursor-1b/clone-bookmark-sharing).
+    // Slot k maps to 0x0300 + 0x0300 * k for 0x0300-class snapshots; clones share their family root's slot;
+    // table-type (1), forward-only (8) and SELECT query recordsets take no slot.
+    private readonly Dictionary<int, RecordsetObject> _tempSlots = [];
+
     /// <summary>The open Database sessions of this engine, whose caches its Workspaces publish into (W-05/same-width-mutation).</summary>
     public List<DatabaseObject> Sessions { get; } = [];
 
-    /// <summary>
-    /// Live open recordset families across every open Database of this engine, for keyset bookmark base selection
-    /// (R-CURSOR-1 CUR-ID). Clones share one family entry in their Database and are not counted twice.
-    /// </summary>
-    public OpenKeysetCounts OpenKeysets()
+    /// <summary>Lowest free non-negative temp-page slot, treating <paramref name="excludingSlot"/> as free (for Requery).</summary>
+    public int PeekFreeTempSlot(int? excludingSlot = null)
     {
-        int dynasets = 0, snapshots = 0, forwardOnly = 0, queries = 0;
-        foreach (DatabaseObject session in Sessions)
+        int slot = 0;
+        while (excludingSlot != slot && _tempSlots.ContainsKey(slot))
         {
-            session.CountOpenKeysets(ref dynasets, ref snapshots, ref forwardOnly, ref queries);
+            slot++;
         }
-        return new OpenKeysetCounts(dynasets, snapshots, forwardOnly, queries);
+        return slot;
+    }
+
+    /// <summary>Claim <paramref name="slot"/> for the table-opened dynaset or snapshot family rooted at <paramref name="familyRoot"/>.</summary>
+    public void OccupyTempSlot(int slot, RecordsetObject familyRoot) => _tempSlots[slot] = familyRoot;
+
+    /// <summary>Release <paramref name="slot"/> if still held by <paramref name="familyRoot"/>.</summary>
+    public void ReleaseTempSlot(int slot, RecordsetObject familyRoot)
+    {
+        if (_tempSlots.TryGetValue(slot, out RecordsetObject? holder) && ReferenceEquals(holder, familyRoot))
+        {
+            _tempSlots.Remove(slot);
+        }
+    }
+
+    /// <summary>
+    /// True when any other currently occupying dynaset or snapshot family has populated past its first temp page,
+    /// shifting a newly opened 0x0300-class snapshot's base beyond the single-page stride 0x0300
+    /// (r-q24-bookmarks/r2-q1-snap-t-beside-big-dynaset 0x0a00, r-q24-bookmarks/r2-q1-snap-t-beside-big-snapshot 0x4200).
+    /// </summary>
+    public bool HasMultiPageTempNeighbour(RecordsetObject? excludingFamilyRoot = null)
+    {
+        foreach (RecordsetObject holder in _tempSlots.Values)
+        {
+            if (!ReferenceEquals(holder, excludingFamilyRoot) && holder.IsPastFirstTempPage())
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
