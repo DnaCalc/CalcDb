@@ -48,7 +48,11 @@ scope or design, the book wins.
   evidence and its qualified.md note (process log, change 6, 2026-11-21).
 - Before landing, check every rule the child wrote against a record. Expect one generalization beyond the records
   in a larger task.
-- Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md).
+- Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md). When two children edited one file,
+  stage only the landing child's hunks (a copy of the file, `git hash-object -w`, `git update-index --cacheinfo`) and
+  check the staged diff; the working tree keeps the other child's lines.
+- A note that matters to a running child now is steered (`alta session send` without `--queue-if-busy`); a queued
+  prompt waits for the end of its turn and then starts a new one. Check `alta session queued` before a child ends.
 - An organizer hands over to a fresh session at about 300 tool calls or 5 hours. The register, the process log and
   a handoff prompt carry the state; rules that must outlast the handoff go into this file, not the handoff.
 
