@@ -508,46 +508,55 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: `evidence/r-q17-growth/shrink-row2-minus-30/`, `shrink-row4-minus-30/`. Discriminator: the row that has rows below it against the lowest row.
 - **Open**: an overflow row that shrinks back; a shrink by a recordset Edit; MDB.
 
-### R-FMT-2 Overflow / deletion and Map ownership (W-05): only DELETE without WHERE releases a table's data page; a page emptied row by row stays owned, empty and compacted (reopened: see below)
+### R-FMT-2 Overflow / deletion and Map ownership (W-05): DELETE without WHERE releases every data page unwritten; a row-by-row delete releases an emptied data page (type 01 > 09) only when the table's FreeMap holds a lower page
 - **Claim**:
-  - **DELETE without WHERE.** `DELETE FROM T` releases the table's data page without writing it: its rows and slots stay as they were.
-    - In the statement: the page's bits are cleared in the table's owned map and FreeMap, the TableDef's row count and its index counter drop to 0, and the index leaf is emptied (free word to empty, entry bitmap zeroed; the entry bytes are left).
-    - At Close: page 1 marks the page free, with the Close commit.
-  - **Any other delete.** A delete with a WHERE leaves the page owned, in the same maps, and not free in page 1, even when it removes the table's last rows: the ten rows by `WHERE ID > 0`, the last row by `WHERE ID = 10`, or ten DAO Deletes. Each deleted row is removed from the page:
-    - its slot becomes `0xd000`;
-    - the rows stored below it move up by its length, and their slot offsets rise by that length;
-    - the free word rises by the row's length, and the vacated bottom bytes keep their old content.
-    - An emptied page keeps all its slots, every one `0xd000`, with free `0x0fde` = 4062 (4096 - 14 - 2 × 10).
-  - **Counters.** The TableDef's row count follows the delete. Its index counter (the DistinctCount word, which the statistics note says deletes do not lower) is unchanged.
-- **Byte values** (fixture r-fmt-2b-w-accdb: Au1 tdef 107, maps 108, PK root 109, ten rows of 21-23 bytes on data page 110):
-  - DELETE FROM Au1 (retire-delete-au1: after-hash 5f2c29b3, as r-q16 lower-free's first session):
-    - Page 107 bytes 16 and 67 `0a` > `00`.
-    - Page 108 bytes 4045 (owned) and 3976 (FreeMap) `40` > `00`.
-    - Page 109 bytes 2-3 `c6 0d` > `20 0e`, and bytes 28-38 zeroed.
-    - Page 1 byte 4045 `00` > `40`; page 0 byte 3586 `00` > `02`.
-    - Page 110 is unchanged.
-    - Read before Close (retire-delete-au1-read-open): the same bytes except page 1, and 3586 is `01`. Close writes page 1 and the second count.
-  - WHERE ID > 0 (retire-delete-au1-where-all) and nine rows then `WHERE ID = 10` (retire-delete-au1-nine-then-last):
-    - Page 110 bytes 2-3 > `de 0f` and slots 14-33 all `00 d0`.
-    - Page 107 byte 16 > `00`, byte 67 unchanged.
-    - Page 109: the same header and bitmap change, and entry bytes 484-560 rewritten.
-    - Pages 108 and 1 unchanged.
-    - After the nine: free `c7 0f`, row 10 moved from 3884 to 4073 (slot 9 `e90f`).
-  - DAO dynaset (retire-rs-delete-au1, read 1.5 s after each Delete):
-    - Each Delete is one commit (3586 `01` ... `0a`) and gives the row move above: after the first, slots 1-9 rise by 21, and slot 0 becomes `00 d0`.
-    - The TableDef's row count (107 byte 16) is written at the recordset's Close, as one more commit (`0b`).
-    - Database Close changes nothing more. The page is never freed.
-- **Conditions**: ACCDB, shared DAO sessions; SQL with dbFailOnError; dynaset `Delete` then `MoveNext`.
-- **Records**: `evidence/r-q17-growth/retire-delete-au1/`, `retire-delete-au1-read-open/`, `retire-delete-au1-nine-then-last/`, `retire-delete-au1-where-all/`, `retire-rs-delete-au1/`; `evidence/r-q16-overflow/lower-free-grow-row2-plus-30/` (session 1 hash). Discriminators: WHERE-less against WHERE deleting the same ten rows; one statement that removes the last row; the recordset route; a read before Close.
-- **Reopened (r-q19-growth-open, 2026-11-21).** Two records contradict parts of the claim, which held for a table of one data page and deletes of the page's top row:
-  - A delete with a WHERE that empties a data page other than the table's first releases it (`split-empty-right-leaf`: pages 50 and 51; `split-empty-left-leaf`: page 46). The page leaves the maps and its type byte goes from `01` to `09`. The table's first data page (45) stays owned, as page 110 does above, where it is the table's only page.
-  - A deleted row that is not the page's top row gets slot word `0xc000 | (offset + length)` (`lv-op-delete-row-chain`: `ce cf`). Every record above deletes the top row, where that word is `0xd000`.
-  - Next probes: which page a WHERE delete keeps (the table's first, or the last one it owns), and the slot word of a middle row on a plain page.
+  - **DELETE without WHERE.** `DELETE FROM T` releases the table's data pages without writing them: their rows and slots stay as they were (multi-page, multi-index and long-value tables are covered in the DELETE-without-WHERE note below).
+    - In the statement: each page's bits are cleared in the table's owned map and FreeMap, the TableDef's row count and its index counters drop to 0, and the index leaves are emptied.
+    - At `Database.Close`: page 1 marks the released pages free, with the Close commit (`page 0` byte 3586 `+1`).
+  - **Row-by-row delete (`DELETE ... WHERE` and DAO dynaset `Delete`).** Each deleted row is removed and the page is compacted (see the deleted-slot note below), raising its free word to `4096 - 14 - 2 * slots` with every slot `0xd000` once empty. When the last live row of data page `P` is deleted, ACE releases `P` if and only if the table's FreeMap (slot 1 of its usage-map page) already has a page strictly below `P` (`Q < P`):
+    - **Released (`Q < P` in FreeMap).** `P`'s type byte goes from `01` to `09` (with its compacted `0xd000` slots and free word written), and `P` is cleared in the table's owned map and FreeMap during the statement (or the dynaset `Delete`'s write-behind commit). Page 1 marks `P` free at `Database.Close` (`page 0` byte 3586 `+1`), not during the statement or at `Recordset.Close`. `Q` need not be empty (3 rows / 1,062 bytes free on `Pg` page 55, or 92 rows on `L` page 47, suffice), need not be the table's first data page (`L` page 47 with 45 and 46 full), and may have joined FreeMap in an earlier session.
+    - **Kept owned (no `Q < P` in FreeMap).** `P` stays owned with type byte `01`, joins FreeMap if not already in it, and page 1 is untouched (`Database.Close` writes nothing). Higher pages `Q > P` in FreeMap — even already-empty ones — do not cause `P` to be released. Consequently, deleting all rows of a three-page table (`Pg`, pages 55-57) ascending (`WHERE ID > 0`, or dynaset `ORDER BY ID`) keeps 55 and releases 56 and 57, while deleting them descending (dynaset `ORDER BY ID DESC`) releases none and leaves all three pages owned and in FreeMap.
+  - **Counters.** The TableDef's row count follows the delete (for a dynaset, written at `Recordset.Close` as its own commit). Its index DistinctCount word is unchanged by row-by-row deletes.
+- **Byte values**:
+  - Single-page table `Au1` (fixture `r-fmt-2b-w-accdb`: tdef 107, maps 108, PK root 109, ten rows of 21-23 bytes on data page 110):
+    - `DELETE FROM Au1` (`retire-delete-au1`, after-hash `5f2c29b3`): page 107 bytes 16 and 67 `0a > 00`; page 108 bytes 4045 (owned) and 3976 (FreeMap) `40 > 00`; page 109 bytes 2-3 `c6 0d > 20 0e` and bytes 28-38 zeroed; page 1 byte 4045 `00 > 40`; page 0 byte 3586 `00 > 02`; page 110 unchanged. Read open before Close (`retire-delete-au1-read-open`): same except page 1 unchanged and 3586 `01`; Close writes page 1 and `02`.
+    - `WHERE ID > 0` (`retire-delete-au1-where-all`), nine rows then `WHERE ID = 10` (`retire-delete-au1-nine-then-last`), and ten dynaset Deletes (`retire-rs-delete-au1`): page 110 stays type `01`, free `de 0f` (4062), slots 14-33 all `00 d0`; page 107 byte 16 `0a > 00` (byte 67 unchanged); pages 108 and 1 unchanged. In `retire-rs-delete-au1`, each Delete is one commit (3586 `01..0a`), `Recordset.Close` writes page 107 byte 16 (`0b`), and `Database.Close` writes nothing.
+  - Three-page table `Pg` (fixture `r-fmt-2b-w-accdb`: tdef 52, maps 53 owned `{55, 56, 57}` at bytes 4038 `80`, 4039 `03` and FreeMap `{57}` at bytes 3969 `00`, 3970 `02`; PK root 54; data pages 55-57 each holding 4 × 1004-byte rows, free `3a 00` = 58):
+    - `where-empty-first` (`ID <= 4`): page 55 stays `01`, free `ea 0f` (4074), slots `00 d0` × 4; page 53 FreeMap byte 3969 `00 > 80` (`{55, 57}`); owned and page 1 unchanged; page 0 byte 3586 `00 > 01`.
+    - `where-empty-middle` (`ID >= 5 AND ID <= 8`): page 56 stays `01`, free `ea 0f`, slots `00 d0` × 4; page 53 FreeMap byte 3970 `02 > 03` (`{56, 57}`); owned and page 1 unchanged; 3586 `00 > 01`.
+    - `where-empty-last` and `where-empty-last-read-open` (`ID >= 9`): page 57 stays `01`, free `ea 0f`, slots `00 d0` × 4; page 53 and page 1 unchanged; 3586 `00 > 01`. In `where-empty-last-read-open`, open (after 1.5 s) and post-Close images are identical (`dca4a342bf24`).
+    - `where-empty-all` (`ID > 0`): page 55 stays `01` (`ea 0f`, `00 d0` × 4); pages 56 and 57 type `01 > 09` (`ea 0f`, `00 d0` × 4); page 53 FreeMap bytes 3969-3970 `00 02 > 80 00` (`{55}`), owned byte 4039 `03 > 00` (`{55}`); page 1 byte 4039 `00 > 03`; page 0 byte 3586 `00 > 02`.
+    - `where-empty-last-after-partial-first` (session 1 `ID = 1`: page 55 free `26 04` = 1,062, FreeMap byte 3969 `00 > 80`, 3586 `01`; session 2 `ID >= 9`) and `where-empty-last-after-empty-first` (session 1 `ID <= 4`: page 55 empty, FreeMap `{55, 57}`; session 2 `ID >= 9`): in session 2, page 57 type `01 > 09`, page 53 FreeMap byte 3970 `02 > 00` (`{55}`), owned byte 4039 `03 > 01` (`{55, 56}`), page 1 byte 4039 `00 > 02`, 3586 `01 > 03`.
+    - `dynaset-empty-all-asc` (`SELECT * FROM Pg ORDER BY ID`, 12 Deletes, read after 4, 8, 12, `rs.Close` and `db.Close`): after Delete 4, page 55 stays `01` and joins FreeMap (`3969: 00 > 80`, 3586 `01`); after Delete 8, page 56 is `01 > 09` and cleared from owned (`4039: 03 > 02`, 3586 `02`, page 1 unchanged); after Delete 12, page 57 is `01 > 09` and cleared from owned and FreeMap (`4039: 02 > 00`, `3970: 02 > 00`, 3586 `03`, page 1 unchanged); after `rs.Close`, page 52 byte 16 `0c > 00` (3586 `04`, page 1 unchanged); after `db.Close`, page 1 byte 4039 `00 > 03` (3586 `05`).
+    - `dynaset-empty-all-desc` (`SELECT * FROM Pg ORDER BY ID DESC`): after Deletes 4, 8 and 12, pages 57, 56 and 55 each stay `01`, with FreeMap becoming `{57}`, `{56, 57}` and `{55, 56, 57}` (bytes 3969-3970 `00 02 > 80 03`); `rs.Close` writes page 52 byte 16 `0c > 00` (3586 `04`); `db.Close` writes nothing and page 1 is unchanged.
+  - Five-page table `L` (`r-q19-growth-open`, owned `{45, 46, 47, 50, 51}`): `split-empty-right-leaf` (`k > 602`) leaves 92 rows on page 47 (adding 47 to FreeMap) and releases 50 and 51 (`01 > 09`, out of maps, freed in page 1); `split-empty-left-leaf` (`k <= 602`) keeps 45 (`01`, added to FreeMap) and releases 46 (`01 > 09`, out of maps, freed in page 1).
+- **Conditions**: ACCDB, shared DAO sessions; SQL with dbFailOnError; dynaset `Delete` then `MoveNext`; pages 0, 1, TableDef, maps, PK root and data pages kept before and after (and every page hashed after Close).
+- **Records**: `evidence/r-q20-delete-pages/where-empty-first/`, `where-empty-middle/`, `where-empty-last/`, `where-empty-last-read-open/`, `where-empty-all/`, `where-empty-last-after-partial-first/`, `where-empty-last-after-empty-first/`, `dynaset-empty-all-asc/`, `dynaset-empty-all-desc/`; `evidence/r-q19-growth-open/split-empty-right-leaf/`, `split-empty-left-leaf/`; `evidence/r-q17-growth/retire-delete-au1/`, `retire-delete-au1-read-open/`, `retire-delete-au1-nine-then-last/`, `retire-delete-au1-where-all/`, `retire-rs-delete-au1/`; `evidence/r-q16-overflow/lower-free-grow-row2-plus-30/`. Discriminators: WHERE-less against WHERE; emptying first, middle, last or all pages; ascending against descending dynaset order (higher empty FreeMap pages do not trigger release); cross-session partial (1,062 free) and empty (4,074 free) lower FreeMap page against full lower pages; non-first lower FreeMap page (`L` page 47); open read against Close.
 - **Open**:
-  - A WHERE-less DELETE on a table of several data pages, with long values or more indexes: answered by r-q19-growth-open (the DELETE-without-WHERE note further below).
-  - Whether a later session, an INSERT or Compact reuses or frees an empty owned page.
-  - The meaning of the `0x5000` bits of `0xd000`.
-  - MDB.
+  - The free-space threshold at which a partial delete adds a data page to FreeMap (seen: 1,062 bytes free joins in `slot-delete-bottom`; 118 bytes free after a 60-byte shrink stays out in `shrink-row2-minus-30` and `slot-delete-middle-after-shrink`).
+  - Emptying a data page when FreeMap is initially empty (expected to stay owned by the same rule, not directly asked).
+  - Whether a later INSERT or Compact reuses or frees an empty owned page; table-type recordset Deletes emptying a multi-page table; MDB.
+
+### R-FMT-2 Overflow / deletion (W-05): a deleted row's slot word is 0xc000 | (offset + length), and every later slot shifts up by its length
+- **Claim**: When a row at slot `i` (byte offset `o`, byte length `len`, ending at `end = o + len`) is deleted on a plain data page (no long values):
+  - **Deleted slot word.** Slot `i` becomes `0xc000 | end` (`0x8000` deleted | `0x4000` unused/empty | 13-bit end offset in `0..4096`). For the top row (`end = 4096 = 0x1000`), this is `0xc000 | 0x1000 = 0xd000` (so `0xd000` carries no `0x5000` flag: bit 12 is the offset `4096`).
+  - **Compaction and slot shift.** Every live row stored below slot `i` (slots `j > i`) moves up by `len` bytes, and **every** later slot `j > i` — live and already-deleted alike — has its offset raised by `len` (`slot[j] += len`, preserving `0xc000` on deleted slots). The free word (bytes 2-3) rises by `len`, and the vacated bottom bytes keep their old content.
+  - **Order independence and length invariant.** Every slot `k` (live or deleted) keeps the upper boundary of slot `k + 1`, and a deleted slot spans length 0 (`(slot[k - 1] & 0x1fff) - (slot[k] & 0x1fff) == 0`, with virtual slot `-1` at `0x1000`). Deleting the same rows in ascending or descending order yields identical slot words (and all `0xd000` once empty; only the vacated bottom bytes reflect which live rows moved).
+  - **After an earlier shrink.** Shrinking row 1 compacts rows below it upward without leaving a gap; deleting row 2 below the shorter row 1 writes `0xc000 | (o_2 + len_2)` = `0xc000 | o_1`.
+- **Byte values** (fixture `r-fmt-2b-w-accdb`, `Pg` page 55: initially free `3a 00` = 58, slots 0-3 `14 0c 28 08 3c 04 50 00` = `0x0c14`, `0x0828`, `0x043c`, `0x0050`, each row 1,004 = `0x03ec` bytes):
+  - `slot-delete-top` (`ID = 1`, slot 0): free `26 04` (1,062), slots `00 d0 14 0c 28 08 3c 04` (`0xd000 = 0xc000 | 0x1000`); page 53 FreeMap byte 3969 `00 > 80`.
+  - `slot-delete-middle` (`ID = 2`, slot 1): free `26 04`, slots `14 0c 14 cc 28 08 3c 04` (`0xcc14 = 0xc000 | 0x0c14`).
+  - `slot-delete-bottom` (`ID = 4`, slot 3): free `26 04`, slots `14 0c 28 08 3c 04 3c c4` (`0xc43c = 0xc000 | 0x043c`); no row bytes move.
+  - `slot-delete-two-adjacent-asc` (`ID = 2 OR ID = 3`): free `12 08` (2,066), slots `14 0c 14 cc 14 cc 28 08`.
+  - `slot-delete-two-adjacent-desc`: session 1 (`ID = 3`) gives free `26 04`, slots `14 0c 28 08 28 c8 3c 04` (`0xc828 = 0xc000 | 0x0828`); session 2 (`ID = 2`) gives free `12 08`, slots `14 0c 14 cc 14 cc 28 08` (already-deleted slot 2 shifts `28 c8 > 14 cc`, `+0x03ec`).
+  - `slot-delete-middle-then-top`: session 1 (`ID = 2`) gives slots `14 0c 14 cc 28 08 3c 04`; session 2 (`ID = 1`) gives free `12 08`, slots `00 d0 00 d0 14 0c 28 08` (already-deleted slot 1 shifts `14 cc > 00 d0`, `0xcc14 + 0x03ec = 0xd000`).
+  - `slot-delete-middle-after-shrink`: session 1 (`UPDATE Pg SET T1 = 31 U+20AC WHERE ID = 1`, -60 bytes to 944) gives free `76 00` (118), slots `50 0c 64 08 78 04 8c 00` (no gap, FreeMap unchanged); session 2 (`ID = 2`, 1,004 bytes) gives free `62 04` (1,122), slots `50 0c 50 cc 64 08 78 04` (`0xcc50 = 0xc000 | 0x0c50`), FreeMap `+55`.
+  - Consistent earlier records: `r-q19-growth-open/lv-op-delete-row-chain` (slot 2 `b5 0f` length 25 > `ce cf` = `0xc000 | 0x0fce`), `r-q16-overflow/noroom-middle-room-last-grow-row2-plus-30` (page 57 slots 2-3 `3c 04 50 00 > 28 c8 28 c8`), and `dynaset-empty-all-desc` (bottom-up deletes shift every slot to `00 d0` without moving any row body bytes).
+- **Conditions**: ACCDB, shared DAO sessions, SQL `DELETE ... WHERE` (and `UPDATE` in session 1 of `-after-shrink`) with dbFailOnError, plain rows without long values, pages 0, 1, 52-57 kept before and after.
+- **Records**: `evidence/r-q20-delete-pages/slot-delete-top/`, `slot-delete-middle/`, `slot-delete-bottom/`, `slot-delete-two-adjacent-asc/`, `slot-delete-two-adjacent-desc/`, `slot-delete-middle-then-top/`, `slot-delete-middle-after-shrink/`, `dynaset-empty-all-desc/`; `evidence/r-q19-growth-open/lv-op-delete-row-chain/`; `evidence/r-q16-overflow/noroom-middle-room-last-grow-row2-plus-30/`. Discriminators: top, middle and bottom positions; two adjacent rows ascending against descending (proving already-deleted slots shift); middle then top (proving `0xd000` is `0xc000 | 0x1000`); unequal row lengths after shrink.
+- **Open**:
+  - Deleting a row on a page that actually holds a non-contiguous gap (no recorded ACE write produces one: shrinking, overflowing and deleting all compact lower rows upward).
+  - Deleting an overflow root slot (`0x4000 | offset`) or overflow target slot (`0x8000 | offset`); deleting a non-top row on an LVAL page; MDB.
 
 ### R-FMT-2 LV form selection and Map ownership (W-05): in a new file, values up to 2,000 bytes share one LVAL page as single rows, and 4,076 and 5,000 bytes are chained over pages of their own
 - **Claim**: For a Memo and a Long Binary column alike (byte-identical layouts for the same sizes), each value added by its own session:
@@ -625,7 +634,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Open**:
   - A recordset Edit/Update instead of SQL; Long Binary; MDB.
   - A replacement that no longer fits the data row's page (the reference is the same size, so only a Null-to-value change can grow the row).
-  - The slot word of the deleted data row is not claimed here: lv-op-delete-row-chain gives `ce cf` where the retirement note above writes `00 d0` for every deleted row (reported to the organizer).
+  - Deleting a non-top single row on an LVAL page (here only slot 0 on page 45 was removed, giving `00 d0`; the data row's `ce cf` in `lv-op-delete-row-chain` follows the deleted-slot rule above).
 
 ### R-FMT-2 Overflow / deletion and Map ownership (W-05): DELETE without WHERE releases every data page, every long-value page and every non-root index page of the table, and empties each index root in place
 - **Claim**: `DELETE FROM D` in a shared session, on a table of several data pages:
