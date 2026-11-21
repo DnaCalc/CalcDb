@@ -50,6 +50,35 @@ public static unsafe class RelationalOrder
         return true;
     }
 
+    /// <summary>
+    /// Like <see cref="TryCompare"/>, comparing text operands on at most the first <paramref name="maxUnits"/> UTF-16
+    /// code units (qualified.md R-SORT-3 Length510, r-sql-13b/memo-order-scope, r-sort-3b/memo-equality-sql).
+    /// </summary>
+    public static bool TryComparePrefix(in NativeVariant a, in NativeVariant b, TextCollation? collation, int maxUnits, out int order)
+    {
+        if (a.Vt == (ushort)VarType.Bstr && b.Vt == (ushort)VarType.Bstr)
+        {
+            if (collation is null)
+            {
+                order = 0;
+                return false;
+            }
+            ReadOnlySpan<char> sa = Bstrs.Chars(a.Pointer);
+            ReadOnlySpan<char> sb = Bstrs.Chars(b.Pointer);
+            if (sa.Length > maxUnits)
+            {
+                sa = sa[..maxUnits];
+            }
+            if (sb.Length > maxUnits)
+            {
+                sb = sb[..maxUnits];
+            }
+            order = Math.Sign(collation.Compare(sa, sb));
+            return true;
+        }
+        return TryCompare(a, b, collation, out order);
+    }
+
     private static bool Integral(in NativeVariant v, out long value)
     {
         switch ((VarType)v.Vt)

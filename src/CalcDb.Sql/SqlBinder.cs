@@ -50,19 +50,53 @@ public sealed class SourceSlot
         IndexLeaders = ExpressionSchema.IndexLeaders(table);
     }
 
+    internal SourceSlot(int index, string scopeName, BoundSelect subquery)
+    {
+        Index = index;
+        ScopeName = scopeName;
+        TableName = "";
+        Table = null!;
+        Subquery = subquery;
+        ReferencedColumns = new bool[subquery.Columns.Count];
+        _columns = [];
+        IndexLeaders = [];
+    }
+
     public int Index { get; }
 
-    /// <summary>The name the statement knows the source by: its alias, else its table name.</summary>
+    /// <summary>The name the statement knows the source by: its alias, else its table name (or "" for an unnamed derived table).</summary>
     public string ScopeName { get; }
 
-    /// <summary>The table's own name, as the catalog spells it.</summary>
+    /// <summary>The table's own name, as the catalog spells it, or "" for a derived table.</summary>
     public string TableName { get; }
 
     public TableDefinition Table { get; }
 
+    /// <summary>The bound derived table when this slot is <c>(SELECT …)</c>; null for a base table.</summary>
+    internal BoundSelect? Subquery { get; }
+
+    /// <summary>For a derived-table slot, which output columns of <see cref="Subquery"/> are referenced by the outer query.</summary>
+    internal bool[]? ReferencedColumns { get; }
+
     internal HashSet<int> IndexLeaders { get; }
 
     public ColumnDescriptor? Column(string name) => _columns.GetValueOrDefault(name);
+
+    internal int SubqueryColumn(string name)
+    {
+        if (Subquery is null)
+        {
+            return -1;
+        }
+        for (int i = 0; i < Subquery.Columns.Count; i++)
+        {
+            if (string.Equals(Subquery.Columns[i].Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
 }
 
 /// <summary>
@@ -268,7 +302,7 @@ internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundEx
 }
 
 /// <summary>An ORDER BY key, bound over the input row or, in a grouped SELECT, over the group's slots.</summary>
-internal sealed record OrderKey(BoundExpression Program, bool Descending);
+internal sealed record OrderKey(BoundExpression Program, bool Descending, bool MemoPrefix = false);
 
 /// <summary>
 /// A bound SELECT (II-11 §1 BoundStatement): its sources, result columns with their metadata, predicate, grouping,
@@ -277,7 +311,10 @@ internal sealed record OrderKey(BoundExpression Program, bool Descending);
 /// </summary>
 public sealed class BoundSelect : IDisposable
 {
-    /// <summary>The first slot number of the parameter values (below it, the slots of a group or union row).</summary>
+    /// <summary>The first slot number of a derived table's columns (above group/union slots, below parameter slots).</summary>
+    internal const int DerivedSlot0 = 1 << 19;
+
+    /// <summary>The first slot number of the parameter values (below it, the slots of a group, union, or derived row).</summary>
     internal const int ParameterSlot0 = 1 << 20;
 
     private readonly SelectSyntax _syntax;
@@ -338,6 +375,12 @@ public sealed class BoundSelect : IDisposable
 
     internal List<BoundExpression> Keys { get; } = [];
 
+    /// <summary>For each GROUP BY key, whether it is a Memo column (compared on the first 255 UTF-16 units, R-SORT-3 Length510).</summary>
+    internal List<bool> KeyMemoPrefix { get; } = [];
+
+    /// <summary>For each GROUP BY key, whether the select list, HAVING, or ORDER BY reads that key.</summary>
+    internal List<bool> KeyReferenced { get; } = [];
+
     internal List<AggregateSpec> Aggregates { get; } = [];
 
     internal BoundExpression? Having { get; private set; }
@@ -359,11 +402,20 @@ public sealed class BoundSelect : IDisposable
     /// Bind a parsed statement; it takes the syntax over (disposed with the binding, or at once on failure). The
     /// declarations bind first (II-11 §2), then the arms, each in its own scope, then a union's output shape (§15).
     /// </summary>
-    public static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, out SqlFailure? failure)
+    public static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, out SqlFailure? failure) =>
+        Bind(syntax, database, ownsSyntax: true, out failure);
+
+    private static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, bool ownsSyntax, out SqlFailure? failure)
     {
         var parameters = new List<QueryParameter>();
-        var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax: true);
+        var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
+        if (failure is null && ownsSyntax && CountSelects(syntax) > 50)
+        {
+            // qualified.md R-SQL-1 SQL-B: 50 SELECT keywords open, 51 fail 3360 (r-sql-13b/union-arm-count: 50 top-level
+            // arms open, 51 fail; 50 arms inside a derived table = 51 SELECT keywords and fail 3360).
+            failure = SqlFailure.Ace(SqlPhase.Bind, 3360, "Query is too complex.");
+        }
         if (failure is null && syntax.IsUnion)
         {
             failure = bound.BindUnion(database);
@@ -380,6 +432,27 @@ public sealed class BoundSelect : IDisposable
         bound.CheckParameterCount();
         return bound;
     }
+
+    private static int CountSelects(SelectSyntax syntax)
+    {
+        int count = 1;
+        foreach (SourceSyntax node in syntax.From)
+        {
+            count += CountSelects(node);
+        }
+        foreach (UnionArm arm in syntax.Unions)
+        {
+            count += CountSelects(arm.Select);
+        }
+        return count;
+    }
+
+    private static int CountSelects(SourceSyntax node) => node switch
+    {
+        SubquerySource sub => CountSelects(sub.Query),
+        JoinSource join => CountSelects(join.Left) + CountSelects(join.Right),
+        _ => 0,
+    };
 
     /// <summary>The PARAMETERS declarations: one name declared twice with one type is one parameter, with two types 3060 at Parameters.</summary>
     private SqlFailure? Declare(List<ParameterDeclaration> declarations)
@@ -424,11 +497,6 @@ public sealed class BoundSelect : IDisposable
         {
             syntaxes.Add(arm.Select);
             ArmAll.Add(arm.All);
-        }
-        if (syntaxes.Count > 50)
-        {
-            // qualified.md R-SQL-1 SQL-B: 50 SELECT keywords open, 51 fail 3360 (r-sql-13b/union-arm-count: 50 arms open, 51 fail).
-            return SqlFailure.Ace(SqlPhase.Bind, 3360, "Query is too complex.");
         }
         foreach (SelectSyntax s in syntaxes)
         {
@@ -529,8 +597,15 @@ public sealed class BoundSelect : IDisposable
         {
             o.Program.Dispose();
         }
+        foreach (SourceSlot s in SourceList)
+        {
+            s.Subquery?.Dispose();
+        }
+        SourceList.Clear();
         ColumnList.Clear();
         Keys.Clear();
+        KeyMemoPrefix.Clear();
+        KeyReferenced.Clear();
         Aggregates.Clear();
         Order.Clear();
         if (_ownsSyntax)
@@ -671,6 +746,11 @@ public sealed class BoundSelect : IDisposable
                 {
                     return null;
                 }
+                if (TryDerivedColumn(name, out int colIndex, out ResultColumn? col))
+                {
+                    sources[0].ReferencedColumns![colIndex] = true;
+                    return new SlotBinding(DerivedSlot0 + colIndex, DeclaredVarType(col!.FieldType), col.FieldType == 1 ? StaticType.Boolean : StaticType.Value);
+                }
                 bool bracketed = node.Offset >= 0 && node.Offset < source.Length && source[node.Offset] == '[';
                 parameters.Add(new QueryParameter(bracketed ? $"[{name}]" : name, 10, Declared: false));
                 index = parameters.Count - 1;
@@ -683,8 +763,59 @@ public sealed class BoundSelect : IDisposable
         public int? Slot(string name)
         {
             ColumnBinding? c = Column(name, out bool ambiguous);
-            return ambiguous ? -1 : c?.Source;
+            if (ambiguous)
+            {
+                return -1;
+            }
+            if (c is not null)
+            {
+                return c.Value.Source;
+            }
+            return TryDerivedColumn(name, out _, out _) ? 0 : null;
         }
+
+        internal bool TryDerivedColumn(string name, out int colIndex, out ResultColumn? col)
+        {
+            colIndex = -1;
+            col = null;
+            if (sources.Count != 1 || sources[0].Subquery is not { } sub)
+            {
+                return false;
+            }
+            SourceSlot s = sources[0];
+            string field = name;
+            int dot = name.LastIndexOf('.');
+            if (dot > 0)
+            {
+                string qualifier = name[..dot];
+                if (s.ScopeName.Length == 0 || !string.Equals(s.ScopeName, qualifier, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                field = name[(dot + 1)..];
+            }
+            int idx = s.SubqueryColumn(field);
+            if (idx < 0)
+            {
+                return false;
+            }
+            colIndex = idx;
+            col = sub.Columns[idx];
+            return true;
+        }
+
+        private static VarType DeclaredVarType(int? fieldType) => fieldType switch
+        {
+            1 => VarType.Bool,
+            2 => VarType.UI1,
+            3 => VarType.I2,
+            4 => VarType.I4,
+            5 => VarType.Currency,
+            6 => VarType.R4,
+            7 => VarType.R8,
+            8 => VarType.Date,
+            _ => VarType.Bstr,
+        };
 
         private ColumnBinding? Column(string name, out bool ambiguous)
         {
@@ -767,7 +898,7 @@ public sealed class BoundSelect : IDisposable
     /// field outside both is 3122 (r-sql-1: "Your query does not include the specified expression 'g' as part of an
     /// aggregate function.").
     /// </summary>
-    internal sealed class GroupScope(List<SyntaxNode> keys, List<AggregateSpec> aggregates, List<(VarType Declared, StaticType Type)> keyTypes, List<ColumnBinding?> keyFields, SourceScope input) : ExpressionSchema
+    internal sealed class GroupScope(List<SyntaxNode> keys, List<bool> keyReferenced, List<AggregateSpec> aggregates, List<(VarType Declared, StaticType Type)> keyTypes, List<ColumnBinding?> keyFields, SourceScope input) : ExpressionSchema
     {
         public string? Item { get; set; }
 
@@ -801,6 +932,7 @@ public sealed class BoundSelect : IDisposable
             {
                 if (SameExpression(node, keys[i]))
                 {
+                    keyReferenced[i] = true;
                     return new SlotBinding(i, keyTypes[i].Declared, keyTypes[i].Type);
                 }
             }
@@ -811,6 +943,10 @@ public sealed class BoundSelect : IDisposable
                     return new SlotBinding(keys.Count + i, aggregates[i].Result, StaticType.Value);
                 }
             }
+            if (node is { Kind: SyntaxKind.Name, Text: { } name } && input.TryDerivedColumn(name, out _, out _))
+            {
+                return null;
+            }
             return input.Substitute(node);
         }
 
@@ -820,7 +956,7 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         public override ColumnBinding? Resolve(string name, out ExpressionFailure? failure)
         {
-            if (input.Resolve(name, out failure) is null)
+            if (input.Resolve(name, out failure) is null && !input.TryDerivedColumn(name, out _, out _))
             {
                 return null;
             }
@@ -953,26 +1089,32 @@ public sealed class BoundSelect : IDisposable
         }
 
         /// <summary>
-        /// Output names that collide. Two or more unaliased field columns of one name, each written qualified by a
-        /// different source, are named <c>q.f</c> (qualified.md R-SQL-1 SQL-B output names: <c>SELECT a.id, b.id</c> gives
-        /// "a.id", "b.id", r-sql-1/b-output-names); other collisions rename by a rule not identified (<c>R.lid, R.lid</c>
-        /// gives "Expr1001", "lid"; an alias equal to another column's name renames that column, r-expr-1/b-floating-fidelity).
+        /// Output names that collide. Two or more unaliased field columns of one name from different sources — whether
+        /// written qualified (<c>SELECT a.id, b.id</c>, r-sql-1/b-output-names) or expanded by <c>*</c> / <c>s.*</c>
+        /// (<c>SELECT * FROM PA INNER JOIN CH …</c>, r-def-cursor-dao/join-field-names-and-lookup) — are named <c>q.f</c>;
+        /// other collisions rename by a rule not identified (<c>R.lid, R.lid</c> gives "Expr1001", "lid"; an alias equal to
+        /// another column's name renames that column, r-expr-1/b-floating-fidelity).
         /// </summary>
         private SqlFailure? Collisions()
         {
             foreach (IGrouping<string, ResultColumn> same in bound.ColumnList.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
             {
                 List<ResultColumn> group = [.. same];
-                bool qualified = group.All(c => c.Root is { Kind: SyntaxKind.Name, Text: { } t } && t.Contains('.') && c.Program.BareField is not null
-                    && !syntax.Items.Any(i => i.Alias is { } a && ReferenceEquals(i.Expression?.Syntax.Root, c.Root)));
-                if (!qualified || group.Select(c => c.Root!.Text![..c.Root.Text!.LastIndexOf('.')]).Distinct(StringComparer.OrdinalIgnoreCase).Count() != group.Count)
+                bool unaliasedFields = group.All(c => c.Program.BareField is not null
+                    && (c.Root is null
+                        || (c.Root is { Kind: SyntaxKind.Name, Text: { } t } && t.Contains('.')
+                            && !syntax.Items.Any(i => i.Alias is { } a && ReferenceEquals(i.Expression?.Syntax.Root, c.Root)))));
+                if (!unaliasedFields || group.Select(c => c.Program.BareField!.Value.Source).Distinct().Count() != group.Count)
                 {
                     return Open("NotModelled.DuplicateOutputName", $"two output columns named '{same.Key}' (ACE renames one by a rule not identified)");
                 }
                 foreach (ResultColumn c in group)
                 {
                     int at = bound.ColumnList.IndexOf(c);
-                    bound.ColumnList[at] = Renamed(c, c.Root!.Text!);
+                    string qualifiedName = c.Root is null
+                        ? $"{bound.SourceList[c.Program.BareField!.Value.Source].ScopeName}.{c.Name}"
+                        : c.Root.Text!;
+                    bound.ColumnList[at] = Renamed(c, qualifiedName);
                 }
             }
             return null;
@@ -1061,11 +1203,15 @@ public sealed class BoundSelect : IDisposable
                 }
                 items.Add(node!);
             }
+            if (bound.SourceList.Count > 1 && bound.SourceList.Any(s => s.Subquery is not null))
+            {
+                return Open("NotModelled.Subquery", "a derived table combined with another FROM source");
+            }
             if (bound.SourceList.Count > 32)
             {
                 return Open("NotModelled.SourceCount", $"{bound.SourceList.Count} sources (32 comma-joined tables open, 33 fail 3360)");
             }
-            foreach (IGrouping<string, SourceSlot> same in bound.SourceList.GroupBy(s => s.ScopeName, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+            foreach (IGrouping<string, SourceSlot> same in bound.SourceList.Where(s => s.ScopeName.Length > 0).GroupBy(s => s.ScopeName, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
             {
                 // r-sql-13b/join-cross-forms: FROM CX, CX is 3074; a repeated name in a join is not recorded.
                 return items.Count > 1 && items.All(i => i is TableNode)
@@ -1094,6 +1240,21 @@ public sealed class BoundSelect : IDisposable
                     int index = bound.SourceList.Count;
                     bound.SourceList.Add(new SourceSlot(index, named.ScopeName, named.Name, table));
                     node = new TableNode(index);
+                    return null;
+                case SubquerySource sub:
+                    BoundSelect? inner = Bind(sub.Query, database, ownsSyntax: false, out SqlFailure? subFailure);
+                    if (subFailure is not null)
+                    {
+                        return subFailure;
+                    }
+                    if (inner!.ParameterList.Count > 0)
+                    {
+                        inner.Dispose();
+                        return Open("NotModelled.Subquery", "a derived table with parameters");
+                    }
+                    int subIndex = bound.SourceList.Count;
+                    bound.SourceList.Add(new SourceSlot(subIndex, sub.ScopeName, inner));
+                    node = new TableNode(subIndex);
                     return null;
                 case JoinSource join:
                     if (Tree(join.Left, out SourceNode? left) is { } lf)
@@ -1467,6 +1628,14 @@ public sealed class BoundSelect : IDisposable
                 {
                     Parameter(column, bound.ParameterList[slot - ParameterSlot0]);
                 }
+                else if (program.BareSlot is int derivedSlot && derivedSlot >= DerivedSlot0 && derivedSlot < ParameterSlot0)
+                {
+                    ResultColumn innerCol = bound.SourceList[0].Subquery!.Columns[derivedSlot - DerivedSlot0];
+                    column.TypeRule = innerCol.TypeRule;
+                    column.FieldType = innerCol.FieldType;
+                    column.TypeOpen = innerCol.TypeOpen;
+                    column.Size = innerCol.Size;
+                }
                 else
                 {
                     Computed(column, item.Expression!.Syntax.Root!);
@@ -1483,11 +1652,21 @@ public sealed class BoundSelect : IDisposable
                 {
                     return f;
                 }
-                bound.Order.Add(new OrderKey(key!, o.Descending));
+                bool memoPrefix = false;
                 if (key!.Fields.Any(b => b.Column.TypeCode is NativeTypes.Memo or NativeTypes.Ole or NativeTypes.Binary))
                 {
-                    return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo, OLE or Binary field (r-sql-13b/memo-order-scope; R-SORT-3 Length510)");
+                    if (key.BareField is { Column.TypeCode: NativeTypes.Memo })
+                    {
+                        // qualified.md R-SORT-3 Length510, r-sql-13b/memo-order-scope: ORDER BY Memo compares the first 255 UTF-16 units.
+                        memoPrefix = true;
+                    }
+                    else
+                    {
+                        key.Dispose();
+                        return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression, OLE or Binary field (r-sql-13b/memo-order-scope; R-SORT-3 Length510)");
+                    }
                 }
+                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix));
             }
             return null;
         }
@@ -1511,6 +1690,10 @@ public sealed class BoundSelect : IDisposable
             else if (program.BareField is { } field)
             {
                 name = field.Column.Name;
+            }
+            else if (program.BareSlot is int derivedSlot && derivedSlot >= DerivedSlot0 && derivedSlot < ParameterSlot0)
+            {
+                name = bound.SourceList[0].Subquery!.Columns[derivedSlot - DerivedSlot0].Name;
             }
             else if (program.BareSlot is int slot && slot >= ParameterSlot0)
             {
@@ -1626,11 +1809,25 @@ public sealed class BoundSelect : IDisposable
         };
 
         /// <summary>
-        /// Static Field.Type of decided single-argument functions: IsNull and the nine C* conversion functions.
+        /// Static Field.Type of decided functions: IsNull, the nine C* conversion functions, InStr, and StrComp.
         /// </summary>
         private static StaticTypeResult StaticCall(SyntaxNode root)
         {
-            if (root.Text is not { } name || root.Items.Count != 1)
+            if (root.Text is not { } name)
+            {
+                return StaticTypeResult.Unknown;
+            }
+            if (name.Equals("InStr", StringComparison.OrdinalIgnoreCase) && root.Items.Count is >= 2 and <= 4)
+            {
+                // r-expr-1b/str-instr-compare-modes, r-str-ado-act/str-projection: InStr(...) is 4 (Long, VT_I4).
+                return new(OperandKind.Long, 4, true);
+            }
+            if (name.Equals("StrComp", StringComparison.OrdinalIgnoreCase) && root.Items.Count is >= 2 and <= 3)
+            {
+                // r-expr-1b/str-strcomp-and-text-operators, r-sort-3b/lg-compare-ops: StrComp(...) is 3 (Integer, VT_I2).
+                return new(OperandKind.Integer, 3, true);
+            }
+            if (root.Items.Count != 1)
             {
                 return StaticTypeResult.Unknown;
             }
@@ -2163,6 +2360,10 @@ public sealed class BoundSelect : IDisposable
                 {
                     continue;
                 }
+                if (s.Subquery is not null)
+                {
+                    return Open("NotModelled.Subquery", "* over a derived table");
+                }
                 foreach (ColumnDescriptor c in s.Table.Columns)
                 {
                     var schema = new FixedField(new ColumnBinding(s.Index, c));
@@ -2211,12 +2412,14 @@ public sealed class BoundSelect : IDisposable
                     key.Dispose();
                     return Open("NotModelled.GroupByExpression", "a GROUP BY key that is not a field (its static type is not identified)");
                 }
-                if (field.Column.TypeCode is NativeTypes.Memo or NativeTypes.Ole or NativeTypes.Binary)
+                if (field.Column.TypeCode is NativeTypes.Ole or NativeTypes.Binary)
                 {
                     key.Dispose();
-                    return Open("NotModelled.GroupByLongValue", "GROUP BY a Memo, OLE or Binary field (qualified.md R-SORT-3 Length510: the first 255 units)");
+                    return Open("NotModelled.GroupByLongValue", "GROUP BY an OLE or Binary field");
                 }
                 bound.Keys.Add(key);
+                bound.KeyMemoPrefix.Add(field.Column.TypeCode == NativeTypes.Memo);
+                bound.KeyReferenced.Add(false);
                 keys.Add(k.Syntax.Root!);
                 keyTypes.Add((Declared(field.Column), field.Column.TypeCode == NativeTypes.Boolean ? StaticType.Boolean : StaticType.Value));
                 keyFieldTypes.Add(field);
@@ -2235,7 +2438,7 @@ public sealed class BoundSelect : IDisposable
                     }
                 }
             }
-            var output = new GroupScope(keys, bound.Aggregates, keyTypes, keyFieldTypes, _scope);
+            var output = new GroupScope(keys, bound.KeyReferenced, bound.Aggregates, keyTypes, keyFieldTypes, _scope);
             int unnamed = 0;
             foreach (SelectItem item in syntax.Items)
             {
@@ -2260,13 +2463,19 @@ public sealed class BoundSelect : IDisposable
                             column = Renamed(column, field.Column.Name);
                         }
                     }
-                    else
+                    else if (slot < ParameterSlot0)
                     {
+                        int aggType = bound.Aggregates[slot - keys.Count].FieldType;
                         column.TypeRule = ColumnTypeRule.Bound;
-                        column.FieldType = bound.Aggregates[slot - keys.Count].FieldType;
+                        column.FieldType = aggType;
+                        column.Size = AggregateSize(aggType);
                         column.TypeOpen = null;
                         column.SourceTable = "";
                         column.SourceField = "";
+                    }
+                    else
+                    {
+                        Parameter(column, bound.ParameterList[slot - ParameterSlot0]);
                     }
                 }
                 else
@@ -2301,7 +2510,13 @@ public sealed class BoundSelect : IDisposable
                 {
                     return f;
                 }
-                bound.Order.Add(new OrderKey(key!, o.Descending));
+                bool memoPrefix = key!.BareSlot is int s && s < keys.Count && bound.KeyMemoPrefix[s];
+                if (!memoPrefix && Walk(o.Expression.Syntax.Root!).Any(n => output.KeyColumn(n)?.TypeCode == NativeTypes.Memo || output.Aggregate(n)?.FieldType == 12))
+                {
+                    key.Dispose();
+                    return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression or aggregate in a grouped SELECT");
+                }
+                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix));
             }
             return null;
         }
@@ -2315,6 +2530,24 @@ public sealed class BoundSelect : IDisposable
             Size = c.Size,
             SourceTable = c.SourceTable,
             SourceField = c.SourceField,
+        };
+
+        /// <summary>
+        /// Aggregate Field.Size by DAO Field.Type (r-def-cursor-dao/query-field-metadata-aggregates: Count 4 -> 4,
+        /// Sum/Avg 7 -> 8, Min(Text) 10 -> 0, Min(Date) 8 -> 8, Min(Yes/No) 3 -> 2; r-sql-13b/agg-yesno-memo-guid:
+        /// First(Memo) 12 -> 0).
+        /// </summary>
+        private static int? AggregateSize(int fieldType) => fieldType switch
+        {
+            3 => 2,
+            4 => 4,
+            5 => 8,
+            6 => 4,
+            7 => 8,
+            8 => 8,
+            10 => 0,
+            12 => 0,
+            _ => null,
         };
 
         private static VarType Declared(ColumnDescriptor c) => c.TypeCode switch
@@ -2332,9 +2565,10 @@ public sealed class BoundSelect : IDisposable
 
         /// <summary>
         /// An aggregate occurrence (qualified.md R-SQL-1 SQL-AGG): Count(*) counts rows and Count(x) the non-Null values,
-        /// VT_I4 (4); Sum and Avg of Byte, Integer, Long, Single, Date and Double are Double (7) and Sum of Currency is
-        /// Currency (5); Min and Max keep the argument's type, Byte as Long; First and Last keep it. Other argument types
-        /// and arguments that are not a field have no recorded type rule and are named.
+        /// VT_I4 (4); Sum and Avg of Boolean, Byte, Integer, Long, Single, Date and Double are Double (7) and Sum of Currency
+        /// is Currency (5); Min and Max keep the argument's type, Byte as Long and Boolean as Integer (3); First and Last
+        /// keep it, Boolean as Integer (3) and Memo as Memo (12) (r-sql-13b/agg-yesno-memo-guid,
+        /// r-def-cursor-dao/query-field-metadata-aggregates). Other argument types and expressions stay named.
         /// </summary>
         private SqlFailure? Aggregate(AggregateKind kind, SyntaxNode node, Fragment fragment)
         {
@@ -2374,9 +2608,11 @@ public sealed class BoundSelect : IDisposable
             }
             (VarType result, int type)? rule = kind switch
             {
-                AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
+                AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
                 AggregateKind.Sum when t is NativeTypes.Currency => (VarType.Currency, 5),
                 AggregateKind.Min or AggregateKind.Max when t is NativeTypes.Byte => (VarType.I4, 4),
+                AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when t is NativeTypes.Boolean => (VarType.I2, 3),
+                AggregateKind.First or AggregateKind.Last when t is NativeTypes.Memo => (VarType.Bstr, 12),
                 AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when t is NativeTypes.Integer or NativeTypes.Long or NativeTypes.Currency
                     or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Text => (Declared(field.Column), t),
                 _ => null,

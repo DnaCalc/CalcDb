@@ -24,6 +24,9 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT CDbl(1) AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("SELECT CDate('2020-01-01') AS v FROM T", 8, ColumnTypeRule.Bound)]
     [InlineData("SELECT CStr(1) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT InStr(Txt, 'a') AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT InStr(1, Txt, 'a', 0) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT StrComp(Txt, 'a', 0) AS v FROM T", 3, ColumnTypeRule.Bound)]
     public void Conversion_functions_resolve_decided_static_field_types(string sql, int expectedType, ColumnTypeRule expectedRule)
     {
         using BoundSelect plan = Prepare(sql);

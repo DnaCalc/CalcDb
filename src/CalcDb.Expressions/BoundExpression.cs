@@ -192,6 +192,12 @@ public sealed unsafe class BoundExpression : IDisposable
 
         /// <summary>x Between low And high: GreaterOrEqual, LessOrEqual, And; the same with the bounds exchanged; Or.</summary>
         Between,
+
+        /// <summary>InStr([start,] string1, string2[, compare]): 2..4 arguments (r-expr-1b/str-instr-compare-modes, r-str-ado-act/str-projection).</summary>
+        InStr,
+
+        /// <summary>StrComp(string1, string2[, compare]): 2..3 arguments (r-expr-1b/str-strcomp-and-text-operators, r-sort-3b/lg-compare-ops).</summary>
+        StrComp,
     }
 
     [StructLayout(LayoutKind.Auto)]
@@ -390,6 +396,16 @@ public sealed unsafe class BoundExpression : IDisposable
                 case Op.In:
                     r = In(ref sp, ins);
                     break;
+                case Op.InStr:
+                    if (!InStr(ref sp, ins, out r))
+                    {
+                        Unwind(sp);
+                        return false;
+                    }
+                    break;
+                case Op.StrComp:
+                    r = StrComp(ref sp, ins);
+                    break;
                 default:
                     r = Between(ref sp, ins);
                     break;
@@ -474,6 +490,227 @@ public sealed unsafe class BoundExpression : IDisposable
         }
         ScalarOutcome le = ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, _active);
         return le.Succeeded ? ScalarKernel.Apply(_descriptors[d + 2], ge.Value, le.Value, _active) : le;
+    }
+
+    /// <summary>
+    /// InStr([start,] string1, string2[, compare]) (r-expr-1b/str-instr-compare-modes, r-expr-1/a-optional-arguments,
+    /// r-expr-1b/null-propagation-functions, r-str-ado-act/str-projection, qualified.md R-EXPR-1 EXPR-INVENTORY):
+    /// 2 args use start=1 and text compare; 3 args take (start, s1, s2); 4 args add compare (0 binary, 1 text, 2 or &lt;0
+    /// error 5, &gt;2 named). Start &lt;= 0 or 2147483647 fails 5; start in 1073741825..2147483646 is named (qualified.md).
+    /// Null s1 or s2 yields Null; empty s1 yields 0; empty s2 on non-empty s1 yields start.
+    /// </summary>
+    private bool InStr(ref int sp, Instruction ins, out ScalarOutcome result)
+    {
+        int n = ins.Operand, first = sp - n;
+        int d = ins.Descriptor;
+        int site = _descriptors[d].Site;
+        result = default;
+        ScalarOutcome conv1 = default, conv2 = default;
+        try
+        {
+            int start = 1;
+            int compare = 1;
+            int s1Slot = first, s2Slot = first + 1;
+            if (n >= 3)
+            {
+                ScalarOutcome st = ScalarKernel.Apply(_descriptors[d], _stack[first].Value, _active);
+                if (!st.Succeeded)
+                {
+                    result = st;
+                    return true;
+                }
+                start = (int)st.Value.Int64;
+                if (start <= 0 || start == int.MaxValue)
+                {
+                    result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.InvalidProcedureCall, site, ScalarOperation.Mid));
+                    return true;
+                }
+                if (start > 1073741824)
+                {
+                    LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.InStrStartBound", "InStr start between 1073741825 and 2147483646 (qualified.md R-EXPR-1 EXPR-INVENTORY)");
+                    return false;
+                }
+                s1Slot = first + 1;
+                s2Slot = first + 2;
+            }
+            if (n == 4)
+            {
+                ScalarOutcome cm = ScalarKernel.Apply(_descriptors[d + 3], _stack[first + 3].Value, _active);
+                if (!cm.Succeeded)
+                {
+                    result = cm;
+                    return true;
+                }
+                compare = (int)cm.Value.Int64;
+                if (compare < 0 || compare == 2)
+                {
+                    result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.InvalidProcedureCall, site, ScalarOperation.Mid));
+                    return true;
+                }
+                if (compare > 2)
+                {
+                    result = ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Mid));
+                    return true;
+                }
+            }
+            NativeVariant v1 = _stack[s1Slot].Value;
+            NativeVariant v2 = _stack[s2Slot].Value;
+            if (v1.Vt == (ushort)VarType.Null || v2.Vt == (ushort)VarType.Null)
+            {
+                result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                return true;
+            }
+            if (v1.Vt != (ushort)VarType.Bstr)
+            {
+                conv1 = ScalarKernel.Apply(_descriptors[d + 1], v1, _active);
+                if (!conv1.Succeeded)
+                {
+                    result = conv1;
+                    return true;
+                }
+                v1 = conv1.Value;
+            }
+            if (v2.Vt != (ushort)VarType.Bstr)
+            {
+                conv2 = ScalarKernel.Apply(_descriptors[d + 2], v2, _active);
+                if (!conv2.Succeeded)
+                {
+                    result = conv2;
+                    return true;
+                }
+                v2 = conv2.Value;
+            }
+            ReadOnlySpan<char> s1 = Bstrs.Chars(v1.Pointer);
+            ReadOnlySpan<char> s2 = Bstrs.Chars(v2.Pointer);
+            int pos;
+            if (s1.Length == 0)
+            {
+                pos = 0;
+            }
+            else if (s2.Length == 0)
+            {
+                pos = start;
+            }
+            else if (start > s1.Length)
+            {
+                pos = 0;
+            }
+            else if (compare == 0)
+            {
+                int idx = s1[(start - 1)..].IndexOf(s2, StringComparison.Ordinal);
+                pos = idx < 0 ? 0 : start + idx;
+            }
+            else if (s2.Length == 1 && s2[0] == '\0')
+            {
+                // U+0000 matches only U+0000 under every compare mode (r-str-ado-act/str-projection: InStr(T, Chr(0))).
+                int idx = s1[(start - 1)..].IndexOf('\0');
+                pos = idx < 0 ? 0 : start + idx;
+            }
+            else if (System.Text.Ascii.IsValid(s1) && System.Text.Ascii.IsValid(s2))
+            {
+                int idx = s1[(start - 1)..].IndexOf(s2, StringComparison.OrdinalIgnoreCase);
+                pos = idx < 0 ? 0 : start + idx;
+            }
+            else
+            {
+                result = ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Mid));
+                return true;
+            }
+            result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = (uint)pos });
+            return true;
+        }
+        finally
+        {
+            conv1.Clear();
+            conv2.Clear();
+            for (int i = first; i < sp; i++)
+            {
+                Release(ref _stack[i]);
+            }
+            sp = first;
+        }
+    }
+
+    /// <summary>
+    /// StrComp(string1, string2[, compare]) (r-expr-1b/str-strcomp-and-text-operators, r-expr-1b/null-propagation-functions,
+    /// r-sort-3b/lg-compare-ops, qualified.md R-EXPR-1 TextCompareMode): compare=0 is UTF-16 code-unit order (VT_I2 -1/0/1);
+    /// compare=2 or &lt;0 fails 5; Null string1 or string2 yields Null; compare=1 (or omitted) and compare&gt;2 are named
+    /// NotModelledCase.TextCompareMode.
+    /// </summary>
+    private ScalarOutcome StrComp(ref int sp, Instruction ins)
+    {
+        int n = ins.Operand, first = sp - n;
+        int d = ins.Descriptor;
+        int site = _descriptors[d].Site;
+        ScalarOutcome conv1 = default, conv2 = default;
+        try
+        {
+            int compare = 1;
+            if (n == 3)
+            {
+                NativeVariant cmpArg = _stack[first + 2].Value;
+                if (cmpArg.Vt == (ushort)VarType.Null)
+                {
+                    // r-expr-1/pat-15-strcomp-selector, r-expr-1b/str-strcomp-and-text-operators: Null compare fails 3464.
+                    return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Equal));
+                }
+                ScalarOutcome cm = ScalarKernel.Apply(_descriptors[d + 2], cmpArg, _active);
+                if (!cm.Succeeded)
+                {
+                    return cm;
+                }
+                compare = (int)cm.Value.Int64;
+                if (compare < 0 || compare == 2)
+                {
+                    return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.InvalidProcedureCall, site, ScalarOperation.Equal));
+                }
+                if (compare > 2)
+                {
+                    return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+                }
+            }
+            NativeVariant v1 = _stack[first].Value;
+            NativeVariant v2 = _stack[first + 1].Value;
+            if (v1.Vt == (ushort)VarType.Null || v2.Vt == (ushort)VarType.Null)
+            {
+                return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+            }
+            if (compare != 0)
+            {
+                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+            }
+            if (v1.Vt != (ushort)VarType.Bstr)
+            {
+                conv1 = ScalarKernel.Apply(_descriptors[d], v1, _active);
+                if (!conv1.Succeeded)
+                {
+                    return conv1;
+                }
+                v1 = conv1.Value;
+            }
+            if (v2.Vt != (ushort)VarType.Bstr)
+            {
+                conv2 = ScalarKernel.Apply(_descriptors[d + 1], v2, _active);
+                if (!conv2.Succeeded)
+                {
+                    return conv2;
+                }
+                v2 = conv2.Value;
+            }
+            int cmp = Bstrs.Chars(v1.Pointer).SequenceCompareTo(Bstrs.Chars(v2.Pointer));
+            short answer = cmp < 0 ? (short)-1 : cmp > 0 ? (short)1 : (short)0;
+            return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = (ushort)answer });
+        }
+        finally
+        {
+            conv1.Clear();
+            conv2.Clear();
+            for (int i = first; i < sp; i++)
+            {
+                Release(ref _stack[i]);
+            }
+            sp = first;
+        }
     }
 
     /// <summary>CUR-FIND indexed Text: a non-ASCII subject under an indexed Like may take a collation range (R-SORT-3 LIKE-RANGE-01/05).</summary>
@@ -894,6 +1131,33 @@ public sealed unsafe class BoundExpression : IDisposable
                 Bound arg = Bind(node.Items[i], at + i);
                 contracts[i] = arg.Contract;
                 depth = Math.Max(depth, arg.Depth + i);
+            }
+            if (node.Text!.Equals("InStr", StringComparison.OrdinalIgnoreCase))
+            {
+                if (n is < 2 or > 4)
+                {
+                    throw WrongArity(node.Text!, n, node.Offset);
+                }
+                int first = Descriptors.Count;
+                Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[0] : default, default);
+                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 1 : 0], default);
+                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 2 : 1], default);
+                Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 4 ? contracts[3] : default, default);
+                Program.Add(new Instruction(Op.InStr, n, first));
+                return new Bound(entry.Type, OperandContract.FunctionResult, depth);
+            }
+            if (node.Text!.Equals("StrComp", StringComparison.OrdinalIgnoreCase))
+            {
+                if (n is < 2 or > 3)
+                {
+                    throw WrongArity(node.Text!, n, node.Offset);
+                }
+                int first = Descriptors.Count;
+                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[1], default);
+                Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
+                Program.Add(new Instruction(Op.StrComp, n, first));
+                return new Bound(entry.Type, OperandContract.FunctionResult, depth);
             }
             if (n is < 1 or > 3)
             {

@@ -34,6 +34,12 @@ public sealed record NamedSource(string Name, string? Alias, int Offset) : Sourc
     public string ScopeName => Alias ?? Name;
 }
 
+/// <summary><c>(SELECT …) [AS alias]</c>, a derived table in FROM (r-sort-3/equality-accdb, r-sort-3b/memo-equality-sql).</summary>
+public sealed record SubquerySource(SelectSyntax Query, string? Alias, int Offset) : SourceSyntax(Offset)
+{
+    public string ScopeName => Alias ?? "";
+}
+
 /// <summary><c>left [INNER|LEFT|RIGHT] JOIN right ON condition</c>.</summary>
 public sealed record JoinSource(JoinKind Kind, SourceSyntax Left, SourceSyntax Right, Fragment On, int Offset) : SourceSyntax(Offset);
 
@@ -109,9 +115,27 @@ public sealed class SelectSyntax : IDisposable
             f.Syntax.Dispose();
         }
         Fragments.Clear();
+        foreach (SourceSyntax source in From)
+        {
+            DisposeSource(source);
+        }
         foreach (UnionArm arm in Unions)
         {
             arm.Select.Dispose();
+        }
+    }
+
+    private static void DisposeSource(SourceSyntax source)
+    {
+        switch (source)
+        {
+            case SubquerySource sub:
+                sub.Query.Dispose();
+                break;
+            case JoinSource join:
+                DisposeSource(join.Left);
+                DisposeSource(join.Right);
+                break;
         }
     }
 }
@@ -394,6 +418,20 @@ public static class SqlParser
             {
                 return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
             }
+            if (QueryBody(statement) is { } bodyFailure)
+            {
+                return bodyFailure;
+            }
+            TakeSymbol(';');
+            if (!AtEnd())
+            {
+                return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
+            }
+            return null;
+        }
+
+        private SqlFailure? QueryBody(SelectSyntax statement)
+        {
             if (Arm(statement) is { } first)
             {
                 return first;
@@ -422,11 +460,6 @@ public static class SqlParser
             {
                 statement.UnionOrderBy.AddRange(last.OrderBy);
                 last.OrderBy.Clear();
-            }
-            TakeSymbol(';');
-            if (!AtEnd())
-            {
-                return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
             }
             return null;
         }
@@ -787,7 +820,27 @@ public static class SqlParser
             {
                 if (IsWord("SELECT"))
                 {
-                    return Open("NotModelled.Subquery", "a subquery in FROM");
+                    var inner = new SelectSyntax(s);
+                    _armDepth++;
+                    SqlFailure? subFailure = QueryBody(inner);
+                    _armDepth--;
+                    if (subFailure is not null)
+                    {
+                        inner.Dispose();
+                        return subFailure;
+                    }
+                    if (!TakeSymbol(')'))
+                    {
+                        inner.Dispose();
+                        return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+                    }
+                    if (SourceAlias(out string? subAlias) is { } aliasFailure)
+                    {
+                        inner.Dispose();
+                        return aliasFailure;
+                    }
+                    source = new SubquerySource(inner, subAlias, offset);
+                    return null;
                 }
                 if (Source(statement, out source) is { } f)
                 {
@@ -804,7 +857,17 @@ public static class SqlParser
             {
                 return Open("NotModelled.ExternalSource", "FROM … IN 'file' (II-11 §2 external IN)");
             }
-            string? alias = null;
+            if (SourceAlias(out string? alias) is { } namedAliasFailure)
+            {
+                return namedAliasFailure;
+            }
+            source = new NamedSource(name, alias, offset);
+            return null;
+        }
+
+        private SqlFailure? SourceAlias(out string? alias)
+        {
+            alias = null;
             if (TakeWord("AS"))
             {
                 alias = Name(allowClauseWord: true);
@@ -817,7 +880,6 @@ public static class SqlParser
             {
                 alias = bare;
             }
-            source = new NamedSource(name, alias, offset);
             return null;
         }
     }
