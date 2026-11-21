@@ -45,9 +45,15 @@ internal sealed class DatabaseSql(DatabaseObject database) : ISqlDatabase
     /// <summary>A saved query of that name; when MSysQueries cannot be read, any name is taken as one, so the source is named rather than answered 3078.</summary>
     public bool IsQuery(string name) => database.Queries is not { } catalog || catalog.Queries.Any(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// The pages a statement reads: the Workspace's overlay of the file when it has one, so a statement sees the
+    /// Workspace's own unpublished rows and keys (Isam PageSource, task rf2n), else the committed images.
+    /// </summary>
+    public PageSource Source => new(database.Cache, database.Workspace.Transactions.OverlayOf(database.Cache));
+
     public RowReader? OpenRows(TableDefinition table, out string? failure)
     {
-        RowReader? reader = RowReader.Open(database.Cache, database.Format, table, database.PageCount, out TraversalFailure? f);
+        RowReader? reader = RowReader.Open(Source, database.Format, table, database.PageCount, out TraversalFailure? f);
         failure = f?.Predicate;
         return reader;
     }
@@ -56,7 +62,7 @@ internal sealed class DatabaseSql(DatabaseObject database) : ISqlDatabase
     public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
     {
         failure = null;
-        return new IndexNavigator(database.Cache, database.Format, index, table.FirstPage);
+        return new IndexNavigator(Source, database.Format, index, table.FirstPage);
     }
 }
 

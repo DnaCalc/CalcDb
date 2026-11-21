@@ -546,9 +546,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {options} (an accepted option whose effect is not modelled: RecordsetOptions)"));
         }
         TraversalFailure? traversal;
+        // A table-type, dynaset or forward-only recordset reads this Workspace's own unpublished rows through its overlay
+        // (Isam PageSource, task rf2n); a snapshot keeps the committed images (the ISAM names a snapshot over an overlay),
+        // and its reads of the Workspace's own changes stay refused by name (RecordsetObject.UnpublishedRead).
+        PrivateOverlay? overlay = recordsetType == 4 ? null : _workspace.Transactions.OverlayOf(Cache);
+        var source = new PageSource(Cache, overlay);
         IRecordCursor? cursor = recordsetType == 1
-            ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
-            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
+            ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
+            : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
                 bookmarkBase: Engine.KeysetRecordsetsOpened != 0 ? null : recordsetType == 2 ? KeysetBookmark.FirstBase : recordsetType == 4 ? FirstSnapshotBase(table) : null,
                 snapshot: recordsetType == 4);
         if (cursor is not null && recordsetType is 2 or 4)
@@ -563,7 +568,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, overlay);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();

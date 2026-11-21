@@ -66,6 +66,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         Cursor = cursor;
         RecordsetType = recordsetType;
         _openLevels = [.. database.Workspace.Transactions.Frames];
+        _overlay = database.Workspace.Transactions.OverlayOf(database.Cache);
         database.AddRef(); // a recordset keeps its Database object alive
     }
 
@@ -84,9 +85,20 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
     }
 
-    protected override Operation? Find(MemberDecl member) => NotRecordedAfterRollback is { } why && member.Name != "Close"
-        ? (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", $"Recordset.{member.Name}: {why}"))
+    protected override Operation? Find(MemberDecl member) => (NotRecordedAfterRollback ?? OverlayGone) is { } why && member.Name != "Close"
+        ? (self, args) => CallResult.Fail(Failure.NotModelled(OverlayGone is null ? "NotModelled.Txn.RecordsetAfterRollback" : "NotModelled.Edit.ResolvedOverlay", $"Recordset.{member.Name}: {why}"))
         : base.Find(member);
+
+    /// <summary>The Workspace's overlay of the file when the statement opened (DatabaseSql.Source reads through it), or null.</summary>
+    private readonly Storage.PrivateOverlay? _overlay;
+
+    /// <summary>
+    /// Why the cursor cannot read any more: it reads through an overlay its Workspace no longer has (the level was
+    /// resolved or published; a reader's PageSource is fixed at open, task rf2n); null while it can.
+    /// </summary>
+    public string? OverlayGone => _overlay is { } overlay && !ReferenceEquals(overlay, Database.Workspace.Transactions.OverlayOf(Database.Cache))
+        ? "the query recordset was opened over its Workspace's overlay of a level that has ended (a reader's PageSource is fixed at open)"
+        : null;
 
     /// <summary>
     /// RecordCount: the rows populated so far (CUR-POP), or named where the cursor says the population at open is not
@@ -226,7 +238,8 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
     {
         var f = (SelectFieldsObject)self;
         return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid)
-            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Fields: " + why)) : op(f);
+            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Fields: " + why))
+            : f.Recordset.OverlayGone is { } gone ? CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Fields: " + gone)) : op(f);
     }
 
     private CallResult Item(nint index)
@@ -331,7 +344,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     {
         var f = (SelectFieldObject)self;
         return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid)
-            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field: " + why)) : op(f);
+            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field: " + why))
+            : f.Recordset.OverlayGone is { } gone ? CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Field: " + gone)) : op(f);
     }
 
     private CallResult FieldType() => Recordset.Cursor.FieldType(_ordinal, out string? open) is int type
@@ -347,6 +361,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect).</summary>
     public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal)
     {
+        if (recordset.OverlayGone is { } gone)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Field.Value: " + gone));
+        }
         if (recordset.NotRecordedAfterRollback is { } why)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field.Value: " + why));

@@ -4,6 +4,7 @@ using CalcDb.Com.Com;
 using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
 using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
@@ -78,9 +79,12 @@ internal sealed class UnpublishedChanges
     /// <summary>
     /// Whether <paramref name="reader"/> sees an accepted, unpublished change of <paramref name="table"/> in
     /// <paramref name="file"/>. Changes accepted through <paramref name="own"/> are left out when it is given: the edit
-    /// frame over that semantics decides them itself (its row and key checks).
+    /// frame over that semantics decides them itself (its row and key checks). <paramref name="readsOverlayOf"/> is the
+    /// file whose overlay of <paramref name="reader"/> the read goes through (Isam PageSource, task rf2n): the reader's own
+    /// level changes written to that file are in the overlay and readable, so they are left out too; a change with no
+    /// physical form, one of another file and one awaiting publication still count.
     /// </summary>
-    public bool Visible(TransactionCoordinator reader, string file, string table, MutationSemantics? own = null)
+    public bool Visible(TransactionCoordinator reader, string file, string table, MutationSemantics? own = null, PageCache? readsOverlayOf = null)
     {
         foreach (TransactionCoordinator w in _workspaces)
         {
@@ -89,13 +93,13 @@ internal sealed class UnpublishedChanges
                 IReadOnlyList<ExplicitFrame> frames = w.Frames;
                 for (int i = 0; i < frames.Count; i++)
                 {
-                    if (Touches(frames[i].AcceptedChanges, file, table, own))
+                    if (Touches(frames[i].AcceptedChanges, file, table, own, readsOverlayOf))
                     {
                         return true;
                     }
                 }
             }
-            if (Touches(w.PendingPublication, file, table, own))
+            if (Touches(w.PendingPublication, file, table, own, null))
             {
                 return true;
             }
@@ -103,11 +107,15 @@ internal sealed class UnpublishedChanges
         return false;
     }
 
-    private bool Touches(IReadOnlyList<AcceptedRowChange> changes, string file, string table, MutationSemantics? own)
+    private bool Touches(IReadOnlyList<AcceptedRowChange> changes, string file, string table, MutationSemantics? own, PageCache? readable)
     {
         for (int i = 0; i < changes.Count; i++)
         {
             MutationSemantics s = changes[i].Table;
+            if (readable is not null && ReferenceEquals(changes[i].Physical?.File, readable))
+            {
+                continue;
+            }
             if (!ReferenceEquals(s, own) && string.Equals(s.TableName, table, StringComparison.OrdinalIgnoreCase)
                 && _files.TryGetValue(s, out string? f) && string.Equals(f, file, StringComparison.OrdinalIgnoreCase))
             {

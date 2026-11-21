@@ -374,6 +374,30 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Assert.Equal("6f22c95aced354a9d56dc4de6edb053d3de6d359822e2bb4c3ca1b39285fad1d", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
     }
 
+    /// <summary>
+    /// Isam PageSource (task rf2n): a recordset opened after its Workspace changed a table inside a level reads the change
+    /// through the Workspace's overlay; one opened before the change has the committed images and stays named, as does any
+    /// read through an overlay after its level ended.
+    /// </summary>
+    [Fact]
+    public void A_recordset_opened_after_the_levels_change_reads_it_through_the_overlay()
+    {
+        DatabaseObject db = Open(EditFixture);
+        Ok(_engine.DefaultWorkspace.BeginTrans());
+        RecordsetObject before = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
+        FieldObject u = Object<FieldObject>(Object<FieldsObject>(before, "Fields"), "Item", "U");
+        Ok(Method(before, "Edit"));
+        Ok(Put(u, "Value", "u9")); // same width as "u1" (a shrinking row is refused by name)
+        Ok(Method(before, "Update"));
+        Named(Get(u, "Value")); // its cursor reads the committed images
+
+        RecordsetObject after = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
+        Assert.Equal("u9", Text(Get(Object<FieldObject>(Object<FieldsObject>(after, "Fields"), "Item", "U"), "Value")));
+        RecordsetObject snapshot = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 4)));
+        Named(Get(Object<FieldObject>(Object<FieldsObject>(snapshot, "Fields"), "Item", "U"), "Value"));
+        Ok(_engine.DefaultWorkspace.Rollback());
+    }
+
     [Fact]
     public void LockEdits_put_reaches_the_edit_frame()
     {

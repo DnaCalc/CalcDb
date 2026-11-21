@@ -9,6 +9,7 @@ using CalcDb.Format;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
 
 namespace CalcDb.Com.Dao;
 
@@ -108,8 +109,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
-    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    /// <param name="overlay">The Workspace's overlay of the file the cursor reads through (Isam PageSource, task rf2n), or null for the committed images.</param>
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, PrivateOverlay? overlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
+        _overlay = overlay;
         Database = database;
         _entry = entry;
         TableName = entry.Name;
@@ -540,8 +543,21 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// yet (<see cref="UnpublishedChanges"/>), or null. <paramref name="own"/> leaves out the changes of this recordset's
     /// own edit semantics, which the edit frame checks itself (an Edit of a changed row, a unique key).
     /// </summary>
-    public CallResult? UnpublishedRead(string member, MutationSemantics? own = null) =>
-        Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own) ? EditPublication.Unpublished(_entry.Name, member) : null;
+    public CallResult? UnpublishedRead(string member, MutationSemantics? own = null)
+    {
+        if (_overlay is { } overlay && !ReferenceEquals(overlay, Transactions.OverlayOf(Database.Cache)))
+        {
+            // The cursor's pages come from an overlay its Workspace no longer has (the level was resolved or published):
+            // a cursor's source is fixed at open (Isam PageSource), so its reads are named rather than made.
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: the recordset of '{_entry.Name}' was opened over its Workspace's overlay of a level that has ended (a cursor's PageSource is fixed at open)"));
+        }
+        return Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own, readsOverlayOf: _overlay is null ? null : Database.Cache)
+            ? EditPublication.Unpublished(_entry.Name, member)
+            : null;
+    }
+
+    /// <summary>The Workspace overlay this recordset's cursor reads through, or null (RecordsetObject constructor).</summary>
+    private readonly PrivateOverlay? _overlay;
 
     /// <summary>
     /// A member whose effect on a pending edit no record shows (Seek, an Index put, a refused Requery or Find): named while
