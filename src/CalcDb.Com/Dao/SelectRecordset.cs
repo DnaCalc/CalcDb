@@ -11,10 +11,10 @@ namespace CalcDb.Com.Dao;
 /// <summary>
 /// A Recordset (Recordset2) over a SELECT's result (W-06/parser-binder-scan; II-11 §1 ExecutionInstance, II-12 §10): the
 /// SQL executor's <see cref="SelectCursor"/>, opened by Database.OpenRecordset with SELECT text or a saved select query,
-/// or by QueryDef.OpenRecordset. Its rows, movement (CUR-POS, CUR-POP) and values are the cursor's; a value read that
-/// fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). It reads only: the members a
-/// result needs beyond Type, EOF, BOF, RecordCount, the moves, Fields and Close are named gaps. After Close every member
-/// fails 3420 (R-ACT-1 ACT-RETAIN).
+/// or by QueryDef.OpenRecordset. Its rows, movement (CUR-POS, CUR-POP), values and updatability (CUR-PROV) are the
+/// cursor's; a value read that fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). It
+/// reads only: the members a result needs beyond Type, Updatable, EOF, BOF, RecordCount, the moves, Fields and Close
+/// are named gaps. After Close every member fails 3420 (R-ACT-1 ACT-RETAIN).
 /// </summary>
 internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecordset
 {
@@ -22,6 +22,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
+        .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
         .Get("RecordCount", (self, args) => Live(self, r => r.RecordCount()))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
@@ -107,6 +108,16 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     public string? OverlayGone => _overlay is { } overlay && !ReferenceEquals(overlay, Database.Workspace.Transactions.OverlayOf(Database.Cache))
         ? "the query recordset was opened over its Workspace's overlay of a level that has ended (a reader's PageSource is fixed at open)"
         : null;
+
+    /// <summary>
+    /// Updatable (R-CURSOR-1 CUR-PROV, R-SQL-3 SQL-DR-01..05): False on a read-only database
+    /// (r-cursor-1b/open-argument-shapes, r-def-cursor-dao/pos-query-*, prov-alias-fields-metadata); on a writable
+    /// open, the SQL cursor's <see cref="SelectCursor.Updatable"/> by query shape and cursor kind, or named via
+    /// <see cref="SelectCursor.UpdatableOpen"/> when no retained record decides the shape.
+    /// </summary>
+    private CallResult Updatable() => Database.ReadOnly ? Bool(false)
+        : Cursor.Updatable is bool updatable ? Bool(updatable)
+        : CallResult.Fail(Failure.NotModelled(Cursor.UpdatableOpen ?? "NotModelled.QueryUpdatable", $"Recordset.Updatable: {Cursor.UpdatableOpen ?? "unrecorded query shape"}"));
 
     /// <summary>
     /// RecordCount: the rows populated so far (CUR-POP), or named where the cursor says the population at open is not
@@ -282,11 +293,11 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
 }
 
 /// <summary>
-/// A result column of a SELECT recordset (Field3): Name, Type, Size, SourceTable and SourceField from the binding
-/// (qualified.md "the DAO Field.Type of a projected column"; a type, size or source CalcDb does not identify is named),
-/// and Value read from the current row on each get (a held Field follows the current row, R-DAO-1 DAO-ID). A computed
-/// column whose static type is not identified gives the evaluator's inner value. Value failures publish an IErrorInfo
-/// from DAO.Field (R-ERR-1 ERR-EXCEP; r-q3-sql/constant-phase).
+/// A result column of a SELECT recordset (Field3): Name, Type, Size, SourceTable, SourceField and DataUpdatable from
+/// the binding (qualified.md "the DAO Field.Type of a projected column" and R-CURSOR-1 CUR-PROV; a type, size, source
+/// or updatability CalcDb does not identify is named), and Value read from the current row on each get (a held Field
+/// follows the current row, R-DAO-1 DAO-ID). A computed column whose static type is not identified gives the evaluator's
+/// inner value. Value failures publish an IErrorInfo from DAO.Field (R-ERR-1 ERR-EXCEP; r-q3-sql/constant-phase).
 /// </summary>
 internal sealed unsafe class SelectFieldObject : DaoObject
 {
@@ -296,8 +307,9 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("Name", (self, args) => Live(self, f => Text(f.Column.Name)))
         .Get("Type", (self, args) => Live(self, f => f.FieldType()))
         .Get("Size", (self, args) => Live(self, f => f.Column.Size is int s ? Int32(s) : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSize", $"Field.Size of the computed column {f.Column.Name}"))))
-        .Get("SourceTable", (self, args) => Live(self, f => Origin(f.Column.SourceTable, f.Column.Name)))
-        .Get("SourceField", (self, args) => Live(self, f => Origin(f.Column.SourceField, f.Column.Name)))
+        .Get("SourceTable", (self, args) => Live(self, f => Origin(f.Column.SourceTable, "SourceTable", f.Column.Name)))
+        .Get("SourceField", (self, args) => Live(self, f => Origin(f.Column.SourceField, "SourceField", f.Column.Name)))
+        .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
         .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()));
@@ -360,9 +372,36 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         ? Int16(type)
         : CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.ExpressionFieldType", $"Field.Type of the column {Column.Name}"));
 
-    private static CallResult Origin(string? value, string column) => value is null
-        ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldSource", $"Field.SourceTable and SourceField of the column {column} (r-sql-1/b-output-names)"))
+    private static CallResult Origin(string? value, string member, string column) => value is null
+        ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldSource", $"Field.{member} of the column {column} (r-sql-1/b-output-names)"))
         : Text(value);
+
+    /// <summary>
+    /// DataUpdatable (R-CURSOR-1 CUR-PROV): False on a read-only database (r-def-cursor-dao/prov-alias-fields-metadata,
+    /// query-field-metadata-aggregates, query-field-metadata-expressions); on a writable open, the SQL cursor's
+    /// <see cref="SelectCursor.FieldDataUpdatable"/>, or named when no retained record decides it. Calculated columns
+    /// and AutoNumber base columns on a writable open are not recorded and are refused by name.
+    /// </summary>
+    private CallResult DataUpdatable()
+    {
+        if (Column.SourceColumn?.Column is { CalculatedResultType: not null })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.CalculatedColumn", $"Field.DataUpdatable of the calculated column {Column.Name} (not recorded)"));
+        }
+        if (Recordset.Database.ReadOnly)
+        {
+            return Bool(false);
+        }
+        if (Recordset.Cursor.FieldDataUpdatable(_ordinal, out string? open) is not bool updatable)
+        {
+            return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldDataUpdatable", $"Field.DataUpdatable of the column {Column.Name}"));
+        }
+        if (updatable && Column.SourceColumn?.Column is { IsAutoNumber: true })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.AutoNumber", $"Field.DataUpdatable of the AutoNumber column {Column.Name} on a writable open (not recorded)"));
+        }
+        return Bool(updatable);
+    }
 
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
 
