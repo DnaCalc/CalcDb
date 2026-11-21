@@ -1269,7 +1269,43 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     internal void RebindRow(PageSource pages) => _row.Rebind(pages);
 
-    public int? OnRowInserted(RowId row) => _family.Store.AppendIfComplete(row);
+    /// <summary>
+    /// Register a row inserted by this cursor's AddNew+Update at the end of the keyset and return its ordinal.
+    /// Three recorded dynaset AddNew traces reach Update with an incomplete store (<c>ObservedCount == 1</c>, no move
+    /// since open or Requery) and still answer the post-full-table ordinal immediately on LastModified:
+    /// <c>r-cursor-1/edit-addnew-generated</c> (call 6 open on 2-row G, call 31 AddNew, call 35 Update, call 41
+    /// LastModified -&gt; 02020000, followed by MoveLast and a 3-row walk to EOF),
+    /// <c>r-cursor-1b/lastmodified-addnew</c> (call 36 open on 8-row F, call 41 AddNew, call 46 Update, calls 47/51
+    /// LastModified -&gt; 08020000), and <c>r-cursor-1b/lastmodified-clone-family</c> (call 28 rp.Requery resets 8-row F
+    /// to 1 populated row, call 31 AddNew, call 34 Update, calls 35/39/42 LastModified -&gt; 08020000). The three SQL
+    /// dynasets in <c>r-def-cursor-dao/addnew-landing-by-index-and-type</c> (calls 113/143/173 -&gt; 08020000) call
+    /// MoveFirst+Move(2) before AddNew and take the already-complete <see cref="OccurrenceStore{T}.AppendIfComplete"/>
+    /// path. When completing an incomplete store after Update has already published <paramref name="row"/> to the table
+    /// pages, <c>ProduceAll</c> may scan <paramref name="row"/>; keep it once at the end of the keyset rather than
+    /// duplicating it. Behavior on an unpopulated &gt;500-row dynaset is not yet recorded.
+    /// </summary>
+    public int? OnRowInserted(RowId row)
+    {
+        if (!_family.Store.Complete)
+        {
+            int before = _family.Store.ObservedCount;
+            _family.Store.ProduceAll();
+            int count = _family.Store.ObservedCount;
+            for (int i = before; i < count; i++)
+            {
+                if (_family.Store[i] == row)
+                {
+                    if (i == count - 1)
+                    {
+                        return i;
+                    }
+                    _family.Store.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+        return _family.Store.AppendIfComplete(row);
+    }
 
     /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base or after a delete.</summary>
     public byte[]? BookmarkForOrdinal(int ordinal) =>

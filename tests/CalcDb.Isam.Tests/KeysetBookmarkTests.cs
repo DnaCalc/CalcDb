@@ -152,4 +152,58 @@ public sealed class KeysetBookmarkTests
         Assert.Null(rs.SetBookmark([]));
         Assert.Equal("01020000", Bookmark(rs));
     }
+
+    [Fact]
+    public void OnRowInserted_populates_incomplete_keyset_and_returns_appended_ordinal_without_duplicates()
+    {
+        // r-cursor-1/edit-addnew-generated (call 41 -> 02020000), r-cursor-1b/lastmodified-addnew (call 47 -> 08020000):
+        // AddNew on an unpopulated dynaset completes the store and yields the new row's ordinal at the end.
+        int existingCount;
+        RowId secondRow;
+        RowId lastRow;
+        using (PopulationCursor probe = Open(Nav, "T"))
+        {
+            Assert.Equal(MoveOutcome.Moved, probe.MoveNext());
+            secondRow = probe.CurrentRow!.Value;
+            Assert.Equal(MoveOutcome.Moved, probe.MoveLast());
+            existingCount = (int)probe.RecordCount;
+            lastRow = probe.CurrentRow!.Value;
+        }
+        Assert.True(existingCount >= 3);
+
+        // Case 1: inserted row on a page/slot not encountered by ProduceAll -> appended at existingCount.
+        using (PopulationCursor rs = Open(Nav, "T"))
+        {
+            Assert.Equal(1, rs.RecordCount);
+            var synthetic = new RowId(0x00FF_FFFF, 0);
+            int? ordinal = rs.OnRowInserted(synthetic);
+            Assert.Equal(existingCount, ordinal);
+            Assert.Equal(existingCount + 1, rs.RecordCount);
+            Assert.Equal(Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.FirstBase, existingCount)),
+                Convert.ToHexStringLower(rs.BookmarkForOrdinal(ordinal!.Value)!));
+            Assert.Equal(0, rs.Ordinal);
+            Assert.Equal(MoveOutcome.Moved, rs.MoveLast());
+            Assert.Equal(synthetic, rs.CurrentRow);
+        }
+
+        // Case 2: inserted row already at the tail of ProduceAll -> kept once at the end without double-append.
+        using (PopulationCursor rs = Open(Nav, "T"))
+        {
+            Assert.Equal(1, rs.RecordCount);
+            int? ordinal = rs.OnRowInserted(lastRow);
+            Assert.Equal(existingCount - 1, ordinal);
+            Assert.Equal(existingCount, rs.RecordCount);
+        }
+
+        // Case 3: inserted row encountered in the middle of ProduceAll -> moved once to the end of the keyset.
+        using (PopulationCursor rs = Open(Nav, "T"))
+        {
+            Assert.Equal(1, rs.RecordCount);
+            int? ordinal = rs.OnRowInserted(secondRow);
+            Assert.Equal(existingCount - 1, ordinal);
+            Assert.Equal(existingCount, rs.RecordCount);
+            Assert.Equal(MoveOutcome.Moved, rs.MoveLast());
+            Assert.Equal(secondRow, rs.CurrentRow);
+        }
+    }
 }

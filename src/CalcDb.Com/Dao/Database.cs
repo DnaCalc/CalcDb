@@ -485,15 +485,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // an overlay or dynamic source), and its reads of the Workspace's own changes stay refused by name
         // (RecordsetObject.UnpublishedRead).
         PageSource source = recordsetType == 4 ? new PageSource(Cache) : new PageSource(Cache, _workspace.Transactions);
+        uint? bookmarkBase = null;
+        (string Name, string Detail)? bookmarkBaseRefusal = null;
+        if (recordsetType is 2 or 4)
+        {
+            bookmarkBase = KeysetBookmarkBase(recordsetType, table, out bookmarkBaseRefusal);
+        }
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
-                bookmarkBase: Engine.KeysetRecordsetsOpened != 0 ? null : recordsetType == 2 ? KeysetBookmark.FirstBase : recordsetType == 4 ? FirstSnapshotBase(table) : null,
+                bookmarkBase: bookmarkBase,
                 snapshot: recordsetType == 4);
-        if (cursor is not null && recordsetType is 2 or 4)
-        {
-            Engine.KeysetRecordsetsOpened++;
-        }
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
@@ -502,7 +504,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, bookmarkBaseRefusal);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();
@@ -525,18 +527,106 @@ internal sealed unsafe class DatabaseObject : DaoObject
             : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
     }
 
-    /// <summary>A new recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
-    /// <summary>
-    /// The bookmark base of a session's first snapshot (qualified.md R-CURSOR-1 CUR-ID, r-q6-bookmarks rounds 2-5): 0x0200
-    /// over a table of one or two LONG columns, 0x0300 over every other table asked (three or more LONGs, one BYTE, TEXT or
-    /// MEMO column, a LONG with a second column of any type); the row count and a reopened file do not matter.
-    /// </summary>
-    private static uint FirstSnapshotBase(TableDefinition table) =>
-        table.Columns.Count <= 2 && table.Columns.All(c => c.TypeCode == NativeTypes.Long) ? KeysetBookmark.FirstBase : 0x0300;
+    /// <summary>Count this Database's live dynaset, snapshot, forward-only and SELECT query recordset families.</summary>
+    public void CountOpenKeysets(ref int dynasets, ref int snapshots, ref int forwardOnly, ref int queries)
+    {
+        foreach (IDatabaseRecordset r in _recordsets)
+        {
+            if (r is RecordsetObject rs)
+            {
+                switch (rs.RecordsetType)
+                {
+                    case 2: dynasets++; break;
+                    case 4: snapshots++; break;
+                    case 8: forwardOnly++; break;
+                }
+            }
+            else if (r is SelectRecordsetObject)
+            {
+                queries++;
+            }
+        }
+    }
 
+    /// <summary>
+    /// Keyset bookmark base for a newly opened dynaset or snapshot (R-CURSOR-1 CUR-ID), strictly limited to the
+    /// open-neighbour states and table schemas recorded in ACE evidence:
+    /// <list type="bullet">
+    /// <item>Dynaset (2): 0x0200 when no snapshot, forward-only or query recordset is open (first, sequential or beside
+    /// open dynasets/table-types: r-cursor-1/id-bookmark-shape, r-fix-cursor-dao/id-bookmark-assign-fresh,
+    /// r-cursor-1b/clone-bookmark-sharing call 17, r-q6-bookmarks/snapshot-base-neighbours calls 12/18/24/56/58).</item>
+    /// <item>Snapshot (4) over 1 unindexed LONG column: 0x0200 when no forward-only or query recordset is open
+    /// (r-q6-bookmarks/first-snapshot-columns-longs-1, narrow-*, reopened-3, snapshot-base-neighbours s1-s7a).</item>
+    /// <item>Snapshot (4) with no other open keyset, forward-only or query recordsets: 0x0200 for 2 unindexed LONG
+    /// columns (first-snapshot-columns-longs-2); 0x0300 for recorded 1-column unindexed BYTE/TEXT/MEMO
+    /// (first-snapshot-columns-only-*), 2-column unindexed (LONG, BIT|BYTE|CURRENCY|DATETIME|DOUBLE|GUID|TEXT|MEMO)
+    /// (first-snapshot-column-*, wide-*, created-600, reopened-600), and 3+-column tables of recorded types
+    /// LONG/TEXT/MEMO/DATETIME/DOUBLE (first-snapshot-columns-longs-3/-4/-8, r-dao-1b/recordset-members-snapshot,
+    /// r-cursor-1/id-bookmark-shape, r-cursor-1b/bookmark-walk-types, lastmodified-addnew,
+    /// r-q-cursor-dao/id-bookmark-assign-deleted-and-beyond).</item>
+    /// </list>
+    /// Any other open-neighbour state or unrecorded schema returns null with a named NotModelled refusal.
+    /// </summary>
+    private uint? KeysetBookmarkBase(int recordsetType, TableDefinition table, out (string Name, string Detail)? refusal)
+    {
+        OpenKeysetCounts open = Engine.OpenKeysets();
+        if (recordsetType == 2)
+        {
+            if (open is { Snapshots: 0, ForwardOnly: 0, Queries: 0 })
+            {
+                refusal = null;
+                return KeysetBookmark.FirstBase;
+            }
+            refusal = ("NotModelled.DynasetBookmarkBaseWithOpenNeighbour",
+                "Bookmark on a dynaset opened while a snapshot, forward-only or query recordset is open (not recorded)");
+            return null;
+        }
+        bool unindexed = table.PhysicalIndexes.Count == 0 && table.LogicalIndexes.Count == 0;
+        if (unindexed && table.Columns.Count == 1 && table.Columns[0].TypeCode == NativeTypes.Long)
+        {
+            if (open is { ForwardOnly: 0, Queries: 0 })
+            {
+                refusal = null;
+                return KeysetBookmark.FirstBase;
+            }
+            refusal = ("NotModelled.SnapshotBookmarkBaseWithOpenNeighbour",
+                "Bookmark on a 1-LONG snapshot opened while a forward-only or query recordset is open (not recorded)");
+            return null;
+        }
+        if (open is not { Dynasets: 0, Snapshots: 0, ForwardOnly: 0, Queries: 0 })
+        {
+            refusal = ("NotModelled.SnapshotBookmarkBaseWithOpenNeighbour",
+                "Bookmark on a snapshot opened while another dynaset, snapshot, forward-only or query recordset is open (r-cursor-1/life-requery 0x0600 and r-cursor-1b/clone-bookmark-sharing 0x0900 confound open dynasets, movement and clones)");
+            return null;
+        }
+        if (unindexed && table.Columns.Count == 2 && table.Columns[0].TypeCode == NativeTypes.Long && table.Columns[1].TypeCode == NativeTypes.Long)
+        {
+            refusal = null;
+            return KeysetBookmark.FirstBase;
+        }
+        if (IsRecordedSnapshot0300Schema(table, unindexed))
+        {
+            refusal = null;
+            return KeysetBookmark.SnapshotBase;
+        }
+        refusal = ("NotModelled.SnapshotBookmarkBaseSchema",
+            "Bookmark on a snapshot whose table column types or indexing are not recorded in r-q6-bookmarks or the fixture records");
+        return null;
+    }
+
+    private static bool IsRecordedSnapshot0300Schema(TableDefinition table, bool unindexed) => table.Columns.Count switch
+    {
+        1 => unindexed && table.Columns[0].TypeCode is NativeTypes.Byte or NativeTypes.Text or NativeTypes.Memo,
+        2 => unindexed
+            && table.Columns[0].TypeCode == NativeTypes.Long
+            && table.Columns[1].TypeCode is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Currency or NativeTypes.DateTime or NativeTypes.Double or NativeTypes.Guid or NativeTypes.Text or NativeTypes.Memo,
+        >= 3 => table.Columns.All(static c => c.TypeCode is NativeTypes.Long or NativeTypes.Text or NativeTypes.Memo or NativeTypes.DateTime or NativeTypes.Double),
+        _ => false,
+    };
+
+    /// <summary>A new SELECT query recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
     public CallResult Adopt(SelectRecordsetObject recordset)
     {
-        Engine.KeysetRecordsetsOpened++;
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();

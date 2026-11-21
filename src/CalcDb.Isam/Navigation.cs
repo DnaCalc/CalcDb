@@ -32,17 +32,24 @@ public static class TableBookmark
 /// delete (c1/id-key-change, id-relocation, id-delete-reinsert), and Requery numbers the new keyset again
 /// (c1/life-requery). A number that names no occurrence is 3159 (c1b/clone-bookmark-sharing,
 /// q/id-bookmark-assign-deleted-and-beyond, q2/id-bookmark-requery-populated).
-/// <para>The base: <see cref="FirstBase"/> for a dynaset that is the first dynaset or snapshot of an engine session (every
-/// record). A snapshot's base is not identified: 0x0200 in a fresh database with three-row tables, alone or beside other
-/// recordsets (r-q6-bookmarks/snapshot-base-neighbours), but 0x0300 as the first recordset over a fixture table
-/// (r-dao-1b/recordset-members-snapshot) and 0x0600 or 0x0900 beside open dynasets (c1/life-requery,
-/// c1b/clone-bookmark-sharing). The caller passes no base for a snapshot or a later recordset, whose bookmarks are then
+/// <para>The base: <see cref="FirstBase"/> (0x0200) for a dynaset opened with no open snapshot, forward-only or query
+/// recordset (first, sequential or concurrent beside open dynasets/table-types: c1/id-bookmark-shape,
+/// fix/id-bookmark-assign-fresh, c1b/clone-bookmark-sharing, r-q6-bookmarks/snapshot-base-neighbours) and for a snapshot
+/// over an unindexed 1- or 2-column LONG table (r-q6-bookmarks/first-snapshot-columns-longs-1, -2,
+/// snapshot-base-neighbours). <see cref="SnapshotBase"/> (0x0300) for a snapshot opened with no other open keyset,
+/// forward-only or query recordset over a recorded non-(1..2 LONG) schema (r-q6-bookmarks rounds 2-5,
+/// r-dao-1b/recordset-members-snapshot, c1/id-bookmark-shape, c1b/bookmark-walk-types, c1b/lastmodified-addnew,
+/// q/id-bookmark-assign-deleted-and-beyond). Other concurrent combinations (such as c1/life-requery 0x0600 and
+/// c1b/clone-bookmark-sharing 0x0900) and unrecorded snapshot schemas pass no base, whose bookmarks are then
 /// NotObserved.</para>
 /// </summary>
 public static class KeysetBookmark
 {
-    /// <summary>The number of the first row of an engine session's first dynaset or snapshot.</summary>
+    /// <summary>The base of a dynaset and of a snapshot over an unindexed 1- or 2-column LONG table.</summary>
     public const uint FirstBase = 0x0200;
+
+    /// <summary>The base of a standalone snapshot over a recorded wider or non-LONG table.</summary>
+    public const uint SnapshotBase = 0x0300;
 
     /// <summary>Occurrences per numbering block, and the numbers each block takes.</summary>
     public const int BlockEntries = 453, BlockNumbers = 512;

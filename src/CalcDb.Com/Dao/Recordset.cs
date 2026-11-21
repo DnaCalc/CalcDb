@@ -99,13 +99,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     private sealed class RecordsetFamily
     {
-        public RecordsetFamily(RecordsetObject root)
+        public RecordsetFamily(RecordsetObject root, (string Name, string Detail)? bookmarkBaseRefusal)
         {
             Root = root;
+            BookmarkBaseRefusal = bookmarkBaseRefusal;
             Live.Add(root);
         }
 
         public RecordsetObject Root { get; }
+
+        public (string Name, string Detail)? BookmarkBaseRefusal { get; }
 
         public List<RecordsetObject> Live { get; } = [];
 
@@ -137,9 +140,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
-    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    /// <param name="bookmarkBaseRefusal">Named refusal when a dynaset or snapshot opened without a recorded bookmark base.</param>
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, (string Name, string Detail)? bookmarkBaseRefusal = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
-        _family = new RecordsetFamily(this);
+        _family = new RecordsetFamily(this, bookmarkBaseRefusal);
         Database = database;
         _entry = entry;
         TableName = entry.Name;
@@ -958,8 +962,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// LastModified after an accepted Update: an Edit's row is the current row, which Update keeps (CUR-EDIT), so its
     /// bookmark is the current one (r-cursor-1/edit-cancel-rollback: LastModified equals Bookmark after the Update). A
-    /// published AddNew row gets its landing root bookmark on a table-type cursor, or its appended keyset bookmark on a
-    /// fully populated dynaset; otherwise LastModified stays named.
+    /// published AddNew row gets its landing root bookmark on a table-type cursor (r-cursor-1b/lastmodified-addnew call 18),
+    /// or its appended keyset bookmark on a dynaset (r-cursor-1/edit-addnew-generated call 41, r-cursor-1b/lastmodified-addnew
+    /// call 47, r-cursor-1b/lastmodified-clone-family call 35, r-def-cursor-dao/addnew-landing-by-index-and-type); when
+    /// no ordinal or bookmark base is available (inside a transaction, after a cursor Delete, or without a recorded base)
+    /// LastModified stays named.
     /// </summary>
     private void Modified(EditMode mode, UpdateOutcome outcome)
     {
@@ -984,11 +991,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit Update changed; after an outermost
-    /// Rollback a null array (TXN-CLOSE: r-cursor-1/edit-rollback-*, edit-cancel-rollback; CommitTrans keeps it,
-    /// edit-commit-opened-inside). Before any Update a table-type or dynaset recordset answers a null array and a snapshot
-    /// or forward-only one 3251 (r-dao-1b/recordset-members-table, -dynaset, -at-eof, -snapshot, -forward-only). After an
-    /// AddNew it is not identified and is named.
+    /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit or published AddNew Update wrote;
+    /// after an outermost Rollback a null array (TXN-CLOSE: r-cursor-1/edit-rollback-*, edit-cancel-rollback;
+    /// CommitTrans keeps it, edit-commit-opened-inside). Before any Update a table-type or dynaset recordset answers a
+    /// null array and a snapshot or forward-only one 3251 (r-dao-1b/recordset-members-table, -dynaset, -at-eof,
+    /// -snapshot, -forward-only). An AddNew whose keyset bookmark is not recorded (inside a transaction, after a cursor
+    /// Delete, or without a recorded base) refuses by name.
     /// </summary>
     private CallResult LastModified() => _lastModified switch
     {
@@ -1389,6 +1397,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 {
                     return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
                 }
+                if (_family.BookmarkBaseRefusal is { } refusal)
+                {
+                    return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
+                }
             }
             return CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
         }
@@ -1399,7 +1411,24 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     private CallResult SetBookmark(nint value)
     {
+        if (Cursor is PopulationCursor { ForwardOnly: true })
+        {
+            return CallResult.Fail(Failure.NotImplemented("Bookmark put of a recordset opened with dbForwardOnly (its cursor is not modelled)"));
+        }
         NativeVariant* v = Args.Cell(value);
+        VarType vt = (VarType)v->Vt;
+        if (vt == VarType.Bstr)
+        {
+            // r-cursor-1/id-bookmark-shape (call 66): Bookmark = "" succeeds and moves nothing; a non-empty BSTR is not recorded.
+            return Bstrs.Chars(v->Pointer).IsEmpty
+                ? CallResult.Nothing
+                : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkPutNonEmptyBstr", "Bookmark put of a non-empty BSTR (not recorded)"));
+        }
+        if (vt is VarType.I4 or VarType.Null or VarType.Empty)
+        {
+            // r-cursor-1/id-bookmark-shape (calls 75, 84, 93): VT_I4, VT_NULL and VT_EMPTY fail 3421 from DAO.Recordset with IErrorInfo.
+            return Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+        }
         if (v->Vt != (ushort)(VarType.Array | VarType.UI1) || v->Pointer == 0 || SafeArrays.ElementType(v->Pointer) != VarType.UI1)
         {
             return CallResult.Fail(Failure.NotImplemented("Bookmark put of a value that is not a Byte array"));
@@ -1421,6 +1450,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             if (pop.BookmarksInvalidatedByDelete)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark put on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
+            }
+            if (_family.BookmarkBaseRefusal is { } refusal)
+            {
+                return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
             }
         }
         return failure switch

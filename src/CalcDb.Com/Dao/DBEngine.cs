@@ -10,6 +10,9 @@ using CalcDb.Storage;
 
 namespace CalcDb.Com.Dao;
 
+/// <summary>Live open recordset family counts across an engine's open Databases (R-CURSOR-1 CUR-ID).</summary>
+internal readonly record struct OpenKeysetCounts(int Dynasets, int Snapshots, int ForwardOnly, int Queries);
+
 /// <summary>
 /// The engine state of one binding on one apartment thread: what survives the release of every DBEngine reference
 /// (R-ACT-1 ACT-RETAIN: a DBEngine created again still reports the earlier Errors), the Errors list (R-ORACLE-1 OR-OBS)
@@ -23,10 +26,18 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     public List<DatabaseObject> Sessions { get; } = [];
 
     /// <summary>
-    /// The dynasets, snapshots and query recordsets opened in this engine session so far: only the first, when it is a
-    /// dynaset, numbers its bookmarks from a base ACE is seen to use (KeysetBookmark.FirstBase; R-CURSOR-1 CUR-ID).
+    /// Live open recordset families across every open Database of this engine, for keyset bookmark base selection
+    /// (R-CURSOR-1 CUR-ID). Clones share one family entry in their Database and are not counted twice.
     /// </summary>
-    public int KeysetRecordsetsOpened { get; set; }
+    public OpenKeysetCounts OpenKeysets()
+    {
+        int dynasets = 0, snapshots = 0, forwardOnly = 0, queries = 0;
+        foreach (DatabaseObject session in Sessions)
+        {
+            session.CountOpenKeysets(ref dynasets, ref snapshots, ref forwardOnly, ref queries);
+        }
+        return new OpenKeysetCounts(dynasets, snapshots, forwardOnly, queries);
+    }
 
     /// <summary>
     /// The writable file of the open Database whose cache a Workspace publishes (II-08 §19): that session's writer lease
