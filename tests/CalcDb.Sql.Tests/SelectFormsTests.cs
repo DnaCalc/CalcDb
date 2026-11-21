@@ -58,13 +58,20 @@ public sealed class SelectFormsTests
             Assert.True(cur1.Eof);
         }
 
-        // 2 matching rows (r-def-cursor-dao/prov-missing-projected-key): row order is observable -> NotModelled.DynasetOrder.
+        // 2 matching rows (r-def-cursor-dao/prov-missing-projected-key): equality WHERE is not a single range -> storage order (r-q14-dynaset-order).
         using (BoundSelect plan2 = Prepare(db, "SELECT N FROM T WHERE N = 40"))
         using (SelectCursor? cur2 = SelectCursor.Open(plan2, db, ResultKind.Dynaset, out SqlFailure? f2))
         {
-            Assert.Null(cur2);
-            Assert.NotNull(f2);
-            Assert.Equal("NotModelled.DynasetOrder", f2!.NotModelled);
+            Assert.Null(f2);
+            Assert.NotNull(cur2);
+            var vals = new List<int>();
+            while (!cur2!.Eof)
+            {
+                Assert.True(cur2.Read(0, out NativeVariant v, out SqlFailure? rf), rf?.ToString());
+                vals.Add((int)v.Int64);
+                cur2.MoveNext();
+            }
+            Assert.Equal([40, 40], vals);
         }
     }
 

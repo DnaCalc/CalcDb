@@ -1,0 +1,515 @@
+using System.Text.Json;
+
+using CalcDb.Catalog;
+using CalcDb.Evidence;
+using CalcDb.Format;
+using CalcDb.Foundation;
+using CalcDb.Isam.Edit;
+using CalcDb.Storage;
+using CalcDb.Values;
+
+namespace CalcDb.Sql.Tests;
+
+/// <summary>
+/// SQL DDL parser, binder, and executor tests (W-07/native-metadata-write stretch 2):
+/// byte-exact <c>evidence/r-q11-ddl-closure</c> round-trips through <see cref="ActionExecutor.Execute"/>,
+/// end-to-end DDL + DML + SELECT readback, ACE syntax/bind error numbers, <c>evidence/r-q15-ddl-open</c>
+/// declaration-order / NOT NULL / 3010 rules, and named <c>NotModelled.Ddl*</c> refusals.
+/// </summary>
+public sealed class DdlTests
+{
+    private const string EmptyAccdbSha = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
+    private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
+
+    [Theory]
+    [InlineData("create-one-long", new[] { "T" }, new[] { "CREATE TABLE T (n LONG)" })]
+    [InlineData("create-name-first", new[] { "A" }, new[] { "CREATE TABLE A (n LONG)" })]
+    [InlineData("create-two-columns", new[] { "T" }, new[] { "CREATE TABLE T (n LONG, t TEXT(50))" })]
+    [InlineData("create-primary-key", new[] { "T" }, new[] { "CREATE TABLE T (n LONG CONSTRAINT PK_T PRIMARY KEY)" })]
+    [InlineData("create-two-tables", new[] { "T", "U" }, new[] { "CREATE TABLE T (n LONG)", "CREATE TABLE U (n LONG)" })]
+    public void R_q11_ddl_closure_create_table_executes_byte_exact_through_sql_ddl(string question, string[] createdTables, string[] statements)
+    {
+        Kept kept = Kept.Of(question);
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        byte[] aceImage = kept.AceImage(fixture);
+        var timestamps = new Queue<ulong>();
+        foreach (string table in createdTables)
+        {
+            (ulong created, ulong updated) = AceDates(aceImage, table);
+            timestamps.Enqueue(created);
+            timestamps.Enqueue(updated);
+        }
+
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        foreach (string sql in statements)
+        {
+            ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+            Assert.Null(outcome.Failure);
+            Assert.True(outcome.Succeeded);
+            Assert.Equal(0, outcome.RecordsAffected);
+        }
+
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void R_q11_ddl_closure_create_then_index_executes_byte_exact_through_sql_ddl()
+    {
+        Kept kept = Kept.Of("create-then-index");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        Assert.NotEqual(created, updated);
+
+        var timestamps = new Queue<ulong>([created, created, updated]);
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (n LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (n)", db).Succeeded);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void R_q11_ddl_closure_create_then_drop_executes_byte_exact_through_sql_ddl()
+    {
+        Kept kept = Kept.Of("create-then-drop");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        byte[] ace = kept.AceImage(fixture);
+
+        // Locate the dropped MSysObjects row slot in page 17's free gap to recover ACE's DateCreate/DateUpdate clock readings.
+        ulong created, updated;
+        using (var probe = new WritableSqlFixture(fixture))
+        {
+            probe.DateBitsProvider = () => 1;
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (n LONG)", probe).Succeeded);
+            CatalogSnapshot catalog = CatalogBootstrap.Open(probe.Cache, D, probe.PageCount, out _)!;
+            CatalogEntry t = catalog.Entries.Single(e => e.Name == "T");
+            using PagePin page = probe.Cache.Pin(t.Root.Page).Pin!;
+            SlotView slot = DataPages.CheckedSlot(page.Bytes, t.Root.Row, D, out _)!.Value;
+            int DateOffset(string col) => (int)(t.Root.Page * (ulong)D.PageSize) + slot.Start + D.Row.FixedBase
+                + catalog.ObjectTable.Columns.Single(c => c.Name == col).FixedOffset;
+            created = BitConverter.ToUInt64(ace, DateOffset("DateCreate"));
+            updated = BitConverter.ToUInt64(ace, DateOffset("DateUpdate"));
+        }
+
+        var timestamps = new Queue<ulong>([created, updated]);
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (n LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("DROP TABLE T", db).Succeeded);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void Create_table_then_insert_and_select_readback_works_end_to_end()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+
+        ActionOutcome created = ActionExecutor.Execute(
+            "CREATE TABLE Items (id LONG CONSTRAINT PK_Items PRIMARY KEY, title TEXT(20))", db);
+        Assert.Null(created.Failure);
+        Assert.Equal(0, created.RecordsAffected);
+
+        ActionOutcome ins1 = ActionExecutor.Execute("INSERT INTO Items (id, title) VALUES (20, 'second')", db);
+        Assert.Null(ins1.Failure);
+        Assert.Equal(1, ins1.RecordsAffected);
+
+        ActionOutcome ins2 = ActionExecutor.Execute("INSERT INTO Items (id, title) VALUES (10, 'first')", db);
+        Assert.Null(ins2.Failure);
+        Assert.Equal(1, ins2.RecordsAffected);
+
+        // Dynaset on a table with PK reads in PK order (10, 20); snapshot reads in storage order (20, 10).
+        using BoundSelect? plan = BoundSelect.Prepare("SELECT id, title FROM Items", db, out SqlFailure? bf);
+        Assert.Null(bf);
+
+        using (SelectCursor? dyn = SelectCursor.Open(plan!, db, ResultKind.Dynaset, [], out SqlFailure? of))
+        {
+            Assert.Null(of);
+            var ids = new List<long>();
+            while (!dyn!.Eof)
+            {
+                Assert.True(dyn.Read(0, out NativeVariant v, out _));
+                ids.Add(v.Int64);
+                dyn.MoveNext();
+            }
+            Assert.Equal([10L, 20L], ids);
+        }
+
+        using (SelectCursor? snap = SelectCursor.Open(plan!, db, ResultKind.Snapshot, [], out SqlFailure? of))
+        {
+            Assert.Null(of);
+            var ids = new List<long>();
+            while (!snap!.Eof)
+            {
+                Assert.True(snap.Read(0, out NativeVariant v, out _));
+                ids.Add(v.Int64);
+                snap.MoveNext();
+            }
+            Assert.Equal([20L, 10L], ids);
+        }
+
+        // Empty table created and dropped removes the table from catalog.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Scratch (a LONG)", db).Succeeded);
+        Assert.NotNull(db.Table("Scratch"));
+        Assert.True(ActionExecutor.Execute("DROP TABLE Scratch", db).Succeeded);
+        Assert.Null(db.Table("Scratch"));
+    }
+
+    [Theory]
+    [InlineData("GRANT SELECT ON T TO Admin", 3129)]
+    [InlineData("REVOKE SELECT ON T FROM Admin", 3129)]
+    [InlineData("CREATE TABLE T (x LONG) EXTRA", 3290)]
+    [InlineData("CREATE TABLE TABLE (x LONG)", 3290)]
+    [InlineData("CREATE TABLE DATE (x LONG)", 3290)]
+    [InlineData("CREATE TABLE [] (x LONG)", 3290)]
+    [InlineData("CREATE TABLE [T`T] (x LONG)", 3290)]
+    [InlineData("CREATE TABLE T (TEXT LONG)", 3292)]
+    [InlineData("CREATE TABLE T (LONG LONG)", 3292)]
+    [InlineData("CREATE TABLE T ()", 3292)]
+    [InlineData("CREATE TABLE T (x NOTATYPE)", 3292)]
+    [InlineData("CREATE TABLE T (x LONG DEFAULT 1)", 3290)]
+    [InlineData("CREATE TABLE T (x LONG CHECK (x > 0))", 3290)]
+    [InlineData("CREATE TABLE T (x LONG CONSTRAINT C CHECK (x > 0))", 3289)]
+    [InlineData("CREATE INDEX ON T (x)", 3291)]
+    [InlineData("DROP VIEW V", 3295)]
+    [InlineData("ALTER TABLE T RENAME COLUMN x TO y", 3293)]
+    public void Ddl_parser_reports_recorded_ace_syntax_error_numbers(string sql, int expectedError)
+    {
+        DdlStatement? stmt = DdlParser.Parse(sql, out SqlFailure? failure);
+        Assert.Null(stmt);
+        Assert.NotNull(failure);
+        Assert.False(failure!.IsNotModelled, failure.ToString());
+        Assert.Equal(expectedError, failure.Number);
+    }
+
+    [Theory]
+    [InlineData("CREATE TABLE T (x LONG); EXTRA", "NotModelled.DdlTrailingAfterSemicolon")]
+    [InlineData("CREATE TABLE T (x LONG CONSTRAINT)", "NotModelled.DdlConstraintSyntax")]
+    [InlineData("CREATE INDEX IX_T T (x)", "NotModelled.DdlCreateIndexSyntax")]
+    [InlineData("DROP TABLE", "NotModelled.DdlDropSyntax")]
+    [InlineData("CREATE TABLE T (x LONG NOT 1)", "NotModelled.DdlNotWithoutNull")]
+    [InlineData("ALTER TABLE T ALTER COLUMN x LONG NOT 1", "NotModelled.DdlNotWithoutNull")]
+    [InlineData("ALTER TABLE T ADD COLUMN x LONG(10)", "NotModelled.DdlAlterTypeSyntax")]
+    [InlineData("ALTER TABLE T ADD COLUMN x NOTATYPE", "NotModelled.DdlAlterTypeSyntax")]
+    [InlineData("ALTER TABLE T ALTER COLUMN x NOTATYPE", "NotModelled.DdlAlterTypeSyntax")]
+    [InlineData("ALTER TABLE T ALTER COLUMN x LONG(10)", "NotModelled.DdlAlterTypeSyntax")]
+    [InlineData("CREATE TABLE T (FOREIGN LONG)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE TABLE CHAR (x LONG)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE TABLE T (VARCHAR LONG)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE TABLE T (INT LONG)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE INDEX DATE ON T (x)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE INDEX IX_T ON TABLE (x)", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE INDEX IX_T ON T (TEXT)", "NotModelled.DdlReservedWord")]
+    [InlineData("DROP TABLE TABLE", "NotModelled.DdlReservedWord")]
+    [InlineData("DROP INDEX DATE ON T", "NotModelled.DdlReservedWord")]
+    [InlineData("ALTER TABLE TABLE ADD COLUMN x LONG", "NotModelled.DdlReservedWord")]
+    [InlineData("ALTER TABLE T DROP COLUMN TEXT", "NotModelled.DdlReservedWord")]
+    [InlineData("ALTER TABLE T ALTER COLUMN TEXT LONG", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE TABLE T (a LONG, PRIMARY KEY (TEXT))", "NotModelled.DdlReservedWord")]
+    [InlineData("CREATE TABLE T (a LONG REFERENCES TABLE (a))", "NotModelled.DdlReservedWord")]
+    public void Ddl_parser_refuses_unrecorded_syntax_and_reserved_word_shapes_by_name(string sql, string expectedNotModelled)
+    {
+        DdlStatement? stmt = DdlParser.Parse(sql, out SqlFailure? failure);
+        Assert.Null(stmt);
+        Assert.NotNull(failure);
+        Assert.True(failure!.IsNotModelled, failure.ToString());
+        Assert.Equal(expectedNotModelled, failure.NotModelled);
+    }
+
+    [Fact]
+    public void Ddl_parser_accepts_bracketed_reserved_names_and_unbracketed_select_where()
+    {
+        // r-def-expr-sql/ddl-reserved-table-names & ddl-reserved-column-names: bracketed reserved words succeed,
+        // and non-DDL SQL keywords like SELECT/WHERE are accepted unbracketed by ACE.
+        DdlStatement? s1 = DdlParser.Parse("CREATE TABLE [TABLE] ([TEXT] LONG, [a b] TEXT(10), [CHAR] LONG, [FOREIGN] LONG)", out SqlFailure? f1);
+        Assert.Null(f1);
+        var ct1 = Assert.IsType<CreateTableStatement>(s1);
+        Assert.Equal("TABLE", ct1.TableName);
+        Assert.Equal("TEXT", ct1.Columns[0].Name);
+        Assert.Equal("a b", ct1.Columns[1].Name);
+        Assert.Equal("CHAR", ct1.Columns[2].Name);
+        Assert.Equal("FOREIGN", ct1.Columns[3].Name);
+
+        DdlStatement? s2 = DdlParser.Parse("CREATE TABLE SELECT (WHERE LONG)", out SqlFailure? f2);
+        Assert.Null(f2);
+        var ct2 = Assert.IsType<CreateTableStatement>(s2);
+        Assert.Equal("SELECT", ct2.TableName);
+        Assert.Equal("WHERE", ct2.Columns[0].Name);
+    }
+
+    [Fact]
+    public void Ddl_binder_enforces_recorded_ace_error_numbers()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b TEXT(10))", db).Succeeded);
+
+        // 3010: Table already exists (case-insensitive and NFC-normalized, r-q15-ddl-open/err-dup-table-sql).
+        AssertAceError(db, "CREATE TABLE t (x LONG)", 3010);
+
+        // 3380: Duplicate column name in CREATE TABLE and ALTER TABLE ADD COLUMN.
+        AssertAceError(db, "CREATE TABLE U (a LONG, A TEXT(5))", 3380);
+        AssertAceError(db, "ALTER TABLE T ADD COLUMN a LONG", 3380);
+
+        // 3382: TEXT(256) out of range (r-def-expr-sql/ddl-name-and-size-limits).
+        AssertAceError(db, "CREATE TABLE U (s TEXT(256))", 3382);
+
+        // 3190: > 255 columns.
+        string cols256 = string.Join(", ", Enumerable.Range(1, 256).Select(i => $"c{i:D3} LONG"));
+        AssertAceError(db, $"CREATE TABLE TooWide ({cols256})", 3190);
+
+        // 3283: Two PRIMARY KEY constraints.
+        AssertAceError(db, "CREATE TABLE TwoPk (a LONG PRIMARY KEY, b LONG PRIMARY KEY)", 3283);
+
+        // 3277: > 10 columns in one index (r-def-expr-sql/ddl-name-and-size-limits).
+        string idxCols = string.Join(", ", Enumerable.Range(1, 11).Select(i => $"c{i:D2}"));
+        string tblCols = string.Join(", ", Enumerable.Range(1, 11).Select(i => $"c{i:D2} LONG"));
+        Assert.True(ActionExecutor.Execute($"CREATE TABLE Wide ({tblCols})", db).Succeeded);
+        AssertAceError(db, $"CREATE INDEX IX_W ON Wide ({idxCols})", 3277);
+
+        // 3376: DROP TABLE missing table; 3371: ALTER TABLE missing table (r-def-expr-sql/ddl-drop-and-missing-objects, ddl-alter-column-forms).
+        AssertAceError(db, "DROP TABLE NoSuchTable", 3376);
+        AssertAceError(db, "ALTER TABLE NoSuchTable ADD COLUMN x LONG", 3371);
+
+        // 3372: DROP INDEX missing index; 3755: ALTER TABLE DROP CONSTRAINT missing constraint (r-def-expr-sql/ddl-drop-and-missing-objects, ddl-alter-column-forms).
+        AssertAceError(db, "DROP INDEX NoSuchIdx ON T", 3372);
+        AssertAceError(db, "ALTER TABLE T DROP CONSTRAINT NoSuchCon", 3755);
+
+        // 3381: ALTER TABLE DROP missing column; 3018: ALTER TABLE ALTER missing column (r-def-expr-sql/ddl-alter-column-forms).
+        AssertAceError(db, "ALTER TABLE T DROP COLUMN NoSuchCol", 3381);
+        AssertAceError(db, "ALTER TABLE T ALTER COLUMN NoSuchCol TEXT(10)", 3018);
+
+        // 3259: ALTER COLUMN to COUNTER on a non-AutoNumber column.
+        AssertAceError(db, "ALTER TABLE T ALTER COLUMN a COUNTER(1, 1)", 3259);
+
+        // 3409: CREATE INDEX on missing column (r-def-expr-sql/ddl-index-forms ix8).
+        AssertAceError(db, "CREATE INDEX IX_Bad ON T (missing_col)", 3409);
+
+        // 3285: Duplicate column inside one index key (r-def-expr-sql/ddl-index-forms ixg).
+        AssertAceError(db, "CREATE INDEX IX_Dup ON T (a, a)", 3285);
+
+        // 3371: CREATE INDEX on missing table (r-def-expr-sql/ddl-index-forms ix9);
+        // 3609: FOREIGN KEY targeting a non-unique column (r-def-expr-sql/ddl-fk-actions Fx5).
+        AssertAceError(db, "CREATE INDEX IX_Miss ON NoSuchTable (a)", 3371);
+        AssertAceError(db, "CREATE TABLE FkNoUk (a LONG REFERENCES T (a))", 3609);
+
+        // 3125: Invalid table / column / index name (dots, bangs, leading space, >64 chars).
+        AssertAceError(db, "CREATE TABLE [bad!name] (a LONG)", 3125);
+        AssertAceError(db, $"CREATE TABLE [{new string('a', 65)}] (a LONG)", 3125);
+
+        // 3280: Cannot drop a column that is part of an index.
+        Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T_A ON T (a)", db).Succeeded);
+        AssertAceError(db, "ALTER TABLE T DROP COLUMN a", 3280);
+
+        // 3375: Duplicate index name on same table.
+        AssertAceError(db, "CREATE INDEX IX_T_A ON T (b)", 3375);
+    }
+
+    [Fact]
+    public void Ddl_binder_preserves_declaration_order_and_refuses_open_shapes_by_name()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+
+        // r-q15-ddl-open/columns-z-a: declaration order is preserved by DdlBinder; SchemaWriter currently
+        // refuses non-alphabetical field order instead of silently reordering.
+        DdlStatement? parsed = DdlParser.Parse("CREATE TABLE ZFirst (z LONG, a LONG)", out SqlFailure? pf);
+        Assert.Null(pf);
+        BoundDdl? bound = DdlBinder.Bind(parsed!, db, out SqlFailure? bf);
+        Assert.Null(bf);
+        Assert.NotNull(bound);
+        Assert.Equal(BoundDdlKind.CreateTable, bound!.Kind);
+        Assert.NotNull(bound.CreateTable);
+        Assert.Equal(["z", "a"], bound.CreateTable!.Fields.Select(f => f.Name).ToArray());
+
+        ActionOutcome executed = ActionExecutor.Execute("CREATE TABLE ZFirst (z LONG, a LONG)", db);
+        Assert.False(executed.Succeeded);
+        Assert.NotNull(executed.Failure);
+        Assert.Equal("NotModelled.SchemaWriter", executed.Failure!.NotModelled);
+
+        // r-q15-ddl-open/lv-sql-notnull-long: NOT NULL writes LvProp blob -> refused by name.
+        AssertNotModelled(db, "CREATE TABLE Nn (a LONG NOT NULL)", "NotModelled.DdlColumnNotNull");
+
+        // Other named NotModelled.Ddl* refusals for valid DDL shapes outside SchemaWriter's current scope.
+        AssertNotModelled(db, "CREATE TABLE Tz (s TEXT(0))", "NotModelled.DdlTextZeroSize");
+        AssertNotModelled(db, "CREATE TABLE Dt (d DATETIME)", "NotModelled.DdlFieldType");
+        AssertNotModelled(db, "CREATE TABLE Bi (x BIGINT)", "NotModelled.DdlBigIntOrDateTime2");
+        AssertNotModelled(db, "CREATE TABLE Un (a LONG UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE PkU (a LONG PRIMARY KEY)", "NotModelled.DdlUnnamedPrimaryKey");
+
+        Assert.True(ActionExecutor.Execute("CREATE TABLE P (a LONG CONSTRAINT PK_P PRIMARY KEY)", db).Succeeded);
+        AssertNotModelled(db, "CREATE TABLE Fk (a LONG REFERENCES P (a))", "NotModelled.DdlForeignKey");
+        // Lesser narrowings: SQL FK type mismatch and >32 CREATE TABLE constraints refuse by name.
+        AssertNotModelled(db, "CREATE TABLE FkType (a TEXT(10) REFERENCES P (a))", "NotModelled.DdlForeignKeyTypeMismatch");
+        string uq33 = string.Join(", ", Enumerable.Range(1, 33).Select(i => $"c{i:D2} LONG UNIQUE"));
+        AssertNotModelled(db, $"CREATE TABLE C33 ({uq33})", "NotModelled.DdlTooManyTableConstraints");
+
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG)", db).Succeeded);
+        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN b LONG", "NotModelled.DdlAlterTable");
+        Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (a)", db).Succeeded);
+        AssertNotModelled(db, "DROP INDEX IX_T ON T", "NotModelled.DdlDropIndex");
+        AssertNotModelled(db, "CREATE UNIQUE INDEX UX_T ON T (a)", "NotModelled.DdlIndexOptions");
+        // B11: multi-name DROP TABLE refuses by name even when one table is missing.
+        AssertNotModelled(db, "DROP TABLE T, NoSuchTable", "NotModelled.DdlMultiDropTable");
+        // B10: invalid index name against missing table refuses by name instead of assuming 3125 vs 3371 precedence.
+        AssertNotModelled(db, "CREATE INDEX [bad!ix] ON NoSuchTable (a)", "NotModelled.DdlErrorPrecedence");
+    }
+
+    [Fact]
+    public void Ddl_binder_checks_table_in_use_before_missing_column_or_index()
+    {
+        using var inner = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG)", inner).Succeeded);
+        var locked = new LockedTableDatabase(inner, "T");
+
+        // r-def-cursor-dao/err-drop-missing-index-column: open cursor on T fails 3211 for plain DROP / CREATE UNIQUE INDEX and before 3372/3381.
+        AssertAceError(locked, "DROP INDEX NoSuch ON T", 3211);
+        AssertAceError(locked, "ALTER TABLE T DROP COLUMN NoSuch", 3211);
+        AssertAceError(locked, "ALTER TABLE T DROP COLUMN a", 3211);
+        AssertAceError(locked, "DROP TABLE T", 3211);
+        AssertAceError(locked, "CREATE UNIQUE INDEX UX_T ON T (a)", 3211);
+
+        // B10: held table meeting any other bind error refuses by name instead of assuming 3211 precedence.
+        AssertNotModelled(locked, "CREATE INDEX IX_Miss ON T (missing_col)", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(locked, "CREATE INDEX [bad!ix] ON T (a)", "NotModelled.DdlErrorPrecedence");
+        AssertNotModelled(locked, "ALTER TABLE T ADD COLUMN a LONG", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(locked, "ALTER TABLE T ALTER COLUMN NoSuch LONG", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(locked, "ALTER TABLE T ALTER COLUMN a COUNTER(1, 1)", "NotModelled.DdlTableInUsePrecedence");
+    }
+
+    private static void AssertAceError(ISqlActionDatabase db, string sql, int expectedNumber)
+    {
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        Assert.False(outcome.Succeeded, $"Expected ACE error {expectedNumber}, but succeeded.");
+        Assert.NotNull(outcome.Failure);
+        Assert.False(outcome.Failure!.IsNotModelled, $"Expected ACE error {expectedNumber}, got {outcome.Failure}");
+        Assert.Equal(expectedNumber, outcome.Failure.Number);
+    }
+
+    private static void AssertNotModelled(ISqlActionDatabase db, string sql, string expectedName)
+    {
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        Assert.False(outcome.Succeeded, $"Expected {expectedName}, but succeeded.");
+        Assert.NotNull(outcome.Failure);
+        Assert.True(outcome.Failure!.IsNotModelled, $"Expected {expectedName}, got {outcome.Failure}");
+        Assert.Equal(expectedName, outcome.Failure.NotModelled);
+    }
+
+    private sealed record Kept(IReadOnlyList<(long Offset, byte[] Bytes)> Reads, long Length)
+    {
+        public static Kept Of(string question)
+        {
+            string folder = Path.Combine(SqlFixture.Root(), "evidence", "r-q11-ddl-closure", question);
+            string record = Directory.GetFiles(folder, "*.a1.json").Single();
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
+            List<(long, byte[])> reads = [];
+            long length = -1;
+            Walk(doc.RootElement, reads, ref length);
+            Assert.True(length > 0 && reads.Count > 0, $"{question}: the record keeps no pages");
+            return new Kept(reads, length);
+        }
+
+        private static void Walk(JsonElement e, List<(long, byte[])> reads, ref long length)
+        {
+            if (e.ValueKind == JsonValueKind.Object)
+            {
+                if (e.TryGetProperty("op", out JsonElement op) && op.ValueKind == JsonValueKind.String && op.GetString() == "read"
+                    && e.TryGetProperty("bytes", out JsonElement bytes) && e.TryGetProperty("offset", out JsonElement offset))
+                {
+                    reads.Add((offset.GetInt64(), Convert.FromHexString(bytes.GetString()!)));
+                }
+                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
+                {
+                    length = files[0].GetProperty("length").GetInt64();
+                }
+                foreach (JsonProperty p in e.EnumerateObject())
+                {
+                    Walk(p.Value, reads, ref length);
+                }
+            }
+            else if (e.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement x in e.EnumerateArray())
+                {
+                    Walk(x, reads, ref length);
+                }
+            }
+        }
+
+        public IEnumerable<long> Pages => Reads.SelectMany(r => Enumerable.Range(0, r.Bytes.Length / D.PageSize).Select(i => (r.Offset / D.PageSize) + i));
+
+        public byte[] AceImage(byte[] fixture)
+        {
+            byte[] image = new byte[Length];
+            fixture.AsSpan(0, (int)Math.Min(fixture.Length, Length)).CopyTo(image);
+            foreach ((long offset, byte[] bytes) in Reads)
+            {
+                bytes.CopyTo(image.AsSpan((int)offset));
+            }
+            return image;
+        }
+    }
+
+    private static (ulong Created, ulong Updated) AceDates(byte[] aceImage, string table)
+    {
+        using var file = new MemoryDatabaseFile(aceImage, D.PageSize);
+        var cache = new PageCache(file, file.Incarnation, D.PageSize, 64);
+        CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, file.PageCount, out _)!;
+        CatalogEntry entry = catalog.Entries.Single(e => e.Name == table && e.ParentId == catalog.TablesContainer);
+        return (entry.DateCreateBits!.Value, entry.DateUpdateBits!.Value);
+    }
+
+    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours)
+    {
+        byte[] ace = kept.AceImage(fixture);
+        Assert.Equal(kept.Length, ours.Length);
+        HashSet<long> keptPages = [.. kept.Pages];
+        List<string> differences = [];
+        for (long page = 0; page < ours.Length / D.PageSize; page++)
+        {
+            ReadOnlySpan<byte> mine = ours.AsSpan((int)(page * D.PageSize), D.PageSize);
+            if (keptPages.Contains(page))
+            {
+                ReadOnlySpan<byte> theirs = ace.AsSpan((int)(page * D.PageSize), D.PageSize);
+                for (int i = 0; i < D.PageSize; i++)
+                {
+                    if (mine[i] != theirs[i])
+                    {
+                        differences.Add($"page {page} +{i}: ours {mine[i]:X2}, ACE {theirs[i]:X2}");
+                    }
+                }
+            }
+            else if (page * D.PageSize < fixture.Length && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
+            {
+                differences.Add($"page {page} changed, and ACE's record does not keep it");
+            }
+        }
+        Assert.True(differences.Count == 0, $"{differences.Count} differences:\n" + string.Join("\n", differences.Take(40)));
+    }
+
+    private sealed class LockedTableDatabase(WritableSqlFixture inner, string lockedTable) : ISqlSchemaDatabase
+    {
+        public CalcDb.Values.Scalar.ExpressionContext Context => inner.Context;
+        public bool ReadOnly => inner.ReadOnly;
+        public CalcDb.Isam.Transactions.TransactionCoordinator Workspace => inner.Workspace;
+        public ulong PageCount => inner.PageCount;
+        public TableDefinition? Table(string name) => inner.Table(name);
+        public bool IsQuery(string name) => inner.IsQuery(name);
+        public CalcDb.Isam.RowReader? OpenRows(TableDefinition table, out string? failure) => inner.OpenRows(table, out failure);
+        public CalcDb.Isam.IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => inner.OpenIndex(table, index, out failure);
+        public CalcDb.Isam.Edit.TableEditContext? EditContext(string tableName, out string? failure) => inner.EditContext(tableName, out failure);
+        public CalcDb.Isam.TableCursor? OpenCursor(TableDefinition table, out string? failure) => inner.OpenCursor(table, out failure);
+        public SchemaWriter? OpenSchemaWriter(out string? failure) => inner.OpenSchemaWriter(out failure);
+        public void OnSchemaPublished(ulong extentPages) => inner.OnSchemaPublished(extentPages);
+        public ulong NowDateBits() => inner.NowDateBits();
+        public bool IsLinkedTable(string name) => inner.IsLinkedTable(name);
+        public bool IsTableInRelationship(string tableName) => inner.IsTableInRelationship(tableName);
+        public bool IsColumnInRelationship(string tableName, string columnName) => inner.IsColumnInRelationship(tableName, columnName);
+        public bool IsIndexInRelationship(string tableName, string indexName) => inner.IsIndexInRelationship(tableName, indexName);
+        public bool HasRelationshipNamed(string tableName, string constraintName) => inner.HasRelationshipNamed(tableName, constraintName);
+        public bool IsTableInUse(string tableName) => string.Equals(tableName, lockedTable, StringComparison.OrdinalIgnoreCase);
+    }
+}

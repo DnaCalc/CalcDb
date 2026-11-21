@@ -166,7 +166,8 @@ internal enum TwoTableJoinForm : byte
 
 /// <summary>
 /// Bound classification of a two-table join: its form, the join key column and leading physical index on each side
-/// (for equality and outer joins), and whether an extra WHERE clause touches both tables or any indexed column.
+/// (for equality and outer joins), whether an extra WHERE clause touches both tables or any indexed column, whether
+/// there is any extra WHERE beyond the join condition, and whether the join was written as a comma list.
 /// </summary>
 internal sealed record TwoTableJoin(
     TwoTableJoinForm Form,
@@ -176,7 +177,49 @@ internal sealed record TwoTableJoin(
     PhysicalIndex? RightIndex,
     bool AmbiguousLeftIndex,
     bool AmbiguousRightIndex,
-    bool WhereTouchesBothOrIndexed);
+    bool WhereTouchesBothOrIndexed,
+    bool HasExtraWhere,
+    bool IsCommaJoin);
+
+/// <summary>
+/// Classification of a single-table SELECT's WHERE clause for ACE's unordered dynaset row order
+/// (qualified.md R-CURSOR-1 CUR-POP, R-SQL-1 SQL-J, PAR-ORDER; evidence/r-q14-dynaset-order/*).
+/// </summary>
+internal enum SingleTableWhereKind : byte
+{
+    /// <summary>No WHERE clause: ACE chooses an index (PK, then unique, then most distinct keys, ties by last name), else storage order.</summary>
+    None,
+
+    /// <summary>
+    /// A recorded single-column range shape: bare column on the left with a literal bound (&lt;, &lt;=, &gt;, &gt;=),
+    /// BETWEEN with ascending literal bounds, <c>col &gt;= a AND col &lt;= b</c> in that order, <c>NOT (col &lt; a)</c>,
+    /// or Text <c>LIKE</c> with a non-wildcard literal prefix.
+    /// </summary>
+    ColumnRange,
+
+    /// <summary>A range on one bare column where a bound reads a parameter (Open: whether a parameter keeps the range is not recorded).</summary>
+    ParameterRange,
+
+    /// <summary>
+    /// An unrecorded range-like shape on one bare column (literal-on-left, multiple NOTs, NOT around &lt;=/&gt;/&gt;=,
+    /// reversed two-bound AND order, reversed BETWEEN, or column-free non-literal expression bounds).
+    /// </summary>
+    UnrecordedRangeShape,
+
+    /// <summary>Leading-wildcard LIKE on a Text column (Open when the column has an index).</summary>
+    LeadingWildcardLike,
+
+    /// <summary>LIKE on a non-Text column (Open when the column has an index; LIKE index walk is recorded only on Text).</summary>
+    NonTextLike,
+
+    /// <summary>OR of equalities on one bare column (Open: text-forms asked only where storage and index order agree).</summary>
+    OrEqualities,
+
+    /// <summary>Any other WHERE predicate: storage order, even with a primary key.</summary>
+    Other,
+}
+
+internal sealed record SingleTableWhereOrder(SingleTableWhereKind Kind, ColumnDescriptor? Column);
 
 /// <summary>
 /// A parameter of a statement (II-11 §2: declaration origin and inferred uses kept apart): a PARAMETERS declaration or a
@@ -359,6 +402,9 @@ public sealed class BoundSelect : IDisposable
 
     /// <summary>The two-table join classification when the statement is a two-table join covered by PAR-ORDER; null otherwise.</summary>
     internal TwoTableJoin? TwoTable { get; private set; }
+
+    /// <summary>Single-table WHERE classification for unordered dynaset row order; null for multi-source or derived-table SELECTs.</summary>
+    internal SingleTableWhereOrder? SingleWhereOrder { get; private set; }
 
     /// <summary>The arms of a union (II-11 §15), in order; null for a plain SELECT.</summary>
     internal List<BoundSelect>? Arms { get; private set; }
@@ -726,6 +772,8 @@ public sealed class BoundSelect : IDisposable
 
     internal void SetTwoTable(TwoTableJoin two) => TwoTable = two;
 
+    internal void SetSingleWhereOrder(SingleTableWhereOrder order) => SingleWhereOrder = order;
+
     internal void SetHaving(BoundExpression having) => Having = having;
 
     internal void SetGrouped() => Grouped = true;
@@ -1031,6 +1079,7 @@ public sealed class BoundSelect : IDisposable
                 bound.SetWhere(w!);
             }
             ClassifyTwoTable();
+            ClassifySingleTableWhere();
             if (Aliases() is { } aliasFailure)
             {
                 return aliasFailure;
@@ -1341,7 +1390,7 @@ public sealed class BoundSelect : IDisposable
                 FindLeadingIndex(bound.SourceList[0].Table, leftKey!, out PhysicalIndex? leftIndex, out bool ambiguousLeft);
                 FindLeadingIndex(bound.SourceList[1].Table, rightKey!, out PhysicalIndex? rightIndex, out bool ambiguousRight);
                 AnalyzeWhere(syntax.Where, out bool touchesBoth, out bool touchesIndexed);
-                bound.SetTwoTable(new TwoTableJoin(form, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, touchesBoth || touchesIndexed));
+                bound.SetTwoTable(new TwoTableJoin(form, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, touchesBoth || touchesIndexed, HasExtraWhere: syntax.Where is not null, IsCommaJoin: false));
                 return;
             }
             if (bound.Tree is CrossNode { Items: [TableNode { Slots: [0] }, TableNode { Slots: [1] }] })
@@ -1350,7 +1399,7 @@ public sealed class BoundSelect : IDisposable
                 {
                     FindLeadingIndex(bound.SourceList[0].Table, leftKey!, out PhysicalIndex? leftIndex, out bool ambiguousLeft);
                     FindLeadingIndex(bound.SourceList[1].Table, rightKey!, out PhysicalIndex? rightIndex, out bool ambiguousRight);
-                    bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.InnerEquality, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, WhereTouchesBothOrIndexed: false));
+                    bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.InnerEquality, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, WhereTouchesBothOrIndexed: false, HasExtraWhere: false, IsCommaJoin: true));
                     return;
                 }
                 AnalyzeWhere(syntax.Where, out bool touchesBoth, out bool touchesIndexed);
@@ -1358,8 +1407,307 @@ public sealed class BoundSelect : IDisposable
                 {
                     return;
                 }
-                bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.Cross, null, null, null, null, false, false, touchesIndexed));
+                bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.Cross, null, null, null, null, false, false, touchesIndexed, HasExtraWhere: syntax.Where is not null, IsCommaJoin: true));
             }
+        }
+
+        /// <summary>
+        /// Classify a single base table's WHERE predicate for ACE's unordered dynaset row order
+        /// (qualified.md R-CURSOR-1 CUR-POP, R-SQL-1 SQL-J, PAR-ORDER; evidence/r-q14-dynaset-order/*):
+        /// no WHERE -> index selection; recorded single-column range shapes (bare column on left with a literal bound
+        /// &lt;/&lt;=/&gt;/&gt;=, BETWEEN with ascending literal bounds, col &gt;= a AND col &lt;= b in that order,
+        /// NOT (col &lt; a), or Text LIKE with a non-wildcard literal prefix) -> ascending index on that column;
+        /// parameter range, unrecorded range shapes, leading-wildcard LIKE, non-Text LIKE, and OR-of-equalities stay
+        /// named as Open when the column has an index; everything else -> storage order.
+        /// </summary>
+        private void ClassifySingleTableWhere()
+        {
+            if (bound.SourceList.Count != 1 || bound.SourceList[0].Subquery is not null)
+            {
+                return;
+            }
+            if (syntax.Where is null)
+            {
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.None, null));
+                return;
+            }
+            SyntaxNode root = syntax.Where.Syntax.Root!;
+            if (TryRangeBound(root, out ColumnDescriptor? col, out ScalarOperation op, out int notCount, out bool colOnLeft, out bool isLit, out bool hasParam))
+            {
+                SingleTableWhereKind kind = hasParam
+                    ? SingleTableWhereKind.ParameterRange
+                    : colOnLeft && isLit && (notCount == 0 || (notCount == 1 && op == ScalarOperation.Less))
+                        ? SingleTableWhereKind.ColumnRange
+                        : SingleTableWhereKind.UnrecordedRangeShape;
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(kind, col));
+                return;
+            }
+            if (root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.And }
+                && TryRangeBound(root.Left!, out ColumnDescriptor? c1, out ScalarOperation op1, out int n1, out bool l1, out bool lit1, out bool p1)
+                && TryRangeBound(root.Right!, out ColumnDescriptor? c2, out ScalarOperation op2, out int n2, out bool l2, out bool lit2, out bool p2)
+                && c1!.PhysicalNumber == c2!.PhysicalNumber
+                && EffectiveIsLower(op1, n1, l1) != EffectiveIsLower(op2, n2, l2))
+            {
+                SingleTableWhereKind kind = p1 || p2
+                    ? SingleTableWhereKind.ParameterRange
+                    : n1 == 0 && l1 && lit1 && op1 == ScalarOperation.GreaterOrEqual
+                        && n2 == 0 && l2 && lit2 && op2 == ScalarOperation.LessOrEqual
+                        ? SingleTableWhereKind.ColumnRange
+                        : SingleTableWhereKind.UnrecordedRangeShape;
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(kind, c1));
+                return;
+            }
+            if (root is { Kind: SyntaxKind.Between, Negated: false, Items.Count: 2 }
+                && Field(root.Left!) is { } betweenCol
+                && ContainsNoColumn(root.Items[0], out bool bp0)
+                && ContainsNoColumn(root.Items[1], out bool bp1))
+            {
+                SingleTableWhereKind kind = bp0 || bp1
+                    ? SingleTableWhereKind.ParameterRange
+                    : IsLiteralBound(root.Items[0]) && IsLiteralBound(root.Items[1]) && AreAscendingLiterals(root.Items[0], root.Items[1])
+                        ? SingleTableWhereKind.ColumnRange
+                        : SingleTableWhereKind.UnrecordedRangeShape;
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(kind, betweenCol));
+                return;
+            }
+            if (root is { Kind: SyntaxKind.Like, Negated: false }
+                && Field(root.Left!) is { } likeCol
+                && ContainsNoColumn(root.Right!, out bool lp))
+            {
+                if (likeCol.TypeCode != NativeTypes.Text)
+                {
+                    bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.NonTextLike, likeCol));
+                    return;
+                }
+                if (root.Right is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text, Text: { Length: > 0 } pat })
+                {
+                    char c0 = pat[0];
+                    SingleTableWhereKind kind = c0 is not ('*' or '?' or '#' or '[' or '!')
+                        ? SingleTableWhereKind.ColumnRange
+                        : SingleTableWhereKind.LeadingWildcardLike;
+                    bound.SetSingleWhereOrder(new SingleTableWhereOrder(kind, likeCol));
+                    return;
+                }
+                if (lp)
+                {
+                    bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.ParameterRange, likeCol));
+                    return;
+                }
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.UnrecordedRangeShape, likeCol));
+                return;
+            }
+            if (TryOrEqualitiesOnOneColumn(root, out ColumnDescriptor? orCol))
+            {
+                bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.OrEqualities, orCol));
+                return;
+            }
+            bound.SetSingleWhereOrder(new SingleTableWhereOrder(SingleTableWhereKind.Other, null));
+        }
+
+        private bool TryRangeBound(
+            SyntaxNode node,
+            out ColumnDescriptor? col,
+            out ScalarOperation op,
+            out int notCount,
+            out bool colOnLeft,
+            out bool isLiteral,
+            out bool hasParam)
+        {
+            col = null;
+            op = default;
+            notCount = 0;
+            colOnLeft = false;
+            isLiteral = false;
+            hasParam = false;
+            while (node is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Not })
+            {
+                notCount++;
+                node = node.Left!;
+            }
+            if (node.Kind != SyntaxKind.Binary)
+            {
+                return false;
+            }
+            op = node.Operation;
+            if (op is not (ScalarOperation.Less or ScalarOperation.LessOrEqual or ScalarOperation.Greater or ScalarOperation.GreaterOrEqual))
+            {
+                return false;
+            }
+            if (Field(node.Left!) is { } leftCol && ContainsNoColumn(node.Right!, out bool rp))
+            {
+                col = leftCol;
+                colOnLeft = true;
+                isLiteral = IsLiteralBound(node.Right!);
+                hasParam = rp;
+                return true;
+            }
+            if (Field(node.Right!) is { } rightCol && ContainsNoColumn(node.Left!, out bool lp))
+            {
+                col = rightCol;
+                colOnLeft = false;
+                isLiteral = IsLiteralBound(node.Left!);
+                hasParam = lp;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool EffectiveIsLower(ScalarOperation op, int notCount, bool colOnLeft)
+        {
+            if (!colOnLeft)
+            {
+                op = op switch
+                {
+                    ScalarOperation.Less => ScalarOperation.Greater,
+                    ScalarOperation.LessOrEqual => ScalarOperation.GreaterOrEqual,
+                    ScalarOperation.Greater => ScalarOperation.Less,
+                    _ => ScalarOperation.LessOrEqual,
+                };
+            }
+            if ((notCount & 1) != 0)
+            {
+                op = op switch
+                {
+                    ScalarOperation.Less => ScalarOperation.GreaterOrEqual,
+                    ScalarOperation.LessOrEqual => ScalarOperation.Greater,
+                    ScalarOperation.Greater => ScalarOperation.LessOrEqual,
+                    _ => ScalarOperation.Less,
+                };
+            }
+            return op is ScalarOperation.Greater or ScalarOperation.GreaterOrEqual;
+        }
+
+        private static bool IsLiteralBound(SyntaxNode node) =>
+            node is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number or LiteralKind.Text or LiteralKind.Date or LiteralKind.Boolean }
+            || node is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } };
+
+        private static bool TryGetNumericLiteral(SyntaxNode node, out double value)
+        {
+            bool neg = false;
+            if (node is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { } inner })
+            {
+                neg = true;
+                node = inner;
+            }
+            if (node is not { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number })
+            {
+                value = 0;
+                return false;
+            }
+            var v = node.Value;
+            value = (VarType)v.Vt switch
+            {
+                VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8 => v.Int64,
+                VarType.R4 or VarType.R8 => v.Double,
+                VarType.Currency => v.Int64 / 10000.0,
+                VarType.Decimal when node.Text is { } text
+                    && double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed) => parsed,
+                _ => double.NaN,
+            };
+            if (double.IsNaN(value))
+            {
+                return false;
+            }
+            if (neg)
+            {
+                value = -value;
+            }
+            return true;
+        }
+
+        private bool AreAscendingLiterals(SyntaxNode low, SyntaxNode high)
+        {
+            if (TryGetNumericLiteral(low, out double lo) && TryGetNumericLiteral(high, out double hi))
+            {
+                return lo <= hi;
+            }
+            if (low is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Date }
+                && high is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Date })
+            {
+                return low.Value.Double <= high.Value.Double;
+            }
+            if (low is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text, Text: { } lt }
+                && high is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text, Text: { } ht })
+            {
+                return _context.DatabaseOrder is { } order
+                    ? order.Compare(lt, ht) <= 0
+                    : string.Compare(lt, ht, StringComparison.OrdinalIgnoreCase) <= 0;
+            }
+            if (low is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Boolean }
+                && high is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Boolean })
+            {
+                return (short)low.Value.Int64 <= (short)high.Value.Int64;
+            }
+            return false;
+        }
+
+        private bool TryOrEqualitiesOnOneColumn(SyntaxNode root, out ColumnDescriptor? col)
+        {
+            col = null;
+            if (root is not { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Or })
+            {
+                return false;
+            }
+            var branches = new List<SyntaxNode>();
+            CollectOr(root, branches);
+            if (branches.Count < 2)
+            {
+                return false;
+            }
+            foreach (SyntaxNode b in branches)
+            {
+                if (b is not { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal })
+                {
+                    return false;
+                }
+                ColumnDescriptor? c = Field(b.Left!) is { } lc && ContainsNoColumn(b.Right!, out _) ? lc
+                    : Field(b.Right!) is { } rc && ContainsNoColumn(b.Left!, out _) ? rc
+                    : null;
+                if (c is null)
+                {
+                    return false;
+                }
+                if (col is null)
+                {
+                    col = c;
+                }
+                else if (col.PhysicalNumber != c.PhysicalNumber)
+                {
+                    return false;
+                }
+            }
+            return col is not null;
+        }
+
+        private static void CollectOr(SyntaxNode node, List<SyntaxNode> into)
+        {
+            if (node is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Or })
+            {
+                CollectOr(node.Left!, into);
+                CollectOr(node.Right!, into);
+                return;
+            }
+            into.Add(node);
+        }
+
+        private bool ContainsNoColumn(SyntaxNode node, out bool hasParam)
+        {
+            hasParam = false;
+            foreach (SyntaxNode n in Walk(node))
+            {
+                if (n.Kind == SyntaxKind.Name && n.Text is { } name)
+                {
+                    if (_scope.Slot(name) is not null)
+                    {
+                        return false;
+                    }
+                    if (bound.ParameterList.Any(p => p.Is(name)))
+                    {
+                        hasParam = true;
+                    }
+                }
+            }
+            return true;
         }
 
         private bool TryTwoTableEquality(SyntaxNode root, out ColumnDescriptor? leftKey, out ColumnDescriptor? rightKey)

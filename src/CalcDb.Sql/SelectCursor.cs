@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 
 using CalcDb.Expressions;
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Values;
@@ -113,7 +114,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         _derivedWidth = prepared.DerivedWidth;
         _ambiguity = prepared.Ambiguity;
         RecordCountOpen = prepared.RecordCountOpen;
-        _producer = prepared.Rows is { } rows ? new ListSource(rows) : new FilteredScan(this);
+        _producer = prepared.Rows is { } rows ? new ListSource(rows)
+            : prepared.StreamIndex is { } nav ? new FilteredIndexScan(this, nav)
+            : new FilteredScan(this);
         _store = new OccurrenceStore<ResultRow>(_producer, firstMoveChunk: forwardOnly ? 1 : 500);
         if (prepared.Rows is not null)
         {
@@ -406,6 +409,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         public Ambiguity? Ambiguity { get; init; }
 
         public string? RecordCountOpen { get; init; }
+
+        /// <summary>An opened index navigator for a streamed single-table unordered dynaset (CUR-POP / PAR-ORDER).</summary>
+        public IndexNavigator? StreamIndex { get; init; }
     }
 
     /// <summary>
@@ -453,6 +459,44 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         public ResultRow? Previous(ResultRow? before) => null;
     }
 
+    /// <summary>The streamed rows of an unordered single-table dynaset walked through an index (with optional WHERE).</summary>
+    private sealed class FilteredIndexScan(SelectCursor owner, IndexNavigator navigator) : IOrderedSource<ResultRow>
+    {
+        private IndexPosition? _last;
+
+        public ResultRow? Next(ResultRow? after)
+        {
+            RowReader reader = owner._readers[0]!;
+            BoundExpression? where = owner._plan.Where;
+            IndexPosition? pos = after is null ? navigator.First() : _last is { } prev ? navigator.Next(prev) : null;
+            for (; pos is { } p; pos = navigator.Next(p))
+            {
+                reader.Position(p.Row);
+                if (where is null)
+                {
+                    _last = p;
+                    return new ResultRow(p.Row, -1, -1);
+                }
+                switch (where.Test(owner))
+                {
+                    case RowTest.Match:
+                        _last = p;
+                        return new ResultRow(p.Row, -1, -1);
+                    case RowTest.Failed:
+                        owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString());
+                        return null;
+                }
+            }
+            if (navigator.LastFailure is { } storage)
+            {
+                owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.Storage", storage.Predicate);
+            }
+            return null;
+        }
+
+        public ResultRow? Previous(ResultRow? before) => null;
+    }
+
     /// <summary>A result computed at open, in its order.</summary>
     private sealed class ListSource(List<ResultRow> rows) : IOrderedSource<ResultRow>
     {
@@ -484,6 +528,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private int _group = -1;
         private int _derivedRow = -1;
         private bool _joinOrderIdentified;
+        private string? _joinOrderOpenReason;
         private TextCollation? Collation => plan.Context.DatabaseOrder;
 
         IRecordCursor? IExpressionRow.Source(int source) => _nullExtended[source] ? null : readers[source];
@@ -565,6 +610,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             failure = null;
             bool streams = !plan.IsUnion && !hasSubquery && plan.Tree is null && !plan.Grouped && plan.Order.Count == 0 && plan.Predicate == SelectPredicate.All && plan.Top is null;
             List<ResultRow>? rows = null;
+            IndexNavigator? streamIndex = null;
             Ambiguity? ambiguity = null;
             if (!streams)
             {
@@ -585,35 +631,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             else if (kind == ResultKind.Dynaset)
             {
-                // R-PAR-1 PAR-ORDER: a plain SELECT's dynaset order is not identified when >= 2 rows qualify,
-                // but 0 or 1 qualifying row has only one possible order (r-def-cursor-dao/fields-lookup-forms-on-recordset,
-                // prov-alias-edit-duplicate-source, recordset-collect-member, recordset-field-properties).
-                var probe = new List<ResultRow>(2);
-                RowReader reader = readers[0]!;
-                for (RowId? root = reader.Scan.Next(null); root is { } r; root = reader.Scan.Next(r))
+                if (!SelectSingleDynaset(out streamIndex, out rows, out failure))
                 {
-                    var row = new ResultRow(r, -1, probe.Count);
-                    if (Where(row, out failure) is not bool keep)
-                    {
-                        return null;
-                    }
-                    if (!keep)
-                    {
-                        continue;
-                    }
-                    if (probe.Count >= 1)
-                    {
-                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder", "the row order of an unordered dynaset");
-                        return null;
-                    }
-                    probe.Add(row);
-                }
-                if (reader.Scan.LastFailure is { } storage)
-                {
-                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage.Predicate);
                     return null;
                 }
-                rows = probe;
             }
             ClearSlots(_keys);
             string? population = (plan.IsUnion || plan.Tree is not null) && plan.Order.Count == 0
@@ -623,8 +644,400 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
                 DerivedSlots = _derivedSlots, DerivedWidth = _derivedWidth, Tuples = _tuples, Parameters = parameters, Ambiguity = ambiguity,
-                RecordCountOpen = population,
+                RecordCountOpen = population, StreamIndex = streamIndex,
             };
+        }
+
+        /// <summary>
+        /// Single-table unordered dynaset order (qualified.md R-CURSOR-1 CUR-POP, R-SQL-1 SQL-J, PAR-ORDER;
+        /// evidence/r-q14-dynaset-order/*):
+        /// - No WHERE: PK, else unique index, else index with most distinct keys (ties by last name, OrdinalIgnoreCase);
+        ///   no indexes -> storage order.
+        /// - WHERE = single range on one bare column with an ascending index: that ascending index's order.
+        /// - Any other WHERE: storage order, even with a primary key.
+        /// Open cases (compound non-PK indexes, IgnoreNulls, DistinctCount vs true distinct count disagreement,
+        /// parameter range, OR of equalities on an indexed column) are refused by name only when &gt;= 2 rows qualify.
+        /// </summary>
+        private bool SelectSingleDynaset(out IndexNavigator? streamIndex, out List<ResultRow>? probedRows, out SqlFailure? failure)
+        {
+            streamIndex = null;
+            probedRows = null;
+            failure = null;
+            TableDefinition table = plan.Sources[0].Table;
+            IndexDescriptorRules idxRules = FormatDescriptor.Jet4Family.IndexDescriptor;
+            SingleTableWhereOrder whereOrder = plan.SingleWhereOrder ?? new SingleTableWhereOrder(SingleTableWhereKind.None, null);
+
+            switch (whereOrder.Kind)
+            {
+                case SingleTableWhereKind.None:
+                {
+                    if (table.PhysicalIndexes.Count == 0 || table.LogicalIndexes.Count == 0)
+                    {
+                        return true;
+                    }
+                    if (!ProbeAtMostOneRow(applyWhere: false, out bool hasAtLeastTwo, out List<ResultRow>? small, out failure))
+                    {
+                        return false;
+                    }
+                    if (!hasAtLeastTwo)
+                    {
+                        probedRows = small;
+                        return true;
+                    }
+                    // Primary key wins unconditionally over any other index (XC3).
+                    LogicalIndex? pkLogical = null;
+                    foreach (LogicalIndex li in table.LogicalIndexes)
+                    {
+                        if (li.IndexType == idxRules.PrimaryKeyType && li.PhysicalNumber >= 0 && li.PhysicalNumber < table.PhysicalIndexes.Count)
+                        {
+                            pkLogical = li;
+                            break;
+                        }
+                    }
+                    if (pkLogical is not null)
+                    {
+                        PhysicalIndex pkPhys = table.PhysicalIndexes[pkLogical.PhysicalNumber];
+                        if (pkPhys.IgnoreNulls(idxRules))
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.IgnoreNullsIndex", "unordered dynaset over an IgnoreNulls primary key index");
+                            return false;
+                        }
+                        return TryOpenDynasetIndex(table, pkPhys, out streamIndex, out failure);
+                    }
+                    var candidates = new List<(LogicalIndex Logical, PhysicalIndex Physical)>();
+                    foreach (LogicalIndex li in table.LogicalIndexes)
+                    {
+                        if (li.PhysicalNumber < 0 || li.PhysicalNumber >= table.PhysicalIndexes.Count)
+                        {
+                            continue;
+                        }
+                        PhysicalIndex pi = table.PhysicalIndexes[li.PhysicalNumber];
+                        if (pi.Columns.Count > 1)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.CompoundIndex", "unordered dynaset index selection with a compound index (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)");
+                            return false;
+                        }
+                        if (pi.IgnoreNulls(idxRules))
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.IgnoreNullsIndex", "unordered dynaset index selection with an IgnoreNulls index");
+                            return false;
+                        }
+                        candidates.Add((li, pi));
+                    }
+                    if (candidates.Count == 0)
+                    {
+                        return true;
+                    }
+                    if (candidates.Count == 1)
+                    {
+                        return TryOpenDynasetIndex(table, candidates[0].Physical, out streamIndex, out failure);
+                    }
+                    // Multiple candidates: compute distinct keys for all candidates before preferring unique indexes,
+                    // because the records only decide that unique beats an equally distinct non-unique index.
+                    var navByPhys = new Dictionary<int, IndexNavigator>();
+                    var trueDistinctByPhys = new Dictionary<int, long>();
+                    foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+                    {
+                        if (navByPhys.ContainsKey(pi.Number))
+                        {
+                            continue;
+                        }
+                        if (!TryOpenDynasetIndex(table, pi, out IndexNavigator? nav, out failure))
+                        {
+                            return false;
+                        }
+                        if (!CountDistinctKeys(nav!, out long trueDistinct, out failure))
+                        {
+                            return false;
+                        }
+                        navByPhys[pi.Number] = nav!;
+                        trueDistinctByPhys[pi.Number] = trueDistinct;
+                    }
+                    foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+                    {
+                        if (pi.EntryCount > 0 && pi.UniqueEntryCount != trueDistinctByPhys[pi.Number])
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.DistinctCountMetric", "index built after rows with stale DistinctCount counter (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)");
+                            return false;
+                        }
+                    }
+                    var unique = candidates.Where(c => c.Physical.Unique(idxRules)).ToList();
+                    if (unique.Count > 0 && unique.Count < candidates.Count)
+                    {
+                        long bestUniqueTrue = unique.Max(c => trueDistinctByPhys[c.Physical.Number]);
+                        long bestUniqueCounter = unique.Max(c => c.Physical.UniqueEntryCount);
+                        foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+                        {
+                            if (!pi.Unique(idxRules) && (trueDistinctByPhys[pi.Number] > bestUniqueTrue || pi.UniqueEntryCount > bestUniqueCounter))
+                            {
+                                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.UniqueVsHigherDistinct", "a unique index competes with a non-unique index having more distinct keys (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)");
+                                return false;
+                            }
+                        }
+                        candidates = unique;
+                    }
+                    if (candidates.Count == 1)
+                    {
+                        streamIndex = navByPhys[candidates[0].Physical.Number];
+                        return true;
+                    }
+                    // Multiple equally qualified candidates: most distinct keys wins, ties broken by last name where
+                    // OrdinalIgnoreCase and the database's General sort agree.
+                    TextCollation? databaseOrder = database.Context.DatabaseOrder;
+                    (LogicalIndex Logical, PhysicalIndex Physical) byCounter = PickBestIndex(candidates, c => c.Physical.UniqueEntryCount, databaseOrder, out bool counterCollationDisagrees);
+                    (LogicalIndex Logical, PhysicalIndex Physical) byTrue = PickBestIndex(candidates, c => trueDistinctByPhys[c.Physical.Number], databaseOrder, out bool trueCollationDisagrees);
+                    if (counterCollationDisagrees || trueCollationDisagrees)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.NameTieBreakCollation", "ordinal and database General sort order tied index names differently (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)");
+                        return false;
+                    }
+                    if (byCounter.Physical.Number != byTrue.Physical.Number)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder.DistinctCountMetric", "DistinctCount counter and true distinct key count select different indexes (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)");
+                        return false;
+                    }
+                    streamIndex = navByPhys[byTrue.Physical.Number];
+                    return true;
+                }
+                case SingleTableWhereKind.ColumnRange:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    PhysicalIndex? chosen = null;
+                    string? guardName = null;
+                    string? guardDetail = null;
+                    foreach (PhysicalIndex pi in table.PhysicalIndexes)
+                    {
+                        if (pi.Columns.Count == 0 || pi.Columns[0].PhysicalNumber != colNum || !pi.Columns[0].Ascending)
+                        {
+                            continue;
+                        }
+                        if (pi.Columns.Count > 1)
+                        {
+                            guardName = "NotModelled.DynasetOrder.CompoundIndex";
+                            guardDetail = "unordered dynaset range WHERE over a compound index (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)";
+                        }
+                        else if (pi.IgnoreNulls(idxRules))
+                        {
+                            guardName = "NotModelled.DynasetOrder.IgnoreNullsIndex";
+                            guardDetail = "unordered dynaset range WHERE over an IgnoreNulls index";
+                        }
+                        chosen ??= pi;
+                    }
+                    if (chosen is null)
+                    {
+                        // No ascending index on the range column (unindexed or descending only, e.g. XD1): storage order.
+                        return true;
+                    }
+                    if (guardName is not null)
+                    {
+                        return GuardAtMostOneRow(guardName, guardDetail!, out probedRows, out failure);
+                    }
+                    IndexNavigator? nav = database.OpenIndex(table, chosen, out string? indexFailure);
+                    if (indexFailure is not null)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", indexFailure);
+                        return false;
+                    }
+                    if (nav is null)
+                    {
+                        return GuardAtMostOneRow("NotModelled.DynasetOrder", "the row order of an unordered dynaset (index unavailable)", out probedRows, out failure);
+                    }
+                    streamIndex = nav;
+                    return true;
+                }
+                case SingleTableWhereKind.ParameterRange:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    bool hasAscending = table.PhysicalIndexes.Any(pi => pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == colNum && pi.Columns[0].Ascending);
+                    if (!hasAscending)
+                    {
+                        return true;
+                    }
+                    return GuardAtMostOneRow("NotModelled.DynasetOrder.ParameterRange", "range WHERE with a parameter on an ascending indexed column (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", out probedRows, out failure);
+                }
+                case SingleTableWhereKind.UnrecordedRangeShape:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    bool hasAscending = table.PhysicalIndexes.Any(pi => pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == colNum && pi.Columns[0].Ascending);
+                    if (!hasAscending)
+                    {
+                        return true;
+                    }
+                    return GuardAtMostOneRow("NotModelled.DynasetOrder.RangeShape", "unrecorded range WHERE shape on an ascending indexed column", out probedRows, out failure);
+                }
+                case SingleTableWhereKind.LeadingWildcardLike:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    bool hasIndex = table.PhysicalIndexes.Any(pi => pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == colNum);
+                    if (!hasIndex)
+                    {
+                        return true;
+                    }
+                    return GuardAtMostOneRow("NotModelled.DynasetOrder.LeadingWildcardLike", "leading-wildcard LIKE on an indexed column", out probedRows, out failure);
+                }
+                case SingleTableWhereKind.NonTextLike:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    bool hasIndex = table.PhysicalIndexes.Any(pi => pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == colNum);
+                    if (!hasIndex)
+                    {
+                        return true;
+                    }
+                    return GuardAtMostOneRow("NotModelled.DynasetOrder.NonTextLike", "LIKE on an indexed non-Text column (LIKE index walk is recorded only on Text)", out probedRows, out failure);
+                }
+                case SingleTableWhereKind.OrEqualities:
+                {
+                    int colNum = whereOrder.Column!.PhysicalNumber;
+                    bool hasIndex = table.PhysicalIndexes.Any(pi => pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == colNum);
+                    if (!hasIndex)
+                    {
+                        return true;
+                    }
+                    return GuardAtMostOneRow("NotModelled.DynasetOrder.OrEqualities", "OR of equalities on one indexed column (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", out probedRows, out failure);
+                }
+                default:
+                    // Any other WHERE (equality, <>, IN, expression, multi-conjunct, etc.): storage order.
+                    return true;
+            }
+        }
+
+        private bool TryOpenDynasetIndex(TableDefinition table, PhysicalIndex index, out IndexNavigator? nav, out SqlFailure? failure)
+        {
+            failure = null;
+            nav = database.OpenIndex(table, index, out string? indexFailure);
+            if (indexFailure is not null)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", indexFailure);
+                return false;
+            }
+            if (nav is null)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.DynasetOrder", "the row order of an unordered dynaset (index unavailable)");
+                return false;
+            }
+            return true;
+        }
+
+        private bool ProbeAtMostOneRow(bool applyWhere, out bool hasAtLeastTwo, out List<ResultRow>? rows, out SqlFailure? failure)
+        {
+            hasAtLeastTwo = false;
+            rows = null;
+            failure = null;
+            var probe = new List<ResultRow>(2);
+            RowReader reader = readers[0]!;
+            for (RowId? root = reader.Scan.Next(null); root is { } r; root = reader.Scan.Next(r))
+            {
+                var row = new ResultRow(r, -1, probe.Count);
+                if (applyWhere)
+                {
+                    if (Where(row, out failure) is not bool keep)
+                    {
+                        return false;
+                    }
+                    if (!keep)
+                    {
+                        continue;
+                    }
+                }
+                if (probe.Count >= 1)
+                {
+                    hasAtLeastTwo = true;
+                    return true;
+                }
+                probe.Add(row);
+            }
+            if (reader.Scan.LastFailure is { } storage)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage.Predicate);
+                return false;
+            }
+            rows = probe;
+            return true;
+        }
+
+        private bool GuardAtMostOneRow(string name, string detail, out List<ResultRow>? probedRows, out SqlFailure? failure)
+        {
+            probedRows = null;
+            if (!ProbeAtMostOneRow(applyWhere: true, out bool hasAtLeastTwo, out List<ResultRow>? small, out failure))
+            {
+                return false;
+            }
+            if (!hasAtLeastTwo)
+            {
+                probedRows = small;
+                return true;
+            }
+            failure = SqlFailure.Open(SqlPhase.Open, name, detail);
+            return false;
+        }
+
+        private static (LogicalIndex Logical, PhysicalIndex Physical) PickBestIndex(
+            List<(LogicalIndex Logical, PhysicalIndex Physical)> candidates,
+            Func<(LogicalIndex Logical, PhysicalIndex Physical), long> scoreOf,
+            TextCollation? databaseOrder,
+            out bool collationDisagrees)
+        {
+            collationDisagrees = false;
+            long bestScore = candidates.Max(scoreOf);
+            var tied = new List<(LogicalIndex Logical, PhysicalIndex Physical)>();
+            foreach ((LogicalIndex Logical, PhysicalIndex Physical) c in candidates)
+            {
+                if (scoreOf(c) == bestScore)
+                {
+                    tied.Add(c);
+                }
+            }
+            (LogicalIndex Logical, PhysicalIndex Physical) best = tied[0];
+            for (int i = 1; i < tied.Count; i++)
+            {
+                if (string.Compare(tied[i].Logical.Name, best.Logical.Name, StringComparison.OrdinalIgnoreCase) > 0)
+                {
+                    best = tied[i];
+                }
+            }
+            if (tied.Count > 1 && databaseOrder is not null)
+            {
+                for (int i = 0; i < tied.Count; i++)
+                {
+                    for (int j = i + 1; j < tied.Count; j++)
+                    {
+                        int ord = Math.Sign(string.Compare(tied[i].Logical.Name, tied[j].Logical.Name, StringComparison.OrdinalIgnoreCase));
+                        int gen = Math.Sign(databaseOrder.Compare(tied[i].Logical.Name, tied[j].Logical.Name));
+                        if (ord != gen)
+                        {
+                            collationDisagrees = true;
+                            return best;
+                        }
+                    }
+                }
+            }
+            return best;
+        }
+
+        private static bool CountDistinctKeys(IndexNavigator nav, out long count, out SqlFailure? failure)
+        {
+            count = 0;
+            failure = null;
+            byte[]? previous = null;
+            for (IndexPosition? at = nav.First(); at is { } p; at = nav.Next(p))
+            {
+                byte[]? key = nav.KeyBytes(p);
+                if (key is null)
+                {
+                    break;
+                }
+                if (previous is null || !previous.AsSpan().SequenceEqual(key))
+                {
+                    count++;
+                    previous = key;
+                }
+            }
+            if (nav.LastFailure is { } navFailure)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", navFailure.Predicate);
+                return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -895,6 +1308,14 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 return null;
             }
             bool singlePage = readers[0]!.Scan.Navigator.PageCount <= 1 && readers[1]!.Scan.Navigator.PageCount <= 1;
+            if (kind == ResultKind.Dynaset
+                && two.Form != TwoTableJoinForm.Cross
+                && two.LeftIndex is not null
+                && two.RightIndex is not null
+                && !two.HasExtraWhere)
+            {
+                return ProduceTwoTableDynasetBothIndexed(two, rows0, rows1, out failure);
+            }
             int outerSlot = two.Form switch
             {
                 TwoTableJoinForm.Cross => count0 > count1 ? 0 : 1,
@@ -985,7 +1406,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 innerOrderKnown = true;
             }
 
-            _joinOrderIdentified = kind == ResultKind.Snapshot
+            _joinOrderIdentified = kind is ResultKind.Snapshot or ResultKind.Dynaset
                 && singlePage
                 && count0 <= 6 && count1 <= 6
                 && two.LeftKey!.TypeCode == Format.NativeTypes.Long
@@ -1041,6 +1462,192 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             return list;
+        }
+
+        /// <summary>
+        /// Two-table equality/outer join dynaset with an index on the join key on BOTH sides and no extra WHERE
+        /// (qualified.md R-CURSOR-1 CUR-POP, R-SQL-1 SQL-J, PAR-ORDER; evidence/r-q14-dynaset-order/join-*):
+        /// join-key order through both indexes, ties in storage order. Driver is the preserved side of an outer join
+        /// or the second-listed table of an INNER join regardless of sizes.
+        /// </summary>
+        private List<RowId?[]>? ProduceTwoTableDynasetBothIndexed(TwoTableJoin two, List<RowId> rows0, List<RowId> rows1, out SqlFailure? failure)
+        {
+            failure = null;
+            int outerSlot = two.Form switch
+            {
+                TwoTableJoinForm.LeftEquality => 0,
+                TwoTableJoinForm.RightEquality => 1,
+                _ => 1,
+            };
+            int innerSlot = 1 - outerSlot;
+            PhysicalIndex driverIndex = outerSlot == 0 ? two.LeftIndex! : two.RightIndex!;
+            PhysicalIndex innerIndex = innerSlot == 0 ? two.LeftIndex! : two.RightIndex!;
+            bool driverAmbiguous = outerSlot == 0 ? two.AmbiguousLeftIndex : two.AmbiguousRightIndex;
+            bool innerAmbiguous = innerSlot == 0 ? two.AmbiguousLeftIndex : two.AmbiguousRightIndex;
+            IndexDescriptorRules idxRules = FormatDescriptor.Jet4Family.IndexDescriptor;
+
+            bool bothMultiPage = readers[0]!.Scan.Navigator.PageCount > 1 && readers[1]!.Scan.Navigator.PageCount > 1;
+            bool compound = driverIndex.Columns.Count > 1 || innerIndex.Columns.Count > 1;
+            bool descending = !driverIndex.Columns[0].Ascending || !innerIndex.Columns[0].Ascending;
+            bool ambiguous = driverAmbiguous || innerAmbiguous;
+            bool outerIgnoreNulls = two.Form != TwoTableJoinForm.InnerEquality && driverIndex.IgnoreNulls(idxRules);
+
+            List<RowId> outerStorage = outerSlot == 0 ? rows0 : rows1;
+            List<RowId> innerStorage = innerSlot == 0 ? rows0 : rows1;
+            List<RowId> outerRows = outerStorage;
+            List<RowId> innerRows = innerStorage;
+            bool driverWalked = false;
+            bool innerWalked = false;
+
+            if (!outerIgnoreNulls && !compound && !descending && !driverAmbiguous)
+            {
+                if (!WalkIndexRows(outerSlot, driverIndex, outerStorage.Count, out List<RowId>? walked, out failure))
+                {
+                    return null;
+                }
+                if (walked is not null)
+                {
+                    outerRows = walked;
+                    driverWalked = true;
+                }
+            }
+            if (!compound && !descending && !innerAmbiguous)
+            {
+                if (!WalkIndexRows(innerSlot, innerIndex, innerStorage.Count, out List<RowId>? walked, out failure))
+                {
+                    return null;
+                }
+                if (walked is not null)
+                {
+                    innerRows = walked;
+                    innerWalked = true;
+                }
+            }
+
+            bool commaBothDups = false;
+            List<RowId?[]> result;
+            if (plan.Tree is CrossNode)
+            {
+                var outerMatches = new int[outerRows.Count];
+                var innerMatches = new int[innerRows.Count];
+                var matched = new List<(int O, int I, RowId?[] Tuple)>();
+                for (int oi = 0; oi < outerRows.Count; oi++)
+                {
+                    for (int ii = 0; ii < innerRows.Count; ii++)
+                    {
+                        var t = new RowId?[2];
+                        t[outerSlot] = outerRows[oi];
+                        t[innerSlot] = innerRows[ii];
+                        StandOn(t);
+                        RowTest test = plan.Where!.Test(this);
+                        if (test == RowTest.Failed)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", plan.Where.LastFailure!.ToString());
+                            return null;
+                        }
+                        if (test == RowTest.Match)
+                        {
+                            outerMatches[oi]++;
+                            innerMatches[ii]++;
+                            matched.Add((oi, ii, t));
+                        }
+                    }
+                }
+                commaBothDups = matched.Any(m => outerMatches[m.O] > 1 && innerMatches[m.I] > 1);
+                result = new List<RowId?[]>(matched.Count);
+                foreach ((int _, int _, RowId?[] tuple) in matched)
+                {
+                    result.Add(tuple);
+                }
+            }
+            else
+            {
+                var join = (JoinNode)plan.Tree!;
+                result = [];
+                foreach (RowId o in outerRows)
+                {
+                    bool matched = false;
+                    foreach (RowId i in innerRows)
+                    {
+                        var t = new RowId?[2];
+                        t[outerSlot] = o;
+                        t[innerSlot] = i;
+                        StandOn(t);
+                        RowTest test = join.On!.Test(this);
+                        if (test == RowTest.Failed)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.OnFailure", join.On.LastFailure!.ToString());
+                            return null;
+                        }
+                        if (test == RowTest.Match)
+                        {
+                            matched = true;
+                            result.Add(t);
+                        }
+                    }
+                    if (!matched && join.Kind != JoinKind.Inner)
+                    {
+                        var t = new RowId?[2];
+                        t[outerSlot] = o;
+                        result.Add(t);
+                    }
+                }
+            }
+
+            if (bothMultiPage)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder.BothSidesMultiPage: join dynaset with both sides on many pages";
+            }
+            else if (compound)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder.CompoundIndex: join dynaset over a compound key index";
+            }
+            else if (descending)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder.DescendingKeyIndex: join dynaset over a descending key index";
+            }
+            else if (outerIgnoreNulls)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder.IgnoreNullsIndex: outer join dynaset with IgnoreNulls driver index";
+            }
+            else if (commaBothDups)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder.CommaJoinBothDups: comma-list join dynaset with duplicates on both sides";
+            }
+            else if (ambiguous || !driverWalked || !innerWalked)
+            {
+                _joinOrderOpenReason = "NotModelled.DynasetOrder: join dynaset key index could not be walked";
+            }
+            _joinOrderIdentified = _joinOrderOpenReason is null;
+            return result;
+        }
+
+        private bool WalkIndexRows(int slot, PhysicalIndex index, int capacity, out List<RowId>? rows, out SqlFailure? failure)
+        {
+            rows = null;
+            failure = null;
+            IndexNavigator? nav = database.OpenIndex(plan.Sources[slot].Table, index, out string? indexFailure);
+            if (indexFailure is not null)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", indexFailure);
+                return false;
+            }
+            if (nav is null)
+            {
+                return true;
+            }
+            var list = new List<RowId>(capacity);
+            for (IndexPosition? at = nav.First(); at is { } p; at = nav.Next(p))
+            {
+                list.Add(p.Row);
+            }
+            if (nav.LastFailure is { } navFailure)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", navFailure.Predicate);
+                return false;
+            }
+            rows = list;
+            return true;
         }
 
         private List<RowId>? ScanAll(int slot, out SqlFailure? failure)
@@ -1204,7 +1811,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 // qualified.md R-SQL-1 SQL-J, PAR-ORDER, r-par-1/order-join-duplicate-matches, r-sql-13b/join-cross-forms:
                 // outside the identified two-table join cases, the row order of a join is not identified.
-                _runs.Add((0, rows.Count, "the row order of a join is not identified (PAR-ORDER)"));
+                _runs.Add((0, rows.Count, _joinOrderOpenReason ?? "the row order of a join is not identified (PAR-ORDER)"));
             }
             if (plan.Order.Count > 0)
             {

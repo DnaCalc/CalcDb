@@ -126,7 +126,7 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             public TransactionCoordinator? Custom { get; set; } = custom;
         }
 
-        private sealed class DatabaseState(FileState? file, WorkspaceState workspace, bool readOnly) : ISqlActionDatabase
+        private sealed class DatabaseState(FileState? file, WorkspaceState workspace, bool readOnly, Func<string, bool> isTableInUse) : ISqlSchemaDatabase
         {
             public FileState? File { get; } = file;
 
@@ -146,13 +146,33 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
 
             public bool IsQuery(string name) => File!.Fixture.IsQuery(name);
 
-            public RowReader? OpenRows(TableDefinition table, out string? failure) => File!.Fixture.OpenRows(table, out failure);
+            public RowReader? OpenRows(TableDefinition table, out string? failure) => File!.Fixture.OpenRows(table, Workspace, out failure);
 
-            public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => File!.Fixture.OpenIndex(table, index, out failure);
+            public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => File!.Fixture.OpenIndex(table, index, Workspace, out failure);
 
             public TableEditContext? EditContext(string tableName, out string? failure) => File!.Fixture.EditContext(tableName, out failure);
 
-            public TableCursor? OpenCursor(TableDefinition table, out string? failure) => File!.Fixture.OpenCursor(table, out failure);
+            public TableCursor? OpenCursor(TableDefinition table, out string? failure) => File!.Fixture.OpenCursor(table, Workspace, out failure);
+
+            public SchemaWriter? OpenSchemaWriter(out string? failure) => File!.Fixture.OpenSchemaWriter(out failure);
+
+            public void OnSchemaPublished(ulong extentPages) => File!.Fixture.OnSchemaPublished(extentPages);
+
+            public ulong NowDateBits() => File!.Fixture.NowDateBits();
+
+            public bool IsLinkedTable(string name) => File!.Fixture.IsLinkedTable(name);
+
+            public bool IsTableInRelationship(string tableName) => File!.Fixture.IsTableInRelationship(tableName);
+
+            public bool IsColumnInRelationship(string tableName, string columnName) => File!.Fixture.IsColumnInRelationship(tableName, columnName);
+
+            public bool IsIndexInRelationship(string tableName, string indexName) => File!.Fixture.IsIndexInRelationship(tableName, indexName);
+
+            public ulong PageCount => File!.Fixture.PageCount;
+
+            public bool IsTableInUse(string tableName) => isTableInUse(tableName);
+
+            public bool HasRelationshipNamed(string tableName, string constraintName) => File!.Fixture.HasRelationshipNamed(tableName, constraintName);
         }
 
         private sealed record QueryDefsCollection(DatabaseState Database);
@@ -383,8 +403,14 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             {
                 ws.Custom = state.Fixture.CreatePeerWorkspace(_nextLocker++);
             }
-            _objects[dbName] = new DatabaseState(state, ws, readOnly);
+            _objects[dbName] = new DatabaseState(state, ws, readOnly, HasOpenRecordsetOnTable);
         }
+
+        private bool HasOpenRecordsetOnTable(string tableName) =>
+            _recordsets.Any(rs =>
+                rs.Cursor is not null
+                && rs.Plan is not null
+                && rs.Plan.Sources.Any(s => string.Equals(DdlBinder.NameKey(s.TableName), DdlBinder.NameKey(tableName), StringComparison.OrdinalIgnoreCase)));
 
         private void OnTransaction(InvokeEvent e, string where)
         {
@@ -780,10 +806,11 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                 {
                     db.LastActionOpen = why;
                 }
-                if (e.ExcepInfo is null)
+                if (e.ExcepInfo is null || (mine.Phase == SqlPhase.Execute && !db.ReadOnly))
                 {
-                    // ACE succeeded and mutated the file, whereas CalcDb stopped before/during execution:
-                    // mark the file dirty so later reads are counted as Open, never falsely compared.
+                    // ACE succeeded or may have partially mutated rows before a mid-statement failure (R-ERR-1 ERR-PARTIAL /
+                    // R-TXN-1 TXN-STMT, e.g. r-txn-1b/rb-expression-failonerror-d1), whereas CalcDb stopped before/during
+                    // execution: mark the file dirty so later reads are counted as Open, never falsely compared.
                     MarkFileDirty(db.File, why);
                 }
                 return;
@@ -873,14 +900,6 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             {
                 rs.Stopped = dirty;
                 Open.Add($"{where}: {dirty}");
-                Bind(e, rs);
-                return;
-            }
-            // If this Workspace currently has uncommitted changes inside BeginTrans, RowReader reads committed images only.
-            if (db.Workspace.Frames.Any(f => f.AcceptedChanges.Count > 0) || db.Workspace.PendingPublication.Count > 0)
-            {
-                rs.Stopped = "NotModelled.Edit.UnpublishedRows: SELECT inside open transaction";
-                Open.Add($"{where}: {rs.Stopped}");
                 Bind(e, rs);
                 return;
             }

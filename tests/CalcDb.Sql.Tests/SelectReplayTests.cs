@@ -73,10 +73,11 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         ["r-expr-1b/info-stored-null-handling"] = "unexplained: ACE answers 3141 where CalcDb answers 3085 (Nz undefined); registered with the SQL row",
     };
 
-    internal sealed class Replay(string record)
+    internal sealed class Replay(string record, ISqlDatabase? liveDatabase = null)
     {
         private readonly Dictionary<string, object> _objects = new(StringComparer.Ordinal);
         private string? _changed;
+        private bool _openedAny;
 
         public int Matched { get; private set; }
 
@@ -85,11 +86,11 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         public List<string> Open { get; } = [];
 
         /// <summary>A database the record opened, with its input file's hash (null when it is not one of the inputs).</summary>
-        private sealed class DatabaseObject(string? fixture)
+        private sealed class DatabaseObject(string? fixture, ISqlDatabase? live = null)
         {
             public string? Fixture { get; } = fixture;
 
-            public SqlFixture? Image { get; set; }
+            public ISqlDatabase? Image { get; set; } = live;
         }
 
         private sealed class RecordsetObject(string sql)
@@ -112,9 +113,9 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         private sealed record FieldObject(RecordsetObject Recordset, int Column);
 
         /// <summary>A temporary QueryDef (<c>CreateQueryDef("", sql)</c>): its bound statement and its parameter values.</summary>
-        private sealed class QueryDefObject(SqlFixture image)
+        private sealed class QueryDefObject(ISqlDatabase image)
         {
-            public SqlFixture Image { get; } = image;
+            public ISqlDatabase Image { get; } = image;
 
             public BoundSelect? Plan { get; set; }
 
@@ -171,6 +172,11 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     _objects[dbName] = new DatabaseObject(sha);
                     continue;
                 }
+                if (liveDatabase is not null && e.Member == "CreateDatabase" && e.Bind is { } createdDb && e.ExcepInfo is null)
+                {
+                    _objects[createdDb] = new DatabaseObject(null, liveDatabase);
+                    continue;
+                }
                 if (e.Bind is { } rebound && _objects.Remove(rebound, out object? previous) && previous is RecordsetObject held)
                 {
                     // The name now holds whatever this call returns (a recordset of a route not replayed, say).
@@ -178,6 +184,15 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                 }
                 if (e.Member is "Execute" or "Update" or "Delete" or "Append" or "CompactDatabase")
                 {
+                    if (liveDatabase is ISqlActionDatabase writable && !_openedAny && e.Member == "Execute" && e.Args.Count > 0 && e.Args[0].Text is { } execSql)
+                    {
+                        ActionOutcome outcome = ActionExecutor.Execute(execSql, writable);
+                        if (outcome.Failure is { } execFail)
+                        {
+                            Changed($"#{e.Seq} {e.Target}.{e.Member}: {execFail}");
+                        }
+                        continue;
+                    }
                     // On any object, a recordset of this replay's included: from here the database is not the fixture.
                     Changed($"#{e.Seq} {e.Target}.{e.Member}");
                     continue;
@@ -193,16 +208,20 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                         if (e.Member is "OpenRecordset" or "CreateQueryDef" && e.Args.Count > (e.Member == "OpenRecordset" ? 0 : 1)
                             && e.Args[e.Member == "OpenRecordset" ? 0 : 1].Text is { } sql && IsSelectText(sql))
                         {
+                            _openedAny = true;
                             if (e.Member == "CreateQueryDef" && e.Args[0].Text is not "")
                             {
                                 continue; // a saved QueryDef: W-07/saved-definition's
                             }
-                            if (db.Fixture is not { } fixture || !SqlFixture.Retained(fixture))
+                            if (db.Image is null)
                             {
-                                Open.Add($"{where}: NotModelled.Fixture: the database is not a retained input of the record");
-                                continue;
+                                if (db.Fixture is not { } fixture || !SqlFixture.Retained(fixture))
+                                {
+                                    Open.Add($"{where}: NotModelled.Fixture: the database is not a retained input of the record");
+                                    continue;
+                                }
+                                db.Image = new SqlFixture(fixture);
                             }
-                            db.Image ??= new SqlFixture(fixture);
                             if (e.Member == "OpenRecordset")
                             {
                                 OpenRecordset(e, db.Image, sql, where);
@@ -256,7 +275,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         /// 3139 and 3129, params-positions 3296). A binding failure of another kind where ACE created the QueryDef is
         /// answered at another phase, not recorded here: named.
         /// </summary>
-        private void CreateQueryDef(InvokeEvent e, SqlFixture image, string sql, string where)
+        private void CreateQueryDef(InvokeEvent e, ISqlDatabase image, string sql, string where)
         {
             where += $"(\"{(sql.Length > 90 ? sql[..90] + "…" : sql)}\")";
             if (_changed is { } changed)
@@ -549,7 +568,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
             rs.Plan = null;
         }
 
-        private void OpenRecordset(InvokeEvent e, SqlFixture image, string sql, string where)
+        private void OpenRecordset(InvokeEvent e, ISqlDatabase image, string sql, string where)
         {
             where += $"(\"{(sql.Length > 90 ? sql[..90] + "…" : sql)}\")";
             if (_changed is { } changed)
@@ -665,6 +684,12 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                 case "MoveNext" or "MoveFirst" or "MoveLast" or "MovePrevious":
                     Move(e, rs, where);
                     break;
+                case "Move" when e.Args.Count == 1 && e.Args[0].Integer is not null:
+                    Move(e, rs, where);
+                    break;
+                case "GetRows" when e.ExcepInfo is null && e.Args.Count <= 1 && e.Result?.Array is { Elements: not null, Bounds.Count: 2 }:
+                    GetRows(e, rs, where);
+                    break;
                 case "Fields" when e.Args.Count == 0:
                     Bind(e, new FieldsObject(rs));
                     break;
@@ -672,6 +697,81 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     rs.Stopped = $"NotModelled.RecordsetMember: {e.Member}";
                     Open.Add($"{where}: {rs.Stopped}");
                     break;
+            }
+        }
+
+        private void GetRows(InvokeEvent e, RecordsetObject rs, string where)
+        {
+            SelectCursor c = rs.Cursor!;
+            int requested = e.Args.Count == 1 && e.Args[0].Integer is { } n ? int.Parse(n, CultureInfo.InvariantCulture) : 1;
+            var arr = e.Result!.Array!;
+            // ACE GetRows returns (cols, rows) when rows > 0 and (0, cols) when rows == 0 (r-par-1/err-getrows-chunks).
+            int aceCols = arr.Bounds[0].Count == 0 ? (int)arr.Bounds[1].Count : (int)arr.Bounds[0].Count;
+            int aceRows = arr.Bounds[0].Count == 0 ? 0 : (int)arr.Bounds[1].Count;
+            int cols = c.Columns.Count;
+            var actual = new List<CapturedValue[]>();
+            while (actual.Count < requested && !c.Eof)
+            {
+                var row = new CapturedValue[cols];
+                bool rowFailed = false;
+                for (int col = 0; col < cols; col++)
+                {
+                    if (!c.Read(col, out NativeVariant v, out SqlFailure? failure))
+                    {
+                        if (failure is { IsNotModelled: true })
+                        {
+                            rs.Stopped = $"{failure.NotModelled}: {failure.Message}";
+                            Open.Add($"{where}: {rs.Stopped}");
+                            return;
+                        }
+                        // ACE GetRows stops before a failing row, leaves the cursor positioned on it, and returns
+                        // the rows already collected without raising an exception (r-par-1/err-getrows-chunks).
+                        rowFailed = true;
+                        break;
+                    }
+                    row[col] = SqlFixture.Capture(v);
+                }
+                if (rowFailed)
+                {
+                    break;
+                }
+                actual.Add(row);
+                c.MoveNext();
+                if (c.FetchFailure is { } fetch)
+                {
+                    rs.Stopped = fetch.NotModelled ?? fetch.ToString();
+                    Open.Add($"{where}: {fetch}");
+                    return;
+                }
+            }
+            if (cols != aceCols || actual.Count != aceRows)
+            {
+                Mismatches.Add($"{where}: ACE shape ({aceCols}x{aceRows}), CalcDb shape ({cols}x{actual.Count})");
+                return;
+            }
+            if (aceRows == 0)
+            {
+                Matched++;
+                return;
+            }
+            IReadOnlyList<CapturedValue> elems = arr.Elements!;
+            var comparer = new ValueComparer();
+            for (int r = 0; r < aceRows; r++)
+            {
+                for (int col = 0; col < aceCols; col++)
+                {
+                    CapturedValue expected = elems[(r * aceCols) + col];
+                    CapturedValue mine = actual[r][col];
+                    Difference? d = comparer.Compare(expected, mine, $"{where}[{r},{col}]");
+                    if (d is null)
+                    {
+                        Matched++;
+                    }
+                    else
+                    {
+                        Mismatches.Add($"{where}[{r},{col}]: ACE {d.Expected}, CalcDb {d.Actual}");
+                    }
+                }
             }
         }
 
@@ -683,6 +783,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                 "MoveNext" => c.MoveNext(),
                 "MoveFirst" => c.MoveFirst(),
                 "MoveLast" => c.MoveLast(),
+                "Move" => c.Move(long.Parse(e.Args[0].Integer!, CultureInfo.InvariantCulture)),
                 _ => c.MovePrevious(),
             };
             if (c.FetchFailure is { } fetch)

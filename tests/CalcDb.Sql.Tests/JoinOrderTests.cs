@@ -137,8 +137,11 @@ public sealed class JoinOrderTests(ITestOutputHelper output)
         // 6. Cross join where at least one table has an index (L has PK on id).
         AssertRowOrderNamed(db1, "SELECT L.id, R.rid FROM L, R");
 
-        // 7. Dynaset and ForwardOnly over an otherwise covered two-table join.
-        AssertRowOrderNamed(db1, "SELECT L.id, R.rid FROM L INNER JOIN R ON L.id = R.lid", ResultKind.Dynaset);
+        // 7. ForwardOnly over an otherwise covered two-table join remains named RowOrder;
+        //    Dynaset over a one-side-indexed equality join follows snapshot order (qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER).
+        Assert.Equal(
+            ReadPairs(db1, "SELECT L.id, R.rid FROM L INNER JOIN R ON L.id = R.lid", ResultKind.Snapshot),
+            ReadPairs(db1, "SELECT L.id, R.rid FROM L INNER JOIN R ON L.id = R.lid", ResultKind.Dynaset));
         AssertRowOrderNamed(db1, "SELECT L.id, R.rid FROM L INNER JOIN R ON L.id = R.lid", ResultKind.ForwardOnly);
 
         // 8. ISqlDatabase adapter that does not implement OpenIndex (default returns null) on an indexed inner join.
@@ -237,11 +240,11 @@ public sealed class JoinOrderTests(ITestOutputHelper output)
         Assert.Equal(7, unindexedInnerDiffs);
     }
 
-    private static string[] ReadPairs(ISqlDatabase db, string sql)
+    private static string[] ReadPairs(ISqlDatabase db, string sql, ResultKind kind = ResultKind.Snapshot)
     {
         using BoundSelect? plan = BoundSelect.Prepare(sql, db, out SqlFailure? bindFailure);
         Assert.Null(bindFailure);
-        using SelectCursor? cursor = SelectCursor.Open(plan!, db, ResultKind.Snapshot, [], out SqlFailure? openFailure);
+        using SelectCursor? cursor = SelectCursor.Open(plan!, db, kind, [], out SqlFailure? openFailure);
         Assert.Null(openFailure);
         var rows = new List<string>();
         while (!cursor!.Eof)

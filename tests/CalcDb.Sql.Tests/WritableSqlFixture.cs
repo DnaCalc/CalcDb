@@ -17,34 +17,44 @@ namespace CalcDb.Sql.Tests;
 /// <see cref="IPublicationTarget"/> over an in-memory <see cref="MemoryDatabaseFile"/>, mirroring
 /// <see cref="SqlFixture"/> with the ISAM edit context, workspace coordinator and saved-query catalog wired in.
 /// </summary>
-internal sealed class WritableSqlFixture : ISqlActionDatabase, IPublicationTarget, IDisposable
+internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarget, IDisposable
 {
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
     private readonly MemoryDatabaseFile _image;
     private readonly PageCache _cache;
-    private readonly CatalogSnapshot _catalog;
-    private readonly QueryCatalog? _queries;
+    private readonly TextSortOrder _sortOrder;
+    private CatalogSnapshot _catalog;
+    private QueryCatalog? _queries;
     private readonly ExpressionRuleBinder _ruleBinder;
-    private readonly IReadOnlyList<Relationship> _relationships;
+    private IReadOnlyList<Relationship> _relationships;
+    private ulong _pageCount;
     private readonly Dictionary<string, TableEditContext> _editContexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TableDefinition?> _tables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<TransactionCoordinator> _extraWorkspaces = [];
 
     public WritableSqlFixture(string sha256, bool readOnly = false)
+        : this(ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(sha256), readOnly)
     {
-        byte[] file = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(sha256);
+    }
+
+    public WritableSqlFixture(byte[] file, bool readOnly = false)
+    {
         _image = new MemoryDatabaseFile(file, D.PageSize);
+        _pageCount = _image.PageCount;
         _cache = new PageCache(_image, _image.Incarnation, D.PageSize, 256);
-        _catalog = CatalogBootstrap.Open(_cache, D, _image.PageCount, out _, readProperties: true)!;
-        _queries = QueryCatalog.Read(_cache, D, _catalog, _image.PageCount, out _);
-        _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _image.PageCount, out _) ?? [];
+        _catalog = CatalogBootstrap.Open(_cache, D, _pageCount, out _, readProperties: true)!;
+        _queries = QueryCatalog.Read(_cache, D, _catalog, _pageCount, out _);
+        _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
+        _sortOrder = header.SortOrder;
         Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query);
         _ruleBinder = new ExpressionRuleBinder(Context);
         ReadOnly = readOnly;
         Scheduler = new InstantLockScheduler();
         Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = Scheduler };
     }
+
+    public Func<ulong>? DateBitsProvider { get; set; }
 
     public ExpressionContext Context { get; }
 
@@ -71,46 +81,123 @@ internal sealed class WritableSqlFixture : ISqlActionDatabase, IPublicationTarge
         return failure is null ? _image : null;
     }
 
+    private static bool NamesEqual(string a, string b) =>
+        string.Equals(DdlBinder.NameKey(a), DdlBinder.NameKey(b), StringComparison.OrdinalIgnoreCase);
+
+    public ulong PageCount => Math.Max(Math.Max(_pageCount, _image.PageCount), _cache.KnownExtentPages);
+
+    public SchemaWriter? OpenSchemaWriter(out string? failure)
+    {
+        failure = null;
+        return new SchemaWriter(_cache, D, _catalog, PageCount, _sortOrder);
+    }
+
+    public void OnSchemaPublished(ulong extentPages)
+    {
+        _pageCount = Math.Max(_image.PageCount, extentPages);
+        _tables.Clear();
+        _editContexts.Clear();
+        _catalog = CatalogBootstrap.Open(_cache, D, PageCount, out _, readProperties: true)!;
+        _queries = QueryCatalog.Read(_cache, D, _catalog, PageCount, out _);
+        _relationships = RelationshipCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
+    }
+
+    public ulong NowDateBits() => DateBitsProvider?.Invoke() ?? SchemaWriter.DateBits(DateTime.Now);
+
+    public bool IsLinkedTable(string name) =>
+        _catalog.TablesContainer is int container
+        && _catalog.Entries.Any(e => e.ParentId == container && (e.Type == 4 || e.Type == 6) && NamesEqual(e.Name, name));
+
+    public bool IsTableInRelationship(string tableName) =>
+        _relationships.Any(r => NamesEqual(r.Table, tableName) || NamesEqual(r.ForeignTable, tableName));
+
+    public bool IsColumnInRelationship(string tableName, string columnName) =>
+        _relationships.Any(r =>
+            (NamesEqual(r.Table, tableName) && r.Columns.Any(c => NamesEqual(c.Referenced, columnName)))
+            || (NamesEqual(r.ForeignTable, tableName) && r.Columns.Any(c => NamesEqual(c.Foreign, columnName))));
+
+    public bool IsIndexInRelationship(string tableName, string indexName)
+    {
+        TableDefinition? table = Table(tableName);
+        if (table is null)
+        {
+            return false;
+        }
+        LogicalIndex? li = table.LogicalIndexes.FirstOrDefault(x => NamesEqual(x.Name, indexName));
+        if (li is null)
+        {
+            return false;
+        }
+        if (li.IndexType == 2)
+        {
+            return true;
+        }
+        PhysicalIndex? pi = table.PhysicalIndexes.FirstOrDefault(x => x.Number == li.PhysicalNumber);
+        if (pi is null)
+        {
+            return false;
+        }
+        string[] indexCols = [.. pi.Columns.Select(ic => table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber)?.Name ?? "")];
+        return _relationships.Any(r =>
+            (NamesEqual(r.Table, tableName) && r.Columns.Count == indexCols.Length && Enumerable.Range(0, indexCols.Length).All(i => NamesEqual(r.Columns[i].Referenced, indexCols[i])))
+            || (NamesEqual(r.ForeignTable, tableName) && r.Columns.Count == indexCols.Length && Enumerable.Range(0, indexCols.Length).All(i => NamesEqual(r.Columns[i].Foreign, indexCols[i]))));
+    }
+
+    public bool IsTableInUse(string tableName) => false;
+
+    public bool HasRelationshipNamed(string tableName, string constraintName) =>
+        _relationships.Any(r =>
+            NamesEqual(r.Name, constraintName)
+            && (NamesEqual(r.Table, tableName) || NamesEqual(r.ForeignTable, tableName)));
+
     public TableDefinition? Table(string name)
     {
-        if (_tables.TryGetValue(name, out TableDefinition? cached))
+        string key = DdlBinder.NameKey(name);
+        if (_tables.TryGetValue(key, out TableDefinition? cached))
         {
             return cached;
         }
-        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => NamesEqual(e.Name, name));
         TableDefinition? table = entry is null ? null
             : TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _);
-        _tables[name] = table;
+        _tables[key] = table;
         return table;
     }
 
     public bool IsQuery(string name) =>
-        _catalog.TablesContainer is int container && _catalog.Entries.Any(e => e.ParentId == container && e.Type == 5 && string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        _catalog.TablesContainer is int container && _catalog.Entries.Any(e => e.ParentId == container && e.Type == 5 && NamesEqual(e.Name, name));
 
     public SavedQuery? SavedQuery(string name) =>
-        _queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
+        _queries?.Queries.FirstOrDefault(q => NamesEqual(q.Name, name));
 
-    public RowReader? OpenRows(TableDefinition table, out string? failure)
+    private PageSource SourceOf(TransactionCoordinator workspace) => new(_cache, workspace.OverlayOf(_cache));
+
+    public RowReader? OpenRows(TableDefinition table, out string? failure) => OpenRows(table, Workspace, out failure);
+
+    public RowReader? OpenRows(TableDefinition table, TransactionCoordinator workspace, out string? failure)
     {
-        RowReader? reader = RowReader.Open(_cache, D, table, _image.PageCount, out TraversalFailure? f);
+        RowReader? reader = RowReader.Open(SourceOf(workspace), D, table, PageCount, out TraversalFailure? f);
         failure = f?.Predicate;
         return reader;
     }
 
-    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => OpenIndex(table, index, Workspace, out failure);
+
+    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, TransactionCoordinator workspace, out string? failure)
     {
         failure = null;
-        return new IndexNavigator(_cache, D, index, table.FirstPage);
+        return new IndexNavigator(SourceOf(workspace), D, index, table.FirstPage);
     }
 
     public TableEditContext? EditContext(string tableName, out string? failure)
     {
-        if (_editContexts.TryGetValue(tableName, out TableEditContext? cached))
+        string key = DdlBinder.NameKey(tableName);
+        if (_editContexts.TryGetValue(key, out TableEditContext? cached))
         {
             failure = null;
             return cached;
         }
-        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => string.Equals(e.Name, tableName, StringComparison.OrdinalIgnoreCase));
+        CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => NamesEqual(e.Name, tableName));
         if (entry is null)
         {
             failure = $"table '{tableName}' not found";
@@ -125,22 +212,23 @@ internal sealed class WritableSqlFixture : ISqlActionDatabase, IPublicationTarge
         PropertyBlob? blob = entry.Properties is { } raw ? PropertyBlob.Read(raw, out _) : null;
         MutationSemantics semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, D.IndexDescriptor);
         bool related = _relationships.Any(r =>
-            string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
+            NamesEqual(r.Table, entry.Name) || NamesEqual(r.ForeignTable, entry.Name));
         var ctx = new TableEditContext(
             semantics,
-            new StoredUniqueProbe(_cache, D, table, _image.PageCount),
+            new StoredUniqueProbe(_cache, D, table, PageCount),
             7177,
             related,
-            new TableFootprints(_cache, D, table, _image.PageCount));
-        _editContexts[entry.Name] = ctx;
+            new TableFootprints(_cache, D, table, PageCount));
+        _editContexts[key] = ctx;
         failure = null;
         return ctx;
     }
 
-    public TableCursor? OpenCursor(TableDefinition table, out string? failure)
+    public TableCursor? OpenCursor(TableDefinition table, out string? failure) => OpenCursor(table, Workspace, out failure);
+
+    public TableCursor? OpenCursor(TableDefinition table, TransactionCoordinator workspace, out string? failure)
     {
-        TableCursor? cursor = TableCursor.Open(_cache, D, table, _image.PageCount, 0, out TraversalFailure? f);
+        TableCursor? cursor = TableCursor.Open(SourceOf(workspace), D, table, PageCount, 0, out TraversalFailure? f);
         failure = f?.Predicate;
         return cursor;
     }

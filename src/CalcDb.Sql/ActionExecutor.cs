@@ -69,7 +69,7 @@ public static unsafe class ActionExecutor
     private const int DbFailOnError = 128;
     private const int AdmittedOptionsMask = DbInconsistent | DbConsistent | DbFailOnError;
 
-    /// <summary>Parse, bind and execute a SQL action statement.</summary>
+    /// <summary>Parse, bind and execute a SQL action or DDL statement.</summary>
     public static ActionOutcome Execute(
         string sql,
         ISqlActionDatabase database,
@@ -77,13 +77,17 @@ public static unsafe class ActionExecutor
         IReadOnlyList<NativeVariant?>? parameters = null,
         ActionErrorSource source = ActionErrorSource.Database)
     {
+        string normalized = sql;
+        if (!SqlParser.NormalizeSource(ref normalized, out SqlFailure? normFail))
+        {
+            return ActionOutcome.Fail(normFail!);
+        }
+        if (DdlParser.IsDdlLeadingKeyword(normalized))
+        {
+            return DdlExecutor.Execute(normalized, database, options);
+        }
         if (source == ActionErrorSource.Database)
         {
-            string normalized = sql;
-            if (!SqlParser.NormalizeSource(ref normalized, out SqlFailure? normFail))
-            {
-                return ActionOutcome.Fail(normFail!);
-            }
             if (!ActionParser.IsSqlStatement(normalized))
             {
                 if (database.IsQuery(normalized))
@@ -247,15 +251,6 @@ public static unsafe class ActionExecutor
         if (plan.SourceSelect is null)
         {
             return ExecuteInsertValues(plan, database, failOnError, paramValues);
-        }
-
-        // Unpublished changes in the current Workspace are held in its private overlay, which RowReader does not read yet.
-        foreach (SourceSlot slot in plan.SourceSelect.Sources)
-        {
-            if (slot.Subquery is null && HasUnpublishedChanges(database.Workspace, slot.Table))
-            {
-                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit.UnpublishedRows", $"INSERT SELECT source '{slot.TableName}' has unpublished changes in this Workspace"));
-            }
         }
 
         // Materialize all source rows before mutating the target so self-insert (INSERT INTO T SELECT * FROM T) is
@@ -438,11 +433,6 @@ public static unsafe class ActionExecutor
         bool failOnError,
         NativeVariant[] paramValues)
     {
-        if (HasUnpublishedChanges(database.Workspace, plan.TargetTable))
-        {
-            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit.UnpublishedRows", $"UPDATE target '{plan.TargetName}' has unpublished changes in this Workspace"));
-        }
-
         // Collect qualifying RowIds in storage scan order before mutating any row so key-moving updates
         // (R-SQL-2 ACT-SEL-01/02: r-q-expr-sql/act-sel-repeated-keys, r-sql-2-3/act-sel-range) visit each
         // qualifying row exactly once and never revisit or skip moved rows.
@@ -605,11 +595,6 @@ public static unsafe class ActionExecutor
         bool failOnError,
         NativeVariant[] paramValues)
     {
-        if (HasUnpublishedChanges(database.Workspace, plan.TargetTable))
-        {
-            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit.UnpublishedRows", $"DELETE target '{plan.TargetName}' has unpublished changes in this Workspace"));
-        }
-
         List<RowId>? candidates = CollectCandidates(plan, database, paramValues, out SqlFailure? scanFailure);
         if (candidates is null)
         {
@@ -824,31 +809,6 @@ public static unsafe class ActionExecutor
         }
         failure = null;
         return true;
-    }
-
-    private static bool HasUnpublishedChanges(TransactionCoordinator workspace, TableDefinition table)
-    {
-        IReadOnlyList<ExplicitFrame> frames = workspace.Frames;
-        for (int i = 0; i < frames.Count; i++)
-        {
-            if (TouchesTable(frames[i].AcceptedChanges, table))
-            {
-                return true;
-            }
-        }
-        return TouchesTable(workspace.PendingPublication, table);
-    }
-
-    private static bool TouchesTable(IReadOnlyList<AcceptedRowChange> changes, TableDefinition table)
-    {
-        for (int i = 0; i < changes.Count; i++)
-        {
-            if (changes[i].Table.Table.FirstPage == table.FirstPage)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>

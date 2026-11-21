@@ -116,4 +116,106 @@ public static class SqlMessages
 
     /// <summary>3142 for tokens after the terminating semicolon (r-def-expr-sql/sql-insert-values-forms).</summary>
     public const string CharactersAfterEnd = "Characters found after end of SQL statement.";
+
+    /// <summary>3129 for invalid leading SQL statement keywords such as GRANT, ALTER DATABASE, BEGIN TRANSACTION (r-sql-2-3/act-ddl-objects, r-def-expr-sql/sql-unsupported-statements).</summary>
+    public const string InvalidSqlStatement = "Invalid SQL statement; expected 'DELETE', 'INSERT', 'PROCEDURE', 'SELECT', or 'UPDATE'.";
+
+    /// <summary>3289 for malformed CONSTRAINT clause such as CHECK, ON DELETE/UPDATE, DESC in PK (r-def-expr-sql/ddl-column-clauses, ddl-fk-actions, r-sql-2-3/act-ddl-columns-indexes).</summary>
+    public const string ConstraintSyntaxError = "Syntax error in CONSTRAINT clause.";
+
+    /// <summary>3290 for malformed CREATE TABLE or unsupported CREATE object statement (r-def-expr-sql/ddl-column-clauses, ddl-reserved-table-names, ddl-index-forms, r-sql-2-3/act-ddl-objects).</summary>
+    public const string CreateTableSyntaxError = "Syntax error in CREATE TABLE statement.";
+
+    /// <summary>3291 for malformed CREATE INDEX statement (r-def-expr-sql/ddl-index-forms).</summary>
+    public const string CreateIndexSyntaxError = "Syntax error in CREATE INDEX statement.";
+
+    /// <summary>3292 for malformed column/field definition in CREATE TABLE or ALTER TABLE ADD (r-def-expr-sql/ddl-column-clauses, ddl-type-names-accdb, ddl-reserved-column-names, ddl-alter-column-forms).</summary>
+    public const string FieldDefinitionSyntaxError = "Syntax error in field definition.";
+
+    /// <summary>3293 for malformed ALTER TABLE statement (r-def-expr-sql/ddl-alter-column-forms, sql-unsupported-statements).</summary>
+    public const string AlterTableSyntaxError = "Syntax error in ALTER TABLE statement.";
+
+    /// <summary>3295 for malformed DROP TABLE / DROP INDEX or DROP VIEW / DROP PROCEDURE (r-def-expr-sql/ddl-drop-and-missing-objects, ddl-index-forms, r-sql-2-3/act-ddl-objects).</summary>
+    public const string DropSyntaxError = "Syntax error in DROP TABLE or DROP INDEX.";
+
+    /// <summary>3001 for invalid DDL argument such as COUNTER(1, 0) (r-def-expr-sql/ddl-counter-seed-increment; BIGINT/DATETIME2 fail 3001 in MDB, while ddl-type-names-accdb Dt69/Dt70 succeed in ACCDB).</summary>
+    public const string InvalidArgument = "Invalid argument.";
+
+    /// <summary>3010 when CREATE TABLE targets an existing table name (r-q15-ddl-open/dup-create-sql, r-def-expr-sql/ddl-name-and-size-limits, r-err-1b/ddl-table-exists).</summary>
+    public static string TableAlreadyExists(string name) => $"Table '{name}' already exists.";
+
+    /// <summary>3018 when ALTER TABLE ALTER COLUMN names a nonexistent field (r-def-expr-sql/ddl-alter-column-forms).</summary>
+    public const string CouldNotFindField = "Could not find field.";
+
+    /// <summary>3090 when a table would have more than one AutoNumber/COUNTER column (r-def-expr-sql/ddl-counter-seed-increment, ddl-alter-column-forms).</summary>
+    public const string MultipleAutoNumber = "Resultant table not allowed to have more than one AutoNumber field.";
+
+    /// <summary>3125 for an invalid table, column, index, or constraint name (r-def-expr-sql/ddl-name-and-size-limits, r-dao-1-err-1/err-invalid-names).</summary>
+    public static string InvalidObjectName(string name) => $"'{name}' is not a valid name. Make sure that it does not include invalid characters or punctuation and that it is not too long.";
+
+    /// <summary>3190 when CREATE TABLE defines more than 255 fields (r-def-expr-sql/ddl-name-and-size-limits).</summary>
+    public const string TooManyFields = "Too many fields defined.";
+
+    /// <summary>3211 when DDL targets a table with an open Recordset or table lock (r-def-cursor-dao/err-drop-missing-index-column).</summary>
+    public static string TableInUse(string table) => $"The database engine could not lock table '{table}' because it is already in use by another person or process.";
+
+    /// <summary>3259 when ALTER TABLE ALTER COLUMN changes a non-AutoNumber column to COUNTER (r-def-expr-sql/ddl-alter-column-forms).</summary>
+    public const string InvalidFieldDataType = "Invalid field data type.";
+
+    /// <summary>3277 when an index or constraint lists more than 10 fields (r-def-expr-sql/ddl-name-and-size-limits).</summary>
+    public const string TooManyIndexFields = "Cannot have more than 10 fields in an index.";
+
+    /// <summary>3280 when ALTER TABLE DROP COLUMN targets an indexed column (r-def-expr-sql/ddl-alter-column-forms, r-sql-2-3/act-ddl-columns-indexes).</summary>
+    public const string CannotDeleteIndexedField = "Cannot delete a field that is part of an index or is needed by the system.";
+
+    /// <summary>3281 when DROP TABLE or DROP INDEX targets a table/index used in a relationship (r-def-cat-txn/cat-drop-table-in-relation, r-def-expr-sql/ddl-drop-and-missing-objects).</summary>
+    public const string CannotDeleteRelatedObject = "Cannot delete this index or table. It is either the current index or is used in a relationship.";
+
+    /// <summary>3283 when a table already has a primary key (r-def-expr-sql/ddl-column-clauses, ddl-index-forms, ddl-alter-column-forms).</summary>
+    public const string PrimaryKeyAlreadyExists = "Primary key already exists.";
+
+    /// <summary>3285 for a duplicate field in an index definition (r-def-expr-sql/ddl-index-forms).</summary>
+    public const string InvalidIndexDefinition = "Invalid index definition.";
+
+    /// <summary>3368 when a foreign key column count or data types do not match the referenced columns (r-def-expr-sql/ddl-fk-actions).</summary>
+    public const string RelationshipColumnMismatch = "Relationship must be on the same number of fields with the same data types.";
+
+    /// <summary>3371 when CREATE INDEX, DROP INDEX, ALTER TABLE, or REFERENCES names a missing table (r-def-expr-sql/ddl-index-forms, ddl-alter-column-forms, ddl-fk-actions).</summary>
+    public const string CannotFindTableOrConstraint = "Cannot find table or constraint.";
+
+    /// <summary>3372 when DROP INDEX names an index not on the table (r-def-expr-sql/ddl-index-forms, r-def-cursor-dao/err-drop-missing-index-column).</summary>
+    public static string NoSuchIndex(string index, string table) => $"No such index '{index}' on table '{table}'.";
+
+    /// <summary>3375 when CREATE INDEX names an index that already exists on the table (r-cat-1/names, r-q-cat-txn-lock/cat-b-names-fields-indexes-relations).</summary>
+    public static string IndexAlreadyExists(string table, string index) => $"Table '{table}' already has an index named '{index}'.";
+
+    /// <summary>3376 when DROP TABLE names a table that does not exist (r-def-expr-sql/ddl-drop-and-missing-objects, r-def-cursor-dao/err-drop-missing-table, r-sql-2-3/act-ddl-objects).</summary>
+    public static string TableDoesNotExist(string table) => $"Table '{table}' does not exist.";
+
+    /// <summary>3380 when CREATE TABLE or ALTER TABLE ADD COLUMN names a duplicate field (r-def-expr-sql/ddl-column-clauses, ddl-alter-column-forms, r-cat-1/id-reuse).</summary>
+    public static string FieldAlreadyExists(string field, string table) => $"Field '{field}' already exists in table '{table}'.";
+
+    /// <summary>3381 when ALTER TABLE DROP COLUMN names a nonexistent field (r-def-expr-sql/ddl-alter-column-forms, ddl-drop-and-missing-objects, r-def-cursor-dao/err-drop-missing-index-column).</summary>
+    public static string NoFieldNamed(string field, string table) => $"There is no field named '{field}' in table '{table}'.";
+
+    /// <summary>3382 when a Text/VarChar field size exceeds 255 characters (r-def-expr-sql/ddl-type-names-accdb).</summary>
+    public static string FieldSizeTooLong(string field) => $"Size of field '{field}' is too long.";
+
+    /// <summary>3383 when ALTER TABLE DROP COLUMN targets a field in a relationship (r-def-cat-txn/cat-drop-column-in-relation).</summary>
+    public static string CannotDeleteRelatedField(string field) => $"Cannot delete field '{field}'. It is part of one or more relationships.";
+
+    /// <summary>3409 when an index or relationship references a missing or non-indexable field (r-def-expr-sql/ddl-index-forms, ddl-fk-actions, r-q-cursor-dao/index-nonindexable-types).</summary>
+    public static string InvalidIndexOrRelationField(string field) => $"Invalid field definition '{field}' in definition of index or relationship.";
+
+    /// <summary>3609 when a foreign key references columns without a unique index on the primary table (r-def-expr-sql/ddl-fk-actions).</summary>
+    public const string NoUniqueReferencedIndex = "No unique index found for the referenced field of the primary table.";
+
+    /// <summary>3611 when DDL targets a linked table (r-def-cat-txn/link-drop-delete-and-alter-link).</summary>
+    public const string CannotDdlLinkedTable = "Cannot execute data definition statements on linked data sources.";
+
+    /// <summary>3626 when a table would exceed 32 indexes (r-def-expr-sql/ddl-name-and-size-limits).</summary>
+    public static string TooManyIndexes(string table) => $"The operation failed. There are too many indexes on table '{table}'. Delete some of the indexes on the table and try the operation again.";
+
+    /// <summary>3755 when ALTER TABLE DROP CONSTRAINT names a constraint not found on the table (r-def-expr-sql/ddl-drop-and-missing-objects).</summary>
+    public static string CheckConstraintDoesNotExist(string name) => $"CHECK constraint '{name}' does not exist.";
 }
