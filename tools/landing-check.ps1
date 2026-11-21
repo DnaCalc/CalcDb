@@ -54,8 +54,8 @@ foreach ($f in $Files) {
 Step "copied $($Files.Count) files"
 # The export has no .git; Directory.Build.props reads the source state the binaries record from this file.
 $full = (git -C $repo rev-parse HEAD).Trim()
-$tooling = $Files | Where-Object { ($_ -replace '\\', '/') -match '^(src|tools|tests)/|^(Directory\.Build\.props|global\.json|CalcDb\.slnx)$' }
-$changed = if ($tooling) { git -C $repo status --porcelain --untracked-files=all -- @tooling } else { $null }
+$tooling = @($Files | Where-Object { ($_ -replace '\\', '/') -match '^(src|tools|tests)/|^(Directory\.Build\.props|global\.json|CalcDb\.slnx)$' })
+$changed = if ($tooling) { git -C $repo status --porcelain --untracked-files=all -- $tooling } else { $null }
 Set-Content (Join-Path $Export "calcdb-source.txt") ($(if ($changed) { "$full+dirty" } else { $full })) -NoNewline
 $staleFiles = git -C $repo status --porcelain --untracked-files=all | ForEach-Object { $_.Substring(3) -replace '"', '' } |
     Where-Object { $_ -notin ($Files | ForEach-Object { $_ -replace '\\', '/' }) -and $_ -notlike '.alta/*' }

@@ -642,7 +642,7 @@ All 42 records were read, 11 of them through the `show` output and the rest from
 **Probe or fixture defects**
 - `index-metadata-seek`: `rs.Index("PrimaryKey")` gave 3800 because the fixture's primary key is named `PK_T`. All later `Seek` calls then ran with no current index (3019 or 3001). The Seek arity and error-order evidence is void.
 - `prop-user-lifecycle`: the held-after-Delete reads use `pd`, which was never appended (`Value("")` gave 3385, `Append` 3386). The appended and deleted object was `pdup`, so held-Property behaviour across Delete and same-name recreation is untested.
-- `recordset-state-inventory`: `Sort "V DESC"` does not discriminate. The V values (three, four, five) in descending order give the same row order as ID ascending (3, 4, 5). `GetRows` is "not yet captured element-wise", so the capture is incomplete. A dynaset on a read-only open shows `Updatable` False.
+- `recordset-state-inventory`: `Sort "V DESC"` does not discriminate. The V values (three, four, five) in descending order give the same row order as ID ascending (3, 4, 5). `GetRows` returns its cells dimension 1 fastest: `GetRows(2)` a [0+3,0+2] array of 1, "one", 10, 2, "two", 20, and the next `GetRows()` the one remaining row (rerun a3 under element capture, `frfp`, 2026-11-21). A dynaset on a read-only open shows `Updatable` False.
 - `ado-connection-errors`: `Errors.Clear` ran with `Count` already 0, so its clear effect is untested.
 - `ado-recordset-warning-runtime`: no provider warning was induced. This is an unobserved case.
 - `manifest-library` and `manifest-runtime-types`: `show` renders blank steps for the type data, which exists only in the JSON.
