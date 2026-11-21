@@ -639,6 +639,14 @@ about 100 calls and 40 min for 56 questions in 4 rounds, while four code writers
 rules rechecked against their records, all held; page-level rules are left to the next DDL stretch's byte tests. One
 gap: `show` prints no kept page bytes or diffs, so the prober wrote helpers in `%TEMP%` (task `8jq6`).
 
+**Organizer stretch measured (01a1fb8b, 2026-11-21 00:40-03:40 UTC, about 280 calls).** 17 landings: 9 code
+stretches (c4rv, 42cd s1 with 5tw7, tc26 s1, mvgk, 8jq6, zfrp s3, sjws with rf2n, Com twice more) and 5 prober rounds
+(r-q14 to r-q18, 166 questions), plus doc fixes. Compare baseline 183 → 215 of 1043, no question lost in any landing.
+Up to five children at once in disjoint projects (changes 1, 2 and 6 together). After change 3 (mvgk) a full compare
+set took 5 min instead of 15-22, so every landing got its own baseline within minutes. Review found per landing about
+one rule beyond its records (narrowed in four of the nine code stretches) and three notes contradicted by new records
+(gqv4, r-q16 FreeMap membership, ERR-PARTIAL), each corrected at landing.
+
 **Observations (organizer 01a1fb8b, 2026-11-21).**
 
 | Cause | Effect | Change made |
