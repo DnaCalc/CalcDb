@@ -170,4 +170,66 @@ public sealed class AllocationTests(ITestOutputHelper output)
         // Budget (The Plan §3.2): a resident Text Seek allocates nothing.
         Assert.True(perCall < 1, $"a resident Text Seek allocates {perCall:F1} B/call");
     }
+
+    [Fact]
+    public void Dynamic_PageSource_field_read_allocates_zero_bytes_with_and_without_overlay()
+    {
+        // Budget (The Plan §3.2, task hm8k): every table/dynaset field read resolves coordinator.OverlayOf(Cache).
+        // Steady-state field reads on a bound row must allocate 0 managed bytes with no overlay, with an active
+        // overlay, and again after Rollback returns to the committed pages.
+        const string EditFixture = "71c42e613e63fe3e63f039644361c9de802a35d12605ec28ea0daa75f697f72b";
+        using var file = new CalcDb.Isam.Tests.Edit.ReplayFixture(EditFixture);
+        using var ws = new CalcDb.Isam.Transactions.TransactionCoordinator(new LockerId(1))
+        {
+            Publisher = file,
+            Scheduler = new CalcDb.Isam.Tests.Edit.CountingScheduler(),
+        };
+        (TableDefinition g, CalcDb.Isam.Edit.TableEditContext gCtx) = file.Table("G")!.Value;
+        ColumnDescriptor nCol = g.Columns.Single(c => c.Name == "N");
+        var source = new PageSource(file.Cache, ws);
+
+        using TableCursor rs = TableCursor.Open(source, D, g, file.Image.PageCount, 1, out _)!;
+        using TableCursor writer = TableCursor.Open(source, D, g, file.Image.PageCount, 1, out _)!;
+        using var frame = new CalcDb.Isam.Edit.EditFrame(gCtx, writer, ws);
+
+        const int Reads = 1000;
+        (long Bytes, long Sum) MeasureReads()
+        {
+            // Warm up once so RowBinding and SourceHold are bound for the current overlay state.
+            long warm = rs.Read(nCol).Value.Integer;
+            long sum = 0;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < Reads; i++)
+            {
+                sum += rs.Read(nCol).Value.Integer;
+            }
+            return (GC.GetAllocatedBytesForCurrentThread() - before, warm + sum);
+        }
+
+        // 1. Dynamic source with no overlay (committed pages).
+        Assert.Null(source.Overlay);
+        (long noOverlayBytes, long noOverlaySum) = MeasureReads();
+        Assert.Equal(1L * (Reads + 1), noOverlaySum);
+
+        // 2. Dynamic source with an active Workspace overlay.
+        Assert.Null(ws.BeginTrans());
+        Assert.True(frame.Edit().Succeeded);
+        Assert.True(frame.Assign(nCol, new CalcDb.Values.NativeVariant { Vt = (ushort)CalcDb.Foundation.VarType.I4, Int64 = 77 }).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+        Assert.NotNull(source.Overlay);
+
+        (long withOverlayBytes, long withOverlaySum) = MeasureReads();
+        Assert.Equal(77L * (Reads + 1), withOverlaySum);
+
+        // 3. Dynamic source back to committed pages after Rollback.
+        Assert.True(ws.Rollback().Succeeded);
+        Assert.Null(source.Overlay);
+        (long afterRollbackBytes, long afterRollbackSum) = MeasureReads();
+        Assert.Equal(1L * (Reads + 1), afterRollbackSum);
+
+        output.WriteLine($"dynamic read: no overlay {noOverlayBytes} B/{Reads}, with overlay {withOverlayBytes} B/{Reads}, after rollback {afterRollbackBytes} B/{Reads}");
+        Assert.Equal(0, noOverlayBytes);
+        Assert.Equal(0, withOverlayBytes);
+        Assert.Equal(0, afterRollbackBytes);
+    }
 }

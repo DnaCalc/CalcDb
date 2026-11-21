@@ -468,7 +468,7 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         AssertNotModelled(Method(opt, "Clone"), "NotModelled.CloneWithOptimisticLockEdits");
         Ok(Method(opt, "Close"));
 
-        // Clone on a recordset whose Workspace overlay has resolved (after CommitTrans) refuses by name.
+        // Clone on a recordset opened over a Workspace overlay succeeds after CommitTrans and reads the committed pages (task hm8k).
         Ok(Method(ws, "BeginTrans"));
         RecordsetObject writer = OpenRecordset(db, "T", 2);
         Ok(Method(writer, "Edit"));
@@ -476,7 +476,9 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         Ok(Method(writer, "Update"));
         RecordsetObject over = OpenRecordset(db, "T", 2);
         Ok(Method(ws, "CommitTrans"));
-        AssertNotModelled(Method(over, "Clone"), "NotModelled.Edit.ResolvedOverlay");
+        RecordsetObject overClone = Recover<RecordsetObject>(Ok(Method(over, "Clone")));
+        Assert.Equal("committed", TextValue(Ok(FieldValue(overClone, "V"))));
+        Ok(Method(overClone, "Close"));
         Ok(Method(over, "Close"));
         Ok(Method(writer, "Close"));
 

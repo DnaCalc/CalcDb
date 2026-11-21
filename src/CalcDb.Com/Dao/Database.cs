@@ -479,11 +479,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {options} (an accepted option whose effect is not modelled: RecordsetOptions)"));
         }
         TraversalFailure? traversal;
-        // A table-type, dynaset or forward-only recordset reads this Workspace's own unpublished rows through its overlay
-        // (Isam PageSource, task rf2n); a snapshot keeps the committed images (the ISAM names a snapshot over an overlay),
-        // and its reads of the Workspace's own changes stay refused by name (RecordsetObject.UnpublishedRead).
-        PrivateOverlay? overlay = recordsetType == 4 ? null : _workspace.Transactions.OverlayOf(Cache);
-        var source = new PageSource(Cache, overlay);
+        // A table-type, dynaset or forward-only recordset reads this Workspace's own unpublished rows through its live
+        // overlay while a level has changed the file and the committed images before the first change and after the level
+        // ends (Isam PageSource, tasks rf2n, hm8k); a snapshot keeps the committed images (the ISAM names a snapshot over
+        // an overlay or dynamic source), and its reads of the Workspace's own changes stay refused by name
+        // (RecordsetObject.UnpublishedRead).
+        PageSource source = recordsetType == 4 ? new PageSource(Cache) : new PageSource(Cache, _workspace.Transactions);
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
@@ -501,7 +502,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, overlay);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();

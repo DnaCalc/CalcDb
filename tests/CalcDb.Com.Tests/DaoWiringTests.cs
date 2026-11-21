@@ -375,27 +375,38 @@ public sealed unsafe class DaoWiringTests : IDisposable
     }
 
     /// <summary>
-    /// Isam PageSource (task rf2n): a recordset opened after its Workspace changed a table inside a level reads the change
-    /// through the Workspace's overlay; one opened before the change has the committed images and stays named, as does any
-    /// read through an overlay after its level ended.
+    /// Isam dynamic PageSource (tasks rf2n, hm8k): a non-snapshot recordset opened before or after its Workspace changed
+    /// a table inside a level reads the change through the Workspace's live overlay, and reads the committed pages after
+    /// the level resolves; a snapshot stays named over unpublished changes.
     /// </summary>
     [Fact]
-    public void A_recordset_opened_after_the_levels_change_reads_it_through_the_overlay()
+    public void A_recordset_opened_before_or_after_the_levels_change_reads_it_through_the_overlay()
     {
         DatabaseObject db = Open(EditFixture);
+        RecordsetObject atDepthZero = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 1)));
+        FieldObject u0 = Object<FieldObject>(Object<FieldsObject>(atDepthZero, "Fields"), "Item", "U");
+        Assert.Equal("u1", Text(Get(u0, "Value")));
+
         Ok(_engine.DefaultWorkspace.BeginTrans());
         RecordsetObject before = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
         FieldObject u = Object<FieldObject>(Object<FieldsObject>(before, "Fields"), "Item", "U");
         Ok(Method(before, "Edit"));
         Ok(Put(u, "Value", "u9")); // same width as "u1" (a shrinking row is refused by name)
         Ok(Method(before, "Update"));
-        Named(Get(u, "Value")); // its cursor reads the committed images
+        Assert.Equal("u9", Text(Get(u, "Value"))); // opened before the first change: follows the live overlay
+        Assert.Equal("u9", Text(Get(u0, "Value"))); // opened at depth 0: follows its Workspace's live overlay
 
         RecordsetObject after = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 2)));
         Assert.Equal("u9", Text(Get(Object<FieldObject>(Object<FieldsObject>(after, "Fields"), "Item", "U"), "Value")));
         RecordsetObject snapshot = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 4)));
         Named(Get(Object<FieldObject>(Object<FieldsObject>(snapshot, "Fields"), "Item", "U"), "Value"));
+
         Ok(_engine.DefaultWorkspace.Rollback());
+        Assert.Equal("u1", Text(Get(u0, "Value"))); // after Rollback: reads committed pages directly (r-txn-1b/rs-types-after-rollback)
+        Ok(Method(atDepthZero, "Close"));
+        Ok(Method(before, "Close"));
+        Ok(Method(after, "Close"));
+        Ok(Method(snapshot, "Close"));
     }
 
     [Fact]

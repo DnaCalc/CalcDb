@@ -137,11 +137,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     /// <param name="options">The admitted OpenRecordset Options bits (<see cref="RecordsetOptions"/>).</param>
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
-    /// <param name="overlay">The Workspace's overlay of the file the cursor reads through (Isam PageSource, task rf2n), or null for the committed images.</param>
-    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, PrivateOverlay? overlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         _family = new RecordsetFamily(this);
-        _overlay = overlay;
         Database = database;
         _entry = entry;
         TableName = entry.Name;
@@ -153,10 +151,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         database.AddRef(); // a recordset keeps its Database object alive
     }
 
-    private RecordsetObject(RecordsetObject parent, IRecordCursor cursor, PrivateOverlay? overlay) : base(Decl, Vtable, parent.Engine, "DAO.Recordset")
+    private RecordsetObject(RecordsetObject parent, IRecordCursor cursor) : base(Decl, Vtable, parent.Engine, "DAO.Recordset")
     {
         _family = parent._family;
-        _overlay = overlay;
         Database = parent.Database;
         _entry = parent._entry;
         TableName = parent.TableName;
@@ -600,23 +597,13 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// The refusal of a read that would meet an accepted change this recordset's Workspace sees and the file does not hold
     /// yet (<see cref="UnpublishedChanges"/>), or null. <paramref name="own"/> leaves out the changes of this recordset's
-    /// own edit semantics, which the edit frame checks itself (an Edit of a changed row, a unique key).
+    /// own edit semantics, which the edit frame checks itself (an Edit of a changed row, a unique key). Non-snapshot
+    /// cursors bind dynamically to their Workspace's live overlay of <see cref="DatabaseObject.Cache"/> (task hm8k).
     /// </summary>
-    public CallResult? UnpublishedRead(string member, MutationSemantics? own = null)
-    {
-        if (_overlay is { } overlay && !ReferenceEquals(overlay, Transactions.OverlayOf(Database.Cache)))
-        {
-            // The cursor's pages come from an overlay its Workspace no longer has (the level was resolved or published):
-            // a cursor's source is fixed at open (Isam PageSource), so its reads are named rather than made.
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: the recordset of '{_entry.Name}' was opened over its Workspace's overlay of a level that has ended (a cursor's PageSource is fixed at open)"));
-        }
-        return Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own, readsOverlayOf: _overlay is null ? null : Database.Cache)
+    public CallResult? UnpublishedRead(string member, MutationSemantics? own = null) =>
+        Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own, readsOverlayOf: RecordsetType == 4 ? null : Database.Cache)
             ? EditPublication.Unpublished(_entry.Name, member)
             : null;
-    }
-
-    /// <summary>The Workspace overlay this recordset's cursor reads through, or null (updated on Requery).</summary>
-    private PrivateOverlay? _overlay;
 
     /// <summary>
     /// A member whose effect on a pending edit no record shows (Seek, an Index put, a refused Requery or Find): named while
@@ -1263,10 +1250,6 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.CloneWithOptimisticLockEdits", "Clone of a recordset with LockEdits = False (whether LockEdits is inherited or reset is not recorded)"));
         }
-        if (_overlay is { } overlay && !ReferenceEquals(overlay, Transactions.OverlayOf(Database.Cache)))
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"Clone: the recordset of '{_entry.Name}' was opened over its Workspace's overlay of a level that has ended"));
-        }
         IRecordCursor? cloned;
         switch (Cursor)
         {
@@ -1287,7 +1270,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             default:
                 return CallResult.Fail(Failure.NotImplemented($"Clone on cursor type {Cursor.GetType().Name}"));
         }
-        var copy = new RecordsetObject(this, cloned, _overlay);
+        var copy = new RecordsetObject(this, cloned);
         CallResult result = Object(copy);
         copy.Release();
         return result;
@@ -1339,8 +1322,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 return CallResult.Fail(Failure.NotModelled("NotModelled.RequeryWithSiblingPendingEdit", "Requery while another member of the clone family has a pending edit (not recorded)"));
             }
         }
-        PrivateOverlay? currentOverlay = RecordsetType == 4 ? null : Transactions.OverlayOf(Database.Cache);
-        if (Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own: null, readsOverlayOf: currentOverlay is null ? null : Database.Cache))
+        if (Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own: null, readsOverlayOf: RecordsetType == 4 ? null : Database.Cache))
         {
             return EditPublication.Unpublished(_entry.Name, "Requery");
         }
@@ -1348,7 +1330,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             Database.Workspace.Transactions.EndLazyBurst(Database.Cache);
         }
-        var source = new PageSource(Database.Cache, currentOverlay);
+        PageSource source = RecordsetType == 4 ? new PageSource(Database.Cache) : new PageSource(Database.Cache, Transactions);
         if (!pop.Requery(out TraversalFailure? failure, source, Database.PageCount))
         {
             if (failure?.Predicate is { } predicate && predicate.StartsWith("NotModelled.", StringComparison.Ordinal))
@@ -1363,7 +1345,6 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _frame?.Discard();
         foreach (RecordsetObject member in _family.Live)
         {
-            member._overlay = currentOverlay;
             member._staleEditModeAfterCloneCloseAbort = false;
         }
         return CallResult.Nothing;

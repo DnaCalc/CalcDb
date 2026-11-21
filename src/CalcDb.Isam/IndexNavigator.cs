@@ -62,8 +62,9 @@ public sealed class IndexNavigator
     private readonly uint _owner;
     private readonly Dictionary<uint, (ImageId Image, IndexPage Page)> _decoded = [];
     private ulong _serial;
+    private PrivateOverlay? _overlay;
 
-    /// <param name="source">The pages the tree is read from: the committed images, or a Workspace's overlay (rf2n).</param>
+    /// <param name="source">The pages the tree is read from: the committed images, or a Workspace's overlay (rf2n, hm8k).</param>
     public IndexNavigator(PageSource source, FormatDescriptor d, PhysicalIndex index, uint tableDefPage)
     {
         _source = source;
@@ -292,20 +293,23 @@ public sealed class IndexNavigator
 
     private IndexPage? Page(uint page)
     {
-        // A publication may have changed any page this navigator decoded (W-05/same-width-mutation); through an overlay a
-        // private revision may too, so a kept page is used only while it is the page's image in the source.
+        // A publication or overlay transition may have changed any page this navigator decoded (W-05/same-width-mutation,
+        // task hm8k); through an overlay a private revision may too, so a kept page is used only while it is the page's
+        // image in the source.
         ulong serial = _source.Cache.PublishedSerial;
-        if (serial != _serial)
+        PrivateOverlay? overlay = _source.Overlay;
+        if (serial != _serial || !ReferenceEquals(overlay, _overlay))
         {
             _decoded.Clear();
             _serial = serial;
+            _overlay = overlay;
         }
         if (_decoded.TryGetValue(page, out (ImageId Image, IndexPage Page) kept)
-            && (_source.Overlay is null || _source.CurrentImage(page) == kept.Image))
+            && (overlay is null || _source.CurrentImage(overlay, page) == kept.Image))
         {
             return kept.Page;
         }
-        using PagePin? pin = _source.Pin(page).Pin;
+        using PagePin? pin = (overlay is not null ? overlay.Pin(page) : _source.Cache.Pin(page)).Pin;
         if (pin is null)
         {
             Fail($"index page {page} could not be pinned", page);
