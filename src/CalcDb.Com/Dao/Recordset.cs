@@ -956,6 +956,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// snapshot or forward-only one opened outside every level; any one at an inner Rollback). CommitTrans changes nothing
     /// (edit-commit-opened-inside: the recordset reads on its row).
     /// </summary>
+    /// <summary>A table-type or dynaset recordset locks its table against DDL; a snapshot or forward-only one is not recorded (<see cref="TableHold"/>).</summary>
+    public TableHold Holds(string table) => !string.Equals(_entry.Name, table, StringComparison.OrdinalIgnoreCase) ? TableHold.None
+        : RecordsetType is 1 or 2 ? TableHold.Locked
+        : RecordsetType == 4 ? TableHold.TableSnapshot
+        : TableHold.ForwardOnly;
+
     public void RolledBack(ExplicitFrame level, bool outermost)
     {
         if (Closed || _afterRollback is RecordsetAfterRollback.Invalid or RecordsetAfterRollback.NotRecorded)

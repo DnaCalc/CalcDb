@@ -77,6 +77,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// </summary>
     public string? NotRecordedAfterRollback { get; private set; }
 
+    /// <summary>
+    /// A SELECT dynaset or snapshot locks the tables it reads against DDL (r-def-cat-txn/cat-drop-table-held-recordset,
+    /// r-def-cursor-dao/err-drop-missing-index-column: 3211); a forward-only one is not recorded (<see cref="TableHold"/>).
+    /// </summary>
+    public TableHold Holds(string table) => !Plan.Sources.Any(s => string.Equals(s.TableName, table, StringComparison.OrdinalIgnoreCase)) ? TableHold.None
+        : RecordsetType is 2 or 4 ? TableHold.Locked
+        : TableHold.ForwardOnly;
+
     public void RolledBack(ExplicitFrame level, bool outermost)
     {
         if (!Closed && Array.IndexOf(_openLevels, level) >= 0)

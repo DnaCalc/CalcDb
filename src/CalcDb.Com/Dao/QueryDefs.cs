@@ -33,7 +33,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Get("LastUpdated", (self, args) => Live(self, q => CatalogDates.Date(q._query.Entry.DateUpdateBits)))
         .Get("ODBCTimeout", (self, args) => Live(self, q => q.StoredOr("ODBCTimeout", Int16(60))))
         .Get("MaxRecords", (self, args) => Live(self, q => q.StoredOr("MaxRecords", Int32(0))))
-        .Get("RecordsAffected", (self, args) => Live(self, q => Int32(0)))
+        .Get("RecordsAffected", (self, args) => Live(self, q => Int32(q._recordsAffected)))
         .Get("StillExecuting", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("CacheSize", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("Prepare", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
@@ -41,7 +41,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Get("Fields", (self, args) => Live(self, q => q.FieldsCollection()))
         .Get("Properties", (self, args) => Live(self, q => q.PropertiesCollection()))
         .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, q => q.OpenRecordset(type, options)); })
-        .Method("Execute", (self, args) => Live(self, q => q.Execute()))
+        .Method("Execute", (self, args) => { nint options = args.Length > 0 ? args[0] : 0; return Live(self, q => q.Execute(options)); })
         .Method("Close", (self, args) => Live(self, q => CallResult.Nothing));
 
     private readonly DefinitionCollection _owner;
@@ -50,6 +50,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private DefinitionCollection? _parameters;
     private PropertiesObject? _properties;
     private BoundSelect? _plan;
+    private BoundAction? _action;
+    private int _recordsAffected;
     private SqlFailure? _planFailure;
     private bool _planMade;
     private NativeVariant?[] _values = [];
@@ -107,20 +109,39 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     /// <summary>
     /// The select query's SQL as ACE renders it (QuerySql), bound once (W-06/parser-binder-scan); null for the other
-    /// families, and when the SQL does not render or bind (<see cref="_planFailure"/> holds the binder's failure).
+    /// families, and when the SQL does not render or bind (<see cref="_planFailure"/> holds the binder's failure). A
+    /// delete, update or append query's SQL is bound once too, as its action plan (<see cref="_action"/>, W-07/actions),
+    /// whose parameters its Parameters list and Execute takes (r-cat-1b/qd-execute-param-action).
     /// </summary>
     public BoundSelect? Plan()
     {
         if (!_planMade)
         {
             _planMade = true;
-            if (_query.Family == QueryFamily.Select && QuerySql.Render(_query).Text is { } text)
+            if (_query.Family is QueryFamily.Select or QueryFamily.Delete or QueryFamily.Update or QueryFamily.Append && QuerySql.Render(_query).Text is { } text)
             {
-                _plan = BoundSelect.Prepare(text, Database.Sql, out _planFailure);
-                _values = _plan is null ? [] : new NativeVariant?[_plan.Parameters.Count];
+                if (_query.Family == QueryFamily.Select)
+                {
+                    _plan = BoundSelect.Prepare(text, Database.Sql, out _planFailure);
+                }
+                else
+                {
+                    _action = BoundAction.Prepare(text, Database.Sql, out _planFailure);
+                }
+                _values = BoundParameters is { } bound ? new NativeVariant?[bound.Count] : [];
             }
         }
         return _plan;
+    }
+
+    /// <summary>The bound statement's parameters (a select's or an action's), or null when neither bound.</summary>
+    private IReadOnlyList<Sql.QueryParameter>? BoundParameters => _plan?.Parameters ?? _action?.Parameters;
+
+    /// <summary>Parameter <paramref name="index"/> of the bound statement.</summary>
+    public Sql.QueryParameter Parameter(int index)
+    {
+        Plan();
+        return BoundParameters![index];
     }
 
     /// <summary>The value assigned to parameter <paramref name="index"/>, or null (DAO-QUERY: an untouched Parameter reads Empty).</summary>
@@ -155,12 +176,35 @@ internal sealed unsafe class QueryDefObject : DaoObject
     }
 
     /// <summary>
-    /// Execute of a row-returning query (select, crosstab, union) is 3065 from DAO.QueryDef, before any parameter is
-    /// asked for (r-cat-1b/qd-execute-on-row-returning: QSel, QXtab, QUni, QParam). Action queries are W-07/actions.
+    /// Execute(Options): a row-returning query (select, crosstab, union) is 3065 from DAO.QueryDef, before any parameter is
+    /// asked for (r-cat-1b/qd-execute-on-row-returning: QSel, QXtab, QUni, QParam). A delete, update or append query runs
+    /// its bound plan with this QueryDef's parameter values (missing ones: 3061 from DAO.QueryDef,
+    /// r-cat-1b/qd-execute-param-action); the other families run their rendered SQL (<see cref="ActionRoute.ExecuteSaved"/>).
+    /// RecordsAffected counts on the QueryDef only (r-cat-1b/qd-execute-action-saved: QUpd 4, QApp 4, db 0 after each).
+    /// An Options value that does not convert is not recorded on a QueryDef and is named.
     /// </summary>
-    private CallResult Execute() => _query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union
-        ? Fail(3065, SelectRoute.CannotExecuteSelect)
-        : CallResult.Fail(Failure.NotImplemented($"QueryDef.Execute of a {_query.Family?.ToString() ?? "unclassified"} query (W-07/actions)"));
+    private CallResult Execute(nint optionsArg)
+    {
+        if (_query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union)
+        {
+            _recordsAffected = 0;
+            return Fail(3065, SelectRoute.CannotExecuteSelect);
+        }
+        if (Args.Int32(optionsArg, omitted: 0) is not { } options)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.Execute with an Options argument that is not numeric (not recorded)"));
+        }
+        Plan();
+        if (_action is { } action)
+        {
+            return ActionRoute.Execute(Database, this, action, options, _values, ref _recordsAffected);
+        }
+        if (_planFailure is { } failure)
+        {
+            return ActionRoute.Failed(Database, this, failure, ref _recordsAffected);
+        }
+        return ActionRoute.ExecuteSaved(Database, this, _query, options, null, ActionErrorSource.QueryDef, ref _recordsAffected);
+    }
 
     /// <summary>A built-in the blob stores (flag 01: ODBCTimeout, MaxRecords), else the value ACE shows for an unset one.</summary>
     private CallResult StoredOr(string name, CallResult unset)
@@ -194,7 +238,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
                 ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
             };
         }
-        if (Plan() is not { } plan)
+        Plan();
+        if (BoundParameters is not { } parameters)
         {
             return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
@@ -204,8 +249,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
                     : $"the Parameters of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
             };
         }
-        SqlFailure? declarations = plan.ParametersFailure;
-        _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. plan.Parameters.Select(p => Unbracketed(p.Name))],
+        SqlFailure? declarations = _plan?.ParametersFailure ?? _action?.ParametersFailure;
+        _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. parameters.Select(p => Unbracketed(p.Name))],
             (c, i) => new ParameterObject(c, this, i))
         {
             ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
@@ -251,6 +296,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
             }
         }
         _plan?.Dispose();
+        _action?.Dispose();
         _owner.Released(this);
         _owner.Release();
     }
@@ -287,7 +333,7 @@ internal sealed unsafe class ParameterObject : DaoObject
         query.AddRef(); // its value lives on the QueryDef (CAT-V: one instance's values are shared by its Parameters)
     }
 
-    private Sql.QueryParameter Parameter => _query.Plan()!.Parameters[_index];
+    private Sql.QueryParameter Parameter => _query.Parameter(_index);
 
     private CallResult Assign(nint value)
     {

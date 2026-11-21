@@ -7,6 +7,7 @@ using CalcDb.Expressions;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
+using CalcDb.Sql;
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
 using CalcDb.Values.Scalar;
@@ -40,7 +41,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
         .Get("Connect", (self, args) => Live(self, d => Text("")))
         .Get("QueryTimeout", (self, args) => Live(self, d => Int16(60)))
-        .Get("RecordsAffected", (self, args) => Live(self, d => Int32(0)))
+        .Get("RecordsAffected", (self, args) => Live(self, d => Int32(d._recordsAffected)))
         .Get("ReplicaID", (self, args) => Live(self, d => NullBstr()))
         .Get("DesignMasterID", (self, args) => Live(self, d => NullBstr()))
         .Get("Connection", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType)))
@@ -65,6 +66,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private Dictionary<int, TableEditContext>? _editContexts;
     private ExpressionRuleBinder? _ruleBinder;
     private IReadOnlyList<Relationship>? _relationships;
+
+    /// <summary>
+    /// The RecordsAffected of this Database's last Execute (R-SQL-2; r-sql-2-3/act-records-affected): the rows the
+    /// statement changed, 0 after a DDL statement and after a failure (SQL-ACT-FAIL). A QueryDef's Execute counts on the
+    /// QueryDef and leaves this one (r-cat-1b/qd-execute-action-saved: db.RecordsAffected reads 0 after each).
+    /// </summary>
+    private int _recordsAffected;
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
@@ -450,19 +458,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return null;
         }
-        if (_relationships is null)
+        if (Relationships(out failure) is null)
         {
-            _relationships = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out failure);
-            if (_relationships is null)
-            {
-                failure = "MSysRelationships cannot be read: " + failure;
-                return null;
-            }
+            return null;
         }
         // The text compare and session LCID (R-EXPR-1 EXPR-LOCALE: user default, never the thread's), as Find binds its criteria.
         _ruleBinder ??= new ExpressionRuleBinder(new ExpressionContext(SessionLocale.Lcid, TextCompareMode.Database, Collation, ExpressionUse.Query));
         var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
-        bool related = _relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
+        bool related = _relationships!.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
         // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).
         var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), SessionLocale.Lcid, related, new TableFootprints(Cache, Format, table, PageCount));
         Engine.Changes.Register(semantics, Name);
@@ -472,6 +475,40 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _editContexts.Add(entry.Id, context);
         return context;
+    }
+
+    /// <summary>MSysRelationships, read once per Database at first use; null with the reason when it cannot be read.</summary>
+    public IReadOnlyList<Relationship>? Relationships(out string? failure)
+    {
+        failure = null;
+        if (_relationships is null)
+        {
+            _relationships = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out failure);
+            if (_relationships is null)
+            {
+                failure = "MSysRelationships cannot be read: " + failure;
+            }
+        }
+        return _relationships;
+    }
+
+    /// <summary>How the open recordsets of this Database hold <paramref name="table"/>: locked by any one locks it; else the first hold no record decides.</summary>
+    public TableHold Hold(string table)
+    {
+        TableHold hold = TableHold.None;
+        foreach (IDatabaseRecordset r in _recordsets)
+        {
+            TableHold h = r.Holds(table);
+            if (h == TableHold.Locked)
+            {
+                return h;
+            }
+            if (h != TableHold.None && hold == TableHold.None)
+            {
+                hold = h;
+            }
+        }
+        return hold;
     }
 
     /// <summary>The database as the SQL layer binds and runs against it, made once per Database.</summary>
@@ -610,25 +647,96 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// Execute(Query, Options): an Options value that does not convert is 3421 (r-dao-1-err-1/err-bind-types); a SELECT is
-    /// 3065 (r-err-1b/sql-execute-select). Action queries and DDL are W-07/actions.
+    /// Execute(Query, Options) (W-07/actions, W-07/native-metadata-write; II-11 §§22-28): an Options value that does not
+    /// convert is 3421 (r-dao-1-err-1/err-bind-types); a SELECT is 3065 (r-err-1b/sql-execute-select); the name of a saved
+    /// query runs that query (<see cref="ActionRoute.ExecuteSaved"/>); any other text goes to the SQL layer's action and
+    /// DDL executor (<see cref="ActionExecutor"/>), whose ACE errors come from DAO.Database. RecordsAffected is set from the
+    /// outcome, 0 on a failure (SQL-ACT-FAIL); a success leaves DBEngine.Errors as it was (STR-SCHEMA: the old 3211 still
+    /// reads after a successful ALTER; ERR-PARTIAL and r-q18-statements: a no-flag statement that skipped rows raises nothing).
     /// </summary>
     private CallResult Execute(nint query, nint optionsArg)
     {
-        if (Args.Int32(optionsArg, omitted: 0) is null)
+        if (Args.Int32(optionsArg, omitted: 0) is not { } options)
         {
             return Args.TypeOf(optionsArg) == Foundation.VarType.Bstr ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented("Execute with an Options argument that is not numeric"));
         }
         string sql = Args.Text(query) ?? "";
-        if (!SelectRoute.IsSelect(sql))
+        if (SelectRoute.IsSelect(sql))
         {
-            return CallResult.Fail(Failure.NotImplemented("Database.Execute of a statement that is not a SELECT (action queries and DDL are W-07/actions)"));
+            // A SELECT with a PARAMETERS clause: no record shows whether Execute answers 3061 (no values) or 3065 first
+            // (DAO-QUERY records only a saved QueryDef's Execute).
+            return sql.AsSpan().TrimStart().StartsWith("PARAMETERS", StringComparison.OrdinalIgnoreCase)
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.ExecuteParameterSelect", "Database.Execute of a SELECT with a PARAMETERS clause: 3061 or 3065 is not recorded"))
+                : Affected(Fail(3065, SelectRoute.CannotExecuteSelect));
         }
-        // A SELECT with a PARAMETERS clause: no record shows whether Execute answers 3061 (no values) or 3065 first
-        // (DAO-QUERY records only a saved QueryDef's Execute).
-        return sql.AsSpan().TrimStart().StartsWith("PARAMETERS", StringComparison.OrdinalIgnoreCase)
-            ? CallResult.Fail(Failure.NotModelled("NotModelled.ExecuteParameterSelect", "Database.Execute of a SELECT with a PARAMETERS clause: 3061 or 3065 is not recorded"))
-            : Fail(3065, SelectRoute.CannotExecuteSelect);
+        if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, sql, StringComparison.OrdinalIgnoreCase)) is { } saved)
+        {
+            return ActionRoute.ExecuteSaved(this, this, saved, options, null, ActionErrorSource.Database, ref _recordsAffected);
+        }
+        return ActionRoute.Execute(this, this, sql, options, null, ActionErrorSource.Database, ref _recordsAffected);
+    }
+
+    /// <summary>A failure of Execute before the SQL layer ran: RecordsAffected reads 0 after it (SQL-ACT-FAIL).</summary>
+    private CallResult Affected(CallResult failed)
+    {
+        _recordsAffected = 0;
+        return failed;
+    }
+
+    /// <summary>
+    /// A SchemaWriter over this Database's cache, catalog and extent, the one route of TableDefs.Append and SQL DDL
+    /// (W-07/native-metadata-write). Null with the reason when the session cannot write.
+    /// </summary>
+    public SchemaWriter? OpenSchemaWriter(out string? failure)
+    {
+        if (_schemaFailure is { } stale)
+        {
+            failure = stale;
+            return null;
+        }
+        failure = null;
+        return new SchemaWriter(Cache, Format, Catalog, PageCount, Header.SortOrder);
+    }
+
+    /// <summary>
+    /// A SQL DDL statement's catalog change was published (<see cref="DatabaseSql.OnSchemaPublished"/>). A catalog that
+    /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="_schemaFailure"/>).
+    /// </summary>
+    public void SqlSchemaPublished(ulong extentPages) => _schemaFailure = SchemaPublished(extentPages);
+
+    /// <summary>Why the catalog could not be read after this session's last catalog change; nothing more is written then.</summary>
+    private string? _schemaFailure;
+
+    /// <summary>The reason a statement cannot run against this Database's current catalog, or null.</summary>
+    public string? SchemaFailure => _schemaFailure;
+
+    /// <summary>
+    /// Whether DDL statement <paramref name="sql"/> may run beside the open recordsets: an existing table it changes or
+    /// drops that an open recordset holds in a way no record decides (a snapshot of the table itself or a forward-only
+    /// recordset, <see cref="TableHold"/>) refuses it by name; so does an MSysRelationships that cannot be read (the
+    /// binder's 3281 and 3383 read it). A statement that does not parse is left to the executor, which answers it.
+    /// </summary>
+    public Failure? DdlRefusal(string sql)
+    {
+        IEnumerable<string> targets = DdlParser.Parse(sql, out _) switch
+        {
+            DropTableStatement drop => drop.TableNames,
+            CreateIndexStatement index => [index.TableName],
+            DropIndexStatement index => [index.TableName],
+            AlterTableStatement alter => [alter.TableName],
+            _ => [],
+        };
+        foreach (string table in targets)
+        {
+            switch (Hold(table))
+            {
+                case TableHold.TableSnapshot:
+                    return Failure.NotModelled("NotModelled.DdlBesideTableSnapshot", $"DDL on '{table}' while a snapshot opened on the table is open: whether it locks the table (3211) is not recorded");
+                case TableHold.ForwardOnly:
+                    return Failure.NotModelled("NotModelled.DdlBesideForwardOnly", $"DDL on '{table}' while a forward-only recordset of it is open: whether it locks the table (3211) is not recorded");
+            }
+        }
+        return Relationships(out string? failure) is null ? Failure.NotImplemented("DDL when " + failure) : null;
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
@@ -731,7 +839,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented(notWritten!));
         }
-        var writer = new SchemaWriter(Cache, Format, Catalog, PageCount, Header.SortOrder);
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append: " + writerFailure));
+        }
         SchemaOutcome outcome = writer.CreateTable(workspace, request, SchemaWriter.DateBits(draft.Created), SchemaWriter.DateBits(DateTime.Now));
         if (outcome.Refused is { } refused)
         {
@@ -769,7 +880,31 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         Catalog = catalog;
         _tableDefs?.Relist();
+        _sql?.Forget();
+        ForgetEditContexts();
         return null;
+    }
+
+    /// <summary>
+    /// After a catalog change the edit state of a table its recordsets do not hold is compiled again at its next use: a
+    /// dropped table's goes, and a table that gained an index gets probes and footprints over its new definition. A held
+    /// table's stays: its recordsets' frames use it, and DDL on a held table fails 3211 before it writes.
+    /// </summary>
+    private void ForgetEditContexts()
+    {
+        if (_editContexts is not { } contexts)
+        {
+            return;
+        }
+        foreach ((int id, TableEditContext context) in contexts.ToArray())
+        {
+            string name = context.Semantics.TableName;
+            if (Hold(name) == TableHold.None)
+            {
+                context.Semantics.Dispose();
+                contexts.Remove(id);
+            }
+        }
     }
 
     /// <summary>The saved queries (II-06 §8), read once per Database at first use; null with the reason when they cannot be.</summary>
@@ -929,7 +1064,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _recordsets.Clear();
         _workspace.Transactions.EndLazyBurst(Cache);
         CallResult closing = CallResult.Nothing;
-        if (GlobalMapChanged)
+        // A DELETE without WHERE released its data pages: the closing commit sets their global-map bits, also when page 1
+        // is otherwise unchanged (zfrp; R-FMT-2; evidence/r-q17-growth/retire-delete-au1-read-open).
+        if (GlobalMapChanged || _workspace.Transactions.ReleasesAtClose(Cache))
         {
             _globalMapChanged = false;
             (MutationOpen open, string? detail) = _workspace.Transactions.PublishCounterCommit(Cache);
