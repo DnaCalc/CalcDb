@@ -25,28 +25,72 @@ public sealed class GeneratedTicket(long value)
 }
 
 /// <summary>
-/// A table's incrementing AutoNumber counter (II-07 §14; qualified.md R-FMT-2 Generated values): the next value is the
-/// highest ever issued plus one, issued at AddNew (r-cursor-1/edit-addnew-generated: the stored counter 2 gives 3, and
-/// after CancelUpdate the next AddNew gives 4). A consumed value is not returned by cancel, refusal or rollback; only
-/// Compact &amp; Repair resets it (not modelled here). One counter per table of a file, shared by every recordset and
-/// Workspace that adds to it; no MAX(id)+1 allocator.
+/// A table's AutoNumber counter (II-07 §14; qualified.md R-CAT-1 CAT-X / R-FMT-2 "each insert issues the last value
+/// plus the signed increment and writes it to TDEF 0x14..0x17"; W-07/native-metadata-write): reads the signed 32-bit
+/// last-issued value from TDEF +0x14..+0x17 and signed increment from TDEF +0x18..+0x1B (default 1;
+/// <c>evidence/r-q21-ddl-types/col-counter*</c>). Each insert issues <see cref="Last"/> + <see cref="Increment"/> and
+/// writes the issued value back to TDEF 0x14..0x17 (<c>evidence/r-q23-counter-step/</c>: <c>sql-100-5-ins1</c>,
+/// <c>sql-100-5-ins2</c>, <c>sql-100-1-ins1</c>, <c>sql-10-neg2-ins1</c>, <c>sql-10-neg2-ins2</c>,
+/// <c>dao-100-5-addnew1</c>). Zero increment and signed 32-bit overflow/underflow (past <see cref="int.MaxValue"/> or
+/// below <see cref="int.MinValue"/>) are refused by name without mutating <see cref="Last"/>. A consumed value is not
+/// returned by cancel, refusal or rollback; only Compact &amp; Repair resets it (not modelled here). One counter per
+/// table of a file, shared by every recordset and Workspace that adds to it; no MAX(id)+1 allocator.
 /// </summary>
-public sealed class AutoNumberCounter(uint stored)
+public sealed class AutoNumberCounter(uint stored, int increment = 1)
 {
-    private long _last = stored;
+    private long _last = unchecked((int)stored);
 
-    /// <summary>The last value issued (initially the TableDef's stored counter).</summary>
+    /// <summary>The signed step read from TableDef offset +0x18 (default 1).</summary>
+    public int Increment { get; } = increment;
+
+    /// <summary>The last value issued (initially the TableDef's stored signed 32-bit counter).</summary>
     public long Last => _last;
 
-    public GeneratedTicket Issue() => new(++_last);
+    /// <summary>
+    /// Try to issue the next AutoNumber ticket (<see cref="Last"/> + <see cref="Increment"/>). Refuses by name without
+    /// mutating <see cref="Last"/> when <see cref="Increment"/> is 0 or when the next value overflows signed 32-bit
+    /// <see cref="int"/> (above <see cref="int.MaxValue"/> or below <see cref="int.MinValue"/>; qualified.md Open).
+    /// </summary>
+    public bool TryIssue(out GeneratedTicket? ticket, out MutationOpen open, out string? detail)
+    {
+        ticket = null;
+        if (Increment == 0)
+        {
+            open = MutationOpen.AutoNumberIncrement;
+            detail = "AutoNumber insert with TableDef increment 0 is not modelled (ACE refuses COUNTER(seed, 0) with 3001 at DDL)";
+            return false;
+        }
+        long next = _last + (long)Increment;
+        if (next > int.MaxValue || next < int.MinValue)
+        {
+            open = MutationOpen.AutoNumberOverflow;
+            detail = $"AutoNumber step {_last} + ({Increment}) = {next} overflows signed 32-bit int (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)";
+            return false;
+        }
+        _last = next;
+        ticket = new GeneratedTicket(_last);
+        open = MutationOpen.None;
+        detail = null;
+        return true;
+    }
+
+    public GeneratedTicket Issue()
+    {
+        if (!TryIssue(out GeneratedTicket? ticket, out _, out string? detail))
+        {
+            throw new InvalidOperationException(detail);
+        }
+        return ticket!;
+    }
 
     /// <summary>
-    /// An explicit value accepted for the column moves the counter when it is higher (qualified.md: an explicit ID 100
-    /// gives 101 next; an explicit duplicate refused with 3022 still sets it).
+    /// Under unit increment, an explicit value accepted for the column moves the counter when it is higher
+    /// (qualified.md: an explicit ID 100 gives 101 next; an explicit duplicate refused with 3022 still sets it).
+    /// Explicit values under non-1 increments are refused before reaching here (qualified.md Open).
     /// </summary>
     public void Observe(long value)
     {
-        if (value > _last)
+        if (Increment == 1 && value > _last)
         {
             _last = value;
         }

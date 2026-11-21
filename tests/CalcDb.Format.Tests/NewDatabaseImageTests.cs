@@ -159,4 +159,95 @@ public sealed class NewDatabaseImageTests
         Assert.Equal(0, decoded.PrefixLength);
         Assert.Equal(D.IndexPage.EntryAreaBytes, decoded.FreeCount);
     }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(5, 5)]
+    [InlineData(93, 7)]
+    [InlineData(12, -2)]
+    [InlineData(-1, 1)]
+    [InlineData(-7, 2)]
+    public void TableDefEncoder_and_Decoder_round_trip_AutoNumberIncrement_and_SpecOf_preserves_it(int autoNumber, int increment)
+    {
+        // evidence/r-q21-ddl-types: col-counter (0, 1), col-counter-seed-inc (5, 5),
+        // col-counter-100-7 (93, 7), col-counter-neg-inc (12, -2);
+        // evidence/r-def-expr-sql/ddl-counter-seed-increment: Cs3 (-1, 1), Cs6 (-7, 2).
+        var spec = new TableDefSpec(
+            TableType: 0x4E,
+            RowCount: 0,
+            AutoNumber: unchecked((uint)autoNumber),
+            MaxColumns: 1,
+            VariableColumns: 0,
+            OwnedMap: new RowLocator(43, 0),
+            FreeMap: new RowLocator(43, 1),
+            Columns: [new ColumnSpec("n", NativeTypes.Long, 0, 0, 0, 0x00000409, 0x07, 0x00, 0, 4)],
+            PhysicalIndexes: [],
+            LogicalIndexes: [],
+            LvalColumnMaps: [],
+            AutoNumberIncrement: increment);
+
+        byte[] page = new byte[D.PageSize];
+        TableDefEncoder.Encode(page, spec, D);
+        Assert.Equal(unchecked((uint)autoNumber), (uint)D.TableDef.AutoNumber.Read(page));
+        Assert.Equal(increment, unchecked((int)(uint)D.TableDef.AutoNumberIncrement.Read(page)));
+
+        TableDefSegmentView view = TableDefSegmentView.Open(42, p => p == 42 ? page : null, D, maxPages: 4, out string? openFail)!;
+        Assert.Null(openFail);
+        TableDefinition decoded = TableDefDecoder.Decode(view, 42, D, out string? decodeFail)!;
+        Assert.Null(decodeFail);
+        Assert.Equal(unchecked((uint)autoNumber), decoded.AutoNumber);
+        Assert.Equal(increment, decoded.AutoNumberIncrement);
+
+        TableDefSpec roundTripped = TableDefEncoder.SpecOf(decoded, out string? specFail)!;
+        Assert.Null(specFail);
+        Assert.Equal(increment, roundTripped.AutoNumberIncrement);
+        byte[] reencoded = new byte[D.PageSize];
+        TableDefEncoder.Encode(reencoded, roundTripped, D);
+        Assert.Equal(page, reencoded);
+    }
+
+    [Fact]
+    public void TableDefUpdater_TryUpdateCounts_steps_AutoNumber_signed_in_increment_direction()
+    {
+        // Positive increment (r-q23-counter-step/sql-100-5-ins1, sql-100-5-ins2): 95 -> 100 -> 105; lower floor ignored.
+        byte[] pos = new byte[D.PageSize];
+        pos[0] = 0x02;
+        D.TableDef.AutoNumber.Write(pos, 95u);
+        D.TableDef.AutoNumberIncrement.Write(pos, 5u);
+        Assert.True(TableDefUpdater.TryUpdateCounts(pos, +1, 100u, [], D, out string? err), err);
+        Assert.Equal(100, unchecked((int)(uint)D.TableDef.AutoNumber.Read(pos)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(pos, +1, 105u, [], D, out err), err);
+        Assert.Equal(105, unchecked((int)(uint)D.TableDef.AutoNumber.Read(pos)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(pos, 0, 100u, [], D, out err), err);
+        Assert.Equal(105, unchecked((int)(uint)D.TableDef.AutoNumber.Read(pos)));
+
+        // Negative increment (r-q23-counter-step/sql-10-neg2-ins1, sql-10-neg2-ins2): 12 -> 10 -> 8 -> 0 -> -2; higher floor ignored.
+        byte[] neg = new byte[D.PageSize];
+        neg[0] = 0x02;
+        D.TableDef.AutoNumber.Write(neg, 12u);
+        D.TableDef.AutoNumberIncrement.Write(neg, unchecked((uint)-2));
+        Assert.True(TableDefUpdater.TryUpdateCounts(neg, +1, 10u, [], D, out err), err);
+        Assert.Equal(10, unchecked((int)(uint)D.TableDef.AutoNumber.Read(neg)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(neg, +1, 8u, [], D, out err), err);
+        Assert.Equal(8, unchecked((int)(uint)D.TableDef.AutoNumber.Read(neg)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(neg, +1, 0u, [], D, out err), err);
+        Assert.Equal(0, unchecked((int)(uint)D.TableDef.AutoNumber.Read(neg)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(neg, +1, unchecked((uint)-2), [], D, out err), err);
+        Assert.Equal(-2, unchecked((int)(uint)D.TableDef.AutoNumber.Read(neg)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(neg, 0, 5u, [], D, out err), err);
+        Assert.Equal(-2, unchecked((int)(uint)D.TableDef.AutoNumber.Read(neg)));
+        Assert.Equal(-2, unchecked((int)(uint)D.TableDef.AutoNumberIncrement.Read(neg)));
+
+        // Negative stored 0x14 with positive increment (COUNTER(-5, 2) -> -7 -> -5 -> 0 -> 50): signed comparison advances upward.
+        byte[] negToPos = new byte[D.PageSize];
+        negToPos[0] = 0x02;
+        D.TableDef.AutoNumber.Write(negToPos, unchecked((uint)-7));
+        D.TableDef.AutoNumberIncrement.Write(negToPos, 2u);
+        Assert.True(TableDefUpdater.TryUpdateCounts(negToPos, +1, unchecked((uint)-5), [], D, out err), err);
+        Assert.Equal(-5, unchecked((int)(uint)D.TableDef.AutoNumber.Read(negToPos)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(negToPos, +1, 0u, [], D, out err), err);
+        Assert.Equal(0, unchecked((int)(uint)D.TableDef.AutoNumber.Read(negToPos)));
+        Assert.True(TableDefUpdater.TryUpdateCounts(negToPos, +1, 50u, [], D, out err), err);
+        Assert.Equal(50, unchecked((int)(uint)D.TableDef.AutoNumber.Read(negToPos)));
+    }
 }

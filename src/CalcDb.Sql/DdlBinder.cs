@@ -325,11 +325,6 @@ public static class DdlBinder
                         {
                             return Fail(BindOpen("NotModelled.DdlCounterSingleArg", $"single-argument COUNTER({seed}) on column '{col.Name}' is not recorded in r-q21-ddl-types"), out failure);
                         }
-                        if (inc != 1)
-                        {
-                            // AutoNumberCounter steps by 1 and TableDefinition does not decode TDEF+0x18 yet; refuse non-1 step on the SQL route.
-                            return Fail(BindOpen("NotModelled.DdlCounterIncrement", "the AutoNumber step is not applied by the ISAM yet"), out failure);
-                        }
                         long initial = (long)seed - inc;
                         if (initial is < int.MinValue or > int.MaxValue)
                         {

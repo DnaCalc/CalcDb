@@ -199,4 +199,19 @@ public enum MutationOpen : byte
     /// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits): CalcDb does not guess silently.
     /// </summary>
     CommitBurstGap,
+
+    /// <summary>
+    /// Unrecorded AutoNumber non-1 increment edge cases (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open,
+    /// <c>evidence/r-q23-counter-step/</c>): a zero TDEF increment at offset +0x18 (ACE refuses <c>COUNTER(seed, 0)</c>
+    /// with 3001 at DDL), an explicit AutoNumber value under a non-1 increment, a cancelled <c>AddNew</c> under a non-1
+    /// increment, or a non-1 increment in a Jet 4 MDB file.
+    /// </summary>
+    AutoNumberIncrement,
+
+    /// <summary>
+    /// Stepping an AutoNumber counter past signed 32-bit <see cref="int.MaxValue"/> or below <see cref="int.MinValue"/>
+    /// (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open): no retained byte-level record shows TDEF 0x14..0x17 on disk after
+    /// wraparound.
+    /// </summary>
+    AutoNumberOverflow,
 }

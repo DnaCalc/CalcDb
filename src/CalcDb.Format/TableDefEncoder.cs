@@ -99,7 +99,7 @@ public static class TableDefEncoder
         t.AutoNumber.Write(page, spec.AutoNumber);
         // Signed int32LE AutoNumber increment at TableDef header [24..28) (evidence/r-q21-ddl-types:
         // col-counter = 1, col-counter-seed-inc = 5, col-counter-100-7 = 7, col-counter-neg-inc = -2).
-        BinaryPrimitives.WriteInt32LittleEndian(page[24..], spec.AutoNumberIncrement);
+        t.AutoNumberIncrement.Write(page, unchecked((uint)spec.AutoNumberIncrement));
         t.TableType.Write(page, spec.TableType);
         t.MaxColumns.Write(page, spec.MaxColumns);
         t.VariableColumns.Write(page, spec.VariableColumns);
@@ -216,9 +216,10 @@ public static class TableDefEncoder
     /// <summary>
     /// The spec of a decoded single-page TableDef, for a writer that changes one part of it (CREATE INDEX: W-07/native-metadata-write);
     /// null with the reason when the definition spans continuation pages. Trailing LVAL column map locators decoded in
-    /// <see cref="TableDefinition.LongValueMaps"/> are carried forward (<c>evidence/r-q21-ddl-types/ix-on-table-with-memo</c>).
+    /// <see cref="TableDefinition.LongValueMaps"/> (<c>evidence/r-q21-ddl-types/ix-on-table-with-memo</c>) and the signed
+    /// <see cref="TableDefinition.AutoNumberIncrement"/> (<c>evidence/r-q21-ddl-types/col-counter*</c>) are carried forward.
     /// A caller re-encodes the spec and compares it with the stored page before it writes a changed one, so that no byte
-    /// it does not model (such as a non-1 AutoNumber increment) is lost (R-PRESERVE-1).
+    /// it does not model is lost (R-PRESERVE-1).
     /// </summary>
     public static TableDefSpec? SpecOf(TableDefinition t, out string? failure)
     {
@@ -239,7 +240,8 @@ public static class TableDefEncoder
             Columns: [.. t.Columns.Select(c => new ColumnSpec(c.Name, c.TypeCode, (ushort)c.PhysicalNumber, (ushort)c.VariableIndex, (ushort)c.ColumnId, c.TypeInfo, c.Flags, c.ExtendedFlags, (ushort)c.FixedOffset, (ushort)c.Length))],
             PhysicalIndexes: [.. t.PhysicalIndexes.Select(p => new PhysicalIndexSpec(p.Columns, p.OwnedMap, p.RootPage, p.Flags, p.EntryCount, p.UniqueEntryCount))],
             LogicalIndexes: [.. t.LogicalIndexes.Select(l => new LogicalIndexSpec(l.Name, (uint)l.Number, (uint)l.PhysicalNumber, l.IndexType, l.RelatedTableType, l.RelatedIndex, l.RelatedTable))],
-            LvalColumnMaps: [.. t.LongValueMaps]);
+            LvalColumnMaps: [.. t.LongValueMaps],
+            AutoNumberIncrement: t.AutoNumberIncrement);
     }
 
     private static int WriteName(Span<byte> page, int pos, string name, int lengthBytes)

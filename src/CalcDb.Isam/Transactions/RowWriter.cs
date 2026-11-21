@@ -383,6 +383,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
     public PageCache File => _cache;
 
+    /// <summary>Whether the file header at page 0 is ACCDB (format version 2); false for Jet 4 MDB (format version 1).</summary>
+    public bool IsAccdb(PrivateOverlay? seen = null)
+    {
+        using PagePin? page0 = Seen(seen).Pin(0).Pin;
+        return page0 is null || DatabaseHeader.IsAccdb(page0.Bytes, _d);
+    }
+
     /// <summary>
     /// Compile the modification of <paramref name="root"/> to <paramref name="values"/> (every column, in order). The row,
     /// its index entries and its leaves are read as <paramref name="seen"/>, the Workspace's overlay, shows them: an

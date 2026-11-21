@@ -440,11 +440,31 @@ public sealed class SchemaWriterTests
         Assert.True(w2.CreateIndex(session.Workspace, new("T", new("IX_1", ["a"], PrimaryKey: false), SchemaRoute.Sql), 2).Succeeded);
         Assert.NotNull(session.Writer().CreateIndex(session.Workspace, new("T", new("IX_2", ["b"], PrimaryKey: false), SchemaRoute.Sql), 3).Refused?.NotWritten);
 
-        // R-PRESERVE-1: CREATE INDEX on a table with non-1 AutoNumberIncrement refuses rather than clobbering bytes 0x18..0x1B.
+        // TableDefinition decodes TDEF+0x18 (r-q21-ddl-types/col-counter-seed-inc) and TableDefEncoder.SpecOf preserves it,
+        // so CREATE INDEX on a table with non-1 AutoNumberIncrement keeps bytes 0x18..0x1B intact.
         session.Create(new("U", [new("n", NewFieldType.Counter, Seed: 10, Increment: 5)], SchemaRoute.Sql), 1, 1);
         SchemaOutcome counterIdx = session.Writer().CreateIndex(session.Workspace, new("U", new("IX_U", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2);
-        Assert.False(counterIdx.Succeeded);
-        Assert.Equal(MutationOpen.Publication, counterIdx.Accepted.Open);
-        Assert.Contains("R-PRESERVE-1", counterIdx.Accepted.Detail);
+        Assert.True(counterIdx.Succeeded, $"{counterIdx.Refused} {counterIdx.Accepted}");
+        CatalogSnapshot catAfter = CatalogBootstrap.Open(session.Cache, D, session.Pages, out _)!;
+        uint uPage = (uint)catAfter.Entries.Single(e => e.Name == "U").Id;
+        using (PagePin uPin = session.Cache.Pin(uPage).Pin!)
+        {
+            TableDefSegmentView uView = TableDefSegmentView.Open(uPage, p => p == uPage ? uPin.Bytes.ToArray() : null, D, 4, out _)!;
+            TableDefinition uDef = TableDefDecoder.Decode(uView, uPage, D, out _)!;
+            Assert.Equal(5u, uDef.AutoNumber);
+            Assert.Equal(5, uDef.AutoNumberIncrement);
+        }
+
+        // R-PRESERVE-1: CREATE INDEX on a table whose TableDef holds an unmodelled non-zero byte refuses rather than clobbering it.
+        session.Create(new("V", [Long("n")], SchemaRoute.Sql), 1, 1);
+        CatalogSnapshot catV = CatalogBootstrap.Open(session.Cache, D, session.Pages, out _)!;
+        uint vPage = (uint)catV.Entries.Single(e => e.Name == "V").Id;
+        byte[] patched = session.File.Snapshot();
+        patched[(int)(vPage * D.PageSize) + 0x1C] = 0x01; // reserved header byte outside modelled TableDef fields
+        using var patchedSession = new Session(patched);
+        SchemaOutcome unmodelledIdx = patchedSession.Writer().CreateIndex(patchedSession.Workspace, new("V", new("IX_V", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2);
+        Assert.False(unmodelledIdx.Succeeded);
+        Assert.Equal(MutationOpen.Publication, unmodelledIdx.Accepted.Open);
+        Assert.Contains("R-PRESERVE-1", unmodelledIdx.Accepted.Detail);
     }
 }

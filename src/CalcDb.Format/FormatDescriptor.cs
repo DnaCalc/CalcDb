@@ -89,6 +89,7 @@ public sealed record FormatDescriptor
             DefinitionLength = new("jet4.tdef.length", "TableDef stream", 8, 4, ByteOrder.Little, "Definition length.", Reference),
             RowCount = new("jet4.tdef.row_count", "TableDef stream", 16, 4, ByteOrder.Little, "Table row count.", Reference + "; II-04 §1.2"),
             AutoNumber = new("jet4.tdef.autonumber", "TableDef stream", 20, 4, ByteOrder.Little, "AutoNumber-related counter (no consumption rule implied).", Reference + "; II-04 §1.2"),
+            AutoNumberIncrement = new("jet4.tdef.autonumber_increment", "TableDef stream", 24, 4, ByteOrder.Little, "Signed 32-bit AutoNumber increment (default 1; seed - increment is stored at offset 20).", "W-07/native-metadata-write; evidence/r-q21-ddl-types: col-counter, col-autoincrement, col-counter-seed-inc, col-counter-seed-inc-ado, col-counter-100-7, col-counter-neg-inc"),
             TableType = new("jet4.tdef.table_type", "TableDef stream", 40, 1, ByteOrder.Little, "Table type byte.", Reference + "; II-04 §1.2"),
             MaxColumns = new("jet4.tdef.max_columns", "TableDef stream", 41, 2, ByteOrder.Little, "Historical maximum column count.", Reference + "; II-04 §1.3"),
             VariableColumns = new("jet4.tdef.variable_columns", "TableDef stream", 43, 2, ByteOrder.Little, "Historical variable column count.", Reference + "; II-04 §1.3"),
@@ -294,6 +295,7 @@ public sealed record TableDefRules
     public required FieldRule DefinitionLength { get; init; }
     public required FieldRule RowCount { get; init; }
     public required FieldRule AutoNumber { get; init; }
+    public required FieldRule AutoNumberIncrement { get; init; }
     public required FieldRule TableType { get; init; }
     public required FieldRule MaxColumns { get; init; }
     public required FieldRule VariableColumns { get; init; }
@@ -310,7 +312,7 @@ public sealed record TableDefRules
 
     public required int NameLengthBytes { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [NextPage, DefinitionLength, RowCount, AutoNumber, TableType, MaxColumns, VariableColumns, ColumnCount, LogicalIndexCount, RealIndexCount, OwnedMap, FreeMap];
+    public IEnumerable<FieldRule> Rules => [NextPage, DefinitionLength, RowCount, AutoNumber, AutoNumberIncrement, TableType, MaxColumns, VariableColumns, ColumnCount, LogicalIndexCount, RealIndexCount, OwnedMap, FreeMap];
 }
 
 /// <summary>

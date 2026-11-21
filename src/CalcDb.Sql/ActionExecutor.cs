@@ -924,10 +924,15 @@ public static unsafe class ActionExecutor
     }
 
     /// <summary>
-    /// Guard against explicit AutoNumber values strictly below <see cref="AutoNumberCounter.Last"/>: ACE reseeds the
-    /// counter downward to the explicit value even when 3022 refuses the insert (R-SQL-2 ACT-INS-01,
+    /// Guard against unrecorded explicit AutoNumber assignments before <see cref="EditFrame.AddNew"/>:
+    /// <list type="bullet">
+    /// <item>Any explicit AutoNumber column under a non-1 increment is Open (qualified.md R-CAT-1 CAT-X / R-FMT-2,
+    /// <c>evidence/r-q23-counter-step/</c>) and must refuse before issuing a ticket.</item>
+    /// <item>Under unit increment, explicit AutoNumber values strictly below <see cref="AutoNumberCounter.Last"/>: ACE
+    /// reseeds the counter downward to the explicit value even when 3022 refuses the insert (R-SQL-2 ACT-INS-01,
     /// <c>r-q-expr-sql/act-ins-autonumber</c>), whereas <c>AutoNumberCounter.Observe</c> in <c>CalcDb.Isam</c> currently
-    /// only advances upward. Stop cleanly until ISAM supports downward reseed.
+    /// only advances upward. Stop cleanly until ISAM supports downward reseed.</item>
+    /// </list>
     /// </summary>
     private static SqlFailure? CheckAutoNumberDownwardReseed(
         IReadOnlyList<ColumnDescriptor> columns,
@@ -940,15 +945,25 @@ public static unsafe class ActionExecutor
         }
         for (int i = 0; i < columns.Count; i++)
         {
-            if (columns[i].IsAutoNumber && converted[i].Type == VarType.I4)
+            if (columns[i].IsAutoNumber)
             {
-                int explicitValue = (int)converted[i].Int64;
-                if (explicitValue < counter.Last)
+                if (counter.Increment != 1)
                 {
                     return SqlFailure.Open(
                         SqlPhase.Execute,
-                        "NotModelled.AutoNumberDownwardReseed",
-                        $"explicit AutoNumber {explicitValue} < current counter {counter.Last} requires downward counter reseed in CalcDb.Isam (r-q-expr-sql/act-ins-autonumber)");
+                        "NotModelled.Edit.AutoNumberIncrement",
+                        $"explicit AutoNumber value under non-1 increment ({counter.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
+                }
+                if (converted[i].Type == VarType.I4)
+                {
+                    int explicitValue = (int)converted[i].Int64;
+                    if (explicitValue < counter.Last)
+                    {
+                        return SqlFailure.Open(
+                            SqlPhase.Execute,
+                            "NotModelled.AutoNumberDownwardReseed",
+                            $"explicit AutoNumber {explicitValue} < current counter {counter.Last} requires downward counter reseed in CalcDb.Isam (r-q-expr-sql/act-ins-autonumber)");
+                    }
                 }
             }
         }

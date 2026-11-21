@@ -536,4 +536,179 @@ public sealed class CounterAndLandingTests
         Assert.True(ins2.Succeeded && ins2.Change?.Inserted is not null, $"{ins2} / {ins2.Change?.NotWritten}");
         Assert.Equal(pHigh, ins2.Change!.Inserted!.Value.Page);
     }
+
+    // ---- 5. AutoNumber step and named refusals (W-07/native-metadata-write stretch 4; evidence/r-q23-counter-step) ----
+
+    [Fact]
+    public void AutoNumberCounter_steps_signed_increments_and_refuses_zero_and_int32_overflow_by_name()
+    {
+        // Unit increment (r-q10-commit-counter-edits, r-q23-counter-step/sql-100-1-ins1).
+        var c1 = new AutoNumberCounter(9, 1);
+        Assert.Equal(1, c1.Increment);
+        Assert.Equal(10, c1.Issue().Value);
+        Assert.Equal(11, c1.Issue().Value);
+        c1.Observe(50);
+        Assert.Equal(51, c1.Issue().Value);
+
+        // Positive non-1 increment (r-q23-counter-step/sql-100-5-ins1, sql-100-5-ins2).
+        var c5 = new AutoNumberCounter(95, 5);
+        Assert.Equal(5, c5.Increment);
+        Assert.Equal(100, c5.Issue().Value);
+        Assert.Equal(105, c5.Issue().Value);
+        Assert.Equal(105, c5.Last);
+
+        // Negative increment stepping down through 0 into negative (r-q23-counter-step/sql-10-neg2-ins1, sql-10-neg2-ins2).
+        var cNeg = new AutoNumberCounter(12, -2);
+        Assert.Equal(-2, cNeg.Increment);
+        Assert.Equal(10, cNeg.Issue().Value);
+        Assert.Equal(8, cNeg.Issue().Value);
+        var cNegZero = new AutoNumberCounter(0, -2);
+        Assert.Equal(-2, cNegZero.Issue().Value);
+        Assert.Equal(-4, cNegZero.Issue().Value);
+
+        // Negative stored TDEF 0x14 (COUNTER(0, 1) -> -1; COUNTER(-5, 2) -> -7).
+        var cZero = new AutoNumberCounter(unchecked((uint)-1), 1);
+        Assert.Equal(-1, cZero.Last);
+        Assert.Equal(0, cZero.Issue().Value);
+        Assert.Equal(1, cZero.Issue().Value);
+
+        var cNegStored = new AutoNumberCounter(unchecked((uint)-7), 2);
+        Assert.Equal(-5, cNegStored.Issue().Value);
+        Assert.Equal(-3, cNegStored.Issue().Value);
+
+        // Zero increment refuses by name without mutating Last.
+        var cZeroInc = new AutoNumberCounter(0, 0);
+        Assert.False(cZeroInc.TryIssue(out GeneratedTicket? tZeroInc, out MutationOpen openZeroInc, out _));
+        Assert.Null(tZeroInc);
+        Assert.Equal(MutationOpen.AutoNumberIncrement, openZeroInc);
+        Assert.Equal(0, cZeroInc.Last);
+
+        // Overflow past int.MaxValue and underflow below int.MinValue refuse by name without mutating Last.
+        var cMax = new AutoNumberCounter(int.MaxValue - 1, 1);
+        Assert.Equal(int.MaxValue, cMax.Issue().Value);
+        Assert.False(cMax.TryIssue(out GeneratedTicket? tOvf, out MutationOpen openOvf, out _));
+        Assert.Null(tOvf);
+        Assert.Equal(MutationOpen.AutoNumberOverflow, openOvf);
+        Assert.Equal(int.MaxValue, cMax.Last);
+
+        var cMin = new AutoNumberCounter(unchecked((uint)(int.MinValue + 1)), -2);
+        Assert.False(cMin.TryIssue(out GeneratedTicket? tUnf, out MutationOpen openUnf, out _));
+        Assert.Null(tUnf);
+        Assert.Equal(MutationOpen.AutoNumberOverflow, openUnf);
+        Assert.Equal(int.MinValue + 1, cMin.Last);
+    }
+
+    [Fact]
+    public void EditFrame_steps_signed_TDEF_increments_and_refuses_open_cases_by_name()
+    {
+        static Rig PatchedG(uint stored, int increment, bool asMdb = false)
+        {
+            using var template = new Rig(EditFixture);
+            (TableDefinition g0, _) = template.Table("G");
+            byte[] tdef = template.File.Image.Snapshot().AsSpan((int)(g0.FirstPage * D.PageSize), D.PageSize).ToArray();
+            D.TableDef.AutoNumber.Write(tdef, stored);
+            D.TableDef.AutoNumberIncrement.Write(tdef, unchecked((uint)increment));
+
+            var rig = new Rig(EditFixture);
+            WriteRawPage(rig.File, g0.FirstPage, tdef);
+            if (asMdb)
+            {
+                using var mdbTemplate = new Rig(Jet4MdbFixture);
+                byte[] page0 = mdbTemplate.File.Image.Snapshot().AsSpan(0, D.PageSize).ToArray();
+                Assert.False(DatabaseHeader.IsAccdb(page0, D));
+                WriteRawPage(rig.File, 0, page0);
+            }
+            return rig;
+        }
+
+        // Positive and negative increments step and write signed 0x14..0x17 while keeping 0x18..0x1B unchanged
+        // (evidence/r-q23-counter-step/sql-100-5-ins1, sql-100-5-ins2, sql-10-neg2-ins1, sql-10-neg2-ins2, dao-100-5-addnew1).
+        foreach ((uint stored, int inc, int first, int second) in new (uint, int, int, int)[]
+        {
+            (95u, 5, 100, 105),
+            (12u, -2, 10, 8),
+            (unchecked((uint)-7), 2, -5, -3),
+            (0u, -2, -2, -4),
+        })
+        {
+            using Rig rig = PatchedG(stored, inc);
+            (TableDefinition g, _) = rig.Table("G");
+            Assert.Equal(inc, g.AutoNumberIncrement);
+            (EditFrame frame, _) = rig.OpenTable("G");
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(first, frame.Read(Col(g, "ID")).Value.Integer);
+            AssignText(frame, Col(g, "T"), "ok");
+            AssignText(frame, Col(g, "U"), "u-step-1");
+            UpdateOutcome u1 = frame.Update();
+            Assert.True(u1.Succeeded, u1.ToString());
+
+            byte[] snap1 = rig.File.Image.Snapshot();
+            ReadOnlySpan<byte> td1 = snap1.AsSpan((int)(g.FirstPage * D.PageSize), D.PageSize);
+            Assert.Equal(first, unchecked((int)(uint)D.TableDef.AutoNumber.Read(td1)));
+            Assert.Equal(inc, unchecked((int)(uint)D.TableDef.AutoNumberIncrement.Read(td1)));
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(second, frame.Read(Col(g, "ID")).Value.Integer);
+            AssignText(frame, Col(g, "T"), "ok");
+            AssignText(frame, Col(g, "U"), "u-step-2");
+            UpdateOutcome u2 = frame.Update();
+            Assert.True(u2.Succeeded, u2.ToString());
+
+            byte[] snap2 = rig.File.Image.Snapshot();
+            ReadOnlySpan<byte> td2 = snap2.AsSpan((int)(g.FirstPage * D.PageSize), D.PageSize);
+            Assert.Equal(second, unchecked((int)(uint)D.TableDef.AutoNumber.Read(td2)));
+            Assert.Equal(inc, unchecked((int)(uint)D.TableDef.AutoNumberIncrement.Read(td2)));
+        }
+
+        // Open: explicit AutoNumber put during AddNew under non-1 increment refuses without mutating buffer or disk.
+        using (Rig rig = PatchedG(95u, 5))
+        {
+            (TableDefinition g, _) = rig.Table("G");
+            byte[] before = rig.File.Image.Snapshot();
+            (EditFrame frame, _) = rig.OpenTable("G");
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(100, frame.Read(Col(g, "ID")).Value.Integer);
+            EditOutcome assign = frame.Assign(Col(g, "ID"), I4(50));
+            Assert.False(assign.Succeeded);
+            Assert.Equal(MutationOpen.AutoNumberIncrement, assign.Open);
+            Assert.Equal(100, frame.Read(Col(g, "ID")).Value.Integer);
+            Assert.Equal(before, rig.File.Image.Snapshot());
+        }
+
+        // Open: CancelUpdate on AddNew under non-1 increment refuses by name without writing 0x14 to disk.
+        using (Rig rig = PatchedG(12u, -2))
+        {
+            (TableDefinition g, _) = rig.Table("G");
+            byte[] before = rig.File.Image.Snapshot();
+            (EditFrame frame, _) = rig.OpenTable("G");
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(10, frame.Read(Col(g, "ID")).Value.Integer);
+            EditOutcome cancel = frame.CancelUpdate();
+            Assert.False(cancel.Succeeded);
+            Assert.Equal(MutationOpen.AutoNumberIncrement, cancel.Open);
+            Assert.Equal(EditMode.AddNew, frame.Mode);
+            Assert.Equal(before, rig.File.Image.Snapshot());
+        }
+
+        // Open: MDB under non-1 increment, zero increment, overflow past int.MaxValue, and underflow below int.MinValue refuse at AddNew.
+        foreach ((uint stored, int inc, bool asMdb, MutationOpen expectedOpen) in new (uint, int, bool, MutationOpen)[]
+        {
+            (95u, 5, true, MutationOpen.AutoNumberIncrement),
+            (12u, -2, true, MutationOpen.AutoNumberIncrement),
+            (0u, 0, false, MutationOpen.AutoNumberIncrement),
+            ((uint)int.MaxValue, 1, false, MutationOpen.AutoNumberOverflow),
+            (unchecked((uint)(int.MinValue + 1)), -2, false, MutationOpen.AutoNumberOverflow),
+        })
+        {
+            using Rig rig = PatchedG(stored, inc, asMdb);
+            byte[] before = rig.File.Image.Snapshot();
+            (EditFrame frame, _) = rig.OpenTable("G");
+            EditOutcome outcome = frame.AddNew();
+            Assert.False(outcome.Succeeded);
+            Assert.Equal(expectedOpen, outcome.Open);
+            Assert.Equal(EditMode.None, frame.Mode);
+            Assert.Equal(before, rig.File.Image.Snapshot());
+        }
+    }
 }

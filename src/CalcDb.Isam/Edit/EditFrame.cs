@@ -147,7 +147,7 @@ public sealed class TableEditContext(MutationSemantics semantics, IUniqueProbe? 
     public SameWidthWriter? Writer { get; } = footprints is null ? null : new SameWidthWriter(footprints);
 
     /// <summary>The table's counter, when it has an AutoNumber column.</summary>
-    public AutoNumberCounter? Counter { get; } = semantics.AutoNumber is null ? null : new AutoNumberCounter(semantics.Table.AutoNumber);
+    public AutoNumberCounter? Counter { get; } = semantics.AutoNumber is null ? null : new AutoNumberCounter(semantics.Table.AutoNumber, semantics.Table.AutoNumberIncrement);
 
     public IUniqueProbe? Probe { get; } = probe;
 
@@ -340,10 +340,24 @@ public sealed class EditFrame : IDisposable
         GeneratedTicket? newTicket = null;
         if (s.AutoNumber is not null && _table.Counter is { } counter)
         {
-            newTicket = counter.Issue();
-            if (_table.Writer is { } writer && _workspace.Publisher is not null && newTicket.Value > 0 && newTicket.Value <= uint.MaxValue)
+            if (counter.Increment != 1 && _table.Writer is { } formatWriter && !formatWriter.IsAccdb(_workspace.OverlayOf(formatWriter.File)))
             {
-                CompiledChange advance = writer.CompileAutoNumberAdvance((uint)newTicket.Value, _workspace.OverlayOf(writer.File));
+                return EditOutcome.NotModelled(
+                    MutationOpen.AutoNumberIncrement,
+                    $"AutoNumber insert with non-1 increment ({counter.Increment}) in an MDB file is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
+            }
+            if (!counter.TryIssue(out newTicket, out MutationOpen counterOpen, out string? counterDetail))
+            {
+                return EditOutcome.NotModelled(counterOpen, counterDetail);
+            }
+            // Under unit increment outside a SQL action statement, DAO AddNew persists 0x14..0x17 eagerly so
+            // CancelUpdate leaves it on disk (r-q10-commit-counter-edits/addnew-cancel-once). Inside a SQL action
+            // statement (InStatement), Update/EndStatement publishes 0x14..0x17 and bumps page 0 +3586 once
+            // (evidence/r-q23-counter-step/sql-100-1-ins1). Under a non-1 increment, CancelUpdate is Open
+            // (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open), so disk write-back happens at Update (evidence/r-q23-counter-step/).
+            if (counter.Increment == 1 && !_workspace.InStatement && _table.Writer is { } writer && _workspace.Publisher is not null && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
+            {
+                CompiledChange advance = writer.CompileAutoNumberAdvance(unchecked((uint)(int)newTicket.Value), _workspace.OverlayOf(writer.File));
                 if (advance.Change is not { } compiled)
                 {
                     newTicket.Disposition = TicketDisposition.ConsumedWithoutRow;
@@ -417,6 +431,12 @@ public sealed class EditFrame : IDisposable
         if (column.IsAutoNumber && Mode == EditMode.Edit)
         {
             return EditOutcome.NotModelled(MutationOpen.ConversionNotRecorded, "a put into an AutoNumber field during Edit is not recorded");
+        }
+        if (column.IsAutoNumber && Mode == EditMode.AddNew && _table.Counter is { Increment: not 1 } c)
+        {
+            return EditOutcome.NotModelled(
+                MutationOpen.AutoNumberIncrement,
+                $"an explicit AutoNumber value under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
         }
         ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid);
         if (converted.Error is { } error)
@@ -505,10 +525,12 @@ public sealed class EditFrame : IDisposable
                 if (s.AutoNumber is { } autoCol && candidateValues[autoCol.Ordinal].Kind == NativeKind.Long)
                 {
                     long assignedValue = candidateValues[autoCol.Ordinal].Integer;
-                    long floor = Math.Max(_table.Counter?.Last ?? 0, assignedValue);
-                    if (floor > 0 && floor <= uint.MaxValue)
+                    long floor = _table.Counter is { } c
+                        ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
+                        : assignedValue;
+                    if (floor is >= int.MinValue and <= int.MaxValue)
                     {
-                        autoFloor = (uint)floor;
+                        autoFloor = unchecked((uint)(int)floor);
                     }
                 }
                 CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File));
@@ -577,10 +599,12 @@ public sealed class EditFrame : IDisposable
             if (s.AutoNumber is { } autoCol && values[autoCol.Ordinal].Kind == NativeKind.Long)
             {
                 long assignedValue = values[autoCol.Ordinal].Integer;
-                long floor = Math.Max(_table.Counter?.Last ?? 0, assignedValue);
-                if (floor > 0 && floor <= uint.MaxValue)
+                long floor = _table.Counter is { } c
+                    ? (c.Increment < 0 ? Math.Min(c.Last, assignedValue) : Math.Max(c.Last, assignedValue))
+                    : assignedValue;
+                if (floor is >= int.MinValue and <= int.MaxValue)
                 {
-                    autoFloor = (uint)floor;
+                    autoFloor = unchecked((uint)(int)floor);
                 }
             }
             physical = insertWriter.CompileInsert(s, values, autoFloor, _workspace.OverlayOf(insertWriter.File));
@@ -841,6 +865,12 @@ public sealed class EditFrame : IDisposable
         if (Mode == EditMode.None)
         {
             return EditOutcome.Fail(MutationError.NoEdit, MutationErrorSource.Recordset);
+        }
+        if (Mode == EditMode.AddNew && _table.Counter is { Increment: not 1 } c)
+        {
+            return EditOutcome.NotModelled(
+                MutationOpen.AutoNumberIncrement,
+                $"CancelUpdate on AddNew under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
         }
         ReleaseTicket();
         Clear();

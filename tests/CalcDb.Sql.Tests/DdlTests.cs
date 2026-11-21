@@ -4,6 +4,7 @@ using CalcDb.Catalog;
 using CalcDb.Evidence;
 using CalcDb.Format;
 using CalcDb.Foundation;
+using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Storage;
 using CalcDb.Values;
@@ -111,6 +112,9 @@ public sealed class DdlTests
     [InlineData("col-two-memos", "CREATE TABLE T (a MEMO, b MEMO)")]
     [InlineData("col-counter", "CREATE TABLE T (n COUNTER)")]
     [InlineData("col-autoincrement", "CREATE TABLE T (n AUTOINCREMENT)")]
+    [InlineData("col-counter-seed-inc", "CREATE TABLE T (n COUNTER(10, 5))")]
+    [InlineData("col-counter-100-7", "CREATE TABLE T (n COUNTER(100, 7))")]
+    [InlineData("col-counter-neg-inc", "CREATE TABLE T (n COUNTER(10, -2))")]
     [InlineData("col-double", "CREATE TABLE T (n DOUBLE)")]
     [InlineData("col-byte", "CREATE TABLE T (n BYTE)")]
     [InlineData("col-short", "CREATE TABLE T (n SHORT)")]
@@ -151,17 +155,160 @@ public sealed class DdlTests
     }
 
     [Theory]
-    [InlineData("CREATE TABLE T (n COUNTER(10, 5))")]
-    [InlineData("CREATE TABLE T (n COUNTER(100, 7))")]
-    [InlineData("CREATE TABLE T (n COUNTER(10, -2))")]
-    public void Counter_with_non_unit_increment_is_refused_on_the_sql_route(string sql)
+    [InlineData("sql-100-5-ins1", "CREATE TABLE T (n COUNTER(100, 5), v LONG)", new[] { "INSERT INTO T (v) VALUES (1)" }, new long[] { 100 })]
+    [InlineData("sql-100-5-ins2", "CREATE TABLE T (n COUNTER(100, 5), v LONG)", new[] { "INSERT INTO T (v) VALUES (1)", "INSERT INTO T (v) VALUES (2)" }, new long[] { 100, 105 })]
+    [InlineData("sql-100-1-ins1", "CREATE TABLE T (n COUNTER(100, 1), v LONG)", new[] { "INSERT INTO T (v) VALUES (1)" }, new long[] { 100 })]
+    [InlineData("sql-10-neg2-ins1", "CREATE TABLE T (n COUNTER(10, -2), v LONG)", new[] { "INSERT INTO T (v) VALUES (1)" }, new long[] { 10 })]
+    [InlineData("sql-10-neg2-ins2", "CREATE TABLE T (n COUNTER(10, -2), v LONG)", new[] { "INSERT INTO T (v) VALUES (1)", "INSERT INTO T (v) VALUES (2)" }, new long[] { 10, 8 })]
+    public void R_q23_counter_step_sql_insert_executes_byte_exact_against_kept_pages(
+        string question, string createSql, string[] insertSqls, long[] expectedIssued)
     {
+        Kept kept = Kept.Of(question, "r-q23-counter-step");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        var timestamps = new Queue<ulong>([created, updated]);
+
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome create = ActionExecutor.Execute(createSql, db);
+        Assert.Null(create.Failure);
+        Assert.True(create.Succeeded);
+
+        foreach (string insSql in insertSqls)
+        {
+            ActionOutcome ins = ActionExecutor.Execute(insSql, db);
+            Assert.Null(ins.Failure);
+            Assert.True(ins.Succeeded);
+            Assert.Equal(1, ins.RecordsAffected);
+        }
+
+        using BoundSelect plan = BoundSelect.Prepare("SELECT n, v FROM T ORDER BY v", db, out SqlFailure? selFail)!;
+        Assert.Null(selFail);
+        using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, [], out selFail)!;
+        Assert.Null(selFail);
+        var issued = new List<long>();
+        while (!cur.Eof)
+        {
+            Assert.True(cur.Read(0, out NativeVariant v, out _));
+            issued.Add((int)v.Int64);
+            cur.MoveNext();
+        }
+        Assert.Equal(expectedIssued, issued);
+
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void R_q23_counter_step_dao_addnew_executes_byte_exact_against_kept_pages()
+    {
+        Kept kept = Kept.Of("dao-100-5-addnew1", "r-q23-counter-step");
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        var timestamps = new Queue<ulong>([created, updated]);
+
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome create = ActionExecutor.Execute("CREATE TABLE T (n COUNTER(100, 5), v LONG)", db);
+        Assert.Null(create.Failure);
+        Assert.True(create.Succeeded);
+
+        TableDefinition table = db.Table("T")!;
+        TableEditContext ctx = db.EditContext("T", out string? ctxFail)!;
+        Assert.Null(ctxFail);
+        using TableCursor cursor = db.OpenCursor(table, out string? curFail)!;
+        Assert.Null(curFail);
+        using var frame = new EditFrame(ctx, cursor, db.Workspace);
+
+        Assert.True(frame.AddNew().Succeeded);
+        // DAO dynaset shows the issued value (100) immediately at AddNew before Update.
+        FieldResult atAddNew = frame.Read(table.Columns[0]);
+        Assert.True(atAddNew.Succeeded);
+        Assert.Equal(100L, atAddNew.Value.Integer);
+
+        Assert.True(frame.Assign(table.Columns[1], new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 1 }).Succeeded);
+        UpdateOutcome upd = frame.Update();
+        Assert.True(upd.Succeeded, upd.ToString());
+
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCounterCommit(db.Cache).Open);
+        AssertAsAce(kept, fixture, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void Counter_with_custom_seed_and_increment_steps_and_refuses_open_cases_by_name()
+    {
+        static List<long> ReadColumnA(WritableSqlFixture db, string table)
+        {
+            using BoundSelect plan = BoundSelect.Prepare($"SELECT A FROM {table} ORDER BY B", db, out SqlFailure? sf)!;
+            Assert.Null(sf);
+            using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, [], out sf)!;
+            Assert.Null(sf);
+            var values = new List<long>();
+            while (!cur.Eof)
+            {
+                Assert.True(cur.Read(0, out NativeVariant v, out _));
+                values.Add((int)v.Int64);
+                cur.MoveNext();
+            }
+            return values;
+        }
+
         using var db = new WritableSqlFixture(EmptyAccdbSha);
-        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
-        Assert.False(outcome.Succeeded);
-        Assert.NotNull(outcome.Failure);
-        Assert.Equal("NotModelled.DdlCounterIncrement", outcome.Failure!.NotModelled);
-        Assert.Equal("the AutoNumber step is not applied by the ISAM yet", outcome.Failure.Message);
+
+        // r-q23-counter-step/sql-100-5-ins1, sql-100-5-ins2; r-def-expr-sql/ddl-counter-seed-increment Cs1:
+        // COUNTER(100, 5) issues 100, 105; explicit value under non-1 increment refuses by name without consuming counter.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Cs1 (A COUNTER(100, 5), B LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs1 (B) VALUES (1)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs1 (B) VALUES (2)", db).Succeeded);
+        ActionOutcome explicitInc5 = ActionExecutor.Execute("INSERT INTO Cs1 (A, B) VALUES (50, 3)", db);
+        Assert.False(explicitInc5.Succeeded);
+        Assert.Equal("NotModelled.Edit.AutoNumberIncrement", explicitInc5.Failure?.NotModelled);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs1 (B) VALUES (4)", db).Succeeded);
+        Assert.Equal([100L, 105L, 110L], ReadColumnA(db, "Cs1"));
+
+        // r-q23-counter-step/sql-10-neg2-ins1, sql-10-neg2-ins2: negative increment steps down through 0 into negative.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE CsNeg (A COUNTER(10, -2), B LONG)", db).Succeeded);
+        for (int b = 1; b <= 7; b++)
+        {
+            Assert.True(ActionExecutor.Execute($"INSERT INTO CsNeg (B) VALUES ({b})", db).Succeeded);
+        }
+        ActionOutcome explicitNeg = ActionExecutor.Execute("INSERT INTO CsNeg (A, B) VALUES (50, 8)", db);
+        Assert.False(explicitNeg.Succeeded);
+        Assert.Equal("NotModelled.Edit.AutoNumberIncrement", explicitNeg.Failure?.NotModelled);
+        Assert.Equal([10L, 8L, 6L, 4L, 2L, 0L, -2L], ReadColumnA(db, "CsNeg"));
+
+        // Negative initial TDEF 0x14 with unit increment (Cs3 COUNTER(0, 1) -> -1, 1) and positive increment (Cs6 COUNTER(-5, 2) -> -7, 2).
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Cs3 (A COUNTER(0, 1), B LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs3 (B) VALUES (1)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs3 (B) VALUES (2)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs3 (A, B) VALUES (50, 3)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs3 (B) VALUES (4)", db).Succeeded);
+        Assert.Equal([0L, 1L, 50L, 51L], ReadColumnA(db, "Cs3"));
+
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Cs6 (A COUNTER(-5, 2), B LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs6 (B) VALUES (1)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs6 (B) VALUES (2)", db).Succeeded);
+        Assert.Equal([-5L, -3L], ReadColumnA(db, "Cs6"));
+
+        // Overflow past int.MaxValue and underflow below int.MinValue refuse by name (qualified.md Open).
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Cs7 (A COUNTER(2147483647, 1), B LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO Cs7 (B) VALUES (1)", db).Succeeded);
+        ActionOutcome ovfInsert = ActionExecutor.Execute("INSERT INTO Cs7 (B) VALUES (2)", db);
+        Assert.False(ovfInsert.Succeeded);
+        Assert.Equal("NotModelled.Edit.AutoNumberOverflow", ovfInsert.Failure?.NotModelled);
+        Assert.Equal([2147483647L], ReadColumnA(db, "Cs7"));
+
+        Assert.True(ActionExecutor.Execute("CREATE TABLE CsMin (A COUNTER(-2147483647, -2), B LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO CsMin (B) VALUES (1)", db).Succeeded);
+        ActionOutcome unfInsert = ActionExecutor.Execute("INSERT INTO CsMin (B) VALUES (2)", db);
+        Assert.False(unfInsert.Succeeded);
+        Assert.Equal("NotModelled.Edit.AutoNumberOverflow", unfInsert.Failure?.NotModelled);
+        Assert.Equal([-2147483647L], ReadColumnA(db, "CsMin"));
+
+        // Seed - increment int32 overflow at CREATE TABLE refuses by name.
+        AssertNotModelled(db, "CREATE TABLE CsOvf (A COUNTER(-2147483648, 1))", "NotModelled.DdlCounterOverflow");
     }
 
     [Fact]

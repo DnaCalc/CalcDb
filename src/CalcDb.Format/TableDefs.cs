@@ -212,10 +212,17 @@ public sealed record TableDefinition
     public required uint RowCount { get; init; }
 
     /// <summary>
-    /// The stored AutoNumber counter: the last value issued (r-cursor-1-edit: G holds IDs 1 and 2, the counter reads 2 and
-    /// the next AddNew shows 3; R-FMT-2 Generated values: the next value is the highest ever issued plus one).
+    /// The stored AutoNumber counter (signed 32-bit int bits): the last value issued (r-cursor-1-edit: G holds IDs 1 and 2,
+    /// the counter reads 2 and the next AddNew shows 3; r-q21-ddl-types/col-counter-100-7: COUNTER(100, 7) stores 93 =
+    /// seed - increment).
     /// </summary>
     public uint AutoNumber { get; init; }
+
+    /// <summary>
+    /// The signed 32-bit AutoNumber increment at TDEF offset 24 (default 1; evidence/r-q21-ddl-types: col-counter,
+    /// col-autoincrement, col-counter-seed-inc, col-counter-seed-inc-ado, col-counter-100-7, col-counter-neg-inc).
+    /// </summary>
+    public int AutoNumberIncrement { get; init; } = 1;
 
     public required byte TableType { get; init; }
     public required int MaxColumns { get; init; }
@@ -337,6 +344,7 @@ public static class TableDefDecoder
                 Segments = stream.Segments,
                 RowCount = (uint)stream.Read(t.RowCount),
                 AutoNumber = (uint)stream.Read(t.AutoNumber),
+                AutoNumberIncrement = unchecked((int)(uint)stream.Read(t.AutoNumberIncrement)),
                 TableType = (byte)stream.Read(t.TableType),
                 MaxColumns = (int)stream.Read(t.MaxColumns),
                 VariableColumns = (int)stream.Read(t.VariableColumns),
@@ -572,8 +580,14 @@ public static class TableDefUpdater
         t.RowCount.Write(firstPage, (ulong)nextRows);
         if (autoNumberFloor is uint floor)
         {
-            uint stored = (uint)t.AutoNumber.Read(firstPage);
-            if (floor > stored)
+            // R-CAT-1 CAT-X, R-FMT-2, II-04 (evidence/r-q23-counter-step/): TDEF 0x14..0x17 (last-issued value) and
+            // 0x18..0x1B (signed increment) are signed 32-bit little-endian integers. Positive increments (and
+            // synthetic test pages leaving +0x18 zero) advance 0x14 upward; negative increments step 0x14 downward
+            // (sql-10-neg2-ins1: 12 -> 10; sql-10-neg2-ins2: 10 -> 8).
+            int stored = unchecked((int)(uint)t.AutoNumber.Read(firstPage));
+            int candidate = unchecked((int)floor);
+            int increment = unchecked((int)(uint)t.AutoNumberIncrement.Read(firstPage));
+            if (increment < 0 ? candidate < stored : candidate > stored)
             {
                 t.AutoNumber.Write(firstPage, floor);
             }
