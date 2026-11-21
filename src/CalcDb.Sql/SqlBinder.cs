@@ -1129,6 +1129,7 @@ public sealed class BoundSelect : IDisposable
             6 => VarType.R4,
             7 => VarType.R8,
             8 => VarType.Date,
+            9 or 11 => VarType.Array | VarType.UI1,
             _ => VarType.Bstr,
         };
 
@@ -2210,12 +2211,12 @@ public sealed class BoundSelect : IDisposable
             _ => 100 + c.TypeCode,
         };
 
-        private SqlFailure? Program(Fragment fragment, ExpressionSchema scope, out BoundExpression? program) =>
-            Program(fragment.Syntax.Root!, fragment, scope, out program);
+        private SqlFailure? Program(Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false) =>
+            Program(fragment.Syntax.Root!, fragment, scope, out program, allowBareBinary);
 
-        private SqlFailure? Program(SyntaxNode node, Fragment fragment, ExpressionSchema scope, out BoundExpression? program)
+        private SqlFailure? Program(SyntaxNode node, Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false)
         {
-            program = BoundExpression.Bind(node, scope, _context, out ExpressionFailure? failure);
+            program = BoundExpression.Bind(node, scope, _context, allowBareBinary, out ExpressionFailure? failure);
             if (failure is null)
             {
                 return null;
@@ -2238,7 +2239,7 @@ public sealed class BoundSelect : IDisposable
                     }
                     continue;
                 }
-                if (Program(item.Expression!, _scope, out BoundExpression? program) is { } f)
+                if (Program(item.Expression!, _scope, out BoundExpression? program, allowBareBinary: true) is { } f)
                 {
                     return f;
                 }
@@ -2261,7 +2262,7 @@ public sealed class BoundSelect : IDisposable
                     column.Size = innerCol.Size;
                     if (innerCol.Origin == ColumnOrigin.Union)
                     {
-                        // r-sql-1/eq-cross-type, r-sql-13b/union-error-order: a column from a derived UNION table has SourceTable = "" and SourceField = "".
+                        // r-sql-1/eq-cross-type, r-sql-1/union-error-order: a column from a derived UNION table has SourceTable = "" and SourceField = "".
                         column.SourceTable = "";
                         column.SourceField = "";
                     }
@@ -3044,7 +3045,7 @@ public sealed class BoundSelect : IDisposable
                 foreach (ColumnDescriptor c in s.Table.Columns)
                 {
                     var schema = new FixedField(new ColumnBinding(s.Index, c));
-                    BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = c.Name }, schema, _context, out ExpressionFailure? failure)!;
+                    BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = c.Name }, schema, _context, allowBareBinary: true, out ExpressionFailure? failure)!;
                     if (failure is not null)
                     {
                         return SqlFailure.Of(failure, SqlPhase.Bind, syntax.Source, item.Offset, item.Offset + 1);

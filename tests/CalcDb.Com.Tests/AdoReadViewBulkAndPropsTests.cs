@@ -433,18 +433,10 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
         try
         {
             // evidence/r-ado-1b/view-sort-grammar #16 opens via adCmdText SQL projecting LONGBINARY column B;
-            // CalcDb.Sql currently refuses native type 11 (LONGBINARY) in SQL projections by name (NotModelled.FieldType).
-            nint rsWithB = New(OwnRecordset);
-            Assert.Null(Put(rsWithB, "CursorLocation", 3).Failure);
-            Outcome openWithB = Call(rsWithB, "Open", "SELECT ID, L, S, Dt, Y, M, B FROM T", new Dispatch(cn), 3, 1, 1);
-            Assert.Equal(HResults.E_NOTIMPL, openWithB.Failure!.Value.Scode);
-            Assert.Contains("NotModelled.FieldType", openWithB.Failure!.Value.Description);
-            Release(rsWithB);
-
-            // SQL-supported columns of the same query (without B) exercise Sort grammar, ordering, MEMO refusal, and argument checks.
+            // exercise Sort grammar, ordering, MEMO refusal, LONGBINARY refusal, and argument checks on that exact SQL open.
             nint rs = New(OwnRecordset);
             Assert.Null(Put(rs, "CursorLocation", 3).Failure);
-            Assert.Null(Call(rs, "Open", "SELECT ID, L, S, Dt, Y, M FROM T", new Dispatch(cn), 3, 1, 1).Failure);
+            Assert.Null(Call(rs, "Open", "SELECT ID, L, S, Dt, Y, M, B FROM T", new Dispatch(cn), 3, 1, 1).Failure);
 
             // NULL sorts first in ASC, last in DESC; tie-break reverses on DESC (evidence/r-ado-1b/view-sort-grammar #18-208).
             Assert.Null(Put(rs, "Sort", "L ASC").Failure);
@@ -468,11 +460,19 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.Null(Put(rs, "Sort", "Y ASC").Failure);
             Assert.Equal(false, ReadObjField(rs, "Y"));
 
-            // MEMO (M) fails 0x80040E60 from Microsoft Cursor Engine (evidence/r-ado-1b/view-sort-grammar #1443).
+            // MEMO (M) and LONGBINARY (B) fail 0x80040E60 from Microsoft Cursor Engine and leave Sort unchanged
+            // (evidence/r-ado-1b/view-sort-grammar #1443, #1538).
             Outcome memoSort = Put(rs, "Sort", "M");
             Assert.Equal(unchecked((int)0x80040E60), memoSort.Failure!.Value.Scode);
             Assert.Equal("Microsoft Cursor Engine", memoSort.Failure!.Value.Source);
             Assert.Equal(Guid.Empty, memoSort.Failure!.Value.ErrorInfoGuid);
+            Assert.Equal("Y ASC", Get(rs, "Sort"));
+
+            Outcome sqlBinSort = Put(rs, "Sort", "B");
+            Assert.Equal(unchecked((int)0x80040E60), sqlBinSort.Failure!.Value.Scode);
+            Assert.Equal("Microsoft Cursor Engine", sqlBinSort.Failure!.Value.Source);
+            Assert.Equal(Guid.Empty, sqlBinSort.Failure!.Value.ErrorInfoGuid);
+            Assert.Equal("Y ASC", Get(rs, "Sort"));
 
             // Bad column -> 0x800A0CC1; bad syntax -> 0x800A0BB9; whitespace-only Sort -> E_NOTIMPL.
             Assert.Equal(unchecked((int)0x800A0CC1), Put(rs, "Sort", "NoSuch").Failure!.Value.Scode);
@@ -720,8 +720,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
         }
 
         // 3) evidence/r-wire/ado-getrows-tags on r-wire-dao.accdb:
-        //    Exact recorded SQL opens across all 13 typed bands; 10 succeed with exact VarTypes,
-        //    FBin/FOle hit CalcDb.Sql NotModelled.FieldType, and FDec (precision-38) hits NotModelled.AdoPrecision38Decimal.
+        //    Exact recorded SQL opens across all 13 typed bands; 12 succeed with exact VarTypes and byte arrays
+        //    (including FBin native type 9 and FOle native type 11), and FDec (precision-38) hits NotModelled.AdoPrecision38Decimal.
         nint wCn = OpenAceConnection(wireDaoPath, mode: 1);
         try
         {
@@ -736,6 +736,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
                 ("FDate", 700, 799, 14, typeof(OleDate), false),
                 ("FText", 800, 899, 15, typeof(string), true),
                 ("FMemo", 900, 999, 10, typeof(string), false),
+                ("FBin", 1000, 1099, 8, typeof(byte[]), true),
+                ("FOle", 1100, 1199, 6, typeof(byte[]), true),
                 ("FBool", 1200, 1299, 9, typeof(bool), false),
             ];
 
@@ -744,6 +746,18 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
                 nint wRs = New(OwnRecordset);
                 Assert.Null(Put(wRs, "CursorLocation", 3).Failure);
                 Assert.Null(Call(wRs, "Open", $"SELECT ID, {band.Col} FROM W WHERE ID BETWEEN {band.Lo} AND {band.Hi} ORDER BY ID", new Dispatch(wCn), 3, 1, 1).Failure);
+                if (band.Col == "FBin")
+                {
+                    nint flds = (nint)Get(wRs, "Fields")!;
+                    AssertFieldMeta(flds, "FBin", 204, 255, 255, 255, 106);
+                    Release(flds);
+                }
+                else if (band.Col == "FOle")
+                {
+                    nint flds = (nint)Get(wRs, "Fields")!;
+                    AssertFieldMeta(flds, "FOle", 205, 1073741823, 255, 255, 234);
+                    Release(flds);
+                }
                 object[,] grid = (object[,])Call(wRs, "GetRows", -1).Value!;
                 Assert.Equal(2, grid.GetLength(0));
                 Assert.Equal(band.ExpectedRows, grid.GetLength(1));
@@ -767,20 +781,40 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
                 }
                 Assert.True(sawType, $"Expected non-null {band.ExpectedClrType.Name} for {band.Col}");
                 Assert.Equal(band.HasNull, sawNull);
+                if (band.Col == "FBin")
+                {
+                    // evidence/r-wire/ado-getrows-tags #270: rows 1000 & 1004 Null; non-null rows are 255-byte arrays.
+                    Assert.Same(DBNull.Value, grid[1, 0]);
+                    Assert.Same(DBNull.Value, grid[1, 4]);
+                    byte[] r1001 = (byte[])grid[1, 1]!;
+                    Assert.Equal(255, r1001.Length);
+                    Assert.Equal(new byte[] { 0x00, 0x00, 0x01, 0x00 }, r1001[..4]);
+                    byte[] r1003 = (byte[])grid[1, 3]!;
+                    Assert.Equal(255, r1003.Length);
+                    Assert.Equal(new byte[] { 0x00, 0x01, 0x02, 0x03 }, r1003[..4]);
+                    byte[] r1005 = (byte[])grid[1, 5]!;
+                    Assert.Equal(255, r1005.Length);
+                    Assert.Equal(new byte[] { 0x41, 0x00, 0x42, 0x00 }, r1005[..4]);
+                    byte[] r1007 = (byte[])grid[1, 7]!;
+                    Assert.Equal(255, r1007.Length);
+                    Assert.Equal(new byte[] { 0x00, 0x00, 0x01, 0x02 }, r1007[..4]);
+                }
+                else if (band.Col == "FOle")
+                {
+                    // evidence/r-wire/ado-getrows-tags #296: row 1100 Null; rows 1101..1105 are 3, 256, 5000, 4, 3 bytes.
+                    Assert.Same(DBNull.Value, grid[1, 0]);
+                    Assert.Equal(new byte[] { 0x00, 0x00, 0x01 }, (byte[])grid[1, 1]!);
+                    byte[] r1102 = (byte[])grid[1, 2]!;
+                    Assert.Equal(256, r1102.Length);
+                    Assert.Equal(new byte[] { 0x00, 0x01, 0x02, 0x03 }, r1102[..4]);
+                    byte[] r1103 = (byte[])grid[1, 3]!;
+                    Assert.Equal(5000, r1103.Length);
+                    Assert.Equal(new byte[] { 0x00, 0x07, 0x0E, 0x15 }, r1103[..4]);
+                    Assert.Equal(new byte[] { 0x41, 0x00, 0x42, 0x00 }, (byte[])grid[1, 4]!);
+                    Assert.Equal(new byte[] { 0x01, 0x02, 0x03 }, (byte[])grid[1, 5]!);
+                }
                 Assert.Null(Call(wRs, "Close").Failure);
                 Release(wRs);
-            }
-
-            // evidence/r-wire/ado-getrows-tags opens FBin (native type 9) and FOle (native type 11) via adCmdText SQL;
-            // CalcDb.Sql currently refuses native types 9 and 11 in SQL projections by name (NotModelled.FieldType).
-            foreach ((string Col, int Lo, int Hi) in new[] { ("FBin", 1000, 1099), ("FOle", 1100, 1199) })
-            {
-                nint sqlBinRs = New(OwnRecordset);
-                Assert.Null(Put(sqlBinRs, "CursorLocation", 3).Failure);
-                Outcome binOpen = Call(sqlBinRs, "Open", $"SELECT ID, {Col} FROM W WHERE ID BETWEEN {Lo} AND {Hi} ORDER BY ID", new Dispatch(wCn), 3, 1, 1);
-                Assert.Equal(HResults.E_NOTIMPL, binOpen.Failure!.Value.Scode);
-                Assert.Contains("NotModelled.FieldType", binOpen.Failure!.Value.Description);
-                Release(sqlBinRs);
             }
 
             // evidence/r-wire/ado-getrows-tags opens FDec (precision 38/scale 0, row 1304 with non-zero High32/Mid32) via adCmdText SQL;

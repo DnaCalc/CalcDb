@@ -11,19 +11,31 @@ namespace CalcDb.Sql;
 
 /// <summary>
 /// The values a result keeps (constants, group keys, aggregate results, sort keys): the kernel's and the field reads'
-/// values are scalars held inline or BSTRs, so an owned copy is the scalar itself or a new BSTR of the same units.
+/// values are scalars held inline, BSTRs, or 1D UI1 SAFEARRAYs (bare Binary/OLE projections), so an owned copy is the
+/// scalar itself, a new BSTR of the same units, or a new UI1 SAFEARRAY of the same bytes.
 /// </summary>
 internal static unsafe class SelectValues
 {
     public static NativeVariant Copy(in NativeVariant v)
     {
-        if (v.Vt != (ushort)VarType.Bstr)
+        if (v.Vt == (ushort)VarType.Bstr)
         {
-            return v;
+            ReadOnlySpan<char> units = Bstrs.Chars(v.Pointer);
+            nint copy = Bstrs.FromUnits(units.Length, v.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest));
+            return new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = copy };
         }
-        ReadOnlySpan<char> units = Bstrs.Chars(v.Pointer);
-        nint copy = Bstrs.FromUnits(units.Length, v.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest));
-        return new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = copy };
+        if (v.Vt == (ushort)(VarType.Array | VarType.UI1) && v.Pointer != 0)
+        {
+            (int lower, int count) = SafeArrays.Shape(v.Pointer)[0];
+            nint copy = SafeArrays.Create(VarType.UI1, (lower, count));
+            if (count > 0)
+            {
+                new ReadOnlySpan<byte>(SafeArrays.ElementPointer(v.Pointer, lower), count)
+                    .CopyTo(new Span<byte>(SafeArrays.ElementPointer(copy, lower), count));
+            }
+            return new NativeVariant { Vt = (ushort)(VarType.Array | VarType.UI1), Pointer = copy };
+        }
+        return v;
     }
 
     public static void Clear(ref NativeVariant v)
@@ -31,6 +43,10 @@ internal static unsafe class SelectValues
         if (v.Vt == (ushort)VarType.Bstr)
         {
             Bstrs.Free(v.Pointer);
+        }
+        else if (v.Vt == (ushort)(VarType.Array | VarType.UI1) && v.Pointer != 0)
+        {
+            using OwnedVariant owned = OwnedVariant.TakeArray(v.Pointer, VarType.UI1);
         }
         v = default;
     }
@@ -2131,6 +2147,25 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             if (a.Vt == (ushort)VarType.Bstr)
             {
                 return Bstrs.Chars(a.Pointer).SequenceEqual(Bstrs.Chars(b.Pointer));
+            }
+            if (a.Vt == (ushort)(VarType.Array | VarType.UI1))
+            {
+                if (a.Pointer == b.Pointer)
+                {
+                    return true;
+                }
+                if (a.Pointer == 0 || b.Pointer == 0)
+                {
+                    return false;
+                }
+                (int lowerA, int countA) = SafeArrays.Shape(a.Pointer)[0];
+                (int lowerB, int countB) = SafeArrays.Shape(b.Pointer)[0];
+                if (lowerA != lowerB || countA != countB)
+                {
+                    return false;
+                }
+                return countA == 0 || new ReadOnlySpan<byte>(SafeArrays.ElementPointer(a.Pointer, lowerA), countA)
+                    .SequenceEqual(new ReadOnlySpan<byte>(SafeArrays.ElementPointer(b.Pointer, lowerB), countB));
             }
             NativeVariant x = a, y = b;
             return new ReadOnlySpan<byte>(&x, 16).SequenceEqual(new ReadOnlySpan<byte>(&y, 16));

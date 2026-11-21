@@ -244,13 +244,22 @@ public sealed unsafe class BoundExpression : IDisposable
     /// Bind one node of a parsed expression (a SQL clause, an aggregate's argument; W-06/parser-binder-scan). The program
     /// borrows the literal texts, so the syntax must outlive it.
     /// </summary>
-    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, out ExpressionFailure? failure)
+    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, out ExpressionFailure? failure) =>
+        Bind(root, schema, context, allowBareBinary: false, out failure);
+
+    /// <summary>
+    /// Bind one node of a parsed expression, optionally admitting a bare top-level reference to a stored Binary (native
+    /// type 9) or OLE / Long Binary (native type 11) column for SELECT projection (evidence/r-wire/read-dao,
+    /// r-wire/read-sql, r-wire/ado-getrows-tags, r-ado-1b/view-sort-grammar). Any expression over such a column stays
+    /// refused as NotModelled.FieldType.
+    /// </summary>
+    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, bool allowBareBinary, out ExpressionFailure? failure)
     {
         var b = new Builder(schema, context.Use);
         StaticType type;
         try
         {
-            type = b.Bind(root, 0).Type;
+            type = b.Bind(root, 0, allowBareBinary).Type;
         }
         catch (BindError e)
         {
@@ -747,8 +756,10 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>
     /// The current row's value of field <paramref name="index"/>, as the DAO read path projects it (R-ORACLE-1
     /// FMT1-FAMILIES): Null, Yes/No as VT_BOOL, Byte UI1, Integer I2, Long I4, Currency CY, Single R4, Double R8, Date
-    /// DATE, Decimal DECIMAL, Text and Memo as text. GUID, Binary and OLE fields are refused when bound. A source with no cursor is a
-    /// Null-extended row: every field reads Null.
+    /// DATE, Decimal DECIMAL, Text and Memo as text, and bare-projected Binary and OLE as 0-based VT_ARRAY|VT_UI1 (or
+    /// VT_NULL when empty; evidence/r-wire/read-dao, r-wire/ado-getrows-tags, r-def-cursor-dao/bulk-getrows-memo-binary).
+    /// GUID fields and Binary/OLE inside expressions are refused when bound. A source with no cursor is a Null-extended
+    /// row: every field reads Null.
     /// </summary>
     private bool Load(IRecordCursor? cursor, int index, ref Slot slot)
     {
@@ -781,6 +792,21 @@ public sealed unsafe class BoundExpression : IDisposable
             return false;
         }
         NativeValue v = read.Value;
+        if (v.Kind is NativeKind.Binary or NativeKind.LongBinary)
+        {
+            if (v.Bytes is { Length: > 0 } bytes)
+            {
+                nint array = SafeArrays.Create(VarType.UI1, (0, bytes.Length));
+                bytes.CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), bytes.Length));
+                slot.Value = new NativeVariant { Vt = (ushort)(VarType.Array | VarType.UI1), Pointer = array };
+                slot.Owned = true;
+            }
+            else
+            {
+                slot.Value = new NativeVariant { Vt = (ushort)VarType.Null };
+            }
+            return true;
+        }
         slot.Value = v.Kind switch
         {
             NativeKind.Null => new NativeVariant { Vt = (ushort)VarType.Null },
@@ -841,7 +867,14 @@ public sealed unsafe class BoundExpression : IDisposable
     {
         if (slot.Owned)
         {
-            ScalarOutcome.Of(slot.Value).Clear();
+            if (slot.Value.Vt == (ushort)(VarType.Array | VarType.UI1) && slot.Value.Pointer != 0)
+            {
+                using OwnedVariant owned = OwnedVariant.TakeArray(slot.Value.Pointer, VarType.UI1);
+            }
+            else
+            {
+                ScalarOutcome.Of(slot.Value).Clear();
+            }
             slot.Owned = false;
         }
         slot.Value = default;
@@ -914,10 +947,14 @@ public sealed unsafe class BoundExpression : IDisposable
         private static BindError Open(string name, string detail) => new(ExpressionFailure.Open(ExpressionPhase.Bind, name, detail));
 
         /// <summary>Bind <paramref name="node"/>, its value landing at stack position <paramref name="at"/>.</summary>
-        public Bound Bind(SyntaxNode node, int at)
+        public Bound Bind(SyntaxNode node, int at, bool allowBinary = false)
         {
             if (schema.Substitute(node) is { } slot)
             {
+                if (slot.Declared == (VarType.Array | VarType.UI1))
+                {
+                    throw Open("NotModelled.FieldType", $"derived or slot field {node.Text} of binary type in an expression");
+                }
                 Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0));
                 UsesSlots = true;
                 MaxDepth = Math.Max(MaxDepth, at + 1);
@@ -926,7 +963,7 @@ public sealed unsafe class BoundExpression : IDisposable
             Bound result = node.Kind switch
             {
                 SyntaxKind.Literal => Literal(node),
-                SyntaxKind.Name => Field(node),
+                SyntaxKind.Name => Field(node, allowBinary),
                 SyntaxKind.Unary => Unary(node, at),
                 SyntaxKind.Binary => Binary(node, at),
                 SyntaxKind.Call => Call(node, at),
@@ -956,7 +993,7 @@ public sealed unsafe class BoundExpression : IDisposable
         /// A field by name, as the schema resolves it (the table scope: case-insensitive, a qualified name such as F.N is not
         /// resolved: 3070 with the name as written). A name the scope takes as a parameter binds as a Null placeholder.
         /// </summary>
-        private Bound Field(SyntaxNode node)
+        private Bound Field(SyntaxNode node, bool allowBinary)
         {
             if (schema.Resolve(node.Text!, out ExpressionFailure? failure) is not { } binding)
             {
@@ -987,6 +1024,7 @@ public sealed unsafe class BoundExpression : IDisposable
                 NativeTypes.DateTime => VarType.Date,
                 NativeTypes.Text or NativeTypes.Memo => VarType.Bstr,
                 NativeTypes.Numeric => VarType.Decimal,
+                NativeTypes.Binary or NativeTypes.Ole when allowBinary && column.CalculatedResultType is null => VarType.Array | VarType.UI1,
                 _ => throw Open("NotModelled.FieldType", $"field {column.Name} of native type {column.TypeCode} in an expression (W-04/private-codecs)"),
             };
             int index = Fields.IndexOf(binding);
