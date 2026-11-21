@@ -16,7 +16,14 @@ procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scrat
    counters printed), and runs the candidate check from the repository folder
    (`calcdb-oracle batch --dir D --env windows-x64-calcdb-local --deployment <export>/artifacts/native --compare --rerun`).
    Its exit code is the number of failed steps. It lists the changed files it leaves out, so a missing file shows.
-3. When the review adjusts a file, run the script again; it starts from a fresh export each time.
+3. When the review adjusts a file, run the script again; it starts from a fresh export each time. While a child fixes
+   its own new tests it adds `-Filter <dotnet test filter>` (for example `-Filter FullyQualifiedName~DaoBookmarkTests`)
+   and leaves out `-Questions`: the same export and build, only those tests. The script prints FILTERED and refuses
+   `-Filter` with `-Snapshot`; the run that lands is unfiltered. (Measured 2026-11-21: the ADO read-side child ran 7
+   landing checks, bkmk and gdkq 3 each; at least 6 of the 10 reruns were for errors in the child's own new test
+   files, each a whole check of about 4 min. A filtered trial ran 3 tests in 21 s, but its export took 34 s and its build
+   217 s, with a compare and four children's checks running beside it: the filter saves the test and candidate steps,
+   not the build.)
 4. Commit only the child's files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`), push,
    update its register row and task.
 5. With `-Snapshot` the script has copied the export's runner, worker and `artifacts/native` to

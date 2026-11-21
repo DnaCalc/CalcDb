@@ -13,6 +13,7 @@ param(
     [string[]] $Questions = @(),                    # question folders for the candidate check
     [switch] $Publish,                              # publish CalcDb.Com into the export's artifacts/native
     [switch] $Snapshot,                             # copy runner, worker, native to compare-bin\<Name>
+    [string] $Filter = "",                         # dotnet test --filter while iterating on new tests; never on a landing run
     [string] $Export = "")
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
@@ -23,6 +24,8 @@ $Questions = @($Questions | ForEach-Object { $_ -split ',' } | Where-Object { $_
 # PerUserRegistration): Com tests always publish first.
 if ($Tests -contains 'Com') { $Publish = [switch]::new($true) }
 if ($Snapshot -and -not $Publish) { throw "-Snapshot needs -Publish: the compare set runs the export's native deployment" }
+if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for iterating, not for a landing run with -Snapshot" }
+$filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
 $repo = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
 $head = (git -C $repo rev-parse --short HEAD).Trim()
 if (-not $Export) { $Export = Join-Path $env:TEMP "calcdb-land-$Name-$head" }
@@ -83,7 +86,7 @@ try {
     $env:COLUMNS = "4000"
     foreach ($t in $Tests) {
         $log = Join-Path $out "$t.txt"
-        dotnet test "tests/CalcDb.$t.Tests" --no-build --logger "console;verbosity=detailed" `
+        dotnet test "tests/CalcDb.$t.Tests" --no-build @filterArgs --logger "console;verbosity=detailed" `
             --logger "trx;LogFileName=$t.trx" --results-directory $out > $log 2>&1
         $code = $LASTEXITCODE
         $text = (Get-Content $log -Raw) -replace '\r?\n\s*', ' '
@@ -142,5 +145,5 @@ try {
             "--worker $snap\worker\CalcDb.Oracle.Worker.exe --deployment $snap\native --store $env:LOCALAPPDATA\CalcDb\compare-store"
     }
 } finally { Pop-Location }
-Step "done, $failed failed steps"
+if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)" } else { Step "done, $failed failed steps" }
 exit $failed
