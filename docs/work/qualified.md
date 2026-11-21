@@ -1072,6 +1072,10 @@ is summarised in [qualification-report.md](qualification-report.md).
   - *Counters.* The TableDef's first page holds the row count (16), the AutoNumber counter (20, the last value issued) and the unique-entry counts of physical indexes 0 and 1 (67, 79). They are written in the rows' group. INSERT…SELECT of K 1–4 gives IDs 1–4 and every counter 4. The next insert gets ID 5.
   - *Duplicate, no flag.* The refused row is the later of the two in source order ('g2-c-second12'), and it consumes its AutoNumber: IDs 1, 2 and 4 are stored. `RecordsAffected` is 3, and `Errors` is empty. Row count 3, AutoNumber 4, PK count 4 (the refused row's PK entry was counted), UK count 3. One group, as for a clean statement, inside `BeginTrans`/`CommitTrans` as well.
   - *Duplicate, `dbFailOnError`.* 3022, `RecordsAffected` 0, one `Errors` entry (3022). No row is stored and no data or index page is written. The TableDef counters are written as they stood at the refusal: row count 2, AutoNumber 3, PK count 3, UK count 2, on an empty table. `TableDef.RecordCount` and a table-type `RecordCount` read 2. After the next insert they read 3, with one row (ID 4).
+  - *One row refused, nothing counted.* A single-row `INSERT … VALUES` refused 3022 by the first unique index changes
+    nothing on the file, page 0 included, with or without `dbFailOnError` (`evidence/r-err-1b/con-pk-duplicate-insert`,
+    `evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror`: identical hashes before open and after close). The
+    +1 on page 0 of r-q10 belongs to a recordset `AddNew`.
   - *How the refusal is written.* Outside a transaction, three groups: one inside `Execute` (page 1, TableDef), the deferred one 0.5 s later (the same pages), and page 1 at `Close` (+3). Inside a transaction: one group at `CommitTrans` and page 1 at `Close` (+2).
   - *Division by zero, `dbFailOnError`.* Error 11 in the third source row does the same: no rows; row count 2, AutoNumber 3, both index counts 2 (the failing row reached no index); +3.
   - *Rollback.* `BeginTrans`, the clean 4-row insert, `Rollback`: no row, row count 0. AutoNumber 4 is written with page 1 within `Rollback`, and page 1 again at `Close` (+2). The next insert gets ID 5.
@@ -1087,6 +1091,12 @@ is summarised in [qualification-report.md](qualification-report.md).
   - Whether Compact & Repair resets the drifted row count.
   - A refusal in a statement that spans pages; MDB.
   - The first ro-ins-fail attempt's `Execute` took 3.15 s. Its repeat (a2, retained) took 11 ms.
+  - The counter bytes of a refused 3022 that took no new page, and of a 3201 after earlier rows: their answers are
+    recorded (`evidence/r-txn-1/stmt-unique-middle-fail-d1`, `stmt-fk-counter-fail-d1`: 3201, next ID 5), their
+    pages are not. CalcDb writes the counters it reached there (task c7gn).
+  - Rollback of a generated AutoNumber that took no new page, an inner Rollback, or under an increment other than 1:
+    `evidence/r-q-fmt-sort/auto-cancel-fail-accdb` (no new page; next ID 10) records the answer, not the bytes.
+    CalcDb writes nothing, and refuses a non-unit increment by name.
 
 ### R-TXN-1 TXN-MULTI: files and Workspaces
 - **Claim**: Within one Workspace, changes in files A and B resolve together by one `Rollback`/`CommitTrans` in either touch order; a file opened after the first `BeginTrans` joins; a statement failure in B after a change in A is statement-only; closing B inside the level still rolls back both; three handles to one file roll back together. Two Workspaces touching the same two files in opposite order (w1: A then B, w2: B then A) resolve independently: on rows that do not share a page (unindexed field, all four updates admitted) the three resolution orders (w1 Rollback then w2 CommitTrans; w2 CommitTrans then w1 CommitTrans; w2 Rollback then w1 CommitTrans) each leave exactly the committing Workspace's changes on both files and nothing of the rolled-back one (A and B rows 1/64: (0,10), (1,20), (2,20)), in each Workspace's own reads and in a third Workspace after a pause and Idle; no deadlock. An update colliding with the other Workspace's page (three rows on one page) is refused 3188. A refused second-file admission (`OpenDatabase` on a file another process holds exclusively, 3045) leaves the level usable: later updates and `CommitTrans` succeed and both main-file changes are committed (independent final read), and the file opens after the other process closes.
