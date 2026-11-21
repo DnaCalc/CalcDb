@@ -797,34 +797,21 @@ public sealed class GrowthPublicationTests
     [Fact]
     public void Refuses_LVAL_dropped_column_BOM_overflow_and_relationship()
     {
-        // 1. LVAL Memo (Mm) & OLE (Lo) + Dropped column (Dr) in WAccdbFixture.
+        // 1. Unrecorded Memo edge (leading U+FEFF) + Null OLE insert in WAccdbFixture (inline/single/chained LV writes
+        // and deletes are covered byte-for-byte against evidence/r-q19-growth-open/lv-* in KeptPageReplayTests).
         using (var rig = new Rig(WAccdbFixture))
         {
-            // Memo insert refused
+            // Leading U+FEFF Memo insert refused by name (TextCodec.TryEncode through RowWriter.PlacedLongValue).
             (TableDefinition mm, _) = rig.Table("Mm");
-            (EditFrame mmFrame, TableCursor mmCursor) = rig.OpenTable(rig.A, "Mm");
+            (EditFrame mmFrame, _) = rig.OpenTable(rig.A, "Mm");
             Assert.True(mmFrame.AddNew().Succeeded);
             Assert.True(mmFrame.Assign(Col(mm, "ID"), I4(999)).Succeeded);
-            AssignText(mmFrame, Col(mm, "M"), "memo-val");
-            AssertNotWritten(mmFrame.Update(), rig.A, "LVAL", rig.Before, rig.File.Image);
-
-            // Non-Null Memo delete refused
-            ColumnDescriptor memoCol = Col(mm, "M");
-            bool foundNonNullMemo = false;
-            for (mmCursor.MoveFirst(); !mmCursor.Eof; mmCursor.MoveNext())
-            {
-                if (mmCursor.Read(memoCol).Value.Kind != NativeKind.Null)
-                {
-                    foundNonNullMemo = true;
-                    break;
-                }
-            }
-            Assert.True(foundNonNullMemo, "expected a row of Mm with non-Null Memo");
-            AssertNotWritten(mmFrame.Delete(), rig.A, "LVAL", rig.Before, rig.File.Image);
+            AssignText(mmFrame, Col(mm, "M"), "\uFEFFmemo-bom");
+            AssertNotWritten(mmFrame.Update(), rig.A, "U+FEFF", rig.Before, rig.File.Image);
 
             // An OLE insert whose long value is Null compiles: a Null long value is a Null field of the row, as in the
             // catalog rows ACE writes with Null Memo and OLE fields (evidence/r-q11-ddl-closure, W-07/native-metadata-write).
-            // The refused Memo changes were withdrawn (task sjws), so nothing waits before it: it is published.
+            // The refused Memo change was withdrawn (task sjws), so nothing waits before it: it is published.
             (TableDefinition lo, _) = rig.Table("Lo");
             (EditFrame loFrame, _) = rig.OpenTable(rig.A, "Lo");
             Assert.True(loFrame.AddNew().Succeeded);

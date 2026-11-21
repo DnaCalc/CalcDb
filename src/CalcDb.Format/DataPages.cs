@@ -178,22 +178,24 @@ public static class DataPages
     /// Delete one ordinary (non-overflow) slot in place (II-03 §§1.3, 3.3; R-FMT-2 "deleted row slot word",
     /// <c>evidence/r-q20-delete-pages/slot-delete-*</c>, <c>dynaset-empty-all-desc</c>,
     /// <c>evidence/r-q19-growth-open/lv-op-delete-row-chain</c>, <c>lv-op-delete-row-single</c>,
-    /// <c>evidence/r-q17-growth/retire-*</c>):
+    /// <c>lv-op-single-*</c>, <c>evidence/r-q17-growth/retire-*</c>):
     /// sets slot <paramref name="slot"/> (offset <c>o</c>, length <c>len</c>, <c>end = o + len</c>) to
     /// <c>0xC000 | (o + len)</c> (<c>0xD000</c> at the page's top row where <c>o + len == 0x1000</c>); raises every
     /// later slot <c>j &gt; slot</c> — live or already deleted — by <c>len</c> keeping its flag bits (<c>0xC000</c> on
     /// deleted slots); moves live rows below upward by <c>len</c>; adds <c>len</c> to
     /// <see cref="DataPageRules.FreeCount"/>; keeps <see cref="DataPageRules.RowCount"/> and
-    /// <see cref="DataPageRules.Stamp"/> unchanged; and leaves vacated bottom bytes untouched. Refuses LVAL pages,
-    /// already-deleted / overflow-target slots, overflow-root slots, and pages with a non-contiguous gap.
+    /// <see cref="DataPageRules.Stamp"/> unchanged; and leaves vacated bottom bytes untouched. When
+    /// <paramref name="lval"/> is true, targets an LVAL page (owner <c>"LVAL"</c>) instead of an ordinary data page.
+    /// Refuses mismatched page subtype, already-deleted / overflow-target slots, overflow-root slots, and pages with a
+    /// non-contiguous gap.
     /// </summary>
-    public static bool TryDeleteSlot(Span<byte> page, int slot, FormatDescriptor d, out string? failure)
+    public static bool TryDeleteSlot(Span<byte> page, int slot, FormatDescriptor d, out string? failure, bool lval = false)
     {
         DataPageRules r = d.DataPage;
         failure = null;
-        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d) != lval)
         {
-            failure = "page is not an ordinary data page";
+            failure = lval ? "page is not an LVAL page" : "page is not an ordinary data page";
             return false;
         }
         SlotView? targetView = CheckedSlot(page, slot, d, out failure);
@@ -235,7 +237,8 @@ public static class DataPages
             page.Slice(minStart, target.Start - minStart).CopyTo(page.Slice(minStart + length, target.Start - minStart));
         }
         // R-FMT-2 "deleted row slot word" (evidence/r-q20-delete-pages/slot-delete-*, dynaset-empty-all-desc;
-        // evidence/r-q19-growth-open/lv-op-delete-row-chain page 46 slot 2: b5 0f -> ce cf):
+        // evidence/r-q19-growth-open/lv-op-delete-row-chain page 46 slot 2: b5 0f -> ce cf;
+        // evidence/r-q19-growth-open/lv-op-single-* page 45 slot 0: 9c 0f -> 00 d0):
         // deleted slot word is 0xC000 | (o + len), which equals 0xD000 at the top row (o + len == 0x1000);
         // every later slot j > slot (live or already deleted) rises by len, preserving its upper flag bits (0xC000).
         WriteSlotWord(page, r.SlotBase + (slot * r.SlotEntryBytes), (ushort)(r.DeletedFlag | r.OverflowFlag | target.End));
@@ -252,13 +255,14 @@ public static class DataPages
     }
 
     /// <summary>
-    /// Whether an ordinary data page holds no live row, overflow root or overflow target (every slot is a deleted
-    /// zero-length slot). Used by delete compilation to detect an emptied data page.
+    /// Whether an ordinary data page (or an LVAL page when <paramref name="lval"/> is true) holds no live row, overflow
+    /// root or overflow target (every slot is a deleted zero-length slot). Used by delete compilation to detect an
+    /// emptied page.
     /// </summary>
-    public static bool IsEmpty(ReadOnlySpan<byte> page, FormatDescriptor d)
+    public static bool IsEmpty(ReadOnlySpan<byte> page, FormatDescriptor d, bool lval = false)
     {
         DataPageRules r = d.DataPage;
-        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d))
+        if (page.Length != d.PageSize || page[r.Kind.Offset] != 0x01 || IsLvalPage(page, d) != lval)
         {
             return false;
         }

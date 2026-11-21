@@ -527,6 +527,54 @@ public sealed class NativeRowAndDataPageTests
         Assert.Equal(rowNew2, page.AsSpan(s5.Start, s5.Length).ToArray());
     }
 
+    [Fact]
+    public void DataPages_TryDeleteSlot_and_IsEmpty_support_LVAL_pages_and_LongValuePlan_bounds()
+    {
+        Assert.Equal(64, LongValuePlan.InlinePayloadMax);
+        Assert.Equal(3816, LongValuePlan.SingleRowPayloadMax);
+        Assert.Equal(4072, LongValuePlan.ChainChunkPayloadMax);
+
+        // Build an LVAL page with slot 0 = 100 bytes, slot 1 = 2000 bytes (matches lv-op-* before-state page 45).
+        byte[] lval = new byte[D.PageSize];
+        DataPages.InitializeLval(lval, 0, D);
+        byte[] row0 = new byte[100];
+        Array.Fill(row0, (byte)0xAA);
+        byte[] row1 = new byte[2000];
+        Array.Fill(row1, (byte)0xBB);
+        Assert.True(DataPages.TryAppendRow(lval, row0, D, out byte s0, out _, lval: true));
+        Assert.True(DataPages.TryAppendRow(lval, row1, D, out byte s1, out _, lval: true));
+        Assert.Equal((byte)0, s0);
+        Assert.Equal((byte)1, s1);
+        Assert.Equal(1978ul, D.DataPage.FreeCount.Read(lval));
+        Assert.False(DataPages.IsEmpty(lval, D, lval: true));
+
+        // Ordinary mode refuses LVAL page; LVAL mode deletes slot 0 cleanly (slot 0 -> 0xD000, slot 1 rises by 100).
+        Assert.False(DataPages.TryDeleteSlot(lval, 0, D, out string? ordinaryErr, lval: false));
+        Assert.Contains("ordinary data page", ordinaryErr);
+
+        Assert.True(DataPages.TryDeleteSlot(lval, 0, D, out string? lvalErr, lval: true), lvalErr);
+        Assert.Equal(2078ul, D.DataPage.FreeCount.Read(lval));
+        Assert.False(DataPages.IsEmpty(lval, D, lval: true));
+        SlotView after0 = DataPages.CheckedSlot(lval, 0, D, out _)!.Value;
+        SlotView after1 = DataPages.CheckedSlot(lval, 1, D, out _)!.Value;
+        Assert.True(after0.Deleted && after0.Overflow && after0.Start == 4096 && after0.Length == 0);
+        Assert.False(after1.Deleted);
+        Assert.Equal(2096, after1.Start);
+        Assert.Equal(2000, after1.Length);
+        Assert.Equal(row1, lval.AsSpan(after1.Start, after1.Length).ToArray());
+
+        // Deleting slot 1 empties the LVAL page.
+        Assert.True(DataPages.TryDeleteSlot(lval, 1, D, out string? lvalErr2, lval: true), lvalErr2);
+        Assert.True(DataPages.IsEmpty(lval, D, lval: true));
+        Assert.False(DataPages.IsEmpty(lval, D, lval: false));
+
+        // LVAL mode refuses ordinary data pages.
+        byte[] ordinary = EmptyDataPage(42);
+        Assert.True(DataPages.TryAppendRow(ordinary, [1, 2, 3, 4], D, out _, out _));
+        Assert.False(DataPages.TryDeleteSlot(ordinary, 0, D, out string? notLvalErr, lval: true));
+        Assert.Contains("LVAL", notLvalErr);
+    }
+
     private static byte[] EmptyDataPage(uint owner)
     {
         byte[] page = new byte[D.PageSize];

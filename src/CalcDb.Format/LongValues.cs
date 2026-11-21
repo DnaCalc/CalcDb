@@ -22,15 +22,31 @@ public sealed record LongValuePlan(LongValueForm Form, uint Length, RowLocator F
     public const int DefinitionBytes = 12;
 
     /// <summary>
-    /// The largest inline payload a record shows ACE storing: the 51-byte MR2 property blob of a DAO-appended TableDef,
-    /// in its MSysObjects LvProp (evidence/r-q11-ddl-closure/append-dao, page 17 offset 2272: <c>33 00 00 80</c>, eight
-    /// zero bytes, the blob). The size from which ACE uses an LVAL page instead is not recorded.
+    /// The largest payload stored inline in the data row (II-04 §7.1; R-FMT-2 "LV form selection":
+    /// <c>evidence/r-q19-growth-open/lv-inline-memo</c> 2, 50, 64 vs 66, 98; <c>lv-inline-ole</c> 1, 50, 64 vs 65, 99;
+    /// also the 51-byte MR2 LvProp blob in <c>evidence/r-q11-ddl-closure/append-dao</c>). From 65 bytes the value goes
+    /// to an LVAL page.
     /// </summary>
-    public const int ObservedInlinePayloadMax = 51;
+    public const int InlinePayloadMax = 64;
+
+    /// <summary>
+    /// The largest payload stored as a single LVAL row (R-FMT-2 "LV form selection":
+    /// <c>evidence/r-q19-growth-open/lv-single-3816</c> vs <c>lv-single-3817</c>). From 3,817 bytes the value uses the
+    /// chained form even when it fits one page.
+    /// </summary>
+    public const int SingleRowPayloadMax = 3816;
+
+    /// <summary>
+    /// The maximum payload carried by one chained LVAL page: a 4,076-byte LVAL row less its 4-byte next locator
+    /// (R-FMT-2 "LV form selection": <c>evidence/r-q19-growth-open/lv-single-4072</c> one page, 4 bytes free;
+    /// <c>lv-single-4074</c> two pages, 4,072 + 2 bytes).
+    /// </summary>
+    public const int ChainChunkPayloadMax = 4072;
 
     /// <summary>
     /// An inline long value (II-04 §7.1): the length with the inline flag <c>0x80000000</c>, then the row locator and the
-    /// opaque word, both zero in the recorded inline value (evidence/r-q11-ddl-closure/append-dao), then the payload.
+    /// opaque word, both zero (<c>evidence/r-q19-growth-open/lv-inline-memo</c>, <c>lv-inline-ole</c>,
+    /// <c>evidence/r-q11-ddl-closure/append-dao</c>), then the payload.
     /// </summary>
     public static byte[] EncodeInline(ReadOnlySpan<byte> payload)
     {

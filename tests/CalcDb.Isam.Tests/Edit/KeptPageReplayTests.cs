@@ -1081,4 +1081,1242 @@ public sealed class KeptPageReplayTests
         Assert.Contains("ordinary data page", lvalFailure);
     }
 
+    private static byte[]? KeptSlice(string card, string question, string handleName, long byteOffset, int expectedLength, string attempt = "a1")
+    {
+        string folder = Path.Combine(ReplayFixture.Root(), "evidence", card, question);
+        using JsonDocument doc = JsonDocument.Parse(System.IO.File.ReadAllText(Directory.GetFiles(folder, $"*.{attempt}.json").Single()));
+        byte[]? found = null;
+        Walk(doc.RootElement, handleName, byteOffset, expectedLength, ref found);
+        return found;
+
+        static void Walk(JsonElement e, string handleName, long byteOffset, int expectedLength, ref byte[]? found)
+        {
+            if (e.ValueKind == JsonValueKind.Object)
+            {
+                if (e.TryGetProperty("handle", out JsonElement handle) && handle.GetString() == handleName
+                    && e.TryGetProperty("bytes", out JsonElement bytes)
+                    && e.TryGetProperty("offset", out JsonElement offset) && offset.GetInt64() == byteOffset
+                    && e.TryGetProperty("bytesRead", out JsonElement read) && read.GetInt32() == expectedLength)
+                {
+                    found = Convert.FromHexString(bytes.GetString()!);
+                }
+                foreach (JsonProperty p in e.EnumerateObject())
+                {
+                    Walk(p.Value, handleName, byteOffset, expectedLength, ref found);
+                }
+            }
+            else if (e.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement x in e.EnumerateArray())
+                {
+                    Walk(x, handleName, byteOffset, expectedLength, ref found);
+                }
+            }
+        }
+    }
+
+    private static byte[] SeedGrowthOpen(string question, string card = "r-q19-growth-open")
+    {
+        SortedDictionary<long, byte[]> created = KeptPages(card, question, "pg-after-create");
+        byte[] image = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyAccdb);
+        long maxPage = created.Keys.Max();
+        if ((maxPage + 1) * D.PageSize > image.Length)
+        {
+            Array.Resize(ref image, (int)((maxPage + 1) * D.PageSize));
+        }
+        foreach ((long p, byte[] bytes) in created)
+        {
+            bytes.CopyTo(image, (int)(p * D.PageSize));
+        }
+        if (!created.ContainsKey(1))
+        {
+            foreach (long p in created.Keys)
+            {
+                if (p >= 42)
+                {
+                    Assert.True(MapPages.TryInlineBit(image.AsSpan(D.PageSize, D.PageSize), D.Map.GlobalFreeSlot, (uint)p, D, out int offset, out byte mask, out string? bitFailure), bitFailure);
+                    image[D.PageSize + offset] &= (byte)~mask;
+                }
+            }
+        }
+        if (KeptSlice(card, question, "pg-after-create", 3584, 8) is { } headerSlice)
+        {
+            headerSlice.CopyTo(image, 3584);
+        }
+        return image;
+    }
+
+    private static void CloseLvSession(Session s, byte[] page1Before)
+    {
+        byte[] page1After = s.File.Snapshot().AsSpan(D.PageSize, D.PageSize).ToArray();
+        // Close commits page 0 +1 when this session allocated a page (cleared a bit 1 -> 0 in page 1, returning the
+        // session allocation reservation) or has deferred page releases (emptied data pages). Setting a free bit
+        // 0 -> 1 during a statement (DELETE freeing chain pages, r-q22-lv-open/lv-free-timing-delete-chain) writes
+        // nothing at Close.
+        bool allocatedPage = false;
+        for (int i = 0; i < page1Before.Length; i++)
+        {
+            if ((page1Before[i] & ~page1After[i]) != 0)
+            {
+                allocatedPage = true;
+                break;
+            }
+        }
+        if (allocatedPage || s.Workspace.ReleasesAtClose(s.Cache))
+        {
+            (MutationOpen open, string? detail) = s.Workspace.PublishCounterCommit(s.Cache);
+            Assert.Equal(MutationOpen.None, open);
+            Assert.Null(detail);
+        }
+    }
+
+    private static void AssertMatchesGrowthOpen(string question, string handleName, byte[] ours, string card = "r-q19-growth-open")
+    {
+        SortedDictionary<long, byte[]> after = KeptPages(card, question, handleName);
+        List<string> differences = [];
+        foreach ((long page, byte[] theirs) in after)
+        {
+            if ((page + 1) * D.PageSize > ours.Length)
+            {
+                differences.Add($"page {page}: ACE has it, ours ends at page {ours.Length / D.PageSize}");
+                continue;
+            }
+            for (int b = 0; b < D.PageSize; b++)
+            {
+                if (ours[(page * D.PageSize) + b] != theirs[b])
+                {
+                    differences.Add($"page {page} +{b}: ours {ours[(page * D.PageSize) + b]:X2}, ACE {theirs[b]:X2}");
+                }
+            }
+        }
+        if (KeptSlice(card, question, handleName, 3584, 8) is { } expectedHeader)
+        {
+            for (int i = 0; i < expectedHeader.Length; i++)
+            {
+                if (ours[3584 + i] != expectedHeader[i])
+                {
+                    differences.Add($"page 0 +{3584 + i}: ours {ours[3584 + i]:X2}, ACE {expectedHeader[i]:X2}");
+                }
+            }
+        }
+        Assert.True(differences.Count == 0, $"{card}/{question} ({handleName}): {differences.Count} differences:\n" + string.Join("\n", differences.Take(40)));
+    }
+
+    private static unsafe NativeVariant MakeLvVariant(bool memo, int byteLength, out nint ownedBstr, char fill = '€')
+    {
+        if (memo)
+        {
+            ownedBstr = Bstrs.FromUnits(byteLength / 2, byteLength / 2, (span, n) => span[..n].Fill(fill));
+            return new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = ownedBstr };
+        }
+        ownedBstr = 0;
+        nint psa = SafeArrays.Create(VarType.UI1, (0, byteLength));
+        if (byteLength > 0)
+        {
+            byte* data = (byte*)SafeArrays.ElementPointer(psa, 0);
+            for (int b = 0; b < byteLength; b++)
+            {
+                data[b] = (byte)((b * 7) + 3);
+            }
+        }
+        return new NativeVariant { Vt = (ushort)(VarType.Array | VarType.UI1), Pointer = psa };
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection" (evidence/r-q19-growth-open/lv-inline-memo and lv-inline-ole):
+    /// Memo (2, 50, 64, 66, 98 bytes) and Long Binary (1, 50, 64, 65, 99 bytes), one value per shared session.
+    /// Up to 64 bytes stay inline in the data row (n | 0x80000000, 8 zero bytes, payload); from 65 bytes a single
+    /// LVAL row lands on a new LVAL page (46, in LV owned and LV free maps). Every kept page (1, 42–53) and page 0
+    /// commit counter match ACE byte-for-byte after every session.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-inline-memo", true, new[] { 2, 50, 64, 66, 98 })]
+    [InlineData("lv-inline-ole", false, new[] { 1, 50, 64, 65, 99 })]
+    public void Long_values_inline_bound_matches_ACE_byte_for_byte(string question, bool memo, int[] sizes)
+    {
+        byte[] image = SeedGrowthOpen(question);
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            NativeVariant value = MakeLvVariant(memo, sizes[i], out nint ownedBstr);
+            try
+            {
+                s.Insert(t, () => 0u, ("ID", I4(i + 1)), ("V", value));
+            }
+            finally
+            {
+                if (ownedBstr != 0)
+                {
+                    Bstrs.Free(ownedBstr);
+                }
+            }
+            CloseLvSession(s, page1Before);
+            image = s.File.Snapshot();
+            AssertMatchesGrowthOpen(question, $"pg-after-insert-{i + 1}", image);
+        }
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection" (evidence/r-q19-growth-open/lv-single-*):
+    /// Up to 3,816 bytes store as a single LVAL row (length | 0x40000000, stamp 0, page joins LV free map even with
+    /// 264 bytes free at 3,816). From 3,817 bytes the value uses the chained form (no flag, tick stamp in +8 and page
+    /// bytes 8–11, not in LV free map): 3,817..4,072 take one chain page (4,072 leaves 4 bytes free), 4,074 takes two
+    /// (4,072 + 2). Every kept page (1, 42–53) and page 0 commit counter match ACE byte-for-byte.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-single-2002", 2002)]
+    [InlineData("lv-single-3816", 3816)]
+    [InlineData("lv-single-3817", 3817)]
+    [InlineData("lv-single-4072", 4072)]
+    [InlineData("lv-single-4074", 4074)]
+    public void Long_values_single_row_and_chain_boundary_matches_ACE_byte_for_byte(string question, int size)
+    {
+        byte[] image = SeedGrowthOpen(question);
+        SortedDictionary<long, byte[]> after = KeptPages("r-q19-growth-open", question, "pg-after-insert-1");
+        uint stamp = size > LongValuePlan.SingleRowPayloadMax ? BinaryPrimitives.ReadUInt32LittleEndian(after[45].AsSpan(8)) : 0u;
+        byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        NativeVariant value = MakeLvVariant(memo: false, size, out _);
+        s.Insert(t, () => stamp, ("ID", I4(1)), ("V", value));
+        CloseLvSession(s, page1Before);
+        AssertMatchesGrowthOpen(question, "pg-after-insert-1", s.File.Snapshot());
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection and Map ownership" (evidence/r-q19-growth-open/lv-fill-2000-1976, -1978, -2000):
+    /// 100 and 2,000 bytes leave LVAL page 45 with 1,978 free. Then 1,976 (+2 slot = 1,978) fills page 45 to 0 free
+    /// bytes and clears 45 from the LV free map, so the next 100 bytes take new page 47 (all 4 sessions match ACE
+    /// byte-for-byte). 1,978 and 2,000 do not fit with their slot, leave 45 in the LV free map, and take new page 47
+    /// (sessions 1–3 match ACE byte-for-byte); session 4 (100B) then sees two LV free-map pages with room ({45, 47})
+    /// and is refused by name because r-q22-lv-open/lv-two-free-lower-looser-* disproved both first-fit and best-fit.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-fill-2000-1976", 1976, true)]
+    [InlineData("lv-fill-2000-1978", 1978, false)]
+    [InlineData("lv-fill-2000-2000", 2000, false)]
+    public void Long_values_LVAL_fill_and_free_map_matches_ACE_byte_for_byte(string question, int thirdSize, bool fourthAdmitted)
+    {
+        int[] sizes = [100, 2000, thirdSize, 100];
+        byte[] image = SeedGrowthOpen(question);
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            if (i == 3 && !fourthAdmitted)
+            {
+                using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+                var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+                using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+                using var frame = new EditFrame(ctx, cur, s.Workspace);
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(t.Columns[0], I4(4)).Succeeded);
+                Assert.True(frame.Assign(t.Columns[1], MakeLvVariant(memo: false, sizes[i], out _)).Succeeded);
+                UpdateOutcome refused = frame.Update();
+                Assert.False(refused.Succeeded);
+                Assert.Equal(MutationOpen.Publication, refused.Open);
+                Assert.Contains("2 long-value free-map pages have room", refused.Detail);
+                return;
+            }
+            NativeVariant value = MakeLvVariant(memo: false, sizes[i], out _);
+            s.Insert(t, () => 0u, ("ID", I4(i + 1)), ("V", value));
+            CloseLvSession(s, page1Before);
+            image = s.File.Snapshot();
+            AssertMatchesGrowthOpen(question, $"pg-after-insert-{i + 1}", image);
+        }
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection and Overflow / deletion" (admitted evidence/r-q19-growth-open/lv-op-* records):
+    /// replacing a stored single Memo (larger, smaller, crossing to chain), clearing a single Memo to Null, and
+    /// deleting a row holding a single or chained Memo. Checks every kept page (1, 42–57) and page 0 commit counter
+    /// (+3586: +2 when UPDATE allocates chain pages, +1 for single-row UPDATE/Null and for BOTH DELETEs including
+    /// lv-op-delete-row-chain) byte-for-byte, plus reads back surviving rows through <see cref="FieldDecoder"/>.
+    /// (UPDATE freeing a chain — lv-op-chain-* — is pinned as a named refusal in
+    /// <see cref="Long_values_r_q22_open_cases_refuse_by_name"/>.)
+    /// </summary>
+    [Theory]
+    [InlineData("lv-op-single-larger", 1, 200, false)]
+    [InlineData("lv-op-single-smaller", 1, 80, false)]
+    [InlineData("lv-op-single-to-chain", 1, 5000, false)]
+    [InlineData("lv-op-single-null", 1, 0, false)]
+    [InlineData("lv-op-delete-row-single", 1, -1, true)]
+    [InlineData("lv-op-delete-row-chain", 3, -1, true)]
+    public void Long_values_replace_clear_and_delete_match_ACE_byte_for_byte(string question, int targetId, int newBytes, bool isDelete)
+    {
+        byte[] image = SeedGrowthOpen(question);
+        SortedDictionary<long, byte[]> after = KeptPages("r-q19-growth-open", question, "pg-after-op");
+        uint stamp = !isDelete && newBytes > LongValuePlan.SingleRowPayloadMax
+            ? BinaryPrimitives.ReadUInt32LittleEndian(after[49].AsSpan(8))
+            : 0u;
+        byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount) { LongValueTicks = () => stamp });
+        using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+        using var frame = new EditFrame(context, cursor, s.Workspace);
+        ColumnDescriptor idCol = t.Columns.Single(c => c.Name == "ID");
+        ColumnDescriptor vCol = t.Columns.Single(c => c.Name == "V");
+        bool found = false;
+        for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
+        {
+            if (cursor.Read(idCol).Value.Integer == targetId)
+            {
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found, $"row ID={targetId} not found");
+
+        using (StatementScope stmt = s.Workspace.BeginStatement())
+        {
+            if (isDelete)
+            {
+                UpdateOutcome del = frame.Delete();
+                Assert.True(del.Succeeded && del.Change?.Physical is not null, $"{question}: {del} / {del.Change?.NotWritten}");
+            }
+            else
+            {
+                Assert.True(frame.Edit().Succeeded);
+                nint ownedBstr = 0;
+                NativeVariant val = newBytes == 0
+                    ? new NativeVariant { Vt = (ushort)VarType.Null }
+                    : MakeLvVariant(memo: true, newBytes, out ownedBstr);
+                try
+                {
+                    Assert.True(frame.Assign(vCol, val).Succeeded);
+                    UpdateOutcome upd = frame.Update();
+                    Assert.True(upd.Succeeded && upd.Change?.Physical is not null, $"{question}: {upd} / {upd.Change?.NotWritten}");
+                }
+                finally
+                {
+                    if (ownedBstr != 0)
+                    {
+                        Bstrs.Free(ownedBstr);
+                    }
+                }
+            }
+            ResolutionOutcome res = stmt.Complete();
+            Assert.Equal(MutationOpen.None, res.Open);
+        }
+
+        CloseLvSession(s, page1Before);
+        byte[] finalImage = s.File.Snapshot();
+        AssertMatchesGrowthOpen(question, "pg-after-op", finalImage);
+
+        // Verify round-trip read of every surviving row.
+        using var verify = new Session(finalImage);
+        TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using TableCursor readCur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+        Dictionary<long, int?> readSizes = [];
+        for (readCur.MoveFirst(); !readCur.Eof; readCur.MoveNext())
+        {
+            long id = readCur.Read(tAfter.Columns[0]).Value.Integer;
+            NativeValue v = readCur.Read(tAfter.Columns[1]).Value;
+            Assert.NotEqual(NativeKind.Failed, v.Kind);
+            readSizes[id] = v.Kind == NativeKind.Null ? null : v.Text!.Length * 2;
+        }
+        if (isDelete)
+        {
+            Assert.False(readSizes.ContainsKey(targetId));
+            Assert.Equal(2, readSizes.Count);
+        }
+        else
+        {
+            Assert.Equal(3, readSizes.Count);
+            Assert.Equal(newBytes == 0 ? null : newBytes, readSizes[targetId]);
+        }
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection and Overflow / deletion" (evidence/r-q22-lv-open/lv-free-timing-delete-chain):
+    /// DELETE frees chained LVAL pages 47 and 48 in page 1 (4037..4038: 00 fe -> 80 ff) and clears them in the LV
+    /// owned map during the statement, with page 0 +3586 = +1 and no Close write. Verifies byte-for-byte identity at
+    /// BOTH <c>pg-open-after-op</c> (before Close) and <c>pg-after-close</c>.
+    /// </summary>
+    [Fact]
+    public void Long_values_delete_chain_frees_page1_during_statement_matches_ACE_byte_for_byte()
+    {
+        const string card = "r-q22-lv-open";
+        const string question = "lv-free-timing-delete-chain";
+        byte[] image = SeedGrowthOpen(question, card);
+        byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+        using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+        using var frame = new EditFrame(context, cursor, s.Workspace);
+        for (cursor.MoveFirst(); !cursor.Eof && cursor.Read(t.Columns[0]).Value.Integer != 3; cursor.MoveNext())
+        {
+        }
+        Assert.False(cursor.Eof);
+        using (StatementScope stmt = s.Workspace.BeginStatement())
+        {
+            UpdateOutcome del = frame.Delete();
+            Assert.True(del.Succeeded && del.Change?.Physical is not null, $"{del} / {del.Change?.NotWritten}");
+            Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+        }
+
+        // Before Close: page 1 already marks 47 and 48 free and page 0 +3586 is +1.
+        AssertMatchesGrowthOpen(question, "pg-open-after-op", s.File.Snapshot(), card);
+        Assert.False(s.Workspace.ReleasesAtClose(s.Cache));
+
+        // Close writes nothing.
+        CloseLvSession(s, page1Before);
+        AssertMatchesGrowthOpen(question, "pg-after-close", s.File.Snapshot(), card);
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection" (evidence/r-q22-lv-open/lv-bound-room2000-2500, lv-bound-room2000-3900,
+    /// lv-bound-room3980-3900, lv-memo-bound-3816, lv-memo-bound-3818):
+    /// The 3,816/3,817 single-row-to-chain bound holds regardless of whether the column already has an LVAL page with
+    /// room (1,978B or 3,980B free) and for plain uncompressed Memo as well as OLE. Every kept page and page 0 commit
+    /// counter match ACE byte-for-byte after every session.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-bound-room2000-2500", false, new[] { 100, 2000, 2500 }, -1, 0)]
+    [InlineData("lv-bound-room2000-3900", false, new[] { 100, 2000, 3900 }, 2, 47)]
+    [InlineData("lv-bound-room3980-3900", false, new[] { 100, 3900 }, 1, 47)]
+    [InlineData("lv-memo-bound-3816", true, new[] { 3816 }, -1, 0)]
+    [InlineData("lv-memo-bound-3818", true, new[] { 3818 }, 0, 45)]
+    public void Long_values_3816_bound_holds_with_existing_LVAL_room_and_plain_Memo_matches_ACE_byte_for_byte(
+        string question, bool memo, int[] sizes, int chainedInsertIndex, long stampPage)
+    {
+        const string card = "r-q22-lv-open";
+        byte[] image = SeedGrowthOpen(question, card);
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            uint stamp = 0u;
+            if (i == chainedInsertIndex)
+            {
+                SortedDictionary<long, byte[]> expected = KeptPages(card, question, $"pg-after-insert-{i + 1}");
+                stamp = BinaryPrimitives.ReadUInt32LittleEndian(expected[stampPage].AsSpan(8));
+            }
+            byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            NativeVariant value = MakeLvVariant(memo, sizes[i], out nint ownedBstr);
+            try
+            {
+                s.Insert(t, () => stamp, ("ID", I4(i + 1)), ("V", value));
+            }
+            finally
+            {
+                if (ownedBstr != 0)
+                {
+                    Bstrs.Free(ownedBstr);
+                }
+            }
+            CloseLvSession(s, page1Before);
+            image = s.File.Snapshot();
+            AssertMatchesGrowthOpen(question, $"pg-after-insert-{i + 1}", image, card);
+        }
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection" (evidence/r-q22-lv-open/lv-chain-3-pages, lv-chain-4-pages):
+    /// 10,000-byte (3 chain pages 45–47 + data page 48) and 14,000-byte (4 chain pages 45–48 + data page 49) chains
+    /// link forward in ascending page order with the tick stamp on page 45 only and 0 on continuation pages. Every
+    /// kept page and page 0 commit counter match ACE byte-for-byte, and <see cref="FieldDecoder"/> reads back the exact
+    /// patterned bytes.
+    /// </summary>
+    [Theory]
+    [InlineData("lv-chain-3-pages", 10000)]
+    [InlineData("lv-chain-4-pages", 14000)]
+    public void Long_values_3_and_4_page_chains_match_ACE_byte_for_byte(string question, int byteLength)
+    {
+        const string card = "r-q22-lv-open";
+        byte[] image = SeedGrowthOpen(question, card);
+        SortedDictionary<long, byte[]> after = KeptPages(card, question, "pg-after-insert-1");
+        uint stamp = BinaryPrimitives.ReadUInt32LittleEndian(after[45].AsSpan(8));
+        byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        s.Insert(t, () => stamp, ("ID", I4(1)), ("V", MakeLvVariant(memo: false, byteLength, out _)));
+        CloseLvSession(s, page1Before);
+        byte[] finalImage = s.File.Snapshot();
+        AssertMatchesGrowthOpen(question, "pg-after-insert-1", finalImage, card);
+
+        using var verify = new Session(finalImage);
+        TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using TableCursor cur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+        cur.MoveFirst();
+        Assert.False(cur.Eof);
+        NativeValue read = cur.Read(tAfter.Columns[1]).Value;
+        Assert.Equal(NativeKind.LongBinary, read.Kind);
+        Assert.Equal(byteLength, read.Bytes!.Length);
+        for (int b = 0; b < byteLength; b++)
+        {
+            Assert.Equal((byte)((b * 7) + 3), read.Bytes[b]);
+        }
+    }
+
+    /// <summary>
+    /// R-FMT-2 "LV form selection" (evidence/r-q22-lv-open/lv-inline-tight-3958, lv-inline-tight-3960,
+    /// lv-inline-two-memos-60):
+    /// A &lt;= 64-byte Memo stays inline up to a 4,060-byte data row (lv-inline-tight-3958: 20B free on page 45, out of
+    /// FreeMap) and spills to a single LVAL row (page 45, before data page 46) when inlining would exceed 4,060 bytes
+    /// (lv-inline-tight-3960: 4,002B data row, 78B free, out of FreeMap); the 64-byte bound is per column
+    /// (lv-inline-two-memos-60: two 60-byte Memos both inline in a 159B row). Every kept page matches ACE byte-for-byte.
+    /// </summary>
+    [Fact]
+    public void Long_values_inline_4060_spill_and_per_column_bound_match_ACE_byte_for_byte()
+    {
+        const string card = "r-q22-lv-open";
+
+        foreach ((string question, int t8Chars) in new[] { ("lv-inline-tight-3958", 194), ("lv-inline-tight-3960", 195) })
+        {
+            byte[] image = SeedGrowthOpen(question, card);
+            byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            List<nint> bstrs = [];
+            try
+            {
+                List<(string Column, NativeVariant Value)> row = [("ID", I4(1))];
+                for (int k = 1; k <= 7; k++)
+                {
+                    NativeVariant v = MakeLvVariant(memo: true, 255 * 2, out nint b);
+                    bstrs.Add(b);
+                    row.Add(($"T{k}", v));
+                }
+                {
+                    NativeVariant v8 = MakeLvVariant(memo: true, t8Chars * 2, out nint b8);
+                    bstrs.Add(b8);
+                    row.Add(("T8", v8));
+                    NativeVariant vm = MakeLvVariant(memo: true, 30 * 2, out nint bm);
+                    bstrs.Add(bm);
+                    row.Add(("M", vm));
+                }
+                s.Insert(t, () => 0u, [.. row]);
+            }
+            finally
+            {
+                foreach (nint b in bstrs)
+                {
+                    Bstrs.Free(b);
+                }
+            }
+            CloseLvSession(s, page1Before);
+            byte[] finalImage = s.File.Snapshot();
+            AssertMatchesGrowthOpen(question, "pg-after-insert-1", finalImage, card);
+
+            using var verify = new Session(finalImage);
+            TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using TableCursor cur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+            cur.MoveFirst();
+            Assert.False(cur.Eof);
+            NativeValue mRead = cur.Read(tAfter.Columns.Single(c => c.Name == "M")).Value;
+            Assert.Equal(NativeKind.Text, mRead.Kind);
+            Assert.Equal(30, mRead.Text!.Length);
+        }
+
+        // lv-inline-two-memos-60: two 60-byte Memos (sum 120 > 64) both inline on page 45.
+        {
+            const string question = "lv-inline-two-memos-60";
+            byte[] image = SeedGrowthOpen(question, card);
+            byte[] page1Before = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            NativeVariant m1 = MakeLvVariant(memo: true, 60, out nint b1);
+            NativeVariant m2 = MakeLvVariant(memo: true, 60, out nint b2);
+            try
+            {
+                s.Insert(t, () => 0u, ("ID", I4(1)), ("M1", m1), ("M2", m2));
+            }
+            finally
+            {
+                Bstrs.Free(b1);
+                Bstrs.Free(b2);
+            }
+            CloseLvSession(s, page1Before);
+            byte[] finalImage = s.File.Snapshot();
+            AssertMatchesGrowthOpen(question, "pg-after-insert-1", finalImage, card);
+
+            using var verify = new Session(finalImage);
+            TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using TableCursor cur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+            cur.MoveFirst();
+            Assert.False(cur.Eof);
+            Assert.Equal(30, cur.Read(tAfter.Columns.Single(c => c.Name == "M1")).Value.Text!.Length);
+            Assert.Equal(30, cur.Read(tAfter.Columns.Single(c => c.Name == "M2")).Value.Text!.Length);
+        }
+    }
+
+    /// <summary>
+    /// Named refusals directly pinned against the unimplemented/open r-q22-lv-open and r-q19-growth-open records:
+    /// (1) UPDATE freeing a chain (lv-free-timing-update-chain-smaller/-to-single, lv-op-chain-*),
+    /// (2) MEMO WITH COMPRESSION (lv-memo-comp-100, -1908, -1909),
+    /// (3) two LV free-map pages with room (lv-two-free-lower-looser-100, -250, -400, -1400, -1500, -same-session:
+    /// inserts 1–3 replay byte-for-byte, insert 4 refuses by name).
+    /// </summary>
+    [Fact]
+    public void Long_values_r_q22_open_cases_refuse_by_name()
+    {
+        // 1. UPDATE freeing a chain: refused by name (UPDATE takes a page-1 allocation reservation returned at Close).
+        foreach ((string card, string question, int newBytes) in new[]
+        {
+            ("r-q22-lv-open", "lv-free-timing-update-chain-smaller", 4500),
+            ("r-q22-lv-open", "lv-free-timing-update-chain-to-single", 100),
+            ("r-q19-growth-open", "lv-op-chain-larger", 6000),
+            ("r-q19-growth-open", "lv-op-chain-smaller", 4500),
+            ("r-q19-growth-open", "lv-op-chain-to-single", 100),
+            ("r-q19-growth-open", "lv-op-chain-null", 0),
+        })
+        {
+            byte[] image = SeedGrowthOpen(question, card);
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != 3; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            Assert.True(frame.Edit().Succeeded);
+            nint owned = 0;
+            NativeVariant val = newBytes == 0 ? new NativeVariant { Vt = (ushort)VarType.Null } : MakeLvVariant(memo: true, newBytes, out owned);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                UpdateOutcome refused = frame.Update();
+                Assert.False(refused.Succeeded, $"{card}/{question} should refuse");
+                Assert.Equal(MutationOpen.Publication, refused.Open);
+                Assert.Contains("frees a chained long value", refused.Detail);
+            }
+            finally
+            {
+                if (owned != 0)
+                {
+                    Bstrs.Free(owned);
+                }
+            }
+        }
+
+        // 2. MEMO WITH COMPRESSION (ExtendedFlags = 0x01): refused by name via TextCodec.TryEncode.
+        foreach ((string question, int chars) in new[]
+        {
+            ("lv-memo-comp-100", 100),
+            ("lv-memo-comp-1908", 1908),
+            ("lv-memo-comp-1909", 1909),
+        })
+        {
+            byte[] image = SeedGrowthOpen(question, "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            Assert.NotEqual(0, t.Columns[1].ExtendedFlags & 0x01);
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(t.Columns[0], I4(1)).Succeeded);
+            NativeVariant val = MakeLvVariant(memo: true, chars * 2, out nint owned, fill: 'a');
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                UpdateOutcome refused = frame.Update();
+                Assert.False(refused.Succeeded, $"{question} should refuse");
+                Assert.Equal(MutationOpen.Publication, refused.Open);
+                Assert.Contains("compress", refused.Detail, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                Bstrs.Free(owned);
+            }
+        }
+
+        // 3. Two LV free-map pages with room (45: 1,978B free, 47: 1,580B free): inserts 1–3 replay byte-for-byte
+        // against ACE, and insert 4 (100, 250, 400, 1400, 1500B, across fresh sessions and in one session) refuses by name.
+        foreach ((string question, int fourthSize) in new[]
+        {
+            ("lv-two-free-lower-looser-100", 100),
+            ("lv-two-free-lower-looser-250", 250),
+            ("lv-two-free-lower-looser-400", 400),
+            ("lv-two-free-lower-looser-1400", 1400),
+            ("lv-two-free-lower-looser", 1500),
+        })
+        {
+            byte[] image = SeedGrowthOpen(question, "r-q22-lv-open");
+            int[] setup = [100, 2000, 2500];
+            for (int i = 0; i < setup.Length; i++)
+            {
+                byte[] p1 = image.AsSpan(D.PageSize, D.PageSize).ToArray();
+                using var s = new Session(image);
+                TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                s.Insert(t, () => 0u, ("ID", I4(i + 1)), ("V", MakeLvVariant(memo: false, setup[i], out _)));
+                CloseLvSession(s, p1);
+                image = s.File.Snapshot();
+                AssertMatchesGrowthOpen(question, $"pg-after-insert-{i + 1}", image, "r-q22-lv-open");
+            }
+            using var s4 = new Session(image);
+            TableDefinition t4 = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s4.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var sem4 = MutationSemantics.Compile("V", t4, null, new NoRules(), D.IndexDescriptor);
+            var ctx4 = new TableEditContext(sem4, new StoredUniqueProbe(s4.Cache, D, t4, s4.File.PageCount), 7177, false, new TableFootprints(s4.Cache, D, t4, s4.File.PageCount));
+            using TableCursor cur4 = TableCursor.Open(s4.Cache, D, t4, s4.File.PageCount, 0, out _)!;
+            using var frame4 = new EditFrame(ctx4, cur4, s4.Workspace);
+            Assert.True(frame4.AddNew().Succeeded);
+            Assert.True(frame4.Assign(t4.Columns[0], I4(4)).Succeeded);
+            Assert.True(frame4.Assign(t4.Columns[1], MakeLvVariant(memo: false, fourthSize, out _)).Succeeded);
+            UpdateOutcome refused = frame4.Update();
+            Assert.False(refused.Succeeded, $"{question} insert 4 should refuse");
+            Assert.Equal(MutationOpen.Publication, refused.Open);
+            Assert.Contains("2 long-value free-map pages have room", refused.Detail);
+        }
+
+        // Same-session control (lv-two-free-lower-looser-same-session): 100, 2000, 2500 succeed in one session, 1500 refuses.
+        {
+            byte[] image = SeedGrowthOpen("lv-two-free-lower-looser-same-session", "r-q22-lv-open");
+            using var s = new Session(image);
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            s.Insert(t, () => 0u, ("ID", I4(1)), ("V", MakeLvVariant(memo: false, 100, out _)));
+            s.Insert(t, () => 0u, ("ID", I4(2)), ("V", MakeLvVariant(memo: false, 2000, out _)));
+            s.Insert(t, () => 0u, ("ID", I4(3)), ("V", MakeLvVariant(memo: false, 2500, out _)));
+
+            TableDefinition tNow = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var sem = MutationSemantics.Compile("V", tNow, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(sem, new StoredUniqueProbe(s.Cache, D, tNow, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, tNow, s.File.PageCount));
+            using TableCursor cur = TableCursor.Open(s.Cache, D, tNow, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(tNow.Columns[0], I4(4)).Succeeded);
+            Assert.True(frame.Assign(tNow.Columns[1], MakeLvVariant(memo: false, 1500, out _)).Succeeded);
+            UpdateOutcome refused = frame.Update();
+            Assert.False(refused.Succeeded);
+            Assert.Equal(MutationOpen.Publication, refused.Open);
+            Assert.Contains("2 long-value free-map pages have room", refused.Detail);
+        }
+    }
+
+    /// <summary>
+    /// Inline long values (1..64 bytes, R-FMT-2 "LV form selection"): replacing an inline Memo with a shorter inline
+    /// Memo, promoting an inline Memo to a single LVAL row, clearing an inline Memo to Null, and deleting a row
+    /// holding an inline Memo. Verifies every byte decided by the recorded row/page/slot/map rules
+    /// (<c>lv-inline-memo</c>, <c>lv-op-single-null</c>, <c>slot-delete-middle-after-shrink</c>, <c>slot-delete-bottom</c>)
+    /// as well as <see cref="FieldDecoder"/> read-back.
+    /// </summary>
+    [Fact]
+    public void Long_values_inline_replace_clear_and_delete_round_trip()
+    {
+        byte[] image = SeedGrowthOpen("lv-inline-memo");
+        using var s = new Session(image);
+        TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+        var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+        LvalColumnMapSpec lvMaps = t.LongValueMaps.Single();
+
+        void InsertMemo(int id, int byteLen)
+        {
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            using StatementScope stmt = s.Workspace.BeginStatement();
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(t.Columns[0], I4(id)).Succeeded);
+            NativeVariant val = MakeLvVariant(memo: true, byteLen, out nint owned);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                UpdateOutcome ok = frame.Update();
+                Assert.True(ok.Succeeded && ok.Change?.Physical is not null, $"{ok} / {ok.Change?.NotWritten}");
+            }
+            finally
+            {
+                if (owned != 0)
+                {
+                    Bstrs.Free(owned);
+                }
+            }
+            Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+        }
+
+        void UpdateMemo(int id, int? byteLen)
+        {
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != id; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using StatementScope stmt = s.Workspace.BeginStatement();
+            Assert.True(frame.Edit().Succeeded);
+            nint owned = 0;
+            NativeVariant val = byteLen is { } len ? MakeLvVariant(memo: true, len, out owned) : new NativeVariant { Vt = (ushort)VarType.Null };
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                UpdateOutcome ok = frame.Update();
+                Assert.True(ok.Succeeded && ok.Change?.Physical is not null, $"{ok} / {ok.Change?.NotWritten}");
+            }
+            finally
+            {
+                if (owned != 0)
+                {
+                    Bstrs.Free(owned);
+                }
+            }
+            Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+        }
+
+        void DeleteRow(int id)
+        {
+            using TableCursor cur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cur, s.Workspace);
+            for (cur.MoveFirst(); !cur.Eof && cur.Read(t.Columns[0]).Value.Integer != id; cur.MoveNext())
+            {
+            }
+            Assert.False(cur.Eof);
+            using StatementScope stmt = s.Workspace.BeginStatement();
+            UpdateOutcome del = frame.Delete();
+            Assert.True(del.Succeeded && del.Change?.Physical is not null, $"{del} / {del.Change?.NotWritten}");
+            Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+        }
+
+        byte[] ReadPage(uint page) => s.File.Snapshot().AsSpan((int)(page * D.PageSize), D.PageSize).ToArray();
+
+        static byte[] ReadVFieldBytes(byte[] dataPage, int slotIndex, TableDefinition td)
+        {
+            SlotView slot = DataPages.CheckedSlot(dataPage, slotIndex, D, out string? err)!.Value;
+            Assert.Null(err);
+            ReadOnlySpan<byte> body = dataPage.AsSpan(slot.Start, slot.Length);
+            Assert.True(RowEnvelope.TryOpen(body, D, out RowEnvelope env, out string? envErr), envErr);
+            FieldRead f = env.ReadField(td.Columns[1], td.KnownFixedEnd(env.ColumnCount, D));
+            Assert.Equal(FieldOutcome.Bytes, f.Outcome);
+            return body[f.Start..f.End].ToArray();
+        }
+
+        // 1. Insert three inline Memo rows (64B, 40B, 20B): data page 45 holds 89B, 65B, 45B; LV maps stay empty.
+        InsertMemo(1, 64);
+        InsertMemo(2, 40);
+        InsertMemo(3, 20);
+        {
+            byte[] p45 = ReadPage(45);
+            Assert.Equal(3u, D.DataPage.RowCount.Read(p45));
+            Assert.Equal(3877u, D.DataPage.FreeCount.Read(p45));
+            SlotView s0 = DataPages.CheckedSlot(p45, 0, D, out _)!.Value;
+            SlotView s1 = DataPages.CheckedSlot(p45, 1, D, out _)!.Value;
+            SlotView s2 = DataPages.CheckedSlot(p45, 2, D, out _)!.Value;
+            Assert.Equal((4007, 89), (s0.Start, s0.Length));
+            Assert.Equal((3942, 65), (s1.Start, s1.Length));
+            Assert.Equal((3897, 45), (s2.Start, s2.Length));
+            Assert.Equal(new byte[] { 0x40, 0x00, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0 }, ReadVFieldBytes(p45, 0, t)[..12]);
+            Assert.Equal((byte)0x03, p45[s0.End - 1]);
+            Assert.Empty(UsageMaps.Pages(s.Cache, D, lvMaps.OwnedMap, s.File.PageCount, out _)!);
+            Assert.Empty(UsageMaps.Pages(s.Cache, D, lvMaps.FreeMap, s.File.PageCount, out _)!);
+        }
+
+        // 2. Inline 64B -> inline 20B: slot 0 shrinks 89B -> 45B, slots 1 & 2 shift up by 44B, FreeCount +44, no LVAL page.
+        UpdateMemo(1, 20);
+        {
+            byte[] p45 = ReadPage(45);
+            Assert.Equal(3921u, D.DataPage.FreeCount.Read(p45));
+            SlotView s0 = DataPages.CheckedSlot(p45, 0, D, out _)!.Value;
+            SlotView s1 = DataPages.CheckedSlot(p45, 1, D, out _)!.Value;
+            SlotView s2 = DataPages.CheckedSlot(p45, 2, D, out _)!.Value;
+            Assert.Equal((4051, 45), (s0.Start, s0.Length));
+            Assert.Equal((3986, 65), (s1.Start, s1.Length));
+            Assert.Equal((3941, 45), (s2.Start, s2.Length));
+            Assert.Equal(new byte[] { 0x14, 0x00, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0 }, ReadVFieldBytes(p45, 0, t)[..12]);
+            Assert.Empty(UsageMaps.Pages(s.Cache, D, lvMaps.OwnedMap, s.File.PageCount, out _)!);
+        }
+
+        // 3. Inline 20B -> single LVAL row 100B: allocates LVAL page 46 (in LV owned & free maps, stamp 0),
+        // slot 0 shrinks 45B -> 25B with single-row ref [64 00 00 40 00 2E 00 00 00 00 00 00], slots 1 & 2 shift up by 20B.
+        UpdateMemo(1, 100);
+        byte[] lval46AfterPromote;
+        {
+            byte[] p45 = ReadPage(45);
+            Assert.Equal(3941u, D.DataPage.FreeCount.Read(p45));
+            SlotView s0 = DataPages.CheckedSlot(p45, 0, D, out _)!.Value;
+            SlotView s1 = DataPages.CheckedSlot(p45, 1, D, out _)!.Value;
+            SlotView s2 = DataPages.CheckedSlot(p45, 2, D, out _)!.Value;
+            Assert.Equal((4071, 25), (s0.Start, s0.Length));
+            Assert.Equal((4006, 65), (s1.Start, s1.Length));
+            Assert.Equal((3961, 45), (s2.Start, s2.Length));
+            Assert.Equal(new byte[] { 0x64, 0x00, 0x00, 0x40, 0x00, 0x2E, 0x00, 0x00, 0, 0, 0, 0 }, ReadVFieldBytes(p45, 0, t));
+            Assert.Equal([46u], UsageMaps.Pages(s.Cache, D, lvMaps.OwnedMap, s.File.PageCount, out _)!);
+            Assert.Equal([46u], UsageMaps.Pages(s.Cache, D, lvMaps.FreeMap, s.File.PageCount, out _)!);
+
+            lval46AfterPromote = ReadPage(46);
+            Assert.True(DataPages.IsLvalPage(lval46AfterPromote, D));
+            Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(lval46AfterPromote.AsSpan(8)));
+            Assert.Equal(1u, D.DataPage.RowCount.Read(lval46AfterPromote));
+            Assert.Equal(3980u, D.DataPage.FreeCount.Read(lval46AfterPromote));
+            SlotView lv0 = DataPages.CheckedSlot(lval46AfterPromote, 0, D, out _)!.Value;
+            Assert.Equal((3996, 100), (lv0.Start, lv0.Length));
+        }
+
+        // 4. Inline 40B -> Null: slot 1 shrinks 65B -> 13B with null-mask byte 0x01 (lv-op-single-null), slot 2 shifts up by 52B.
+        UpdateMemo(2, null);
+        {
+            byte[] p45 = ReadPage(45);
+            Assert.Equal(3993u, D.DataPage.FreeCount.Read(p45));
+            SlotView s1 = DataPages.CheckedSlot(p45, 1, D, out _)!.Value;
+            SlotView s2 = DataPages.CheckedSlot(p45, 2, D, out _)!.Value;
+            Assert.Equal((4058, 13), (s1.Start, s1.Length));
+            Assert.Equal((byte)0x01, p45[s1.End - 1]);
+            Assert.Equal((4013, 45), (s2.Start, s2.Length));
+            Assert.Equal(lval46AfterPromote, ReadPage(46));
+        }
+
+        // 5. Delete row 3 (inline 20B): slot 2 word becomes 0xC000 | 4058 (slot-delete-bottom), FreeCount +45, RowCount 3 -> 2.
+        DeleteRow(3);
+        {
+            byte[] p45 = ReadPage(45);
+            Assert.Equal(4038u, D.DataPage.FreeCount.Read(p45));
+            ushort deletedSlotWord = BinaryPrimitives.ReadUInt16LittleEndian(p45.AsSpan(D.DataPage.SlotBase + (2 * D.DataPage.SlotEntryBytes)));
+            Assert.Equal((ushort)(0xC000 | 4058), deletedSlotWord);
+            Assert.Equal(lval46AfterPromote, ReadPage(46));
+        }
+
+        using var verify = new Session(s.File.Snapshot());
+        TableDefinition tAfter = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => verify.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+        Assert.Equal(2u, tAfter.RowCount);
+        using TableCursor readCur = TableCursor.Open(verify.Cache, D, tAfter, verify.File.PageCount, 0, out _)!;
+        Dictionary<long, int?> sizes = [];
+        for (readCur.MoveFirst(); !readCur.Eof; readCur.MoveNext())
+        {
+            long id = readCur.Read(tAfter.Columns[0]).Value.Integer;
+            NativeValue v = readCur.Read(tAfter.Columns[1]).Value;
+            Assert.NotEqual(NativeKind.Failed, v.Kind);
+            sizes[id] = v.Kind == NativeKind.Null ? null : v.Text!.Length * 2;
+        }
+        Assert.Equal(2, sizes.Count);
+        Assert.Equal(100, sizes[1]);
+        Assert.Null(sizes[2]);
+    }
+
+    /// <summary>
+    /// Named refusals for every remaining unrecorded (Open) long-value case across the R-FMT-2 LV notes after
+    /// r-q22-lv-open (r-q22-specific records — UPDATE freeing a chain, MEMO WITH COMPRESSION, and two LV free-map
+    /// pages with room — are pinned in <see cref="Long_values_r_q22_open_cases_refuse_by_name"/>):
+    /// (1) 0-byte Memo and 0-byte OLE,
+    /// (2) single LVAL row leaving 179..263 free bytes on an LVAL page (while &lt;= 178 leaves and &gt;= 264 stays),
+    /// (3) multi-page LV free-map walk when the first page has no room,
+    /// (4) deleting/replacing a non-top single LVAL row,
+    /// (5) emptying an LVAL page by removing its sole single row,
+    /// (6) removing a single LVAL row from a page not in the LV free map,
+    /// (7) replacing a stored long value when the rewritten data row overflows its data page,
+    /// (8) writing or removing (including inline) a long value in an MDB file,
+    /// (9) freeing a shared/multi-slot chain page,
+    /// (10) two &lt;= 64-byte long-value columns together pushing a row over 4,060 bytes (spill order Open).
+    /// </summary>
+    [Fact]
+    public void Long_value_writes_refuse_every_unrecorded_case_by_name()
+    {
+        static UpdateOutcome TryInsertLv(Session s, int id, bool memo, int byteLength)
+        {
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cursor, s.Workspace);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(t.Columns[0], I4(id)).Succeeded);
+            NativeVariant val = MakeLvVariant(memo, byteLength, out nint owned);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                return frame.Update();
+            }
+            finally
+            {
+                if (owned != 0)
+                {
+                    Bstrs.Free(owned);
+                }
+            }
+        }
+
+        static UpdateOutcome TryDeleteById(Session s, int id)
+        {
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cursor, s.Workspace);
+            for (cursor.MoveFirst(); !cursor.Eof && cursor.Read(t.Columns[0]).Value.Integer != id; cursor.MoveNext())
+            {
+            }
+            Assert.False(cursor.Eof);
+            return frame.Delete();
+        }
+
+        static UpdateOutcome TryUpdateById(Session s, int id, bool memo, int newBytes)
+        {
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var ctx = new TableEditContext(semantics, new StoredUniqueProbe(s.Cache, D, t, s.File.PageCount), 7177, false, new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            using TableCursor cursor = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+            using var frame = new EditFrame(ctx, cursor, s.Workspace);
+            for (cursor.MoveFirst(); !cursor.Eof && cursor.Read(t.Columns[0]).Value.Integer != id; cursor.MoveNext())
+            {
+            }
+            Assert.False(cursor.Eof);
+            Assert.True(frame.Edit().Succeeded);
+            nint owned = 0;
+            NativeVariant val = newBytes == 0 ? new NativeVariant { Vt = (ushort)VarType.Null } : MakeLvVariant(memo, newBytes, out owned);
+            try
+            {
+                Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
+                return frame.Update();
+            }
+            finally
+            {
+                if (owned != 0)
+                {
+                    Bstrs.Free(owned);
+                }
+            }
+        }
+
+        // 1. 0-byte Memo and 0-byte OLE (EditFrame refuses empty Memo via ZeroLength and coerces empty OLE SAFEARRAY
+        // to Null per AssignmentConversion; FieldEncoder and RowWriter refuse 0-byte payloads directly by name).
+        using (var s = new Session(SeedGrowthOpen("lv-inline-memo")))
+        {
+            UpdateOutcome r = TryInsertLv(s, 1, memo: true, byteLength: 0);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.ZeroLength, r.Open);
+
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            var emptyMemo = new NativeValue(NativeKind.Text) { Text = "" };
+            Assert.False(FieldEncoder.TryEncodeVariable(emptyMemo, t.Columns[1], D, out _, out string? encErr));
+            Assert.Contains("0-byte", encErr);
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var writer = new SameWidthWriter(new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            CompiledChange compiled = writer.CompileInsert(semantics, [new NativeValue(NativeKind.Long) { Integer = 1 }, emptyMemo], null);
+            Assert.Null(compiled.Change);
+            Assert.Contains("0-byte", compiled.NotWritten);
+        }
+        using (var s = new Session(SeedGrowthOpen("lv-inline-ole")))
+        {
+            TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            var emptyOle = new NativeValue(NativeKind.LongBinary) { Bytes = [] };
+            Assert.False(FieldEncoder.TryEncodeVariable(emptyOle, t.Columns[1], D, out _, out string? encErr));
+            Assert.Contains("0-byte", encErr);
+            using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
+            var writer = new SameWidthWriter(new TableFootprints(s.Cache, D, t, s.File.PageCount));
+            CompiledChange compiled = writer.CompileInsert(semantics, [new NativeValue(NativeKind.Long) { Integer = 1 }, emptyOle], null);
+            Assert.Null(compiled.Change);
+            Assert.Contains("0-byte", compiled.NotWritten);
+        }
+
+        // 2. LV free-map drop bound (r-q22-lv-open): 178 leaves, 264 stays, 179..263 refuses by name.
+        // Start with page 45 holding 1,978 free bytes (after 100B and 2,000B OLE inserts):
+        {
+            byte[] baseImg = SeedGrowthOpen("lv-fill-2000-1976");
+            foreach ((int id, int len) in new[] { (1, 100), (2, 2000) })
+            {
+                byte[] p1 = baseImg.AsSpan(D.PageSize, D.PageSize).ToArray();
+                using var s = new Session(baseImg);
+                Assert.True(TryInsertLv(s, id, memo: false, len).Succeeded);
+                CloseLvSession(s, p1);
+                baseImg = s.File.Snapshot();
+            }
+
+            // 1,797B (+2 = 1,799) -> 179 free -> refused.
+            using (var s179 = new Session(baseImg.ToArray()))
+            {
+                UpdateOutcome r = TryInsertLv(s179, 3, memo: false, 1797);
+                Assert.False(r.Succeeded);
+                Assert.Equal(MutationOpen.Publication, r.Open);
+                Assert.Contains("between 179 and 263", r.Detail);
+            }
+
+            // 1,713B (+2 = 1,715) -> 263 free -> refused.
+            using (var s263 = new Session(baseImg.ToArray()))
+            {
+                UpdateOutcome r = TryInsertLv(s263, 3, memo: false, 1713);
+                Assert.False(r.Succeeded);
+                Assert.Equal(MutationOpen.Publication, r.Open);
+                Assert.Contains("between 179 and 263", r.Detail);
+            }
+
+            // 1,798B (+2 = 1,800) -> 178 free -> succeeds and clears page 45 from LV free map.
+            using (var s178 = new Session(baseImg.ToArray()))
+            {
+                UpdateOutcome ok = TryInsertLv(s178, 3, memo: false, 1798);
+                Assert.True(ok.Succeeded, ok.Detail);
+                TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s178.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                Assert.Empty(UsageMaps.Pages(s178.Cache, D, t.LongValueMaps.Single().FreeMap, s178.File.PageCount, out _)!);
+            }
+
+            // 1,712B (+2 = 1,714) -> 264 free -> succeeds and keeps page 45 in LV free map.
+            using (var s264 = new Session(baseImg.ToArray()))
+            {
+                UpdateOutcome ok = TryInsertLv(s264, 3, memo: false, 1712);
+                Assert.True(ok.Succeeded, ok.Detail);
+                TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s264.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+                Assert.Equal([45u], UsageMaps.Pages(s264.Cache, D, t.LongValueMaps.Single().FreeMap, s264.File.PageCount, out _)!);
+            }
+        }
+
+        // 3. Multi-page LV free-map walk when the first page has no room: after lv-fill-2000-1978's 3 inserts,
+        // LV free map holds {45, 47} and page 45 has 1,978 free; inserting 2,000B does not fit on 45 and 47 follows.
+        {
+            byte[] img = SeedGrowthOpen("lv-fill-2000-1978");
+            int[] setup = [100, 2000, 1978];
+            for (int i = 0; i < setup.Length; i++)
+            {
+                byte[] p1 = img.AsSpan(D.PageSize, D.PageSize).ToArray();
+                using var s = new Session(img);
+                UpdateOutcome ok = TryInsertLv(s, i + 1, memo: false, setup[i]);
+                Assert.True(ok.Succeeded, ok.Detail);
+                CloseLvSession(s, p1);
+                img = s.File.Snapshot();
+            }
+            using var s4 = new Session(img);
+            UpdateOutcome r = TryInsertLv(s4, 4, memo: false, 2000);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("walk order over several LV free-map pages", r.Detail);
+        }
+
+        // 4. Deleting/replacing a non-top single LVAL row (ID=2 holds slot 1 on page 45, end 3,996 != 4,096).
+        using (var s = new Session(SeedGrowthOpen("lv-op-single-larger")))
+        {
+            UpdateOutcome r = TryDeleteById(s, 2);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("not the top row", r.Detail);
+        }
+
+        // 5. Emptying an LVAL page by removing its sole single row (lv-single-2002 after insert 1).
+        {
+            byte[] img = SeedGrowthOpen("lv-single-2002");
+            using (var s = new Session(img))
+            {
+                byte[] p1 = img.AsSpan(D.PageSize, D.PageSize).ToArray();
+                UpdateOutcome ok = TryInsertLv(s, 1, memo: false, 2002);
+                Assert.True(ok.Succeeded, ok.Detail);
+                CloseLvSession(s, p1);
+                img = s.File.Snapshot();
+            }
+            using var s2 = new Session(img);
+            UpdateOutcome r = TryDeleteById(s2, 1);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("empties LVAL page", r.Detail);
+        }
+
+        // 6. Removing a single LVAL row from a page not in the LV free map (after lv-fill-2000-1976 fills page 45 to 0).
+        {
+            byte[] img = SeedGrowthOpen("lv-fill-2000-1976");
+            int[] setup = [100, 2000, 1976];
+            for (int i = 0; i < setup.Length; i++)
+            {
+                byte[] p1 = img.AsSpan(D.PageSize, D.PageSize).ToArray();
+                using var s = new Session(img);
+                UpdateOutcome ok = TryInsertLv(s, i + 1, memo: false, setup[i]);
+                Assert.True(ok.Succeeded, ok.Detail);
+                CloseLvSession(s, p1);
+                img = s.File.Snapshot();
+            }
+            using var s4 = new Session(img);
+            UpdateOutcome r = TryDeleteById(s4, 1);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("not in the long-value free map", r.Detail);
+        }
+
+        // 7. Replacing a stored long value causing the data row to overflow its data page: shrink data page 46's
+        // FreeCount to 10 by padding a dummy slot, then replace ID=1 (12-byte single-row ref) with 64-byte inline (76B).
+        {
+            byte[] img = SeedGrowthOpen("lv-op-single-larger");
+            Span<byte> dataPage = img.AsSpan(46 * D.PageSize, D.PageSize);
+            int freeNow = (int)D.DataPage.FreeCount.Read(dataPage);
+            Assert.True(DataPages.TryAppendRow(dataPage, new byte[freeNow - 12], D, out _, out _));
+            using var s = new Session(img);
+            UpdateOutcome r = TryUpdateById(s, 1, memo: true, newBytes: 64);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("overflows its data page", r.Detail);
+        }
+
+        // 8. MDB file: writing a long value, removing a single-row LV, and removing an inline LV (before early return)
+        // all refuse by name.
+        {
+            byte[] mdbPage0 = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(Jet4MdbFixture).AsSpan(0, D.PageSize).ToArray();
+            byte[] img = SeedGrowthOpen("lv-op-single-larger");
+            mdbPage0.CopyTo(img, 0);
+            using var sWrite = new Session(img);
+            UpdateOutcome rWrite = TryInsertLv(sWrite, 4, memo: true, 100);
+            Assert.False(rWrite.Succeeded);
+            Assert.Equal(MutationOpen.Publication, rWrite.Open);
+            Assert.Contains("MDB", rWrite.Detail);
+
+            using var sDel = new Session(img);
+            UpdateOutcome rDel = TryDeleteById(sDel, 1);
+            Assert.False(rDel.Succeeded);
+            Assert.Equal(MutationOpen.Publication, rDel.Open);
+            Assert.Contains("MDB", rDel.Detail);
+
+            byte[] inlineImg = SeedGrowthOpen("lv-inline-memo");
+            using (var s1 = new Session(inlineImg))
+            {
+                Assert.True(TryInsertLv(s1, 1, memo: true, 20).Succeeded);
+                inlineImg = s1.File.Snapshot();
+            }
+            mdbPage0.CopyTo(inlineImg, 0);
+            using var sMdb = new Session(inlineImg);
+            UpdateOutcome rInlineDel = TryDeleteById(sMdb, 1);
+            Assert.False(rInlineDel.Succeeded);
+            Assert.Equal(MutationOpen.Publication, rInlineDel.Open);
+            Assert.Contains("removing a long value in an MDB file", rInlineDel.Detail);
+        }
+
+        // 9. Shared / multi-slot chain page: append a second dummy slot to chain page 48 of lv-op-delete-row-chain.
+        {
+            byte[] img = SeedGrowthOpen("lv-op-delete-row-chain");
+            Span<byte> chainPage48 = img.AsSpan(48 * D.PageSize, D.PageSize);
+            Assert.True(DataPages.TryAppendRow(chainPage48, [1, 2, 3, 4], D, out _, out _, lval: true));
+            using var s = new Session(img);
+            UpdateOutcome r = TryDeleteById(s, 3);
+            Assert.False(r.Succeeded);
+            Assert.Equal(MutationOpen.Publication, r.Open);
+            Assert.Contains("multi-slot chain page", r.Detail);
+        }
+
+        // 10. Two <= 64-byte long-value columns together pushing a row over 4,060 bytes (qualified.md:598 Open: spill order).
+        using (var s = new Session(SeedGrowthOpen("lv-inline-tight-3960", "r-q22-lv-open")))
+        {
+            TableDefinition baseT = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
+            ColumnDescriptor m1 = baseT.Columns.Single(c => c.Name == "M");
+            ColumnDescriptor m2 = m1 with
+            {
+                Name = "M2",
+                PhysicalNumber = baseT.MaxColumns,
+                VariableIndex = baseT.VariableColumns,
+                ColumnId = baseT.MaxColumns,
+                Ordinal = baseT.Columns.Count,
+            };
+            TableDefinition twoMemoTight = baseT with
+            {
+                Columns = [.. baseT.Columns, m2],
+                MaxColumns = baseT.MaxColumns + 1,
+                ColumnCount = baseT.ColumnCount + 1,
+                VariableColumns = baseT.VariableColumns + 1,
+            };
+            using var sem = MutationSemantics.Compile("R", twoMemoTight, null, new NoRules(), D.IndexDescriptor);
+            var writer = new SameWidthWriter(new TableFootprints(s.Cache, D, twoMemoTight, s.File.PageCount));
+            List<NativeValue> vals = [new NativeValue(NativeKind.Long) { Integer = 1 }];
+            for (int k = 1; k <= 7; k++)
+            {
+                vals.Add(new NativeValue(NativeKind.Text) { Text = new string('€', 255) });
+            }
+            vals.Add(new NativeValue(NativeKind.Text) { Text = new string('€', 195) });
+            vals.Add(new NativeValue(NativeKind.Text) { Text = new string('€', 30) });
+            vals.Add(new NativeValue(NativeKind.Text) { Text = new string('€', 30) });
+            CompiledChange res = writer.CompileInsert(sem, vals, null);
+            Assert.Null(res.Change);
+            Assert.Contains("spill order", res.NotWritten);
+        }
+    }
+
 }

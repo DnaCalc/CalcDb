@@ -151,9 +151,12 @@ public static class FieldEncoder
     }
 
     /// <summary>
-    /// Encode <paramref name="value"/>'s payload for the variable-length <paramref name="column"/> (II-04 §§5–6;
-    /// W-05/growth-structural-closure). Supports in-row Text (via <see cref="TextCodec.TryEncode"/>) and non-empty
-    /// Binary; refuses calculated columns, Memo/OLE (LVAL), Unicode-compressed Text, leading U+FEFF and mismatched kinds.
+    /// Encode <paramref name="value"/>'s payload for the variable-length <paramref name="column"/> (II-04 §§5–7;
+    /// W-05/growth-structural-closure). Supports in-row Text (via <see cref="TextCodec.TryEncode"/>), non-empty Binary,
+    /// and inline Memo/OLE payloads of 1 to <see cref="LongValuePlan.InlinePayloadMax"/> (64) bytes
+    /// (<c>evidence/r-q19-growth-open/lv-inline-memo</c>, <c>lv-inline-ole</c>); refuses calculated columns, empty
+    /// long values, payloads above 64 bytes (which require LVAL placement), Unicode-compressed Text/Memo, leading
+    /// U+FEFF, and mismatched kinds.
     /// </summary>
     public static bool TryEncodeVariable(in NativeValue value, ColumnDescriptor column, FormatDescriptor d, out byte[]? bytes, out string? failure)
     {
@@ -166,16 +169,37 @@ public static class FieldEncoder
         }
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            // An inline long value (II-04 §7.1). Which payloads ACE keeps inline rather than on an LVAL page is recorded
-            // only for the one blob below its observed size; longer values and Memo text need LVAL pages
-            // (W-05/growth-structural-closure).
-            if (column.TypeCode == NativeTypes.Ole && value.Kind is NativeKind.Binary or NativeKind.LongBinary && value.Bytes is { Length: > 0 } payload
-                && payload.Length <= LongValuePlan.ObservedInlinePayloadMax)
+            // Inline long values: 1..64 bytes in the data row (II-04 §7.1; R-FMT-2 "LV form selection":
+            // evidence/r-q19-growth-open/lv-inline-memo 2..64 vs 66..98, lv-inline-ole 1..64 vs 65..99).
+            byte[]? payload;
+            if (column.TypeCode == NativeTypes.Memo && value.Kind == NativeKind.Text)
+            {
+                bool compressedMemo = (column.ExtendedFlags & 0x01) != 0;
+                if (!TextCodec.TryEncode(value.Text ?? "", compressedMemo, out payload, out failure))
+                {
+                    return false;
+                }
+            }
+            else if (column.TypeCode == NativeTypes.Ole && value.Kind is NativeKind.Binary or NativeKind.LongBinary && value.Bytes is { } rawOle)
+            {
+                payload = rawOle.ToArray();
+            }
+            else
+            {
+                failure = $"a {value.Kind} value for long-value column (native type {column.TypeCode})";
+                return false;
+            }
+            if (payload!.Length == 0)
+            {
+                failure = "an empty (0-byte) long value is not recorded (R-FMT-2 LV form selection)";
+                return false;
+            }
+            if (payload.Length <= LongValuePlan.InlinePayloadMax)
             {
                 bytes = LongValuePlan.EncodeInline(payload);
                 return true;
             }
-            failure = $"long-value column (Memo/OLE): a {value.Kind} value needs an LVAL page or an inline form no record shows (W-05/growth-structural-closure)";
+            failure = $"a {payload.Length}-byte long value exceeds the {LongValuePlan.InlinePayloadMax}-byte inline bound and requires LVAL placement";
             return false;
         }
         switch (column.TypeCode, value.Kind)

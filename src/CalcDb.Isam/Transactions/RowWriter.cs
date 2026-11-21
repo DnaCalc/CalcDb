@@ -25,7 +25,7 @@ public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits
     public RowId? InsertedRow { get; } = insertedRow;
 
     /// <summary>
-    /// The data pages the change releases whose global-map free bits the session's Close sets, with its closing commit
+    /// The data pages the change releases whose global-map free bits the session's Close sets
     /// (<see cref="TransactionCoordinator.PublishCounterCommit"/>; R-FMT-2 "Overflow / deletion and Map ownership":
     /// DELETE without WHERE in evidence/r-q17-growth/retire-delete-au1-read-open, and a row-by-row delete emptying data
     /// page P while the table's FreeMap holds a page Q &lt; P in evidence/r-q20-delete-pages/where-empty-all,
@@ -81,6 +81,24 @@ public sealed class LvalAppendDelta(byte[] rowBytes, byte expectedSlot, FormatDe
         if (!DataPages.TryAppendRow(decodedPage, rowBytes, d, out byte actualSlot, out string? failure, lval: true) || actualSlot != expectedSlot)
         {
             throw new FormatViolationException($"LVAL page append: {failure ?? $"expected slot {expectedSlot}, landed at slot {actualSlot}"}");
+        }
+    }
+}
+
+/// <summary>
+/// Delete one single long-value row from an LVAL page in place (<see cref="DataPages.TryDeleteSlot"/> with
+/// <c>lval: true</c>; R-FMT-2 "LV form selection and Overflow / deletion",
+/// <c>evidence/r-q19-growth-open/lv-op-single-*</c>, <c>lv-op-delete-row-single</c>).
+/// </summary>
+public sealed class LvalDeleteDelta(byte slot, FormatDescriptor d) : IPageDelta
+{
+    public byte Slot => slot;
+
+    public void Apply(Span<byte> decodedPage)
+    {
+        if (!DataPages.TryDeleteSlot(decodedPage, slot, d, out string? failure, lval: true))
+        {
+            throw new FormatViolationException($"LVAL page delete: {failure}");
         }
     }
 }
@@ -428,10 +446,6 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                     {
                         return NotWritten($"field {c.Name} is calculated: its change rewraps the row (W-05/growth-structural-closure)");
                     }
-                    if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && stored[i].Kind != NativeKind.Null)
-                    {
-                        return NotWritten($"field {c.Name} holds a long value: replacing or clearing it frees its LVAL rows, which is not recorded (R-FMT-2 LV form selection Open; r-fmt-2b mm-*)");
-                    }
                     rewrite = true;
                 }
                 continue;
@@ -547,10 +561,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         var encoded = new EncodedField[columns.Count];
-        // A long value's LVAL pages are taken before the row's page (evidence/r-q17-growth/lval-memo: LVAL page 45, then
-        // data page 46), from the one allocator of the insert.
-        var allocator = new PageAllocator(_cache, _d, Extent);
-        List<PageEdit> edits = [];
+        List<(int Index, ColumnDescriptor Column, byte[] Payload)> longValues = [];
+        List<int> inlineCandidates = [];
         for (int i = 0; i < columns.Count; i++)
         {
             ColumnDescriptor c = columns[i];
@@ -561,11 +573,22 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && v.Kind != NativeKind.Null)
             {
-                if (PlacedLongValue(c, v, allocator, seen, edits, out string? lvFailure) is not { } reference)
+                if (PrepareLongValuePayload(c, v, seen, out string? lvFailure) is not { } payload)
                 {
                     return NotWritten($"field {c.Name}: {lvFailure}");
                 }
-                encoded[i] = EncodedField.OfBytes(reference);
+                int lvIndex = longValues.Count;
+                longValues.Add((i, c, payload));
+                if (payload.Length <= LongValuePlan.InlinePayloadMax)
+                {
+                    inlineCandidates.Add(lvIndex);
+                    encoded[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(payload));
+                }
+                else
+                {
+                    // 12-byte placeholder while measuring whether inline-sized LV columns fit the 4,060-byte row ceiling.
+                    encoded[i] = EncodedField.OfBytes(new byte[LongValuePlan.DefinitionBytes]);
+                }
                 continue;
             }
             if (c.IsMaskBoolean)
@@ -600,6 +623,36 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 }
                 encoded[i] = EncodedField.OfBytes(bytes!);
             }
+        }
+        // R-FMT-2 "LV form selection" (evidence/r-q22-lv-open/lv-inline-tight-3958, lv-inline-tight-3960,
+        // lv-inline-two-memos-60): the 64-byte inline limit is per column, and a <= 64-byte value spills to a single
+        // LVAL row when inlining it would make the data row exceed 4,060 bytes.
+        int spilledInlineIndex = -1;
+        if (inlineCandidates.Count > 0 && MeasureEncodedRowBytes(encoded) is { } tentativeBytes && tentativeBytes > RowEncoder.MaxOrdinaryRowBytes)
+        {
+            if (inlineCandidates.Count > 1)
+            {
+                return NotWritten($"the {tentativeBytes}-byte row with {inlineCandidates.Count} <= {LongValuePlan.InlinePayloadMax}-byte long-value columns exceeds {RowEncoder.MaxOrdinaryRowBytes} bytes: spill order when two or more inline-sized long-value columns push the row past {RowEncoder.MaxOrdinaryRowBytes} bytes is not recorded (R-FMT-2 LV form selection Open)");
+            }
+            spilledInlineIndex = inlineCandidates[0];
+        }
+        // A long value's LVAL pages are taken before the row's page (evidence/r-q17-growth/lval-memo: LVAL page 45, then
+        // data page 46; evidence/r-q22-lv-open/lv-inline-tight-3960: spilled LVAL page 45, then data page 46), from the
+        // one allocator of the insert.
+        var allocator = new PageAllocator(_cache, _d, Extent);
+        List<PageEdit> edits = [];
+        for (int lvIndex = 0; lvIndex < longValues.Count; lvIndex++)
+        {
+            (int colIndex, ColumnDescriptor c, byte[] payload) = longValues[lvIndex];
+            if (payload.Length <= LongValuePlan.InlinePayloadMax && lvIndex != spilledInlineIndex)
+            {
+                continue;
+            }
+            if (PlaceExternalLongValue(c, payload, allocator, seen, edits, out string? lvFailure) is not { } reference)
+            {
+                return NotWritten($"field {c.Name}: {lvFailure}");
+            }
+            encoded[colIndex] = EncodedField.OfBytes(reference);
         }
         if (!RowEncoder.TryEncode(_table, encoded, _d, out byte[]? rowBytes, out string? rowFailure))
         {
@@ -709,8 +762,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// II-05 §2, II-16 §17): marks and compacts the ordinary slot in place (<c>0xC000 | (o + len)</c>, shifting every
     /// later slot — live or already deleted — up by <c>len</c>; R-FMT-2 "deleted row slot word",
     /// evidence/r-q20-delete-pages/slot-delete-*, dynaset-empty-all-desc; evidence/r-q19-growth-open/lv-op-delete-row-chain,
-    /// -single), removes each physical index entry without emptying or changing the boundaries of a non-root leaf, and
-    /// decrements TableDef RowCount (AutoNumber and UniqueEntryCount stay unchanged).
+    /// -single; evidence/r-q22-lv-open/lv-free-timing-delete-chain), removes each physical index entry without emptying
+    /// or changing the boundaries of a non-root leaf, and decrements TableDef RowCount (AutoNumber and UniqueEntryCount
+    /// stay unchanged).
     /// <list type="bullet">
     /// <item>When live rows remain on <paramref name="root"/>'s page, the page rejoins the FreeMap if it was not there
     /// (evidence/r-q16-overflow/room-middle, noroom-middle-room-last; evidence/r-q20-delete-pages/slot-delete-*).</item>
@@ -728,7 +782,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// evidence/r-q17-growth/retire-delete-au1-where-all, retire-delete-au1-nine-then-last, retire-rs-delete-au1).</item>
     /// <item>Refused by name (Open in R-FMT-2): emptying a data page when the table's FreeMap is initially empty, a
     /// table-type recordset Delete emptying a data page of a multi-page table, emptying a data page in an MDB file,
-    /// overflow-row / LVAL deletion, and emptying a non-root index leaf.</item>
+    /// overflow-row deletion, and emptying a non-root index leaf.</item>
     /// </list>
     /// With <paramref name="deferTableDefCounts"/> (a dynaset's Delete) the TableDef is not written: its row count and
     /// the indexes' bulk-built counters change at the recordset's Close (<see cref="PhysicalChange.DeferredEntryDecrements"/>).
@@ -776,12 +830,27 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"row {root}: {envelopeFailure}");
         }
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        var allocator = new PageAllocator(_cache, _d, Extent);
+        List<PageEdit> lvEdits = [];
+        int knownFixedEnd = _table.KnownFixedEnd(envelope.ColumnCount, _d);
         for (int i = 0; i < columns.Count; i++)
         {
             ColumnDescriptor c = columns[i];
             if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && c.PhysicalNumber < envelope.ColumnCount && envelope.MaskBit(c.PhysicalNumber))
             {
-                return NotWritten($"row {root} holds a non-Null long-value field {c.Name} (Memo/OLE): LVAL page deallocation is not written (W-05/growth-structural-closure)");
+                FieldRead lvRead = envelope.ReadField(c, knownFixedEnd);
+                if (lvRead.Outcome != FieldOutcome.Bytes)
+                {
+                    return NotWritten($"field {c.Name} of row {root}: {lvRead.Failure ?? $"unexpected field outcome {lvRead.Outcome}"}");
+                }
+                // R-FMT-2 "LV form selection and Overflow / deletion" (evidence/r-q19-growth-open/lv-op-delete-row-single,
+                // lv-op-delete-row-chain; evidence/r-q22-lv-open/lv-free-timing-delete-chain): DELETE removes a single
+                // LVAL row from its page, or clears a chain's pages from the LV owned map and frees them in page 1
+                // during the statement without writing their bytes (page 0 +1, Close writes nothing).
+                if (!RemoveLongValue(c, row.Body[lvRead.Start..lvRead.End], isDelete: true, allocator, seen, lvEdits, clearedFreeLvalPages: null, out string? lvFailure))
+                {
+                    return NotWritten($"field {c.Name} of row {root}: {lvFailure}");
+                }
             }
         }
         byte[] dataCopy = dataPin.Bytes.ToArray();
@@ -819,8 +888,12 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             releasePage = freePages.Any(q => q < root.Page);
         }
 
-        List<PageEdit> edits = [new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d, releasePage), PageRole.Data)];
+        List<PageEdit> edits = [.. lvEdits, new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d, releasePage), PageRole.Data)];
         List<LockResource> footprint = [TableFootprints.Row(root)];
+        foreach (PageEdit e in lvEdits)
+        {
+            AddUnique(footprint, new LockResource(e.Page, e.Role == PageRole.Map ? LockPurpose.Map : LockPurpose.DataPage));
+        }
         uint[] releasedAtClose = releasePage ? [root.Page] : [];
         if (releasePage)
         {
@@ -938,7 +1011,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
         if (deferTableDefCounts)
         {
-            return new CompiledChange(new PhysicalChange(_cache, edits, footprint) { DeferredEntryDecrements = [.. removedPhysical], ReleasedAtClose = releasedAtClose }, null);
+            return new CompiledChange(new PhysicalChange(_cache, edits, footprint)
+            {
+                DeferredEntryDecrements = [.. removedPhysical],
+                ReleasedAtClose = releasedAtClose,
+            }, null);
         }
         using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
@@ -952,7 +1029,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(-1, null, [], [.. removedPhysical], _d), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
-        return new CompiledChange(new PhysicalChange(_cache, edits, footprint) { ReleasedAtClose = releasedAtClose }, null);
+        return new CompiledChange(new PhysicalChange(_cache, edits, footprint)
+        {
+            ReleasedAtClose = releasedAtClose,
+        }, null);
     }
 
     /// <summary>
@@ -1312,18 +1392,31 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     }
 
     /// <summary>
-    /// The variable-width Edit of an ordinary row (W-05/growth-structural-closure; II-04 §§2, 4.2, 8): the whole row is
-    /// encoded again by the one <see cref="RowEncoder"/>, each unchanged field from its stored bytes (a long-value
-    /// definition and its opaque stamp word are kept as they are, II-04 §7.1) and each changed field from its new value,
-    /// and replaces the slot's body in place when the page has room, a shorter body too (<see cref="DataPages.TryReplaceRow"/>);
-    /// a row that no longer fits its page overflows (<see cref="OverflowedRow"/>). Refused by name: an overflow row, and
-    /// a row recorded before a column was added (row growth past C).
+    /// The variable-width Edit of an ordinary row (W-05/growth-structural-closure; II-04 §§2, 4.2, 7, 8; R-FMT-2
+    /// "LV form selection and Overflow / deletion", <c>evidence/r-q19-growth-open/lv-op-*</c>,
+    /// <c>evidence/r-q22-lv-open/lv-inline-*</c>, <c>lv-free-timing-*</c>): the whole row is encoded again by the one
+    /// <see cref="RowEncoder"/>, each unchanged field from its stored bytes (a long-value definition and its opaque
+    /// stamp word are kept as they are, II-04 §7.1) and each changed field from its new value, and replaces the slot's
+    /// body in place when the page has room, a shorter body too (<see cref="DataPages.TryReplaceRow"/>); a row that no
+    /// longer fits its page overflows (<see cref="OverflowedRow"/>) unless it is replacing a stored long value (Open).
+    /// When replacing a stored long value, the new value is placed before the old single LVAL slot is removed so the
+    /// LVAL page's bytes below the new slot match <c>lv-op-single-larger</c> and <c>lv-op-single-smaller</c> byte for
+    /// byte. A changed &lt;= 64-byte long value spills to a single LVAL row when inlining it would make the row exceed
+    /// 4,060 bytes. Refused by name: an overflow row, a row recorded before a column was added (row growth past C),
+    /// updating a row that frees a chained long value (UPDATE takes a page-1 allocation reservation returned at Close,
+    /// <c>lv-free-timing-update-chain-*</c>), spilling an unchanged inline long value or choosing spill order across
+    /// two or more &lt;= 64-byte long-value columns, and replacing a stored long value when the rewritten row overflows
+    /// its data page.
     /// </summary>
     private List<PageEdit>? RewrittenRow(RowView row, RowEnvelope envelope, IReadOnlyList<NativeValue> values, NativeValue[] stored, PrivateOverlay? seen, out string? failure)
     {
         failure = null;
         var allocator = new PageAllocator(_cache, _d, Extent);
         List<PageEdit> longValueEdits = [];
+        List<(ColumnDescriptor Column, byte[] StoredField)> oldLongValues = [];
+        List<(int ColumnIndex, ColumnDescriptor Column, byte[] Payload)> newLongValues = [];
+        List<int> inlineCandidates = [];
+        HashSet<uint> clearedFreeLvalPages = [];
         if (row.Data != row.Root)
         {
             failure = $"row {row.Root} is an overflow row: rewriting its target is not written (W-05/growth-structural-closure)";
@@ -1335,6 +1428,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return null;
         }
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        bool hasUnchangedInlineLongValue = false;
         ReadOnlySpan<byte> body = row.Body;
         int knownFixedEnd = _table.KnownFixedEnd(envelope.ColumnCount, _d);
         var fields = new EncodedField[columns.Count];
@@ -1357,7 +1451,41 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                     failure = $"field {c.Name} of row {row.Root}: {read.Failure}";
                     return null;
                 }
+                if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && read.Outcome == FieldOutcome.Bytes
+                    && LongValuePlan.Inspect(body[read.Start..read.End], out _) is { Form: LongValueForm.Inline })
+                {
+                    hasUnchangedInlineLongValue = true;
+                }
                 continue;
+            }
+            if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && stored[i].Kind != NativeKind.Null)
+            {
+                FieldRead oldRead = envelope.ReadField(c, knownFixedEnd);
+                if (oldRead.Outcome != FieldOutcome.Bytes)
+                {
+                    failure = $"field {c.Name} of row {row.Root}: {oldRead.Failure ?? $"unexpected stored long-value outcome {oldRead.Outcome}"}";
+                    return null;
+                }
+                byte[] oldBytes = body[oldRead.Start..oldRead.End].ToArray();
+                if (LongValuePlan.Inspect(oldBytes, out failure) is not { } oldPlan)
+                {
+                    failure = $"field {c.Name} of row {row.Root}: {failure}";
+                    return null;
+                }
+                using (PagePin? page0 = Seen(seen).Pin(0).Pin)
+                {
+                    if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
+                    {
+                        failure = $"field {c.Name} of row {row.Root}: removing a long value in an MDB file is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                        return null;
+                    }
+                }
+                if (oldPlan.Form == LongValueForm.Chain)
+                {
+                    failure = $"field {c.Name} of row {row.Root}: updating a row that frees a chained long value is not implemented (UPDATE takes a page-1 allocation reservation returned at Close, evidence/r-q22-lv-open/lv-free-timing-update-chain-*)";
+                    return null;
+                }
+                oldLongValues.Add((c, oldBytes));
             }
             if (c.IsMaskBoolean)
             {
@@ -1384,13 +1512,22 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             else if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
             {
-                // A Null long value given one (evidence/r-fmt-2b/mm-null-to-1page): its LVAL rows are placed first.
-                if (PlacedLongValue(c, v, allocator, seen, longValueEdits, out failure) is not { } reference)
+                if (PrepareLongValuePayload(c, v, seen, out failure) is not { } payload)
                 {
                     failure = $"field {c.Name}: {failure}";
                     return null;
                 }
-                fields[i] = EncodedField.OfBytes(reference);
+                int lvIndex = newLongValues.Count;
+                newLongValues.Add((i, c, payload));
+                if (payload.Length <= LongValuePlan.InlinePayloadMax)
+                {
+                    inlineCandidates.Add(lvIndex);
+                    fields[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(payload));
+                }
+                else
+                {
+                    fields[i] = EncodedField.OfBytes(new byte[LongValuePlan.DefinitionBytes]);
+                }
             }
             else
             {
@@ -1401,6 +1538,39 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 }
                 fields[i] = EncodedField.OfBytes(bytes!);
             }
+        }
+        int spilledInlineIndex = -1;
+        if ((inlineCandidates.Count > 0 || hasUnchangedInlineLongValue)
+            && MeasureEncodedRowBytes(fields) is { } tentativeBytes
+            && tentativeBytes > RowEncoder.MaxOrdinaryRowBytes)
+        {
+            if (hasUnchangedInlineLongValue)
+            {
+                failure = $"row {row.Root}: the {tentativeBytes}-byte rewritten row exceeds {RowEncoder.MaxOrdinaryRowBytes} bytes while an unchanged inline long value is present: whether UPDATE spills an unchanged inline long value is not recorded (R-FMT-2 LV form selection Open)";
+                return null;
+            }
+            if (inlineCandidates.Count > 1)
+            {
+                failure = $"row {row.Root}: the {tentativeBytes}-byte rewritten row with {inlineCandidates.Count} <= {LongValuePlan.InlinePayloadMax}-byte long-value columns exceeds {RowEncoder.MaxOrdinaryRowBytes} bytes: spill order when two or more inline-sized long-value columns push the row past {RowEncoder.MaxOrdinaryRowBytes} bytes is not recorded (R-FMT-2 LV form selection Open)";
+                return null;
+            }
+            spilledInlineIndex = inlineCandidates[0];
+        }
+        // Place the new long value before removing any old long value (evidence/r-fmt-2b/mm-null-to-1page,
+        // evidence/r-q19-growth-open/lv-op-single-larger and lv-op-single-smaller).
+        for (int lvIndex = 0; lvIndex < newLongValues.Count; lvIndex++)
+        {
+            (int colIndex, ColumnDescriptor c, byte[] payload) = newLongValues[lvIndex];
+            if (payload.Length <= LongValuePlan.InlinePayloadMax && lvIndex != spilledInlineIndex)
+            {
+                continue;
+            }
+            if (PlaceExternalLongValue(c, payload, allocator, seen, longValueEdits, out failure, clearedFreeLvalPages) is not { } reference)
+            {
+                failure = $"field {c.Name}: {failure}";
+                return null;
+            }
+            fields[colIndex] = EncodedField.OfBytes(reference);
         }
         if (!RowEncoder.TryEncode(_table, fields, _d, out byte[]? rowBytes, out failure))
         {
@@ -1415,7 +1585,21 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         byte[] copy = pin.Bytes.ToArray();
         int growth = rowBytes!.Length - row.Slot.Length;
-        if (growth > (int)_d.DataPage.FreeCount.Read(copy))
+        bool overflows = growth > (int)_d.DataPage.FreeCount.Read(copy);
+        if (overflows && oldLongValues.Count > 0)
+        {
+            failure = $"row {row.Root}: replacing a stored long value that overflows its data page is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+            return null;
+        }
+        foreach ((ColumnDescriptor oldColumn, byte[] oldField) in oldLongValues)
+        {
+            if (!RemoveLongValue(oldColumn, oldField, isDelete: false, allocator, seen, longValueEdits, clearedFreeLvalPages, out failure))
+            {
+                failure = $"field {oldColumn.Name} of row {row.Root}: {failure}";
+                return null;
+            }
+        }
+        if (overflows)
         {
             return OverflowedRow(row.Root, rowBytes, copy, allocator, seen, longValueEdits, out failure);
         }
@@ -1506,38 +1690,61 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// the grown row's walk does, is what those final maps show, not a recorded single step. A page of the FreeMap that
     /// is not an ordinary data page of the table is passed over and kept.
     /// </summary>
-    /// <summary>The largest single-row long value recorded (R-FMT-2 "LV form selection": 100 and 2,000 bytes single rows).</summary>
-    private const int LongestRecordedSingleRow = 2000;
-
-    /// <summary>The shortest chained long value recorded (4,076 bytes: 4,072 on the first page, 4 on the next).</summary>
-    private const int ShortestRecordedChain = 4076;
-
-    /// <summary>The shortest value recorded on an LVAL page rather than inline (100 bytes).</summary>
-    private const int ShortestRecordedOnLval = 100;
-
-    /// <summary>The data bytes one chain row holds: a whole LVAL page (4,076) less its 4-byte next locator.</summary>
-    private const int ChainRowData = 4072;
+    /// <summary>
+    /// Largest remaining free-byte count recorded as leaving the long-value free map (R-FMT-2 "LV form selection and
+    /// Map ownership": <c>evidence/r-q19-growth-open/lv-fill-2000-1976</c> leaves at 0 free bytes;
+    /// <c>evidence/r-q22-lv-open/lv-two-free-lower-looser</c> leaves at 78 free bytes;
+    /// <c>lv-two-free-lower-looser-1400</c> leaves at 178 free bytes).
+    /// </summary>
+    private const int LvalFreeMapLeavesAtOrBelow = 178;
 
     /// <summary>
-    /// Place a Memo or OLE value on LVAL pages and return its 12-byte row reference (II-04 §§7.1, 9.3; R-FMT-2 "LV form
-    /// selection and Map ownership", evidence/r-q17-growth/lval-memo and lval-ole; W-05/growth-structural-closure):
-    /// <list type="bullet">
-    /// <item>The payload: Memo text as UTF-16LE units (<see cref="TextCodec.TryEncode"/>, which refuses a Unicode-compressed
-    /// column and a leading U+FEFF), OLE bytes as given.</item>
-    /// <item>100 to 2,000 bytes: one LVAL row, the payload alone, on the first page of the column's long-value free map,
-    /// as its next slot; with no page there, on a new LVAL page (stamp 0) that joins the column's owned and free maps
-    /// (page 45 holds 100 then 2,000 bytes at 3996 and 1996, 1,978 free).</item>
-    /// <item>4,076 bytes or more: a chain over newly taken pages in order, each holding one row at the end of the page, the
-    /// next row's locator then up to 4,072 bytes, the last locator zero; the first page is stamped with the tick clock
-    /// (<see cref="TableFootprints.LongValueTicks"/>), the others 0. The chain pages join the column's owned map and not
-    /// its free map, though they keep free space (48 and 50: 4,072 and 3,148).</item>
-    /// <item>The reference: <see cref="LongValuePlan.EncodeReference"/>.</item>
-    /// </list>
-    /// Refused by name (the note's Open): under 100 bytes (the inline bound), between 2,000 and 4,076 (the single-row bound),
-    /// a free-map page without room for the row (when a single row takes a new page instead), and a column without long-value
-    /// maps in its TableDef.
+    /// Smallest remaining free-byte count recorded as staying in the long-value free map (R-FMT-2 "LV form selection
+    /// and Map ownership": <c>evidence/r-q19-growth-open/lv-single-3816</c> and
+    /// <c>evidence/r-q22-lv-open/lv-memo-bound-3816</c> keep 264 bytes free in the LV free map; 179..263 free bytes
+    /// is Open).
     /// </summary>
-    private byte[]? PlacedLongValue(ColumnDescriptor c, in NativeValue value, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
+    private const int LvalFreeMapStaysAtOrAbove = 264;
+
+    /// <summary>
+    /// Measure the encoded ordinary-row byte length of <paramref name="fields"/> using the same layout formula as
+    /// <see cref="RowEncoder.TryEncode"/> (without enforcing the 4,060-byte cap), so <see cref="CompileInsert"/> and
+    /// <see cref="RewrittenRow"/> can apply the 4,060-byte inline-LV spill bound
+    /// (<c>evidence/r-q22-lv-open/lv-inline-tight-3958</c> vs <c>lv-inline-tight-3960</c>).
+    /// </summary>
+    private long? MeasureEncodedRowBytes(EncodedField[] fields)
+    {
+        IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        int c = _table.MaxColumns;
+        if (columns.Count != c || fields.Length != columns.Count)
+        {
+            return null;
+        }
+        int fixedEnd = _table.KnownFixedEnd(c, _d);
+        if (fixedEnd <= _d.Row.FixedBase)
+        {
+            return null;
+        }
+        long variableBytes = 0;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            if (!columns[i].IsFixed && !columns[i].IsMaskBoolean && !fields[i].IsNull)
+            {
+                variableBytes += fields[i].Bytes?.Length ?? 0;
+            }
+        }
+        int v = _table.VariableColumns;
+        int maskBytes = (c + 7) / 8;
+        long trailerBytes = v > 0 ? 4L + (2L * v) : 0L;
+        return fixedEnd + variableBytes + trailerBytes + maskBytes;
+    }
+
+    /// <summary>
+    /// Encode a non-Null Memo or OLE value into its payload bytes and check preconditions common to inline and
+    /// external placement: Memo text via <see cref="TextCodec.TryEncode"/> (which refuses <c>MEMO WITH COMPRESSION</c>
+    /// and a leading U+FEFF by name), OLE bytes as given, refusing 0-byte payloads and MDB files.
+    /// </summary>
+    private byte[]? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure)
     {
         byte[]? payload;
         if (c.TypeCode == NativeTypes.Memo && value.Kind == NativeKind.Text)
@@ -1556,27 +1763,62 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"a {value.Kind} value for the long-value column";
             return null;
         }
-        if (payload!.Length < ShortestRecordedOnLval)
+        if (payload!.Length == 0)
         {
-            if (c.TypeCode == NativeTypes.Ole && payload.Length > 0 && payload.Length <= LongValuePlan.ObservedInlinePayloadMax)
+            failure = "an empty (0-byte) long value is not recorded (R-FMT-2 LV form selection)";
+            return null;
+        }
+        using (PagePin? page0 = Seen(seen).Pin(0).Pin)
+        {
+            if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
             {
-                failure = null;
-                return LongValuePlan.EncodeInline(payload);
+                failure = "writing a long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
+                return null;
             }
-            failure = $"a {payload.Length}-byte long value: whether ACE keeps it inline is not recorded (100 bytes go to an LVAL page; R-FMT-2 LV form selection)";
-            return null;
         }
-        if (payload.Length > LongestRecordedSingleRow && payload.Length < ShortestRecordedChain)
-        {
-            failure = $"a {payload.Length}-byte long value: the bound between a single LVAL row and a chain lies between 2,000 and 4,076 bytes and is not recorded (R-FMT-2 LV form selection Open)";
-            return null;
-        }
+        failure = null;
+        return payload;
+    }
+
+    /// <summary>
+    /// Place a Memo or OLE payload onto LVAL page(s) and return its 12-byte LVAL row reference (II-04 §§7.1, 9.3;
+    /// R-FMT-2 "LV form selection and Map ownership", <c>evidence/r-q17-growth/lval-memo</c>, <c>lval-ole</c>,
+    /// <c>evidence/r-q19-growth-open/lv-inline-*</c>, <c>lv-single-*</c>, <c>lv-fill-*</c>,
+    /// <c>evidence/r-q22-lv-open/lv-bound-*</c>, <c>lv-memo-bound-*</c>, <c>lv-chain-*</c>, <c>lv-inline-tight-3960</c>,
+    /// <c>lv-two-free-*</c>; W-05/growth-structural-closure):
+    /// <list type="bullet">
+    /// <item>Up to 3,816 bytes (<see cref="LongValuePlan.SingleRowPayloadMax"/>, including a &lt;= 64-byte value
+    /// spilled past the 4,060-byte data-row limit): one LVAL row on the sole LV free-map page with room for
+    /// <c>payload.Length + 2</c>; if &lt;= 178 bytes stay free (<see cref="LvalFreeMapLeavesAtOrBelow"/>), that page
+    /// leaves the LV free map; if &gt;= 264 bytes stay free (<see cref="LvalFreeMapStaysAtOrAbove"/>), it stays;
+    /// 179..263 is refused by name. If the sole free-map page has no room, it stays in the LV free map and a new LVAL
+    /// page (stamp 0) joins the LV owned and free maps.</item>
+    /// <item>3,817 bytes and above (whether or not the column has an LVAL page with room, and for plain Memo and OLE
+    /// alike): a chain over newly taken pages in ascending order, each holding one row of 4-byte next locator plus up
+    /// to 4,072 bytes (<see cref="LongValuePlan.ChainChunkPayloadMax"/>), the last locator zero; only the first page
+    /// carries the tick stamp (<see cref="TableFootprints.LongValueTicks"/>), the rest 0. Chain pages join the LV
+    /// owned map only, never the LV free map (<c>lv-single-3817</c>..4074, <c>lv-chain-3-pages</c>,
+    /// <c>lv-chain-4-pages</c>, <c>lv-bound-room*</c>, <c>lv-memo-bound-3818</c>).</item>
+    /// </list>
+    /// Refused by name (the notes' Open items): two or more LV free-map pages both having room
+    /// (<c>lv-two-free-lower-looser-*</c> disproves both first-fit and best-fit), walking past a full first LV
+    /// free-map page, a single-row page left with 179..263 free bytes, and a column without long-value maps.
+    /// </summary>
+    private byte[]? PlaceExternalLongValue(
+        ColumnDescriptor c,
+        byte[] payload,
+        PageAllocator allocator,
+        PrivateOverlay? seen,
+        List<PageEdit> edits,
+        out string? failure,
+        HashSet<uint>? clearedFreeLvalPages = null)
+    {
         if (_table.LongValueMaps.FirstOrDefault(m => m.PhysicalNumber == c.PhysicalNumber) is not { } maps)
         {
             failure = "the TableDef names no long-value maps for the column";
             return null;
         }
-        if (payload.Length <= LongestRecordedSingleRow)
+        if (payload.Length <= LongValuePlan.SingleRowPayloadMax)
         {
             IReadOnlyList<uint>? free = UsageMaps.Pages(Seen(seen), _d, maps.FreeMap, Extent, out TraversalFailure? freeFailure);
             if (free is null)
@@ -1584,30 +1826,84 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 failure = $"the long-value free map cannot be read: {freeFailure?.Predicate}";
                 return null;
             }
+            int needed = payload.Length + _d.DataPage.SlotEntryBytes;
+            List<uint> lvalFree = [];
+            List<(uint Page, int FreeBytes)> withRoom = [];
             foreach (uint candidate in free)
             {
                 using PagePin? pin = Seen(seen).Pin(candidate).Pin;
-                if (pin is null || !DataPages.IsLvalPage(pin.Bytes, _d))
+                if (pin is not null && DataPages.IsLvalPage(pin.Bytes, _d))
                 {
-                    continue;
+                    lvalFree.Add(candidate);
+                    int freeBytes = (int)_d.DataPage.FreeCount.Read(pin.Bytes);
+                    int rowCount = (int)_d.DataPage.RowCount.Read(pin.Bytes);
+                    if (freeBytes >= needed && rowCount < _d.DataPage.ReaderSlotCapacity)
+                    {
+                        withRoom.Add((candidate, freeBytes));
+                    }
+                }
+            }
+            if (withRoom.Count >= 2)
+            {
+                failure = $"{withRoom.Count} long-value free-map pages have room ({string.Join(", ", withRoom.Select(p => $"page {p.Page}: {p.FreeBytes}B"))}): the multi-page LV free-map choice rule is not established (evidence/r-q22-lv-open/lv-two-free-lower-looser-* disproves both first-fit and best-fit; R-FMT-2 LV form selection and Map ownership Open)";
+                return null;
+            }
+            if (withRoom.Count == 1)
+            {
+                uint candidate = withRoom[0].Page;
+                if (candidate != lvalFree[0])
+                {
+                    failure = $"LVAL page {lvalFree[0]} of the long-value free map has no room and page {candidate} follows: the walk order over several LV free-map pages is not recorded (R-FMT-2 LV form selection and Map ownership Open)";
+                    return null;
+                }
+                using PagePin? pin = Seen(seen).Pin(candidate).Pin;
+                if (pin is null)
+                {
+                    failure = $"LVAL page {candidate} could not be pinned";
+                    return null;
                 }
                 byte[] copy = pin.Bytes.ToArray();
                 if (!DataPages.TryAppendRow(copy, payload, _d, out byte slot, out string? appendFailure, lval: true))
                 {
-                    failure = $"LVAL page {candidate} of the long-value free map has no room ({appendFailure}): whether ACE then takes a new page is not recorded (R-FMT-2 LV form selection Open)";
+                    failure = $"LVAL page {candidate}: {appendFailure}";
+                    return null;
+                }
+                int remainingFree = (int)_d.DataPage.FreeCount.Read(copy);
+                if (remainingFree <= LvalFreeMapLeavesAtOrBelow)
+                {
+                    if (MapBit(maps.FreeMap, candidate, seen, out failure, member: false) is not { } leaveFree)
+                    {
+                        failure = $"the long-value free map: {failure}";
+                        return null;
+                    }
+                    edits.Add(leaveFree);
+                    clearedFreeLvalPages?.Add(candidate);
+                }
+                else if (remainingFree < LvalFreeMapStaysAtOrAbove)
+                {
+                    failure = $"LVAL page {candidate} would keep {remainingFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection and Map ownership Open; seen: <= {LvalFreeMapLeavesAtOrBelow} leaves, >= {LvalFreeMapStaysAtOrAbove} stays)";
                     return null;
                 }
                 edits.Add(new PageEdit(candidate, new LvalAppendDelta(payload, slot, _d), PageRole.Data));
                 failure = null;
                 return LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)payload.Length, new RowLocator(candidate, slot), 0);
             }
+            if (lvalFree.Count > 1)
+            {
+                failure = $"LVAL page {lvalFree[0]} of the long-value free map has no room and {lvalFree.Count - 1} more free-map page(s) follow: the walk order over several LV free-map pages is not recorded (R-FMT-2 LV form selection and Map ownership Open)";
+                return null;
+            }
+            // Empty LV free map, or sole LV free-map page lacks room (leave it in the LV free map and take a new
+            // LVAL page: evidence/r-q19-growth-open/lv-fill-2000-1978, lv-fill-2000-2000,
+            // evidence/r-q22-lv-open/lv-bound-room2000-2500).
             if (NewLvalPage(maps, joinsFree: true, 0, payload, allocator, seen, edits, out failure) is not { } page)
             {
                 return null;
             }
             return LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)payload.Length, new RowLocator(page, 0), 0);
         }
-        int count = (payload.Length + ChainRowData - 1) / ChainRowData;
+        int chunkMax = LongValuePlan.ChainChunkPayloadMax;
+        int count = (payload.Length + chunkMax - 1) / chunkMax;
         uint[] pages = new uint[count];
         var globalEdits = new PageEdit[count];
         for (int i = 0; i < count; i++)
@@ -1622,8 +1918,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         uint stamp = _ticks();
         for (int i = 0; i < count; i++)
         {
-            int start = i * ChainRowData;
-            int length = Math.Min(ChainRowData, payload.Length - start);
+            int start = i * chunkMax;
+            int length = Math.Min(chunkMax, payload.Length - start);
             byte[] row = new byte[4 + length];
             if (i + 1 < count)
             {
@@ -1647,6 +1943,164 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         failure = null;
         return LongValuePlan.EncodeReference(LongValueForm.Chain, (uint)payload.Length, new RowLocator(pages[0], 0), stamp);
+    }
+
+    /// <summary>
+    /// Remove a previously stored long value on UPDATE or DELETE (R-FMT-2 "LV form selection and Overflow / deletion",
+    /// <c>evidence/r-q19-growth-open/lv-op-*</c>, <c>evidence/r-q22-lv-open/lv-free-timing-*</c>):
+    /// <list type="bullet">
+    /// <item>Inline: nothing on LVAL pages to remove (after refusing MDB files, as <see cref="PrepareLongValuePayload"/>
+    /// does).</item>
+    /// <item>Single row: deletes the slot in place on its LVAL page (<see cref="LvalDeleteDelta"/>, leaving vacated
+    /// bytes untouched). Any pending <paramref name="edits"/> targeting the same LVAL page are replayed onto the check
+    /// image first so append-then-delete matches <c>lv-op-single-larger</c> and <c>lv-op-single-smaller</c>.</item>
+    /// <item>Chain on DELETE: walks the exclusive chain pages (<see cref="LongValueReader.ChainPages"/>), clears each
+    /// from the LV owned map and marks it free in page 1 immediately during the statement without modifying the chain
+    /// pages' bytes (<c>lv-free-timing-delete-chain</c>, <c>lv-op-delete-row-chain</c>; page 0 +1, Close writes
+    /// nothing).</item>
+    /// </list>
+    /// Refused by name (the notes' Open items): MDB files, UPDATE freeing a chained long value (UPDATE takes a page-1
+    /// allocation reservation returned at Close, <c>lv-free-timing-update-chain-*</c>), deleting a non-top single LVAL
+    /// row, emptying an LVAL page, removing a single LVAL row from a page not in the LV free map, and chain pages that
+    /// are shared, not in the LV owned map, or in the LV free map.
+    /// </summary>
+    private bool RemoveLongValue(
+        ColumnDescriptor c,
+        ReadOnlySpan<byte> storedField,
+        bool isDelete,
+        PageAllocator allocator,
+        PrivateOverlay? seen,
+        List<PageEdit> edits,
+        HashSet<uint>? clearedFreeLvalPages,
+        out string? failure)
+    {
+        if (LongValuePlan.Inspect(storedField, out failure) is not { } plan)
+        {
+            return false;
+        }
+        using (PagePin? page0 = Seen(seen).Pin(0).Pin)
+        {
+            if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
+            {
+                failure = "removing a long value in an MDB file is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                return false;
+            }
+        }
+        if (plan.Form == LongValueForm.Inline)
+        {
+            failure = null;
+            return true;
+        }
+        if (_table.LongValueMaps.FirstOrDefault(m => m.PhysicalNumber == c.PhysicalNumber) is not { } maps)
+        {
+            failure = "the TableDef names no long-value maps for the column";
+            return false;
+        }
+        if (plan.Form == LongValueForm.SingleRow)
+        {
+            RowLocator loc = plan.First;
+            IReadOnlyList<uint>? free = UsageMaps.Pages(Seen(seen), _d, maps.FreeMap, Extent, out TraversalFailure? freeFailure);
+            if (free is null)
+            {
+                failure = $"the long-value free map cannot be read: {freeFailure?.Predicate}";
+                return false;
+            }
+            if (!free.Contains(loc.Page) || (clearedFreeLvalPages is not null && clearedFreeLvalPages.Contains(loc.Page)))
+            {
+                failure = $"single-row LVAL page {loc.Page} is not in the long-value free map: whether removing a row returns it to the free map is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                return false;
+            }
+            using PagePin? lvalPin = Seen(seen).Pin(loc.Page).Pin;
+            if (lvalPin is null)
+            {
+                failure = $"LVAL page {loc.Page} could not be pinned";
+                return false;
+            }
+            byte[] copy = lvalPin.Bytes.ToArray();
+            foreach (PageEdit e in edits)
+            {
+                if (e.Page == loc.Page)
+                {
+                    e.Delta.Apply(copy);
+                }
+            }
+            if (DataPages.CheckedSlot(copy, loc.Row, _d, out failure) is not { } target)
+            {
+                return false;
+            }
+            if (target.End != _d.PageSize)
+            {
+                failure = $"single-row LVAL slot {loc.Row} on page {loc.Page} is not the top row (end {target.End} != {_d.PageSize}): deleting a non-top single LVAL row is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                return false;
+            }
+            if (!DataPages.TryDeleteSlot(copy, loc.Row, _d, out failure, lval: true))
+            {
+                return false;
+            }
+            if (DataPages.IsEmpty(copy, _d, lval: true))
+            {
+                failure = $"removing single-row LVAL slot {loc.Row} empties LVAL page {loc.Page}: retiring an emptied LVAL page is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                return false;
+            }
+            edits.Add(new PageEdit(loc.Page, new LvalDeleteDelta(loc.Row, _d), PageRole.Data));
+            failure = null;
+            return true;
+        }
+        if (plan.Form == LongValueForm.Chain)
+        {
+            if (!isDelete)
+            {
+                failure = "updating a row that frees a chained long value is not implemented (UPDATE takes a page-1 allocation reservation returned at Close, evidence/r-q22-lv-open/lv-free-timing-update-chain-*)";
+                return false;
+            }
+            List<uint>? chainPages = LongValueReader.ChainPages(plan, Seen(seen), _d, out TraversalFailure? chainFailure);
+            if (chainPages is null)
+            {
+                failure = chainFailure?.Predicate ?? "chained long value could not be walked";
+                return false;
+            }
+            IReadOnlyList<uint>? owned = UsageMaps.Pages(Seen(seen), _d, maps.OwnedMap, Extent, out TraversalFailure? ownedFailure);
+            if (owned is null)
+            {
+                failure = $"the long-value owned map cannot be read: {ownedFailure?.Predicate}";
+                return false;
+            }
+            IReadOnlyList<uint>? free = UsageMaps.Pages(Seen(seen), _d, maps.FreeMap, Extent, out TraversalFailure? freeFailure);
+            if (free is null)
+            {
+                failure = $"the long-value free map cannot be read: {freeFailure?.Predicate}";
+                return false;
+            }
+            foreach (uint chainPage in chainPages)
+            {
+                if (!owned.Contains(chainPage))
+                {
+                    failure = $"chained LVAL page {chainPage} is not in the long-value owned map";
+                    return false;
+                }
+                if (free.Contains(chainPage))
+                {
+                    failure = $"chained LVAL page {chainPage} is in the long-value free map: freeing a chain page in the free map is not recorded";
+                    return false;
+                }
+                if (MapBit(maps.OwnedMap, chainPage, seen, out failure, member: false) is not { } leaveOwned)
+                {
+                    failure = $"the long-value owned map: {failure}";
+                    return false;
+                }
+                if (allocator.Free(seen, chainPage, out failure) is not { } freeGlobal)
+                {
+                    failure = $"freeing chained LVAL page {chainPage} in page 1: {failure}";
+                    return false;
+                }
+                edits.Add(leaveOwned);
+                edits.Add(freeGlobal);
+            }
+            failure = null;
+            return true;
+        }
+        failure = $"long-value form {plan.Form} is not recognized";
+        return false;
     }
 
     /// <summary>A new LVAL page holding <paramref name="row"/> as slot 0, in the column's owned map and, when asked, its free map.</summary>
@@ -1687,8 +2141,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// A new data page holding one row joins the table's FreeMap exactly when its free space exceeds 2,040 bytes
     /// (R-FMT-2 Overflow "Checked further", evidence/r-q17-growth/freemap-free-*: the overflow target 122 joins at 2,042 and
     /// every larger free space asked, and stays out at 2,040 and every smaller one; r-cplx-rebuild/create-rb-rich-accdb W's
-    /// page 54, 1,057 free, is out). A bound fixed or relative to the row (F = 4080 - L) is not told apart, and whether it
-    /// holds for a page an INSERT takes is open: there a new page left with 2,040 bytes or less is refused by name.
+    /// page 54, 1,057 free, is out; r-q19-growth-open/insert-free-*: an INSERT leaving 2,042 or 3,080 free joins, 2,040 or
+    /// 1,080 stays out; r-q22-lv-open/lv-inline-tight-3958/-3960: 20 and 78 free stay out).
     /// </summary>
     private const int FreeMapJoinsAbove = 2040;
 
@@ -1734,11 +2188,6 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         int left = (int)_d.DataPage.FreeCount.Read(bytes);
         bool joins = left > FreeMapJoinsAbove;
-        if (!joins && !overflowTarget)
-        {
-            failure = $"the inserted row's new page would keep {left} bytes free: whether a page an INSERT takes joins the FreeMap at or below 2,040 bytes is not recorded (r-q17-growth freemap-free-* asked overflow targets)";
-            return null;
-        }
         if (MapBit(_table.OwnedMap, page, seen, out failure) is not { } owned)
         {
             failure = $"the table's owned map: {failure}";
