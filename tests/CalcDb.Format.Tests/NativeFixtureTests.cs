@@ -103,19 +103,22 @@ public sealed class NativeFixtureTests
     {
         // Any MDB fixture the oracle created (R-FMT-1 fixtures): the first stored one whose header carries the Jet signature.
         CalcDb.Evidence.ArtifactStore store = Store();
-        string? mdb = store.Hashes().Select(store.Locate).OfType<string>()
-            .FirstOrDefault(p => new FileInfo(p).Length >= 4096 && HasSignature(p, "Standard Jet DB"));
-        Assert.NotNull(mdb);
-        InspectionReport r = Inspector.Inspect(File.ReadAllBytes(mdb));
+        string? sha = store.Hashes().FirstOrDefault(h => HasSignature(store, h, "Standard Jet DB"));
+        Assert.NotNull(sha);
+        InspectionReport r = Inspector.Inspect(store.ReadAll(sha));
         Assert.Equal(ProfileRefusal.None, r.Refusal);
         Assert.Equal(FileFormat.Jet4, r.Profile!.Format);
         Assert.Contains(r.TableDefs, t => t.FirstPage == 2);
     }
 
-    private static bool HasSignature(string path, string signature)
+    private static bool HasSignature(CalcDb.Evidence.ArtifactStore store, string sha, string signature)
     {
+        using FileStream? f = store.OpenRead(sha);
+        if (f is null || f.Length < 4096)
+        {
+            return false;
+        }
         byte[] head = new byte[24];
-        using FileStream f = File.OpenRead(path);
         return f.Read(head) == 24 && Encoding.ASCII.GetString(head, 4, signature.Length) == signature;
     }
 }

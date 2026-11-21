@@ -94,16 +94,19 @@ public sealed partial class JobStore
     {
         string sha = Hashing.Sha256File(sourcePath);
         string target = Path.Combine(CasDir, sha);
-        if (!File.Exists(target))
+        lock (ArtifactStore.LockFor(target))
         {
-            string temp = target + ".tmp-" + Guid.NewGuid().ToString("N");
-            File.Copy(sourcePath, temp);
-            if (Hashing.Sha256File(temp) != sha)
+            if (!File.Exists(target))
             {
-                File.Delete(temp);
-                throw new IOException($"Content of '{sourcePath}' changed while it was imported.");
+                string temp = target + ".tmp-" + Guid.NewGuid().ToString("N");
+                ArtifactStore.CopyShared(sourcePath, temp);
+                if (Hashing.Sha256File(temp) != sha)
+                {
+                    File.Delete(temp);
+                    throw new IOException($"Content of '{sourcePath}' changed while it was imported.");
+                }
+                MoveUnlessPresent(temp, target);
             }
-            MoveUnlessPresent(temp, target);
         }
         return new FixtureInput(role, fileName, sha, new FileInfo(target).Length) { Provenance = provenance };
     }
@@ -169,7 +172,7 @@ public sealed partial class JobStore
         {
             string source = FindContent(input.Sha256) ?? throw new FileNotFoundException($"Input '{input.Role}' content {input.Sha256} is not in the store or any content source.");
             string copy = Path.Combine(dir, "inputs", input.FileName);
-            File.Copy(source, copy);
+            ArtifactStore.CopyShared(source, copy);
             string actual = Hashing.Sha256File(copy);
             if (actual != input.Sha256 || new FileInfo(copy).Length != input.Length)
             {
