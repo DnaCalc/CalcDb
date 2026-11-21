@@ -86,11 +86,13 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         public List<string> Open { get; } = [];
 
         /// <summary>A database the record opened, with its input file's hash (null when it is not one of the inputs).</summary>
-        private sealed class DatabaseObject(string? fixture, ISqlDatabase? live = null)
+        private sealed class DatabaseObject(string? fixture, ISqlDatabase? live = null, bool readOnly = false)
         {
             public string? Fixture { get; } = fixture;
 
             public ISqlDatabase? Image { get; set; } = live;
+
+            public bool ReadOnly { get; } = readOnly;
         }
 
         private sealed class RecordsetObject(string sql)
@@ -103,6 +105,10 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
             public bool OwnsPlan { get; set; } = true;
 
             public SelectCursor? Cursor { get; set; }
+
+            public bool DatabaseReadOnly { get; set; }
+
+            public int Options { get; set; }
 
             /// <summary>Why the replay of this recordset stopped, when it did.</summary>
             public string? Stopped { get; set; }
@@ -169,7 +175,8 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     // The database is the input file the path names (by file name; the attempt directory differs per run).
                     string? file = e.Args.Count > 0 && e.Args[0].Text is { } path ? Path.GetFileName(path) : null;
                     string? sha = inputs.FirstOrDefault(f => file is not null && string.Equals(Path.GetFileName(f.RelativePath), file, StringComparison.OrdinalIgnoreCase))?.Sha256;
-                    _objects[dbName] = new DatabaseObject(sha);
+                    bool readOnly = e.Args.Count > 2 && e.Args[2].Integer is { } ro && ro != "0";
+                    _objects[dbName] = new DatabaseObject(sha, readOnly: readOnly);
                     continue;
                 }
                 if (liveDatabase is not null && e.Member == "CreateDatabase" && e.Bind is { } createdDb && e.ExcepInfo is null)
@@ -224,7 +231,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                             }
                             if (e.Member == "OpenRecordset")
                             {
-                                OpenRecordset(e, db.Image, sql, where);
+                                OpenRecordset(e, db.Image, db.ReadOnly, sql, where);
                             }
                             else
                             {
@@ -568,7 +575,7 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
             rs.Plan = null;
         }
 
-        private void OpenRecordset(InvokeEvent e, ISqlDatabase image, string sql, string where)
+        private void OpenRecordset(InvokeEvent e, ISqlDatabase image, bool databaseReadOnly, string sql, string where)
         {
             where += $"(\"{(sql.Length > 90 ? sql[..90] + "…" : sql)}\")";
             if (_changed is { } changed)
@@ -582,7 +589,17 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                 Bind(e, Stopped(sql, where, $"NotModelled.RecordsetType: type {type}"));
                 return;
             }
-            var rs = new RecordsetObject(sql);
+            int options = e.Args.Count > 2 && e.Args[2].Integer is { } opt ? int.Parse(opt, CultureInfo.InvariantCulture) : 0;
+            int lockEdit = e.Args.Count > 3 && e.Args[3].Integer is { } le ? int.Parse(le, CultureInfo.InvariantCulture) : 0;
+            if (lockEdit == 4)
+            {
+                options |= 4;
+            }
+            else if (lockEdit is not (0 or 2 or 3))
+            {
+                options |= int.MinValue; // unrecorded lockEdit bit
+            }
+            var rs = new RecordsetObject(sql) { DatabaseReadOnly = databaseReadOnly, Options = options };
             BoundSelect? plan = BoundSelect.Prepare(sql, image, out SqlFailure? failure);
             SelectCursor? cursor = null;
             if (plan is not null)
@@ -680,6 +697,26 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                         break;
                     }
                     Check(where, long.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), c.RecordCount);
+                    break;
+                case "Updatable" when e.ExcepInfo is null:
+                    if ((rs.Options & ~(4 | 256)) != 0)
+                    {
+                        Open.Add($"{where}: NotModelled.RecordsetOptions: options {rs.Options}: ACE {e.Result!.Integer}");
+                        break;
+                    }
+                    if (rs.DatabaseReadOnly || (rs.Options & (4 | 256)) != 0)
+                    {
+                        Check(where, Bool(e), false);
+                        break;
+                    }
+                    if (c.Updatable is bool updatable)
+                    {
+                        Check(where, Bool(e), updatable);
+                    }
+                    else
+                    {
+                        Open.Add($"{where}: {c.UpdatableOpen}: ACE {e.Result!.Integer}");
+                    }
                     break;
                 case "MoveNext" or "MoveFirst" or "MoveLast" or "MovePrevious":
                     Move(e, rs, where);
@@ -881,6 +918,26 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     else
                     {
                         Check(where, e.Result?.Text ?? "", mine);
+                    }
+                    break;
+                case "DataUpdatable" when e.ExcepInfo is null:
+                    if ((rs.Options & ~(4 | 256)) != 0)
+                    {
+                        Open.Add($"{where}: NotModelled.RecordsetOptions: options {rs.Options}: ACE {e.Result!.Integer}");
+                        break;
+                    }
+                    if (rs.DatabaseReadOnly || (rs.Options & 4) != 0)
+                    {
+                        Check(where, Bool(e), false);
+                        break;
+                    }
+                    if (c.FieldDataUpdatable(field.Column, out string? duOpen) is bool du)
+                    {
+                        Check(where, Bool(e), du);
+                    }
+                    else
+                    {
+                        Open.Add($"{where}: {duOpen}: ACE {e.Result!.Integer}");
                     }
                     break;
                 case "Value":

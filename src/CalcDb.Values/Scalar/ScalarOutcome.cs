@@ -108,7 +108,7 @@ public enum NotModelledCase : byte
     /// <summary>Single or Double against Decimal where VarCmp and the Decimal-widened comparison disagree.</summary>
     FloatingAgainstDecimalCompare,
 
-    /// <summary>Text compare mode (StrComp 1, Option Compare Text): the NLS flags are not qualified.</summary>
+    /// <summary>Text compare mode (StrComp 1, Option Compare Text) without a host <see cref="TextCollation"/> supplied, or an unmodelled LCID selector (&gt; 2).</summary>
     TextCompareMode,
 
     /// <summary>Database compare mode without the database sort order's collation (W-04/weight-tables-per-sort-order).</summary>

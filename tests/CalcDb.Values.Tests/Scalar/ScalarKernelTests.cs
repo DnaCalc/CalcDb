@@ -109,6 +109,34 @@ public sealed unsafe class ScalarKernelTests(ITestOutputHelper output)
         Assert.Equal(0, (short)ScalarKernel.Apply(eq, *a.Pointer, *upper.Pointer, binary).Value.Int64);
         Assert.Equal("test/ordinal-ignore-case", ci.SortOrderIdentity);
         Assert.Equal(NotModelledCase.TextCompareMode, ScalarKernel.Apply(eq, *a.Pointer, *upper.Pointer, new ExpressionContext(7177, TextCompareMode.Text)).Failure.Case);
+
+        TextCollation? hostText = OperatingSystem.IsWindows() ? CalcDb.Values.Windows.WindowsTextCollation.For(7177) : null;
+        var text = new ExpressionContext(7177, TextCompareMode.Text, textOrder: hostText);
+        if (hostText is not null)
+        {
+            Assert.Equal(-1, (short)ScalarKernel.Apply(eq, *a.Pointer, *upper.Pointer, text).Value.Int64);
+            Assert.Same(hostText, text.Folding.TextOrder);
+            Assert.Equal(1, hostText.Compare("\0", ""));
+            Assert.Equal(0, hostText.Compare("a\0b", "a\0B"));
+            Assert.Equal(-1, hostText.Compare("a\0a", "a\0b"));
+            Assert.Equal(0, hostText.Compare("ß", "ss"));
+            Assert.Equal(1, hostText.Compare("é", "e"));
+
+            for (int warm = 0; warm < 3; warm++)
+            {
+                _ = hostText.Compare("a\0b", "a\0B");
+            }
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 1000; i++)
+            {
+                _ = hostText.Compare("a\0b", "a\0B");
+            }
+            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+        else
+        {
+            Assert.Equal(NotModelledCase.TextCompareMode, ScalarKernel.Apply(eq, *a.Pointer, *upper.Pointer, text).Failure.Case);
+        }
     }
 
     private sealed class OrdinalIgnoreCase : TextCollation

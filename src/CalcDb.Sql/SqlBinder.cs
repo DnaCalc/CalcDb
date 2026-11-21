@@ -29,6 +29,19 @@ public interface ISqlDatabase
     IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure);
 
     ExpressionContext Context { get; }
+
+    /// <summary>
+    /// Whether the local table <paramref name="name"/> is a system table whose rows SQL <c>SELECT</c> cannot read
+    /// under default Admin (ACE 3112; <c>r-cat-1/catalog-accdb</c>, <c>r-cat-1/catalog-mdb</c>,
+    /// <c>r-cat-1b/rel-msys-rows</c>). Defaults to checking <see cref="TableDefinition.TableType"/> == <c>0x53</c>
+    /// (<c>MSysObjects</c>, <c>MSysACEs</c>, <c>MSysQueries</c>, <c>MSysRelationships</c>) plus the ACCDB complex
+    /// system tables (<c>MSysComplexColumns</c>, <c>MSysComplexType_*</c>), which carry <c>TableType == 0x4E</c> with
+    /// <c>MSysObjects.Flags &amp; 0x80000000</c>. Catalog-backed implementations may override from <c>CatalogEntry.Flags</c>.
+    /// </summary>
+    bool IsSystemTable(string name, TableDefinition table) =>
+        table.TableType == 0x53
+        || string.Equals(name, "MSysComplexColumns", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("MSysComplexType_", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>One FROM source occurrence (II-11 §2: each occurrence is its own slot, even for one table twice).</summary>
@@ -268,6 +281,42 @@ public enum ColumnTypeRule : byte
     NotModelled,
 }
 
+/// <summary>
+/// The base-table column a <see cref="ResultColumn"/> directly projects (possibly aliased, in a plain, DISTINCT,
+/// DISTINCTROW, joined, or GROUP BY key position). Null on <see cref="ResultColumn.SourceColumn"/> for expressions,
+/// aggregates, unions, parameters, and derived-table columns.
+/// </summary>
+public sealed record ColumnSource(int SourceIndex, string TableName, TableDefinition Table, ColumnDescriptor Column);
+
+/// <summary>
+/// How a <see cref="ResultColumn"/> derives from its query's sources (qualified.md R-CURSOR-1 CUR-PROV;
+/// r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/query-field-metadata-aggregates, prov-aggregate-groupby,
+/// prov-union-crosstab).
+/// </summary>
+public enum ColumnOrigin : byte
+{
+    /// <summary>A direct base-table column (bare, qualified, aliased, or expanded from <c>*</c>).</summary>
+    BaseColumn,
+
+    /// <summary>A bare base-table column projected as a GROUP BY key.</summary>
+    GroupKey,
+
+    /// <summary>A computed expression (not a bare base-table column or bare aggregate).</summary>
+    Expression,
+
+    /// <summary>A bare aggregate call (<c>Count</c>, <c>Sum</c>, <c>Avg</c>, <c>Min</c>, <c>Max</c>, <c>First</c>, <c>Last</c>).</summary>
+    Aggregate,
+
+    /// <summary>A union output column.</summary>
+    Union,
+
+    /// <summary>A bare query parameter.</summary>
+    Parameter,
+
+    /// <summary>A bare column passed through from a derived table.</summary>
+    DerivedColumn,
+}
+
 /// <summary>A result column (II-11 §3 result schema): its name, its DAO metadata and the program that computes it.</summary>
 public sealed class ResultColumn
 {
@@ -294,7 +343,16 @@ public sealed class ResultColumn
     /// <summary>Field.Size of a stored column, or null.</summary>
     public int? Size { get; internal set; }
 
-    /// <summary>Field.SourceTable and SourceField: the table and column of a stored column, "" for a computed one, null when not identified.</summary>
+    /// <summary>How this column derives from its sources (base column, GROUP BY key, expression, aggregate, union, parameter, derived).</summary>
+    public ColumnOrigin Origin { get; internal set; }
+
+    /// <summary>
+    /// The resolved base-table column when <see cref="Origin"/> is <see cref="ColumnOrigin.BaseColumn"/> or
+    /// <see cref="ColumnOrigin.GroupKey"/>; null for expressions, aggregates, unions, parameters, and derived-table columns.
+    /// </summary>
+    public ColumnSource? SourceColumn { get; internal set; }
+
+    /// <summary>Field.SourceTable and SourceField: the table and column of a stored column or single-column expression, "" for column-free expressions/aggregates/unions/DISTINCT expressions, null when not identified.</summary>
     public string? SourceTable { get; internal set; }
 
     public string? SourceField { get; internal set; }
@@ -436,6 +494,175 @@ public sealed class BoundSelect : IDisposable
     public SelectPredicate Predicate => _syntax.Predicate;
 
     public TopClause? Top => _syntax.Top;
+
+    /// <summary>
+    /// Whether a <paramref name="kind"/> cursor over this SELECT is updatable by query shape alone (assuming a writable
+    /// database and no read-only open option such as <c>dbReadOnly</c> or <c>dbForwardOnly</c>), per qualified.md
+    /// R-CURSOR-1 CUR-PROV and R-SQL-3 SQL-DR-01..05; returns <c>null</c> with a <c>NotModelled.*</c> name in
+    /// <paramref name="open"/> when no retained record decides this query shape.
+    /// </summary>
+    public bool? TryUpdatable(ResultKind kind, out string? open)
+    {
+        open = null;
+        if (kind is ResultKind.Snapshot or ResultKind.ForwardOnly)
+        {
+            // r-fix-cursor-dao/pos-query-sources-rw, updatable-members-rw; r-cursor-1b/open-argument-shapes, option-join-updatability:
+            // snapshots and forward-only cursors are never updatable.
+            return false;
+        }
+        if (kind != ResultKind.Dynaset)
+        {
+            open = "NotModelled.QueryUpdatable.ResultKind";
+            return null;
+        }
+        if (IsUnion)
+        {
+            // r-fix-cursor-dao/pos-query-sources-rw, prov-sources-errors-per-call; r-def-cursor-dao/prov-union-crosstab; r-cat-1b/qd-updatable-by-shape.
+            return false;
+        }
+        if (Grouped)
+        {
+            if (Keys.Count > 0)
+            {
+                // r-fix-cursor-dao/pos-query-sources-rw, prov-sources-errors-per-call; r-def-cursor-dao/prov-aggregate-groupby; r-cat-1b/qd-updatable-by-shape.
+                return false;
+            }
+            open = "NotModelled.QueryUpdatable.UngroupedAggregate";
+            return null;
+        }
+        if (Predicate == SelectPredicate.Distinct)
+        {
+            // r-fix-cursor-dao/pos-query-sources-rw, prov-sources-errors-per-call; r-def-cursor-dao/prov-distinct-distinctrow-plain; r-cat-1b/qd-updatable-by-shape; r-sql-2-3/dr-updatable.
+            return false;
+        }
+        if (SourceList.Count == 1)
+        {
+            if (SourceList[0].Subquery is not null)
+            {
+                open = "NotModelled.QueryUpdatable.DerivedTable";
+                return null;
+            }
+            if (!ColumnList.Any(c => c.Origin == ColumnOrigin.BaseColumn))
+            {
+                open = "NotModelled.QueryUpdatable.NoBaseColumn";
+                return null;
+            }
+            // r-fix-cursor-dao/pos-query-sources-rw (TOP), field-metadata-rw (mixed base + aliases + expressions),
+            // prov-sources-errors-per-call (plain, DISTINCTROW); r-def-cursor-dao/prov-distinct-distinctrow-plain,
+            // prov-missing-projected-key; r-q-cursor-dao/prov-heap-second-row-edit; r-cat-1b/qd-updatable-by-shape.
+            return true;
+        }
+        if (SourceList.Count == 2 && TwoTable is { } two && !two.IsCommaJoin && SourceList[0].Subquery is null && SourceList[1].Subquery is null && Top is null)
+        {
+            if (two.Form == TwoTableJoinForm.InnerEquality && two.LeftKey is not null && two.RightKey is not null)
+            {
+                bool leftUnique = HasSingleColumnUniqueIndex(SourceList[0].Table, two.LeftKey);
+                bool rightUnique = HasSingleColumnUniqueIndex(SourceList[1].Table, two.RightKey);
+                if (Predicate == SelectPredicate.All)
+                {
+                    if (leftUnique || rightUnique)
+                    {
+                        // r-cursor-1b/option-join-updatability (P2 INNER JOIN C2 ON P2.ID = C2.PID);
+                        // r-cat-1b/qd-updatable-by-shape (T INNER JOIN U ON T.ID = U.TID).
+                        return true;
+                    }
+                    // r-sql-2-3/dr-updatable (SELECT A.Label, A.Hidden FROM A INNER JOIN B ON A.Label = B.Label -> Updatable 0).
+                    return false;
+                }
+                if (Predicate == SelectPredicate.DistinctRow)
+                {
+                    int? singleSource = null;
+                    bool multipleSources = false;
+                    foreach (ResultColumn col in ColumnList)
+                    {
+                        if (col.SourceColumn is { } sc)
+                        {
+                            if (singleSource is null)
+                            {
+                                singleSource = sc.SourceIndex;
+                            }
+                            else if (singleSource.Value != sc.SourceIndex)
+                            {
+                                multipleSources = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (singleSource is not null && !multipleSources)
+                    {
+                        // r-sql-2-3/dr-updatable (SELECT DISTINCTROW A.Label, A.Hidden FROM A INNER JOIN B ON A.Label = B.Label -> Updatable -1).
+                        return true;
+                    }
+                    open = "NotModelled.QueryUpdatable.DistinctRowJoin";
+                    return null;
+                }
+            }
+            if (two.Form == TwoTableJoinForm.LeftEquality && two.LeftKey is not null && Predicate == SelectPredicate.All)
+            {
+                if (HasSingleColumnUniqueIndex(SourceList[0].Table, two.LeftKey))
+                {
+                    // r-fix-cursor-dao/pos-query-sources-rw, prov-outer-join-cancel-after-failed-update;
+                    // r-def-cursor-dao/prov-outer-join-absent-side (PA LEFT JOIN CH ON PA.ID = CH.PID).
+                    return true;
+                }
+                open = "NotModelled.QueryUpdatable.JoinWithoutKey";
+                return null;
+            }
+            open = "NotModelled.QueryUpdatable.JoinShape";
+            return null;
+        }
+        open = "NotModelled.QueryUpdatable.Shape";
+        return null;
+    }
+
+    /// <summary>
+    /// Whether column <paramref name="columnIndex"/> has DAO <c>Field.DataUpdatable</c> true for <paramref name="kind"/>
+    /// (assuming a writable database and no <c>dbReadOnly</c> option), per qualified.md R-CURSOR-1 CUR-PROV
+    /// (r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/prov-*, r-cursor-1b/option-join-updatability).
+    /// Note that under <c>dbOpenDynaset</c> with <c>dbForwardOnly</c> (option 256), ACE reports <c>Recordset.Updatable = 0</c>
+    /// while base fields still report <c>DataUpdatable = -1</c> (r-cursor-1b/option-join-updatability), so the COM layer
+    /// passes <see cref="ResultKind.Dynaset"/> here for <c>dbOpenDynaset | dbForwardOnly</c>.
+    /// </summary>
+    public bool? TryColumnDataUpdatable(int columnIndex, ResultKind kind, out string? open)
+    {
+        open = null;
+        ResultColumn col = ColumnList[columnIndex];
+        if (col.Origin is ColumnOrigin.Expression or ColumnOrigin.Aggregate or ColumnOrigin.GroupKey or ColumnOrigin.Union)
+        {
+            // r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/query-field-metadata-aggregates,
+            // prov-aggregate-groupby, prov-union-crosstab.
+            return false;
+        }
+        if (col.Origin != ColumnOrigin.BaseColumn)
+        {
+            open = "NotModelled.FieldDataUpdatable.ColumnOrigin";
+            return null;
+        }
+        if (kind == ResultKind.Dynaset)
+        {
+            return TryUpdatable(ResultKind.Dynaset, out open);
+        }
+        open = "NotModelled.FieldDataUpdatable.ReadOnlyCursor";
+        return null;
+    }
+
+    private static bool HasSingleColumnUniqueIndex(TableDefinition table, ColumnDescriptor column)
+    {
+        // FormatDescriptor: physical index Flags bit 0x01 = Unique, bit 0x02 = IgnoreNulls (Jet4 and ACE).
+        const byte UniqueFlag = 0x01;
+        const byte IgnoreNullsFlag = 0x02;
+        foreach (PhysicalIndex pi in table.PhysicalIndexes)
+        {
+            if (pi.Columns.Count == 1
+                && pi.Columns[0].PhysicalNumber == column.PhysicalNumber
+                && (pi.Flags & UniqueFlag) != 0
+                && (pi.Flags & IgnoreNullsFlag) == 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// <summary>Parse and bind a statement.</summary>
     public static BoundSelect? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
@@ -591,6 +818,9 @@ public sealed class BoundSelect : IDisposable
                 TypeRule = ColumnTypeRule.Bound,
                 FieldType = UnionTypes.DaoType(conversion),
                 Size = size,
+                Origin = ColumnOrigin.Union,
+                SourceTable = "",
+                SourceField = "",
                 Union = conversion,
             });
         }
@@ -1033,10 +1263,6 @@ public sealed class BoundSelect : IDisposable
 
         public SqlFailure? Run()
         {
-            if (syntax.Predicate == SelectPredicate.DistinctRow)
-            {
-                return Open("NotModelled.DistinctRow", "DISTINCTROW (R-SQL-3 SQL-DR)");
-            }
             if (Sources() is { } sourceFailure)
             {
                 return sourceFailure;
@@ -1063,6 +1289,12 @@ public sealed class BoundSelect : IDisposable
                 return joinFailure;
             }
             bool grouped = syntax.GroupBy.Count > 0 || Expressions().Any(f => Walk(f.Syntax.Root!).Any(n => AggregateOf(n) is not null || IsStatistic(n)));
+            if (syntax.Predicate == SelectPredicate.DistinctRow && (bound.SourceList.Count != 1 || bound.SourceList[0].Subquery is not null || grouped))
+            {
+                // qualified.md R-SQL-3 SQL-DR-01..05: single-table DISTINCTROW never merges equal rows (r-sql-2-3/dr-long-values,
+                // r-def-cursor-dao/prov-distinct-distinctrow-plain); joined/grouped/subquery DISTINCTROW deduplication stays open.
+                return Open("NotModelled.DistinctRow", "DISTINCTROW over joins, derived tables, or grouped queries (R-SQL-3 SQL-DR)");
+            }
             if (syntax.Where is { } where)
             {
                 if (Walk(where.Syntax.Root!).Any(n => AggregateOf(n) is not null))
@@ -1294,6 +1526,12 @@ public sealed class BoundSelect : IDisposable
                         return database.IsQuery(named.Name)
                             ? Open("NotModelled.QuerySource", $"saved query {named.Name} as a source (W-07/saved-definition reads it)")
                             : SqlFailure.Ace(SqlPhase.Bind, 3078, SqlMessages.NoInputTable(named.Name));
+                    }
+                    if (database.IsSystemTable(named.Name, table))
+                    {
+                        // qualified.md R-CAT-1, r-cat-1/catalog-accdb, r-cat-1/catalog-mdb, r-cat-1b/rel-msys-rows:
+                        // SELECT on a system table fails 3112 under default Admin.
+                        return SqlFailure.Ace(SqlPhase.Bind, 3112, SqlMessages.NoReadPermission(named.Name));
                     }
                     int index = bound.SourceList.Count;
                     bound.SourceList.Add(new SourceSlot(index, named.ScopeName, named.Name, table));
@@ -1988,10 +2226,17 @@ public sealed class BoundSelect : IDisposable
                 else if (program.BareSlot is int derivedSlot && derivedSlot >= DerivedSlot0 && derivedSlot < ParameterSlot0)
                 {
                     ResultColumn innerCol = bound.SourceList[0].Subquery!.Columns[derivedSlot - DerivedSlot0];
+                    column.Origin = ColumnOrigin.DerivedColumn;
                     column.TypeRule = innerCol.TypeRule;
                     column.FieldType = innerCol.FieldType;
                     column.TypeOpen = innerCol.TypeOpen;
                     column.Size = innerCol.Size;
+                    if (innerCol.Origin == ColumnOrigin.Union)
+                    {
+                        // r-sql-1/eq-cross-type, r-sql-13b/union-error-order: a column from a derived UNION table has SourceTable = "" and SourceField = "".
+                        column.SourceTable = "";
+                        column.SourceField = "";
+                    }
                 }
                 else
                 {
@@ -2068,20 +2313,24 @@ public sealed class BoundSelect : IDisposable
 
         private void Stored(ResultColumn column, ColumnBinding field)
         {
+            SourceSlot slot = bound.SourceList[field.Source];
             int? type = ColumnFacts.DaoType(field.Column);
+            column.Origin = ColumnOrigin.BaseColumn;
+            column.SourceColumn = new ColumnSource(field.Source, slot.TableName, slot.Table, field.Column);
             column.TypeRule = type is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
             column.FieldType = type;
             column.TypeOpen = type is null ? "NotModelled.FieldType" : null;
             column.Size = ColumnFacts.Size(field.Column);
-            column.SourceTable = bound.SourceList[field.Source].TableName;
+            column.SourceTable = slot.TableName;
             column.SourceField = field.Column.Name;
         }
 
         /// <summary>
         /// A computed column (qualified.md "the DAO Field.Type of a projected column"): 9 for the Null literal and an operator
         /// with a Null-literal operand; static types decided by retained evidence records; any other combination stays named.
-        /// SourceTable and SourceField are "" (r-sql-1/agg-count) except where a record shows otherwise (r-sql-1/b-output-names:
-        /// not decided, named).
+        /// SourceTable and SourceField follow CUR-PROV and retained metadata records: "" for aggregates, DISTINCT computed
+        /// columns, and column-free expressions; the single referenced column's table/name for ungrouped single-column
+        /// expressions; null (named) for multi-column, parameter/slot-bearing, or grouped expressions.
         /// </summary>
         private void Computed(ResultColumn column, SyntaxNode root, GroupScope? group = null)
         {
@@ -2099,8 +2348,46 @@ public sealed class BoundSelect : IDisposable
             // qualified.md: 1 <> Null and False And Null are 3, 7 & Null is 10 (the other operators' non-Null case is not recorded).
             column.NonNullType = nullOperator && root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual or ScalarOperation.And or ScalarOperation.Concatenate } ? type : null;
             column.TypeOpen = column.TypeRule == ColumnTypeRule.Bound ? null : "NotModelled.ExpressionFieldType";
-            column.SourceTable = root.Kind == SyntaxKind.Call && AggregateOf(root) is not null ? "" : null;
-            column.SourceField = column.SourceTable;
+            bool isAggregate = root.Kind == SyntaxKind.Call && AggregateOf(root) is not null;
+            column.Origin = isAggregate ? ColumnOrigin.Aggregate : ColumnOrigin.Expression;
+            if (isAggregate)
+            {
+                column.SourceTable = "";
+                column.SourceField = "";
+            }
+            else if (group is null)
+            {
+                if (bound.Predicate == SelectPredicate.Distinct || column.Program.IsConstant)
+                {
+                    // r-sql-1/eq-distinct-text, eq-distinct-error: DISTINCT computed columns have ""/"".
+                    // r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/query-field-metadata-expressions:
+                    // column-free expressions (literals, Now(), Null, etc.) have ""/"".
+                    column.SourceTable = "";
+                    column.SourceField = "";
+                }
+                else if (!column.Program.UsesSlots && column.Program.Fields.Count > 0)
+                {
+                    // r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/query-field-metadata-expressions,
+                    // r-sql-1/b-output-names: an ungrouped expression referencing one base column carries that
+                    // column's SourceTable and SourceField (DataUpdatable stays False via Origin == Expression).
+                    ColumnBinding first = column.Program.Fields[0];
+                    bool singleColumn = true;
+                    for (int i = 1; i < column.Program.Fields.Count; i++)
+                    {
+                        ColumnBinding other = column.Program.Fields[i];
+                        if (other.Source != first.Source || other.Column.PhysicalNumber != first.Column.PhysicalNumber)
+                        {
+                            singleColumn = false;
+                            break;
+                        }
+                    }
+                    if (singleColumn)
+                    {
+                        column.SourceTable = bound.SourceList[first.Source].TableName;
+                        column.SourceField = first.Column.Name;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -2110,6 +2397,7 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         private static void Parameter(ResultColumn column, QueryParameter p)
         {
+            column.Origin = ColumnOrigin.Parameter;
             column.FieldType = p.FieldType;
             column.TypeRule = p.DaoType == 1 || p.FieldType is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
             column.TypeOpen = p.FieldType is null ? "NotModelled.ParameterFieldType" : p.DaoType == 1 ? "NotModelled.ExpressionFieldType" : null;
@@ -2812,9 +3100,22 @@ public sealed class BoundSelect : IDisposable
                     if (slot < keys.Count)
                     {
                         ColumnBinding field = keyFieldTypes[slot]!.Value;
+                        SourceSlot source = bound.SourceList[field.Source];
+                        column.Origin = ColumnOrigin.GroupKey;
+                        column.SourceColumn = new ColumnSource(field.Source, source.TableName, source.Table, field.Column);
                         column.TypeRule = ColumnFacts.DaoType(field.Column) is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
                         column.FieldType = ColumnFacts.DaoType(field.Column);
                         column.TypeOpen = column.FieldType is null ? "NotModelled.FieldType" : null;
+                        column.Size = ColumnFacts.Size(field.Column);
+                        // r-def-cursor-dao/prov-aggregate-groupby, query-field-metadata-aggregates: a bare GROUP BY key column
+                        // carries its base table's SourceTable and SourceField. In r-sql-1/eq-numeric-domains, a select-list
+                        // alias differing only in case from the table name (`AS n` with `FROM N`) changed ACE's SourceTable
+                        // spelling to "n"; leave SourceTable null on that case collision rather than mismatch.
+                        bool aliasCaseCollision = syntax.Items.Any(i => i.Alias is { } a
+                            && string.Equals(a, source.TableName, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(a, source.TableName, StringComparison.Ordinal));
+                        column.SourceTable = aliasCaseCollision ? null : source.TableName;
+                        column.SourceField = field.Column.Name;
                         if (item.Alias is null)
                         {
                             column = Renamed(column, field.Column.Name);
@@ -2823,6 +3124,7 @@ public sealed class BoundSelect : IDisposable
                     else if (slot < ParameterSlot0)
                     {
                         int aggType = bound.Aggregates[slot - keys.Count].FieldType;
+                        column.Origin = ColumnOrigin.Aggregate;
                         column.TypeRule = ColumnTypeRule.Bound;
                         column.FieldType = aggType;
                         column.Size = AggregateSize(aggType);
@@ -2881,8 +3183,12 @@ public sealed class BoundSelect : IDisposable
         /// <summary>A column under another name (a bare key column takes the key's name, not ExprNNNN; a qualified one its qualified name).</summary>
         private static ResultColumn Renamed(ResultColumn c, string name) => new(name, c.Program, c.Root)
         {
+            Origin = c.Origin,
+            SourceColumn = c.SourceColumn,
             TypeRule = c.TypeRule,
             FieldType = c.FieldType,
+            NonNullType = c.NonNullType,
+            Union = c.Union,
             TypeOpen = c.TypeOpen,
             Size = c.Size,
             SourceTable = c.SourceTable,

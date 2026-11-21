@@ -25,8 +25,8 @@ namespace CalcDb.Expressions;
 /// </summary>
 public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRuleBinder
 {
-    private readonly ExpressionContext _default = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.DefaultValue);
-    private readonly ExpressionContext _rule = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.ValidationRule);
+    private readonly ExpressionContext _default = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.DefaultValue, query.TextOrder);
+    private readonly ExpressionContext _rule = new(query.Lcid, query.Compare, query.DatabaseOrder, ExpressionUse.ValidationRule, query.TextOrder);
 
     public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted)
     {

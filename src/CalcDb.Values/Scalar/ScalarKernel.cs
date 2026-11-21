@@ -356,6 +356,9 @@ public static unsafe partial class ScalarKernel
                 return null;
             case TextCompareMode.Database:
                 return Open(d, NotModelledCase.DatabaseCollationMissing);
+            case TextCompareMode.Text when c.TextOrder is { } textOrder:
+                order = Math.Sign(textOrder.Compare(left, right));
+                return null;
             default:
                 return Open(d, NotModelledCase.TextCompareMode);
         }

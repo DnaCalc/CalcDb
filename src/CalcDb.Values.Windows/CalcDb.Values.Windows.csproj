@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows host adapter for the value layer's text compare service (II-10 §14, W-02/shared-scalar-services):
+       kernel32!CompareStringW for TextCompareMode.Text (VBA Option Compare Text, InStr/StrComp compare=1). Targets
+       net11.0 with [SupportedOSPlatform("windows")] so portable tests still build off Windows while CA1416 enforces
+       an OS guard at every call site. -->
+  <PropertyGroup>
+    <RootNamespace>CalcDb.Values.Windows</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Values\CalcDb.Values.csproj" />
+  </ItemGroup>
+</Project>

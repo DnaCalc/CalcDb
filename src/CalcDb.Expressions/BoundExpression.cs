@@ -154,6 +154,9 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <summary>Whether the expression reads no field and no slot: its value is the same on every row.</summary>
     public bool IsConstant => _fields.Length == 0 && !_usesSlots;
 
+    /// <summary>Whether the expression reads any slot (parameter, group key, aggregate, union, or derived-table column).</summary>
+    public bool UsesSlots => _usesSlots;
+
     /// <summary>The field when the whole expression is one field reference.</summary>
     public ColumnBinding? BareField => _program.Length == 1 && _program[0].Op == Op.LoadField ? _fields[_program[0].Operand] : null;
 
@@ -600,16 +603,9 @@ public sealed unsafe class BoundExpression : IDisposable
                 int idx = s1[(start - 1)..].IndexOf(s2, StringComparison.Ordinal);
                 pos = idx < 0 ? 0 : start + idx;
             }
-            else if (s2.Length == 1 && s2[0] == '\0')
+            else if (_active.TextOrder is { } textOrder)
             {
-                // U+0000 matches only U+0000 under every compare mode (r-str-ado-act/str-projection: InStr(T, Chr(0))).
-                int idx = s1[(start - 1)..].IndexOf('\0');
-                pos = idx < 0 ? 0 : start + idx;
-            }
-            else if (System.Text.Ascii.IsValid(s1) && System.Text.Ascii.IsValid(s2))
-            {
-                int idx = s1[(start - 1)..].IndexOf(s2, StringComparison.OrdinalIgnoreCase);
-                pos = idx < 0 ? 0 : start + idx;
+                pos = IndexOfText(s1, s2, start, textOrder);
             }
             else
             {
@@ -633,9 +629,11 @@ public sealed unsafe class BoundExpression : IDisposable
 
     /// <summary>
     /// StrComp(string1, string2[, compare]) (r-expr-1b/str-strcomp-and-text-operators, r-expr-1b/null-propagation-functions,
-    /// r-sort-3b/lg-compare-ops, qualified.md R-EXPR-1 TextCompareMode): compare=0 is UTF-16 code-unit order (VT_I2 -1/0/1);
-    /// compare=2 or &lt;0 fails 5; Null string1 or string2 yields Null; compare=1 (or omitted) and compare&gt;2 are named
-    /// NotModelledCase.TextCompareMode.
+    /// r-expr-1/pat-15-strcomp-selector, r-sort-3b/lg-compare-ops, r-sort-3b/memo-compare-ops,
+    /// r-def-expr-sql/str-stored-instr-strcomp): compare=0 is UTF-16 code-unit order (VT_I2 -1/0/1); compare=1 (or omitted)
+    /// delegates to the host-supplied <see cref="ExpressionContext.TextOrder"/> (or names
+    /// <see cref="NotModelledCase.TextCompareMode"/> when none is supplied); compare=2 or &lt;0 fails 5; Null string1 or
+    /// string2 yields Null; compare&gt;2 is named <see cref="NotModelledCase.TextCompareMode"/>.
     /// </summary>
     private ScalarOutcome StrComp(ref int sp, Instruction ins)
     {
@@ -675,10 +673,6 @@ public sealed unsafe class BoundExpression : IDisposable
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
-            if (compare != 0)
-            {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
-            }
             if (v1.Vt != (ushort)VarType.Bstr)
             {
                 conv1 = ScalarKernel.Apply(_descriptors[d], v1, _active);
@@ -697,7 +691,21 @@ public sealed unsafe class BoundExpression : IDisposable
                 }
                 v2 = conv2.Value;
             }
-            int cmp = Bstrs.Chars(v1.Pointer).SequenceCompareTo(Bstrs.Chars(v2.Pointer));
+            ReadOnlySpan<char> s1 = Bstrs.Chars(v1.Pointer);
+            ReadOnlySpan<char> s2 = Bstrs.Chars(v2.Pointer);
+            int cmp;
+            if (compare == 0)
+            {
+                cmp = s1.SequenceCompareTo(s2);
+            }
+            else if (_active.TextOrder is { } textOrder)
+            {
+                cmp = textOrder.Compare(s1, s2);
+            }
+            else
+            {
+                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+            }
             short answer = cmp < 0 ? (short)-1 : cmp > 0 ? (short)1 : (short)0;
             return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = (ushort)answer });
         }
@@ -711,6 +719,18 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             sp = first;
         }
+    }
+
+    private static int IndexOfText(ReadOnlySpan<char> haystack, ReadOnlySpan<char> needle, int start, TextCollation textOrder)
+    {
+        for (int i = start - 1; i + needle.Length <= haystack.Length; i++)
+        {
+            if (textOrder.Compare(haystack.Slice(i, needle.Length), needle) == 0)
+            {
+                return i + 1;
+            }
+        }
+        return 0;
     }
 
     /// <summary>CUR-FIND indexed Text: a non-ASCII subject under an indexed Like may take a collation range (R-SORT-3 LIKE-RANGE-01/05).</summary>

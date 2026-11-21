@@ -47,7 +47,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _sortOrder = header.SortOrder;
-        Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query);
+        Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query, SqlFixture.HostTextOrder(7177));
         _ruleBinder = new ExpressionRuleBinder(Context);
         ReadOnly = readOnly;
         Scheduler = new InstantLockScheduler();

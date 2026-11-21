@@ -23,14 +23,15 @@ public enum ExpressionUse : byte
 }
 
 /// <summary>
-/// The database sort order's text equality and order (II-10 §14, R-SORT-3 "Text levels": SQL, Seek, GROUP BY and unique
-/// indexes share one compare). The seam between the scalar kernel and the one key codec of W-04/weight-tables-per-sort-order
-/// (CalcDb.Format's <c>TextKeys</c>): the kernel never encodes sort keys itself. The provider is supplied by the layer that
-/// owns both (the W-06 binder); until it exists, Database compare reports <see cref="NotModelledCase.DatabaseCollationMissing"/>.
+/// A text equality and order provider (II-10 §14): the database sort order for <see cref="TextCompareMode.Database"/>
+/// (CalcDb.Format's <c>TextKeys</c>, R-SORT-3 "Text levels") or the host locale's case-insensitive order for
+/// <see cref="TextCompareMode.Text"/> (VBA <c>Option Compare Text</c>, <c>InStr</c>/<c>StrComp</c> compare=1). Supplied
+/// by the layer or host adapter that owns the implementation; when absent, the corresponding mode reports
+/// <see cref="NotModelledCase.DatabaseCollationMissing"/> or <see cref="NotModelledCase.TextCompareMode"/>.
 /// </summary>
 public abstract class TextCollation
 {
-    /// <summary>The sort order's identity (for example "1033/1" General), retained by a bound plan.</summary>
+    /// <summary>The collation's identity (for example "1033/1" General or "win-text/1033"), retained by a bound plan.</summary>
     public abstract string Identity { get; }
 
     /// <summary>Negative, zero or positive, as <paramref name="left"/> sorts before, with or after <paramref name="right"/>.</summary>
@@ -39,22 +40,34 @@ public abstract class TextCollation
 
 /// <summary>
 /// The immutable inputs of scalar evaluation that are not operands (II-10 §§5, 14; II-02 §8): the locale every text
-/// conversion uses (never the process setting), the text compare mode with the database sort order, and the use. A
-/// bound plan retains it; the kernel reads it and never changes it.
+/// conversion uses (never the process setting), the text compare mode with its database and host text collations, and
+/// the use. A bound plan retains it; the kernel reads it and never changes it.
 /// </summary>
 public sealed class ExpressionContext
 {
-    public ExpressionContext(uint lcid, TextCompareMode compare, TextCollation? databaseOrder = null, ExpressionUse use = ExpressionUse.Query)
-        : this(lcid, compare, databaseOrder, use, foldsAtOpen: false)
+    public ExpressionContext(
+        uint lcid,
+        TextCompareMode compare,
+        TextCollation? databaseOrder = null,
+        ExpressionUse use = ExpressionUse.Query,
+        TextCollation? textOrder = null)
+        : this(lcid, compare, databaseOrder, use, textOrder, foldsAtOpen: false)
     {
     }
 
-    private ExpressionContext(uint lcid, TextCompareMode compare, TextCollation? databaseOrder, ExpressionUse use, bool foldsAtOpen)
+    private ExpressionContext(
+        uint lcid,
+        TextCompareMode compare,
+        TextCollation? databaseOrder,
+        ExpressionUse use,
+        TextCollation? textOrder,
+        bool foldsAtOpen)
     {
         Lcid = lcid;
         Compare = compare;
         DatabaseOrder = databaseOrder;
         Use = use;
+        TextOrder = textOrder;
         FoldsAtOpen = foldsAtOpen;
     }
 
@@ -66,7 +79,7 @@ public sealed class ExpressionContext
     public bool FoldsAtOpen { get; }
 
     /// <summary>The same context for the open-time fold of a constant (made once, kept).</summary>
-    public ExpressionContext Folding => FoldsAtOpen ? this : _folding ??= new ExpressionContext(Lcid, Compare, DatabaseOrder, Use, foldsAtOpen: true);
+    public ExpressionContext Folding => FoldsAtOpen ? this : _folding ??= new ExpressionContext(Lcid, Compare, DatabaseOrder, Use, TextOrder, foldsAtOpen: true);
 
     private ExpressionContext? _folding;
 
@@ -77,6 +90,9 @@ public sealed class ExpressionContext
 
     /// <summary>The database sort order, required by <see cref="TextCompareMode.Database"/>.</summary>
     public TextCollation? DatabaseOrder { get; }
+
+    /// <summary>The host locale's text compare collation, required by <see cref="TextCompareMode.Text"/> and compare=1.</summary>
+    public TextCollation? TextOrder { get; }
 
     public ExpressionUse Use { get; }
 

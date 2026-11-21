@@ -72,6 +72,9 @@ public static class SqlMessages
     /// <summary>3078 for a FROM name that is no table or query (qualified.md "how a SELECT reports a failing expression").</summary>
     public static string NoInputTable(string name) => $"The Microsoft Access database engine cannot find the input table or query '{name}'. Make sure it exists and that its name is spelled correctly.";
 
+    /// <summary>3112 for a SELECT over a system table under default Admin (r-cat-1/catalog-accdb, catalog-mdb, r-cat-1b/rel-msys-rows).</summary>
+    public static string NoReadPermission(string name) => $"Record(s) cannot be read; no read permission on '{name}'.";
+
     /// <summary>3065 when Execute is called on a SELECT query (r-err-1b/sql-execute-select, r-sql-2-3/act-records-affected).</summary>
     public const string CannotExecuteSelect = "Cannot execute a select query.";
 

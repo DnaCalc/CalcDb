@@ -10,6 +10,7 @@ using CalcDb.Isam;
 using CalcDb.Storage;
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
+using CalcDb.Values.Windows;
 
 namespace CalcDb.Sql.Tests;
 
@@ -32,8 +33,11 @@ internal sealed class SqlFixture : ISqlDatabase
         _cache = new PageCache(_image, 1, D.PageSize, 256);
         _catalog = CatalogBootstrap.Open(_cache, D, _image.PageCount, out _)!;
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
-        Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query);
+        Context = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query, HostTextOrder(7177));
     }
+
+    internal static TextCollation? HostTextOrder(uint lcid) =>
+        OperatingSystem.IsWindows() ? WindowsTextCollation.For(lcid) : null;
 
     public ExpressionContext Context { get; }
 
@@ -65,6 +69,11 @@ internal sealed class SqlFixture : ISqlDatabase
     /// <summary>A saved query: an MSysObjects entry of type 5 in the Tables container.</summary>
     public bool IsQuery(string name) =>
         _catalog.TablesContainer is int container && _catalog.Entries.Any(e => e.ParentId == container && e.Type == 5 && string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    public bool IsSystemTable(string name, TableDefinition table) =>
+        table.TableType == 0x53
+        || (_catalog.LocalTables(D).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) is { } entry
+            && (entry.Flags & unchecked((int)0x80000000)) != 0);
 
     public RowReader? OpenRows(TableDefinition table, out string? failure)
     {

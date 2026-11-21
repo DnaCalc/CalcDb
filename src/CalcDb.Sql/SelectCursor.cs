@@ -97,9 +97,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private int _group = -1;
     private int _derivedRow = -1;
 
-    private SelectCursor(BoundSelect plan, RowReader?[] readers, Prepared prepared, bool forwardOnly)
+    private SelectCursor(BoundSelect plan, RowReader?[] readers, Prepared prepared, ResultKind kind)
     {
         _plan = plan;
+        Kind = kind;
         _readers = readers;
         _tuples = prepared.Tuples;
         _nullExtended = new bool[readers.Length];
@@ -114,6 +115,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         _derivedWidth = prepared.DerivedWidth;
         _ambiguity = prepared.Ambiguity;
         RecordCountOpen = prepared.RecordCountOpen;
+        Updatable = plan.TryUpdatable(kind, out string? updatableOpen);
+        UpdatableOpen = updatableOpen;
+        bool forwardOnly = kind == ResultKind.ForwardOnly;
         _producer = prepared.Rows is { } rows ? new ListSource(rows)
             : prepared.StreamIndex is { } nav ? new FilteredIndexScan(this, nav)
             : new FilteredScan(this);
@@ -127,6 +131,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     }
 
     public IReadOnlyList<ResultColumn> Columns => _plan.Columns;
+
+    /// <summary>The cursor kind this result was opened as.</summary>
+    public ResultKind Kind { get; }
 
     /// <summary>The expression context the plan was bound with.</summary>
     public ExpressionContext Context => _plan.Context;
@@ -144,6 +151,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// </summary>
     public string? RecordCountOpen { get; }
 
+    /// <summary>
+    /// Whether this SELECT cursor is updatable by query shape and cursor kind (CUR-PROV, SQL-DR-01..05), or null when
+    /// undecided (see <see cref="UpdatableOpen"/>). Callers still apply database/open-option read-only flags.
+    /// </summary>
+    public bool? Updatable { get; }
+
+    /// <summary>Named reason when <see cref="Updatable"/> is null, else null.</summary>
+    public string? UpdatableOpen { get; }
+
     /// <summary>A failure met while the last move produced rows (a WHERE that failed on a streamed row), else null.</summary>
     public SqlFailure? FetchFailure { get; private set; }
 
@@ -153,6 +169,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         open = _typeOpen[column];
         return _types[column];
     }
+
+    /// <summary>
+    /// Whether <paramref name="column"/> is data-updatable for this cursor's <see cref="Kind"/>, or null with
+    /// <paramref name="open"/> naming the unrecorded case.
+    /// </summary>
+    public bool? FieldDataUpdatable(int column, out string? open) => _plan.TryColumnDataUpdatable(column, Kind, out open);
 
     /// <summary>Open the plan over the database as <paramref name="kind"/>, with no parameter values.</summary>
     public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, out SqlFailure? failure) =>
@@ -214,7 +236,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             Close(readers, values);
             return null;
         }
-        var cursor = new SelectCursor(plan, readers, prepared, kind == ResultKind.ForwardOnly);
+        var cursor = new SelectCursor(plan, readers, prepared, kind);
         failure = cursor.FetchFailure;
         if (failure is not null)
         {
@@ -608,7 +630,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             failure = null;
-            bool streams = !plan.IsUnion && !hasSubquery && plan.Tree is null && !plan.Grouped && plan.Order.Count == 0 && plan.Predicate == SelectPredicate.All && plan.Top is null;
+            bool streams = !plan.IsUnion && !hasSubquery && plan.Tree is null && !plan.Grouped && plan.Order.Count == 0 && plan.Predicate != SelectPredicate.Distinct && plan.Top is null;
             List<ResultRow>? rows = null;
             IndexNavigator? streamIndex = null;
             Ambiguity? ambiguity = null;
