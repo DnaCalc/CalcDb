@@ -8,10 +8,12 @@ namespace CalcDb.Catalog;
 
 /// <summary>
 /// The route a catalog change came by. ACE writes SQL and DAO differently for the same table (evidence/r-q11-ddl-closure:
-/// create-one-long by <c>Execute</c>, append-dao by <c>TableDefs.Append</c>): the DAO route stores a property blob on
-/// the MSysObjects row, a later DateUpdate, no collation on a Long column, and commits twice. The ADO route
-/// (<c>Microsoft.ACE.OLEDB.12.0</c>, evidence/r-q21-ddl-types: col-long-ado, col-counter-seed-inc-ado, col-decimal-ado*)
-/// writes the same bytes as SQL and additionally admits <see cref="NewFieldType.Decimal"/>.
+/// create-one-long by <c>Execute</c>, append-dao by <c>TableDefs.Append</c>; evidence/r-q15-ddl-open/lv-dao-fields-*;
+/// evidence/r-q26-column-order/dao-*): the DAO route stores a property blob on the MSysObjects row in definition order,
+/// a later DateUpdate, and no collation on a Long column, with N+1 commits during Append for N fields (the intermediate
+/// row states are not recorded).
+/// The ADO route (<c>Microsoft.ACE.OLEDB.12.0</c>, evidence/r-q21-ddl-types: col-long-ado, col-counter-seed-inc-ado,
+/// col-decimal-ado*) writes the same bytes as SQL and additionally admits <see cref="NewFieldType.Decimal"/>.
 /// </summary>
 public enum SchemaRoute : byte
 {
@@ -69,6 +71,27 @@ public sealed record NewIndex(
     bool IgnoreNull = false,
     IReadOnlyList<bool>? Descending = null);
 
+/// <summary>How a new table's field name compares with the fields before it, as far as the records decide (R-CAT-1 CAT-B).</summary>
+public enum FieldNameClash : byte
+{
+    /// <summary>Distinct from every earlier field.</summary>
+    None,
+
+    /// <summary>
+    /// The name of an earlier field, exactly or up to the case of ASCII letters: SQL CREATE TABLE fails 3380
+    /// (evidence/r-def-expr-sql/ddl-column-clauses Cc20 <c>A, A</c> and Cc21 <c>A, a</c>; evidence/r-cat-1/names C2
+    /// <c>a, A</c>), attached <c>TableDef.Fields.Append</c> fails 3191
+    /// (evidence/r-q-cat-txn-lock/cat-b-names-fields-indexes-relations <c>Aa, aA</c>).
+    /// </summary>
+    Duplicate,
+
+    /// <summary>
+    /// Possibly the name of an earlier field under a comparison no record decides for the fields of a new table:
+    /// see <see cref="SchemaWriter.FieldNameClashOf"/>.
+    /// </summary>
+    Undecided,
+}
+
 /// <summary>A typed CREATE TABLE request over the catalog mutation service (II-11 §28, F-114; II-06 catalog mutation).</summary>
 public sealed record CreateTableRequest(string Name, IReadOnlyList<NewField> Fields, SchemaRoute Route, IReadOnlyList<NewIndex>? Indexes = null)
 {
@@ -99,7 +122,7 @@ public readonly record struct SchemaOutcome(SchemaRefusal? Refused, AcceptOutcom
 /// is transactional and published like any other (R-TXN-1 TXN-DDL; <see cref="TransactionCoordinator.AcceptSchemaChange"/>).
 /// New pages come from the one <see cref="PageAllocator"/>, the catalog rows go in and out through the one row compiler
 /// (<see cref="SameWidthWriter"/>), and the TableDef through the one <see cref="TableDefEncoder"/>. Every byte rule cites
-/// the record it was read from (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types); what no record decides is refused by name.
+/// the record it was read from (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types, evidence/r-q26-column-order); what no record decides is refused by name.
 /// </summary>
 public sealed class SchemaWriter
 {
@@ -149,6 +172,12 @@ public sealed class SchemaWriter
     /// </summary>
     private static readonly StoredProperty DaoFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x00]);
 
+    /// <summary>The most fields a DAO TableDefs.Append writes: its per-field commits are recorded up to six (r-q15-ddl-open/lv-dao-fields-6).</summary>
+    private const int MaxDaoAppendFields = 6;
+
+    /// <summary>The first-field name length from which a DAO Append of two or more fields is refused (r-q15-ddl-open/lv-dao-name-8 has one field).</summary>
+    private const int MinUnrecordedDaoFirstName = 8;
+
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
     private readonly CatalogSnapshot _catalog;
@@ -168,8 +197,9 @@ public sealed class SchemaWriter
     /// <summary>
     /// The object-name rule of R-CAT-1 CAT-B as recorded for tables (evidence/r-cat-1/names, r-dao-1-err-1/err-invalid-names
     /// and draft-tabledef-field): an empty name, a leading space, and <c>. ! [ ]</c> or a backquote anywhere are 3125; a
-    /// trailing space is kept. Duplicates compare after composition (FormC) and without case: precomposed and
-    /// decomposed <c>é</c>, and <c>é</c>/<c>É</c>, are one name; <c>ä</c> and <c>é</c> are two.
+    /// trailing space is kept. Table names compare after composition (FormC) and without case: precomposed and
+    /// decomposed <c>Té</c>, and <c>Té</c>/<c>TÉ</c>, are one name; <c>Tä</c> and <c>Té</c> are two (r-cat-1/names).
+    /// Field names follow <see cref="FieldNameClashOf"/>.
     /// </summary>
     public static bool IsValidName(string name) =>
         name.Length > 0 && name[0] != ' ' && name.IndexOfAny(['.', '!', '[', ']', '`']) < 0;
@@ -201,11 +231,18 @@ public sealed class SchemaWriter
         }
         for (int i = 1; i < request.Fields.Count; i++)
         {
-            // Column blocks: ACE's system tables list them in name order with physical numbers in definition order; for
-            // the recorded user tables the two orders agree (n, t), so no record decides a table where they differ.
-            if (string.Compare(request.Fields[i - 1].Name, request.Fields[i].Name, StringComparison.OrdinalIgnoreCase) >= 0)
+            string name = request.Fields[i].Name;
+            switch (FieldNameClashOf(request.Fields.Take(i).Select(f => f.Name), name, out string? undecided))
             {
-                return new SchemaRefusal(null, $"fields {request.Fields[i - 1].Name} and {request.Fields[i].Name} are not in name order: the column-block order ACE writes then is not recorded");
+                case FieldNameClash.Duplicate when request.Route == SchemaRoute.Sql:
+                    // The SQL route's binder decides first with the same rule (DdlBinder); this is the writer's own guard.
+                    return new SchemaRefusal(3380, null);
+                case FieldNameClash.Duplicate:
+                    // Draft TableDefs.Append (evidence/r-dao-1-err-1/draft-tabledef-field fails 3125 earlier) and ADO
+                    // CREATE TABLE have no record of a duplicate field's error; 3191 is attached Fields.Append's.
+                    return new SchemaRefusal(null, $"duplicate field {name} on the {request.Route} route: ACE's error is recorded for SQL CREATE TABLE (3380) and attached TableDef.Fields.Append (3191: evidence/r-q-cat-txn-lock/cat-b-names-fields-indexes-relations), not for draft TableDefs.Append or ADO");
+                case FieldNameClash.Undecided:
+                    return new SchemaRefusal(null, undecided);
             }
         }
         int counterCount = 0;
@@ -215,7 +252,9 @@ public sealed class SchemaWriter
         {
             if (request.Route == SchemaRoute.Dao && f.Type != NewFieldType.Long)
             {
-                return new SchemaRefusal(null, $"DAO-appended {f.Type} field {f.Name}: only a Long field's TableDef and property bytes are recorded (r-q11 append-dao)");
+                return new SchemaRefusal(null, f.Type == NewFieldType.Text
+                    ? $"DAO-appended Text field {f.Name}: recorded (r-q26 dao-ba-text, dao-bca-mixed, dao-fixed-var-ba, dao-var-fixed-ba: TypeInfo 09 04 00 00, two properties per Text column), not yet implemented"
+                    : $"DAO-appended {f.Type} field {f.Name}: the DAO route writes only Long fields (r-q11 append-dao, r-q15 lv-dao-*, r-q26 dao-*-long)");
             }
             switch (f.Type)
             {
@@ -305,6 +344,27 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"{lvalCount} LVAL columns exceed single-page map capacity ({MaxSinglePageLvalColumns})");
         }
+        if (request.Route == SchemaRoute.Dao)
+        {
+            // One commit per field is recorded for N = 1, 2, 3, 4 and 6 (r-q15 lv-dao-fields-*, r-q26 dao-*); further
+            // commits' LVAL slots fill page 44 near N = 17-18, and ACE's new page and free map then are not recorded.
+            if (request.Fields.Count > MaxDaoAppendFields)
+            {
+                return new SchemaRefusal(null, $"DAO TableDefs.Append of {request.Fields.Count} fields: the per-field commits are recorded for at most {MaxDaoAppendFields} (r-q15-ddl-open/lv-dao-fields-6)");
+            }
+            // An 8-character name is recorded only as a table's one field (r-q15 lv-dao-name-8); the multi-field records
+            // start with names of at most 2 characters, whose first LvProp commit stays inline on page 17.
+            if (request.Fields.Count >= 2 && request.Fields[0].Name.Length >= MinUnrecordedDaoFirstName)
+            {
+                return new SchemaRefusal(null, $"DAO TableDefs.Append of {request.Fields.Count} fields whose first field {request.Fields[0].Name} has {request.Fields[0].Name.Length} characters: the LvProp commits of such a table are not recorded (r-q15 lv-dao-name-8 has one field)");
+            }
+            PropertyMap[] allMaps = [.. request.Fields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [DaoFieldRequired]))];
+            int blobBytes = PropertyBlob.Encode(allMaps).Length;
+            if (blobBytes > LongValuePlan.SingleRowPayloadMax)
+            {
+                return new SchemaRefusal(null, $"DAO table property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
+            }
+        }
         if (request.AllIndexes.Count > 0)
         {
             if (lvalCount > 0)
@@ -327,11 +387,14 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// CREATE TABLE through <paramref name="workspace"/>'s coordinator: checked (<see cref="Check"/>), compiled on the
-    /// file's participant and accepted as one catalog change (published at once outside a level). On the DAO route ACE
-    /// commits twice for one Append (evidence/r-q11-ddl-closure/append-dao: the page-0 counter ends at 3 where the SQL
-    /// route's create-one-long ends at 2, and DateUpdate is later than DateCreate): its second commit, which stores the
-    /// property blob and the later date, is published here as a counter commit after the one publication that wrote the
-    /// final row. The pages are the same; the order of ACE's two writes is not recorded.
+    /// file's participant and accepted as a catalog change (published at once outside a level). On the DAO route ACE
+    /// commits the table row first without <c>LvProp</c>, then once per field in definition order, each commit storing
+    /// <c>LvProp</c> (<c>Required = False</c>) for the fields so far and the later <c>DateUpdate</c>
+    /// (evidence/r-q11-ddl-closure/append-dao, evidence/r-q15-ddl-open/lv-dao-name-8, evidence/r-q15-ddl-open/lv-dao-fields-*,
+    /// evidence/r-q15-ddl-open/columns-z-a-dao, evidence/r-q26-column-order/dao-*): N+1 commits during Append for N Long
+    /// fields, N+2 on page 0 with the closing commit. The records keep the pages after Close; the intermediate row states
+    /// are not recorded. A DAO Append inside BeginTrans is refused by name: its N+1 frames joining the level are not
+    /// recorded (task 4nfc).
     /// </summary>
     public SchemaOutcome CreateTable(TransactionCoordinator workspace, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits)
     {
@@ -339,14 +402,50 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(refused, default, _pageCount);
         }
-        ulong extent = _pageCount;
-        AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileCreateTable(p, request, dateCreateBits, dateUpdateBits, out extent));
-        if (Published(accepted) && request.Route == SchemaRoute.Dao && workspace.Depth == 0)
+        if (request.Route == SchemaRoute.Dao && workspace.Depth > 0)
         {
-            (MutationOpen open, string? detail) = workspace.PublishCounterCommit(_cache);
-            accepted = accepted with { Open = open, Detail = detail };
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO TableDefs.Append inside BeginTrans: how its per-field commits join the level is not recorded (task 4nfc)"), default, _pageCount);
         }
-        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount);
+        ulong extent = _pageCount;
+        RowId objectRow = default;
+        ulong initialUpdateBits = request.Route == SchemaRoute.Dao ? dateCreateBits : dateUpdateBits;
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileCreateTable(p, request, dateCreateBits, initialUpdateBits, out objectRow, out extent));
+        if (!accepted.Accepted)
+        {
+            return new SchemaOutcome(null, accepted, _pageCount);
+        }
+        if (!Published(accepted) || request.Route != SchemaRoute.Dao)
+        {
+            return new SchemaOutcome(null, accepted, extent);
+        }
+        for (int k = 1; k <= request.Fields.Count; k++)
+        {
+            int fieldCount = k;
+            ulong published = extent;
+            AcceptOutcome step = workspace.AcceptSchemaChange(
+                _cache,
+                ObjectSemantics,
+                p => CompileDaoFieldProperties(p, objectRow, request.Fields, fieldCount, dateUpdateBits, published, out extent));
+            if (!Published(step))
+            {
+                // The table row and the commits before this one are published: the table exists, and the outcome names
+                // the step that failed with the extent the file has now.
+                string why = step.Detail ?? step.Error?.Describe() ?? step.Open.ToString();
+                return new SchemaOutcome(
+                    null,
+                    accepted with
+                    {
+                        Error = step.Error,
+                        Open = step.Open == MutationOpen.None && step.Error is null ? MutationOpen.Publication : step.Open,
+                        Detail = $"DAO TableDefs.Append of {request.Name}: commit {k + 1} of {request.Fields.Count + 1} (LvProp through field {request.Fields[k - 1].Name}) failed after the table row was published: {why}",
+                    },
+                    Math.Max(published, _cache.KnownExtentPages));
+            }
+        }
+        return new SchemaOutcome(null, accepted, extent);
     }
 
     /// <summary>
@@ -431,8 +530,9 @@ public sealed class SchemaWriter
     /// Flags 0, the two dates, Owner the masked Admin SID) and its two MSysACEs rows. The dates are the OLE DATE bits of
     /// the clock readings (per run in ACE too: create-one-long a1 against a2 differ only there).
     /// </summary>
-    private CompiledChange CompileCreateTable(FileParticipant p, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits, out ulong extent)
+    private CompiledChange CompileCreateTable(FileParticipant p, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits, out RowId objectRow, out ulong extent)
     {
+        objectRow = default;
         extent = _pageCount;
         var work = new Work(p);
         var allocator = new PageAllocator(_cache, _d, _pageCount);
@@ -491,12 +591,7 @@ public sealed class SchemaWriter
         Set(objects, row, "DateCreate", new NativeValue(NativeKind.DateTime) { Bits = dateCreateBits });
         Set(objects, row, "DateUpdate", new NativeValue(NativeKind.DateTime) { Bits = dateUpdateBits });
         Set(objects, row, "Owner", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(DefaultAdminSecurity.Admin, keystream) });
-        if (request.Route == SchemaRoute.Dao)
-        {
-            PropertyMap[] maps = [.. request.Fields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [DaoFieldRequired]))];
-            Set(objects, row, "LvProp", new NativeValue(NativeKind.LongBinary) { Bytes = PropertyBlob.Encode(maps) });
-        }
-        if (!work.Insert(this, objects, row))
+        if (!work.Insert(this, objects, row, out objectRow))
         {
             return work.NotWritten();
         }
@@ -513,11 +608,53 @@ public sealed class SchemaWriter
             Set(aces, ace, "SID", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(sid, keystream) });
             Set(aces, ace, "ACM", Long(acm));
             Set(aces, ace, "FInheritable", new NativeValue(NativeKind.Boolean) { Boolean = false });
-            if (!work.Insert(this, aces, ace))
+            if (!work.Insert(this, aces, ace, out _))
             {
                 return work.NotWritten();
             }
         }
+        extent = PageAllocator.ExtentOf(_cache, extent, p.Overlay);
+        return work.Change(_cache);
+    }
+
+    /// <summary>
+    /// Compile one DAO field-property commit on the newly created table's MSysObjects row
+    /// (evidence/r-q11-ddl-closure/append-dao, evidence/r-q15-ddl-open/lv-dao-name-8,
+    /// evidence/r-q15-ddl-open/lv-dao-fields-*, evidence/r-q15-ddl-open/columns-z-a-dao,
+    /// evidence/r-q26-column-order/dao-*): writes <c>LvProp</c> for the first <paramref name="fieldCount"/> fields in
+    /// definition order (<c>Required = False</c> each) and sets <c>DateUpdate</c>.
+    /// </summary>
+    private CompiledChange CompileDaoFieldProperties(
+        FileParticipant p,
+        RowId objectRow,
+        IReadOnlyList<NewField> fields,
+        int fieldCount,
+        ulong dateUpdateBits,
+        ulong currentExtent,
+        out ulong extent)
+    {
+        extent = currentExtent;
+        var work = new Work(p);
+        TableDefinition objects = _catalog.ObjectTable;
+        var source = new PageSource(_cache, p.Overlay);
+        using RowView? resolved = RowResolver.Resolve(source, _d, objectRow, out TraversalFailure? failure);
+        if (resolved is not { } row)
+        {
+            return NotWritten($"MSysObjects row {objectRow} cannot be read: {failure?.Predicate ?? "deleted"}");
+        }
+        NativeValue[] values = [.. objects.Columns.Select(c => FieldDecoder.Read(row, objects, c, source, _d))];
+        Set(objects, values, "DateUpdate", new NativeValue(NativeKind.DateTime) { Bits = dateUpdateBits });
+        PropertyMap[] maps = new PropertyMap[fieldCount];
+        for (int i = 0; i < fieldCount; i++)
+        {
+            maps[i] = new PropertyMap(PropertySectionKind.ColumnValues, fields[i].Name, [DaoFieldRequired]);
+        }
+        Set(objects, values, "LvProp", new NativeValue(NativeKind.LongBinary) { Bytes = PropertyBlob.Encode(maps) });
+        if (!work.Update(this, objects, objectRow, values, currentExtent))
+        {
+            return work.NotWritten();
+        }
+        extent = PageAllocator.ExtentOf(_cache, currentExtent, p.Overlay);
         return work.Change(_cache);
     }
 
@@ -637,7 +774,8 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// The new table's TableDef (r-q11 create-one-long and create-two-columns; r-q21-ddl-types col-*): type 4E, no rows,
+    /// The new table's TableDef (r-q11 create-one-long and create-two-columns; r-q21-ddl-types col-*;
+    /// evidence/r-q26-column-order): type 4E, no rows,
     /// the owned and free maps in rows 0 and 1 of its map page, one column block per field in definition order with its
     /// physical number, column id and variable index (a variable column's ordinal among the variable ones, a fixed column's
     /// count of variable ones before it), fixed offsets in definition order (YesNo stays at FixedOffset 0 and advances by 0),
@@ -875,6 +1013,99 @@ public sealed class SchemaWriter
             && string.Equals(e.Name.Normalize(System.Text.NormalizationForm.FormC), composed, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// The one field-name rule of a new table (R-CAT-1 CAT-B), for the SQL binder and this writer alike: how
+    /// <paramref name="name"/> compares with the <paramref name="earlier"/> fields. <see cref="FieldNameClash.Duplicate"/>
+    /// is a name equal to an earlier one exactly or up to the case of ASCII letters, the only field pairs recorded
+    /// (Cc20 <c>A, A</c>, Cc21 <c>A, a</c>, C2 <c>a, A</c>, <c>Aa, aA</c>). <see cref="FieldNameClash.Undecided"/>, with
+    /// <paramref name="undecided"/> naming the pair, is any other pair that might be one name: equal once decomposed and
+    /// stripped of non-spacing marks, without case (non-ASCII case <c>Fé/FÉ</c>, NFC/NFD <c>Fé/Fe&#x301;</c>,
+    /// accent-only <c>e/é</c>), or of one composed length and equal up to ASCII case at every place where both have an
+    /// ASCII character (a different non-ASCII letter in one place: <c>Tä/Té</c>, and the letters without a canonical
+    /// decomposition, <c>o/ø</c>, <c>d/đ</c>). For fields those pairs are recorded only by attached
+    /// <c>Fields.Append</c> (<c>Fé/FÉ</c> 3191); the NFC/NFD and <c>Tä/Té</c> records are table names
+    /// (r-cat-1/names). Pairs of different lengths after composition that a collation might equate (<c>æ/ae</c>,
+    /// <c>ß/ss</c>) count as distinct; no record tests them (R-CAT-1 CAT-B Open).
+    /// </summary>
+    public static FieldNameClash FieldNameClashOf(IEnumerable<string> earlier, string name, out string? undecided)
+    {
+        undecided = null;
+        string? possible = null;
+        foreach (string e in earlier)
+        {
+            if (AsciiCaseEquals(e, name))
+            {
+                return FieldNameClash.Duplicate;
+            }
+            if (possible is null && MightBeOneName(e, name))
+            {
+                possible = e;
+            }
+        }
+        if (possible is null)
+        {
+            return FieldNameClash.None;
+        }
+        undecided = $"fields {possible} and {name}: whether ACE takes them for one field name is not recorded (field duplicates are recorded for exact and ASCII-case pairs only: r-def-expr-sql/ddl-column-clauses Cc20, Cc21; r-cat-1/names C2; R-CAT-1 CAT-B Open)";
+        return FieldNameClash.Undecided;
+    }
+
+    private static bool AsciiCaseEquals(string a, string b)
+    {
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+        for (int i = 0; i < a.Length; i++)
+        {
+            char x = a[i];
+            char y = b[i];
+            if (x != y && !(char.IsAsciiLetter(x) && char.IsAsciiLetter(y) && (x | 0x20) == (y | 0x20)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool MightBeOneName(string a, string b)
+    {
+        if (string.Equals(StripNonSpacingMarks(a), StripNonSpacingMarks(b), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        string ca = a.Normalize(System.Text.NormalizationForm.FormC);
+        string cb = b.Normalize(System.Text.NormalizationForm.FormC);
+        if (ca.Length != cb.Length)
+        {
+            return false;
+        }
+        for (int i = 0; i < ca.Length; i++)
+        {
+            char x = ca[i];
+            char y = cb[i];
+            if (char.IsAscii(x) && char.IsAscii(y) && x != y && !(char.IsAsciiLetter(x) && char.IsAsciiLetter(y) && (x | 0x20) == (y | 0x20)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static string StripNonSpacingMarks(string value)
+    {
+        string decomposed = value.Normalize(System.Text.NormalizationForm.FormD);
+        System.Text.StringBuilder sb = new(decomposed.Length);
+        foreach (char ch in decomposed)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(ch);
+            }
+        }
+        return sb.ToString();
+    }
+
     private TableDefinition? Table(CatalogEntry entry, out string? failure)
     {
         TableDefSegmentView? stream = TableDefSegmentView.Open((uint)entry.Id, page => PinCopy(page), _d, 16, out failure);
@@ -923,7 +1154,8 @@ public sealed class SchemaWriter
 
     private static CompiledChange NotWritten(string? why) => new(null, why ?? "the catalog change could not be compiled");
 
-    private SameWidthWriter Writer(TableDefinition table) => new(new TableFootprints(_cache, _d, table, _pageCount));
+    private SameWidthWriter Writer(TableDefinition table, ulong? extent = null) =>
+        new(new TableFootprints(_cache, _d, table, extent ?? _pageCount));
 
     /// <summary>
     /// One catalog change being compiled on its participant: each edit is applied as it is made, so the next compiled
@@ -964,10 +1196,29 @@ public sealed class SchemaWriter
         }
 
         /// <summary>Insert one catalog row through the one row compiler.</summary>
-        public bool Insert(SchemaWriter owner, TableDefinition table, NativeValue[] values)
+        public bool Insert(SchemaWriter owner, TableDefinition table, NativeValue[] values, out RowId inserted)
+        {
+            inserted = default;
+            using MutationSemantics semantics = MutationSemantics.Compile(table.FirstPage.ToString(), table, null, NoRules.Instance, owner._d.IndexDescriptor);
+            CompiledChange compiled = owner.Writer(table).CompileInsert(semantics, values, null, participant.Overlay);
+            if (!Take(compiled, $"a row of TableDef {table.FirstPage}"))
+            {
+                return false;
+            }
+            if (compiled.Change!.InsertedRow is not { } root)
+            {
+                _failure = $"a row of TableDef {table.FirstPage}: insert returned no RowId";
+                return false;
+            }
+            inserted = root;
+            return true;
+        }
+
+        /// <summary>Update one catalog row through the one row compiler.</summary>
+        public bool Update(SchemaWriter owner, TableDefinition table, RowId root, NativeValue[] values, ulong extent)
         {
             using MutationSemantics semantics = MutationSemantics.Compile(table.FirstPage.ToString(), table, null, NoRules.Instance, owner._d.IndexDescriptor);
-            return Take(owner.Writer(table).CompileInsert(semantics, values, null, participant.Overlay), $"a row of TableDef {table.FirstPage}");
+            return Take(owner.Writer(table, extent).Compile(semantics, root, values, participant.Overlay), $"row {root} of TableDef {table.FirstPage}");
         }
 
         /// <summary>Delete one catalog row through the one row compiler.</summary>
