@@ -27,6 +27,19 @@ public static partial class CompareSet
         public bool Accepted => Status == nameof(ComparisonStatus.AcceptedDifference);
     }
 
+    /// <summary>A compare-set question whose verdict depends on a real-time boundary (explicitly listed in <c>probes/compare-set.json</c>).</summary>
+    public sealed record TimingBoundary(string CaseId, string Reason);
+
+    /// <summary>The standing compare set's definition (<c>probes/compare-set.json</c>).</summary>
+    public sealed record Definition
+    {
+        public required IReadOnlyList<string> Folders { get; init; }
+
+        public string? Note { get; init; }
+
+        public IReadOnlyList<TimingBoundary> TimingBoundaries { get; init; } = [];
+    }
+
     /// <summary>A run of the compare set: the rule, the candidate module and source it ran, and one entry per question.</summary>
     public sealed record Run(string Name, string Rule, string CandidateModuleSha256, string Source, DateTimeOffset At, IReadOnlyList<Entry> Entries);
 
@@ -142,24 +155,46 @@ public static partial class CompareSet
 
         /// <summary>In the earlier run only.</summary>
         Removed,
+
+        /// <summary>
+        /// A verdict flip (<c>Matched</c>/<c>AcceptedDifference</c> &lt;-&gt; <c>Mismatched</c>) of a question explicitly
+        /// listed in <c>probes/compare-set.json</c> <c>timingBoundaries</c>; still counted at its actual verdict in TOTAL,
+        /// reported apart from <see cref="Gained"/> and <see cref="Lost"/> with its reason.
+        /// </summary>
+        TimingBoundary,
     }
 
-    public sealed record Change(ChangeKind Kind, string CaseId, Entry? Before, Entry? After);
+    public sealed record Change(ChangeKind Kind, string CaseId, Entry? Before, Entry? After, string? Reason = null);
 
     /// <summary>Per-question changes from <paramref name="before"/> to <paramref name="after"/>, in case order.</summary>
-    public static IReadOnlyList<Change> Diff(Run before, Run after)
+    public static IReadOnlyList<Change> Diff(Run before, Run after, IReadOnlyList<TimingBoundary>? timingBoundaries = null)
     {
         var old = before.Entries.ToDictionary(e => e.CaseId, StringComparer.Ordinal);
         var now = after.Entries.ToDictionary(e => e.CaseId, StringComparer.Ordinal);
+        Dictionary<string, string>? boundaryReasons = null;
+        if (timingBoundaries is { Count: > 0 })
+        {
+            boundaryReasons = new Dictionary<string, string>(timingBoundaries.Count, StringComparer.Ordinal);
+            foreach (TimingBoundary tb in timingBoundaries)
+            {
+                boundaryReasons[tb.CaseId] = tb.Reason;
+            }
+        }
         var changes = new List<Change>();
         foreach (string id in old.Keys.Union(now.Keys).Order(StringComparer.Ordinal))
         {
             Entry? b = old.GetValueOrDefault(id);
             Entry? a = now.GetValueOrDefault(id);
+            string? boundaryReason = null;
+            bool isTimingBoundary = b is not null && a is not null
+                && boundaryReasons is not null
+                && boundaryReasons.TryGetValue(id, out boundaryReason)
+                && IsTimingBoundaryFlip(b, a);
             ChangeKind? kind = (b, a) switch
             {
                 (null, _) => ChangeKind.Added,
                 (_, null) => ChangeKind.Removed,
+                _ when isTimingBoundary => ChangeKind.TimingBoundary,
                 _ when Good(a) && !Good(b) => ChangeKind.Gained,
                 _ when Good(b) && !Good(a) => ChangeKind.Lost,
                 _ when a.Status != b.Status => ChangeKind.Status,
@@ -169,11 +204,15 @@ public static partial class CompareSet
             };
             if (kind is { } k)
             {
-                changes.Add(new Change(k, id, b, a));
+                changes.Add(new Change(k, id, b, a, k == ChangeKind.TimingBoundary ? boundaryReason : null));
             }
         }
         return changes;
     }
+
+    private static bool IsTimingBoundaryFlip(Entry before, Entry after) =>
+        (Good(before) && after.Status == nameof(ComparisonStatus.Mismatched))
+        || (before.Status == nameof(ComparisonStatus.Mismatched) && Good(after));
 
     /// <summary>
     /// Count of questions whose status, difference count and first-difference stop are unchanged, differing only in the
@@ -255,7 +294,7 @@ public static partial class CompareSet
             sb.Append(CultureInfo.InvariantCulture, $"{mark} {folder,-24} {b.Count(Good),3}/{b.Length,-3} -> {a.Count(Good),3}/{a.Length,-3}\n");
         }
         sb.Append(CultureInfo.InvariantCulture, $"  {"TOTAL",-24} {before.Entries.Count(Good),3}/{before.Entries.Count,-3} -> {after.Entries.Count(Good),3}/{after.Entries.Count,-3} (matched or accepted / questions)\n");
-        foreach (IGrouping<ChangeKind, Change> group in changes.GroupBy(c => c.Kind).OrderBy(g => g.Key))
+        foreach (IGrouping<ChangeKind, Change> group in changes.Where(c => c.Kind != ChangeKind.TimingBoundary).GroupBy(c => c.Kind).OrderBy(g => g.Key))
         {
             sb.Append(CultureInfo.InvariantCulture, $"{group.Key} ({group.Count()}):\n");
             foreach (Change c in group)
@@ -268,6 +307,17 @@ public static partial class CompareSet
                     _ => $"{c.Before!.Status} -> {c.After!.Status} {c.After.First}",
                 };
                 sb.Append(CultureInfo.InvariantCulture, $"  {c.CaseId}: {line}\n");
+            }
+        }
+        Change[] timing = [.. changes.Where(c => c.Kind == ChangeKind.TimingBoundary)];
+        if (timing.Length > 0)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"timing boundary (counted in TOTAL, not in gained/lost): {timing.Length}\n");
+            foreach (Change c in timing)
+            {
+                string first = c.After!.First.Length > 0 ? " " + c.After.First : "";
+                string reason = string.IsNullOrEmpty(c.Reason) ? "" : $" ({c.Reason})";
+                sb.Append(CultureInfo.InvariantCulture, $"  {c.CaseId}: {c.Before!.Status} -> {c.After.Status}{first}{reason}\n");
             }
         }
         if (changes.Count == 0)

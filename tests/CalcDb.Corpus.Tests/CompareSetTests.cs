@@ -152,4 +152,117 @@ public sealed class CompareSetTests
         string text = CompareSet.RenderDiff(before, after, changes);
         Assert.DoesNotContain("same stop, new file hash:", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Diff_counts_timing_boundary_verdict_flips_apart_from_gained_and_lost_while_TOTAL_keeps_actual_verdicts()
+    {
+        const string reason = "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND";
+        CompareSet.TimingBoundary[] boundaries =
+        [
+            new("r-q8-header-counter/two-deletes-470ms-apart", reason),
+            new("r-q8-header-counter/two-deletes-485ms-apart", reason),
+            new("r-q8-header-counter/two-deletes-500ms-apart", reason),
+        ];
+
+        var before = R("b",
+            E("r-q8-header-counter/two-deletes-470ms-apart", "Matched", folder: "r-q8-header-counter"),
+            E("r-q8-header-counter/two-deletes-485ms-apart", "Mismatched", "11 $.invokeHresult [call]: expected 0 actual -2147352567", 1, folder: "r-q8-header-counter"),
+            E("r-q8-header-counter/two-deletes-500ms-apart", "AcceptedDifference", folder: "r-q8-header-counter"));
+        var after = R("a",
+            E("r-q8-header-counter/two-deletes-470ms-apart", "Mismatched", "11 $.files[0].sha256 [files]: expected \"aa\" actual \"bb\"", 1, folder: "r-q8-header-counter"),
+            E("r-q8-header-counter/two-deletes-485ms-apart", "Matched", folder: "r-q8-header-counter"),
+            E("r-q8-header-counter/two-deletes-500ms-apart", "Mismatched", "12 $.files[0].sha256 [files]: expected \"cc\" actual \"dd\"", 1, folder: "r-q8-header-counter"));
+
+        IReadOnlyList<CompareSet.Change> changes = CompareSet.Diff(before, after, boundaries);
+        Assert.Equal(3, changes.Count);
+        Assert.All(changes, c =>
+        {
+            Assert.Equal(CompareSet.ChangeKind.TimingBoundary, c.Kind);
+            Assert.Equal(reason, c.Reason);
+        });
+
+        string text = CompareSet.RenderDiff(before, after, changes);
+        Assert.Contains("* r-q8-header-counter        2/3   ->   1/3", text, StringComparison.Ordinal);
+        Assert.Contains("  TOTAL                      2/3   ->   1/3   (matched or accepted / questions)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Gained (", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Lost (", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("no question changed", text, StringComparison.Ordinal);
+        Assert.Contains("timing boundary (counted in TOTAL, not in gained/lost): 3\n", text, StringComparison.Ordinal);
+        Assert.Contains($"  r-q8-header-counter/two-deletes-470ms-apart: Matched -> Mismatched 11 $.files[0].sha256 [files]: expected \"aa\" actual \"bb\" ({reason})\n", text, StringComparison.Ordinal);
+        Assert.Contains($"  r-q8-header-counter/two-deletes-485ms-apart: Mismatched -> Matched ({reason})\n", text, StringComparison.Ordinal);
+        Assert.Contains($"  r-q8-header-counter/two-deletes-500ms-apart: AcceptedDifference -> Mismatched 12 $.files[0].sha256 [files]: expected \"cc\" actual \"dd\" ({reason})\n", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_keeps_unlisted_changes_and_non_mismatch_boundary_changes_in_their_own_groups()
+    {
+        const string reason = "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND";
+        CompareSet.TimingBoundary[] boundaries =
+        [
+            new("f/tb-flip", reason),
+            new("f/tb-crash", reason),
+            new("f/tb-missing", reason),
+            new("f/tb-moved", reason),
+        ];
+
+        var before = R("b",
+            E("f/tb-flip", "Matched"),
+            E("f/tb-crash", "Matched"),
+            E("f/tb-missing", "Matched"),
+            E("f/tb-moved", "Mismatched", "10 a", 1),
+            E("f/unlisted-gain", "Mismatched", "x", 1),
+            E("f/unlisted-loss", "Matched"));
+        var after = R("a",
+            E("f/tb-flip", "Mismatched", "11 b", 1),
+            E("f/tb-crash", CompareSet.CandidateIncomplete, "candidate attempt Aborted"),
+            E("f/tb-missing", "Missing"),
+            E("f/tb-moved", "Mismatched", "12 c", 1),
+            E("f/unlisted-gain", "Matched"),
+            E("f/unlisted-loss", "Mismatched", "y", 1));
+
+        IReadOnlyList<CompareSet.Change> changes = CompareSet.Diff(before, after, boundaries);
+        var byId = changes.ToDictionary(c => c.CaseId);
+        Assert.Equal(CompareSet.ChangeKind.TimingBoundary, byId["f/tb-flip"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Lost, byId["f/tb-crash"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Lost, byId["f/tb-missing"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Moved, byId["f/tb-moved"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Gained, byId["f/unlisted-gain"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Lost, byId["f/unlisted-loss"].Kind);
+
+        string text = CompareSet.RenderDiff(before, after, changes);
+        Assert.Contains("Gained (1):\n", text, StringComparison.Ordinal);
+        Assert.Contains("Lost (3):\n", text, StringComparison.Ordinal);
+        Assert.Contains("Moved (1):\n", text, StringComparison.Ordinal);
+        Assert.Contains("timing boundary (counted in TOTAL, not in gained/lost): 1\n", text, StringComparison.Ordinal);
+        Assert.Contains($"  f/tb-flip: Matched -> Mismatched 11 b ({reason})\n", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compare_set_json_parses_declared_timing_boundaries()
+    {
+        string repo = RepoRoot();
+        CompareSet.Definition def = EvidenceJson.Read<CompareSet.Definition>(Path.Combine(repo, "probes", "compare-set.json"));
+        Assert.NotEmpty(def.Folders);
+        Assert.Equal(
+            [
+                "r-q8-header-counter/two-deletes-470ms-apart",
+                "r-q8-header-counter/two-deletes-485ms-apart",
+                "r-q8-header-counter/two-deletes-500ms-apart",
+            ],
+            def.TimingBoundaries.Select(tb => tb.CaseId));
+        Assert.All(def.TimingBoundaries, tb =>
+            Assert.Equal("pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND", tb.Reason));
+    }
+
+    private static string RepoRoot()
+    {
+        for (string? dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))
+        {
+            if (File.Exists(Path.Combine(dir, "CalcDb.slnx")))
+            {
+                return dir;
+            }
+        }
+        throw new InvalidOperationException("Repository root not found.");
+    }
 }

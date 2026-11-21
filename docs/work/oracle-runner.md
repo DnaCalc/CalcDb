@@ -88,6 +88,12 @@ stateDiagram-v2
   be reported incomplete. Class registration is read from HKCR, read-only.
 - **File state.** Lengths, hashes and times of inputs and outputs at labelled points; lock
   files are kept as artifacts; outputs and any changed input are kept at the end.
+- **Pauses.** The `pause` operation waits the asked milliseconds within about 1 ms using a
+  high-resolution waitable timer (`CreateWaitableTimerExW` with `CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`)
+  and a short `Stopwatch` spin (never `timeBeginPeriod`, which alters the machine-wide timer). It runs
+  the same for ACE and CalcDb and records the measured elapsed milliseconds on the `sync` event's
+  `waitedMs` field. ACE records retained before this change paused with `Thread.Sleep`, which wakes on
+  the 15.6 ms system clock tick and could wait up to one tick longer than asked.
 
 ## Use
 
@@ -168,6 +174,10 @@ a written run without running anything; `--verbose` shows the batch lines. CalcD
 creates on every run, so a question whose first difference is `$.files[N].sha256` at the same call, path, difference count
 and expected value with only a new actual file hash stays counted `Mismatched` but is treated as unchanged in the diff
 rather than `Moved`, and counted on one line (`same stop, new file hash: N`) so nothing is hidden (task sg5t).
+Questions explicitly listed under `timingBoundaries` in [probes/compare-set.json](../../probes/compare-set.json) (each
+with its reason) stay counted at their actual verdict in `TOTAL` and per-folder counts, while a verdict flip between
+`Matched`/`AcceptedDifference` and `Mismatched` is reported on its own line (`timing boundary (counted in TOTAL, not in
+gained/lost): N`) with its reason instead of `Gained`/`Lost`.
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and

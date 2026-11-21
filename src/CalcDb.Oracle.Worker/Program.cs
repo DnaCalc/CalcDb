@@ -310,8 +310,7 @@ internal sealed unsafe partial class Run : IDisposable
                     DoOnThread(onThread, path);
                     break;
                 case Pause pause:
-                    Thread.Sleep(pause.Ms);
-                    _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "pause", Name = pause.Ms.ToString(CultureInfo.InvariantCulture) + " ms", AtUtc = DateTimeOffset.UtcNow });
+                    _events.Add(Sync.DoPause(++_seq, path, pause.Ms));
                     break;
                 case SetThreadLocale locale:
                     int set = Native.SetThreadLocale(locale.Lcid);

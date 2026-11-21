@@ -92,6 +92,21 @@ internal static unsafe partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool CloseHandle(nint handle);
 
+    public const uint CreateWaitableTimerHighResolution = 0x00000002u;
+    public const uint Synchronize = 0x00100000u;
+    public const uint TimerModifyState = 0x0002u;
+    public const uint Infinite = 0xFFFFFFFFu;
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    public static partial nint CreateWaitableTimerExW(nint timerAttributes, string? timerName, uint flags, uint desiredAccess);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetWaitableTimer(nint timer, in long dueTime, int period, nint completionRoutine, nint argToCompletionRoutine, [MarshalAs(UnmanagedType.Bool)] bool resume);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint WaitForSingleObject(nint handle, uint milliseconds);
+
     public static readonly Guid IidIEnumVARIANT = new("00020404-0000-0000-C000-000000000046");
     public static readonly Guid IidIClassFactory = new("00000001-0000-0000-C000-000000000046");
     public static readonly Guid IidIConnectionPointContainer = new("B196B284-BAB4-101A-B69C-00AA00341D07");

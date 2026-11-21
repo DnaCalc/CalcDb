@@ -3,14 +3,6 @@ using CalcDb.Evidence;
 
 namespace CalcDb.Oracle.Runner;
 
-/// <summary>The standing compare set's folders (<c>probes/compare-set.json</c>).</summary>
-internal sealed record CompareSetDefinition
-{
-    public required IReadOnlyList<string> Folders { get; init; }
-
-    public string? Note { get; init; }
-}
-
 internal static partial class Program
 {
     /// <summary>The committed baseline run, relative to the repository: the last run recorded with <c>--record</c>.</summary>
@@ -34,18 +26,20 @@ internal static partial class Program
             Console.Error.WriteLine($"compare-set: unknown option --{unknown}; options: {string.Join(" ", CompareSetOptions.Select(o => "--" + o))} (see docs/work/oracle-runner.md)");
             return 2;
         }
+        string setPath = options.Get("set") ?? Path.Combine(repo, "probes", "compare-set.json");
+        CompareSet.Definition? definition = File.Exists(setPath) ? EvidenceJson.Read<CompareSet.Definition>(setPath) : null;
         string runsDir = Path.Combine(store.Root, "compare-sets");
         if (options.Get("diff") is { } diffName)
         {
             CompareSet.Run after = ResolveRun(diffName, repo, runsDir) ?? throw new ArgumentException($"--diff {diffName}: no such run.");
             CompareSet.Run before = ResolveRun(options.Get("against") ?? "baseline", repo, runsDir) ?? throw new ArgumentException("--against: no such run.");
-            Console.Write(CompareSet.RenderDiff(before, after, CompareSet.Diff(before, after)));
+            Console.Write(CompareSet.RenderDiff(before, after, CompareSet.Diff(before, after, definition?.TimingBoundaries)));
             return 0;
         }
 
         IReadOnlyList<string> folders = options.Get("dirs") is { } dirs
             ? dirs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : EvidenceJson.Read<CompareSetDefinition>(options.Get("set") ?? Path.Combine(repo, "probes", "compare-set.json")).Folders;
+            : (definition ?? EvidenceJson.Read<CompareSet.Definition>(setPath)).Folders;
         var environmentOptions = new List<string> { "--env", ImplementationSelection.CalcDbEnvironment, "--compare" };
         foreach (string pass in new[] { "deployment", "timeout", "worker", "parallel" })
         {
@@ -122,7 +116,7 @@ internal static partial class Program
         {
             if (ResolveRun(against, repo, runsDir) is { } earlier)
             {
-                Console.Write(CompareSet.RenderDiff(earlier, run, CompareSet.Diff(earlier, run)));
+                Console.Write(CompareSet.RenderDiff(earlier, run, CompareSet.Diff(earlier, run, definition?.TimingBoundaries)));
             }
             else
             {

@@ -42,6 +42,84 @@ internal static class Sync
         return new SyncEvent { Seq = seq, ProgramPath = path, Kind = "await", Name = name, WaitedMs = clock.ElapsedMilliseconds, TimedOut = !found, AtUtc = DateTimeOffset.UtcNow };
     }
 
+    private static readonly TimeSpan HighResSleepThreshold = TimeSpan.FromMilliseconds(3);
+    private static readonly TimeSpan HighResSpinMargin = TimeSpan.FromMilliseconds(1.5);
+    private static readonly TimeSpan FallbackSleepMargin = TimeSpan.FromMilliseconds(20);
+
+    /// <summary>
+    /// Wait <paramref name="ms"/> milliseconds within about 1 ms using a high-resolution waitable timer
+    /// (<c>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION</c>) and a short <see cref="Stopwatch"/> spin, without calling
+    /// <c>timeBeginPeriod</c> (which would alter the machine-wide timer). Records the measured elapsed time in
+    /// <see cref="SyncEvent.WaitedMs"/>.
+    /// </summary>
+    public static SyncEvent DoPause(int seq, string path, int ms)
+    {
+        TimeSpan elapsed = WaitPrecise(ms);
+        long waitedMs = (long)Math.Round(elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
+        return new SyncEvent
+        {
+            Seq = seq,
+            ProgramPath = path,
+            Kind = "pause",
+            Name = ms.ToString(CultureInfo.InvariantCulture) + " ms",
+            WaitedMs = waitedMs,
+            AtUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
+    internal static TimeSpan WaitPrecise(int ms)
+    {
+        if (ms <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+        long start = Stopwatch.GetTimestamp();
+        TimeSpan target = TimeSpan.FromMilliseconds(ms);
+        nint timer = target > HighResSleepThreshold
+            ? Native.CreateWaitableTimerExW(0, null, Native.CreateWaitableTimerHighResolution, Native.Synchronize | Native.TimerModifyState)
+            : 0;
+        try
+        {
+            while (true)
+            {
+                TimeSpan remaining = target - Stopwatch.GetElapsedTime(start);
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+                if (timer != 0 && remaining > HighResSleepThreshold)
+                {
+                    long dueTime = -(remaining - HighResSpinMargin).Ticks;
+                    if (Native.SetWaitableTimer(timer, in dueTime, 0, 0, 0, false)
+                        && Native.WaitForSingleObject(timer, Native.Infinite) == 0)
+                    {
+                        continue;
+                    }
+                    Native.CloseHandle(timer);
+                    timer = 0;
+                }
+                if (timer == 0 && remaining > FallbackSleepMargin)
+                {
+                    int sleepMs = (int)(remaining - FallbackSleepMargin).TotalMilliseconds;
+                    if (sleepMs > 0)
+                    {
+                        Thread.Sleep(sleepMs);
+                        continue;
+                    }
+                }
+                Thread.SpinWait(64);
+            }
+        }
+        finally
+        {
+            if (timer != 0)
+            {
+                Native.CloseHandle(timer);
+            }
+        }
+        return Stopwatch.GetElapsedTime(start);
+    }
+
     private static string Sanitize(string name) => string.Concat(name.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_'));
 }
 
