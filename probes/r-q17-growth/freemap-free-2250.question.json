@@ -1,0 +1,894 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q17-growth/freemap-free-2250",
+  "bookRefs": [
+    "R-FMT-2",
+    "W-05/growth-structural-closure",
+    "II-03 concrete mutation probes",
+    "Overflow / deletion",
+    "Map ownership and growth"
+  ],
+  "description": "A copy of the r-fmt-2b-w-accdb fixture (123 pages; page 122, Au4's old data page, is the only free page inside the file). Au1: tdef 107, usage maps 108, PK root 109, ten rows (IDs 1-10, 21-23 bytes) on data page 110. Pg: tdef 52, usage maps 53 (owned {55, 56, 57}, FreeMap {57}), PK root 54, 12 rows of ID and eight Text(255) fields of 61 U+20AC (1004 bytes each); rows 1-4 fill page 55 with 58 bytes free. One session runs UPDATE Pg SET T1 = 255 U+20AC, T2 = 255 U+20AC, T3 = 86 U+20AC WHERE ID = 2 (row 2 grows from 1004 to 1830 bytes) and closes. The grown row moves to free page 122 (FreeMap page 57 has no room), which is left with 2250 bytes free. Asks whether page 122 joins Pg's FreeMap (slot 1 of page 53): 1,057 bytes free stayed out (r-cplx-rebuild create-rb-rich-accdb), 2,956 and 3,016 joined (r-q16). Each session opens the database shared read/write through DAO, runs its statements with dbFailOnError (RecordsAffected read), and closes, with the DBEngine alive. Each read keeps page 0 bytes 3584-3591 and pages 1, 53, 55, 122; after Close every page's hash too.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-2b-w-accdb.accdb",
+      "sha256": "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be",
+      "length": 503808,
+      "provenance": "r-fmt-2b.create-w-accdb.86336dfac0.a1 qk1-86336dfac06d6ea1a25de04dc28825971144d002d9b51e7440ebc655dd6ddbe9 output:r-fmt-2b-w-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Pg SET T1 = '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', T2 = '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', T3 = '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€' WHERE ID = 2"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-grow",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-grow",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 172032,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 176128,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 180224,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 184320,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 204800,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 208896,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 212992,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 221184,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 225280,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 229376,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 233472,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 245760,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 249856,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 253952,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 258048,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 262144,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 266240,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 270336,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 274432,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 278528,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 282624,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 286720,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 290816,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 294912,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 299008,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 303104,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 307200,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 311296,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 315392,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 319488,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 323584,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 327680,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 331776,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 335872,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 339968,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 344064,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 348160,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 352256,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 356352,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 360448,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 364544,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 368640,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 372736,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 376832,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 380928,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 385024,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 389120,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 393216,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 397312,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 401408,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 405504,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 409600,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 413696,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 417792,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 421888,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 425984,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 430080,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 434176,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 438272,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 442368,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 446464,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 450560,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 454656,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 458752,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 462848,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 466944,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 471040,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 475136,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 479232,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 483328,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 487424,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 491520,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 495616,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 499712,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 503808,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 507904,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-grow",
+      "offset": 512000,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-grow"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

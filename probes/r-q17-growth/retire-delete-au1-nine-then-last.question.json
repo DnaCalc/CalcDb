@@ -1,0 +1,1737 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q17-growth/retire-delete-au1-nine-then-last",
+  "bookRefs": [
+    "R-FMT-2",
+    "W-05/growth-structural-closure",
+    "II-03 concrete mutation probes",
+    "Overflow / deletion",
+    "Map ownership and growth"
+  ],
+  "description": "A copy of the r-fmt-2b-w-accdb fixture (123 pages; page 122, Au4's old data page, is the only free page inside the file). Au1: tdef 107, usage maps 108, PK root 109, ten rows (IDs 1-10, 21-23 bytes) on data page 110. Pg: tdef 52, usage maps 53 (owned {55, 56, 57}, FreeMap {57}), PK root 54, 12 rows of ID and eight Text(255) fields of 61 U+20AC (1004 bytes each); rows 1-4 fill page 55 with 58 bytes free. A session runs DELETE FROM Au1 WHERE ID < 10 (page 110 keeps row 10) and closes; a second session runs DELETE FROM Au1 WHERE ID = 10 and closes: whether one statement that removes a page's last row frees it. Each session opens the database shared read/write through DAO, runs its statements with dbFailOnError (RecordsAffected read), and closes, with the DBEngine alive. Each read keeps page 0 bytes 3584-3591 and pages 1, 107, 108, 109, 110, 122; after Close every page's hash too.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-2b-w-accdb.accdb",
+      "sha256": "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be",
+      "length": 503808,
+      "provenance": "r-fmt-2b.create-w-accdb.86336dfac0.a1 qk1-86336dfac06d6ea1a25de04dc28825971144d002d9b51e7440ebc655dd6ddbe9 output:r-fmt-2b-w-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM Au1 WHERE ID < 10"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-delete-nine",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-delete-nine",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 172032,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 176128,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 180224,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 184320,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 204800,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 208896,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 212992,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 217088,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 221184,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 225280,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 229376,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 233472,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 245760,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 249856,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 253952,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 258048,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 262144,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 266240,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 270336,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 274432,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 278528,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 282624,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 286720,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 290816,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 294912,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 299008,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 303104,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 307200,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 311296,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 315392,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 319488,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 323584,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 327680,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 331776,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 335872,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 339968,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 344064,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 348160,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 352256,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 356352,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 360448,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 364544,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 368640,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 372736,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 376832,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 380928,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 385024,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 389120,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 393216,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 397312,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 401408,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 405504,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 409600,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 413696,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 417792,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 421888,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 425984,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 430080,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 434176,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 438272,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 442368,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 446464,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 450560,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 454656,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 458752,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 462848,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 466944,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 471040,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 475136,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 479232,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 483328,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 487424,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 491520,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 495616,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 499712,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 503808,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 507904,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-nine",
+      "offset": 512000,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-delete-nine"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM Au1 WHERE ID = 10"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-delete-last",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-delete-last",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 172032,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 176128,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 180224,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 184320,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 204800,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 208896,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 212992,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 217088,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 221184,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 225280,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 229376,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 233472,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 245760,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 249856,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 253952,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 258048,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 262144,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 266240,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 270336,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 274432,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 278528,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 282624,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 286720,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 290816,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 294912,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 299008,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 303104,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 307200,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 311296,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 315392,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 319488,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 323584,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 327680,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 331776,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 335872,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 339968,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 344064,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 348160,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 352256,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 356352,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 360448,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 364544,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 368640,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 372736,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 376832,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 380928,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 385024,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 389120,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 393216,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 397312,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 401408,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 405504,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 409600,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 413696,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 417792,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 421888,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 425984,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 430080,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 434176,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 438272,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 442368,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 446464,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 450560,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 454656,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 458752,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 462848,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 466944,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 471040,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 475136,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 479232,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 483328,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 487424,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 491520,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 495616,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 499712,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 503808,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 507904,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-delete-last",
+      "offset": 512000,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-delete-last"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
