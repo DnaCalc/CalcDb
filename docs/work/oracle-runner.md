@@ -190,6 +190,10 @@ timeouts) never go on `notComparable` and remain in the compared denominator as 
 300 s single-attempt default of `run`/`batch`): measured across 1,576 completing candidate attempts, the slowest is
 `r-q-ado-misc/resync-affect-matrix` at 33–34 s (next slowest `r-q2-cat-txn-lock/read-schema-held-querydef-late` at
 21.7–23.0 s), so 90 s leaves ~2.6× headroom while keeping engine timeouts from stalling a run for five minutes (task mfmr).
+At the start of `compare-set` (never `batch`, which may share the repository store concurrently), any attempt in the store
+left `Prepared` or `Running` whose preparing runner process (recorded by PID and start time on the attempt) and owned
+workers are all gone is settled through the `seal` path, printed with its count and attempt id, and the run goes on; when
+either its owning runner or an owned worker is still alive, the command refuses without sealing (task 35gb).
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and

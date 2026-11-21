@@ -70,6 +70,15 @@ public sealed record AttemptRecord
 
     /// <summary>The implementation the question runs against; null for the native installation, the oracle.</summary>
     public ImplementationSelection? Implementation { get; init; }
+
+    /// <summary>
+    /// Process id and UTC start time of the runner that prepared this attempt (task 35gb), so a later
+    /// <c>compare-set</c> or <c>seal</c> treats an attempt whose owning runner is still alive as live. Null for
+    /// attempts prepared before this field was recorded.
+    /// </summary>
+    public int? RunnerProcessId { get; init; }
+
+    public DateTimeOffset? RunnerStartedUtc { get; init; }
 }
 
 /// <summary>

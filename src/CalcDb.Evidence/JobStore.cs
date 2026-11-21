@@ -190,6 +190,8 @@ public sealed partial class JobStore
             BookRevision = bookRevision,
             PreparedUtc = DateTimeOffset.UtcNow,
             Implementation = implementation,
+            RunnerProcessId = CurrentProcess.ProcessId,
+            RunnerStartedUtc = CurrentProcess.StartedUtc,
         };
         if (!EvidenceJson.TryCreateNew(Path.Combine(dir, "attempt.json"), attempt))
         {
@@ -198,6 +200,14 @@ public sealed partial class JobStore
         EvidenceJson.WriteAtomic(Path.Combine(dir, "question.json"), question);
         UpdateJob(job with { State = JobState.Prepared, Attempts = [.. job.Attempts, attemptId] });
         return attempt;
+    }
+
+    private static readonly (int ProcessId, DateTimeOffset StartedUtc) CurrentProcess = ReadCurrentProcess();
+
+    private static (int ProcessId, DateTimeOffset StartedUtc) ReadCurrentProcess()
+    {
+        using var current = System.Diagnostics.Process.GetCurrentProcess();
+        return (current.Id, current.StartTime.ToUniversalTime());
     }
 
     public void MarkRunning(string token) => UpdateJob(GetJob(token) with { State = JobState.Running });

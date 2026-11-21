@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using CalcDb.Evidence;
 
@@ -19,8 +20,8 @@ namespace CalcDb.Oracle.Runner;
 /// structure of a database file (<see cref="InspectCommand"/>).</item>
 /// <item><c>fixtures [--failed-only]</c>: every named fixture of <c>probes/fixtures.json</c> with the creating attempt
 /// and each creation call that returned an error (member, error code, first text argument).</item>
-/// <item><c>seal --token T</c>: seal an attempt whose runner exited before sealing it. Refused while any worker
-/// process named in its started receipts is still alive. Without a started receipt it seals NotStarted; with one
+/// <item><c>seal --token T</c>: seal an attempt whose runner exited before sealing it. Refused while its preparing runner
+/// or any worker process named in its started receipts is still alive. Without a started receipt it seals NotStarted; with one
 /// and no returned receipt it seals Uncertain, and is never re-run automatically.</item>
 /// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
@@ -462,13 +463,78 @@ internal static partial class Program
         return failed == 0 ? 0 : 1;
     }
 
+    /// <summary>One abandoned attempt settled at the start of <c>compare-set</c> (task 35gb).</summary>
+    internal sealed record SettledAttempt(string Token, string AttemptId, JobState PreviousState, CaptureManifest Manifest);
+
     private static int SealAbandoned(JobStore store, Options options)
     {
         JobRecord job = store.GetJob(options.Require("token"));
+        CaptureManifest manifest = SealAbandonedJob(store, job, IsAlive, IsRunnerAlive);
+        Console.WriteLine(EvidenceJson.Serialize(manifest));
+        return 0;
+    }
+
+    internal static CaptureManifest SealAbandonedJob(JobStore store, JobRecord job, Func<int, bool>? isWorkerAlive = null, Func<int, DateTimeOffset?, bool>? isRunnerAlive = null)
+    {
+        (AttemptRecord attempt, List<OwnerReport> owners) = InspectAbandoned(store, job, isWorkerAlive ?? IsAlive, isRunnerAlive ?? IsRunnerAlive);
+        return store.Seal(attempt, owners);
+    }
+
+    /// <summary>
+    /// Settle every job in <paramref name="store"/> left in <see cref="JobState.Prepared"/> or
+    /// <see cref="JobState.Running"/> whose preparing runner and owned workers are all gone, through the same
+    /// <see cref="SealAbandonedJob"/> path as <c>calcdb-oracle seal</c> (task 35gb). Refuses without sealing anything
+    /// when any unsettled job still has a live owning runner or a live owned worker.
+    /// </summary>
+    internal static IReadOnlyList<SettledAttempt> SettleAbandoned(JobStore store, TextWriter? output = null, Func<int, bool>? isWorkerAlive = null, Func<int, DateTimeOffset?, bool>? isRunnerAlive = null)
+    {
+        isWorkerAlive ??= IsAlive;
+        isRunnerAlive ??= IsRunnerAlive;
+        string jobsDir = Path.Combine(store.Root, "jobs");
+        if (!Directory.Exists(jobsDir))
+        {
+            return [];
+        }
+        var pending = new List<(JobRecord Job, AttemptRecord Attempt, List<OwnerReport> Owners)>();
+        foreach (string file in Directory.EnumerateFiles(jobsDir, "*.json").Order(StringComparer.Ordinal))
+        {
+            JobRecord job = EvidenceJson.Read<JobRecord>(file);
+            if (job.State is not (JobState.Prepared or JobState.Running))
+            {
+                continue;
+            }
+            (AttemptRecord attempt, List<OwnerReport> owners) = InspectAbandoned(store, job, isWorkerAlive, isRunnerAlive);
+            pending.Add((job, attempt, owners));
+        }
+        if (pending.Count == 0)
+        {
+            return [];
+        }
+        var settled = new List<SettledAttempt>(pending.Count);
+        foreach ((JobRecord job, AttemptRecord attempt, List<OwnerReport> owners) in pending)
+        {
+            CaptureManifest manifest = store.Seal(attempt, owners);
+            settled.Add(new SettledAttempt(job.Token, attempt.AttemptId, job.State, manifest));
+        }
+        if (output is not null)
+        {
+            output.WriteLine($"settled {settled.Count} abandoned attempt(s): " +
+                string.Join(", ", settled.Select(s => $"{s.AttemptId} ({s.PreviousState} -> {s.Manifest.Execution})")));
+        }
+        return settled;
+    }
+
+    private static (AttemptRecord Attempt, List<OwnerReport> Owners) InspectAbandoned(JobStore store, JobRecord job, Func<int, bool> isWorkerAlive, Func<int, DateTimeOffset?, bool> isRunnerAlive)
+    {
         string attemptId = job.Attempts.Count > 0 ? job.Attempts[^1] : throw new InvalidOperationException("The job has no attempt.");
         if (store.GetManifest(attemptId) is not null)
         {
             throw new InvalidOperationException($"{attemptId} is already sealed.");
+        }
+        AttemptRecord attempt = store.GetAttempt(attemptId);
+        if (attempt.RunnerProcessId is { } runnerPid && isRunnerAlive(runnerPid, attempt.RunnerStartedUtc))
+        {
+            throw new InvalidOperationException($"Owning runner process {runnerPid} of {attemptId} is still running; it is not settled.");
         }
         string dir = store.AttemptDirectory(attemptId);
         Question question = store.GetQuestion(job.QuestionKey);
@@ -477,7 +543,7 @@ internal static partial class Program
         {
             string started = Path.Combine(dir, "receipts", participant == "a" ? "started.json" : $"started.{participant}.json");
             int? pid = File.Exists(started) ? EvidenceJson.Read<StartedReceipt>(started).ProcessId : null;
-            if (pid is { } id && IsAlive(id))
+            if (pid is { } id && isWorkerAlive(id))
             {
                 throw new InvalidOperationException($"Worker process {id} of {attemptId} is still running; it is not settled.");
             }
@@ -489,9 +555,7 @@ internal static partial class Program
                 LaunchError = pid is null ? "No started receipt: the worker never admitted the program." : null,
             });
         }
-        CaptureManifest manifest = store.Seal(store.GetAttempt(attemptId), owners);
-        Console.WriteLine(EvidenceJson.Serialize(manifest));
-        return 0;
+        return (attempt, owners);
     }
 
     private static int FixturesReport(JobStore store, string repo, Options options)
@@ -528,9 +592,39 @@ internal static partial class Program
         try
         {
             using Process process = Process.GetProcessById(pid);
-            return !process.HasExited && process.ProcessName.StartsWith("CalcDb.Oracle.Worker", StringComparison.OrdinalIgnoreCase);
+            return process.ProcessName.StartsWith("CalcDb.Oracle.Worker", StringComparison.OrdinalIgnoreCase) && !process.HasExited;
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsRunnerAlive(int pid, DateTimeOffset? startedUtc)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(pid);
+            string name = process.ProcessName;
+            try
+            {
+                if (process.HasExited)
+                {
+                    return false;
+                }
+                if (startedUtc is { } expected)
+                {
+                    DateTimeOffset actual = process.StartTime.ToUniversalTime();
+                    return Math.Abs((actual - expected).TotalSeconds) < 1;
+                }
+                return name.StartsWith("calcdb-oracle", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Win32Exception)
+            {
+                return name.StartsWith("calcdb-oracle", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return false;
         }

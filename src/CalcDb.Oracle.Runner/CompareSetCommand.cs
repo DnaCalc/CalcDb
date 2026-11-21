@@ -136,11 +136,14 @@ internal static partial class Program
                 folderStart = entries.Count;
             }
         }
+        Options batchOptions = Options.Parse(environmentOptions);
+        int parallel = BatchLanes.Degree(batchOptions, candidate: true);
+        SettleAbandoned(store, console);
         Console.SetOut(verbose ? console : TextWriter.Null);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            Batch(store, Options.Parse(environmentOptions), repo, evidenceDir, artifactsDir, files, Report);
+            Batch(store, batchOptions, repo, evidenceDir, artifactsDir, files, Report);
         }
         finally
         {
@@ -151,7 +154,7 @@ internal static partial class Program
             Console.WriteLine($"{folder,-24} {CompareSet.Counts([], folderNotComparable.GetValueOrDefault(folder))}");
         }
         string ncSummary = activeNotComparable.Count > 0 ? $" ({activeNotComparable.Count} not comparable, listed)" : "";
-        Console.WriteLine($"{files.Count} questions{ncSummary} in {clock.Elapsed.TotalSeconds:F0} s, {BatchLanes.Degree(Options.Parse(environmentOptions), candidate: true)} at once, timeout {candidateTimeout} s");
+        Console.WriteLine($"{files.Count} questions{ncSummary} in {clock.Elapsed.TotalSeconds:F0} s, {parallel} at once, timeout {candidateTimeout} s");
 
         string head = Git(repo, "rev-parse --short=10 HEAD").Trim();
         bool dirty = Git(repo, "status --porcelain --untracked-files=no -- src Directory.Build.props global.json").Trim().Length > 0;
