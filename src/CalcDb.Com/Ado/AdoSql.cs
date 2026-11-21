@@ -89,8 +89,95 @@ internal static class AdoSqlErrors
         "Record is deleted.",
         5003167,
         "3167",
-        0,
+        -66585593,
         AdoObject.IidRowset);
+
+    /// <summary>CommitTrans or RollbackTrans without an active transaction (3034; r-str-ado-act/ado-txn #40-49, r-ado-1b/txn-nesting-three #244).</summary>
+    public static MappedProviderError NoTransaction() => Make(
+        AdoObject.HResultNoTransaction,
+        "You tried to commit or rollback a transaction without first beginning a transaction.",
+        5003034,
+        "3034",
+        -69010462,
+        AdoObject.IidTransactionLocal);
+
+    /// <summary>BeginTrans with an unsupported IsolationLevel such as 1048576 (r-str-ado-act/ado-txn #54).</summary>
+    public static MappedProviderError UnsupportedIsolationLevel() => Make(
+        AdoObject.HResultUnsupportedIsolation,
+        "Neither the isolation level nor a strengthening of it is supported.",
+        5000000,
+        null,
+        null,
+        AdoObject.IidTransactionLocal);
+
+    /// <summary>Optimistic write conflict on server keyset Update (3197; r-ado-1b/values-keyset-conflict #46-54, r-q-ado-misc/values-witness-keyset #65-75).</summary>
+    public static MappedProviderError WriteConflict() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.",
+        5003197,
+        "3197",
+        -105514571,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Lock conflict on server keyset Update/Delete (3218; r-ado-1b/errors-lock-timeout).</summary>
+    public static MappedProviderError CurrentlyLockedOnRowset() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "Could not update; currently locked.",
+        5003218,
+        "3218",
+        -72156238,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Lock conflict on Connection.Execute / Command.Execute (3218; r-ado-1b/errors-lock-timeout #45).</summary>
+    public static MappedProviderError CurrentlyLockedOnCommand() => Make(
+        AdoObject.HResultFail,
+        "Could not update; currently locked.",
+        5003218,
+        "3218",
+        -72156238,
+        AdoObject.IidCommand);
+
+    /// <summary>Duplicate key / primary key / unique index on server keyset Update (3022; r-ado-1b/errors-by-route).</summary>
+    public static MappedProviderError DuplicateOnRowset() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "The changes you requested to the table were not successful because they would create duplicate values in the index, primary key, or relationship. Change the data in the field or fields that contain duplicate data, remove the index, or redefine the index to permit duplicate entries and try again.",
+        5003022,
+        "3022",
+        -105121349,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Assigning a read-only/AutoNumber field during Edit (3164; r-ado-1b/fields-assign-conversion #194).</summary>
+    public static MappedProviderError FieldCannotBeUpdated() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "Field cannot be updated.",
+        5003164,
+        null,
+        null,
+        AdoObject.IidRowset);
+
+    /// <summary>Text value longer than the column's defined size (3163; r-ado-1b/fields-assign-conversion).</summary>
+    public static MappedProviderError FieldTooSmall() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "The field is too small to accept the amount of data you attempted to add. Try inserting or pasting less data.",
+        5003163,
+        null,
+        null,
+        AdoObject.IidRowset);
+
+    /// <summary>Provider Type mismatch on Field.Value put or Recordset.Update/AddNew argument conversion (r-ado-1b/fields-assign-conversion #199, edit-update-args #130-149).</summary>
+    public static MappedProviderError TypeMismatchOn(in Guid iid) => new(
+        AdoObject.ProviderFailure(AdoObject.HResultTypeMismatch, "Type mismatch.", iid),
+        new AdoErrorEntry(AdoObject.HResultTypeMismatch, AdoObject.ProviderSource, "Type mismatch.", "", AdoObject.ProviderHelpContext, "", AdoObject.HResultTypeMismatch));
+
+    /// <summary>Provider Out of present range on Field.Value numeric overflow (r-ado-1b/fields-assign-conversion #164, #179).</summary>
+    public static MappedProviderError OutOfRangeOn(in Guid iid) => new(
+        AdoObject.ProviderFailure(AdoObject.HResultOutOfRange, "Out of present range.", iid),
+        new AdoErrorEntry(AdoObject.HResultOutOfRange, AdoObject.ProviderSource, "Out of present range.", "", AdoObject.ProviderHelpContext, "", AdoObject.HResultOutOfRange));
+
+    /// <summary>Provider Multiple-step OLE DB operation generated errors (Byte overflow, invalid GUID text; r-ado-1b/fields-assign-conversion #159, #169, #174).</summary>
+    public static MappedProviderError MultipleStepOn(in Guid iid) => new(
+        AdoObject.ProviderFailure(AdoObject.HResultErrorsOccurred, AdoObject.MultipleStepDescription, iid),
+        new AdoErrorEntry(AdoObject.HResultErrorsOccurred, AdoObject.ProviderSource, AdoObject.MultipleStepDescription, "", AdoObject.ProviderHelpContext, "", AdoObject.HResultErrorsOccurred));
 
     /// <summary>Operation must use an updateable query (3073; r-str-ado-act/ado-execute-results #125-134, r-ado-1b/rs-readonly-mode-edit #117-126).</summary>
     public static MappedProviderError ReadOnlyAction() => Make(
@@ -151,6 +238,8 @@ internal static class AdoSqlErrors
                 out unmodelled),
             // r-str-ado-act/ado-errors, r-ado-1b/errors-by-route (duplicate PK/unique index)
             3022 => Make(AdoObject.HResultFail, failure.Message, 5003022, "3022", -105121349, AdoObject.IidCommand),
+            // r-ado-1b/errors-lock-timeout #45 (lock conflict on Execute)
+            3188 or 3218 => CurrentlyLockedOnCommand(),
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route (FK delete violation)
             3200 => Make(AdoObject.HResultFail, failure.Message, 5003000, "3200", -534971980, AdoObject.IidCommand),
             // r-str-ado-act/ado-execute-results #125-134, r-ado-1b/rs-readonly-mode-edit #117-126
@@ -195,6 +284,155 @@ internal static class AdoSqlErrors
         new(
             AdoObject.AceFailure(scode, description, helpContext, iid),
             new AdoErrorEntry(scode, AdoObject.AceEngineSource, description, "", helpContext, sqlState, nativeError));
+}
+
+/// <summary>
+/// Maps ISAM <see cref="CalcDb.Isam.Edit.MutationError"/> and <see cref="CalcDb.Isam.Edit.MutationOpen"/> outcomes
+/// from <see cref="CalcDb.Isam.Edit.EditFrame"/> and <see cref="CalcDb.Isam.Transactions.TransactionCoordinator"/>
+/// to exact recorded ADO OLE DB provider errors (R-ADO-1 ADO-EDIT, ADO-TXN, R-ERR-1).
+/// </summary>
+internal static unsafe class AdoEditErrors
+{
+    public static Failure MapOpen(CalcDb.Isam.Edit.MutationOpen open, string? detail) =>
+        Failure.NotModelled("NotModelled.Edit." + open, detail ?? open.ToString());
+
+    public static MappedProviderError? MapUpdateError(CalcDb.Isam.Edit.MutationError error, out Failure? unmodelled)
+    {
+        unmodelled = null;
+        return error.Number switch
+        {
+            CalcDb.Isam.Edit.MutationError.WriteConflict => AdoSqlErrors.WriteConflict(),
+            CalcDb.Isam.Edit.MutationError.LockedBySession => AdoSqlErrors.CurrentlyLockedOnRowset(),
+            CalcDb.Isam.Edit.MutationError.Duplicate => AdoSqlErrors.DuplicateOnRowset(),
+            CalcDb.Isam.Edit.MutationError.RecordDeleted => AdoSqlErrors.RecordIsDeleted(),
+            _ => FailUnmodelled(error, "rowset mutation", out unmodelled),
+        };
+    }
+
+    public static MappedProviderError? MapAssignError(
+        CalcDb.Isam.Edit.MutationError error,
+        in CalcDb.Values.NativeVariant incoming,
+        CalcDb.Format.ColumnDescriptor column,
+        uint lcid,
+        in Guid iid,
+        out Failure? unmodelled)
+    {
+        unmodelled = null;
+        if (error.Number == CalcDb.Isam.Edit.MutationError.FieldTooSmall)
+        {
+            return AdoSqlErrors.FieldTooSmall();
+        }
+        if (error.Number == CalcDb.Isam.Edit.MutationError.Conversion)
+        {
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Guid or CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole or CalcDb.Format.NativeTypes.Numeric)
+            {
+                // r-ado-1b/fields-assign-conversion #139, #144, #149, #159, #184:
+                // Decimal, GUID, and Binary conversion refusals report Provider 0x80040E21 Multiple-step.
+                return AdoSqlErrors.MultipleStepOn(iid);
+            }
+            VarType? target = TargetScalarVarType(column.TypeCode);
+            if (target is { } vt)
+            {
+                CalcDb.Values.NativeVariant copy = incoming;
+                CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
+                if (hr == AdoObject.HResultOutOfRange)
+                {
+                    // r-ado-1b/fields-assign-conversion #169, #174: Byte overflow -> Provider 0x80040E21 Multiple-step;
+                    // #164, #179: Short / Single overflow -> Provider 0x8002000A Out of present range.
+                    return column.TypeCode == CalcDb.Format.NativeTypes.Byte
+                        ? AdoSqlErrors.MultipleStepOn(iid)
+                        : AdoSqlErrors.OutOfRangeOn(iid);
+                }
+                if (hr == AdoObject.HResultTypeMismatch)
+                {
+                    return AdoSqlErrors.TypeMismatchOn(iid);
+                }
+            }
+            return FailUnmodelled(error, "field assignment", out unmodelled);
+        }
+        return FailUnmodelled(error, "field assignment", out unmodelled);
+    }
+
+    /// <summary>
+    /// Map <see cref="CalcDb.Isam.Edit.MutationOpen"/> outcomes from <c>EditFrame.Assign</c> where ADO has an exact
+    /// recorded Provider error (r-ado-1b/fields-assign-conversion #139, #144, #149, #184, #199; r-ado-1b/edit-update-args #134).
+    /// Returns null for unrecorded cases so the caller keeps the named <c>NotModelled</c> refusal.
+    /// </summary>
+    public static MappedProviderError? TryMapOpenAssignError(
+        CalcDb.Isam.Edit.MutationOpen open,
+        in CalcDb.Values.NativeVariant incoming,
+        CalcDb.Format.ColumnDescriptor column,
+        uint lcid,
+        in Guid iid)
+    {
+        if (open == CalcDb.Isam.Edit.MutationOpen.ColumnType)
+        {
+            if (column.TypeCode == CalcDb.Format.NativeTypes.Numeric
+                && incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency)
+            {
+                // r-ado-1b/fields-assign-conversion #139, #144, #149: Decimal put of String/Double/Currency -> Provider 0x80040E21.
+                return AdoSqlErrors.MultipleStepOn(iid);
+            }
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole
+                && incoming.Type == VarType.Bstr)
+            {
+                // r-ado-1b/fields-assign-conversion #184: Binary/OLE put of String -> Provider 0x80040E21.
+                return AdoSqlErrors.MultipleStepOn(iid);
+            }
+            return null;
+        }
+        if (open == CalcDb.Isam.Edit.MutationOpen.ConversionNotRecorded)
+        {
+            if (TargetScalarVarType(column.TypeCode) is { } vt)
+            {
+                CalcDb.Values.NativeVariant copy = incoming;
+                CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
+                if (hr == AdoObject.HResultOutOfRange)
+                {
+                    return column.TypeCode == CalcDb.Format.NativeTypes.Byte
+                        ? AdoSqlErrors.MultipleStepOn(iid)
+                        : AdoSqlErrors.OutOfRangeOn(iid);
+                }
+                if (hr == AdoObject.HResultTypeMismatch)
+                {
+                    // r-ado-1b/fields-assign-conversion #199, r-ado-1b/edit-update-args #134: non-numeric BSTR into Long/etc.
+                    return AdoSqlErrors.TypeMismatchOn(iid);
+                }
+            }
+        }
+        return null;
+    }
+
+    public static MappedProviderError? MapTxnError(CalcDb.Isam.Edit.MutationError error, out Failure? unmodelled)
+    {
+        unmodelled = null;
+        return error.Number switch
+        {
+            CalcDb.Isam.Edit.MutationError.NoTransaction => AdoSqlErrors.NoTransaction(),
+            _ => FailUnmodelled(error, "transaction", out unmodelled),
+        };
+    }
+
+    private static VarType? TargetScalarVarType(byte typeCode) => typeCode switch
+    {
+        CalcDb.Format.NativeTypes.Boolean => VarType.Bool,
+        CalcDb.Format.NativeTypes.Byte => VarType.UI1,
+        CalcDb.Format.NativeTypes.Integer => VarType.I2,
+        CalcDb.Format.NativeTypes.Long => VarType.I4,
+        CalcDb.Format.NativeTypes.Single => VarType.R4,
+        CalcDb.Format.NativeTypes.Double => VarType.R8,
+        CalcDb.Format.NativeTypes.Currency => VarType.Currency,
+        CalcDb.Format.NativeTypes.DateTime => VarType.Date,
+        _ => null,
+    };
+
+    private static MappedProviderError? FailUnmodelled(CalcDb.Isam.Edit.MutationError error, string context, out Failure unmodelled)
+    {
+        unmodelled = Failure.NotModelled(
+            "NotModelled.AdoProviderError",
+            $"ADO OLE DB {context} mapping for ACE error {error.Number} ('{error.Describe()}') is not recorded");
+        return null;
+    }
 }
 
 /// <summary>

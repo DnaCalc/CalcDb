@@ -158,25 +158,148 @@ internal readonly record struct EffectiveProvider(ProviderRoute Route, string Na
 }
 
 /// <summary>
-/// Live native ISAM session held by an open ACE <see cref="ConnectionObject"/> (W-09/native-read-query):
-/// wraps the shared <see cref="ComDatabaseSession"/> native core alongside ADO's transaction coordinator, shared
-/// <see cref="ComSqlDatabase"/> view, open server recordset tracking, <c>@@IDENTITY</c>, and resolved open-phase
-/// initialization values for lazy <see cref="PropertiesObject"/> expansion.
+/// Shared native <see cref="ComDatabaseSession"/> pooled per canonical database file path within this process
+/// so multiple open ADO <see cref="ConnectionObject"/>s on the same file share one <see cref="SessionFile"/>,
+/// <see cref="PageCache"/>, <see cref="LockTable"/>, and <see cref="TableEditContext"/> set (enabling cross-connection
+/// lock conflicts 3218, optimistic write conflicts 3197, and immediate visibility across connections).
+/// </summary>
+internal sealed class SharedComSession
+{
+    private readonly List<AdoOpenSession> _attached = [];
+
+    public SharedComSession(string fullPath, ComDatabaseSession core)
+    {
+        FullPath = fullPath;
+        Core = core;
+    }
+
+    public string FullPath { get; }
+
+    public ComDatabaseSession Core { get; }
+
+    public int RefCount { get; set; }
+
+    public void Attach(AdoOpenSession session)
+    {
+        if (!_attached.Contains(session))
+        {
+            _attached.Add(session);
+        }
+    }
+
+    public void Detach(AdoOpenSession session) => _attached.Remove(session);
+
+    public bool IsTableHeldByAnyServerCursor(string tableName)
+    {
+        foreach (AdoOpenSession session in _attached)
+        {
+            if (session.IsTableHeldByServerCursor(tableName))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void InvalidateAllSql()
+    {
+        foreach (AdoOpenSession session in _attached)
+        {
+            session.InvalidateSql();
+        }
+    }
+}
+
+/// <summary>Process-local pool of open <see cref="SharedComSession"/> instances keyed by canonical path.</summary>
+internal static class AdoFilePool
+{
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, SharedComSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
+
+    public static SharedComSession? AcquireExisting(string fullPath)
+    {
+        lock (Gate)
+        {
+            if (Sessions.TryGetValue(fullPath, out SharedComSession? shared))
+            {
+                shared.RefCount++;
+                return shared;
+            }
+            return null;
+        }
+    }
+
+    public static SharedComSession RegisterOrJoin(string fullPath, ComDatabaseSession core, out bool joinedExisting)
+    {
+        lock (Gate)
+        {
+            if (Sessions.TryGetValue(fullPath, out SharedComSession? existing))
+            {
+                existing.RefCount++;
+                joinedExisting = true;
+                return existing;
+            }
+            var created = new SharedComSession(fullPath, core) { RefCount = 1 };
+            Sessions[fullPath] = created;
+            joinedExisting = false;
+            return created;
+        }
+    }
+
+    public static void CancelAcquire(SharedComSession shared)
+    {
+        ComDatabaseSession? toDispose = null;
+        lock (Gate)
+        {
+            shared.RefCount--;
+            if (shared.RefCount <= 0)
+            {
+                if (Sessions.TryGetValue(shared.FullPath, out SharedComSession? current) && ReferenceEquals(current, shared))
+                {
+                    Sessions.Remove(shared.FullPath);
+                }
+                toDispose = shared.Core;
+            }
+        }
+        toDispose?.DisposeAll();
+    }
+
+    public static void Release(SharedComSession shared, AdoOpenSession session)
+    {
+        ComDatabaseSession? toDispose = null;
+        lock (Gate)
+        {
+            shared.Detach(session);
+            shared.RefCount--;
+            if (shared.RefCount <= 0)
+            {
+                if (Sessions.TryGetValue(shared.FullPath, out SharedComSession? current) && ReferenceEquals(current, shared))
+                {
+                    Sessions.Remove(shared.FullPath);
+                }
+                toDispose = shared.Core;
+            }
+        }
+        toDispose?.DisposeAll();
+    }
+}
+
+/// <summary>
+/// Live native ISAM session held by an open ACE <see cref="ConnectionObject"/> (W-09/native-read-query,
+/// W-09/immediate-edit): wraps a pooled <see cref="SharedComSession"/> alongside this connection's own read-only flag,
+/// <see cref="TransactionCoordinator"/>, <see cref="ComSqlDatabase"/> view, open server recordset tracking,
+/// <c>@@IDENTITY</c>, and resolved open-phase initialization values for lazy <see cref="PropertiesObject"/> expansion.
 /// </summary>
 internal sealed class AdoOpenSession : ISqlSessionHost
 {
-    private readonly ComDatabaseSession _core;
+    private readonly SharedComSession _shared;
     private readonly List<RecordsetObject> _openRecordsets = [];
+    private readonly List<CommandObject> _boundCommands = [];
     private ComSqlDatabase? _sql;
+    private bool _released;
 
     public AdoOpenSession(
-        SessionFile file,
-        LockFile? lockFile,
-        PageCache cache,
-        FileProfile profile,
-        DatabaseHeader header,
-        CatalogSnapshot catalog,
-        ulong pageCount,
+        SharedComSession shared,
         bool readOnly,
         string dataSource,
         string fullPath,
@@ -185,7 +308,8 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         int lockingMode,
         Dictionary<string, OwnedVariant> openInitValues)
     {
-        _core = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "ADO session");
+        _shared = shared;
+        ReadOnly = readOnly;
         DataSource = dataSource;
         FullPath = fullPath;
         EffectiveMode = effectiveMode;
@@ -194,24 +318,25 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         OpenInitValues = openInitValues;
         Transactions = new TransactionCoordinator(EngineState.NextLocker())
         {
-            Publisher = _core,
+            Publisher = readOnly ? null : shared.Core,
             WaitPolicy = LockWaitPolicy.Default,
         };
+        shared.Attach(this);
     }
 
-    public PageCache Cache => _core.Cache;
+    public PageCache Cache => _shared.Core.Cache;
 
-    public FileProfile Profile => _core.Profile;
+    public FileProfile Profile => _shared.Core.Profile;
 
-    public FormatDescriptor Format => _core.Format;
+    public FormatDescriptor Format => _shared.Core.Format;
 
-    public DatabaseHeader Header => _core.Header;
+    public DatabaseHeader Header => _shared.Core.Header;
 
-    public CatalogSnapshot Catalog => _core.Catalog;
+    public CatalogSnapshot Catalog => _shared.Core.Catalog;
 
-    public ulong PageCount => _core.PageCount;
+    public ulong PageCount => _shared.Core.PageCount;
 
-    public bool ReadOnly => _core.ReadOnly;
+    public bool ReadOnly { get; }
 
     public string DataSource { get; }
 
@@ -229,32 +354,32 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 
     public ComSqlDatabase Sql => _sql ??= new ComSqlDatabase(this);
 
-    /// <summary>Last AutoNumber generated by an INSERT executed on this Connection (<c>SELECT @@IDENTITY</c>; r-str-ado-act/ado-execute-action).</summary>
+    /// <summary>Last AutoNumber generated by an INSERT or AddNew+Update executed on this Connection (<c>SELECT @@IDENTITY</c>; r-str-ado-act/ado-execute-action).</summary>
     public int LastIdentity { get; set; }
 
-    public string? SchemaFailure => _core.SchemaFailure;
+    public string? SchemaFailure => _shared.Core.SchemaFailure;
 
-    public QueryCatalog? Queries => _core.Queries;
+    public QueryCatalog? Queries => _shared.Core.Queries;
 
     public SavedQuery? FindSavedQuery(string name) =>
         Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    public ExpressionContext CreateExpressionContext(ExpressionUse use) => _core.CreateExpressionContext(use);
+    public ExpressionContext CreateExpressionContext(ExpressionUse use) => _shared.Core.CreateExpressionContext(use);
 
-    public TableDefinition? Definition(CatalogEntry entry, out string? failure) => _core.Definition(entry, out failure);
+    public TableDefinition? Definition(CatalogEntry entry, out string? failure) => _shared.Core.Definition(entry, out failure);
 
-    public PropertyBlob? Blob(CatalogEntry entry, out string? failure) => _core.Blob(entry, out failure);
+    public PropertyBlob? Blob(CatalogEntry entry, out string? failure) => _shared.Core.Blob(entry, out failure);
 
-    public IReadOnlyList<Relationship>? Relationships(out string? failure) => _core.Relationships(out failure);
+    public IReadOnlyList<Relationship>? Relationships(out string? failure) => _shared.Core.Relationships(out failure);
 
-    public TableEditContext? EditContext(CatalogEntry entry, out string? failure) => _core.EditContext(entry, out failure);
+    public TableEditContext? EditContext(CatalogEntry entry, out string? failure) => _shared.Core.EditContext(entry, out failure);
 
-    public SchemaWriter? OpenSchemaWriter(out string? failure) => _core.OpenSchemaWriter(out failure);
+    public SchemaWriter? OpenSchemaWriter(out string? failure) => _shared.Core.OpenSchemaWriter(out failure);
+
+    public void InvalidateSql() => _sql?.Forget();
 
     public void SqlSchemaPublished(ulong extentPages) =>
-        _core.SqlSchemaPublished(extentPages, IsTableHeldByServerCursor, onCatalogReloaded: () => _sql?.Forget());
-
-    private readonly List<CommandObject> _boundCommands = [];
+        _shared.Core.SqlSchemaPublished(extentPages, _shared.IsTableHeldByAnyServerCursor, onCatalogReloaded: _shared.InvalidateAllSql);
 
     public void RegisterRecordset(RecordsetObject recordset)
     {
@@ -276,7 +401,23 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 
     public void UnregisterCommand(CommandObject command) => _boundCommands.Remove(command);
 
-    public bool IsTableInUse(string tableName) => IsTableHeldByServerCursor(tableName);
+    public void NotifyTransactionCommitted(int newDepth)
+    {
+        foreach (RecordsetObject rs in _openRecordsets.ToArray())
+        {
+            rs.OnTransactionCommitted(newDepth);
+        }
+    }
+
+    public void NotifyTransactionRolledBack(int newDepth)
+    {
+        foreach (RecordsetObject rs in _openRecordsets.ToArray())
+        {
+            rs.OnTransactionRolledBack(newDepth);
+        }
+    }
+
+    public bool IsTableInUse(string tableName) => _shared.IsTableHeldByAnyServerCursor(tableName);
 
     public bool IsTableHeldByServerCursor(string tableName)
     {
@@ -305,10 +446,13 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         _boundCommands.Clear();
 
         CallResult closing = CallResult.Nothing;
-        (MutationOpen open, string? detail) = _core.CloseCommit(Transactions);
-        if (open != MutationOpen.None)
+        if (!ReadOnly)
         {
-            closing = CallResult.Fail(Failure.NotImplemented("Connection.Close could not write its closing commit: " + detail));
+            (MutationOpen open, string? detail) = _shared.Core.CloseCommit(Transactions);
+            if (open != MutationOpen.None)
+            {
+                closing = CallResult.Fail(Failure.NotImplemented("Connection.Close could not write its closing commit: " + detail));
+            }
         }
         ReleaseResources();
         return closing;
@@ -316,6 +460,11 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 
     public void ReleaseResources()
     {
+        if (_released)
+        {
+            return;
+        }
+        _released = true;
         foreach (RecordsetObject rs in _openRecordsets.ToArray())
         {
             rs.CloseFromConnection();
@@ -326,7 +475,8 @@ internal sealed class AdoOpenSession : ISqlSessionHost
             cmd.OnConnectionClosed();
         }
         _boundCommands.Clear();
-        _core.DisposeAll();
+        Transactions.Dispose();
+        AdoFilePool.Release(_shared, this);
         foreach (OwnedVariant value in OpenInitValues.Values)
         {
             value.Dispose();
@@ -336,9 +486,10 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 }
 
 /// <summary>
-/// ADODB.Connection (_Connection, dual) covering closed construction/policy and ACE Open/Close/Execute over CalcDb's
-/// native ISAM and shared SQL executor (W-09/construction-policy, W-09/native-read-query; II-12 §16, R-ADO-1 ADO-CONN,
-/// ADO-PROVIDER, ADO-PROPS; R-ACT-1 ACT-ADO-SCOPE). Non-ACE routes are refused with NotModelled.AdoProvider.
+/// ADODB.Connection (_Connection, dual) covering closed construction/policy and ACE Open/Close/Execute/Transactions
+/// over CalcDb's native ISAM and shared SQL executor (W-09/construction-policy, W-09/native-read-query,
+/// W-09/immediate-edit; II-12 §16, R-ADO-1 ADO-CONN, ADO-PROVIDER, ADO-PROPS, ADO-TXN; R-ACT-1 ACT-ADO-SCOPE).
+/// Non-ACE routes are refused with NotModelled.AdoProvider.
 /// </summary>
 internal sealed unsafe class ConnectionObject : AdoObject
 {
@@ -377,6 +528,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
         .Get("Properties", (self, args) => ((ConnectionObject)self).GetProperties())
         .Method("Open", (self, args) => ((ConnectionObject)self).Open(args))
         .Method("Close", (self, args) => ((ConnectionObject)self).Close())
+        .Method("BeginTrans", (self, args) => ((ConnectionObject)self).BeginTrans())
+        .Method("CommitTrans", (self, args) => ((ConnectionObject)self).CommitTrans())
+        .Method("RollbackTrans", (self, args) => ((ConnectionObject)self).RollbackTrans())
         .Method("Execute", (self, args) => ((ConnectionObject)self).Execute(args))
         .Method("OpenSchema", (self, args) => ((ConnectionObject)self).OpenSchema());
 
@@ -1015,35 +1169,75 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return NotImplemented($"Connection.Open with Locale Identifier={localeId} (only 1033 was asked)");
             }
 
-            if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
+            SharedComSession? shared = AdoFilePool.AcquireExisting(full);
+            FileProfile profile;
+            if (shared is not null)
             {
-                DisposeValues(initValues);
-                return NotImplemented($"Connection.Open when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})");
+                profile = shared.Core.Profile;
             }
-
-            byte[] headerBytes = new byte[4096];
-            if (file.GetExtent() < (ulong)headerBytes.Length || file.ReadAt(0, headerBytes).Status != TransferStatus.Complete)
+            else
             {
-                file.Dispose();
-                DisposeValues(initValues);
-                return NotImplemented("Connection.Open of a file shorter than one page");
-            }
+                if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
+                {
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})");
+                }
 
-            ProfileRefusal profileRefusal = ProfileSelector.Select(headerBytes, out FileProfile? profile);
-            if (profile is null)
-            {
-                file.Dispose();
-                DisposeValues(initValues);
-                return NotImplemented($"Connection.Open of this file profile ({profileRefusal})");
-            }
+                byte[] headerBytes = new byte[4096];
+                if (file.GetExtent() < (ulong)headerBytes.Length || file.ReadAt(0, headerBytes).Status != TransferStatus.Complete)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented("Connection.Open of a file shorter than one page");
+                }
 
-            FormatDescriptor format = profile.Descriptor;
-            DatabaseHeader decodedHeader = DatabaseHeader.Decode(headerBytes, format);
-            if (decodedHeader.SortOrder.Identifier != TextSortOrder.GeneralIdentifier)
-            {
-                file.Dispose();
-                DisposeValues(initValues);
-                return NotImplemented($"Connection.Open of a database with sort identifier {decodedHeader.SortOrder.Identifier} (only General 1033 was asked)");
+                ProfileRefusal profileRefusal = ProfileSelector.Select(headerBytes, out FileProfile? selectedProfile);
+                if (selectedProfile is null)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open of this file profile ({profileRefusal})");
+                }
+                profile = selectedProfile;
+
+                FormatDescriptor format = profile.Descriptor;
+                DatabaseHeader decodedHeader = DatabaseHeader.Decode(headerBytes, format);
+                if (decodedHeader.SortOrder.Identifier != TextSortOrder.GeneralIdentifier)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open of a database with sort identifier {decodedHeader.SortOrder.Identifier} (only General 1033 was asked)");
+                }
+
+                ulong pages = file.GetExtent() / (ulong)format.PageSize;
+                var cache = file.CreateCache(format.PageSize, CachePages);
+                CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? catalogFailure, readProperties: true);
+                if (catalog is null)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
+                        ? "Connection.Open of an encrypted database (W-L1)"
+                        : "Connection.Open when the catalog cannot be read: " + catalogFailure);
+                }
+
+                LockFile? lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
+                if (lockFile is null)
+                {
+                    file.Dispose();
+                    DisposeValues(initValues);
+                    return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
+                }
+
+                // Pool core always starts reader-admitted and acquires its writer lease lazily on first write,
+                // while each AdoOpenSession enforces its own effective Mode (ReadOnly).
+                var freshCore = new ComDatabaseSession(file, lockFile, cache, profile, decodedHeader, pages, catalog, readOnly: false, "ADO session");
+                shared = AdoFilePool.RegisterOrJoin(full, freshCore, out bool joinedExisting);
+                if (joinedExisting)
+                {
+                    freshCore.DisposeAll();
+                    profile = shared.Core.Profile;
+                }
             }
 
             int engineType = profile.IsAce ? 6 : 5;
@@ -1052,7 +1246,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 if (effectiveMode != 1 || lockingModeExplicit)
                 {
-                    file.Dispose();
+                    AdoFilePool.CancelAcquire(shared);
                     DisposeValues(initValues);
                     return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1 without explicit Database Locking Mode is recorded)");
                 }
@@ -1063,7 +1257,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 int explicitLocking = ReadInt32(initValues["Jet OLEDB:Database Locking Mode"], -1);
                 if (!defaultMode || explicitLocking is not (0 or 1))
                 {
-                    file.Dispose();
+                    AdoFilePool.CancelAcquire(shared);
                     DisposeValues(initValues);
                     return NotImplemented($"Connection.Open with explicit Jet OLEDB:Database Locking Mode={explicitLocking} and Mode={effectiveMode} (only 0 or 1 with default Mode is recorded)");
                 }
@@ -1074,26 +1268,6 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 lockingMode = effectiveMode == 1 ? 0 : 1;
             }
 
-            ulong pages = file.GetExtent() / (ulong)format.PageSize;
-            var cache = file.CreateCache(format.PageSize, CachePages);
-            CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? catalogFailure, readProperties: true);
-            if (catalog is null)
-            {
-                file.Dispose();
-                DisposeValues(initValues);
-                return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
-                    ? "Connection.Open of an encrypted database (W-L1)"
-                    : "Connection.Open when the catalog cannot be read: " + catalogFailure);
-            }
-
-            LockFile? lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
-            if (lockFile is null)
-            {
-                file.Dispose();
-                DisposeValues(initValues);
-                return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
-            }
-
             SetInitValue(initValues, "User ID", OwnedVariant.FromText("Admin"));
             SetInitValue(initValues, "Data Source", OwnedVariant.FromText(dataSource));
             SetInitValue(initValues, "Mode", OwnedVariant.FromInt32(effectiveMode));
@@ -1101,7 +1275,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(lockingMode));
 
             _session = new AdoOpenSession(
-                file, lockFile, cache, profile, decodedHeader, catalog, pages,
+                shared,
                 readOnly: effectiveMode == 1,
                 dataSource, full, effectiveMode, engineType, lockingMode, initValues);
             _pinned = effective;
@@ -1126,7 +1300,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return Fail(AdoErrors.ObjectClosed);
         }
-        CallResult closing = _session!.CloseSession();
+        if (_session!.Transactions.Depth > 0)
+        {
+            // r-oledb-odbc/txn-held-rows #248: explicit Close while in a transaction fails 0x800A0CAE.
+            ErrorsCollection.Clear();
+            return Fail(AdoErrors.CannotCloseInTransaction);
+        }
+        CallResult closing = _session.CloseSession();
         _session = null;
         _connectionString = null;
         _failedOpenModeRefreshPending = false;
@@ -1135,6 +1315,137 @@ internal sealed unsafe class ConnectionObject : AdoObject
         int closedMode = _mode == 0 ? 16 : _mode;
         _properties?.MarkStale(() => AceProperties.CreateClosed(closedMode));
         return closing;
+    }
+
+    /// <summary>
+    /// BeginTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
+    /// returns the new 1-based nesting level (<c>VT_I4</c>); IsolationLevel 1048576 (adXactSerializable) fails 0x8004D008
+    /// without opening a transaction.
+    /// </summary>
+    private CallResult BeginTrans()
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isolationLevel == 1048576) // adXactSerializable
+        {
+            MappedProviderError err = AdoSqlErrors.UnsupportedIsolationLevel();
+            SetProviderError(err.ErrorEntry);
+            return CallResult.Fail(err.ComFailure);
+        }
+        if (_isolationLevel != 4096) // adXactReadCommitted
+        {
+            return NotImplemented($"Connection.BeginTrans with IsolationLevel={_isolationLevel} (only 4096 and 1048576 are recorded)");
+        }
+        if (_session!.Transactions.BeginTrans() is { } mutErr)
+        {
+            MappedProviderError? mapped = AdoEditErrors.MapTxnError(mutErr, out Failure? unmodelled);
+            if (mapped is { } pe)
+            {
+                SetProviderError(pe.ErrorEntry);
+                return CallResult.Fail(pe.ComFailure);
+            }
+            return CallResult.Fail(unmodelled!);
+        }
+        ClearErrors();
+        return Int32(_session.Transactions.Depth);
+    }
+
+    /// <summary>
+    /// CommitTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
+    /// commits the innermost level; when <c>Attributes</c> includes <c>adXactCommitRetaining</c> (131072), starts a new
+    /// transaction immediately after committing.
+    /// </summary>
+    private CallResult CommitTrans()
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        TransactionCoordinator tx = _session!.Transactions;
+        if (tx.Depth == 0)
+        {
+            MappedProviderError err = AdoSqlErrors.NoTransaction();
+            SetProviderError(err.ErrorEntry);
+            return CallResult.Fail(err.ComFailure);
+        }
+        ResolutionOutcome res = tx.CommitTrans(0);
+        if (res.Error is { } mutErr)
+        {
+            MappedProviderError? mapped = AdoEditErrors.MapTxnError(mutErr, out Failure? unmodelled);
+            if (mapped is { } pe)
+            {
+                SetProviderError(pe.ErrorEntry);
+                return CallResult.Fail(pe.ComFailure);
+            }
+            return CallResult.Fail(unmodelled!);
+        }
+        if (res.Open != MutationOpen.None)
+        {
+            return CallResult.Fail(AdoEditErrors.MapOpen(res.Open, res.Detail));
+        }
+        _session.NotifyTransactionCommitted(tx.Depth);
+        if ((_attributes & 131072) != 0 && tx.BeginTrans() is { } retainErr)
+        {
+            MappedProviderError? mapped = AdoEditErrors.MapTxnError(retainErr, out Failure? unmodelled);
+            if (mapped is { } pe)
+            {
+                SetProviderError(pe.ErrorEntry);
+                return CallResult.Fail(pe.ComFailure);
+            }
+            return CallResult.Fail(unmodelled!);
+        }
+        ClearErrors();
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// RollbackTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
+    /// rolls back the innermost level, notifies open cursors to drop uncommitted inserts/edits at that depth, and when
+    /// <c>Attributes</c> includes <c>adXactAbortRetaining</c> (262144), starts a new transaction immediately.
+    /// </summary>
+    private CallResult RollbackTrans()
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        TransactionCoordinator tx = _session!.Transactions;
+        if (tx.Depth == 0)
+        {
+            MappedProviderError err = AdoSqlErrors.NoTransaction();
+            SetProviderError(err.ErrorEntry);
+            return CallResult.Fail(err.ComFailure);
+        }
+        ResolutionOutcome res = tx.Rollback();
+        if (res.Error is { } mutErr)
+        {
+            MappedProviderError? mapped = AdoEditErrors.MapTxnError(mutErr, out Failure? unmodelled);
+            if (mapped is { } pe)
+            {
+                SetProviderError(pe.ErrorEntry);
+                return CallResult.Fail(pe.ComFailure);
+            }
+            return CallResult.Fail(unmodelled!);
+        }
+        if (res.Open != MutationOpen.None)
+        {
+            return CallResult.Fail(AdoEditErrors.MapOpen(res.Open, res.Detail));
+        }
+        _session.NotifyTransactionRolledBack(tx.Depth);
+        if ((_attributes & 262144) != 0 && tx.BeginTrans() is { } retainErr)
+        {
+            MappedProviderError? mapped = AdoEditErrors.MapTxnError(retainErr, out Failure? unmodelled);
+            if (mapped is { } pe)
+            {
+                SetProviderError(pe.ErrorEntry);
+                return CallResult.Fail(pe.ComFailure);
+            }
+            return CallResult.Fail(unmodelled!);
+        }
+        ClearErrors();
+        return CallResult.Nothing;
     }
 
     private CallResult OpenSchema() =>

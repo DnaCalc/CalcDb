@@ -312,7 +312,7 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal("Code", Get(fCode, "Name"));
             Assert.Equal(202, Get(fCode, "Type")); // adVarWChar
             Assert.Equal(10, Get(fCode, "DefinedSize"));
-            Assert.Equal(HResults.E_NOTIMPL, Invoke(fCode, "Status", 2).Failure!.Value.Scode);
+            Assert.Equal(0, Get(fCode, "Status")); // Field.Status = adFieldOK (0) on server keyset (r-q-ado-misc/values-witness-keyset #56, #76)
             Assert.Equal(HResults.E_NOTIMPL, Invoke(rs, "Collect", 2, "Code").Failure!.Value.Scode);
 
             // _NewEnum returns IEnumVARIANT yielding 4 Field items; Skip reaching end returns S_FALSE (F6; r-q2-wire/retain-enum-ado-after-close #29-31).
@@ -522,14 +522,10 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Open", "SELECT ID FROM K", new Dispatch(cn), 0, 1, 17).Failure!.Value.Scode);
             Assert.Null(Call(rs, "Open", "K", new Dispatch(cn), 1, 3, 2).Failure);
 
-            // Editing & out-of-scope Recordset methods refused by name.
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "AddNew").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Update").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Delete").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "CancelUpdate").Failure!.Value.Scode);
+            // Out-of-scope Recordset methods remain refused by name; server keyset Resync fails 0x800A0CB3.
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "UpdateBatch").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "CancelBatch").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Resync").Failure!.Value.Scode);
+            Assert.Equal(unchecked((int)0x800A0CB3), Call(rs, "Resync").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Requery").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Seek", 1).Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Index", "PK_K").Failure!.Value.Scode);
@@ -542,7 +538,6 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
 
             nint flds = (nint)Get(rs, "Fields")!;
             nint fT = (nint)Get(flds, "Item", "T")!;
-            Assert.Equal(HResults.E_NOTIMPL, Put(fT, "Value", "edited").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Invoke(fT, "Properties", 2).Failure!.Value.Scode);
             Release(fT);
             Release(flds);

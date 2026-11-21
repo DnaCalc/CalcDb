@@ -258,6 +258,17 @@ internal sealed unsafe class CommandObject : AdoObject
         {
             return NotImplemented("Command.Execute with parameters (parameterized Command execution belongs to a later stretch)");
         }
+        if (_commandType == AdoSqlText.AdCmdText)
+        {
+            // r-ado-1b/errors-lock-timeout #45, r-ado-1b/errors-by-route #34, r-ado-1b/txn-rollback-scope-objects #27:
+            // non-parameterized adCmdText Command.Execute runs over the active connection's SQL executor.
+            return _activeConnection.ExecuteCommandText(
+                _commandText ?? "",
+                _commandType,
+                args.Length > 0 ? args[0] : 0,
+                args.Length > 2 ? args[2] : 0,
+                "Command.Execute");
+        }
         return NotImplemented("Command.Execute of a non-parameterized Command (not recorded)");
     }
 
