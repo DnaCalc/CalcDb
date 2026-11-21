@@ -125,6 +125,25 @@ attempt is reused while the module is unchanged; add `--rerun` after a worker or
 ends with a module observation, so an answer that came from ACE's own modules (an ADODB route reaching the ACE OLE DB
 provider) is a provenance difference, not a match.
 
+**The comparison rule (`calls.trace@8`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
+relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
+is an accepted difference, counted apart. Revision 8 adds `ace-clock-fields` (task c4rv). ACE writes its clock into every
+file it creates or changes, so two ACE runs of one question give different files. Where the SHA-256 of a file
+observation differs and both files' bytes can be found (ACE's from the retained content store only, CalcDb's from its own
+attempt, each checked against its hash), the files are compared byte for byte outside the clock fields each
+file's own structure locates ([AceClockFields](../../src/CalcDb.Corpus/AceClockFields.cs), ACE 2007 profile). Set aside:
+the page-0 creation DATE, MSysObjects DateCreate and DateUpdate, and a chained long value's millisecond tick stamp (its
+definition's word and its first LVAL page's stamp, where they agree and are not zero). Compared with the clock removed: the page-0
+password (XOR the creation day) and the 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID (XOR the RC4 keystream of the
+DATE). Each kind of field that differed is a note on a Matched comparison; this is ACE's nondeterminism, not an
+accepted difference. Any other byte, another profile, or a file whose bytes cannot be found still differs, the last with
+a note. Retained records keep a new file's hash, not its bytes, so the rule applies only where ACE's file is a retained
+artifact (task fh8f asks to retain them). `calcdb-oracle file-compare (--expected F --actual F | --attempts
+A,B | --repeats [--match REGEX])` shows the rule on two files, two attempts, or each native attempt in the store
+against the one before: on 2026-11-21 all 33 created or changed files of ACE repeats there matched, and only
+r-q8-header-counter two-deletes-500ms-apart still differs (two pairs), at the page-0 commit counter (a timing boundary,
+not a clock field).
+
 **The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch over every folder
 of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset), writes the run as one line per
 question (status, difference count, the oracle member the first difference stops at, the first difference) to

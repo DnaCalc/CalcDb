@@ -10,12 +10,16 @@ namespace CalcDb.Corpus;
 /// EXCEPINFO and IErrorInfo channels, enumerations and file effects. Capture-local object labels are assigned in order
 /// of first appearance, so equal labels mean the same identity graph. Strict by default; each relaxation is named.
 /// </summary>
+/// <remarks>
+/// A file a question created or changed is compared by its bytes outside ACE's clock fields when both files' bytes are
+/// available (revision 8, normalization <c>ace-clock-fields</c>, task c4rv); otherwise by its SHA-256, as before.
+/// </remarks>
 public static class CallTraceComparison
 {
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 7,
+        Revision = 8,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key; or (revision 6, R-ORACLE-1 OR-REUSE) the same question asked of the native installation twice, fresh and after a prehistory, compared with each other.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -36,6 +40,10 @@ public static class CallTraceComparison
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
+            new(ClockNormalization, "ACE writes its clock into a file it creates or changes, so two ACE runs of one question give files that differ there and nowhere else (r-fmt-1/create-accdb-empty a1/a3, r-q11-ddl-closure/create-one-long, r-q13-new-file-interop/ace-created a2/a3). This is ACE's own nondeterminism, not a CalcDb difference.",
+                "Revision 8: where the SHA-256 of a file observation differs and the bytes of both files are available (checked against their SHA-256), the files are compared byte for byte outside the clock fields each file's own structure locates (AceClockFields, ACE 2007 profile). The page-0 creation DATE, MSysObjects DateCreate and DateUpdate, and a chained long value's tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) are set aside; the page-0 password and the 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID are compared with each file's creation day and SID keystream removed. Each kind of field whose bytes differed is a note.",
+                "Any other byte, a different list of clock fields, a different length, another profile, and a file whose bytes are not available (compared by SHA-256, with a note) still differ.",
+                ["R-FMT-1 FMT1-CREATE", "R-CAT-1 CAT-NEW", "II-04 §7.1", "II-15 §12"]),
         ],
         AcceptedDifferences =
         [
@@ -44,6 +52,12 @@ public static class CallTraceComparison
                 "Every other interface of the same event, every DAO object's answers and everything after the event are compared as before.", ["II-13 §18", "R-ACT-1 ACT-THREAD"]),
         ],
     };
+
+    /// <summary>The normalization of ACE's clock fields in a file a question created or changed (revision 8).</summary>
+    public const string ClockNormalization = "ace-clock-fields";
+
+    /// <summary>The SHA-256 rendering of two files equal outside ACE's clock fields.</summary>
+    public const string EqualOutsideClock = "(equal outside ACE clock fields)";
 
     /// <summary>The accepted difference of CalcDb's apartment-threaded ADO (owner, 2026-11-20).</summary>
     public const string AdoApartment = "ado-apartment";
@@ -74,7 +88,10 @@ public static class CallTraceComparison
 
     /// <param name="candidateModule">The candidate implementation's module, or null when the candidate is another native run
     /// of the same question (OR-REUSE: a reused worker compared with a fresh one).</param>
-    public static ComparisonRecord Compare(string caseId, string oracleId, Capture oracle, string candidateId, Capture candidate, string? candidateModule, int maxDifferences = 16)
+    /// <param name="oracleFiles">The bytes of a file the oracle capture observed, by SHA-256 (revision 8); without it files compare by hash.</param>
+    /// <param name="candidateFiles">The same for the candidate capture.</param>
+    public static ComparisonRecord Compare(string caseId, string oracleId, Capture oracle, string candidateId, Capture candidate, string? candidateModule, int maxDifferences = 16,
+        Func<string, byte[]?>? oracleFiles = null, Func<string, byte[]?>? candidateFiles = null)
     {
         ComparisonRecord Result(ComparisonStatus status, List<Difference> differences, bool truncated = false, params string[] notes) => new()
         {
@@ -102,11 +119,16 @@ public static class CallTraceComparison
         // Accepted differences describe CalcDb against ACE; two native runs (OR-REUSE) have none.
         HashSet<string> adoBindings = candidateModule is null ? [] : AdoBindings(expected);
         var accepted = new List<string>();
+        var normalized = new List<string>();
         for (int i = 0; i < Math.Min(expected.Length, actual.Length); i++)
         {
             if (expected[i] is InterfacesEvent { Target: var target } && adoBindings.Contains(target))
             {
                 SetAsideAdoApartment(expectedNodes[i], actualNodes[i], $"{expected[i].ProgramPath}", accepted);
+            }
+            if (expected[i] is FilesEvent && actual[i] is FilesEvent)
+            {
+                CompareFileBytes(expectedNodes[i], actualNodes[i], $"{expected[i].ProgramPath}", oracleFiles, candidateFiles, normalized);
             }
         }
         for (int i = 0; i < Math.Max(expected.Length, actual.Length); i++)
@@ -128,8 +150,58 @@ public static class CallTraceComparison
             }
         }
         ComparisonStatus status = differences.Count > 0 ? ComparisonStatus.Mismatched : accepted.Count > 0 ? ComparisonStatus.AcceptedDifference : ComparisonStatus.Matched;
-        return Result(status, differences, truncated, [.. accepted]);
+        return Result(status, differences, truncated, [.. accepted, .. normalized]);
     }
+
+    /// <summary>
+    /// Normalization <see cref="ClockNormalization"/>: each pair of observations of one file whose SHA-256 and nothing else
+    /// differs is compared by its bytes outside ACE's clock fields (<see cref="FileImageComparison"/>). Equal there, both
+    /// hashes read <see cref="EqualOutsideClock"/> and each kind of clock field that differed is a note; otherwise each
+    /// hash carries the first byte that differs outside them. Page hashes give way to the byte comparison.
+    /// </summary>
+    private static void CompareFileBytes(JsonNode expected, JsonNode actual, string at, Func<string, byte[]?>? oracleFiles, Func<string, byte[]?>? candidateFiles, List<string> notes)
+    {
+        if (expected["files"] is not JsonArray e || actual["files"] is not JsonArray a)
+        {
+            return;
+        }
+        for (int i = 0; i < Math.Min(e.Count, a.Count); i++)
+        {
+            if (e[i] is not JsonObject x || a[i] is not JsonObject y
+                || x["relativePath"]?.ToJsonString() != y["relativePath"]?.ToJsonString()
+                || x["length"]?.ToJsonString() != y["length"]?.ToJsonString()
+                || x["sha256"]?.GetValue<string>() is not { } xs || y["sha256"]?.GetValue<string>() is not { } ys
+                || string.Equals(xs, ys, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            string label = $"{ClockNormalization} {at} files[{i}] {x["relativePath"]?.GetValue<string>()}";
+            byte[]? xb = Verified(oracleFiles, xs), yb = Verified(candidateFiles, ys);
+            if (xb is null || yb is null)
+            {
+                notes.Add($"{label}: the bytes of the {(xb is null ? "expected" : "actual")} file are not available; compared by SHA-256");
+                continue;
+            }
+            FileImageVerdict verdict = FileImageComparison.Compare(xb, yb);
+            x.Remove("pageHashes");
+            y.Remove("pageHashes");
+            if (verdict.EqualOutsideClock)
+            {
+                x["sha256"] = EqualOutsideClock;
+                y["sha256"] = EqualOutsideClock;
+                notes.AddRange(verdict.Notes.Select(n => $"{label}: {n}"));
+            }
+            else
+            {
+                x["sha256"] = $"{xs}; at {verdict.Difference}: {verdict.Expected}";
+                y["sha256"] = $"{ys}; at {verdict.Difference}: {verdict.Actual}";
+            }
+        }
+    }
+
+    /// <summary>The bytes a resolver gives for a SHA-256, only when they hash to it.</summary>
+    private static byte[]? Verified(Func<string, byte[]?>? files, string sha256) =>
+        files?.Invoke(sha256) is { } bytes && Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).Equals(sha256, StringComparison.OrdinalIgnoreCase) ? bytes : null;
 
     /// <summary>The bindings of the oracle program that hold an ADO object: created from an ADODB class, or bound from a call on one.</summary>
     private static HashSet<string> AdoBindings(CaptureEvent[] events)

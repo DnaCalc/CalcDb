@@ -42,6 +42,8 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>broker [--workers N] ... | broker --stop</c>: run or stop the oracle service broker (step 2; <see cref="BrokerCommand"/>);
 /// <c>status</c> without <c>--token</c> prints its one line, OK, DEGRADED or DOWN.</item>
 /// <item><c>ask --via broker ...</c>: ask questions of the broker (<see cref="AskCommand"/>).</item>
+/// <item><c>file-compare (--expected F --actual F | --attempts A,B | --repeats [--match REGEX])</c>: database files compared
+/// outside ACE's clock fields (calls.trace revision 8; <see cref="FileCompare"/>).</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
@@ -52,7 +54,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|file-compare|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -80,6 +82,7 @@ internal static partial class Program
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
                 "inspect" => InspectCommand.Run(store, options),
+                "file-compare" => FileCompare(store, options, artifactsDir),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "compare-set" => CompareSetCommand(store, options, repo, evidenceDir, artifactsDir),
                 "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),
@@ -212,7 +215,13 @@ internal static partial class Program
                 Status = Corpus.ComparisonStatus.Missing,
             }, null);
         }
-        return (Corpus.CallTraceComparison.Compare(question.Probe, oracle.Manifest.AttemptId, oracle.Capture!, manifest.AttemptId, EvidenceJson.Read<Capture>(capturePath), "CalcDb.dll"), oracle.Capture);
+        // Files compare by their bytes outside ACE's clock fields where both files' bytes can be found (revision 8). ACE's
+        // side comes only from retained artifacts: a verdict rests on retained observations (The Plan §2.4), never on an
+        // oracle attempt that happens to remain in a local store.
+        var retained = new ArtifactStore(Path.Combine(evidenceDir, "artifacts"), Path.Combine(store.Root, "cas"));
+        return (Corpus.CallTraceComparison.Compare(question.Probe, oracle.Manifest.AttemptId, oracle.Capture!, manifest.AttemptId, EvidenceJson.Read<Capture>(capturePath), "CalcDb.dll",
+            oracleFiles: sha => retained.Locate(sha) is { } kept ? File.ReadAllBytes(kept) : null,
+            candidateFiles: AttemptFiles(store, retained, manifest.AttemptId, manifest.Artifacts)), oracle.Capture);
     }
 
     /// <summary>One question of a batch: its attempt and, when compared, the verdict and the oracle capture it used.</summary>
