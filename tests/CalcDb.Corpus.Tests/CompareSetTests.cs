@@ -293,6 +293,51 @@ public sealed class CompareSetTests
         Assert.DoesNotContain(def.NotComparable, nc => nc.CaseId.StartsWith("r-q2-expr-sql/", StringComparison.Ordinal));
     }
 
+    // The wide set (task 3x6h; docs/work/landing-check.md, compare tiers) holds every folder of the core set.
+    [Fact]
+    public void Compare_set_wide_json_lists_widened_folders_and_named_not_comparable_questions()
+    {
+        string repo = RepoRoot();
+        CompareSet.Definition def = EvidenceJson.Read<CompareSet.Definition>(Path.Combine(repo, "probes", "compare-set-wide.json"));
+        CompareSet.Definition core = EvidenceJson.Read<CompareSet.Definition>(Path.Combine(repo, "probes", "compare-set.json"));
+        var folderSet = new HashSet<string>(def.Folders, StringComparer.Ordinal);
+        Assert.All(core.Folders, folder => Assert.Contains(folder, folderSet));
+        Assert.All(core.NotComparable, nc => Assert.Contains(def.NotComparable, w => w.CaseId == nc.CaseId));
+        Assert.Equal(def.Folders.Count, folderSet.Count);
+        Assert.All(def.Folders, folder =>
+            Assert.True(Directory.Exists(Path.Combine(repo, "probes", folder)), $"compare-set folder probes/{folder} does not exist"));
+
+        Assert.Contains("r-q15-ddl-open", folderSet);
+        Assert.Contains("r-q18-statements", folderSet);
+        Assert.Contains("r-q2-expr-sql", folderSet);
+        Assert.Contains("r-q2-cat-txn-lock", folderSet);
+        Assert.Contains("r-q24-bookmarks", folderSet);
+        Assert.Contains("r-q25-nz-3141", folderSet);
+        Assert.Contains("r-q26-column-order", folderSet);
+
+        // Owned Access front-end host, modal UI dialogs, and all-killParticipant folders stay out by construction.
+        Assert.DoesNotContain("r-access-host", folderSet);
+        Assert.DoesNotContain("r-access-dialog", folderSet);
+        Assert.DoesNotContain("r-crash-1-midcall", folderSet);
+        Assert.DoesNotContain("r-txn-flush", folderSet);
+
+        Assert.Equal(31, def.NotComparable.Count);
+        var ncIds = new HashSet<string>(StringComparer.Ordinal);
+        Assert.All(def.NotComparable, nc =>
+        {
+            Assert.True(ncIds.Add(nc.CaseId), $"duplicate notComparable entry {nc.CaseId}");
+            int slash = nc.CaseId.IndexOf('/');
+            Assert.True(slash > 0, $"notComparable entry {nc.CaseId} must be <folder>/<probe>");
+            Assert.Contains(nc.CaseId[..slash], folderSet);
+            Assert.False(string.IsNullOrWhiteSpace(nc.Reason));
+            string file = Path.Combine(repo, "probes", nc.CaseId.Replace('/', Path.DirectorySeparatorChar) + ".question.json");
+            Assert.True(File.Exists(file), $"notComparable entry {nc.CaseId} has no question file at {file}");
+            Assert.Equal(nc.CaseId, EvidenceJson.Read<Question>(file).Probe);
+        });
+        // CalcDb's own timeouts in r-q2-expr-sql stay in the compared denominator, never excluded.
+        Assert.DoesNotContain(def.NotComparable, nc => nc.CaseId.StartsWith("r-q2-expr-sql/", StringComparison.Ordinal));
+    }
+
     private static string RepoRoot()
     {
         for (string? dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))

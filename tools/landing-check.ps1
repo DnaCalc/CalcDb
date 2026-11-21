@@ -203,6 +203,18 @@ try {
         $build = dotnet build $Solution -v q -clp:ErrorsOnly 2>&1
         if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
         Step "built $Solution"
+        # The tests run with --no-build: a selected test project outside an area filter is built too, or it would run
+        # older binaries (found by the c7gn writer's self-check, 2026-11-21).
+        if ($Solution -ne "CalcDb.slnx") {
+            $inFilter = @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
+            foreach ($t in $Tests) {
+                $proj = "tests/CalcDb.$t.Tests/CalcDb.$t.Tests.csproj"
+                if ($proj -in $inFilter) { continue }
+                $build = dotnet build $proj -v q -clp:ErrorsOnly 2>&1
+                if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED $proj"; exit $failed }
+                Step "built $proj (outside $Solution)"
+            }
+        }
 
         # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
         # last publish here. Four Com test classes, the candidate check and the snapshot load the published module.

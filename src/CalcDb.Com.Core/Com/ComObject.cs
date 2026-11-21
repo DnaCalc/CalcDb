@@ -18,7 +18,7 @@ internal struct InterfaceHead
 /// A NativeAOT module cannot be unloaded, so <c>DllCanUnloadNow</c> answers S_FALSE whatever the counts; they stay
 /// visible for T-INT-17's accounting.
 /// </summary>
-internal static class ModuleLifetime
+public static class ModuleLifetime
 {
     private static long _objects;
     private static long _locks;
@@ -58,7 +58,7 @@ internal static class ModuleLifetime
 /// aggregated wrapper allocates that head; a wrapper without an outer pays one field test per call.
 /// </para>
 /// </summary>
-internal abstract unsafe class ComObject
+public abstract unsafe class ComObject
 {
     private readonly InterfaceHead* _heads;
     private readonly int _headCount;
@@ -221,7 +221,7 @@ internal abstract unsafe class ComObject
     }
 
     /// <summary>Free the heads and the handle: at the final release, or when a parent drops a parked wrapper.</summary>
-    internal void Discard()
+    public void Discard()
     {
         _self.Free();
         NativeMemory.Free(_heads);
@@ -246,7 +246,7 @@ internal abstract unsafe class ComObject
     }
 }
 
-internal static class ComIids
+public static class ComIids
 {
     public static readonly Guid IUnknown = new("00000000-0000-0000-C000-000000000046");
     public static readonly Guid IDispatch = new("00020400-0000-0000-C000-000000000046");
@@ -255,7 +255,8 @@ internal static class ComIids
     public static readonly Guid ISupportErrorInfo = new("DF0B3D60-548F-101B-8E65-08002B2BD119");
 }
 
-internal static class HResults
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Win32 HRESULT constant names.")]
+public static class HResults
 {
     public const int S_OK = 0;
     public const int S_FALSE = 1;

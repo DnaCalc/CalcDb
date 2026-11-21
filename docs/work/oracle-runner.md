@@ -181,15 +181,25 @@ Questions explicitly listed under `timingBoundaries` in [probes/compare-set.json
 with its reason) stay counted at their actual verdict in `TOTAL` and per-folder counts, while a verdict flip between
 `Matched`/`AcceptedDifference` and `Mismatched` is reported on its own line (`timing boundary (counted in TOTAL, not in
 gained/lost): N`) with its reason instead of `Gained`/`Lost`.
-Questions explicitly listed under `notComparable` in [probes/compare-set.json](../../probes/compare-set.json) (currently
-the 11 `killParticipant` questions of `r-q2-cat-txn-lock` whose retained ACE record is `Uncertain`/`Incomplete` with no
-capture of participant `a`) are not run or counted in matched or compared questions; every run prints their count on the
-folder and `TOTAL` lines (`N not comparable, listed`) and lists every one with its reason. CalcDb's own failures (such as
-timeouts) never go on `notComparable` and remain in the compared denominator as `CandidateIncomplete`.
+Questions explicitly listed under `notComparable` in a set file (in the core set
+[probes/compare-set.json](../../probes/compare-set.json), the 11 `killParticipant` questions of `r-q2-cat-txn-lock`; in
+the wide set [probes/compare-set-wide.json](../../probes/compare-set-wide.json), 31 questions across its 96 folders: 22 `killParticipant` questions in `r-q2-cat-txn-lock`, `r-q-cat-txn-lock` and `r-fmt-2b`
+whose retained ACE record has no capture of participant `a`, 6 ACE `0xC0000005` crashes in `r-crash-requery`, `r-expr-1`
+and `r-expr-1b`, 1 ACE timeout in `r-sql-13b/join-limit-tables`, 1 ACE ODBC Select Data Source dialog timeout in
+`r-wire/opt-opendatabase`, and `r-oledb-odbc/act-describe-companion-libraries` which creates only ADOX/JRO outside
+`CalcDb.Compat.manifest`) are not run or counted in matched or compared questions; every run prints their count on the
+folder and `TOTAL` lines (`N not comparable, listed`) and lists every one with its reason. Four probe folders stay outside
+the wide set by construction: `r-access-host` (7) and `r-access-dialog` (10) activate `Access.Application` and claim
+`MSACCESS.EXE`, and `r-crash-1-midcall` (12) and `r-txn-flush` (20) use `killParticipant` on every question with no
+captured ACE participant `a` (task 3x6h). CalcDb's own failures (such as timeouts) never go on `notComparable` and remain
+in the compared denominator as `CandidateIncomplete`.
 `compare-set` uses an explicit candidate per-attempt timeout of **90 s** by default (overridden by `--timeout N`, vs the
-300 s single-attempt default of `run`/`batch`): measured across 1,576 completing candidate attempts, the slowest is
-`r-q-ado-misc/resync-affect-matrix` at 33–34 s (next slowest `r-q2-cat-txn-lock/read-schema-held-querydef-late` at
-21.7–23.0 s), so 90 s leaves ~2.6× headroom while keeping engine timeouts from stalling a run for five minutes (task mfmr).
+300 s single-attempt default of `run`/`batch`): measured across the wide 96-folder set (3,158 comparable questions,
+1,505 s / 25.1 min at `--parallel 6` against 7.7–8.6 min for the earlier 42-folder / 1,360-question set; multi-participant
+questions run one at a time in `BatchLanes`), the slowest completing candidate attempt remains
+`r-q-ado-misc/resync-affect-matrix` at 33–34 s (next slowest in the added folders `r-fix-cat-txn/txn-view-readers-late` at
+29.4 s and `r-q-cat-txn-lock/txn-range-far-row-final-read` at 22.9 s), so 90 s leaves ~2.6× headroom while keeping engine
+timeouts from stalling a run for five minutes (tasks mfmr, 3x6h).
 At the start of `compare-set` (never `batch`, which may share the repository store concurrently), any attempt in the store
 left `Prepared` or `Running` whose preparing runner process (recorded by PID and start time on the attempt) and owned
 workers are all gone is settled through the `seal` path, printed with its count and attempt id, and the run goes on; when

@@ -745,3 +745,21 @@ Not done: one shared repository-root helper for the test projects. It was propos
 **Measure next time.** Landing checks passed on the first run, check duration and merge minutes (landing-runs.tsv,
 tools/process-indicators.ps1); the gap from a child's report to its landing; whether any branch conflicts outside the
 bookkeeping files.
+
+**Trial: the long-lived Roslyn workspace (The Plan §4; Sonnet child 01a1ffc0-fef6, roscli 0.1.6-preview.20).** Six
+navigation tasks on CalcDb.slnx, each done with grep and file reads and again with roscli's hot workspace (daemon,
+`workspace.use`). Grep answered all six completely in 3 to 7 calls and 0.4 to 15 KB. roscli was right only where the
+query was anchored in the right file: `find_references` searches one file and `find_invocations` one project (the 41
+callers of TransactionCoordinator.BeginStatement took four anchored queries), `find_implementations` found 0 of 5
+IPageSource implementers, method-group and constructor uses were invisible, and five commands (call hierarchy, impact
+slice, call-chain slice, implementations, workspace snapshot) reload the solution on every call: 76 to 178 s. The
+warm workspace kept answering from the old state after an edit, its bundled Roslyn reported 4 false errors on .NET 11
+code, and a reload refresh wedged the host twice. Load: 77 to 153 s, 280 to 430 MB. Where it helped: telling apart three
+types named RecordsetObject, and the cross-project error cascade after a signature break, which `dotnet build` of an
+area filter stops before.
+
+| Decision | Why |
+| --- | --- |
+| Not adopted; agents navigate with grep as before | complete and cheaper on every task measured |
+| roscli fixed at its source: daemon routing and solution-wide search (RoslynSkills `r9bh`), the wedged host (`mbvr`), stale answers after edits (`49hc`), false diagnostics (`zzfs`), daemon state in the analysed repository (`vr3g`) | the gaps are in roscli, not in the idea of a persistent workspace |
+| Measure again after r9bh lands, on the same six tasks | this run is the "before" side |

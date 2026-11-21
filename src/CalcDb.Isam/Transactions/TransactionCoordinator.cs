@@ -1800,11 +1800,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
-    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket): e.g. the second
-    /// commit of DAO <c>TableDefs.Append</c> whose pages an earlier publication of the same statement already wrote
-    /// (<c>evidence/r-q11-ddl-closure/append-dao</c>). Does not free <see cref="PhysicalChange.ReleasedAtClose"/> pages
-    /// and keeps <see cref="NeedsCloseCommit"/> intact until <see cref="PublishCloseCommit"/> runs. Nothing when the file
-    /// has no such counter.
+    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket). No production
+    /// path calls it: DAO <c>TableDefs.Append</c> now publishes one catalog change per commit (SchemaWriter.CreateTable),
+    /// and the Isam tests use it to show that a counter-only commit keeps the Close obligation. Does not free
+    /// <see cref="PhysicalChange.ReleasedAtClose"/> pages and keeps <see cref="NeedsCloseCommit"/> intact until
+    /// <see cref="PublishCloseCommit"/> runs. Nothing when the file has no such counter.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache)
     {
@@ -1822,8 +1822,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// (<c>evidence/r-q17-growth/retire-delete-au1-read-open</c>, <c>evidence/r-q15-ddl-open/counter-drop-pages</c>,
     /// <c>evidence/r-q20-delete-pages/*</c>, <c>evidence/r-q22-lv-open/lv-free-timing-update-chain-*</c>), increments the
     /// ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and extent
-    /// reservation state. Mid-session counter commits (<see cref="PublishCounterCommit"/>, e.g. DAO
-    /// <c>TableDefs.Append</c>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
+    /// reservation state. Mid-session commits (catalog changes such as DAO <c>TableDefs.Append</c>'s per-field commits,
+    /// and <see cref="PublishCounterCommit"/>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
     {

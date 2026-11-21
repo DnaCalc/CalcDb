@@ -5,7 +5,7 @@ using CalcDb.Values;
 namespace CalcDb.Com.Com;
 
 /// <summary>The operations a DAO or ADO class implements, by declared member (one table per class).</summary>
-internal sealed class OperationTable(InterfaceDecl declaration)
+public sealed class OperationTable(InterfaceDecl declaration)
 {
     private readonly Dictionary<MemberDecl, Operation> _operations = new(ReferenceEqualityComparer.Instance);
 
@@ -27,7 +27,7 @@ internal sealed class OperationTable(InterfaceDecl declaration)
 }
 
 /// <summary>The results operations return, shared by the DAO and ADO objects.</summary>
-internal static unsafe class Results
+public static unsafe class Results
 {
     /// <summary>A returned object: a new reference to its IDispatch head, owned by the result.</summary>
     public static CallResult Object(ComObject target)

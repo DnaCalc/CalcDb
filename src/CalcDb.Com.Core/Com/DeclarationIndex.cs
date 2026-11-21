@@ -7,27 +7,43 @@ namespace CalcDb.Com.Com;
 /// base chains and the types a USERDEFINED name stands for. DAO and ADO share names (Properties, Errors, Field,
 /// Recordset): a name is always resolved in the library of the declaration that uses it (W-09/construction-policy).
 /// </summary>
-internal static class DeclarationIndex
+public static class DeclarationIndex
 {
+    private static readonly Lock Gate = new();
+    private static volatile LibraryDecl[] _libraries = [];
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<InterfaceDecl, LibraryDecl> Owners = new(ReferenceEqualityComparer.Instance);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<LibraryDecl, Dictionary<string, InterfaceDecl>> ByName = new(ReferenceEqualityComparer.Instance);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<InterfaceDecl, Guid[]> Chains = new(ReferenceEqualityComparer.Instance);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, string>> Resolved = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>The libraries CalcDb.dll implements.</summary>
-    public static IReadOnlyList<LibraryDecl> Libraries { get; } = [DaoTypes.Library, AdoTypes.Library];
+    public static IReadOnlyList<LibraryDecl> Libraries => _libraries;
 
-    private static readonly Dictionary<InterfaceDecl, LibraryDecl> Owners = BuildOwners();
-
-    private static readonly Dictionary<LibraryDecl, Dictionary<string, InterfaceDecl>> ByName =
-        Libraries.ToDictionary<LibraryDecl, LibraryDecl, Dictionary<string, InterfaceDecl>>(l => l, l => l.Interfaces.ToDictionary(i => i.Name, StringComparer.Ordinal), ReferenceEqualityComparer.Instance);
-
-    private static Dictionary<InterfaceDecl, LibraryDecl> BuildOwners()
+    /// <summary>Register a generated library declaration (idempotent, thread-safe).</summary>
+    public static void Register(LibraryDecl library)
     {
-        var owners = new Dictionary<InterfaceDecl, LibraryDecl>(ReferenceEqualityComparer.Instance);
-        foreach (LibraryDecl library in Libraries)
+        if (ByName.ContainsKey(library))
         {
+            return;
+        }
+        lock (Gate)
+        {
+            if (ByName.ContainsKey(library))
+            {
+                return;
+            }
             foreach (InterfaceDecl i in library.Interfaces)
             {
-                owners[i] = library;
+                Owners[i] = library;
             }
+            Resolved[library] = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+            ByName[library] = library.Interfaces.ToDictionary(i => i.Name, StringComparer.Ordinal);
+            _libraries = [.. _libraries, library];
         }
-        return owners;
     }
 
     /// <summary>The library that declares <paramref name="declaration"/>.</summary>
@@ -57,8 +73,6 @@ internal static class DeclarationIndex
         }
         return [.. chain];
     });
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<InterfaceDecl, Guid[]> Chains = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// The type text a parameter or return type of <paramref name="declaration"/> stands for on the vtable: an enum of
@@ -92,7 +106,4 @@ internal static class DeclarationIndex
         }
         return type;
     }
-
-    private static readonly Dictionary<LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, string>> Resolved =
-        Libraries.ToDictionary<LibraryDecl, LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, string>>(l => l, _ => new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal), ReferenceEqualityComparer.Instance);
 }

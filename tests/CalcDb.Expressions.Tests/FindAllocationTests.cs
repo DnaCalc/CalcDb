@@ -10,6 +10,7 @@ namespace CalcDb.Expressions.Tests;
 /// Text comparison under the database sort order. Measured with GC.GetAllocatedBytesForCurrentThread over a whole warm
 /// Find, no assertion inside the measured call.
 /// </summary>
+[Collection(AllocationBudgets.Name)]
 public sealed class FindAllocationTests(ITestOutputHelper output)
 {
     private const string Big = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012";

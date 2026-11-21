@@ -21,7 +21,7 @@ namespace CalcDb.Com.Com;
 /// with the captured offsets in its system kind's pointer units, saved, and only ever used as loaded from its image.
 /// </para>
 /// </summary>
-internal static unsafe partial class TypeLibrary
+public static unsafe partial class TypeLibrary
 {
     private static readonly Lock Gate = new();
     private static readonly Dictionary<LibraryDecl, (nint Library, int Failure)> Loaded = new(ReferenceEqualityComparer.Instance);
