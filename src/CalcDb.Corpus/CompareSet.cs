@@ -11,7 +11,7 @@ namespace CalcDb.Corpus;
 /// stays in the denominator: a candidate attempt that did not complete is <see cref="CandidateIncomplete"/>, and no
 /// retained ACE answer is <see cref="ComparisonStatus.Missing"/>.
 /// </summary>
-public static class CompareSet
+public static partial class CompareSet
 {
     /// <summary>The status of a question whose candidate attempt did not complete, so it was not compared.</summary>
     public const string CandidateIncomplete = "CandidateIncomplete";
@@ -163,6 +163,7 @@ public static class CompareSet
                 _ when Good(a) && !Good(b) => ChangeKind.Gained,
                 _ when Good(b) && !Good(a) => ChangeKind.Lost,
                 _ when a.Status != b.Status => ChangeKind.Status,
+                _ when IsSameStopNewFileHash(b, a) => null,
                 _ when a.First != b.First || a.Differences != b.Differences => ChangeKind.Moved,
                 _ => null,
             };
@@ -173,6 +174,45 @@ public static class CompareSet
         }
         return changes;
     }
+
+    /// <summary>
+    /// Count of questions whose status, difference count and first-difference stop are unchanged, differing only in the
+    /// actual SHA-256 of a <c>$.files[N].sha256</c> observation (task sg5t: CalcDb writes the current clock into a
+    /// created file on every run). Still counted Mismatched; excluded from <see cref="ChangeKind.Moved"/> and reported on
+    /// one line by <see cref="RenderDiff"/> so nothing is hidden.
+    /// </summary>
+    public static int SameStopNewFileHashCount(Run before, Run after)
+    {
+        var old = before.Entries.ToDictionary(e => e.CaseId, StringComparer.Ordinal);
+        int count = 0;
+        foreach (Entry a in after.Entries)
+        {
+            if (old.TryGetValue(a.CaseId, out Entry? b) && IsSameStopNewFileHash(b, a))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static bool IsSameStopNewFileHash(Entry before, Entry after) =>
+        before.Status == after.Status
+        && !Good(before)
+        && before.Differences == after.Differences
+        && before.Stop == after.Stop
+        && before.First != after.First
+        && FileHashPrefix(before.First) is { } bp
+        && FileHashPrefix(after.First) is { } ap
+        && string.Equals(bp, ap, StringComparison.Ordinal);
+
+    private static string? FileHashPrefix(string first)
+    {
+        System.Text.RegularExpressions.Match m = FileHashDifferencePattern().Match(first);
+        return m.Success ? m.Groups["prefix"].Value : null;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?<prefix>\S+ \$\.files\[\d+\]\.sha256 \[files\]: expected .+) actual ""[0-9a-fA-F]{64}""$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex FileHashDifferencePattern();
 
     private static bool Good(Entry e) => e.Matched || e.Accepted;
 
@@ -233,6 +273,11 @@ public static class CompareSet
         if (changes.Count == 0)
         {
             sb.Append("no question changed\n");
+        }
+        int newFileHash = SameStopNewFileHashCount(before, after);
+        if (newFileHash > 0)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"same stop, new file hash: {newFileHash}\n");
         }
         return sb.ToString();
     }

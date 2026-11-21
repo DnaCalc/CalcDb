@@ -86,4 +86,70 @@ public sealed class CompareSetTests
         Assert.Equal("(provenance)", CompareSet.StopAt(new Difference("modules", "a", "b", "provenance"), oracle));
         Assert.Equal("call", CompareSet.StopAt(new Difference("7 $.x", "a", "b", "call"), oracle));
     }
+
+    [Fact]
+    public void Diff_treats_same_stop_new_file_hash_as_unchanged_and_prints_count_on_one_line()
+    {
+        const string exp1 = "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8";
+        const string exp2 = "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58";
+        const string actBefore1 = "3c40876dc3e07c1cb9dbcf06de6056ba5ac2b343849af339b37b6492d4f78735";
+        const string actAfter1 = "3174e3a031812993c233fdcd64a06a611a3fb3fac480149d9d772ecfa1dda7eb";
+        const string actBefore2 = "c6f6dd3ae78fee9dd0894749bd52c69cb33ce8af725e4e39dfb71bedde547ec2";
+        const string actAfter2 = "9d9b7f458a62a083db0b83b4eaa288a5fb82c4b135f51d3e9960386bb9366440";
+
+        CompareSet.Entry FileEntry(string id, string first, int n = 1) => new("f", id, "Mismatched", n, "files", first);
+
+        var before = R("b",
+            FileEntry("f/clock-only-1", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{actBefore1}\"", 16),
+            FileEntry("f/clock-only-2", $"25 $.files[1].sha256 [files]: expected \"{exp2}\" actual \"{actBefore2}\"", 1),
+            FileEntry("f/identical-hash", $"13 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{actBefore1}\"", 1));
+        var after = R("a",
+            FileEntry("f/clock-only-1", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{actAfter1}\"", 16),
+            FileEntry("f/clock-only-2", $"25 $.files[1].sha256 [files]: expected \"{exp2}\" actual \"{actAfter2}\"", 1),
+            FileEntry("f/identical-hash", $"13 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{actBefore1}\"", 1));
+
+        IReadOnlyList<CompareSet.Change> changes = CompareSet.Diff(before, after);
+        Assert.Empty(changes);
+        Assert.Equal(2, CompareSet.SameStopNewFileHashCount(before, after));
+
+        string text = CompareSet.RenderDiff(before, after, changes);
+        Assert.Contains("0/3   ->   0/3", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Moved", text, StringComparison.Ordinal);
+        Assert.Contains("no question changed\nsame stop, new file hash: 2\n", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diff_still_reports_moved_when_call_path_expected_count_or_actual_shape_changes()
+    {
+        const string exp1 = "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8";
+        const string exp2 = "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58";
+        const string act1 = "3c40876dc3e07c1cb9dbcf06de6056ba5ac2b343849af339b37b6492d4f78735";
+        const string act2 = "3174e3a031812993c233fdcd64a06a611a3fb3fac480149d9d772ecfa1dda7eb";
+
+        CompareSet.Entry FileEntry(string id, string first, int n = 1) => new("f", id, "Mismatched", n, "files", first);
+
+        var before = R("b",
+            FileEntry("f/call-moved", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act1}\""),
+            FileEntry("f/index-moved", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act1}\""),
+            FileEntry("f/expected-changed", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act1}\""),
+            FileEntry("f/count-changed", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act1}\"", 16),
+            FileEntry("f/not-a-hash", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual (absent)"),
+            FileEntry("f/byte-diff-suffix", $"9 $.files[0].sha256 [files]: expected \"{exp1}; at page 0 offset 16: 00\" actual \"{act1}; at page 0 offset 16: 01\""),
+            FileEntry("f/length-path", "9 $.files[0].length [files]: expected 266240 actual 258048"));
+        var after = R("a",
+            FileEntry("f/call-moved", $"10 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act2}\""),
+            FileEntry("f/index-moved", $"9 $.files[1].sha256 [files]: expected \"{exp1}\" actual \"{act2}\""),
+            FileEntry("f/expected-changed", $"9 $.files[0].sha256 [files]: expected \"{exp2}\" actual \"{act2}\""),
+            FileEntry("f/count-changed", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act2}\"", 15),
+            FileEntry("f/not-a-hash", $"9 $.files[0].sha256 [files]: expected \"{exp1}\" actual \"{act2}\""),
+            FileEntry("f/byte-diff-suffix", $"9 $.files[0].sha256 [files]: expected \"{exp1}; at page 0 offset 16: 00\" actual \"{act2}; at page 0 offset 16: 02\""),
+            FileEntry("f/length-path", "9 $.files[0].length [files]: expected 266240 actual 262144"));
+
+        IReadOnlyList<CompareSet.Change> changes = CompareSet.Diff(before, after);
+        Assert.Equal(7, changes.Count);
+        Assert.All(changes, c => Assert.Equal(CompareSet.ChangeKind.Moved, c.Kind));
+        Assert.Equal(0, CompareSet.SameStopNewFileHashCount(before, after));
+        string text = CompareSet.RenderDiff(before, after, changes);
+        Assert.DoesNotContain("same stop, new file hash:", text, StringComparison.Ordinal);
+    }
 }

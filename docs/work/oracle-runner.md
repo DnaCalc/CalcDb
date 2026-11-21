@@ -164,10 +164,10 @@ question against an earlier one: gained, lost (a regression until explained), st
 added and removed questions. `--against` takes a run name, a file, `git:REV` (the baseline as committed at REV) or
 `none`; the default is the committed baseline [compare-baseline.tsv](compare-baseline.tsv). `--record` makes the run
 the baseline, committed with the change it measures, so its git diff shows the per-question change. `--diff NAME` diffs
-a written run without running anything; `--verbose` shows the batch lines. CalcDb writes different bytes into a file it
-creates on every run, so a question whose first difference is that file's hash moves in every diff, also between two
-sequential runs of one build: on 2026-11-21 five questions (sort3b-dao-index-flags, create-membership-refresh,
-create-held-databases-before-engine-create, create-suspend-mid-call-early and -late).
+a written run without running anything; `--verbose` shows the batch lines. CalcDb writes the current clock into a file it
+creates on every run, so a question whose first difference is `$.files[N].sha256` at the same call, path, difference count
+and expected value with only a new actual file hash stays counted `Mismatched` but is treated as unchanged in the diff
+rather than `Moved`, and counted on one line (`same stop, new file hash: N`) so nothing is hidden (task sg5t).
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and
