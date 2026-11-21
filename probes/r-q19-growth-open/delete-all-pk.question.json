@@ -1,0 +1,1746 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q19-growth-open/delete-all-pk",
+  "bookRefs": [
+    "R-FMT-2",
+    "W-05/growth-structural-closure",
+    "zfrp",
+    "Overflow / deletion",
+    "Map ownership and growth"
+  ],
+  "description": "CreateDatabase(path, dbLangGeneral, dbVersion120). CREATE TABLE D (ID LONG CONSTRAINT PK_D PRIMARY KEY, P TEXT(255)); 30 rows as in delete-all-no-index. Close. A shared session runs DELETE FROM D with dbFailOnError (RecordsAffected read) and closes. Pages 0, 1 and 42-81 are kept and pages 0-81 hashed after the populating session and after the delete session. Asks which pages DELETE without WHERE releases, in which maps, and what it writes in the pages it releases and the index pages.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "growth.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE D (ID LONG CONSTRAINT PK_D PRIMARY KEY, P TEXT(255))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (1, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (2, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (3, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (4, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (5, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (6, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (7, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (8, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (9, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (10, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (11, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (12, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (13, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (14, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (15, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (16, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (17, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (18, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (19, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (20, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (21, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (22, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (23, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (24, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (25, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (26, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (27, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (28, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (29, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (ID, P) VALUES (30, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-populate",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-after-populate",
+      "file": "work:growth.accdb",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 0,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 188416,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 192512,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 196608,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 200704,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 221184,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 225280,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 229376,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 233472,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 237568,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 241664,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 245760,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 249856,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 253952,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 258048,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 262144,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 266240,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 270336,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 274432,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 278528,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 282624,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 286720,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 290816,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 294912,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 299008,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 303104,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 307200,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 311296,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 315392,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 319488,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 323584,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 327680,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-populate",
+      "offset": 331776,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-after-populate"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "growth.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM D"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-after-close",
+      "file": "work:growth.accdb",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 0,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 188416,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 192512,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 196608,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 200704,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 221184,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 225280,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 229376,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 233472,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 237568,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 241664,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 245760,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 249856,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 253952,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 258048,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 262144,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 266240,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 270336,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 274432,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 278528,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 282624,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 286720,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 290816,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 294912,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 299008,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 303104,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 307200,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 311296,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 315392,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 319488,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 323584,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 327680,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-close",
+      "offset": 331776,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-after-close"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

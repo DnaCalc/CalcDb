@@ -1,0 +1,897 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q19-growth-open/insert-free-2042",
+  "bookRefs": [
+    "R-FMT-2",
+    "W-05/growth-structural-closure",
+    "zfrp",
+    "Overflow / deletion",
+    "Map ownership and growth"
+  ],
+  "description": "A copy of the r-fmt-2b-w-accdb fixture (123 pages; page 122, Au4's old data page, is the only free page inside the file). Pg: tdef 52, usage maps 53 (owned {55, 56, 57}, FreeMap {57}), PK root 54, 12 rows of ID and eight Text(255) fields of 61 U+20AC (1004 bytes each, 28 bytes of row overhead); rows 1-4 fill page 55, 5-8 page 56, 9-12 page 57. One shared session runs INSERT INTO Pg (ID, T1..T8) VALUES (13, ...) with 1005 U+20AC spread over T1..T8 (a row of about 2038 bytes; page 57 has no room) and closes. The row lands on free page 122, which is left with about 2042 bytes free. Asks whether page 122 joins Pg's FreeMap (slot 1 of page 53): an overflow target joined above 2,040 free bytes (r-q17 freemap-free-*). Each read keeps page 0 bytes 3584-3591 and pages 1, 52, 53, 54, 57, 122, 123; after Close every page's hash too.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-2b-w-accdb.accdb",
+      "sha256": "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be",
+      "length": 503808,
+      "provenance": "r-fmt-2b.create-w-accdb.86336dfac0.a1 qk1-86336dfac06d6ea1a25de04dc28825971144d002d9b51e7440ebc655dd6ddbe9 output:r-fmt-2b-w-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Pg (ID, T1, T2, T3, T4, T5, T6, T7, T8) VALUES (13, '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€', '€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-insert",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-after-insert",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 172032,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 176128,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 180224,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 184320,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 204800,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 208896,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 221184,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 225280,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 229376,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 233472,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 245760,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 249856,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 253952,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 258048,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 262144,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 266240,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 270336,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 274432,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 278528,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 282624,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 286720,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 290816,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 294912,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 299008,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 303104,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 307200,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 311296,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 315392,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 319488,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 323584,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 327680,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 331776,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 335872,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 339968,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 344064,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 348160,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 352256,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 356352,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 360448,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 364544,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 368640,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 372736,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 376832,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 380928,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 385024,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 389120,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 393216,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 397312,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 401408,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 405504,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 409600,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 413696,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 417792,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 421888,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 425984,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 430080,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 434176,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 438272,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 442368,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 446464,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 450560,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 454656,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 458752,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 462848,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 466944,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 471040,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 475136,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 479232,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 483328,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 487424,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 491520,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 495616,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 499712,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 503808,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 507904,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-after-insert",
+      "offset": 512000,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-after-insert"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

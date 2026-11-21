@@ -448,8 +448,8 @@ is summarised in [qualification-report.md](qualification-report.md).
     - A root split keeps the root page as the intermediate. The halves go to two newly taken pages, the lower half on the lower page: ix-mid 122 (the free page inside the file) and 123 (new; the file grows 4096 bytes), long-descending 48 and 49. ix-mid changes pages 0 (3586 +2), 1 (4047 `fc` > `f0`), 68 (bytes 16 and 67 `5a` > `5b`), 69 (3909 `00` > `0c`), 70, 73 (the row), 122 and 123 only.
     - A leaf split keeps the lower half on the old page and links a new page for the upper half after it: 48's next (bytes 16-19) goes from 49 to 51, and 49's prev (bytes 12-15) from 48 to 51. The parent gains one entry (free 3603 > 3590).
   - **Open.**
-    - Whether "new lowest key" or "first entry of the leftmost leaf" decides the prefix-0 half: the three records do not tell them apart.
-    - An odd n; a split below the first entry of a leaf that is not leftmost; TEXT keys in these shapes; a split of an intermediate page.
+    - Answered by r-q19-growth-open (the index-split notes further below): the prefix-0 half is the half whose first entry is the inserted key, also in a leaf that is not leftmost; an odd n gives the lower half floor(n/2); a key the stored prefix does not cover splits the leaf at once.
+    - TEXT keys in these shapes; a split of an intermediate page (one observation, split-text-deep-descending).
 
 ### R-FMT-2 Overflow / deletion, Map ownership and growth (W-05): a grown row that no longer fits moves to the first FreeMap page with room, else to the lowest free page; its root becomes a 4-byte locator
 - **Claim**: When an UPDATE grows a row past its page's free space, ACE keeps a 4-byte root on the page and writes the whole grown row elsewhere:
@@ -491,7 +491,7 @@ is summarised in [qualification-report.md](qualification-report.md).
   - 122 joins the FreeMap (page 53 byte 3978 `00` > `04`) at F = 2042 (L = 2038) and at every larger F asked: 2044, 2046, 2048, 2050, 2060, 2100, 2250 and 2500.
   - 122 stays out at F = 2040 (L = 2040) and at every smaller F asked: 2038, 2036, 2020, 2000, 1500 and 1250.
   - So a new target page holding one row joins the FreeMap exactly when its free space exceeds 2,040 bytes, which here is the same as exceeding the row's own length.
-  - Open: a fixed bound and a bound relative to the row cannot be told apart while one row sits on a fresh page (F = 4080 - L). Also open: whether the same bound applies to a page an INSERT takes.
+  - Open: a fixed bound and a bound relative to the row cannot be told apart while one row sits on a fresh page (F = 4080 - L). The same bound applies to a page an INSERT takes (r-q19-growth-open insert-free-*: an INSERT of a Pg row that leaves free page 122 with 2,042 or 3,080 bytes free sets it in the FreeMap, with 2,040 or 1,080 it stays out; 57 is cleared as above).
 
 ### R-FMT-2 Overflow / deletion (W-05): a row made smaller is rewritten in place, ending where it ended, and the rows below it move up
 - **Claim**: An UPDATE that shrinks a variable-width row by d bytes rewrites it on its own page:
@@ -508,7 +508,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: `evidence/r-q17-growth/shrink-row2-minus-30/`, `shrink-row4-minus-30/`. Discriminator: the row that has rows below it against the lowest row.
 - **Open**: an overflow row that shrinks back; a shrink by a recordset Edit; MDB.
 
-### R-FMT-2 Overflow / deletion and Map ownership (W-05): only DELETE without WHERE releases a table's data page; a page emptied row by row stays owned, empty and compacted
+### R-FMT-2 Overflow / deletion and Map ownership (W-05): only DELETE without WHERE releases a table's data page; a page emptied row by row stays owned, empty and compacted (reopened: see below)
 - **Claim**:
   - **DELETE without WHERE.** `DELETE FROM T` releases the table's data page without writing it: its rows and slots stay as they were.
     - In the statement: the page's bits are cleared in the table's owned map and FreeMap, the TableDef's row count and its index counter drop to 0, and the index leaf is emptied (free word to empty, entry bitmap zeroed; the entry bytes are left).
@@ -539,8 +539,12 @@ is summarised in [qualification-report.md](qualification-report.md).
     - Database Close changes nothing more. The page is never freed.
 - **Conditions**: ACCDB, shared DAO sessions; SQL with dbFailOnError; dynaset `Delete` then `MoveNext`.
 - **Records**: `evidence/r-q17-growth/retire-delete-au1/`, `retire-delete-au1-read-open/`, `retire-delete-au1-nine-then-last/`, `retire-delete-au1-where-all/`, `retire-rs-delete-au1/`; `evidence/r-q16-overflow/lower-free-grow-row2-plus-30/` (session 1 hash). Discriminators: WHERE-less against WHERE deleting the same ten rows; one statement that removes the last row; the recordset route; a read before Close.
+- **Reopened (r-q19-growth-open, 2026-11-21).** Two records contradict parts of the claim, which held for a table of one data page and deletes of the page's top row:
+  - A delete with a WHERE that empties a data page other than the table's first releases it (`split-empty-right-leaf`: pages 50 and 51; `split-empty-left-leaf`: page 46). The page leaves the maps and its type byte goes from `01` to `09`. The table's first data page (45) stays owned, as page 110 does above, where it is the table's only page.
+  - A deleted row that is not the page's top row gets slot word `0xc000 | (offset + length)` (`lv-op-delete-row-chain`: `ce cf`). Every record above deletes the top row, where that word is `0xd000`.
+  - Next probes: which page a WHERE delete keeps (the table's first, or the last one it owns), and the slot word of a middle row on a plain page.
 - **Open**:
-  - A WHERE-less DELETE on a table of several data pages, or with long values or more indexes.
+  - A WHERE-less DELETE on a table of several data pages, with long values or more indexes: answered by r-q19-growth-open (the DELETE-without-WHERE note further below).
   - Whether a later session, an INSERT or Compact reuses or frees an empty owned page.
   - The meaning of the `0x5000` bits of `0xd000`.
   - MDB.
@@ -568,9 +572,136 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions**: ACCDB made by CreateDatabase (dbLangGeneral, dbVersion120); `CREATE TABLE V (ID LONG PRIMARY KEY, V MEMO | LONGBINARY)`; each value added by a table recordset AddNew/Update in its own shared session; pages 42-53 read after each Close. The Memo values are U+20AC text, 2 bytes per character, not compressed.
 - **Records**: `evidence/r-q17-growth/lval-memo/` (a1, a2), `lval-ole/`. FieldSize reads back 100, 2000, 4076 and 5000. Discriminators: size varied with type fixed; Memo against OLE; a repeated run.
 - **Open**:
-  - The single-row bound between 2,000 and 4,076 bytes.
-  - When a single-row value takes a new LVAL page instead of the shared one.
-  - Compressed Memo text; MDB; values replaced or deleted (r-fmt-2b mm-*).
+  - Answered by r-q19-growth-open (the notes below): the single-row bound (3,816 bytes), when a single row takes a new page (no room for it and its slot), and replaced or deleted values.
+  - Compressed Memo text; MDB.
+
+### R-FMT-2 LV form selection (W-05): a Memo or OLE value of up to 64 bytes is stored in the row, and from 65 bytes on an LVAL page
+- **Claim**: In a new file, a Memo or Long Binary value of n bytes, n at most 64, lies in the data row:
+  - The 12-byte reference has length word n | 0x80000000 (`01 00 00 80` for 1 byte, `40 00 00 80` for 64), then 8 zero bytes, then the n bytes. The row is 25 + n bytes (26 to 89 here).
+  - At 65 bytes and more the value is a single LVAL row. The row is 25 bytes, with length word n | 0x40000000 and the locator of slot 0 on a new LVAL page (46, after data page 45, which the first insert took). That page is set in the LV owned and LV free maps (page 43 bytes 3830 and 3761 `40`).
+  - Memo and Long Binary give the same rows. The bound is the catalog LvProp's (the CAT-P note below).
+- **Conditions**: ACCDB made by CreateDatabase, `CREATE TABLE V (ID LONG PRIMARY KEY, V MEMO | LONGBINARY)`, one value per shared session through a table recordset AddNew/Update, pages 42-53 read after each Close. Memo values are U+20AC text (2 bytes a character).
+- **Records**: `evidence/r-q19-growth-open/lv-inline-memo/` (2, 50, 64, 66, 98 bytes), `lv-inline-ole/` (1, 50, 64, 65, 99). FieldSize reads back each size. Discriminators: 64 against 65 and 66; Memo against OLE.
+- **Open**: whether a row near the record limit or other long-value columns move the bound; compressed Memo text; MDB.
+
+### R-FMT-2 LV form selection (W-05): a value of up to 3,816 bytes is one LVAL row; from 3,817 bytes it is chained, and one chain page holds up to 4,072 bytes
+- **Claim**: For the first long value of a new file (Long Binary, an empty file with no LVAL page):
+  - **n up to 3,816: a single row.** The row of n bytes sits at 4096 - n on a new LVAL page 45. Its length word is n | 0x40000000, and both its +8 word and the page's stamp (bytes 8-11) are 0. The page is set in the LV free map (page 43 byte 3761 `20`), even with 264 bytes left (n = 3816).
+  - **n from 3,817: the chained form, even when the value fits one page.** The length word is n with no flag. The +8 word is the tick stamp, equal to bytes 8-11 of the first LVAL page. The LVAL row is 4 + n bytes: a zero next-page locator, then the value.
+    - 3,817 to 4,072 bytes take one page; at 4,072 the 4,076-byte row starts at offset 20 and leaves 4 bytes free.
+    - 4,074 bytes take two pages: page 45 holds a row of 4,076 bytes and page 46 a row of 6. The data row goes to page 47.
+    - A chain page is not set in the LV free map (byte 3761 unchanged).
+- **Conditions**: as the note above, one value per new file.
+- **Records**: `evidence/r-q19-growth-open/lv-single-*`. Single rows: 2002, 2500, 3000, 3500, 3600, 3700, 3800, 3810-3816. Chained: 3817-3820, 3830-3890 in tens, 3900, 3950, 3990, 4000, 4060, 4072, 4074. Discriminator: 3,816 against 3,817.
+- **Open**: whether the bound holds when the file already has an LVAL page with room; the same bound for Memo (the two types gave identical layouts at 100 to 5,000 bytes, r-q17); MDB.
+
+### R-FMT-2 LV form selection and Map ownership (W-05): a single LVAL row goes to a free-map page with room for the row and its slot, else to a new page; a page filled to no free bytes leaves the LV free map
+- **Claim**: Values of 100 and 2,000 bytes leave LVAL page 45 with 1,978 bytes free, in the LV free map. Then:
+  - **1,976 bytes** (with its 2-byte slot, exactly 1,978) land on page 45: slot 2, free word 0. Page 45 is cleared from the LV free map (page 43 byte 3761 `20` > `00`). The next value, 100 bytes, takes new page 47, set in the LV owned and free maps.
+  - **1,978 and 2,000 bytes** do not fit with their slot. They take new page 47 (owned and free maps, 3830 and 3761 `20` > `a0`), and page 45 stays in the free map. The next value, 100 bytes, lands on 45 (slot 2, free 1978 > 1876).
+  - Page 0 byte 3586 counts +2 for a session that took a page and +1 for one that did not.
+- **Conditions**: as the notes above (Long Binary, one value per session).
+- **Records**: `evidence/r-q19-growth-open/lv-fill-2000-1976/`, `lv-fill-2000-1978/`, `lv-fill-2000-2000/`. Discriminators: an exact fit with the slot, a fit without the slot, no fit.
+- **Open**: the order of the walk over several LV free-map pages; the free space below which a single-row page leaves the free map (seen: 0 leaves, 264 stays).
+
+### R-FMT-2 LV form selection and Overflow / deletion (W-05): a replaced long value is written anew; an old single row is removed from its page, an old chain's pages are freed without being written, and Null stores no reference
+- **Before-state** (one CreateDatabase session, three SQL INSERTs into `V (ID LONG PRIMARY KEY, V MEMO)`):
+  - Rows 1 and 2 hold 100 and 2,000 bytes as single rows on LVAL page 45: slot 0 at 3996, slot 1 at 1996, 1,978 bytes free.
+  - Row 3 holds 5,000 bytes chained on pages 47 and 48. Data page 46 holds the three rows.
+  - The LV owned map holds {45, 47, 48}, the LV free map {45}.
+- **Claim**: One UPDATE or DELETE in a shared session:
+  - **The old value goes first.**
+    - An old single row is removed as a deleted data row is: its slot becomes `00 d0`, the rows below it move up by its length (slot 1 `cc 07` > `30 08`), and the free word rises by its length.
+    - An old chain's pages are released, cleared in the LV owned map and marked free in page 1. Their bytes are not written.
+  - **The new value is placed by the ordinary rules.**
+    - A single row goes as a new slot on the first free-map page with room; deleted slots are not reused. 100 > 200 bytes gives slot 2, free 1978 > 1876. 100 > 80 bytes gives free > 1996. 5,000 > 100 bytes gives slot 2 on page 45, free 1876.
+    - A chain is never rewritten in place: 5,000 > 6,000, 5,000 > 4,500 and 100 > 5,000 all write a new chain on newly taken pages 49 and 50, with a new tick stamp.
+  - **The data row's 12-byte reference is rewritten in place**: length word, locator, +8 word.
+  - **Null** removes the reference from the row. Row 1 goes from 25 to 13 bytes, and its null-mask byte from `03` to `01`. The rows below it move up 12. The old single row or chain goes as above.
+  - **DELETE of the row** removes the value as Null does (the single row from page 45; chain pages 47 and 48 freed), removes the data row and its index entry, and lowers the TableDef row count (3 > 2).
+  - Page 0 byte 3586 counts +2 for an UPDATE that took or freed a page and +1 for the others. Both DELETEs count +1, also lv-op-delete-row-chain, which freed two pages.
+- **Conditions**: ACCDB made by CreateDatabase, Memo of U+20AC text, SQL UPDATE or DELETE with dbFailOnError, pages 0, 1 and 42-57 read after the setup session and after the statement's session. FieldSize reads back the new sizes.
+- **Records**: `evidence/r-q19-growth-open/lv-op-single-larger`, `-single-smaller`, `-single-to-chain`, `-chain-larger`, `-chain-smaller`, `-chain-to-single`, `-single-null`, `-chain-null`, `-delete-row-single`, `-delete-row-chain`. Discriminators: single against chained old value; larger, smaller, crossing form; a value against Null against a deleted row.
+- **Open**:
+  - A recordset Edit/Update instead of SQL; Long Binary; MDB.
+  - A replacement that no longer fits the data row's page (the reference is the same size, so only a Null-to-value change can grow the row).
+  - The slot word of the deleted data row is not claimed here: lv-op-delete-row-chain gives `ce cf` where the retirement note above writes `00 d0` for every deleted row (reported to the organizer).
+
+### R-FMT-2 Overflow / deletion and Map ownership (W-05): DELETE without WHERE releases every data page, every long-value page and every non-root index page of the table, and empties each index root in place
+- **Claim**: `DELETE FROM D` in a shared session, on a table of several data pages:
+  - **Data pages.** Every one is released: cleared in the table's owned map and FreeMap and marked free in page 1 (at Close, as the retirement note above found for one page). Their bytes are not written; rows and slots stay.
+  - **LVAL pages** of the table's long-value columns, single-row pages and chain pages alike, are released the same way, cleared in the column's LV owned and LV free maps. Their bytes are not written.
+  - **Index roots.** Each index keeps its root page, rewritten as an empty leaf: free word `20 0e` (3616), entry bitmap zeroed, entry bytes left.
+    - An intermediate root becomes a leaf: type byte `03` > `04`, tail child (bytes 20-23) zeroed, level byte 26 `01` > `00`.
+    - Its leaf pages are released: cleared in the index's usage map and marked free in page 1. Their bytes are not written.
+  - **TableDef.** The row count (bytes 16-19) and each index's count (byte 67 for the first, 79 for the second) go to 0.
+  - **Changed pages.** Page 0 (byte 3586 +2), page 1, the TableDef, the usage-map page and the index roots, and no other (every page's hash compared).
+- **Byte values** (new files; page 43 holds the usage maps, page 1 bits from byte 4032):
+  - No index (data 44-48, 30 rows of about 530 bytes): page 43 owned 4037-4038 `f0 01` > `00 00`, FreeMap 3969 `01` > `00`; page 1 4037-4038 `00 fe` > `f0 ff`; page 42 byte 16 `1e` > `00`.
+  - Primary key (data 45-49): root 44 free `12 0d` > `20 0e` and bitmap bytes 28-60 zeroed; page 42 bytes 16 and 67 `1e` > `00`; page 1 `00 fc` > `e0 ff`.
+  - Two indexes (data 46-50): roots 44 and 45 emptied alike; page 42 bytes 16, 67 and 79 `1e` > `00`; page 1 `00 f8` > `c0 ff`.
+  - Long values (data 47 and 51; LVAL 45, 46, 48, 49, 50, 52 and 53: one single-row page and three two-page chains). Page 43: LV owned 3830-3831 `60 37` > `00 00`, LV free 3762 `01` > `00` (page 48), table owned 4037-4038 `80 08` > `00 00`, FreeMap 3969 `08` > `00`. Page 1: `00 c0` > `e0 ff`.
+  - Intermediate root (1,200 rows, leaves 48 and 49):
+    - Root 44: `03` > `04`, free `13 0e` > `20 0e`, tail `31` > `00`, byte 26 `01` > `00`, bitmap byte 28 `20` > `00`.
+    - The leaves are cleared in the index map (page 43 byte 3900 `03` > `00`) and freed. Data 45, 46, 47, 50 and 51 are freed: page 1 `00 f0` > `e0 ff`.
+    - Page 42 bytes 16 and 67 `b0 04` > `00 00`.
+- **Conditions**: ACCDB new files, the table populated in the CreateDatabase session and closed. One shared session runs DELETE FROM D with dbFailOnError (RecordsAffected 30 or 1200) and closes. Pages 0, 1 and 42-81 kept, 0-81 hashed, after both sessions.
+- **Records**: `evidence/r-q19-growth-open/delete-all-no-index/`, `delete-all-pk/`, `delete-all-two-indexes/`, `delete-all-long-values/`, `delete-all-intermediate-root/`; with `evidence/r-q17-growth/retire-delete-au1/` (one data page, a one-leaf index). Discriminators: no, one and two indexes; a long-value column; a leaf root against an intermediate root.
+- **Open**: a three-level index; DELETE without WHERE inside a transaction; which pages a later INSERT takes from those released; MDB.
+
+### R-FMT-2 and R-CURSOR-1 (W-05): a table-type Delete writes the TableDef row count at the recordset's Close, as a dynaset's does; TableDef.RecordCount keeps its first read in the session until TableDefs.Refresh
+- **Claim**:
+  - **Table-type Delete.** Each Delete removes the row and its index entry as a write group of its own (page 0 byte 3586 +1 per Delete, read after a 1.5 s pause). The TableDef's row count (page 107 byte 16) stays `0a` until the recordset closes, and is then written as one more commit. This is the dynaset's behaviour (the retirement note above).
+  - **A burst.** Three dynaset Deletes with no pause between them are one write group (3586 +1).
+  - **Counts while the count is pending.** The recordset's own RecordCount falls with each Delete (10, 9, 8, 7). A table-type recordset opened then reads 7 and walks IDs 4-10, and `SELECT Count(*)` gives 7, while the page still holds 10.
+  - **TableDef.RecordCount** is the value of its first read in the session. Read before the Deletes, it reads 10 after them and after the recordset's Close, for table-type and dynaset alike. First read after the Deletes, it reads 7. After `TableDefs.Refresh` it reads the live count (10, 9, 8, 7), before the count reaches the page.
+- **Conditions**: copies of r-fmt-2b-w-accdb (Au1: ten rows on page 110, tdef 107), one shared DAO session, `TableDefs("Au1")` taken afresh for each read; pages read 1.5 s after the last Delete, after the recordset's Close (and a pause) and after the database's Close.
+- **Records**: `evidence/r-q19-growth-open/rs-table-delete-au1/`, `rs-table-delete-au1-td-after/`, `rs-table-delete-au1-td-refresh/`, `rs-dynaset-delete-au1-counts/`, `rs-dynaset-delete-au1-td-before/`; `evidence/r-q17-growth/retire-rs-delete-au1/`. Discriminators: table-type against dynaset; the first TableDef read before against after the Deletes; Refresh.
+- **Open**: whether a new Database object or a reopen reads the live count; a Delete inside a transaction; MDB.
+
+### R-FMT-2 Index page splits (W-05, zfrp stretch 4): an append past the last key of a full rightmost leaf starts a one-entry leaf, also below the root and whether or not the leaf's prefix covers the key
+- **Claim**: An INSERT whose key is above every key of the tree, when the rightmost leaf is full:
+  - The full leaf keeps its entries and stored prefix. Only its next link (bytes 16-19) changes, to the new page.
+  - A newly taken page becomes the rightmost leaf. It holds the one entry and stores prefix 0, with prev set to the full leaf and next 0.
+  - The parent gains one entry: the full leaf's last key, its row locator and the full leaf as child. The parent's tail child (bytes 20-23) becomes the new page.
+  - A key the full leaf's prefix covers (1205 under `7f 80 00`) and one it does not (100000) give the same pages, apart from the key and its row locator.
+  - This is the rule r-q7 long-split found for a full root leaf and long-split-insert-wider for a leaf that was not full (gqv4 note).
+- **Byte values** (append-full-rightmost-covered): leaf 49 holds 603..1204, 602 entries, prefix 3, free 1. After key 1205:
+  - Page 49 byte 16 `00` > `34`.
+  - New page 52: `04 01 17 0e 2a 00 00 00 00 00 00 00 31 00 00 00`, prefix length (bytes 24-25) 0, the entry `7f 80 00 04 b5` (data 51 slot 184) at 480.
+  - Root 44: free `13 0e` > `06 0e`, tail `31` > `34`, the entry `7f 80 00 04 b4` (data 51 slot 183, child 49) at 493-505, bitmap byte 30 `00` > `04`.
+  - The new leaf goes on filling under prefix 0: after Close, 52 holds 1205..1210.
+- **Conditions**: ACCDB new file, L(k LONG PRIMARY KEY), ascending one INSERT each in a shared session under `SetOption(dbImplicitCommitSync, "Yes")`. The first 28 bytes of pages 44-63 were read after every statement from key 1190, and pages 44-59 whole around the append.
+- **Records**: `evidence/r-q19-growth-open/append-full-rightmost-covered/`, `append-full-rightmost-uncovered/`; `evidence/r-q7-index-prefix/long-split/`, `long-split-insert-wider/`. Discriminators: a full non-root leaf against a full root (r-q7) and a non-full leaf (r-q7); a covered against an uncovered key.
+- **Open**: TEXT keys; a full rightmost leaf under a non-root intermediate page.
+
+### R-FMT-2 Index page splits (W-05, zfrp stretch 4): a key a leaf's stored prefix does not cover splits that leaf at once, even with room; the half that begins with the inserted key stores 0; an odd leaf keeps the smaller half
+- **Claim**:
+  - **Routing.** An intermediate entry holds its child's last key. A key above it goes to the next child, and a key above every entry goes to the tail child. In split-uncovered-between-leaves, 70000 goes to the rightmost leaf (first key 100000, prefix 0), not to the leaf before it (603..1200, prefix 3), which is untouched.
+  - **An uncovered key splits the leaf.** A leaf whose stored prefix the inserted key does not share is split whatever its free space. With prefix `7f 80 01`, key 65535 (`7f 80 00 ff ff`) split each of these:
+    - a root leaf of 600 entries with 13 bytes free;
+    - a non-root leaf of 451 entries with 907 bytes free;
+    - the same leaf after deletes left it 10 entries with 3,553 bytes free.
+    - A covered key below a leaf's first entry does not split it before it is full (r-q17 split-inner-below).
+  - **Split point.** The n entries are halved, the lower half taking floor(n/2): 600 into 300 and 300, 451 into 225 and 226, 10 into 5 and 5, and the TEXT leaf of 401 into 200 and 201. The new key joins the half its key falls in. At the boundary it joins the upper half: abcd0401, between the 200th and 201st entries, made it 202.
+  - **Prefix.** The half whose first entry is the inserted key stores 0, and the other half keeps the leaf's stored prefix. In split-uncovered-right-leaf-below the leaf is not leftmost and 65535 is not the tree's lowest key (keys 1-602 lie to its left), yet its lower half stores 0. This settles the gqv4 question between "new lowest key" and "first entry of the leftmost leaf": neither, it is the half's first entry.
+  - **Pages**, as in the gqv4 note:
+    - The lower half stays on the old page, and the upper half goes on a newly taken page linked after it.
+    - The parent gains one entry (the lower half's last key, child the old page), and its tail moves to the new page when the split leaf was the tail.
+    - A root leaf keeps the root page as the intermediate (type `03`, byte 26 `01`), and the halves go on two new pages, the lower half on the lower page.
+- **Byte values**:
+  - split-uncovered-right-leaf-below: before 65535, leaf 49 (65536..65986) has prefix 3 and free `8b 03`. After it, 49 has free `2e 06`, prefix 0 and next `34`, and new page 52 has free `d1 08`, prefix 3 and prev `31`. Root 44: free `13 0e` > `06 0e`, tail `31` > `34`. After 65534 too, 49 holds 227 entries and 52 holds 226.
+  - split-uncovered-sparse-leaf-below: after the delete (441 rows), 49 has 10 entries, free `e1 0d` and prefix 3. After 65535, 49 has 6 entries and prefix 0, and new page 53 has 5 and prefix 3.
+  - split-uncovered-root-below: root 44 (600 keys 65536..66135, prefix 3, free `0d 00`) becomes the intermediate. Its halves are 48 (65535 and 300 keys, prefix 0) and 49 (300 keys, prefix 3).
+  - split-text-odd-count: K(k TEXT(20)) with even keys abcd0002..abcd0820. The root splits at the 402nd key, leaving leaf 49 full with 401 entries (prefix 6, `7f 4a 4c 4d 4f 36`) and a one-entry leaf 50. abcd0401 splits 49 into 49 (200 entries, free 1810) and new page 51 (202, free 1792), both with prefix 6, linked 49 > 51 > 50.
+- **Conditions**: ACCDB new files, L(k LONG PRIMARY KEY) or K(id LONG, k TEXT(20)) with a non-unique index, one INSERT each in a shared session under dbImplicitCommitSync, index pages whole after the statements that decide.
+- **Records**: `evidence/r-q19-growth-open/split-uncovered-between-leaves/`, `split-uncovered-root-below/`, `split-uncovered-right-leaf-below/`, `split-uncovered-sparse-leaf-below/`, `split-text-odd-count/`; `evidence/r-q17-growth/split-inner-below/`. Discriminators: free space (13, 907 and 3,553 bytes); root against non-root; leftmost against not; covered against uncovered; odd against even n.
+- **Observation, one case** (split-text-deep-descending: 500 TEXT(255) keys of about 200 bytes, descending, in the CreateDatabase session):
+  - The tree has three levels. Root 44 is level 2, stores prefix 0 and holds 4 entries and a tail.
+  - The level-1 pages have prev and next links. They store prefix 3, except the leftmost (78), which holds the lowest keys and stores 0. Right halves hold 9 entries, as the leaves do.
+  - The leaves hold 9 entries (the leftmost 14), with stored prefix 3 or 4.
+  - This is consistent with leaves' split rules applied to intermediate pages. It is not qualified: one run, read only after Close.
+- **Open**: an uncovered key in a TEXT index; the split of an intermediate page asked with designed probes; how each leaf of the deep tree came by its prefix, statement by statement.
 
 ### R-FMT-2 Text grammar (public round trip, corrected): Text and Memo store UTF-16 units as given, including NUL and lone surrogates, within the declared length, but a leading U+FEFF is not reliably kept
 

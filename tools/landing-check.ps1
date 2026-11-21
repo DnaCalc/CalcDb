@@ -49,7 +49,11 @@ foreach ($f in $Files) {
         continue
     }
     New-Item -ItemType Directory -Force (Split-Path $to) | Out-Null
-    Copy-Item $from $to -Force
+    if (Test-Path $from -PathType Container) {
+        # A folder (a probe's questions or records): its files replace the export's copy of it.
+        if (Test-Path $to) { Remove-Item $to -Recurse -Force }
+        Copy-Item $from $to -Recurse -Force
+    } else { Copy-Item $from $to -Force }
 }
 Step "copied $($Files.Count) files"
 # The export has no .git; Directory.Build.props reads the source state the binaries record from this file.
