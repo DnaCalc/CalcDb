@@ -35,6 +35,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Method("MoveNext", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveNext())))
         .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
+        .Method("Clone", (self, args) => Live(self, r => r.Clone()))
+        .Method("Requery", (self, args) => Live(self, r => r.Requery()))
         .Method("Close", (self, args) => Live(self, r => r.Close()))
         .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
         // A query recordset's edits are not built, so no edit is ever pending: a dynaset's Collect put is 3020 from DAO.Field
@@ -223,6 +225,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         int? rows = Args.Int32(rowsArg, omitted: null);
         return rows is null ? CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number")) : Moved(Cursor.Move(rows.Value));
     }
+
+    private CallResult Clone() =>
+        CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on a SELECT query recordset (SelectCursor has no Clone yet)"));
+
+    private CallResult Requery() =>
+        CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetRequery", "Requery on a SELECT query recordset (SelectCursor has no Requery yet)"));
 
     private CallResult Close()
     {

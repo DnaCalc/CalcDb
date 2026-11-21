@@ -354,6 +354,7 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
     private readonly PageSource _cache;
     private readonly FormatDescriptor _d;
+    private readonly ulong _pageCount;
     private readonly ScanSource _scan;
     private readonly RowBinding _row;
     private IOrderedSource<TableOccurrence> _order;
@@ -366,10 +367,11 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     private long _rowCount;
     private ulong _rowCountSerial;
 
-    private TableCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
+    private TableCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
         _cache = cache;
         _d = d;
+        _pageCount = pageCount;
         Table = table;
         _scan = source;
         FileIncarnation = fileIncarnation;
@@ -395,7 +397,19 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     public static TableCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, ulong tableIncarnation, out TraversalFailure? failure)
     {
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        return navigator is null ? null : new TableCursor(cache, d, table, new ScanSource(navigator), cache.Cache.FileIncarnation, tableIncarnation);
+        return navigator is null ? null : new TableCursor(cache, d, table, pageCount, new ScanSource(navigator), cache.Cache.FileIncarnation, tableIncarnation);
+    }
+
+    /// <summary>
+    /// Open an independent table-type cursor over the same table in storage order, at row 1 (or Empty), with no index
+    /// (r-cursor-1b/clone-by-type-and-properties, r-cursor-1b/clone-chain-close-orders).
+    /// </summary>
+    public TableCursor? Clone(out TraversalFailure? failure, PageSource? source = null, ulong? pageCount = null)
+    {
+        PageSource pages = source ?? _cache;
+        ulong extent = Math.Max(pageCount ?? _pageCount, pages.Cache.KnownExtentPages);
+        ScanNavigator? navigator = ScanNavigator.Open(pages, _d, Table, extent, out failure);
+        return navigator is null ? null : new TableCursor(pages, _d, Table, extent, new ScanSource(navigator), FileIncarnation, TableIncarnation);
     }
 
     public bool Bof => _position.Bof;
@@ -840,37 +854,245 @@ internal static class StoragePercentLanding
 }
 
 /// <summary>
+/// Shared population state of a <see cref="PopulationCursor"/> and every clone derived from it (R-CURSOR-1 CUR-LIFE,
+/// W-04, II-07 §11): the scan source, occurrence store, snapshot read views, bookmark base and live member list. Owned
+/// by its live members through ref-counted attachment so closing the parent or any intermediate clone leaves surviving
+/// clones intact (r-cursor-1/life-clone, r-cursor-1b/clone-chain-close-orders, clone-bookmark-sharing).
+/// </summary>
+internal sealed class PopulationFamily : IDisposable
+{
+    private PageSource _pages;
+    private readonly FormatDescriptor _d;
+    private readonly TableDefinition _table;
+    private ulong _pageCount;
+    private readonly bool _forwardOnly;
+    private readonly bool _isSnapshot;
+    private uint? _bookmarkBase;
+    private bool _snapshotRequeried;
+    private bool _bookmarksInvalidatedByDelete;
+    private ScanSource _source;
+    private OccurrenceStore<RowId> _store;
+    private SnapshotValues? _snapshot;
+    private readonly List<PopulationCursor> _members = [];
+    private PopulationCursor? _root;
+    private bool _disposed;
+
+    public PopulationFamily(PageSource pages, FormatDescriptor d, TableDefinition table, ulong pageCount, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
+    {
+        _pages = pages;
+        _d = d;
+        _table = table;
+        _pageCount = pageCount;
+        _forwardOnly = forwardOnly;
+        _isSnapshot = snapshot;
+        _bookmarkBase = bookmarkBase;
+        _source = source;
+        // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
+        // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
+        _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
+        _snapshot = snapshot ? new SnapshotValues(pages.Cache) : null;
+    }
+
+    public PageSource Pages => _pages;
+
+    public FormatDescriptor Format => _d;
+
+    public TableDefinition Table => _table;
+
+    public bool ForwardOnly => _forwardOnly;
+
+    public uint? BookmarkBase => _bookmarkBase;
+
+    public bool SnapshotRequeried => _snapshotRequeried;
+
+    public bool BookmarksInvalidatedByDelete => _bookmarksInvalidatedByDelete;
+
+    public OccurrenceStore<RowId> Store => _store;
+
+    public SnapshotValues? Snapshot => _snapshot;
+
+    public PopulationCursor? Root => _root;
+
+    public bool RootAlive => _root is not null && _members.Contains(_root);
+
+    public void Attach(PopulationCursor member, bool isRoot)
+    {
+        if (isRoot)
+        {
+            _root = member;
+        }
+        _members.Add(member);
+    }
+
+    public void Detach(PopulationCursor member)
+    {
+        _members.Remove(member);
+        if (_members.Count == 0)
+        {
+            Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        _source.Dispose();
+        _snapshot?.Dispose();
+        _snapshot = null;
+    }
+
+    /// <summary>
+    /// Remove the deleted row from the shared store and update every live member: the deleter enters Deleted, siblings
+    /// on the same row enter DeletedBySibling (3167 on read, Move(0) succeeds: r-fix-cursor-dao/clone-write-visibility-same-row;
+    /// AbsolutePosition kept at the deleted ordinal while in range, RecordCount drops by 1, MoveNext/MovePrevious step
+    /// to neighbours: r-def-cursor-dao/delete-by-other-cursor-current-row), and siblings on other rows keep pointing to
+    /// their live row in the store (r-cursor-1b/clone-write-visibility). Keyset bookmarks are invalidated until Requery
+    /// because ACE's bookmark stability across cursor Deletes is not recorded.
+    /// </summary>
+    public void OnRowDeleted(PopulationCursor deleter, int ordinal)
+    {
+        _bookmarksInvalidatedByDelete = true;
+        _snapshot?.Remove(ordinal);
+        _store.RemoveAt(ordinal);
+        foreach (PopulationCursor member in _members)
+        {
+            if (ReferenceEquals(member, deleter))
+            {
+                member.DeletedOwnRow();
+            }
+            else
+            {
+                member.SiblingDeletedRow(ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-open the underlying scan, reset the shared occurrence store and snapshot views, and reposition every live
+    /// family member (r-cursor-1b/requery-types-state, requery-family, clone-write-visibility,
+    /// r-fix-cursor-dao/clone-write-visibility-same-row, r-cursor-1/life-requery, pop-visibility-snapshot,
+    /// r-q2-cursor-dao/id-bookmark-requery-populated): dynasets preserve their bookmark base, while snapshots clear it
+    /// (ACE changes a snapshot's bookmark base across Requery: r-cursor-1/life-requery, 0x0600 -> 0x0300); when the
+    /// original calls Requery it lands on row 1 (or Empty) and siblings enter Requeried; when a clone calls Requery in
+    /// a 2-member family the original lands on row 1 and the calling clone enters CloneRequeried (BOF=True, EOF=True).
+    /// </summary>
+    public bool Requery(PopulationCursor caller, PageSource? newSource, ulong? pageCount, out TraversalFailure? failure)
+    {
+        if (!RootAlive)
+        {
+            failure = new TraversalFailure("NotModelled.CloneRequeryAfterParentClose: Requery on a clone whose original cursor is already disposed", null);
+            return false;
+        }
+        if (_isSnapshot && _members.Count > 1)
+        {
+            failure = new TraversalFailure("NotModelled.SnapshotCloneRequery: Requery on a snapshot with live clones (not recorded)", null);
+            return false;
+        }
+        if (!ReferenceEquals(caller, _root) && _members.Count >= 3)
+        {
+            failure = new TraversalFailure("NotModelled.CloneRequeryThreeOrMoreMembers: Requery on a clone with 3 or more live family members (not recorded)", null);
+            return false;
+        }
+        PageSource pages = newSource ?? _pages;
+        if (_isSnapshot && pages.Overlay is not null)
+        {
+            failure = new TraversalFailure("NotModelled.Edit.UnpublishedRows: a snapshot over this Workspace's unpublished changes", null);
+            return false;
+        }
+        ulong extent = Math.Max(pageCount ?? _pageCount, pages.Cache.KnownExtentPages);
+        ScanNavigator? navigator = ScanNavigator.Open(pages, _d, _table, extent, out failure);
+        if (navigator is null)
+        {
+            return false;
+        }
+        var newScanSource = new ScanSource(navigator);
+        var newStore = new OccurrenceStore<RowId>(newScanSource, firstMoveChunk: _forwardOnly ? 1 : 500);
+        if (_members.Count > 1 && newStore.Next(null) is null)
+        {
+            newScanSource.Dispose();
+            failure = new TraversalFailure("NotModelled.CloneRequeryEmptyTable: Requery with live clones when the requeried table is empty (not recorded)", null);
+            return false;
+        }
+        bool pagesChanged = !ReferenceEquals(pages.Cache, _pages.Cache) || !ReferenceEquals(pages.Overlay, _pages.Overlay);
+        _pages = pages;
+        _pageCount = extent;
+        _source.Dispose();
+        _source = newScanSource;
+        _store = newStore;
+        _bookmarksInvalidatedByDelete = false;
+        if (_isSnapshot)
+        {
+            // r-cursor-1/life-requery: snapshot bookmark base changes after Requery (0x0600 -> 0x0300).
+            _bookmarkBase = null;
+            _snapshotRequeried = true;
+        }
+        _snapshot?.Dispose();
+        _snapshot = _isSnapshot ? new SnapshotValues(pages.Cache) : null;
+
+        bool callerIsRoot = ReferenceEquals(caller, _root);
+        foreach (PopulationCursor member in _members)
+        {
+            if (pagesChanged)
+            {
+                member.ReplaceRowBinding(pages);
+            }
+            if (callerIsRoot)
+            {
+                if (ReferenceEquals(member, caller))
+                {
+                    member.ResetForRequery(_store);
+                }
+                else
+                {
+                    member.MarkSiblingRequeried(_store);
+                }
+            }
+            else if (ReferenceEquals(member, _root))
+            {
+                member.ResetForRequery(_store);
+            }
+            else
+            {
+                member.MarkCloneRequeried(_store);
+            }
+        }
+        _snapshot?.Stamp(_store, caller.Row);
+        return true;
+    }
+}
+
+/// <summary>
 /// A dynaset or snapshot over one table (W-04/cursor-algorithms over the actual cache): the occurrence store with the
 /// observed population frontier over the storage-order scan (R-CURSOR-1 CUR-POP: 1 at open, 501 after the first MoveNext,
 /// exactly to a row reached beyond the frontier, complete after MoveLast), the qualified movement rules (CUR-POS), and
 /// forward-only's restricted subset. Its bookmark is the occurrence's keyset ordinal on the dynaset or snapshot base
 /// (<see cref="KeysetBookmark"/>, CUR-ID). A dynaset reads its rows' current values; what a snapshot shows of a change
-/// published after it opened is <see cref="SnapshotValues"/>' (qualified.md CUR-POP).
+/// published after it opened is <see cref="SnapshotValues"/>' (qualified.md CUR-POP). Clones share one
+/// <see cref="PopulationFamily"/> so population, bookmarks and mutations stay coherent across the family (CUR-LIFE).
 /// </summary>
 public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCursor
 {
-    private readonly OccurrenceStore<RowId> _store;
-    private readonly ScanSource _source;
+    private readonly PopulationFamily _family;
     private readonly PositionState<int> _position;
-    private readonly RowBinding _row;
-    private readonly uint? _bookmarkBase;
+    private RowBinding _row;
+    private bool _bookmarkInvalidAnchorDeleted;
+    private bool _disposed;
 
-    /// <summary>A snapshot's values under later publications (CUR-POP); null on a dynaset or forward-only cursor.</summary>
-    private readonly SnapshotValues? _snapshot;
-
-    private PopulationCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
+    private PopulationCursor(PopulationFamily family, bool isRoot)
     {
-        Table = table;
-        _row = new RowBinding(cache, d, table);
-        _source = source;
-        _bookmarkBase = bookmarkBase;
-        // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
-        // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
-        _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
-        _position = new PositionState<int>(_store, forwardOnly);
-        _snapshot = snapshot ? new SnapshotValues(cache.Cache) : null;
-        _snapshot?.Stamp(_store, _row);
+        _family = family;
+        Table = family.Table;
+        _row = new RowBinding(family.Pages, family.Format, family.Table);
+        _position = new PositionState<int>(family.Store, family.ForwardOnly);
+        family.Attach(this, isRoot);
+        family.Snapshot?.Stamp(family.Store, _row);
     }
+
+    internal RowBinding Row => _row;
 
     public TableDefinition Table { get; }
 
@@ -888,8 +1110,48 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             return null;
         }
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, bookmarkBase, snapshot);
+        if (navigator is null)
+        {
+            return null;
+        }
+        var family = new PopulationFamily(cache, d, table, pageCount, new ScanSource(navigator), forwardOnly, bookmarkBase, snapshot);
+        return new PopulationCursor(family, isRoot: true);
     }
+
+    /// <summary>
+    /// Create a clone sharing this cursor's population, bookmarks and snapshot views, positioned at row 1 (or Empty),
+    /// without advancing the population frontier (r-cursor-1/life-clone, r-cursor-1b/clone-by-type-and-properties).
+    /// Returns null on a forward-only cursor (3219 at the DAO layer).
+    /// </summary>
+    public PopulationCursor? Clone() => ForwardOnly ? null : new PopulationCursor(_family, isRoot: false);
+
+    /// <summary>
+    /// Re-run the scan and reset the shared population (r-cursor-1b/requery-types-state, requery-family,
+    /// r-cursor-1/pop-visibility-snapshot, r-def-cursor-dao/prov-heap-duplicate-rows).
+    /// </summary>
+    public bool Requery(out TraversalFailure? failure, PageSource? source = null, ulong? pageCount = null) =>
+        _family.Requery(this, source, pageCount, out failure);
+
+    /// <summary>Current position tag for DAO-level named refusals.</summary>
+    public PositionTag PositionTag => _position.Tag;
+
+    /// <summary>True after this clone itself called Requery (BOF=True, EOF=True; further operations are not recorded).</summary>
+    public bool IsCloneRequeried => _position.Tag == PositionTag.CloneRequeried;
+
+    /// <summary>True when this cursor is a clone whose original cursor has already been disposed.</summary>
+    public bool IsCloneOfClosedParent => !ReferenceEquals(this, _family.Root) && !_family.RootAlive;
+
+    /// <summary>True on a snapshot after Requery, where ACE changes the bookmark base (r-cursor-1/life-requery).</summary>
+    public bool IsSnapshotRequeried => _family.SnapshotRequeried;
+
+    /// <summary>True after a row was deleted from this family's store, invalidating keyset bookmarks until Requery.</summary>
+    public bool BookmarksInvalidatedByDelete => _family.BookmarksInvalidatedByDelete;
+
+    /// <summary>True when this cursor sits on a sibling-deleted row whose ordinal is now past the populated count (unrecorded AbsolutePosition).</summary>
+    public bool IsDeletedBySiblingOutOfRange => _position.DeletedBySiblingAnchor is int anchor && anchor >= _family.Store.ObservedCount;
+
+    /// <summary>True when this cursor was in BookmarkInvalid and a sibling deleted the remembered anchor row.</summary>
+    public bool IsBookmarkInvalidAnchorDeleted => _bookmarkInvalidAnchorDeleted && _position.Tag == PositionTag.BookmarkInvalid;
 
     public bool Bof => _position.Bof;
 
@@ -898,33 +1160,87 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     public bool NoMatch => _position.NoMatch;
 
     /// <summary>The occurrences populated so far (CUR-POP).</summary>
-    public long RecordCount => _store.ObservedCount;
+    public long RecordCount => _family.Store.ObservedCount;
 
-    private RowId? CurrentRoot => _position.Current is int ordinal ? _store[ordinal] : null;
+    private RowId? CurrentRoot => _position.Current is int ordinal ? _family.Store[ordinal] : null;
 
     public RowId? CurrentRow => CurrentRoot;
 
     public bool ForwardOnly => _position.ForwardOnly;
 
-    /// <summary>The zero-based ordinal of the current occurrence (DAO AbsolutePosition), or null without a current row.</summary>
-    public int? Ordinal => _position.Current;
+    /// <summary>
+    /// The zero-based ordinal of the current occurrence (DAO AbsolutePosition), the pre-failure ordinal after a rejected
+    /// Bookmark assignment (r-q2-cursor-dao/id-bookmark-requery-populated), or the deleted row's ordinal while in range
+    /// after a sibling delete (r-def-cursor-dao/delete-by-other-cursor-current-row), or null without a current row.
+    /// </summary>
+    public int? Ordinal => _position.Current
+        ?? _position.BookmarkInvalidAnchor
+        ?? (_position.DeletedBySiblingAnchor is int anchor && anchor < _family.Store.ObservedCount ? anchor : null);
 
     public void OnRowDeleted()
     {
         if (_position.Current is int ordinal)
         {
-            _row.Unbind();
-            _snapshot?.Remove(ordinal);
-            _store.RemoveAt(ordinal);
-            _position.MarkDeleted();
+            _family.OnRowDeleted(this, ordinal);
         }
     }
 
-    public int? OnRowInserted(RowId row) => _store.AppendIfComplete(row);
+    internal void DeletedOwnRow()
+    {
+        _row.Unbind();
+        _position.MarkDeleted();
+    }
 
-    /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base.</summary>
+    internal void SiblingDeletedRow(int deletedOrdinal)
+    {
+        if (_position.Tag == PositionTag.At && _position.Current == deletedOrdinal)
+        {
+            _row.Unbind();
+            _position.MarkDeletedBySibling();
+        }
+        else if (_position.Tag == PositionTag.BookmarkInvalid && _position.BookmarkInvalidAnchor == deletedOrdinal)
+        {
+            _position.ClearBookmarkInvalidAnchor();
+            _bookmarkInvalidAnchorDeleted = true;
+        }
+        else
+        {
+            _position.AdjustAfterRemove(i => i > deletedOrdinal ? i - 1 : i);
+        }
+    }
+
+    internal void ResetForRequery(OccurrenceStore<RowId> store)
+    {
+        _bookmarkInvalidAnchorDeleted = false;
+        _row.Unbind();
+        _position.ResetForRequery(store);
+    }
+
+    internal void MarkSiblingRequeried(OccurrenceStore<RowId> store)
+    {
+        _bookmarkInvalidAnchorDeleted = false;
+        _row.Unbind();
+        _position.MarkRequeried(store);
+    }
+
+    internal void MarkCloneRequeried(OccurrenceStore<RowId> store)
+    {
+        _bookmarkInvalidAnchorDeleted = false;
+        _row.Unbind();
+        _position.MarkCloneRequeried(store);
+    }
+
+    internal void ReplaceRowBinding(PageSource pages)
+    {
+        _row.Dispose();
+        _row = new RowBinding(pages, _family.Format, Table);
+    }
+
+    public int? OnRowInserted(RowId row) => _family.Store.AppendIfComplete(row);
+
+    /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base or after a delete.</summary>
     public byte[]? BookmarkForOrdinal(int ordinal) =>
-        _bookmarkBase is uint @base && ordinal >= 0 && ordinal < _store.ObservedCount
+        !_family.BookmarksInvalidatedByDelete && _family.BookmarkBase is uint @base && ordinal >= 0 && ordinal < _family.Store.ObservedCount
             ? KeysetBookmark.Encode(@base, ordinal)
             : null;
 
@@ -937,7 +1253,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     public float? PercentPosition(out CursorFailure? failure)
     {
         failure = _position.Current is null ? CursorFailure.NoCurrentRecord : null;
-        return _position.Current is int ordinal ? (float)(100.0 * ordinal / _store.ObservedCount) : null;
+        return _position.Current is int ordinal ? (float)(100.0 * ordinal / _family.Store.ObservedCount) : null;
     }
 
     /// <summary>
@@ -953,12 +1269,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return CursorFailure.NoCurrentRecord;
         }
-        long count = _store.ObservedCount;
+        long count = _family.Store.ObservedCount;
         double target = Math.Truncate(percent * (double)count / 100.0);
         if (target < 0 || target > count)
         {
             return CursorFailure.OutOfRange;
         }
+        _bookmarkInvalidAnchorDeleted = false;
         _row.Unbind();
         return _position.Seek((int)Math.Min((long)target, count - 1)) ? null : CursorFailure.OutOfRange;
     }
@@ -975,14 +1292,18 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     private MoveOutcome Moved(MoveOutcome outcome)
     {
-        _row.Unbind();
-        _snapshot?.Stamp(_store, _row); // the move's population, at the serial it read
+        if (outcome != MoveOutcome.NotModelled)
+        {
+            _bookmarkInvalidAnchorDeleted = false;
+            _row.Unbind();
+            _family.Snapshot?.Stamp(_family.Store, _row); // the move's population, at the serial it read
+        }
         return outcome;
     }
 
     /// <summary>
     /// The current occurrence's keyset bookmark (<see cref="KeysetBookmark"/>), or NoCurrentRecord; NotObserved without a
-    /// known base.
+    /// known base or after a cursor Delete shifted the store.
     /// </summary>
     public byte[]? GetBookmark(out CursorFailure? failure)
     {
@@ -991,7 +1312,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             failure = CursorFailure.NoCurrentRecord;
             return null;
         }
-        if (_bookmarkBase is not uint @base)
+        if (_family.BookmarksInvalidatedByDelete || _family.BookmarkBase is not uint @base)
         {
             failure = CursorFailure.NotObserved;
             return null;
@@ -1003,9 +1324,12 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>
     /// Position on the occurrence a bookmark names (CUR-ID). Only populated occurrences are named: validity follows
     /// population, and an assignment populates nothing (q2/id-bookmark-requery-populated: after Requery with one row
-    /// populated, the earlier bookmark of the third row is 3159; after MoveLast or Move 2 it is accepted). An occurrence
-    /// whose row another session deleted is still named, as on ACE (q/id-bookmark-assign-deleted-and-beyond); reading its
-    /// fields then answers <see cref="CursorFailure.DeletedRecord"/> (DAO 3167). An empty array succeeds and moves nothing
+    /// populated, the earlier bookmark of the third row is 3159; after MoveLast or Move 2 it is accepted). A rejected
+    /// assignment clears the current record while keeping BOF/EOF false and preserving the prior ordinal for
+    /// AbsolutePosition (r-cursor-1b/clone-bookmark-sharing, r-q-cursor-dao/id-bookmark-after-requery-and-reinsert,
+    /// r-q2-cursor-dao/id-bookmark-requery-populated). An occurrence whose row another session deleted is still named, as
+    /// on ACE (q/id-bookmark-assign-deleted-and-beyond); reading its fields then answers
+    /// <see cref="CursorFailure.DeletedRecord"/> (DAO 3167). An empty array succeeds and moves nothing
     /// (c1/id-bookmark-shape, fix/id-bookmark-assign-fresh: the Bookmark read after it is unchanged).
     /// </summary>
     public CursorFailure? SetBookmark(ReadOnlySpan<byte> bookmark)
@@ -1014,12 +1338,15 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return null;
         }
-        if (_bookmarkBase is not uint @base)
+        if (_family.BookmarksInvalidatedByDelete || _family.BookmarkBase is not uint @base)
         {
             return CursorFailure.NotObserved;
         }
-        if (KeysetBookmark.Decode(bookmark, @base) is not int ordinal || ordinal >= _store.ObservedCount)
+        _bookmarkInvalidAnchorDeleted = false;
+        if (KeysetBookmark.Decode(bookmark, @base) is not int ordinal || ordinal >= _family.Store.ObservedCount)
         {
+            _row.Unbind();
+            _position.MarkBookmarkInvalid();
             return CursorFailure.InvalidBookmark;
         }
         _row.Unbind();
@@ -1028,22 +1355,30 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     public FieldResult Read(ColumnDescriptor column)
     {
-        if (_snapshot is not { } snapshot || _position.Current is not int ordinal)
+        if (_position.Tag == PositionTag.DeletedBySibling)
+        {
+            return new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted");
+        }
+        if (_family.Snapshot is not { } snapshot || _position.Current is not int ordinal)
         {
             return _row.Read(CurrentRoot, column);
         }
-        snapshot.Stamp(_store, _row);
-        return snapshot.Read(_row, ordinal, _store[ordinal], column);
+        snapshot.Stamp(_family.Store, _row);
+        return snapshot.Read(_row, ordinal, _family.Store[ordinal], column);
     }
 
     public TextFieldRead ReadText(ColumnDescriptor column)
     {
-        if (_snapshot is not { } snapshot || _position.Current is not int ordinal)
+        if (_position.Tag == PositionTag.DeletedBySibling)
+        {
+            return new TextFieldRead(new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted"));
+        }
+        if (_family.Snapshot is not { } snapshot || _position.Current is not int ordinal)
         {
             return _row.ReadText(CurrentRoot, column);
         }
-        snapshot.Stamp(_store, _row);
-        return snapshot.ReadText(_row, ordinal, _store[ordinal], column);
+        snapshot.Stamp(_family.Store, _row);
+        return snapshot.ReadText(_row, ordinal, _family.Store[ordinal], column);
     }
 
     /// <summary>
@@ -1059,26 +1394,32 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public FindResult Find(FindDirection direction, IRowPredicate predicate)
     {
-        int countBefore = _store.ObservedCount;
-        bool movedBefore = _store.FirstMoveDone;
+        OccurrenceStore<RowId> store = _family.Store;
+        int countBefore = store.ObservedCount;
+        bool movedBefore = store.FirstMoveDone;
         try
         {
             return Search(direction, predicate);
         }
         finally
         {
-            if (_snapshot is { } snapshot)
+            if (_family.Snapshot is { } snapshot)
             {
-                snapshot.Stamp(_store, _row); // a FindLast populates rows it may not test
-                snapshot.FindEnded(_store, countBefore, movedBefore);
+                snapshot.Stamp(store, _row); // a FindLast populates rows it may not test
+                snapshot.FindEnded(store, countBefore, movedBefore);
             }
         }
     }
 
     private FindResult Search(FindDirection direction, IRowPredicate predicate)
     {
+        OccurrenceStore<RowId> store = _family.Store;
         PositionTag tag = _position.Tag;
         int? current = _position.Current;
+        if (tag == PositionTag.CloneRequeried)
+        {
+            return new FindResult(FindOutcome.NotModelled);
+        }
         if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))
         {
             _position.FindFailed();
@@ -1087,21 +1428,21 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         bool forward = direction is FindDirection.First or FindDirection.Next;
         int? start = direction switch
         {
-            FindDirection.First => _store.Next(null),
-            FindDirection.Last => _store.Previous(null),
-            FindDirection.Next => _store.Next(current),
-            _ => _store.Previous(current),
+            FindDirection.First => store.Next(null),
+            FindDirection.Last => store.Previous(null),
+            FindDirection.Next => store.Next(current),
+            _ => store.Previous(current),
         };
-        for (int? at = start; at is int ordinal; at = forward ? _store.Next(ordinal) : _store.Previous(ordinal))
+        for (int? at = start; at is int ordinal; at = forward ? store.Next(ordinal) : store.Previous(ordinal))
         {
             _row.Unbind();
             _position.Seek(ordinal);
-            if (_snapshot is { } snapshot)
+            if (_family.Snapshot is { } snapshot)
             {
                 snapshot.UndecidedRead = false;
             }
             RowTest test = predicate.Test(this);
-            if (_snapshot is { UndecidedRead: true })
+            if (_family.Snapshot is { UndecidedRead: true })
             {
                 _row.Unbind();
                 _position.Return(tag, current);
@@ -1125,7 +1466,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
                 // find-expression-forms: FindFirst "1=0" and "N > ID * 10" from row 2 end on row 1.
                 _position.Seek(0);
                 break;
-            case FindDirection.Last when tag == PositionTag.At && current == _store.ObservedCount - 1:
+            case FindDirection.Last when tag == PositionTag.At && current == store.ObservedCount - 1:
                 _position.Return(tag, current); // the last row: where it was and the search start agree
                 break;
             case FindDirection.Last:
@@ -1149,6 +1490,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public FindResult CriteriaFailed(FindDirection direction)
     {
+        OccurrenceStore<RowId> store = _family.Store;
         PositionTag tag = _position.Tag;
         if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))
         {
@@ -1160,7 +1502,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             _position.Seek(0);
             return new FindResult(FindOutcome.Failed);
         }
-        if (tag == PositionTag.At && _position.Current == 0 && (direction != FindDirection.Last || (_store.Complete && _store.ObservedCount == 1)))
+        if (tag == PositionTag.At && _position.Current == 0 && (direction != FindDirection.Last || (store.Complete && store.ObservedCount == 1)))
         {
             return new FindResult(FindOutcome.Failed);
         }
@@ -1169,8 +1511,12 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
         _row.Dispose();
-        _source.Dispose();
-        _snapshot?.Dispose();
+        _family.Detach(this);
     }
 }

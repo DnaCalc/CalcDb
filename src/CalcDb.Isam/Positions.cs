@@ -38,6 +38,33 @@ public enum PositionTag
     /// MovePrevious step to the deleted row's neighbours or boundary).
     /// </summary>
     Deleted,
+
+    /// <summary>
+    /// After another member of the clone family deleted this cursor's current row (r-fix-cursor-dao/clone-write-visibility-same-row,
+    /// r-def-cursor-dao/delete-by-other-cursor-current-row): BOF and EOF stay false, AbsolutePosition keeps the deleted row's
+    /// ordinal while in range, field reads return DeletedRecord (3167), Move(0) succeeds without clearing the state, and
+    /// MoveNext/MovePrevious step from the deleted anchor.
+    /// </summary>
+    DeletedBySibling,
+
+    /// <summary>
+    /// After another member of the clone family ran Requery (r-cursor-1b/requery-family): BOF and EOF are false, no current
+    /// row (3021), MoveNext lands on the first row and MoveLast on the last.
+    /// </summary>
+    Requeried,
+
+    /// <summary>
+    /// After this clone itself ran Requery (r-cursor-1b/clone-write-visibility, r-fix-cursor-dao/clone-write-visibility-same-row):
+    /// BOF and EOF are true and there is no current row (3021).
+    /// </summary>
+    CloneRequeried,
+
+    /// <summary>
+    /// After a failed Bookmark assignment (3159: r-cursor-1b/clone-bookmark-sharing, r-q-cursor-dao/id-bookmark-after-requery-and-reinsert,
+    /// r-q2-cursor-dao/id-bookmark-requery-populated): BOF and EOF are false, no current row (Value and Bookmark give 3021),
+    /// while the prior ordinal is remembered for AbsolutePosition.
+    /// </summary>
+    BookmarkInvalid,
 }
 
 /// <summary>
@@ -53,6 +80,9 @@ public enum MoveOutcome
 
     NoCurrentRecord,
     NotSupported,
+
+    /// <summary>A movement from a cursor state no retained record decides (e.g. MovePrevious from Requeried, relative moves from BookmarkInvalid).</summary>
+    NotModelled,
 }
 
 /// <summary>
@@ -67,8 +97,9 @@ public enum MoveOutcome
 /// </summary>
 public sealed class PositionState<T> where T : struct
 {
-    private readonly IOrderedSource<T> _source;
+    private IOrderedSource<T> _source;
     private T? _deletedAnchor;
+    private T? _invalidAnchor;
 
     public PositionState(IOrderedSource<T> source, bool forwardOnly)
     {
@@ -92,9 +123,15 @@ public sealed class PositionState<T> where T : struct
 
     public T? Current { get; private set; }
 
-    public bool Bof => Tag is PositionTag.Before or PositionTag.Empty || (IsSeekMiss && _missBof);
+    /// <summary>The occurrence held before a failed Bookmark assignment (<see cref="PositionTag.BookmarkInvalid"/>), or null.</summary>
+    public T? BookmarkInvalidAnchor => Tag == PositionTag.BookmarkInvalid ? _invalidAnchor : null;
 
-    public bool Eof => Tag is PositionTag.After or PositionTag.Empty || (IsSeekMiss && _missEof);
+    /// <summary>The occurrence held when a sibling deleted the current row (<see cref="PositionTag.DeletedBySibling"/>), or null.</summary>
+    public T? DeletedBySiblingAnchor => Tag == PositionTag.DeletedBySibling ? _deletedAnchor : null;
+
+    public bool Bof => Tag is PositionTag.Before or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missBof);
+
+    public bool Eof => Tag is PositionTag.After or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missEof);
 
     private bool IsSeekMiss => Tag is PositionTag.SeekMissBefore or PositionTag.SeekMissAfter;
 
@@ -112,6 +149,112 @@ public sealed class PositionState<T> where T : struct
             Current = null;
             Tag = PositionTag.Deleted;
         }
+    }
+
+    /// <summary>
+    /// Record that the current row was deleted by another member of the clone family
+    /// (r-fix-cursor-dao/clone-write-visibility-same-row, r-def-cursor-dao/delete-by-other-cursor-current-row:
+    /// BOF/EOF false, AbsolutePosition kept while in range, 3167 on read, Move(0) succeeds).
+    /// </summary>
+    public void MarkDeletedBySibling()
+    {
+        if (Tag == PositionTag.At && Current is { } at)
+        {
+            _deletedAnchor = at;
+            Current = null;
+            Tag = PositionTag.DeletedBySibling;
+        }
+    }
+
+    /// <summary>
+    /// Record that a Bookmark assignment failed with 3159 (r-cursor-1b/clone-bookmark-sharing,
+    /// r-q-cursor-dao/id-bookmark-after-requery-and-reinsert, r-q2-cursor-dao/id-bookmark-requery-populated):
+    /// BOF/EOF false, no current row, prior occurrence preserved for AbsolutePosition.
+    /// </summary>
+    public void MarkBookmarkInvalid()
+    {
+        if (Tag == PositionTag.Empty)
+        {
+            return;
+        }
+        if (Tag == PositionTag.At)
+        {
+            _invalidAnchor = Current;
+        }
+        else if (Tag != PositionTag.BookmarkInvalid)
+        {
+            _invalidAnchor = null;
+        }
+        Current = null;
+        Tag = PositionTag.BookmarkInvalid;
+    }
+
+    /// <summary>Clear the stored <see cref="BookmarkInvalidAnchor"/> when a sibling deletes that occurrence.</summary>
+    public void ClearBookmarkInvalidAnchor()
+    {
+        if (Tag == PositionTag.BookmarkInvalid)
+        {
+            _invalidAnchor = null;
+        }
+    }
+
+    /// <summary>Update any stored occurrence after a sibling removed an occurrence from the shared store.</summary>
+    public void AdjustAfterRemove(Func<T, T> adjust)
+    {
+        if (Tag == PositionTag.At && Current is { } at)
+        {
+            Current = adjust(at);
+        }
+        else if (Tag is PositionTag.Deleted or PositionTag.DeletedBySibling && _deletedAnchor is { } d)
+        {
+            _deletedAnchor = adjust(d);
+        }
+        else if (Tag == PositionTag.BookmarkInvalid && _invalidAnchor is { } inv)
+        {
+            _invalidAnchor = adjust(inv);
+        }
+    }
+
+    /// <summary>Rebind to a new source after Requery, landing on its first occurrence or Empty (r-cursor-1b/requery-types-state, requery-empty-to-populated).</summary>
+    public void ResetForRequery(IOrderedSource<T> newSource)
+    {
+        _source = newSource;
+        NoMatch = false;
+        _deletedAnchor = null;
+        _invalidAnchor = null;
+        T? first = newSource.Next(null);
+        if (first is null)
+        {
+            Tag = PositionTag.Empty;
+            Current = null;
+        }
+        else
+        {
+            Tag = PositionTag.At;
+            Current = first;
+        }
+    }
+
+    /// <summary>Rebind a sibling clone after Requery: BOF/EOF false, no current row, MoveNext lands on row 1 (r-cursor-1b/requery-family).</summary>
+    public void MarkRequeried(IOrderedSource<T> newSource)
+    {
+        _source = newSource;
+        NoMatch = false;
+        _deletedAnchor = null;
+        _invalidAnchor = null;
+        Current = null;
+        Tag = PositionTag.Requeried;
+    }
+
+    /// <summary>Rebind a clone that itself ran Requery: BOF/EOF true, no current row (r-cursor-1b/clone-write-visibility, r-fix-cursor-dao/clone-write-visibility-same-row).</summary>
+    public void MarkCloneRequeried(IOrderedSource<T> newSource)
+    {
+        _source = newSource;
+        NoMatch = false;
+        _deletedAnchor = null;
+        _invalidAnchor = null;
+        Current = null;
+        Tag = PositionTag.CloneRequeried;
     }
 
     /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS, CUR-FIND).</summary>
@@ -179,6 +322,10 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NotSupported;
         }
+        if (Tag == PositionTag.CloneRequeried)
+        {
+            return MoveOutcome.NoCurrentRecord;
+        }
         if (Tag == PositionTag.Empty)
         {
             T? first = _source.Next(null);
@@ -200,6 +347,10 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NotSupported;
         }
+        if (Tag == PositionTag.CloneRequeried)
+        {
+            return MoveOutcome.NoCurrentRecord;
+        }
         if (Tag == PositionTag.Empty)
         {
             T? last = _source.Previous(null);
@@ -217,9 +368,13 @@ public sealed class PositionState<T> where T : struct
 
     public MoveOutcome MoveNext()
     {
-        if (Tag is PositionTag.Empty or PositionTag.After)
+        if (Tag is PositionTag.Empty or PositionTag.After or PositionTag.CloneRequeried)
         {
             return MoveOutcome.NoCurrentRecord;
+        }
+        if (Tag == PositionTag.BookmarkInvalid)
+        {
+            return MoveOutcome.NotModelled;
         }
         if (Tag == PositionTag.SeekMissAfter)
         {
@@ -227,8 +382,8 @@ public sealed class PositionState<T> where T : struct
         }
         T? next = Tag switch
         {
-            PositionTag.Before or PositionTag.SeekMissBefore => _source.Next(null),
-            PositionTag.Deleted when _deletedAnchor is { } a => _source.NextAfterDeleted(a),
+            PositionTag.Before or PositionTag.SeekMissBefore or PositionTag.Requeried => _source.Next(null),
+            PositionTag.Deleted or PositionTag.DeletedBySibling when _deletedAnchor is { } a => _source.NextAfterDeleted(a),
             _ => _source.Next(Current),
         };
         return Step(next, PositionTag.After);
@@ -240,9 +395,13 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NotSupported;
         }
-        if (Tag is PositionTag.Empty or PositionTag.Before)
+        if (Tag is PositionTag.Empty or PositionTag.Before or PositionTag.CloneRequeried)
         {
             return MoveOutcome.NoCurrentRecord;
+        }
+        if (Tag is PositionTag.Requeried or PositionTag.BookmarkInvalid)
+        {
+            return MoveOutcome.NotModelled;
         }
         if (Tag == PositionTag.SeekMissBefore)
         {
@@ -251,7 +410,7 @@ public sealed class PositionState<T> where T : struct
         T? previous = Tag switch
         {
             PositionTag.After or PositionTag.SeekMissAfter => _source.Previous(null),
-            PositionTag.Deleted when _deletedAnchor is { } a => _source.PreviousBeforeDeleted(a),
+            PositionTag.Deleted or PositionTag.DeletedBySibling when _deletedAnchor is { } a => _source.PreviousBeforeDeleted(a),
             _ => _source.Previous(Current),
         };
         return Step(previous, PositionTag.Before);
@@ -264,15 +423,24 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NotSupported;
         }
-        if (Tag == PositionTag.Empty || (rows == 0 && Tag != PositionTag.At))
+        if (Tag is PositionTag.Empty or PositionTag.CloneRequeried)
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        NoMatch = false;
         if (rows == 0)
         {
-            return MoveOutcome.Moved;
+            if (Tag is PositionTag.At or PositionTag.DeletedBySibling)
+            {
+                NoMatch = false;
+                return MoveOutcome.Moved;
+            }
+            return MoveOutcome.NoCurrentRecord;
         }
+        if (Tag == PositionTag.BookmarkInvalid || (Tag == PositionTag.Requeried && rows < 0))
+        {
+            return MoveOutcome.NotModelled;
+        }
+        NoMatch = false;
         bool forward = rows > 0;
         ulong distance = forward ? (ulong)rows : (ulong)(-(rows + 1)) + 1;
         for (ulong i = 0; i < distance; i++)

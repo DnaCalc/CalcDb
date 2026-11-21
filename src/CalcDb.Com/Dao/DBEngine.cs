@@ -393,6 +393,45 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         return EditPublication.Of(outcome);
     }
 
+    private IDatabaseRecordset? _skipRollbackFor;
+
+    /// <summary>True when <paramref name="recordset"/> is the surviving clone family during a clone-release transaction abort.</summary>
+    public bool SkipsRollback(IDatabaseRecordset recordset) => ReferenceEquals(_skipRollbackFor, recordset);
+
+    /// <summary>
+    /// Abort all open transaction levels when a member of a depth-0 cloned dynaset family is finally released inside a
+    /// transaction after Close failed 3246 (r-txn-1/clone-close-in-transaction, r-fix-cat-txn/clone-close-read-between,
+    /// r-def-cat-txn/txn-close-original-recordset-while-clone-holds-level, r-q-cursor-dao/life-clone-close-transaction-nested,
+    /// r-q2-cursor-dao/life-clone-before-begintrans-commit, -rollback, -no-update, -two-levels). Notifies non-family
+    /// recordsets via <see cref="DatabaseObject.RolledBack"/> while skipping <paramref name="survivingFamilyRoot"/>,
+    /// because ACE leaves surviving members of the family readable and open.
+    /// </summary>
+    public void AbortTransactionsForCloneClose(IDatabaseRecordset survivingFamilyRoot)
+    {
+        IDatabaseRecordset? previous = _skipRollbackFor;
+        _skipRollbackFor = survivingFamilyRoot;
+        try
+        {
+            while (Transactions.Depth > 0)
+            {
+                ExplicitFrame level = Transactions.Frames[^1];
+                ResolutionOutcome outcome = Transactions.Rollback();
+                if (!outcome.Succeeded)
+                {
+                    break;
+                }
+                foreach (DatabaseObject d in _databases.ToArray())
+                {
+                    d.RolledBack(level, outermost: level.Level == 1);
+                }
+            }
+        }
+        finally
+        {
+            _skipRollbackFor = previous;
+        }
+    }
+
     /// <summary>
     /// OpenDatabase(Name, Options, ReadOnly, Connect): the shared operation of DBEngine and Workspace (source
     /// DAO.Workspace). ReadOnly counts only when Options is given (R-ORACLE-1 OR-WIRE: with Options Missing every

@@ -38,13 +38,14 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Moving(self, "Move", r => r.Move(rows, start)); })
         .Get("AbsolutePosition", (self, args) => Read(self, "AbsolutePosition", r => r.AbsolutePosition()))
         .Get("PercentPosition", (self, args) => Read(self, "PercentPosition", r => r.PercentPosition()))
-        .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Read(self, "PercentPosition", r => r.SetPercentPosition(value)); })
+        .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Moving(self, "PercentPosition", r => r.SetPercentPosition(value)); })
         .Get("Bookmark", (self, args) => Read(self, "Bookmark", r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Moving(self, "Bookmark", r => r.SetBookmark(value)); })
         // Index of a dynaset, snapshot or forward-only recordset is 3251 without an IErrorInfo (r-dao-1b/recordset-members-dynaset, -snapshot, -forward-only, -at-eof).
         .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Put("Index", (self, args) => { nint value = args[^1]; return Read(self, "Index", r => r.EditPending("Index") ?? r.SetIndex(value)); })
-        .Method("Requery", (self, args) => Live(self, r => r.Requery()))
+        .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
+        .Method("Clone", (self, args) => Live(self, r => r.Clone()))
         .Method("Seek", static (self, args) => (RecordsetObject)self is { Closed: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).GuardedSeek(args))
         .Method("Edit", (self, args) => Live(self, r => r.Edit()))
         .Method("AddNew", (self, args) => Live(self, r => r.AddNew()))
@@ -63,7 +64,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("Transactions", (self, args) => Live(self, r => Bool(r.RecordsetType == 1)))
         // Restartable: table-type False, the other types True (r-dao-1b/recordset-members-table, -dynaset, -snapshot, -forward-only).
         .Get("Restartable", (self, args) => Live(self, r => Bool(r.RecordsetType != 1)))
-        .Get("EditMode", (self, args) => Live(self, r => Int16((short)(r._frame?.Mode ?? EditMode.None))))
+        .Get("EditMode", (self, args) => Live(self, r => Int16(r.EditModeValue())))
         .Get("Filter", (self, args) => Live(self, r => r.NotTableType() ?? Text(r._filter)))
         .Put("Filter", (self, args) => { nint value = args[^1]; return Live(self, r => r.NotTableType() ?? r.SetText(ref r._filter, value)); })
         .Get("Sort", (self, args) => Live(self, r => r.NotTableType() ?? Text(r._sort)))
@@ -92,13 +93,40 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()))
         .Get("LastModified", (self, args) => Live(self, r => r.LastModified()));
 
+    /// <summary>
+    /// Tracks an original <see cref="RecordsetObject"/> and all live clones derived from it so Database.Close, Rollback,
+    /// DDL holds and transaction-close rules stay coherent while only the root is registered in <see cref="DatabaseObject"/>.
+    /// </summary>
+    private sealed class RecordsetFamily
+    {
+        public RecordsetFamily(RecordsetObject root)
+        {
+            Root = root;
+            Live.Add(root);
+        }
+
+        public RecordsetObject Root { get; }
+
+        public List<RecordsetObject> Live { get; } = [];
+
+        public void AddClone(RecordsetObject clone) => Live.Add(clone);
+
+        public bool Remove(RecordsetObject member)
+        {
+            Live.Remove(member);
+            return Live.Count == 0;
+        }
+    }
+
     private FieldsObject? _fields;
     private PropertiesObject? _properties;
+    private readonly RecordsetFamily _family;
     private readonly CatalogEntry _entry;
     private readonly int _options;
     private bool _pessimistic;
     private readonly ExplicitFrame[] _openLevels;
     private EditFrame? _frame;
+    private bool _staleEditModeAfterCloneCloseAbort;
     private RecordsetAfterRollback _afterRollback;
     private string? _notRecorded;
     private LastModifiedMark _lastModified;
@@ -112,6 +140,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <param name="overlay">The Workspace's overlay of the file the cursor reads through (Isam PageSource, task rf2n), or null for the committed images.</param>
     public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, PrivateOverlay? overlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
+        _family = new RecordsetFamily(this);
         _overlay = overlay;
         Database = database;
         _entry = entry;
@@ -123,6 +152,26 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _openLevels = [.. database.Workspace.Transactions.Frames];
         database.AddRef(); // a recordset keeps its Database object alive
     }
+
+    private RecordsetObject(RecordsetObject parent, IRecordCursor cursor, PrivateOverlay? overlay) : base(Decl, Vtable, parent.Engine, "DAO.Recordset")
+    {
+        _family = parent._family;
+        _overlay = overlay;
+        Database = parent.Database;
+        _entry = parent._entry;
+        TableName = parent.TableName;
+        Cursor = cursor;
+        RecordsetType = parent.RecordsetType;
+        _options = parent._options;
+        _pessimistic = parent._pessimistic;
+        _openLevels = [.. Database.Workspace.Transactions.Frames];
+        _family.AddClone(this);
+        Database.AddRef(); // each clone keeps its Database object alive independently
+    }
+
+    private short EditModeValue() => _frame is { Mode: not EditMode.None } frame ? (short)frame.Mode
+        : _staleEditModeAfterCloneCloseAbort ? (short)EditMode.Edit
+        : (short)EditMode.None;
 
     /// <summary>Updatable (R-CURSOR-1 CUR-PROV with the option matrix of r-fix-cursor-dao/option-flags-rw): <see cref="RecordsetOptions.Updatable"/>.</summary>
     public bool Updatable => RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
@@ -450,6 +499,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return Fail(3420, DaoErrors.ObjectInvalid);
         }
+        if (Cursor is PopulationCursor { IsCloneRequeried: true })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryMove", "Find on a clone after the clone called Requery (not recorded)"));
+        }
         ReadOnlySpan<char> text = argument != 0 && Args.TypeOf(argument) == VarType.Bstr ? Bstrs.Chars(Args.Cell(argument)->Pointer) : (Args.Text(argument) ?? "").AsSpan();
         FindCriteria? criteria = Criteria(text, out ExpressionFailure? failure);
         if (Cursor is not PopulationCursor { ForwardOnly: false } cursor)
@@ -473,6 +526,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return unpublished;
         }
         _frame?.Discard(); // FindFirst and its siblings discard a pending edit (CUR-EDIT)
+        _staleEditModeAfterCloneCloseAbort = false;
         FindResult result = criteria is null ? cursor.CriteriaFailed(direction) : cursor.Find(direction, criteria);
         return result.Outcome switch
         {
@@ -531,7 +585,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return r.Fail(3420, DaoErrors.ObjectInvalid);
         }
+        if (r.Cursor is PopulationCursor { IsCloneRequeried: true })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryMove", $"{member} on a clone after the clone called Requery (not recorded)"));
+        }
         r._frame?.Discard();
+        r._staleEditModeAfterCloneCloseAbort = false;
         return r.UnpublishedRead(member) ?? op(r);
     }
 
@@ -556,8 +615,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             : null;
     }
 
-    /// <summary>The Workspace overlay this recordset's cursor reads through, or null (RecordsetObject constructor).</summary>
-    private readonly PrivateOverlay? _overlay;
+    /// <summary>The Workspace overlay this recordset's cursor reads through, or null (updated on Requery).</summary>
+    private PrivateOverlay? _overlay;
 
     /// <summary>
     /// A member whose effect on a pending edit no record shows (Seek, an Index put, a refused Requery or Find): named while
@@ -737,6 +796,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return unpublished;
         }
+        if (CloneRequeried("GetRows") is { } cloneRequeried)
+        {
+            return cloneRequeried;
+        }
         if (Cursor.Eof)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord);
@@ -792,6 +855,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>A successful read's value as an owned VARIANT.</summary>
     private static OwnedVariant Owned(CallResult cell) => cell.Value ?? OwnedVariant.Adopt(cell.Scalar);
 
+    private CallResult? CloneRequeried(string member) => Cursor is PopulationCursor { IsCloneRequeried: true }
+        ? CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryOp", $"{member} on a clone after the clone called Requery (not recorded)"))
+        : null;
+
     /// <summary>
     /// Collect(Item): the value of the field the index names, as Field.Value reads it, without a Field object; an index
     /// naming no field (3, -1, "T.N", Null, Empty) is 3265 from DAO.Fields without an IErrorInfo; names compare
@@ -826,6 +893,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>Edit: the frame's Existing buffer over the current row (CUR-EDIT); 3251 on a snapshot, 3021 without a current row.</summary>
     private CallResult Edit()
     {
+        if (CloneRequeried("Edit") is { } cloneRequeried)
+        {
+            return cloneRequeried;
+        }
+        _staleEditModeAfterCloneCloseAbort = false;
         if (Frame(out CallResult refused) is not { } frame)
         {
             return refused;
@@ -839,6 +911,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     private CallResult AddNew()
     {
+        if (CloneRequeried("AddNew") is { } cloneRequeried)
+        {
+            return cloneRequeried;
+        }
+        _staleEditModeAfterCloneCloseAbort = false;
         if (Frame(out CallResult refused) is not { } frame)
         {
             return refused;
@@ -862,6 +939,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     private CallResult Update(nint typeArg, nint forceArg)
     {
+        _staleEditModeAfterCloneCloseAbort = false;
         if (Frame(out CallResult refused) is not { } frame)
         {
             return ReadOnlyByOption ? NoEditPending : refused;
@@ -956,13 +1034,25 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// snapshot or forward-only one opened outside every level; any one at an inner Rollback). CommitTrans changes nothing
     /// (edit-commit-opened-inside: the recordset reads on its row).
     /// </summary>
-    /// <summary>A table-type or dynaset recordset locks its table against DDL; a snapshot or forward-only one is not recorded (<see cref="TableHold"/>).</summary>
-    public TableHold Holds(string table) => !string.Equals(_entry.Name, table, StringComparison.OrdinalIgnoreCase) ? TableHold.None
+    /// <summary>A table-type or dynaset recordset locks its table against DDL while any member of its family is live; a snapshot or forward-only one is not recorded (<see cref="TableHold"/>).</summary>
+    public TableHold Holds(string table) => _family.Live.Count == 0 || !string.Equals(_entry.Name, table, StringComparison.OrdinalIgnoreCase) ? TableHold.None
         : RecordsetType is 1 or 2 ? TableHold.Locked
         : RecordsetType == 4 ? TableHold.TableSnapshot
         : TableHold.ForwardOnly;
 
     public void RolledBack(ExplicitFrame level, bool outermost)
+    {
+        if (Database.Workspace.SkipsRollback(_family.Root))
+        {
+            return;
+        }
+        foreach (RecordsetObject member in _family.Live.ToArray())
+        {
+            member.RolledBackOwn(level, outermost);
+        }
+    }
+
+    private void RolledBackOwn(ExplicitFrame level, bool outermost)
     {
         if (Closed || _afterRollback is RecordsetAfterRollback.Invalid or RecordsetAfterRollback.NotRecorded)
         {
@@ -1038,6 +1128,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>CancelUpdate(UpdateType): dbUpdateRegular drops the pending edit without Rollback (CUR-EDIT); another type is not recorded.</summary>
     private CallResult CancelUpdate(nint typeArg)
     {
+        _staleEditModeAfterCloneCloseAbort = false;
         if (Args.Int32(typeArg, omitted: 1) is not 1)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
@@ -1051,6 +1142,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>Delete: discards any pending Edit or AddNew and removes the current row (W-05/growth-structural-closure; CUR-EDIT, CUR-POS).</summary>
     private CallResult Delete()
     {
+        if (CloneRequeried("Delete") is { } cloneRequeried)
+        {
+            return cloneRequeried;
+        }
+        _staleEditModeAfterCloneCloseAbort = false;
         if (Frame(out CallResult refused) is not { } frame)
         {
             return refused;
@@ -1069,18 +1165,26 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         MoveOutcome.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
         // Forward-only refuses backward movement with 3219 (CUR-POS, r-cursor-1/pos-moves-forwardonly).
         MoveOutcome.NotSupported when RecordsetType == 8 => Fail(3219, DaoErrors.InvalidOperation),
+        MoveOutcome.NotModelled => Cursor is PopulationCursor { PositionTag: PositionTag.Requeried }
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.RequeriedMove", "MovePrevious or negative Move from Requeried state (not recorded)"))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkInvalidMove", "relative Move after a failed Bookmark assignment (not recorded)")),
         _ => CallResult.Fail(Failure.NotImplemented($"Recordset movement outcome {outcome}")),
     };
 
     /// <summary>
-    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, or -1 at BOF, EOF, empty, or after own Delete
-    /// (CUR-POS); forward-only refuses it with 3219 and table-type with 3251 (r-cursor-1/pos-moves-dynaset,
+    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, the deleted ordinal while in range after a
+    /// sibling delete (r-def-cursor-dao/delete-by-other-cursor-current-row), or -1 at BOF, EOF, empty, or after own
+    /// Delete (CUR-POS); forward-only refuses it with 3219 and table-type with 3251 (r-cursor-1/pos-moves-dynaset,
     /// pos-moves-forwardonly, pop-count-table).
     /// </summary>
     private CallResult AbsolutePosition() => Cursor switch
     {
         TableCursor => Fail(3251, DaoErrors.NotSupportedForType),
         PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
+        PopulationCursor { IsDeletedBySiblingOutOfRange: true } =>
+            CallResult.Fail(Failure.NotModelled("NotModelled.AbsolutePositionDeletedLastRow", "AbsolutePosition on a cursor whose current row (the last populated row) was deleted by a sibling (not recorded)")),
+        PopulationCursor { IsBookmarkInvalidAnchorDeleted: true } =>
+            CallResult.Fail(Failure.NotModelled("NotModelled.AbsolutePositionBookmarkInvalidDeletedRow", "AbsolutePosition after a failed Bookmark assignment when a sibling deleted the remembered anchor row (not recorded)")),
         PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
         PopulationCursor => Int32(-1),
         _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition without a current row")),
@@ -1138,15 +1242,131 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _ => CallResult.Fail(Failure.NotImplemented($"{member}: {failure}")),
     };
 
-    /// <summary>Requery: table-type refuses it with 3251 (r-cursor-1/pop-count-table); a dynaset or snapshot's re-population is not built yet.</summary>
-    private CallResult Requery()
+    /// <summary>
+    /// Clone (R-CURSOR-1 CUR-LIFE, II-07 §11): a second cursor over the same table (table-type) or shared population
+    /// (dynaset, snapshot), starting at row 1 or Empty without advancing population, with independent position, fresh
+    /// Index/Filter/Sort/LastModified/NoMatch/CacheSize/CacheStart/EditMode and preserved parent pending edit
+    /// (r-cursor-1/life-clone, r-cursor-1b/clone-by-type-and-properties, clone-chain-close-orders, clone-bookmark-sharing,
+    /// edit-pending-ops). Forward-only refuses with 3219 (clone-by-type-and-properties).
+    /// </summary>
+    private CallResult Clone()
     {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!Bookmarkable)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneForwardOnlyOption", "Clone on a recordset opened with the dbForwardOnly option (not recorded)"));
+        }
+        if (RecordsetType is 1 or 2 && !_pessimistic)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneWithOptimisticLockEdits", "Clone of a recordset with LockEdits = False (whether LockEdits is inherited or reset is not recorded)"));
+        }
+        if (_overlay is { } overlay && !ReferenceEquals(overlay, Transactions.OverlayOf(Database.Cache)))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"Clone: the recordset of '{_entry.Name}' was opened over its Workspace's overlay of a level that has ended"));
+        }
+        IRecordCursor? cloned;
+        switch (Cursor)
+        {
+            case TableCursor table:
+                cloned = table.Clone(out TraversalFailure? failure, pageCount: Database.PageCount);
+                if (cloned is null)
+                {
+                    return CallResult.Fail(Failure.NotImplemented("Clone when the table cannot be traversed: " + failure?.Predicate));
+                }
+                break;
+            case PopulationCursor pop:
+                cloned = pop.Clone();
+                if (cloned is null)
+                {
+                    return Fail(3219, DaoErrors.InvalidOperation);
+                }
+                break;
+            default:
+                return CallResult.Fail(Failure.NotImplemented($"Clone on cursor type {Cursor.GetType().Name}"));
+        }
+        var copy = new RecordsetObject(this, cloned, _overlay);
+        CallResult result = Object(copy);
+        copy.Release();
+        return result;
+    }
+
+    /// <summary>
+    /// Requery(NewQueryDef) (R-CURSOR-1 CUR-LIFE, CUR-POP, CUR-EDIT): table-type refuses with 3251
+    /// (r-cursor-1/pop-count-table, r-cursor-1b/requery-types-state); dynaset, snapshot and forward-only discard any
+    /// pending edit on the caller (r-cursor-1b/edit-pending-ops), keep LastModified (lastmodified-clone-family), re-run
+    /// the scan over the current page source (picking up this Workspace's overlay on dynaset:
+    /// r-def-cursor-dao/prov-heap-duplicate-rows; ending any lazy burst on snapshot: r-cursor-1/pop-visibility-snapshot),
+    /// and reposition the family (r-cursor-1b/requery-family, clone-write-visibility,
+    /// r-fix-cursor-dao/clone-write-visibility-same-row).
+    /// </summary>
+    private CallResult Requery(nint newQueryDefArg)
+    {
+        if (newQueryDefArg != 0 && (Args.TypeOf(newQueryDefArg) & ~VarType.ByRef) != VarType.Empty)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.RequeryWithQueryDef", "Recordset.Requery with a NewQueryDef argument (not recorded for table recordsets)"));
+        }
         if (Cursor is TableCursor)
         {
             return EditPending("Requery") ?? Fail(3251, DaoErrors.NotSupportedForType);
         }
-        _frame?.Discard(); // Requery discards a pending edit (CUR-EDIT)
-        return CallResult.Fail(Failure.NotImplemented("Requery of a dynaset or snapshot (R-CURSOR-1 CUR-LIFE)"));
+        if (Cursor is not PopulationCursor pop)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Requery on cursor type {Cursor.GetType().Name}"));
+        }
+        if (pop.IsCloneOfClosedParent)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryAfterParentClose", "Requery on a clone whose original recordset is already closed (not recorded)"));
+        }
+        if (RecordsetType == 4 && _family.Live.Count > 1)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotCloneRequery", "Requery on a snapshot with live clones (not recorded)"));
+        }
+        if (RecordsetType is 4 or 8 && Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RequeryNonDynaset", $"Requery on a type {RecordsetType} table recordset inside an active transaction (not recorded)"));
+        }
+        if (!ReferenceEquals(this, _family.Root) && _family.Live.Count >= 3)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryThreeOrMoreMembers", "Requery on a clone with 3 or more live family members (not recorded)"));
+        }
+        foreach (RecordsetObject sibling in _family.Live)
+        {
+            if (!ReferenceEquals(sibling, this) && sibling._frame is { Mode: not EditMode.None })
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.RequeryWithSiblingPendingEdit", "Requery while another member of the clone family has a pending edit (not recorded)"));
+            }
+        }
+        PrivateOverlay? currentOverlay = RecordsetType == 4 ? null : Transactions.OverlayOf(Database.Cache);
+        if (Database.Engine.Changes.Visible(Transactions, Database.Name, _entry.Name, own: null, readsOverlayOf: currentOverlay is null ? null : Database.Cache))
+        {
+            return EditPublication.Unpublished(_entry.Name, "Requery");
+        }
+        if (RecordsetType == 4)
+        {
+            Database.Workspace.Transactions.EndLazyBurst(Database.Cache);
+        }
+        var source = new PageSource(Database.Cache, currentOverlay);
+        if (!pop.Requery(out TraversalFailure? failure, source, Database.PageCount))
+        {
+            if (failure?.Predicate is { } predicate && predicate.StartsWith("NotModelled.", StringComparison.Ordinal))
+            {
+                int colon = predicate.IndexOf(':');
+                string name = colon >= 0 ? predicate[..colon] : predicate;
+                string detail = colon >= 0 ? predicate[(colon + 1)..].Trim() : predicate;
+                return CallResult.Fail(Failure.NotModelled(name, detail));
+            }
+            return CallResult.Fail(Failure.NotImplemented("Requery when the table cannot be traversed: " + failure?.Predicate));
+        }
+        _frame?.Discard();
+        foreach (RecordsetObject member in _family.Live)
+        {
+            member._overlay = currentOverlay;
+            member._staleEditModeAfterCloneCloseAbort = false;
+        }
+        return CallResult.Nothing;
     }
 
     private CallResult Move(nint rowsArg, nint startBookmark)
@@ -1174,7 +1394,22 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         byte[]? bookmark = Cursor.GetBookmark(out CursorFailure? failure);
         if (bookmark is null)
         {
-            return failure == CursorFailure.NoCurrentRecord ? Fail(3021, DaoErrors.NoCurrentRecord) : CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
+            if (failure == CursorFailure.NoCurrentRecord)
+            {
+                return Fail(3021, DaoErrors.NoCurrentRecord);
+            }
+            if (Cursor is PopulationCursor pop)
+            {
+                if (pop.IsSnapshotRequeried)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkAfterRequery", "Bookmark on a snapshot after Requery: ACE changes the snapshot bookmark base (r-cursor-1/life-requery)"));
+                }
+                if (pop.BookmarksInvalidatedByDelete)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
+                }
+            }
+            return CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
         }
         nint array = SafeArrays.Create(VarType.UI1, (0, bookmark.Length));
         bookmark.CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), bookmark.Length));
@@ -1196,6 +1431,17 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         byte[] bytes = shape[0].Count <= 0 ? [] : new Span<byte>(SafeArrays.ElementPointer(psa, shape[0].Lower), shape[0].Count).ToArray();
         CursorFailure? failure = Cursor.SetBookmark(bytes);
+        if (failure == CursorFailure.NotObserved && Cursor is PopulationCursor pop)
+        {
+            if (pop.IsSnapshotRequeried)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.SnapshotBookmarkAfterRequery", "Bookmark put on a snapshot after Requery: ACE changes the snapshot bookmark base (r-cursor-1/life-requery)"));
+            }
+            if (pop.BookmarksInvalidatedByDelete)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark put on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
+            }
+        }
         return failure switch
         {
             null => CallResult.Nothing,
@@ -1205,30 +1451,56 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// Close: a pending edit is discarded (CUR-EDIT), the cursor's pins and bound row are released and the Database forgets
-    /// this recordset. A dynaset opened outside any level and closed inside the first one is 3246 "Operation not supported
-    /// in transactions." from DAO.Recordset, the recordset and the level kept; a table-type recordset closes (qualified.md
-    /// R-TXN-1 TXN-CLOSE: q2/txn-close-recordset-opened-before-level, 6 of 7 variants). Other recordset types and depths
-    /// are not recorded and are named.
+    /// Close: a pending edit is discarded (CUR-EDIT), the cursor's pins and bound row are released, and the Database
+    /// forgets the family root once the last live member closes. A dynaset (uncloned at depth 1, or any live member of a
+    /// cloned family at depth >= 1) opened outside transactions fails Close with 3246 WITHOUT aborting the transaction
+    /// (r-q2-cat-txn-lock/txn-close-recordset-opened-before-level Variants 1-5, 7); the transaction abort happens at
+    /// final Release of a depth-0 cloned dynaset member (<see cref="OnFinalRelease"/>: r-txn-1/clone-close-in-transaction,
+    /// r-fix-cat-txn/clone-close-read-between, r-def-cat-txn/txn-close-original-recordset-while-clone-holds-level,
+    /// r-q-cursor-dao/life-clone-close-transaction-nested, r-q2-cursor-dao/life-clone-before-begintrans-*). A clone
+    /// opened inside the current level closes cleanly without affecting the transaction
+    /// (r-cursor-1/life-clone-close-transaction, r-q-cursor-dao/life-clone-close-transaction-one-level, -nested).
     /// </summary>
     private CallResult Close()
     {
         int depth = Database.Workspace.Transactions.Depth, openDepth = _openLevels.Length;
-        if (RecordsetType != 1 && depth > openDepth)
+        if (depth > openDepth)
         {
-            return RecordsetType == 2 && openDepth == 0 && depth == 1
-                ? Fail(3246, "Operation not supported in transactions.")
-                : CallResult.Fail(Failure.NotModelled("NotModelled.Txn.CloseRecordsetOpenedOutsideLevel", $"Close of a type {RecordsetType} recordset opened at depth {openDepth} and closed at depth {depth} (TXN-CLOSE records a dynaset from depth 0 to 1)"));
+            if (_family.Live.Count > 1)
+            {
+                return RecordsetType == 2 && openDepth == 0
+                    ? Fail(3246, DaoErrors.NotSupportedInTransactions)
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.Txn.CloseCloneOpenedOutsideLevel", $"Close of a type {RecordsetType} clone-family recordset opened at depth {openDepth} and closed at depth {depth} (not recorded)"));
+            }
+            if (RecordsetType != 1)
+            {
+                return RecordsetType == 2 && openDepth == 0 && depth == 1
+                    ? Fail(3246, DaoErrors.NotSupportedInTransactions)
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.Txn.CloseRecordsetOpenedOutsideLevel", $"Close of a type {RecordsetType} recordset opened at depth {openDepth} and closed at depth {depth} (TXN-CLOSE records a dynaset from depth 0 to 1)"));
+            }
         }
-        CloseCursor();
-        Database.Forget(this);
+        CloseOwnCursor();
+        if (_family.Remove(this))
+        {
+            Database.Forget(_family.Root);
+        }
         return CallResult.Nothing;
     }
 
     public void CloseCursor()
     {
+        foreach (RecordsetObject member in _family.Live.ToArray())
+        {
+            member.CloseOwnCursor();
+            _family.Remove(member);
+        }
+    }
+
+    private void CloseOwnCursor()
+    {
         if (!Closed)
         {
+            _staleEditModeAfterCloneCloseAbort = false;
             _frame?.Dispose();
             _frame = null;
             Cursor.Dispose();
@@ -1247,7 +1519,27 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     {
         if (!Closed)
         {
-            Close();
+            if (_family.Live.Count > 1 && RecordsetType == 2 && _openLevels.Length == 0 && Database.Workspace.Transactions.Depth > 0)
+            {
+                foreach (RecordsetObject member in _family.Live)
+                {
+                    if (member._frame is { Mode: EditMode.Edit } editFrame)
+                    {
+                        editFrame.Discard();
+                        member._staleEditModeAfterCloneCloseAbort = true;
+                    }
+                    else
+                    {
+                        member._frame?.Discard();
+                    }
+                }
+                Database.Workspace.AbortTransactionsForCloneClose(_family.Root);
+            }
+            CloseOwnCursor();
+            if (_family.Remove(this))
+            {
+                Database.Forget(_family.Root);
+            }
         }
         _fields?.Release();
         Database.Release();
