@@ -1,0 +1,2023 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q18-statements/ins-clean-fail-txn-rollback",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-STMT",
+    "R-SQL-2",
+    "SQL-CONTINUE",
+    "SQL-ACT-FAIL",
+    "ACT-INS-01",
+    "R-CRASH-1",
+    "CRASH-ORDER",
+    "W-04"
+  ],
+  "description": "A copy of the r-fmt-1-accdb-empty fixture. A setup session builds An (ID COUNTER primary key PK, K LONG with unique index UK, S TEXT(50), D DOUBLE), empty; Src (N primary key, G, K, S, L TEXT(20)) with group 1 K 1-4, group 2 K 11, 12, 12, 13 (S 'g2-b-first12' and 'g2-c-second12'), group 3 K 31-34 (33 makes 1 / (K - 33) divide by zero), group 4 L '41', '42', 'x43', '44'; and U (ID primary key, K LONG with unique index UKU, S) with rows (1,1), (2,2), (3,3), (4,4). The setup session closes, and after a 1000 ms pause the statement session opens the database through DAO (shared, read/write) and runs: BeginTrans, INSERT INTO An (K, S) SELECT K, S FROM Src WHERE G = 1 ORDER BY N with dbFailOnError, Rollback. RecordsAffected and DBEngine.Errors are read after the statement, then a 1500 ms pause separates its deferred write from Close. After each session the file is read page by page (every page's hash; page 0 bytes 3584-3591 and pages 0, 1, 42, 43, 44, 45, 50, 51, 52, 53, 54, 55, 56, 57 kept). A next session runs INSERT INTO An (K, S) VALUES (1000, 'next') with dbFailOnError (page 42 kept after it), and a read-only session reads An and U back. With the ETW file-I/O recorder on. Asks which rows are stored with which AutoNumber values, what the TableDef counters and row counts hold, which bytes are written and when.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo",
+    "etwFileIo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-1-accdb-empty.accdb",
+      "sha256": "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559",
+      "length": 172032,
+      "provenance": "r-fmt-1.create-accdb-empty.235fff714c.a1 qk1-235fff714c64fbca74c5694474e7c31525644f5b4449e80ca7aaba339839b5e2 output:r-fmt-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE An (ID COUNTER CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), D DOUBLE)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UK ON An (K)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Src (N LONG CONSTRAINT PKS PRIMARY KEY, G LONG, K LONG, S TEXT(50), L TEXT(20))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (1, 1, 1, 'g1-a', '1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (2, 1, 2, 'g1-b', '2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (3, 1, 3, 'g1-c', '3')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (4, 1, 4, 'g1-d', '4')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (5, 2, 11, 'g2-a', '11')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (6, 2, 12, 'g2-b-first12', '12')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (7, 2, 12, 'g2-c-second12', '12')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (8, 2, 13, 'g2-d', '13')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (9, 3, 31, 'g3-a', '31')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (10, 3, 32, 'g3-b', '32')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (11, 3, 33, 'g3-c-div0', '33')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (12, 3, 34, 'g3-d', '34')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (13, 4, 41, 'g4-a', '41')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (14, 4, 42, 'g4-b', '42')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (15, 4, 43, 'g4-c-text', 'x43')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Src VALUES (16, 4, 44, 'g4-d', '44')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE U (ID LONG CONSTRAINT PKU PRIMARY KEY, K LONG, S TEXT(50))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UKU ON U (K)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (1, 1, 'u1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (2, 2, 'u2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (3, 3, 'u3')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (4, 4, 'u4')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-setup",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-setup",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 0,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 221184,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 225280,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 229376,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 233472,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-setup",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-setup"
+    },
+    {
+      "op": "pause",
+      "ms": 1000
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO An (K, S) SELECT K, S FROM Src WHERE G = 1 ORDER BY N"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-statement",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-statement",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 0,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 4096,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 176128,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 180224,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 184320,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 204800,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 208896,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 212992,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 217088,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 221184,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 225280,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 229376,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 233472,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-statement",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-statement"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO An (K, S) VALUES (1000, 'next')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-next",
+      "keep": false
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg-next",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 0,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 4096,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 8192,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 12288,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 16384,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 20480,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 24576,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 28672,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 32768,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 36864,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 40960,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 45056,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 49152,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 53248,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 57344,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 61440,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 65536,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 69632,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 73728,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 77824,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 81920,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 86016,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 90112,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 94208,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 98304,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 102400,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 106496,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 110592,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 114688,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 118784,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 122880,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 126976,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 131072,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 135168,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 139264,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 143360,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 147456,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 151552,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 155648,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 159744,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 163840,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 167936,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 172032,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 176128,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 180224,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 184320,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 188416,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 192512,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 196608,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 200704,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 204800,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 208896,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 212992,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 217088,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 221184,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 225280,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 229376,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 233472,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 237568,
+      "count": 4096
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg-next",
+      "offset": 241664,
+      "count": 4096
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg-next"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, K, S, D FROM An ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, K, S FROM U ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 3,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "read-after",
+      "keep": false
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
