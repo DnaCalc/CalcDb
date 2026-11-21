@@ -58,7 +58,7 @@ public enum FindOpen
     /// <summary>Whether a criteria failure is reported on an empty recordset, or at BOF or EOF where FindNext and FindPrevious do not search.</summary>
     FailureWithoutSearch,
 
-    /// <summary>A snapshot's Find tested a value no record decides after a later publication (<see cref="SnapshotValues"/>, CUR-POP Open F).</summary>
+    /// <summary>A snapshot's Find tested a row whose population no record decides: an earlier Find's open extent (<see cref="SnapshotValues"/>, CUR-POP Open).</summary>
     UndecidedSnapshotValue,
 }
 

@@ -219,28 +219,43 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     }
 
     /// <summary>
-    /// One field of <paramref name="root"/> under <paramref name="view"/> (null: the current images), read without
-    /// touching the binding: an owned value for a comparison (<see cref="SnapshotValues"/>).
+    /// Whether <paramref name="root"/> reads the same under <paramref name="view"/> as in the current images: the same row
+    /// bytes, and the same long values, whose chains lie outside the row (<see cref="SnapshotValues"/>).
     /// </summary>
-    public FieldResult ReadDetached(RowId root, ColumnDescriptor column, ReadView? view)
+    public bool SameRow(RowId root, ReadView view)
     {
-        TraversalFailure? failure;
-        using RowView? row = view is null ? RowResolver.Resolve(cache, d, root, out failure) : RowResolver.Resolve(view, d, root, out failure);
-        if (row is not { } bound)
+        using RowView? then = RowResolver.Resolve(view, d, root, out TraversalFailure? thenFailure);
+        using RowView? now = RowResolver.Resolve(cache, d, root, out TraversalFailure? nowFailure);
+        if (then is not { } a || now is not { } b || thenFailure is not null || nowFailure is not null || !a.Body.SequenceEqual(b.Body))
         {
-            return failure is null
-                ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
-                : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
+            return false;
         }
-        CostCounters.Current.FieldDecodes++;
-        return FieldResult.Of(FieldDecoder.Read(bound, table, column, cache, d));
+        foreach (ColumnDescriptor column in table.Columns)
+        {
+            if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole
+                && !NativeValue.SameStored(FieldDecoder.Read(a, table, column, cache, d), FieldDecoder.Read(b, table, column, cache, d)))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
-    /// <summary>Whether <paramref name="root"/> is a live row in the current images (false when deleted or unreadable).</summary>
-    public bool IsLive(RowId root)
+    /// <summary>Every field of <paramref name="root"/> in the current images, as owned values (a snapshot's copy of a row).</summary>
+    public FieldResult[] CopyRow(RowId root)
     {
+        var values = new FieldResult[table.Columns.Count];
         using RowView? row = RowResolver.Resolve(cache, d, root, out TraversalFailure? failure);
-        return row is not null && failure is null;
+        foreach (ColumnDescriptor column in table.Columns)
+        {
+            values[column.Ordinal] = row is { } bound
+                ? FieldResult.Of(FieldDecoder.Read(bound, table, column, cache, d))
+                : failure is null
+                    ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
+                    : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
+        }
+        CostCounters.Current.FieldDecodes += values.Length;
+        return values;
     }
 
     /// <summary>Unbind and release the held page (cursor Close).</summary>
@@ -827,9 +842,6 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>A snapshot's values under later publications (CUR-POP); null on a dynaset or forward-only cursor.</summary>
     private readonly SnapshotValues? _snapshot;
 
-    /// <summary>A Find is testing rows: its reads fix no snapshot value (<see cref="SnapshotValues"/>).</summary>
-    private bool _finding;
-
     private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
     {
         Table = table;
@@ -841,7 +853,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
         _position = new PositionState<int>(_store, forwardOnly);
         _snapshot = snapshot ? new SnapshotValues(cache) : null;
-        _snapshot?.Stamp(_store.ObservedCount);
+        _snapshot?.Stamp(_store, _row);
     }
 
     public TableDefinition Table { get; }
@@ -941,7 +953,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     private MoveOutcome Moved(MoveOutcome outcome)
     {
         _row.Unbind();
-        _snapshot?.Stamp(_store.ObservedCount); // the move's population, at the serial it read
+        _snapshot?.Stamp(_store, _row); // the move's population, at the serial it read
         return outcome;
     }
 
@@ -997,8 +1009,8 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return _row.Read(CurrentRoot, column);
         }
-        snapshot.Stamp(_store.ObservedCount);
-        return snapshot.Read(_row, ordinal, _store[ordinal], column, _finding);
+        snapshot.Stamp(_store, _row);
+        return snapshot.Read(_row, ordinal, _store[ordinal], column);
     }
 
     public TextFieldRead ReadText(ColumnDescriptor column)
@@ -1007,8 +1019,8 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return _row.ReadText(CurrentRoot, column);
         }
-        snapshot.Stamp(_store.ObservedCount);
-        return snapshot.ReadText(_row, ordinal, _store[ordinal], column, _finding);
+        snapshot.Stamp(_store, _row);
+        return snapshot.ReadText(_row, ordinal, _store[ordinal], column);
     }
 
     /// <summary>
@@ -1017,21 +1029,26 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// wrap. A match becomes current and clears NoMatch. A miss sets NoMatch: FindFirst leaves the first row current,
     /// FindNext and FindPrevious the row that was current; where a FindLast miss leaves the cursor is not recorded. At
     /// BOF or EOF FindNext and FindPrevious test nothing; an empty recordset sets NoMatch. A failing test is
-    /// <see cref="CriteriaFailed"/>'s rule. A forward-only cursor does not Find (the adapter refuses it, 3219). A snapshot
-    /// tests its rows through its own reads; a tested value the records do not decide stops the Find where it was
-    /// (<see cref="FindOpen.UndecidedSnapshotValue"/>).
+    /// <see cref="CriteriaFailed"/>'s rule. A forward-only cursor does not Find (the adapter refuses it, 3219). A test
+    /// past the first row populates the first move's chunk, as a snapshot's Find does on ACE (r-q12-snapshot-fix/
+    /// find-tested-field: row 5 of 5 keeps its value). A snapshot tests its rows through its own reads; a tested value the
+    /// records do not decide stops the Find where it was (<see cref="FindOpen.UndecidedSnapshotValue"/>).
     /// </summary>
     public FindResult Find(FindDirection direction, IRowPredicate predicate)
     {
-        _finding = true;
+        int countBefore = _store.ObservedCount;
+        bool movedBefore = _store.FirstMoveDone;
         try
         {
             return Search(direction, predicate);
         }
         finally
         {
-            _finding = false;
-            _snapshot?.Stamp(_store.ObservedCount); // a FindLast populates rows it may not test
+            if (_snapshot is { } snapshot)
+            {
+                snapshot.Stamp(_store, _row); // a FindLast populates rows it may not test
+                snapshot.FindEnded(_store, countBefore, movedBefore);
+            }
         }
     }
 

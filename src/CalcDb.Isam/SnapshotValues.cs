@@ -5,29 +5,26 @@ namespace CalcDb.Isam;
 
 /// <summary>
 /// What a snapshot over one table shows of changes published after it opened (R-CURSOR-1 CUR-POP, qualified.md; task
-/// 52qh). ACE's table snapshot is not a view fixed at its open. A field read before a publication keeps the value it read:
-/// c1/pop-visibility-snapshot reads K = 10 on ID 1 after a dynaset set it to 111, on both walks (the one record that
-/// decides this; q2/pop-snapshot-plain-table-big's UPDATE does not change the row it read). A row populated after the
-/// publication reads the published state: 444 on unvisited ID 4, deleted ID 3 skipped, inserted ID 6 shown
-/// (c1/pop-visibility-snapshot), rows 2 and 2000 read 'chg' (q2/pop-snapshot-plain-table-big).
+/// 52qh). A table snapshot takes a whole row's values when the row is populated (the first row at open, the first move's
+/// chunk, a Find's population, a jump), whether or not a field was read; a later change is never seen in a populated row,
+/// and a populated row deleted later is still shown with its values (r-q12-snapshot-fix: no-field-read, one-field-read,
+/// chunk-unread-row, read-then-deleted, find-tested-field, find-other-field; c1/pop-visibility-snapshot). A row populated
+/// after a change reads it (444 on ID 4, deleted ID 3 skipped, inserted ID 6 shown; q2/pop-snapshot-plain-table-big rows
+/// 2 and 2000 read 'chg').
 /// <para>
-/// Each occurrence is stamped with the publication serial at which the store populated it. A field read while that
-/// serial is still the published one reads the current images, and its value is then fixed. A fixed value is kept by the
-/// pager's version retention (II-07 §6, II-03 §3.1): the snapshot registers a <see cref="ReadView"/> where a population
-/// of several rows (the first move's chunk, a jump, MoveLast) or the first fixed value finds none at the serial, and
-/// later publications preserve the images it selects. A row populated alone at a serial without a view (a step past the
-/// frontier after a publication) is served by the latest view where that view shows the same value, and otherwise by an
-/// owned copy of the value: the views stay few, so a snapshot walked beside one update per row retains at most one old
-/// image per changed page and view, not one per publication.
+/// Each occurrence is stamped with the publication serial at which the store populated it. While that serial is still
+/// the published one, its row reads the current images. After a later publication it reads as populated, through the
+/// pager's version retention (II-07 §6, II-03 §3.1): one <see cref="ReadView"/> serves a whole population batch, registered
+/// at open and at a population of several rows at a new serial. A row populated alone at a serial without a view (a step
+/// past the frontier after a publication) shares the latest view when its bytes there are the same, and is otherwise an
+/// owned copy of its values. The views stay few: a snapshot walked beside one update per row holds two, not one per
+/// publication.
 /// </para>
 /// <para>
-/// The records leave three cases open (qualified.md CUR-POP, Open F), and a read in them is NotObserved unless the view
-/// of the row's population serial and the current images give the same stored value, which every candidate rule then
-/// shows (the value is then fixed): a field not read before a later publication of a row populated before it (whether
-/// the 500-row chunk fixes values at the first move or a row is fixed at its visit; whether the first read of one field
-/// fixes the whole row); a populated row a later publication deleted; and a row with no view at its population serial.
-/// A Find tests rows through these same reads (CUR-FIND), but fixes nothing: whether testing a row fixes it is not
-/// recorded either.
+/// Open, and named NotObserved after a later publication: how far a Find populates beyond what the records show (a Find
+/// that tested past the first row populated the first move's chunk, row 5 of 5 included; a Find that matches the first
+/// row before any move, and one that tests past the chunk of a longer source, are not recorded), and a row whose view the
+/// cache would not register.
 /// </para>
 /// </summary>
 internal sealed class SnapshotValues(PageCache cache) : IDisposable
@@ -36,26 +33,30 @@ internal sealed class SnapshotValues(PageCache cache) : IDisposable
     private OccurrenceState[] _states = new OccurrenceState[4];
     private int _stamped;
 
-    /// <summary>Fixed values no view serves (their row's serving view shows another value), by ordinal and column ordinal.</summary>
-    private Dictionary<(int Ordinal, int Column), NativeValue>? _copies;
+    /// <summary>The values of rows populated alone that no view shows as populated, by ordinal.</summary>
+    private Dictionary<int, FieldResult[]>? _copies;
 
     /// <summary>
-    /// An occurrence's population serial, the view that serves its fixed values (an index into the views, -1 none yet)
-    /// and the columns it has fixed (bit = column ordinal; ordinals from 64 on are never fixed and always compared).
+    /// A Find left the population open (see the summary): the serial of that Find, the first ordinal whose population
+    /// the records do not decide, and whether the Find had made no first move (then a row populated at another serial is
+    /// open) or tested past the chunk (then any row from there is open once a publication follows the Find).
     /// </summary>
+    private (ulong Serial, int From)? _openFind;
+
+    /// <summary>An occurrence's population serial and the view that shows it as populated (an index, -1 none).</summary>
     private struct OccurrenceState
     {
         public ulong Serial;
         public int View;
-        public ulong Fixed;
     }
 
     /// <summary>Set by a read the records do not decide; a Find clears it before each test and stops on it.</summary>
     public bool UndecidedRead { get; set; }
 
     /// <summary>Stamp the occurrences populated since the last call with the current publication serial.</summary>
-    public void Stamp(int populated)
+    public void Stamp(OccurrenceStore<RowId> store, RowBinding row)
     {
+        int populated = store.ObservedCount;
         if (populated <= _stamped)
         {
             return;
@@ -66,19 +67,31 @@ internal sealed class SnapshotValues(PageCache cache) : IDisposable
             Array.Resize(ref _states, Math.Max(populated, _states.Length * 2));
         }
         int view = _views.Count > 0 && _views[^1].Serial == serial ? _views.Count - 1
-            : populated - _stamped > 1 ? Register(serial)
+            : _views.Count == 0 || populated - _stamped > 1 ? Register(serial)
             : -1;
         for (int i = _stamped; i < populated; i++)
         {
             _states[i] = new OccurrenceState { Serial = serial, View = view };
         }
+        if (view < 0 && _views.Count > 0)
+        {
+            // Rows populated alone after a publication: the latest view where it shows them as they are, else a copy.
+            for (int i = _stamped; i < populated; i++)
+            {
+                if (row.SameRow(store[i], _views[^1]))
+                {
+                    _states[i].View = _views.Count - 1;
+                }
+                else
+                {
+                    (_copies ??= [])[i] = row.CopyRow(store[i]);
+                }
+            }
+        }
         _stamped = populated;
     }
 
-    /// <summary>
-    /// Register a view at <paramref name="serial"/>, the published one; it shows every row populated at that serial, so
-    /// the rows stamped there before it get it too. -1 when admission refuses a view.
-    /// </summary>
+    /// <summary>Register a view at <paramref name="serial"/>, the published one; -1 when admission refuses one.</summary>
     private int Register(ulong serial)
     {
         if (cache.RegisterView().View is not { } view)
@@ -91,12 +104,31 @@ internal sealed class SnapshotValues(PageCache cache) : IDisposable
             return -1;
         }
         _views.Add(view);
-        int index = _views.Count - 1;
-        for (int i = _stamped - 1; i >= 0 && _states[i].Serial == serial && _states[i].View < 0; i--)
+        return _views.Count - 1;
+    }
+
+    /// <summary>
+    /// A Find ended (CUR-FIND): where its population is beyond the records, its serial and the first open ordinal are
+    /// kept. <paramref name="countBefore"/> and <paramref name="movedBefore"/> are the store's before the Find.
+    /// </summary>
+    public void FindEnded(OccurrenceStore<RowId> store, int countBefore, bool movedBefore)
+    {
+        if (_openFind is not null || store.Complete)
         {
-            _states[i].View = index;
+            return;
         }
-        return index;
+        ulong serial = cache.PublishedSerial;
+        if (!store.FirstMoveDone)
+        {
+            // A Find that matched the first row populated nothing more (r-q12-snapshot-fix/findfirst-first-row:
+            // RecordCount stays 1, and row 3 changed after it reads 333): later moves populate at their own serial.
+            return;
+        }
+        int chunkEnd = movedBefore ? countBefore : Math.Max(countBefore, 1 + store.FirstMoveChunk);
+        if (store.ObservedCount > chunkEnd)
+        {
+            _openFind = (serial, chunkEnd);
+        }
     }
 
     /// <summary>An occurrence left the store (CUR-POS): the later states and copies shift down with their ordinals.</summary>
@@ -110,133 +142,58 @@ internal sealed class SnapshotValues(PageCache cache) : IDisposable
         _stamped--;
         if (_copies is { Count: > 0 } copies)
         {
-            _copies = copies.Where(c => c.Key.Ordinal != ordinal)
-                .ToDictionary(c => c.Key.Ordinal > ordinal ? (c.Key.Ordinal - 1, c.Key.Column) : c.Key, c => c.Value);
+            _copies = copies.Where(c => c.Key != ordinal).ToDictionary(c => c.Key > ordinal ? c.Key - 1 : c.Key, c => c.Value);
         }
     }
 
-    public FieldResult Read(RowBinding row, int ordinal, RowId root, ColumnDescriptor column, bool finding)
+    public FieldResult Read(RowBinding row, int ordinal, RowId root, ColumnDescriptor column)
     {
-        ref OccurrenceState state = ref _states[ordinal];
-        ulong bit = Bit(column);
-        if (state.Serial == cache.PublishedSerial)
+        OccurrenceState state = _states[ordinal];
+        ulong now = cache.PublishedSerial;
+        if (FindPopulationOpen(ordinal, state, now))
         {
-            FieldResult current = row.Read(root, column);
-            if (!finding && current.Succeeded && (state.Fixed & bit) == 0)
-            {
-                Fix(ref state, ordinal, root, column, bit, row, current.Value);
-            }
-            return current;
+            return Undecided(FindPopulation);
         }
-        if (!row.IsLive(root))
+        if (state.Serial == now)
         {
-            return Undecided(DeletedAfterPopulation);
+            return row.Read(root, column);
         }
-        if ((state.Fixed & bit) != 0)
+        if (_copies is { } copies && copies.TryGetValue(ordinal, out FieldResult[]? copy))
         {
-            return _copies is { } copies && copies.TryGetValue((ordinal, column.Ordinal), out NativeValue copy)
-                ? new FieldResult(copy, null)
-                : row.Read(root, column, _views[state.View]);
+            return copy[column.Ordinal];
         }
-        return Compare(ref state, root, column, bit, row, finding) is { } agreed ? agreed : Undecided(UnreadBeforePublication);
+        return state.View >= 0 ? row.Read(root, column, _views[state.View]) : Undecided(NoView);
     }
 
-    public TextFieldRead ReadText(RowBinding row, int ordinal, RowId root, ColumnDescriptor column, bool finding)
+    public TextFieldRead ReadText(RowBinding row, int ordinal, RowId root, ColumnDescriptor column)
     {
-        ref OccurrenceState state = ref _states[ordinal];
-        ulong bit = Bit(column);
-        if (state.Serial == cache.PublishedSerial)
+        OccurrenceState state = _states[ordinal];
+        ulong now = cache.PublishedSerial;
+        if (FindPopulationOpen(ordinal, state, now))
         {
-            TextFieldRead current = row.ReadText(root, column);
-            if (!finding && current.Result.Succeeded && (state.Fixed & bit) == 0)
-            {
-                if (ServingViewShowsPopulation(ref state))
-                {
-                    state.Fixed |= bit;
-                }
-                else
-                {
-                    // The detached read leaves the binding, and so the borrowed text, as it is.
-                    Fix(ref state, ordinal, root, column, bit, row, row.ReadDetached(root, column, null).Value);
-                }
-            }
-            return current;
+            return new TextFieldRead(Undecided(FindPopulation));
         }
-        if (!row.IsLive(root))
+        if (state.Serial == now)
         {
-            return new TextFieldRead(Undecided(DeletedAfterPopulation));
+            return row.ReadText(root, column);
         }
-        if ((state.Fixed & bit) != 0)
+        if (_copies is { } copies && copies.TryGetValue(ordinal, out FieldResult[]? copy))
         {
-            return _copies is { } copies && copies.TryGetValue((ordinal, column.Ordinal), out NativeValue copy)
-                ? new TextFieldRead(new FieldResult(copy, null))
-                : row.ReadText(root, column, _views[state.View]);
+            return new TextFieldRead(copy[column.Ordinal]);
         }
-        // An agreed value is returned as a value: the comparison has decoded it already.
-        return new TextFieldRead(Compare(ref state, root, column, bit, row, finding) ?? Undecided(UnreadBeforePublication));
+        return state.View >= 0 ? row.ReadText(root, column, _views[state.View]) : new TextFieldRead(Undecided(NoView));
     }
 
     /// <summary>
-    /// Fix a value read at the row's population serial: its serving view shows it when that view is of the same serial;
-    /// an older serving view serves it when it shows the same value; otherwise it is copied.
+    /// Whether the row's values depend on a Find's population the records do not decide: before any first move, a row
+    /// populated at another serial than the Find (ACE may have populated it at the Find); past the chunk, any row once a
+    /// publication follows the Find (ACE may have populated it at the Find or later).
     /// </summary>
-    private void Fix(ref OccurrenceState state, int ordinal, RowId root, ColumnDescriptor column, ulong bit, RowBinding row, in NativeValue value)
-    {
-        if (bit == 0)
-        {
-            return;
-        }
-        if (!ServingViewShowsPopulation(ref state))
-        {
-            FieldResult then = state.View >= 0 ? row.ReadDetached(root, column, _views[state.View]) : default;
-            if (state.View < 0 || !then.Succeeded || !NativeValue.SameStored(then.Value, value))
-            {
-                (_copies ??= [])[(ordinal, column.Ordinal)] = value;
-            }
-        }
-        state.Fixed |= bit;
-    }
+    private bool FindPopulationOpen(int ordinal, OccurrenceState state, ulong now) =>
+        _openFind is { } open && ordinal >= open.From && (state.Serial != open.Serial || now != open.Serial);
 
-    /// <summary>
-    /// Give the row a serving view if it has none: the first fixed value of a snapshot with no view registers one at the
-    /// row's serial; later ones take the latest view. True when the serving view is of the row's population serial.
-    /// </summary>
-    private bool ServingViewShowsPopulation(ref OccurrenceState state)
-    {
-        if (state.View < 0)
-        {
-            state.View = _views.Count == 0 ? Register(state.Serial) : _views.Count - 1;
-        }
-        return state.View >= 0 && _views[state.View].Serial == state.Serial;
-    }
-
-    /// <summary>
-    /// A field not fixed before a later publication (Open F): decided only when the view of the row's population serial
-    /// and the current images agree; the agreed value is fixed unless a Find is testing. Null when undecided.
-    /// </summary>
-    private FieldResult? Compare(ref OccurrenceState state, RowId root, ColumnDescriptor column, ulong bit, RowBinding row, bool finding)
-    {
-        if (state.View < 0 || _views[state.View].Serial != state.Serial)
-        {
-            return null;
-        }
-        FieldResult then = row.ReadDetached(root, column, _views[state.View]);
-        FieldResult now = row.ReadDetached(root, column, null);
-        if (!then.Succeeded || !now.Succeeded || !NativeValue.SameStored(then.Value, now.Value))
-        {
-            return null;
-        }
-        if (!finding)
-        {
-            state.Fixed |= bit;
-        }
-        return now;
-    }
-
-    private static ulong Bit(ColumnDescriptor column) => column.Ordinal < 64 ? 1UL << column.Ordinal : 0;
-
-    private const string UnreadBeforePublication = "NotObserved.SnapshotUnreadField: a snapshot field first read after a publication that changed it, its row populated before (R-CURSOR-1 CUR-POP, Open F)";
-    private const string DeletedAfterPopulation = "NotObserved.SnapshotDeletedRow: a snapshot row deleted by a publication after it was populated (R-CURSOR-1 CUR-POP)";
+    private const string FindPopulation = "NotObserved.SnapshotFindPopulation: how far a snapshot's Find populates is recorded only within the first move's chunk, after a test past the first row (R-CURSOR-1 CUR-POP, Open)";
+    private const string NoView = "NotObserved.SnapshotView: the snapshot's read view could not be registered, so a publication since this row's population cannot be read past";
 
     private FieldResult Undecided(string detail)
     {

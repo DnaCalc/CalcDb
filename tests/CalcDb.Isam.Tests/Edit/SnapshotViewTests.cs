@@ -9,9 +9,9 @@ namespace CalcDb.Isam.Tests.Edit;
 
 /// <summary>
 /// R-CURSOR-1 CUR-POP (task 52qh, <see cref="SnapshotValues"/>): what a snapshot shows of changes a dynaset publishes
-/// after it opened, over the r-cursor-1-nav fixture (T: ID, K, V; IDs 1 to 5 with K = 10 × ID). Expected values are ACE's
-/// from the record named on the test; a case no record decides reads NotObserved, named, and a publication that leaves a
-/// value as it was decides that value under every rule.
+/// after it opened, over the r-cursor-1-nav fixture (T: ID, K, V; IDs 1 to 5 with K = 10 × ID). A snapshot fixes a whole
+/// row when it is populated. Expected values are ACE's from the record named on the test; a case no record decides reads
+/// NotObserved, named.
 /// </summary>
 public sealed class SnapshotViewTests
 {
@@ -146,17 +146,19 @@ public sealed class SnapshotViewTests
         Assert.StartsWith(name, read.Detail);
     }
 
-    private sealed class KEquals(ColumnDescriptor k, long value) : IRowPredicate
+    private sealed class FieldEquals(ColumnDescriptor column, long value) : IRowPredicate
     {
         public RowTest Test(IRecordCursor cursor)
         {
-            FieldResult read = cursor.Read(k);
+            FieldResult read = cursor.Read(column);
             return !read.Succeeded ? RowTest.Failed : read.Value.Integer == value ? RowTest.Match : RowTest.NoMatch;
         }
     }
 
+    private static readonly (long, long)[] Unchanged = [(1, 10), (2, 20), (3, 30), (4, 40), (5, 50)];
+
     [Fact]
-    public void A_snapshot_keeps_the_values_it_read_and_shows_the_rows_it_had_not_reached()
+    public void A_snapshot_keeps_its_populated_rows_and_shows_the_rows_it_had_not_reached()
     {
         // c1/pop-visibility-snapshot: A reads ID 1 and K at open; B sets K = 111 on ID 1 and 444 on ID 4, deletes ID 3 and
         // adds (6, 60, 'f'). A's count stays 1 until it moves; both walks read the stale 10 on ID 1 and the published rest.
@@ -191,68 +193,123 @@ public sealed class SnapshotViewTests
         Assert.Equal([(1, 111), (2, 20), (4, 444), (5, 50), (6, 60)], Walk(a));
     }
 
-    [Fact]
-    public void A_field_first_read_after_a_change_of_its_populated_row_is_not_observed()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_first_row_is_fixed_at_open_whether_or_not_a_field_was_read(bool readId)
     {
-        // The first MoveNext populates all five rows before the changes (CUR-POP's chunk). ID 2's K, read before, stays
-        // 20 as on ACE (a field read before a publication keeps its value). ID 4's K, populated but not read, is Open F
-        // (chunk or visit); its unchanged ID and the untouched ID 5 read the same under every rule.
+        // r-q12-snapshot-fix/no-field-read and one-field-read: K = 111 on ID 1 after nothing, or only ID, was read; A reads
+        // K 10 and ID 1, then the whole table unchanged.
+        using var rig = new Rig();
+        using PopulationCursor a = rig.Open(4);
+        if (readId)
+        {
+            Assert.Equal(1, Int(a, "ID"));
+        }
+        rig.SetK(1, 111);
+        Assert.Equal((10, 1), (Int(a, "K"), Int(a, "ID")));
+        Assert.Equal(MoveOutcome.Moved, a.MoveFirst());
+        Assert.Equal(Unchanged, Walk(a));
+    }
+
+    [Fact]
+    public void A_row_of_the_first_moves_chunk_is_fixed_unread()
+    {
+        // r-q12-snapshot-fix/chunk-unread-row: one MoveNext, nothing read; K = 444 on ID 4; ID 4 then reads 40.
         using var rig = new Rig();
         using PopulationCursor a = rig.Open(4);
         a.MoveNext();
-        Assert.Equal(5, a.RecordCount);
-        Assert.Equal(20, Int(a, "K"));
+        rig.SetK(4, 444);
+        a.MoveNext();
+        a.MoveNext();
+        Assert.Equal((4, 40), (Int(a, "ID"), Int(a, "K")));
+        Assert.Equal(MoveOutcome.Moved, a.MoveFirst());
+        Assert.Equal(Unchanged, Walk(a));
+    }
+
+    [Fact]
+    public void A_populated_row_deleted_later_is_still_shown()
+    {
+        // r-q12-snapshot-fix/read-then-deleted: ID 1 read, then deleted through the dynaset; A still reads K 10 and ID 1,
+        // moves to ID 2, and its walk shows all five rows.
+        using var rig = new Rig();
+        using PopulationCursor a = rig.Open(4);
+        Assert.Equal((1, 10), (Int(a, "ID"), Int(a, "K")));
+        rig.Delete(1);
+        Assert.Equal((10, 1), (Int(a, "K"), Int(a, "ID")));
+        Assert.Equal(MoveOutcome.Moved, a.MoveNext());
+        Assert.Equal((2, 20), (Int(a, "ID"), Int(a, "K")));
+        Assert.Equal(MoveOutcome.Moved, a.MoveFirst());
+        Assert.Equal(Unchanged, Walk(a));
+    }
+
+    [Theory]
+    [InlineData("K", 30)]
+    [InlineData("ID", 3)]
+    public void A_Find_populates_the_chunk_and_fixes_its_rows(string field, int value)
+    {
+        // r-q12-snapshot-fix/find-tested-field and find-other-field: FindFirst "K = 30" or "ID = 3"; then K = 222 on ID 2 and
+        // 555 on ID 5 (past the found row); A reads ID 3, K 30, and its walk shows the table unchanged.
+        using var rig = new Rig();
+        using PopulationCursor a = rig.Open(4);
+        Assert.Equal(FindOutcome.Found, a.Find(FindDirection.First, new FieldEquals(rig[field], value)).Outcome);
         rig.SetK(2, 222);
-        rig.SetK(4, 444);
-        Assert.Equal(20, Int(a, "K"));
-        a.Move(2);
-        AssertUndecided(a.Read(rig["K"]), "NotObserved.SnapshotUnreadField");
-        Assert.Equal(4, Int(a, "ID"));
-        a.MoveNext();
-        Assert.Equal((5, 50), (Int(a, "ID"), Int(a, "K")));
-        // A field decided by agreement is fixed: a later change of ID 5 does not show.
         rig.SetK(5, 555);
-        Assert.Equal(50, Int(a, "K"));
+        Assert.Equal((3, 30), (Int(a, "ID"), Int(a, "K")));
+        Assert.Equal(MoveOutcome.Moved, a.MoveFirst());
+        Assert.Equal(Unchanged, Walk(a));
     }
 
     [Fact]
-    public void A_populated_row_deleted_later_is_not_observed()
+    public void A_Find_that_matches_the_first_row_before_any_move_populates_only_that_row()
     {
+        // r-q12-snapshot-fix/findfirst-first-row: FindFirst "ID = 1" leaves RecordCount 1; row 3 changed after it reads 333
+        // in the walk, while row 1 keeps its value.
         using var rig = new Rig();
         using PopulationCursor a = rig.Open(4);
-        a.Move(2);
-        Assert.Equal(30, Int(a, "K"));
-        rig.Delete(3);
-        AssertUndecided(a.Read(rig["K"]), "NotObserved.SnapshotDeletedRow");
-        AssertUndecided(a.ReadText(rig["V"]).Result, "NotObserved.SnapshotDeletedRow");
-    }
-
-    [Fact]
-    public void A_Find_tests_the_snapshots_values_and_stops_on_an_undecided_one()
-    {
-        using var rig = new Rig();
-        using PopulationCursor a = rig.Open(4);
+        Assert.Equal(FindOutcome.Found, a.Find(FindDirection.First, new FieldEquals(rig["ID"], 1)).Outcome);
+        rig.SetK(1, 111);
+        rig.SetK(2, 222);
+        Assert.Equal(10, Int(a, "K"));
         a.MoveNext();
-        rig.SetK(4, 444);
-        // Testing ID 4's K would decide Open F: the Find stops where it was.
-        Assert.Equal(new FindResult(FindOutcome.NotModelled, FindOpen.UndecidedSnapshotValue), a.Find(FindDirection.First, new KEquals(rig["K"], 444)));
-        Assert.Equal(1, a.Ordinal);
-        // IDs 1 to 3 are unchanged: the Find decides them and finds K = 30 on ID 3.
-        Assert.Equal(FindOutcome.Found, a.Find(FindDirection.First, new KEquals(rig["K"], 30)).Outcome);
+        Assert.Equal(222, Int(a, "K"));
+        Assert.Equal(FindOutcome.Found, a.Find(FindDirection.First, new FieldEquals(rig["K"], 30)).Outcome);
         Assert.Equal(2, a.Ordinal);
-        // The Find's test fixed nothing: a change of ID 3 then makes its K undecided.
-        rig.SetK(3, 333);
-        AssertUndecided(a.Read(rig["K"]), "NotObserved.SnapshotUnreadField");
     }
 
     [Fact]
-    public void A_snapshot_walked_beside_a_publication_per_row_reads_every_row_as_it_was_and_holds_few_views()
+    public void A_Find_past_the_chunk_of_a_longer_source_leaves_the_rows_past_the_chunk_open()
     {
-        // A publication after each row is read (in Tk of the same file: this slice writes no change of Big's Text V or
-        // of its key). Row 1 is read at open; the first move's chunk (rows 2 to 501) comes after the first publication,
-        // its rows unchanged when read, so every rule gives their values; from row 502 each row is populated alone at a
-        // new serial and read at once. The snapshot keeps two views (row 1's serial and the chunk's), not one per
-        // publication, and a second walk reads every value as it was read.
+        // Not recorded: how far a FindFirst populates past the first move's chunk. After a later publication the rows past
+        // the chunk are NotObserved; the chunk's rows are fixed.
+        using var rig = new Rig(QMain, "Big");
+        long target;
+        using (PopulationCursor scan = rig.Open(2))
+        {
+            scan.Move(600);
+            target = Int(scan, "ID");
+        }
+        using PopulationCursor a = rig.Open(4);
+        Assert.Equal(FindOutcome.Found, a.Find(FindDirection.First, new FieldEquals(rig["ID"], target)).Outcome);
+        Assert.Equal(600, a.Ordinal);
+        Assert.Equal(target, Int(a, "ID"));
+        rig.PublishElsewhere(1);
+        AssertUndecided(a.Read(rig["ID"]), "NotObserved.SnapshotFindPopulation");
+        Assert.Equal(MoveOutcome.Moved, a.MoveFirst());
+        a.Move(500);
+        Assert.Equal(500, a.Ordinal);
+        Assert.True(a.Read(rig["ID"]).Succeeded);
+        a.MoveNext();
+        AssertUndecided(a.Read(rig["ID"]), "NotObserved.SnapshotFindPopulation");
+    }
+
+    [Fact]
+    public void A_snapshot_walked_beside_a_publication_per_row_reads_every_row_as_it_was_and_holds_two_views()
+    {
+        // A publication after each row is read (in Tk of the same file: this slice writes no change of Big's Text V or of
+        // its key). Row 1 is fixed at open; the first move's chunk (rows 2 to 501) after the first publication; from row
+        // 502 each row is populated alone at a new serial and shares the chunk's view, its bytes unchanged there. The
+        // snapshot holds two views, not one per publication, and a second walk reads every row as it was.
         using var rig = new Rig(QMain, "Big");
         const int rows = 600;
         var before = new List<(long Id, string V)>();
@@ -281,54 +338,45 @@ public sealed class SnapshotViewTests
     }
 
     [Fact]
-    public void A_value_no_view_shows_is_kept_as_a_copy()
+    public void A_row_populated_alone_that_no_view_shows_is_kept_as_a_copy()
     {
-        // A row populated alone at a serial with no view (a step past the 500-row frontier after a publication) whose
-        // value differs from the latest view's. No change this slice writes reaches such a row of a large table yet
-        // (Big's Text V, its key and its deletes are W-05/growth-structural-closure), so the stamps are driven directly
-        // over T's rows in storage order: rows 1 to 3 populated together (a view of that serial), K = 444 on ID 4, then
-        // ID 4 populated alone. Its K, read then, is copied; a later change does not show; its ID, not read before that
-        // change and without a view of its serial, is NotObserved.
+        // A row populated alone at a serial with no view (a step past the 500-row frontier after a publication) that
+        // changed since the latest view. No change this slice writes reaches such a row of a large table yet (Big's Text
+        // V, its key and its deletes are W-05/growth-structural-closure), so a store with a one-row first move stands in
+        // for the frontier over T: row 1 at open (a view); K = 222 on ID 2; ID 2 populated alone, copied; ID 3 populated
+        // alone, unchanged since the view, shares it. Later changes of either do not show.
         using var rig = new Rig();
-        var roots = new List<RowId>();
-        using (PopulationCursor scan = rig.Open(2))
-        {
-            for (int i = 0; i < 5; i++, scan.MoveNext())
-            {
-                roots.Add(scan.CurrentRow!.Value);
-            }
-        }
+        var store = new OccurrenceStore<RowId>(new ScanSource(ScanNavigator.Open(rig.File.Cache, FormatDescriptor.Jet4Family, rig.Table, rig.File.Image.PageCount, out _)!), firstMoveChunk: 1);
         using var row = new RowBinding(rig.File.Cache, FormatDescriptor.Jet4Family, rig.Table);
         using var values = new SnapshotValues(rig.File.Cache);
-        values.Stamp(3);
-        rig.SetK(4, 444);
-        values.Stamp(4);
-        Assert.Equal(444, values.Read(row, 3, roots[3], rig["K"], finding: false).Value.Integer);
-        rig.SetK(4, 4444);
-        row.Unbind();
-        Assert.Equal(444, values.Read(row, 3, roots[3], rig["K"], finding: false).Value.Integer);
-        AssertUndecided(values.Read(row, 3, roots[3], rig["ID"], finding: false), "NotObserved.SnapshotUnreadField");
-        // Row 3, populated with the view and read after both publications, agrees with it: 30 under every rule.
-        Assert.Equal(30, values.Read(row, 2, roots[2], rig["K"], finding: false).Value.Integer);
+        values.Stamp(store, row);
+        rig.SetK(2, 222);
+        Assert.Equal(1, store.Next(0));
+        values.Stamp(store, row);
+        Assert.Equal(2, store.Next(1));
+        values.Stamp(store, row);
+        Assert.Equal(1, rig.File.Cache.CheckConservation().Views);
+        rig.SetK(2, 2222);
+        rig.SetK(3, 333);
+        Assert.Equal(222, values.Read(row, 1, store[1], rig["K"]).Value.Integer);
+        Assert.Equal(30, values.Read(row, 2, store[2], rig["K"]).Value.Integer);
+        Assert.False(values.ReadText(row, 1, store[1], rig["V"]).HasText); // a copy is a value, not borrowed text
     }
 
     [Fact]
-    public void Text_and_long_reads_follow_the_same_rule_and_the_views_end_with_the_snapshot()
+    public void Text_reads_come_from_the_view_and_the_views_end_with_the_snapshot()
     {
         using var rig = new Rig();
         PopulationCursor a = rig.Open(4);
         string before = a.Read(rig["V"]).Value.Text!;
-        TextFieldRead text = a.ReadText(rig["V"]);
-        Assert.True(text.HasText);
         rig.SetK(1, 111);
-        // ID 1's V, read before the publication, is read under the snapshot's view; its K was not read and changed.
         TextFieldRead again = a.ReadText(rig["V"]);
         Assert.True(again.HasText);
         Span<char> units = stackalloc char[again.Shape.Units];
         again.DecodeInto(units);
         Assert.Equal(before, units.ToString());
-        AssertUndecided(a.Read(rig["K"]), "NotObserved.SnapshotUnreadField");
-        Assert.True(rig.File.Cache.CheckConservation().Views >= 1);
+        Assert.Equal(10, Int(a, "K"));
+        Assert.Equal(1, rig.File.Cache.CheckConservation().Views);
         a.Dispose();
         CacheConservation after = rig.File.Cache.CheckConservation();
         Assert.Equal(0, after.Views);

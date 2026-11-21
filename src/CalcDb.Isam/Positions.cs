@@ -353,6 +353,9 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
 
     public bool Complete => _complete;
 
+    /// <summary>Whether the first move has populated its chunk (CUR-POP).</summary>
+    public bool FirstMoveDone => _firstMoveDone;
+
     public T this[int ordinal] => _occurrences[ordinal];
 
     /// <summary>Remove a deleted occurrence from the populated keyset (CUR-POS: RecordCount drops by 1).</summary>

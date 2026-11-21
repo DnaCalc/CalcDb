@@ -45,6 +45,17 @@ public sealed class RQ12SnapshotFix : ICard
             before: p => p.Call("ra", "FindFirst", A.Str("ID = 3")),
             change: p => Change(p, (2, 222), (5, 555)),
             after: p => p.Get("a_ID", "Value").Get("a_K", "Value"));
+        // Round 2 (52qh stretch 2): how far a Find populates when it does not test past the first row, and a FindLast.
+        yield return Make("findfirst-first-row",
+            "A: FindFirst \"ID = 1\" (matches the first row, before any move), RecordCount. B: K = 333 on ID 3. A: RecordCount, read ID and K.",
+            before: p => p.Call("ra", "FindFirst", A.Str("ID = 1")).Get("ra", "RecordCount"),
+            change: p => Change(p, (3, 333)),
+            after: p => p.Get("ra", "RecordCount").Get("a_ID", "Value").Get("a_K", "Value"));
+        yield return Make("findlast-population",
+            "A: FindLast \"ID = 5\", RecordCount. B: K = 222 on ID 2. A: RecordCount, read ID and K.",
+            before: p => p.Call("ra", "FindLast", A.Str("ID = 5")).Get("ra", "RecordCount"),
+            change: p => Change(p, (2, 222)),
+            after: p => p.Get("ra", "RecordCount").Get("a_ID", "Value").Get("a_K", "Value"));
     }
 
     private static Probe Make(string name, string what, Action<P> before, Action<P> change, Action<P> after) =>
