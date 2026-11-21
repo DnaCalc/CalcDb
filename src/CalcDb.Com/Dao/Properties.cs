@@ -13,9 +13,12 @@ namespace CalcDb.Com.Dao;
 /// (user-defined) one decodes its MR2 record (CAT-P). <see cref="Member"/> is the getter's declared name when it differs
 /// from the property's spelling (a Recordset lists "BookMark" for its Bookmark getter).
 /// </summary>
-internal sealed record PropertySpec(string Name, short Type, StoredProperty? Stored = null, string? Member = null, bool WriteOnly = false)
+internal sealed record PropertySpec(string Name, short Type, StoredProperty? Stored = null, string? Member = null, bool WriteOnly = false, Func<DaoObject, CallResult>? Read = null)
 {
     public static PropertySpec BuiltIn(string name, short type, string? member = null) => new(name, type, null, member);
+
+    /// <summary>A built-in whose Properties("X").Value is supplied directly by its owner (used where the direct getter is not yet modelled).</summary>
+    public static PropertySpec BuiltIn(string name, short type, Func<DaoObject, CallResult> read) => new(name, type, Read: read);
 
     /// <summary>A built-in with a put and no get (DBEngine DefaultUser, DefaultPassword): its Value is 3251 from the owner.</summary>
     public static PropertySpec PutOnly(string name, short type) => new(name, type, WriteOnly: true);
@@ -280,6 +283,10 @@ internal sealed unsafe class PropertyObject : DaoObject
         if (_spec.WriteOnly)
         {
             return owner.Fail(3251, DaoErrors.NotSupportedForType);
+        }
+        if (_spec.Read is { } read)
+        {
+            return read(owner);
         }
         string member = _spec.Member ?? _spec.Name;
         MemberDecl? getter = owner.Declaration.Members.FirstOrDefault(m => m.Kind == InvokeKind.PropertyGet && m.Parameters.Count == 0

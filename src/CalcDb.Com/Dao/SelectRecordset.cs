@@ -1,5 +1,7 @@
+using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Isam.Transactions;
@@ -13,8 +15,8 @@ namespace CalcDb.Com.Dao;
 /// SQL executor's <see cref="SelectCursor"/>, opened by Database.OpenRecordset with SELECT text or a saved select query,
 /// or by QueryDef.OpenRecordset. Its rows, movement (CUR-POS, CUR-POP), values and updatability (CUR-PROV) are the
 /// cursor's; a value read that fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). It
-/// reads only: the members a result needs beyond Type, Updatable, EOF, BOF, RecordCount, the moves, Fields and Close
-/// are named gaps. After Close every member fails 3420 (R-ACT-1 ACT-RETAIN).
+/// reads only: the members a result needs beyond Type, Updatable, Bookmarkable, EOF, BOF, RecordCount, the moves,
+/// Fields and Close are named gaps. After Close every member fails 3420 (R-ACT-1 ACT-RETAIN).
 /// </summary>
 internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecordset
 {
@@ -23,6 +25,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
         .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
+        .Get("Bookmarkable", (self, args) => Live(self, r => r.Bookmarkable()))
         .Get("RecordCount", (self, args) => Live(self, r => r.RecordCount()))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
@@ -57,6 +60,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private SelectFieldsObject? _fields;
     private CollectionNames? _fieldNames;
+    private Dictionary<string, (PropertyBlob? Blob, string? Failure)>? _tableBlobs;
     private readonly ExplicitFrame[] _openLevels;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
@@ -118,6 +122,41 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private CallResult Updatable() => Database.ReadOnly ? Bool(false)
         : Cursor.Updatable is bool updatable ? Bool(updatable)
         : CallResult.Fail(Failure.NotModelled(Cursor.UpdatableOpen ?? "NotModelled.QueryUpdatable", $"Recordset.Updatable: {Cursor.UpdatableOpen ?? "unrecorded query shape"}"));
+
+    /// <summary>
+    /// Bookmarkable (R-CURSOR-1 CUR-ID): True for dynaset (2) and snapshot (4) across read-only and writable opens and
+    /// all query shapes (r-cursor-1b/open-argument-shapes, r-fix-cursor-dao/open-argument-shapes-rw,
+    /// r-def-cursor-dao/pos-query-distinct-groupby, pos-query-left-join, pos-query-top, pos-query-union,
+    /// r-fix-cursor-dao/pos-query-sources-rw, r-dao-1b/recordset-members-query-snapshot; SelectRoute admits options 0
+    /// only); False for forward-only (8) (r-def-cursor-dao/open-dynamic-and-option-matrix, CUR-ID).
+    /// </summary>
+    private CallResult Bookmarkable() => RecordsetType switch
+    {
+        2 or 4 => Bool(true),
+        8 => Bool(false),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryBookmarkable", $"Recordset.Bookmarkable on a type {RecordsetType} query recordset (not recorded)")),
+    };
+
+    /// <summary>
+    /// The catalog MR2 property blob (CAT-P) of a local source table by name, read once per table on this recordset.
+    /// Returns false with <paramref name="failure"/> when the table's blob cannot be framed.
+    /// </summary>
+    public bool TryTableBlob(string tableName, out PropertyBlob? blob, out string? failure)
+    {
+        _tableBlobs ??= new Dictionary<string, (PropertyBlob?, string?)>(StringComparer.OrdinalIgnoreCase);
+        if (!_tableBlobs.TryGetValue(tableName, out (PropertyBlob? Blob, string? Failure) cached))
+        {
+            CatalogEntry? entry = Database.Catalog.LocalTables(Database.Format)
+                .FirstOrDefault(e => string.Equals(e.Name, tableName, StringComparison.OrdinalIgnoreCase));
+            string? err = null;
+            PropertyBlob? read = entry is null ? null : Database.Blob(entry, out err);
+            cached = (read, err);
+            _tableBlobs[tableName] = cached;
+        }
+        blob = cached.Blob;
+        failure = cached.Failure;
+        return failure is null;
+    }
 
     /// <summary>
     /// RecordCount: the rows populated so far (CUR-POP), or named where the cursor says the population at open is not
@@ -293,11 +332,12 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
 }
 
 /// <summary>
-/// A result column of a SELECT recordset (Field3): Name, Type, Size, SourceTable, SourceField and DataUpdatable from
-/// the binding (qualified.md "the DAO Field.Type of a projected column" and R-CURSOR-1 CUR-PROV; a type, size, source
-/// or updatability CalcDb does not identify is named), and Value read from the current row on each get (a held Field
-/// follows the current row, R-DAO-1 DAO-ID). A computed column whose static type is not identified gives the evaluator's
-/// inner value. Value failures publish an IErrorInfo from DAO.Field (R-ERR-1 ERR-EXCEP; r-q3-sql/constant-phase).
+/// A result column of a SELECT recordset (Field3): Name, Type, Size, Attributes, Required, Properties, SourceTable,
+/// SourceField and DataUpdatable from the binding and catalog (qualified.md "the DAO Field.Type of a projected column",
+/// R-CURSOR-1 CUR-PROV, R-DAO-1 DAO-PROP; anything not decided by a retained record is refused by name), and Value read
+/// from the current row on each get (a held Field follows the current row, R-DAO-1 DAO-ID). A computed column whose
+/// static type is not identified gives the evaluator's inner value. Value failures publish an IErrorInfo from DAO.Field
+/// (R-ERR-1 ERR-EXCEP; r-q3-sql/constant-phase).
 /// </summary>
 internal sealed unsafe class SelectFieldObject : DaoObject
 {
@@ -306,13 +346,16 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, f => Text(f.Column.Name)))
         .Get("Type", (self, args) => Live(self, f => f.FieldType()))
-        .Get("Size", (self, args) => Live(self, f => f.Column.Size is int s ? Int32(s) : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSize", $"Field.Size of the computed column {f.Column.Name}"))))
+        .Get("Size", (self, args) => Live(self, f => f.Size()))
+        .Get("Attributes", (self, args) => Live(self, f => f.Attributes()))
         .Get("SourceTable", (self, args) => Live(self, f => Origin(f.Column.SourceTable, "SourceTable", f.Column.Name)))
         .Get("SourceField", (self, args) => Live(self, f => Origin(f.Column.SourceField, "SourceField", f.Column.Name)))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable()))
+        .Get("Required", (self, args) => Live(self, f => f.Required()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
-        .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()));
+        .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()))
+        .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     /// <summary>
     /// FieldSize (qualified.md R-STRING-1 STR-LV): a Memo column's current value in bytes, twice its UTF-16 units, 0 when
@@ -346,6 +389,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
 
     private readonly SelectFieldsObject _fields;
     private readonly int _ordinal;
+    private PropertiesObject? _properties;
 
     public SelectFieldObject(SelectFieldsObject fields, int ordinal) : base(Decl, Vtable, fields.Engine, "DAO.Field")
     {
@@ -357,6 +401,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private SelectRecordsetObject Recordset => _fields.Recordset;
 
     private ResultColumn Column => Recordset.Cursor.Columns[_ordinal];
+
+    public override bool Invalid => Recordset.Closed;
 
     protected override OperationTable Table => Operations;
 
@@ -372,9 +418,72 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         ? Int16(type)
         : CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.ExpressionFieldType", $"Field.Type of the column {Column.Name}"));
 
+    /// <summary>
+    /// Size: reads <see cref="ResultColumn.Size"/> when Sql provides it (base columns, GROUP BY keys, aggregates,
+    /// union columns, derived columns). For an <see cref="ColumnOrigin.Expression"/> column where Sql leaves Size null,
+    /// serves the exact size recorded for each expression DAO type across r-def-cursor-dao/prov-alias-fields-metadata,
+    /// query-field-metadata-expressions, recordset-field-properties, r-fix-cursor-dao/field-metadata-rw,
+    /// r-expr-1b/meta-conversion-field-types, meta-memo-functions, meta-text-function-field-types, and
+    /// r-def-expr-sql/str-memo-versus-text-expressions (3->2, 4->4, 5->8, 7->8, 8->8, 9->0, 10->0, 20->16).
+    /// Any other origin or unrecorded type is refused by name.
+    /// </summary>
+    private CallResult Size()
+    {
+        if (Column.Size is int s)
+        {
+            return Int32(s);
+        }
+        if (Column.Origin == ColumnOrigin.Expression)
+        {
+            if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
+            {
+                return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldSize", $"Field.Size of the expression column {Column.Name}, whose type is not identified"));
+            }
+            return type switch
+            {
+                3 => Int32(2),
+                4 => Int32(4),
+                5 or 7 or 8 => Int32(8),
+                9 or 10 => Int32(0),
+                20 => Int32(16),
+                _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSize.ExpressionType", $"Field.Size of an expression column of DAO type {type} ({Column.Name}: not recorded)")),
+            };
+        }
+        return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSize", $"Field.Size of the computed column {Column.Name}"));
+    }
+
     private static CallResult Origin(string? value, string member, string column) => value is null
         ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldSource", $"Field.{member} of the column {column} (r-sql-1/b-output-names)"))
         : Text(value);
+
+    /// <summary>
+    /// Resolves whether this column is data-updatable (shared by <see cref="DataUpdatable"/> and <see cref="Attributes"/>
+    /// so dbUpdatableField cannot drift from DataUpdatable). Returns null on success with <paramref name="updatable"/>
+    /// set, or the named refusal when no retained record decides it.
+    /// </summary>
+    private CallResult? TryDataUpdatable(out bool updatable)
+    {
+        updatable = false;
+        if (Column.SourceColumn?.Column is { CalculatedResultType: not null })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.CalculatedColumn", $"Field.DataUpdatable of the calculated column {Column.Name} (not recorded)"));
+        }
+        if (Recordset.Database.ReadOnly)
+        {
+            updatable = false;
+            return null;
+        }
+        if (Recordset.Cursor.FieldDataUpdatable(_ordinal, out string? open) is not bool result)
+        {
+            return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldDataUpdatable", $"Field.DataUpdatable of the column {Column.Name}"));
+        }
+        if (result && Column.SourceColumn?.Column is { IsAutoNumber: true })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.AutoNumber", $"Field.DataUpdatable of the AutoNumber column {Column.Name} on a writable open (not recorded)"));
+        }
+        updatable = result;
+        return null;
+    }
 
     /// <summary>
     /// DataUpdatable (R-CURSOR-1 CUR-PROV): False on a read-only database (r-def-cursor-dao/prov-alias-fields-metadata,
@@ -382,25 +491,225 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <see cref="SelectCursor.FieldDataUpdatable"/>, or named when no retained record decides it. Calculated columns
     /// and AutoNumber base columns on a writable open are not recorded and are refused by name.
     /// </summary>
-    private CallResult DataUpdatable()
+    private CallResult DataUpdatable() => TryDataUpdatable(out bool updatable) ?? Bool(updatable);
+
+    /// <summary>
+    /// Attributes (FieldAttributeEnum; R-CURSOR-1 CUR-PROV):
+    /// <list type="bullet">
+    /// <item>BaseColumn and GroupKey: <see cref="ColumnFacts.Attributes"/> of the base table's column with this field's
+    /// DataUpdatable bit (dbFixedField 1 / dbVariableField 2, plus dbUpdatableField 32 when updatable; r-def-cursor-dao/
+    /// prov-alias-fields-metadata, prov-distinct-distinctrow-plain, prov-aggregate-groupby, prov-union-crosstab,
+    /// recordset-field-properties, r-fix-cursor-dao/field-metadata-rw, prov-sources-errors-per-call, r-def-expr-sql/
+    /// str-memo-versus-text-expressions).</item>
+    /// <item>Expression: dbFixedField 1 for recorded fixed/binary types 3, 4, 5, 7, 8, 9, 20 and dbVariableField 2 for
+    /// Text 10 (r-def-cursor-dao/prov-alias-fields-metadata, query-field-metadata-expressions, recordset-field-properties,
+    /// r-fix-cursor-dao/field-metadata-rw, r-expr-1b/meta-conversion-field-types, meta-memo-functions,
+    /// meta-text-function-field-types, r-def-expr-sql/str-memo-versus-text-expressions).</item>
+    /// <item>Aggregate: 1 for recorded types 3, 4, 7, 8 and 2 for Text 10 (r-def-cursor-dao/query-field-metadata-aggregates,
+    /// prov-aggregate-groupby, prov-union-crosstab, r-fix-cursor-dao/field-metadata-rw, prov-sources-errors-per-call).</item>
+    /// <item>Union: 1 for recorded Long 4 (r-def-cursor-dao/prov-union-crosstab, r-fix-cursor-dao/prov-sources-errors-per-call).</item>
+    /// </list>
+    /// Any other origin or unrecorded type is refused by name.
+    /// </summary>
+    private CallResult Attributes()
     {
-        if (Column.SourceColumn?.Column is { CalculatedResultType: not null })
+        switch (Column.Origin)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.CalculatedColumn", $"Field.DataUpdatable of the calculated column {Column.Name} (not recorded)"));
+            case ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey when Column.SourceColumn is { } sc:
+            {
+                if (TryDataUpdatable(out bool updatable) is { } refused)
+                {
+                    return refused;
+                }
+                return ColumnFacts.Attributes(sc.Column, updatable) is int attributes
+                    ? Int32(attributes)
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"Field.Attributes of the column {Column.Name} (calculated, auto-GUID or hyperlink: not recorded)"));
+            }
+            case ColumnOrigin.Expression:
+            {
+                if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
+                {
+                    return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldAttributes.FieldType", $"Field.Attributes of the expression column {Column.Name}, whose type is not identified"));
+                }
+                return type switch
+                {
+                    3 or 4 or 5 or 7 or 8 or 9 or 20 => Int32(1),
+                    10 => Int32(2),
+                    _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.ExpressionType", $"Field.Attributes of an expression column of DAO type {type} ({Column.Name}: not recorded)")),
+                };
+            }
+            case ColumnOrigin.Aggregate:
+            {
+                if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
+                {
+                    return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldAttributes.FieldType", $"Field.Attributes of the aggregate column {Column.Name}, whose type is not identified"));
+                }
+                return type switch
+                {
+                    3 or 4 or 7 or 8 => Int32(1),
+                    10 => Int32(2),
+                    _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.AggregateType", $"Field.Attributes of an aggregate column of DAO type {type} ({Column.Name}: not recorded)")),
+                };
+            }
+            case ColumnOrigin.Union:
+            {
+                if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
+                {
+                    return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldAttributes.FieldType", $"Field.Attributes of the union column {Column.Name}, whose type is not identified"));
+                }
+                return type switch
+                {
+                    4 => Int32(1),
+                    _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.UnionType", $"Field.Attributes of a union column of DAO type {type} ({Column.Name}: not recorded)")),
+                };
+            }
+            default:
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.ColumnOrigin", $"Field.Attributes of a {Column.Origin} column ({Column.Name}: not recorded)"));
         }
-        if (Recordset.Database.ReadOnly)
+    }
+
+    /// <summary>
+    /// Required (R-CURSOR-1 CUR-PROV): False for expressions, aggregates and union columns (r-def-cursor-dao/
+    /// prov-alias-fields-metadata, query-field-metadata-aggregates, query-field-metadata-expressions,
+    /// prov-aggregate-groupby, prov-union-crosstab, recordset-field-properties, r-fix-cursor-dao/field-metadata-rw,
+    /// prov-sources-errors-per-call). For a BaseColumn or GroupKey, reads the base column's stored Required property
+    /// through the catalog's property blob: False when unset or False (all retained records); refused by name when the
+    /// base column stores Required True (no retained record reads Required on a query recordset over a Required column).
+    /// </summary>
+    private CallResult Required()
+    {
+        switch (Column.Origin)
         {
-            return Bool(false);
+            case ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey when Column.SourceColumn is { } sc:
+            {
+                if (!Recordset.TryTableBlob(sc.TableName, out PropertyBlob? blob, out string? blobFailure))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.FieldRequired.PropertyBlob", $"Field.Required of {Column.Name} when table {sc.TableName}'s property blob cannot be read: {blobFailure}"));
+                }
+                CallResult stored = ColumnFacts.Stored(blob, sc.Column, "Required", Bool(false));
+                if (stored.Failure is not null)
+                {
+                    return stored;
+                }
+                return stored.HasScalar && (VarType)stored.Scalar.Vt == VarType.Bool && stored.Scalar.Int64 == 0
+                    ? Bool(false)
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.FieldRequired.RequiredBaseColumn", $"Field.Required of query column {Column.Name} over Required base column {sc.TableName}.{sc.Column.Name} (not recorded)"));
+            }
+            case ColumnOrigin.Expression or ColumnOrigin.Aggregate or ColumnOrigin.Union:
+                return Bool(false);
+            default:
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldRequired.ColumnOrigin", $"Field.Required of a {Column.Origin} column ({Column.Name}: not recorded)"));
         }
-        if (Recordset.Cursor.FieldDataUpdatable(_ordinal, out string? open) is not bool updatable)
+    }
+
+    /// <summary>
+    /// Properties (R-DAO-1 DAO-PROP; r-def-cursor-dao/recordset-field-properties, r-fix-cursor-dao/field-metadata-rw):
+    /// the 24 built-in properties in ACE's TableDef/Recordset field order (Inherited False; Value, Precision and Scale
+    /// taking the field's own DAO type), on the dynaset base-column and single-column-expression shapes those two
+    /// records enumerate. Any cursor type, column kind, stored column property, or property value those records do not
+    /// decide is refused by name.
+    /// </summary>
+    private CallResult PropertiesCollection()
+    {
+        if (Recordset.RecordsetType != 2)
         {
-            return CallResult.Fail(Failure.NotModelled(open ?? "NotModelled.FieldDataUpdatable", $"Field.DataUpdatable of the column {Column.Name}"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CursorType", $"Field.Properties on a type {Recordset.RecordsetType} query recordset (only dynaset is recorded)"));
         }
-        if (updatable && Column.SourceColumn?.Column is { IsAutoNumber: true })
+        bool isBase = Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null;
+        bool isSingleColumnExpr = Column.Origin == ColumnOrigin.Expression
+            && Column.SourceTable is { Length: > 0 }
+            && Column.SourceField is { Length: > 0 };
+        if (!isBase && !isSingleColumnExpr)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.AutoNumber", $"Field.DataUpdatable of the AutoNumber column {Column.Name} on a writable open (not recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.ColumnOrigin", $"Field.Properties of a {Column.Origin} column ({Column.Name}: not recorded)"));
         }
-        return Bool(updatable);
+        if (Recordset.Cursor.FieldType(_ordinal, out string? typeOpen) is not int fieldType)
+        {
+            return CallResult.Fail(Failure.NotModelled(typeOpen ?? "NotModelled.FieldProperties.FieldType", $"Field.Properties of the column {Column.Name}, whose type is not identified"));
+        }
+        if (Column.SourceColumn is { } sc)
+        {
+            if (sc.Column.CalculatedResultType is not null)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CalculatedColumn", $"Field.Properties of the calculated column {Column.Name} (not recorded)"));
+            }
+            if (HasStoredColumnProperties(sc.TableName, sc.Column.Name) is { } refused)
+            {
+                return refused;
+            }
+        }
+        else if (HasStoredColumnProperties(Column.SourceTable!, Column.SourceField!) is { } refused)
+        {
+            return refused;
+        }
+        _properties ??= new PropertiesObject(this, BuildPropertySpecs((short)fieldType));
+        return Object(_properties);
+    }
+
+    private CallResult? HasStoredColumnProperties(string tableName, string columnName)
+    {
+        if (!Recordset.TryTableBlob(tableName, out PropertyBlob? blob, out string? blobFailure))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.PropertyBlob", $"Field.Properties of {Column.Name} when table {tableName}'s property blob cannot be read: {blobFailure}"));
+        }
+        if (blob?.Map(PropertySectionKind.ColumnValues, columnName) is { Properties.Count: > 0 })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.StoredColumnProperties", $"Field.Properties of query column {Column.Name} whose source column {tableName}.{columnName} has stored column properties (not recorded)"));
+        }
+        return null;
+    }
+
+    private int? PropertyCollatingOrder(short fieldType)
+    {
+        if (fieldType == 20)
+        {
+            return null;
+        }
+        if (Column.SourceColumn is { } sc)
+        {
+            return ColumnFacts.CollatingOrder(sc.Column);
+        }
+        return Recordset.Database.Header.SortOrder.Reserved == 0 ? Recordset.Database.Header.SortOrder.Identifier : null;
+    }
+
+    private static PropertySpec[] BuildPropertySpecs(short fieldType)
+    {
+        const short Boolean = 1, Integer = 3, Long = 4, Memo = 12;
+        return
+        [
+            PropertySpec.BuiltIn("Value", fieldType),
+            PropertySpec.BuiltIn("Attributes", Long),
+            PropertySpec.BuiltIn("CollatingOrder", Integer, owner => Live(owner, f => f.PropertyCollatingOrder(fieldType) is int co
+                ? Int32(co)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CollatingOrder", $"Field.Properties(\"CollatingOrder\") of {f.Column.Name} (DAO type {fieldType}: not recorded)")))),
+            PropertySpec.BuiltIn("Type", Integer),
+            PropertySpec.BuiltIn("Name", Memo),
+            PropertySpec.BuiltIn("OrdinalPosition", Integer),
+            PropertySpec.BuiltIn("Size", Long),
+            PropertySpec.BuiltIn("SourceField", Memo),
+            PropertySpec.BuiltIn("SourceTable", Memo),
+            PropertySpec.BuiltIn("ValidateOnSet", Boolean, owner => Live(owner, _ => Bool(false))),
+            PropertySpec.BuiltIn("DataUpdatable", Boolean),
+            PropertySpec.BuiltIn("ForeignName", Memo, owner => Live(owner, f => f.Fail(3219, DaoErrors.InvalidOperation))),
+            PropertySpec.BuiltIn("DefaultValue", Memo, owner => Live(owner, _ => Text(""))),
+            PropertySpec.BuiltIn("ValidationRule", Memo, owner => Live(owner, _ => Text(""))),
+            PropertySpec.BuiltIn("ValidationText", Memo, owner => Live(owner, _ => Text(""))),
+            PropertySpec.BuiltIn("Required", Boolean),
+            PropertySpec.BuiltIn("AllowZeroLength", Boolean, owner => Live(owner, _ => Bool(false))),
+            PropertySpec.BuiltIn("AppendOnly", Boolean, owner => Live(owner, f => fieldType != Memo
+                ? Bool(false)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.AppendOnly", $"Field.Properties(\"AppendOnly\") of Memo query column {f.Column.Name} (not recorded)")))),
+            PropertySpec.BuiltIn("Expression", Memo, owner => Live(owner, _ => Text(""))),
+            PropertySpec.BuiltIn("FieldSize", Long),
+            PropertySpec.BuiltIn("OriginalValue", Long, owner => Live(owner, f => f.Fail(3251, DaoErrors.NotSupportedForType))),
+            PropertySpec.BuiltIn("VisibleValue", Long, owner => Live(owner, f => f.Fail(3251, DaoErrors.NotSupportedForType))),
+            PropertySpec.BuiltIn("Precision", fieldType, owner => Live(owner, f => fieldType is 4 or 10 && f.PropertyCollatingOrder(fieldType) == 1033
+                ? Int16(1033)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Precision", $"Field.Properties(\"Precision\") of {f.Column.Name} (DAO type {fieldType}: not recorded)")))),
+            PropertySpec.BuiltIn("Scale", fieldType, owner => Live(owner, f => fieldType != 20
+                ? Int16(0)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Scale", $"Field.Properties(\"Scale\") of Decimal query column {f.Column.Name} (not recorded)")))),
+        ];
     }
 
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
@@ -427,6 +736,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
 
     protected override void OnFinalRelease()
     {
+        _properties?.Release();
         _fields.Released(_ordinal);
         _fields.Release();
     }
