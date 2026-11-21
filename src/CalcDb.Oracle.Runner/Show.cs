@@ -15,6 +15,10 @@ internal static class Show
         {
             sb.AppendLine("  problem: " + p);
         }
+        foreach (string o in manifest.OmittedChannels ?? [])
+        {
+            sb.AppendLine("  omitted: " + o);
+        }
         OwnerReport[] owners = [manifest.Owner, .. manifest.Participants.Select(x => x.Owner)];
         foreach (OwnerReport owner in owners)
         {

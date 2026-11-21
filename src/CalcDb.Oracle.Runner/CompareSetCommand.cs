@@ -17,6 +17,14 @@ internal static partial class Program
     /// </summary>
     private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store", "parallel"];
 
+    /// <summary>
+    /// Default per-attempt candidate timeout for <c>compare-set</c> (task mfmr): 90 s, giving ~2.6x headroom over the
+    /// slowest completing candidate attempt in the standing set (<c>r-q-ado-misc/resync-affect-matrix</c>, 33-34 s;
+    /// next slowest <c>r-q2-cat-txn-lock/read-schema-held-querydef-late</c>, 21.7-23.0 s) while avoiding the 300 s
+    /// single-attempt default stalling a run on known engine timeouts. Overridden by <c>--timeout N</c>.
+    /// </summary>
+    internal const int DefaultCandidateTimeoutSeconds = 90;
+
     private static int CompareSetCommand(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
     {
         // A name it does not know is refused before anything runs: compare-set starts up to a thousand attempts, and an
@@ -48,16 +56,38 @@ internal static partial class Program
                 environmentOptions.AddRange(["--" + pass, value]);
             }
         }
+        string candidateTimeout = options.Get("timeout") ?? DefaultCandidateTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (options.Get("timeout") is null)
+        {
+            environmentOptions.AddRange(["--timeout", candidateTimeout]);
+        }
         if (options.Has("rerun"))
         {
             environmentOptions.Add("--rerun");
         }
         string moduleSha = SelectImplementation(ImplementationSelection.CalcDbEnvironment, repo, Options.Parse(environmentOptions))!.ModuleSha256;
 
-        // One batch over every folder's questions, in folder order and file order inside a folder, so batch lanes stay
-        // full across folder ends; each folder's counts are printed when its last question is reported.
+        // Questions explicitly listed under notComparable in compare-set.json are skipped from the batch, excluded from
+        // the compared denominator, and always printed by name with their reason and count.
+        var notComparableByCaseId = new Dictionary<string, CompareSet.NotComparableQuestion>(StringComparer.Ordinal);
+        var notComparableFolders = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CompareSet.NotComparableQuestion nc in definition?.NotComparable ?? [])
+        {
+            notComparableByCaseId[nc.CaseId] = nc;
+            int slash = nc.CaseId.IndexOf('/');
+            if (slash > 0)
+            {
+                notComparableFolders.Add(nc.CaseId[..slash]);
+            }
+        }
+
+        // One batch over every folder's comparable questions, in folder order and file order inside a folder, so batch
+        // lanes stay full across folder ends; each folder's counts are printed when its last question is reported.
         var files = new List<string>();
         var folderOf = new List<string>();
+        var activeNotComparable = new List<CompareSet.NotComparableQuestion>();
+        var folderNotComparable = new Dictionary<string, int>(StringComparer.Ordinal);
+        var emptyComparableFolders = new List<string>();
         foreach (string folder in folders)
         {
             string dir = Path.Combine(repo, "probes", folder);
@@ -65,10 +95,29 @@ internal static partial class Program
             {
                 throw new DirectoryNotFoundException($"Compare-set folder probes/{folder} does not exist.");
             }
+            bool checkNotComparable = notComparableByCaseId.Count > 0 && (notComparableFolders.Contains(folder) || notComparableByCaseId.Keys.Any(k => !k.Contains('/')));
+            int comparableInFolder = 0;
+            int skippedInFolder = 0;
             foreach (string file in Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
             {
+                if (checkNotComparable)
+                {
+                    string probe = EvidenceJson.Read<Question>(file).Probe;
+                    if (notComparableByCaseId.TryGetValue(probe, out CompareSet.NotComparableQuestion? nc))
+                    {
+                        activeNotComparable.Add(nc);
+                        skippedInFolder++;
+                        continue;
+                    }
+                }
                 files.Add(file);
                 folderOf.Add(folder);
+                comparableInFolder++;
+            }
+            folderNotComparable[folder] = skippedInFolder;
+            if (comparableInFolder == 0 && skippedInFolder > 0)
+            {
+                emptyComparableFolders.Add(folder);
             }
         }
         var entries = new List<CompareSet.Entry>();
@@ -83,7 +132,7 @@ internal static partial class Program
                 : CompareSet.Incomplete(folder, o.Question.Probe, o.Manifest.Execution.ToString()));
             if (entries.Count == folderOf.Count || folderOf[entries.Count] != folder)
             {
-                console.WriteLine($"{folder,-24} {CompareSet.Counts(entries.Skip(folderStart))}");
+                console.WriteLine($"{folder,-24} {CompareSet.Counts(entries.Skip(folderStart), folderNotComparable.GetValueOrDefault(folder))}");
                 folderStart = entries.Count;
             }
         }
@@ -97,7 +146,12 @@ internal static partial class Program
         {
             Console.SetOut(console);
         }
-        Console.WriteLine($"{files.Count} questions in {clock.Elapsed.TotalSeconds:F0} s, {BatchLanes.Degree(Options.Parse(environmentOptions), candidate: true)} at once");
+        foreach (string folder in emptyComparableFolders)
+        {
+            Console.WriteLine($"{folder,-24} {CompareSet.Counts([], folderNotComparable.GetValueOrDefault(folder))}");
+        }
+        string ncSummary = activeNotComparable.Count > 0 ? $" ({activeNotComparable.Count} not comparable, listed)" : "";
+        Console.WriteLine($"{files.Count} questions{ncSummary} in {clock.Elapsed.TotalSeconds:F0} s, {BatchLanes.Degree(Options.Parse(environmentOptions), candidate: true)} at once, timeout {candidateTimeout} s");
 
         string head = Git(repo, "rev-parse --short=10 HEAD").Trim();
         bool dirty = Git(repo, "status --porcelain --untracked-files=no -- src Directory.Build.props global.json").Trim().Length > 0;
@@ -107,7 +161,11 @@ internal static partial class Program
         Directory.CreateDirectory(runsDir);
         string runPath = Path.Combine(runsDir, run.Name + ".tsv");
         File.WriteAllText(runPath, CompareSet.Write(run));
-        Console.WriteLine($"{"TOTAL",-24} {CompareSet.Counts(entries)}");
+        Console.WriteLine($"{"TOTAL",-24} {CompareSet.Counts(entries, activeNotComparable.Count)}");
+        if (activeNotComparable.Count > 0)
+        {
+            Console.Write(CompareSet.RenderNotComparable(activeNotComparable));
+        }
         Console.WriteLine($"run {run.Name}: {runPath}");
         Console.WriteLine("first differences stop at: " + string.Join(", ", CompareSet.Census(run).Take(20).Select(c => $"{c.Stop} {c.Count}")));
 

@@ -39,12 +39,22 @@ internal static partial class OwnedWorker
     {
         string desktop = mainDesktop ? PrivateDesktop.MainName : PrivateDesktop.Name;
         string? instruction = mainDesktop ? MainDesktopInstruction : null;
-        // R-CRASH-1 CRASH-ORDER: a question that asks for ETW file-I/O records every file operation on its attempt files.
+        // R-CRASH-1 CRASH-ORDER: ACE attempts with etwFileIo record every file operation on their attempt files.
+        // Candidate attempts skip the ETW recorder (calls.trace@9 does not compare etw:file-io) and name the omission.
         string questionFile = Path.Combine(attemptDir, "question.json");
         Question? question = File.Exists(questionFile) ? EvidenceJson.Read<Question>(questionFile) : null;
-        EtwBridge? etw = question is not null && question.ObservationRecipe.Contains(EtwBridge.Channel)
-            ? EtwBridge.Start(attemptDir, (int)Math.Ceiling(timeout.TotalSeconds) + 30)
-            : null;
+        EtwBridge? etw = null;
+        if (question is not null && question.ObservationRecipe.Contains(EtwBridge.Channel))
+        {
+            if (attempt.Implementation is not null)
+            {
+                EtwBridge.RecordCandidateSkipped(attemptDir);
+            }
+            else
+            {
+                etw = EtwBridge.Start(attemptDir, (int)Math.Ceiling(timeout.TotalSeconds) + 30);
+            }
+        }
         // OR-DESKTOP: the question's dialog policy, for the UI Automation helper that answers dialogs.
         string? policy = null;
         string[] policyTitles = [.. (question?.DialogPolicy ?? []).Select(r => r.Title)];

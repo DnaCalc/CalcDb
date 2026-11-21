@@ -1,5 +1,5 @@
 {
-  "note": "The standing compare set (calcdb-oracle compare-set): the folders whose questions CalcDb answers or will soon answer. r-q-wire and r-q2-wire hold the ado-apartment accepted differences and the thread questions. The probe-round folders r-q3-sql to r-q20-delete-pages joined on 2026-11-21 because they already match end to end through COM (process log, organizer 01a1fd54); the other probe rounds are checked by ISAM and Sql replays until they match through COM or complete.",
+  "note": "The standing compare set (calcdb-oracle compare-set): the folders whose questions CalcDb answers or will soon answer. r-q-wire and r-q2-wire hold the ado-apartment accepted differences and the thread questions. The probe-round folders r-q3-sql to r-q20-delete-pages joined on 2026-11-21 because they already match end to end through COM (process log, organizer 01a1fd54); r-q15-ddl-open, r-q18-statements, r-q2-expr-sql and r-q2-cat-txn-lock joined once candidate runs skipped ETW (named; calls.trace@9 does not compare etw:file-io) and the 11 killParticipant questions whose retained ACE record has no capture of participant a were listed under notComparable (task mfmr).",
   "folders": [
     "r-oracle-1",
     "r-cat-1",
@@ -31,12 +31,16 @@
     "r-act-1-meta",
     "r-q-wire",
     "r-q2-wire",
+    "r-q2-expr-sql",
+    "r-q2-cat-txn-lock",
     "r-q3-sql",
     "r-q8-header-counter",
     "r-q10-commit-counter-edits",
     "r-q12-snapshot-fix",
+    "r-q15-ddl-open",
     "r-q16-overflow",
     "r-q17-growth",
+    "r-q18-statements",
     "r-q19-growth-open",
     "r-q20-delete-pages"
   ],
@@ -52,6 +56,52 @@
     {
       "caseId": "r-q8-header-counter/two-deletes-500ms-apart",
       "reason": "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND"
+    }
+  ],
+  "notComparable": [
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-mid-commit-then-kill",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-then-kill-mid-insert-early",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-then-kill-mid-insert-late",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-200ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-250ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-300ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/ex-life-kill-mid-statement-exclusive",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/read-life-kill-reader-mid-scan",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/txn-flush-implicit-kill-after-300ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/txn-flush-implicit-kill-after-400ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/write-fail-suspend-holder-mid-update",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
     }
   ]
 }

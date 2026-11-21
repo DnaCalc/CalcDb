@@ -137,14 +137,17 @@ provider) is a provenance difference, not a match.
 batch runs six questions at once by default (`--parallel N`; `--parallel 1` runs one at a time). ACE attempts always run
 one at a time, and `--parallel` with them is refused. The batch lines, the ledger, `comparisons.jsonl` and the compare-set
 run are written in file order and equal a sequential run's. Questions of one token run in file order in one lane.
-Questions with further participants, ETW recording, a dialog policy or a claimed server run alone after the others,
-because their timing or their recorder, desktop or COM server is shared. A batch reads the tooling revision and the
-candidate module's hash once, so all its attempts answer for one module. Workers inherit only their own pipe and log
-handles (launches are serialized), and records and cached content are created by a rename that never replaces.
+Questions with further participants, a dialog policy or a claimed server run alone after the others, because their
+timing or their desktop or COM server is shared; candidate runs skip ETW recording (below), so single-participant
+`etwFileIo` questions run in the parallel lanes (while ACE `etwFileIo` attempts run one at a time). A batch reads the
+tooling revision and the candidate module's hash once, so all its attempts answer for one module. Workers inherit only
+their own pipe and log handles (launches are serialized), and records and cached content are created by a rename that
+never replaces.
 
-**The comparison rule (`calls.trace@8`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
+**The comparison rule (`calls.trace@9`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
 relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
-is an accepted difference, counted apart. Revision 8 adds `ace-clock-fields` (task c4rv). ACE writes its clock into every
+is an accepted difference, counted apart. `calls.trace@9` compares the call trace and file observations and does not
+compare `etw:file-io`. Revision 8 adds `ace-clock-fields` (task c4rv). ACE writes its clock into every
 file it creates or changes, so two ACE runs of one question give different files. Where the SHA-256 of a file
 observation differs and both files' bytes can be found (ACE's from the retained content store only, CalcDb's from its own
 attempt, each checked against its hash), the files are compared byte for byte outside the clock fields each
@@ -178,6 +181,15 @@ Questions explicitly listed under `timingBoundaries` in [probes/compare-set.json
 with its reason) stay counted at their actual verdict in `TOTAL` and per-folder counts, while a verdict flip between
 `Matched`/`AcceptedDifference` and `Mismatched` is reported on its own line (`timing boundary (counted in TOTAL, not in
 gained/lost): N`) with its reason instead of `Gained`/`Lost`.
+Questions explicitly listed under `notComparable` in [probes/compare-set.json](../../probes/compare-set.json) (currently
+the 11 `killParticipant` questions of `r-q2-cat-txn-lock` whose retained ACE record is `Uncertain`/`Incomplete` with no
+capture of participant `a`) are not run or counted in matched or compared questions; every run prints their count on the
+folder and `TOTAL` lines (`N not comparable, listed`) and lists every one with its reason. CalcDb's own failures (such as
+timeouts) never go on `notComparable` and remain in the compared denominator as `CandidateIncomplete`.
+`compare-set` uses an explicit candidate per-attempt timeout of **90 s** by default (overridden by `--timeout N`, vs the
+300 s single-attempt default of `run`/`batch`): measured across 1,576 completing candidate attempts, the slowest is
+`r-q-ado-misc/resync-affect-matrix` at 33–34 s (next slowest `r-q2-cat-txn-lock/read-schema-held-querydef-late` at
+21.7–23.0 s), so 90 s leaves ~2.6× headroom while keeping engine timeouts from stalling a run for five minutes (task mfmr).
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and
@@ -228,12 +240,18 @@ the attempt, as for the plain `show`.
 ```
 
 A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
-file-I/O recorder: every create, read, write and flush on the attempt's files, with offsets and sizes, becomes the
-artifact `etw:file-io`. The recorder needs an elevated token, so it runs through a scheduled task installed once by the
-owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check` tests it. Without it, such a
-question seals Incomplete with the reason. The recorder creates `done-ID` before it writes its line, so the runner
-reads it only when it opens and is not empty, waiting up to 60 s; a recorder that never finishes, or a stop that fails,
-is written to `etw-status.txt` and seals Incomplete, never an exception that leaves the attempt Running (task vqs3).
+file-I/O recorder on ACE attempts: every create, read, write and flush on the attempt's files, with offsets and sizes,
+becomes the artifact `etw:file-io`. Because `calls.trace@9` does not compare `etw:file-io`, candidate runs
+(`windows-x64-calcdb-local`) skip the ETW recorder, write `skipped on candidate run (calls.trace@9 does not compare etw:file-io)`
+to `artifacts/etw-status.txt`, record the omission by name on `manifest.OmittedChannels` (and as artifact `etw:status`),
+and seal complete; ACE attempts still require the ETW trace. The recorder needs an elevated token, so it runs through a
+scheduled task installed once by the owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check`
+tests it. Without it, an ACE attempt seals Incomplete with the reason. If the recorder fails before becoming ready and
+writes `done-ID`, the runner stops waiting immediately (instead of waiting out the 20 s ready timeout), cleans up the
+queue files, and records the recorder's reason in `etw-status.txt`. The recorder creates `done-ID` before it writes its
+line, so the runner reads it only when it opens and is not empty, waiting up to 60 s on stop; a recorder that never
+finishes, or a stop that fails, is written to `etw-status.txt` and seals Incomplete, never an exception that leaves the
+attempt Running (task vqs3).
 `calcdb-oracle show --etw --attempt ID` (or `--record FILE`, with
 `--file TEXT` and `--all-io`) shows the trace in order, with each operation's process and thread. The workers'
 lifecycle traces are kept as artifacts `trace:<participant>`, so each operation is placed inside the native call that

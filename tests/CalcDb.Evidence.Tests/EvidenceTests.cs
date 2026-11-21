@@ -345,6 +345,112 @@ public sealed class SealerTests : IDisposable
         Assert.Contains(m.Problems, p => p.Contains("stale", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Candidate_etw_attempt_with_named_skip_seals_complete_and_names_omitted_channel()
+    {
+        var q = new Question
+        {
+            Probe = "test/etw-cand",
+            BookRefs = ["T-EVID-03"],
+            Description = "etw candidate skip test",
+            CallerSurface = "native-idispatch/x64",
+            InvokeLcid = 0x0409,
+            ObservationRecipe = ["etwFileIo"],
+            Program = [new ObserveModules("m")],
+        };
+        _store.SubmitOrQuery("etw-cand", q, ImplementationSelection.CalcDbEnvironment);
+        AttemptRecord attempt = _store.PrepareAttempt("etw-cand", "rev", "book", new ImplementationSelection("calcdb", "deploy", new string('a', 64)));
+        string dir = _store.AttemptDirectory(attempt.AttemptId);
+        WriteStartedFor(dir, attempt);
+        WriteCaptureFor(dir, attempt);
+        File.WriteAllText(Path.Combine(dir, "artifacts", "etw-status.txt"), Sealer.CandidateEtwSkippedStatus);
+
+        CaptureManifest m = _store.Seal(attempt, Owner);
+        Assert.True(m.IsComplete, string.Join("; ", m.Problems));
+        Assert.NotNull(m.OmittedChannels);
+        Assert.Contains($"etwFileIo: {Sealer.CandidateEtwSkippedStatus}", m.OmittedChannels!);
+        Assert.Contains(m.Artifacts, a => a.Role == "etw:status" && a.RelativePath == "artifacts/etw-status.txt");
+        Assert.Equal(Sealer.SealDigest(m), m.SealSha256);
+    }
+
+    [Fact]
+    public void Ace_etw_attempt_rejects_candidate_skip_and_seals_incomplete()
+    {
+        var q = new Question
+        {
+            Probe = "test/etw-ace",
+            BookRefs = ["T-EVID-03"],
+            Description = "etw ace test",
+            CallerSurface = "native-idispatch/x64",
+            InvokeLcid = 0x0409,
+            ObservationRecipe = ["etwFileIo"],
+            Program = [new ObserveModules("m")],
+        };
+        _store.SubmitOrQuery("etw-ace", q, "windows-x64-ace-local");
+        AttemptRecord attempt = _store.PrepareAttempt("etw-ace", "rev", "book");
+        string dir = _store.AttemptDirectory(attempt.AttemptId);
+        WriteStartedFor(dir, attempt);
+        WriteCaptureFor(dir, attempt);
+        File.WriteAllText(Path.Combine(dir, "artifacts", "etw-status.txt"), Sealer.CandidateEtwSkippedStatus);
+
+        CaptureManifest m = _store.Seal(attempt, Owner);
+        Assert.False(m.IsComplete);
+        Assert.Null(m.OmittedChannels);
+        Assert.Contains(m.Problems, p => p.Contains("ETW file-I/O recording requested but no trace was produced", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Candidate_etw_attempt_without_skip_status_seals_incomplete()
+    {
+        var q = new Question
+        {
+            Probe = "test/etw-cand-fail",
+            BookRefs = ["T-EVID-03"],
+            Description = "etw candidate missing status test",
+            CallerSurface = "native-idispatch/x64",
+            InvokeLcid = 0x0409,
+            ObservationRecipe = ["etwFileIo"],
+            Program = [new ObserveModules("m")],
+        };
+        _store.SubmitOrQuery("etw-cand-fail", q, ImplementationSelection.CalcDbEnvironment);
+        AttemptRecord attempt = _store.PrepareAttempt("etw-cand-fail", "rev", "book", new ImplementationSelection("calcdb", "deploy", new string('a', 64)));
+        string dir = _store.AttemptDirectory(attempt.AttemptId);
+        WriteStartedFor(dir, attempt);
+        WriteCaptureFor(dir, attempt);
+
+        CaptureManifest m = _store.Seal(attempt, Owner);
+        Assert.False(m.IsComplete);
+        Assert.Null(m.OmittedChannels);
+        Assert.Contains(m.Problems, p => p.Contains("no status", StringComparison.Ordinal));
+    }
+
+    private static void WriteStartedFor(string dir, AttemptRecord attempt) =>
+        EvidenceJson.TryCreateNew(Path.Combine(dir, "receipts", "started.json"), new StartedReceipt(attempt.AttemptId, attempt.WorkerGeneration, 1, DateTimeOffset.UtcNow));
+
+    private static void WriteCaptureFor(string dir, AttemptRecord attempt)
+    {
+        var capture = new Capture
+        {
+            AttemptId = attempt.AttemptId,
+            WorkerGeneration = attempt.WorkerGeneration,
+            QuestionKey = attempt.QuestionKey,
+            Environment = TestEnvironment(),
+            Events =
+            [
+                new ModulesEvent { Seq = 1, ProgramPath = "0", Label = "m", Complete = true, BytesNeeded = 8, BytesProvided = 8, ModulePaths = ["x"], Identities = [] },
+                new ModulesEvent { Seq = 2, ProgramPath = "end", Label = "deliberate-truncation", Deliberate = true, Complete = false, BytesNeeded = 80, BytesProvided = 8, ModulePaths = ["x"], Identities = [] },
+            ],
+            Artifacts = [],
+            Execution = Execution.ReturnedSuccess,
+            CaptureErrors = [],
+        };
+        string path = Path.Combine(dir, "capture.json");
+        File.WriteAllText(path, EvidenceJson.Serialize(capture));
+        byte[] bytes = File.ReadAllBytes(path);
+        EvidenceJson.TryCreateNew(Path.Combine(dir, "receipts", "returned.json"),
+            new ReturnedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Hashing.Sha256Hex(bytes), bytes.LongLength, DateTimeOffset.UtcNow));
+    }
+
     internal static EnvironmentReceipt TestEnvironment() => new()
     {
         WorkerPath = "w", WorkerSha256 = "0", ToolingRevision = "rev", BookRevision = "book", Runtime = "r", RuntimeVersion = "v",

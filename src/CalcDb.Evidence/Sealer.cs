@@ -29,8 +29,9 @@ public static class Sealer
             participants.Add(new ParticipantResult(peer.Participant, peerExecution, peer, peerSha));
             execution = Worse(execution, peerExecution);
         }
+        var omittedChannels = new List<string>();
         problems.AddRange(KillProvenance(attemptDir, owners));
-        EtwArtifact(attemptDir, problems, artifacts);
+        EtwArtifact(attemptDir, attempt, problems, artifacts, omittedChannels);
         var manifest = new CaptureManifest
         {
             AttemptId = attempt.AttemptId,
@@ -40,6 +41,7 @@ public static class Sealer
             Execution = execution,
             Capture = problems.Count == 0 ? "Complete" : "Incomplete",
             Problems = problems,
+            OmittedChannels = omittedChannels.Count > 0 ? omittedChannels : null,
             CaptureSha256 = captureSha,
             Artifacts = artifacts,
             Owner = owners[0],
@@ -54,6 +56,13 @@ public static class Sealer
         }
         return manifest;
     }
+
+    /// <summary>
+    /// Status line written to <c>artifacts/etw-status.txt</c> when a candidate attempt skips ETW file-I/O recording:
+    /// <c>calls.trace@9</c> does not compare <c>etw:file-io</c>, and the elevated recorder watches only the repository's
+    /// oracle store. Accepted by <see cref="Sealer"/> on candidate attempts only; ACE attempts still require ETW.
+    /// </summary>
+    public const string CandidateEtwSkippedStatus = "skipped on candidate run (calls.trace@9 does not compare etw:file-io)";
 
     /// <summary>
     /// R-CRASH-1 / OR-JOB: name who ended a killed participant, from the kill events in the other participants'
@@ -88,8 +97,11 @@ public static class Sealer
     /// <summary>
     /// R-CRASH-1 CRASH-ORDER: a question with the observation channel <c>etwFileIo</c> must have its ETW file-I/O trace;
     /// when it is present it becomes an artifact of the attempt, and when it is missing the recorder's status is a problem.
+    /// Candidate attempts (<see cref="AttemptRecord.Implementation"/> non-null) may explicitly skip ETW recording with
+    /// <see cref="CandidateEtwSkippedStatus"/>, recorded by name on <see cref="CaptureManifest.OmittedChannels"/> and as
+    /// the <c>etw:status</c> artifact; ACE attempts always require the trace.
     /// </summary>
-    private static void EtwArtifact(string attemptDir, List<string> problems, List<ArtifactRef> artifacts)
+    private static void EtwArtifact(string attemptDir, AttemptRecord attempt, List<string> problems, List<ArtifactRef> artifacts, List<string> omittedChannels)
     {
         string questionFile = Path.Combine(attemptDir, "question.json");
         if (!File.Exists(questionFile) || !EvidenceJson.Read<Question>(questionFile).ObservationRecipe.Contains("etwFileIo"))
@@ -98,9 +110,15 @@ public static class Sealer
         }
         string trace = Path.Combine(attemptDir, "artifacts", "etw-file-io.jsonl");
         string status = Path.Combine(attemptDir, "artifacts", "etw-status.txt");
-        string statusText = File.Exists(status) ? File.ReadAllText(status) : "no status";
+        string statusText = File.Exists(status) ? File.ReadAllText(status).Trim() : "no status";
         if (!File.Exists(trace))
         {
+            if (attempt.Implementation is not null && statusText == CandidateEtwSkippedStatus)
+            {
+                omittedChannels.Add($"etwFileIo: {CandidateEtwSkippedStatus}");
+                artifacts.Add(new ArtifactRef("etw:status", "etw-status", "artifacts/etw-status.txt", new FileInfo(status).Length, Hashing.Sha256File(status)));
+                return;
+            }
             problems.Add("ETW file-I/O recording requested but no trace was produced: " + statusText);
             return;
         }

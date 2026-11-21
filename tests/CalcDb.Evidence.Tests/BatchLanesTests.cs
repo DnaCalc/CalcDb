@@ -82,6 +82,17 @@ public sealed class BatchLanesTests
     }
 
     [Fact]
+    public void Candidate_etw_questions_may_run_in_parallel_while_ACE_etw_questions_and_peer_etw_questions_run_alone()
+    {
+        Question etwOnly = Q("etw/1") with { ObservationRecipe = ["excepinfo", "etwFileIo"] };
+        Question etwWithPeer = Q("etw/2", alone: true) with { ObservationRecipe = ["excepinfo", "etwFileIo"] };
+        Assert.False(BatchLanes.RunsAlone(etwOnly));
+        Assert.False(BatchLanes.RunsAlone(etwOnly, candidate: true));
+        Assert.True(BatchLanes.RunsAlone(etwOnly, candidate: false));
+        Assert.True(BatchLanes.RunsAlone(etwWithPeer, candidate: true));
+    }
+
+    [Fact]
     public void A_failure_is_thrown_at_its_question_after_the_earlier_results_and_later_questions_stop_starting()
     {
         Question[] questions = [.. Enumerable.Range(0, 50).Select(i => Q($"p/{i}"))];

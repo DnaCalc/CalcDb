@@ -53,12 +53,14 @@ internal static class BatchLanes
 
     /// <summary>
     /// Whether a question runs with nothing beside it: further participants (their order in time is the question), ETW
-    /// recording (one recorder queue for the host), a dialog policy or a claimed out-of-process server (UI and COM servers
-    /// outside the attempt).
+    /// recording on non-candidate runs (one recorder queue for the host; candidate runs skip ETW and may run in parallel),
+    /// a dialog policy or a claimed out-of-process server (UI and COM servers outside the attempt).
     /// </summary>
-    public static bool RunsAlone(Question question) =>
+    public static bool RunsAlone(Question question) => RunsAlone(question, candidate: true);
+
+    public static bool RunsAlone(Question question, bool candidate) =>
         question.Peers.Count > 0
-        || question.ObservationRecipe.Contains("etwFileIo") // EtwBridge.Channel, which is Windows-only
+        || (!candidate && question.ObservationRecipe.Contains("etwFileIo")) // EtwBridge.Channel, which is Windows-only
         || question.DialogPolicy is { Count: > 0 }
         || ClaimsProcess(question.Program);
 

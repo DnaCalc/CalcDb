@@ -254,6 +254,45 @@ public sealed class CompareSetTests
             Assert.Equal("pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND", tb.Reason));
     }
 
+    [Fact]
+    public void Counts_and_render_not_comparable_keep_listed_questions_out_of_compared_denominator()
+    {
+        string counts = CompareSet.Counts([E("r-q2-cat-txn-lock/a", "Matched"), E("r-q2-cat-txn-lock/b", "Mismatched", "1 x", 1)], notComparable: 11);
+        Assert.Equal("  1 matched, 0 accepted of   2 (1 Mismatched); 11 not comparable, listed", counts);
+
+        string rendered = CompareSet.RenderNotComparable([
+            new("r-q2-cat-txn-lock/z", "reason z"),
+            new("r-q2-cat-txn-lock/a", "reason a"),
+        ]);
+        Assert.Equal(
+            "not comparable (2, listed; not counted in matched or compared):\n  r-q2-cat-txn-lock/a: reason a\n  r-q2-cat-txn-lock/z: reason z\n",
+            rendered);
+        Assert.Equal("", CompareSet.RenderNotComparable([]));
+    }
+
+    [Fact]
+    public void Compare_set_json_lists_the_four_joined_folders_and_the_eleven_kill_participant_not_comparable_questions()
+    {
+        string repo = RepoRoot();
+        CompareSet.Definition def = EvidenceJson.Read<CompareSet.Definition>(Path.Combine(repo, "probes", "compare-set.json"));
+        Assert.Contains("r-q15-ddl-open", def.Folders);
+        Assert.Contains("r-q18-statements", def.Folders);
+        Assert.Contains("r-q2-expr-sql", def.Folders);
+        Assert.Contains("r-q2-cat-txn-lock", def.Folders);
+
+        Assert.Equal(11, def.NotComparable.Count);
+        Assert.All(def.NotComparable, nc =>
+        {
+            Assert.StartsWith("r-q2-cat-txn-lock/", nc.CaseId, StringComparison.Ordinal);
+            Assert.False(string.IsNullOrWhiteSpace(nc.Reason));
+            string file = Path.Combine(repo, "probes", nc.CaseId.Replace('/', Path.DirectorySeparatorChar) + ".question.json");
+            Assert.True(File.Exists(file), $"notComparable entry {nc.CaseId} has no question file at {file}");
+            Assert.Equal(nc.CaseId, EvidenceJson.Read<Question>(file).Probe);
+        });
+        // CalcDb's own timeouts in r-q2-expr-sql stay in the compared denominator, never excluded.
+        Assert.DoesNotContain(def.NotComparable, nc => nc.CaseId.StartsWith("r-q2-expr-sql/", StringComparison.Ordinal));
+    }
+
     private static string RepoRoot()
     {
         for (string? dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))

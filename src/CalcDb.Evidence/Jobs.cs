@@ -200,6 +200,9 @@ public sealed record CaptureManifest
 
     public required IReadOnlyList<string> Problems { get; init; }
 
+    /// <summary>Observation channels requested by the question that were explicitly skipped and why (for example <c>etwFileIo</c> on a candidate run).</summary>
+    public IReadOnlyList<string>? OmittedChannels { get; init; }
+
     public string? CaptureSha256 { get; init; }
 
     public required IReadOnlyList<ArtifactRef> Artifacts { get; init; }

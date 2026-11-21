@@ -30,6 +30,9 @@ public static partial class CompareSet
     /// <summary>A compare-set question whose verdict depends on a real-time boundary (explicitly listed in <c>probes/compare-set.json</c>).</summary>
     public sealed record TimingBoundary(string CaseId, string Reason);
 
+    /// <summary>A question in a compare-set folder that cannot be compared by <see cref="CallTraceComparison"/> (explicitly listed in <c>probes/compare-set.json</c>).</summary>
+    public sealed record NotComparableQuestion(string CaseId, string Reason);
+
     /// <summary>The standing compare set's definition (<c>probes/compare-set.json</c>).</summary>
     public sealed record Definition
     {
@@ -38,6 +41,8 @@ public static partial class CompareSet
         public string? Note { get; init; }
 
         public IReadOnlyList<TimingBoundary> TimingBoundaries { get; init; } = [];
+
+        public IReadOnlyList<NotComparableQuestion> NotComparable { get; init; } = [];
     }
 
     /// <summary>A run of the compare set: the rule, the candidate module and source it ran, and one entry per question.</summary>
@@ -267,12 +272,29 @@ public static partial class CompareSet
         return sb.ToString();
     }
 
-    /// <summary>"m matched, a accepted of n" plus every other status with its count.</summary>
-    public static string Counts(IEnumerable<Entry> entries)
+    /// <summary>"m matched, a accepted of n" plus every other status with its count, and any listed not-comparable count.</summary>
+    public static string Counts(IEnumerable<Entry> entries, int notComparable = 0)
     {
         List<Entry> list = [.. entries];
         string rest = string.Join(", ", list.Where(e => !Good(e)).GroupBy(e => e.Status).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Count()} {g.Key}"));
-        return $"{list.Count(e => e.Matched),3} matched, {list.Count(e => e.Accepted)} accepted of {list.Count,3}" + (rest.Length > 0 ? $" ({rest})" : "");
+        string core = $"{list.Count(e => e.Matched),3} matched, {list.Count(e => e.Accepted)} accepted of {list.Count,3}" + (rest.Length > 0 ? $" ({rest})" : "");
+        return notComparable > 0 ? $"{core}; {notComparable} not comparable, listed" : core;
+    }
+
+    /// <summary>The named list of questions in the selected folders that are excluded from comparison by <c>probes/compare-set.json</c> <c>notComparable</c>.</summary>
+    public static string RenderNotComparable(IReadOnlyList<NotComparableQuestion> notComparable)
+    {
+        if (notComparable.Count == 0)
+        {
+            return "";
+        }
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"not comparable ({notComparable.Count}, listed; not counted in matched or compared):\n");
+        foreach (NotComparableQuestion q in notComparable.OrderBy(x => x.CaseId, StringComparer.Ordinal))
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"  {q.CaseId}: {q.Reason}\n");
+        }
+        return sb.ToString();
     }
 
     /// <summary>Where the first difference of each mismatch stops, by oracle member, most frequent first.</summary>

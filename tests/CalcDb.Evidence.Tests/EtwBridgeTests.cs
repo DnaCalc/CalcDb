@@ -74,4 +74,55 @@ public sealed class EtwBridgeTests : IDisposable
         Bridge(TimeSpan.FromMilliseconds(300)).Stop();
         Assert.Contains("done file never appeared", Status(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void WaitForReady_stops_immediately_when_done_appears_cleans_it_up_and_reports_the_reason()
+    {
+        string done = Path.Combine(_root, "queue", "done-rej");
+        File.WriteAllText(done, "failed: UnauthorizedAccessException: outside allowed root");
+        EtwBridge bridge = EtwBridge.AttachPending(Path.Combine(_root, "attempt"), Path.Combine(_root, "queue"), "rej");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        bool ready = bridge.WaitForReady(TimeSpan.FromSeconds(20));
+        Assert.False(ready);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"WaitForReady took {clock.Elapsed.TotalSeconds:F2} s instead of stopping when done appeared");
+        Assert.False(File.Exists(done), "done file should be cleaned up on early failure");
+        Assert.Equal("recorder failed before ready: failed: UnauthorizedAccessException: outside allowed root", Status());
+    }
+
+    [Fact]
+    public async Task WaitForReady_waits_while_done_is_locked_then_reads_and_cleans_it_up()
+    {
+        string done = Path.Combine(_root, "queue", "done-lock");
+        var held = new FileStream(done, FileMode.Create, FileAccess.Write, FileShare.None);
+        var releaser = Task.Run(() =>
+        {
+            Thread.Sleep(250);
+            held.Write("failed: bad watchDir"u8);
+            held.Dispose();
+        });
+        EtwBridge bridge = EtwBridge.AttachPending(Path.Combine(_root, "attempt"), Path.Combine(_root, "queue"), "lock");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        bool ready = bridge.WaitForReady(TimeSpan.FromSeconds(20));
+        await releaser;
+        Assert.False(ready);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3));
+        Assert.False(File.Exists(done));
+        Assert.Equal("recorder failed before ready: failed: bad watchDir", Status());
+    }
+
+    [Fact]
+    public void WaitForReady_succeeds_when_ready_appears()
+    {
+        string readyFile = Path.Combine(_root, "queue", "ready-ok");
+        File.WriteAllText(readyFile, "ready");
+        EtwBridge bridge = EtwBridge.AttachPending(Path.Combine(_root, "attempt"), Path.Combine(_root, "queue"), "ok");
+        Assert.True(bridge.WaitForReady(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void RecordCandidateSkipped_writes_the_named_candidate_skip_status()
+    {
+        EtwBridge.RecordCandidateSkipped(Path.Combine(_root, "attempt"));
+        Assert.Equal(Sealer.CandidateEtwSkippedStatus, Status());
+    }
 }
