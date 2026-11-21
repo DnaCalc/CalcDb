@@ -19,6 +19,9 @@ $ErrorActionPreference = 'Stop'
 $Files = @($Files | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Tests = @($Tests | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Questions = @($Questions | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+# Four Com test classes load the published native module (AdoAggregation, AdoConstruction, FactoryHostCore,
+# PerUserRegistration): Com tests always publish first.
+if ($Tests -contains 'Com') { $Publish = [switch]::new($true) }
 if ($Snapshot -and -not $Publish) { throw "-Snapshot needs -Publish: the compare set runs the export's native deployment" }
 $repo = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
 $head = (git -C $repo rev-parse --short HEAD).Trim()
