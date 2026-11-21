@@ -195,4 +195,71 @@ public sealed class PageCacheTests
         b.Dispose();
         Assert.Throws<ObjectDisposedException>(() => a.Bytes.Length);
     }
+
+    [Fact]
+    public void Scan_frame_count_stays_conserved_across_load_promotion_eviction_spill_and_overlay_reuse()
+    {
+        var disk = new MemoryFile();
+        var spill = new PositionedSpillStore(disk, PageSize);
+        var file = new ControlledFile(PageSize);
+        var cache = new PageCache(file, 1, PageSize, 4, scanAllowance: 2, spill: spill);
+
+        // Load two Scan frames.
+        cache.Pin(1, AdmissionClass.Scan).Pin!.Dispose();
+        cache.Pin(2, AdmissionClass.Scan).Pin!.Dispose();
+        Assert.Equal(2, cache.Counters.ScanFrames);
+        Conservation.Conserved(cache);
+
+        // Promote page 1 from Scan to ReuseCandidate on a hit.
+        cache.Pin(1, AdmissionClass.ReuseCandidate).Pin!.Dispose();
+        Assert.Equal(1, cache.Counters.ScanFrames);
+        Conservation.Conserved(cache);
+
+        // Fill remaining two frames with Scan pages (3 Scan frames, 1 ReuseCandidate).
+        cache.Pin(3, AdmissionClass.Scan).Pin!.Dispose();
+        cache.Pin(4, AdmissionClass.Scan).Pin!.Dispose();
+        Assert.Equal(3, cache.Counters.ScanFrames);
+        Conservation.Conserved(cache);
+
+        // Over scanAllowance (3 >= 2): Scan admission evicts a Scan frame and replaces it with another Scan frame.
+        cache.Pin(5, AdmissionClass.Scan).Pin!.Dispose();
+        Assert.Equal(3, cache.Counters.ScanFrames);
+        Assert.Equal(1, cache.Counters.ScanEvictions);
+        Conservation.Conserved(cache);
+
+        // ReuseCandidate admission evicts a cold Scan frame and replaces it with ReuseCandidate.
+        cache.Pin(6, AdmissionClass.ReuseCandidate).Pin!.Dispose();
+        Assert.Equal(2, cache.Counters.ScanFrames);
+        Conservation.Conserved(cache);
+
+        // Register a read view, then publish an edit to a resident Scan page (5): its superseded Scan frame stays
+        // resident as ResidentOnly owned by view history; spilling it transitions Immutable -> SpillInFlight -> Immutable.
+        ImageId scanPage5 = cache.CurrentImage(5);
+        using (ReadView view = cache.RegisterView().View!)
+        {
+            using PrivateOverlay overlay = cache.CreateOverlay(new LockerId(1));
+            Assert.True(overlay.Edit(5, new BytePatch(0, [0x77])).Succeeded);
+            using (PagePin sealedPin = overlay.Pin(5).Pin!)
+            {
+                Assert.Equal(0x77, sealedPin.Bytes[0]);
+            }
+            Conservation.Conserved(cache);
+            Assert.True(cache.Publish(overlay, file).Succeeded);
+            Conservation.Conserved(cache);
+
+            if (cache.IsResident(scanPage5))
+            {
+                Assert.True(cache.Spill(scanPage5).Succeeded);
+                Conservation.Conserved(cache);
+            }
+        }
+
+        // Evict everything via ReuseCandidate misses so ScanFrames reaches 0.
+        for (ulong p = 20; p < 30; p++)
+        {
+            cache.Pin(p, AdmissionClass.ReuseCandidate).Pin!.Dispose();
+        }
+        Assert.Equal(0, cache.Counters.ScanFrames);
+        Conservation.Settled(cache);
+    }
 }

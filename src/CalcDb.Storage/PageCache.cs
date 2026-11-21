@@ -166,7 +166,7 @@ public sealed partial class PageCache
     private int _clockHand;
     private bool _closed;
     private ulong _nextImageSerial;
-    private int _livePins, _liveTokens, _reserved;
+    private int _livePins, _liveTokens, _reserved, _scanFrames;
     private long _hits, _misses, _coalesced, _loads, _loadFailures, _probes, _evictions, _scanEvictions, _noFrame, _noSource;
     private long _parked, _preservationReads, _spillWrites, _spillFailures, _spillLoads, _spillRejects, _admissionWaits, _drainWaits, _publications;
 
@@ -322,13 +322,13 @@ public sealed partial class PageCache
                     {
                         if (hit.Class == AdmissionClass.Scan)
                         {
-                            hit.Class = AdmissionClass.ReuseCandidate; // a reuse after a scan is evidence of reuse
+                            SetFrameClass(hit, AdmissionClass.ReuseCandidate); // a reuse after a scan is evidence of reuse
                         }
                         hit.ReferenceBit = true;
                     }
                     if (hit.State == FrameState.MutablePrivate)
                     {
-                        hit.State = FrameState.Immutable; // a private image exposed to a reader is sealed (II-03 §5.1)
+                        SetFrameState(hit, FrameState.Immutable); // a private image exposed to a reader is sealed (II-03 §5.1)
                     }
                     hit.Pins++;
                     _livePins++;
@@ -409,9 +409,8 @@ public sealed partial class PageCache
     private LoadToken InstallLoad(ImageId target, ImageRecord? record, PageEntry? entry, int slot, AdmissionClass admission, LoadKind kind)
     {
         FrameSlot frame = _slots[slot];
-        frame.State = FrameState.Loading;
+        SetFrameStateAndClass(frame, FrameState.Loading, admission);
         frame.IoReferences = 1;
-        frame.Class = admission;
         var token = new LoadToken(target, new FrameHandle(slot, frame.Generation), kind)
         {
             Wanted = 1,
@@ -514,7 +513,7 @@ public sealed partial class PageCache
         }
         else
         {
-            frame.State = FrameState.Immutable;
+            SetFrameState(frame, FrameState.Immutable);
             frame.ReferenceBit = frame.Class == AdmissionClass.ReuseCandidate;
             if (frame.Class == AdmissionClass.Scan)
             {
@@ -647,7 +646,7 @@ public sealed partial class PageCache
                 return new SpillWriteResult(null, $"Image {image} is leased or already being spilled.");
             }
             slot = ready.Slot;
-            frame.State = FrameState.SpillInFlight;
+            SetFrameState(frame, FrameState.SpillInFlight);
             frame.IoReferences++;
         }
         return SpillCore(slot);
@@ -666,7 +665,7 @@ public sealed partial class PageCache
             if (f.State is FrameState.Immutable or FrameState.MutablePrivate && f.Pins == 0 && f.IoReferences == 0 && f.Handoff == 0
                 && f.Record is { Source: ImageSource.ResidentOnly, Owners: > 0 })
             {
-                f.State = FrameState.SpillInFlight;
+                SetFrameState(f, FrameState.SpillInFlight);
                 f.IoReferences++;
                 return i;
             }
@@ -687,7 +686,7 @@ public sealed partial class PageCache
         SpillWriteResult written = _spill!.Write(identity, frame.Backing);
         lock (_latch)
         {
-            frame.State = FrameState.Immutable; // spilled bytes are sealed: a later edit makes a new revision
+            SetFrameState(frame, FrameState.Immutable); // spilled bytes are sealed: a later edit makes a new revision
             frame.IoReferences--;
             ImageRecord r = frame.Record!;
             if (written.Locator is { } locator)
@@ -723,7 +722,7 @@ public sealed partial class PageCache
                 }
                 if (ReserveFrame(AdmissionClass.ReuseCandidate) is { } slot)
                 {
-                    _slots[slot].State = FrameState.Reserved;
+                    SetFrameState(_slots[slot], FrameState.Reserved);
                     _reserved++;
                     failure = null;
                     return slot;
@@ -766,8 +765,7 @@ public sealed partial class PageCache
         {
             return _free.Pop();
         }
-        int scanFrames = _slots.Count(s => s.State == FrameState.Immutable && s.Class == AdmissionClass.Scan);
-        if (admission == AdmissionClass.Scan && scanFrames >= _scanAllowance)
+        if (admission == AdmissionClass.Scan && _scanFrames >= _scanAllowance)
         {
             // A scan reuses its own cold frames first, so it cannot displace frames with evidence of reuse.
             for (int tries = _scanOrder.Count; tries > 0; tries--)
@@ -848,7 +846,7 @@ public sealed partial class PageCache
         _evictions++;
         frame.Generation++;
         frame.Record = null;
-        frame.State = FrameState.Free;
+        SetFrameState(frame, FrameState.Free);
         frame.ReferenceBit = false;
         return slot;
     }
@@ -858,11 +856,19 @@ public sealed partial class PageCache
         FrameSlot frame = _slots[slot];
         frame.Generation++;
         frame.Record = null;
-        frame.State = FrameState.Free;
+        SetFrameState(frame, FrameState.Free);
         frame.Handoff = 0;
         frame.ReferenceBit = false;
         _free.Push(slot);
     }
+
+    /// <summary>Transition a frame's state/class under the latch while keeping <see cref="_scanFrames"/> exact.</summary>
+    private void SetFrameState(FrameSlot frame, FrameState state) => _scanFrames += frame.SetState(state);
+
+    private void SetFrameClass(FrameSlot frame, AdmissionClass admission) => _scanFrames += frame.SetClass(admission);
+
+    private void SetFrameStateAndClass(FrameSlot frame, FrameState state, AdmissionClass admission) =>
+        _scanFrames += frame.SetStateAndClass(state, admission);
 
     /// <summary>
     /// Once nothing owns an image and no load reads its spill record, the record is released (a resident frame stays as
@@ -980,7 +986,7 @@ public sealed partial class PageCache
                     ResidentImageBytes = (long)resident * PageSize,
                     PinnedFrames = _slots.Count(s => s.Pins > 0),
                     TotalPins = _slots.Sum(s => s.Pins),
-                    ScanFrames = _slots.Count(s => s.State == FrameState.Immutable && s.Class == AdmissionClass.Scan),
+                    ScanFrames = _scanFrames,
                     LoadingFrames = _slots.Count(s => s.State == FrameState.Loading),
                     RetainedFrames = _slots.Count(s => s.Record is { Source: ImageSource.ResidentOnly } && s.State != FrameState.Loading),
                     ReservedFrames = _reserved,
@@ -1048,12 +1054,37 @@ public sealed partial class PageCache
         public Memory<byte> Backing { get; } = backing;
         public ulong Generation { get; set; }
         public ImageRecord? Record { get; set; }
-        public FrameState State { get; set; }
+        public FrameState State { get; private set; }
         public int Pins { get; set; }
         public int IoReferences { get; set; }
         public int Handoff { get; set; }
         public bool ReferenceBit { get; set; }
-        public AdmissionClass Class { get; set; }
+        public AdmissionClass Class { get; private set; }
+
+        public int SetState(FrameState state)
+        {
+            int before = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            State = state;
+            int after = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            return after - before;
+        }
+
+        public int SetClass(AdmissionClass admission)
+        {
+            int before = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            Class = admission;
+            int after = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            return after - before;
+        }
+
+        public int SetStateAndClass(FrameState state, AdmissionClass admission)
+        {
+            int before = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            State = state;
+            Class = admission;
+            int after = State == FrameState.Immutable && Class == AdmissionClass.Scan ? 1 : 0;
+            return after - before;
+        }
     }
 
     private sealed class ImageRecord(ImageId id)

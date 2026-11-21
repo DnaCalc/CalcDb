@@ -34,11 +34,15 @@ public sealed partial class PageCache
         lock (_latch)
         {
             List<string> violations = [];
-            int pins = 0, reserved = 0, free = 0;
+            int pins = 0, reserved = 0, free = 0, scanFrames = 0;
             for (int i = 0; i < _slots.Length; i++)
             {
                 FrameSlot f = _slots[i];
                 pins += f.Pins;
+                if (f.State == FrameState.Immutable && f.Class == AdmissionClass.Scan)
+                {
+                    scanFrames++;
+                }
                 switch (f.State)
                 {
                     case FrameState.Free:
@@ -80,6 +84,10 @@ public sealed partial class PageCache
             if (reserved != _reserved)
             {
                 violations.Add($"{reserved} reserved frames but {_reserved} reservations.");
+            }
+            if (scanFrames != _scanFrames)
+            {
+                violations.Add($"{scanFrames} Scan-class immutable frames but _scanFrames is {_scanFrames}.");
             }
 
             int tokens = 0, nativeTokens = 0, spillRecords = 0, owners = 0;

@@ -734,8 +734,7 @@ public sealed partial class PageCache
                     var record = new ImageRecord(page.Old) { Source = ImageSource.ResidentOnly, Owners = 1, Ready = new FrameHandle(slot, frame.Generation) };
                     _directory[page.Old] = record;
                     frame.Record = record;
-                    frame.State = FrameState.Immutable;
-                    frame.Class = AdmissionClass.ReuseCandidate;
+                    SetFrameStateAndClass(frame, FrameState.Immutable, AdmissionClass.ReuseCandidate);
                     page.OwnsOld = true;
                     page.ReadSlot = null;
                 }
@@ -996,8 +995,7 @@ public sealed partial class PageCache
                 var record = new ImageRecord(image) { Source = ImageSource.Native, Ready = new FrameHandle(slot, frame.Generation) };
                 _directory[image] = record;
                 frame.Record = record;
-                frame.State = FrameState.Immutable;
-                frame.Class = AdmissionClass.ReuseCandidate;
+                SetFrameStateAndClass(frame, FrameState.Immutable, AdmissionClass.ReuseCandidate);
                 frame.ReferenceBit = true;
                 page.FinalSlot = null;
                 if (entry.Versions is not null)

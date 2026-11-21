@@ -620,8 +620,7 @@ public sealed partial class PageCache
         var record = new ImageRecord(id) { Source = ImageSource.ResidentOnly, Owners = 1, Locker = locker.Value, Ready = new FrameHandle(slot, frame.Generation) };
         _directory[id] = record;
         frame.Record = record;
-        frame.State = FrameState.MutablePrivate;
-        frame.Class = AdmissionClass.ReuseCandidate;
+        SetFrameStateAndClass(frame, FrameState.MutablePrivate, AdmissionClass.ReuseCandidate);
         frame.ReferenceBit = true;
         return id;
     }
@@ -651,7 +650,7 @@ public sealed partial class PageCache
     {
         if (_directory.TryGetValue(image, out ImageRecord? record) && record.Ready is { } ready && _slots[ready.Slot].State == FrameState.MutablePrivate)
         {
-            _slots[ready.Slot].State = FrameState.Immutable;
+            SetFrameState(_slots[ready.Slot], FrameState.Immutable);
         }
     }
 
