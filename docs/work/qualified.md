@@ -619,8 +619,8 @@ is summarised in [qualification-report.md](qualification-report.md).
   - Row 3 holds 5,000 bytes chained on pages 47 and 48. Data page 46 holds the three rows.
   - The LV owned map holds {45, 47, 48}, the LV free map {45}.
 - **Claim**: One UPDATE or DELETE in a shared session:
-  - **The old value goes first.**
-    - An old single row is removed as a deleted data row is: its slot becomes `00 d0`, the rows below it move up by its length (slot 1 `cc 07` > `30 08`), and the free word rises by its length.
+  - **The new value is placed first, then the old one is removed** (corrected 2026-11-21: the page bytes show it). In `lv-op-single-larger` the new 200-byte row is written at 1796..1995, below the page's lowest row, and stays there as stale bytes after the old row's removal moves it up by 100 to 1896..2095; in `lv-op-single-smaller` the new 80-byte row leaves stale bytes at 1916..1995 in the same way. Removing the old value first would have left those bytes zero.
+    - An old single row is removed as a deleted data row is: its slot becomes `00 d0`, the rows below it (the new one included) move up by its length (slot 1 `cc 07` > `30 08`), and the free word rises by its length.
     - An old chain's pages are released, cleared in the LV owned map and marked free in page 1. Their bytes are not written.
   - **The new value is placed by the ordinary rules.**
     - A single row goes as a new slot on the first free-map page with room; deleted slots are not reused. 100 > 200 bytes gives slot 2, free 1978 > 1876. 100 > 80 bytes gives free > 1996. 5,000 > 100 bytes gives slot 2 on page 45, free 1876.
