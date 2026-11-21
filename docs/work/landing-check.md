@@ -15,11 +15,16 @@ procedure that the organizer handoffs of 2026-11-20 and 2026-11-21 kept in scrat
    `calcdb-oracle batch --dir D --env windows-x64-calcdb-local --deployment <export>/artifacts/native --compare --rerun`.
 4. Commit only the child's files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`), push,
    update its register row and task.
-5. Publish HEAD from an export into `artifacts/native` and run the full compare set as an `alta job`
-   (`calcdb-oracle compare-set --rerun --name N --against baseline`, 15–21 min). Record it as
-   `docs/work/compare-baseline.tsv` when nothing is lost; investigate every loss first.
-6. While the compare set runs, no child builds `CalcDb.slnx` or the oracle runner or worker, and nobody publishes
-   `artifacts/native`: the job runs the working tree's `bin/Debug` runner and worker and that deployment.
+5. Copy the export's runner (`src/CalcDb.Oracle.Runner/bin/Debug/net11.0/`), worker
+   (`src/CalcDb.Oracle.Worker/bin/Debug/net11.0-windows/win-x64/`) and `artifacts/native` to
+   `%LOCALAPPDATA%\CalcDb\compare-bin\<name>\runner`, `\worker` and `\native` (31 MB, seconds), and run the full
+   compare set from the repository folder as an `alta job`:
+   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`
+   (about 15 min). The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to
+   `docs/work/compare-baseline.tsv` when nothing is lost, and investigate every loss first. Its `source` line names the
+   integration checkout's state, not the candidate's: the commit message names the commit compared.
+6. The job blocks nothing: children build, the next child starts and probes run while it runs. A later landing waits
+   only for the earlier run's result before it records its own baseline.
 
 ## What it costs (2026-11-20, session 01a1f97d)
 
@@ -48,8 +53,12 @@ Rule 6 exists because the job runs the working tree's binaries. `compare-set` al
 3. Children build, and the next child starts, while it runs. The organizer records the baseline when the job
    reports. A later landing waits only for the earlier run's result before it records its own.
 
-Quality is unchanged: it is the same set, comparer and per-question diff, still after every landing. Try it at the next
-landing. Measure the job's time against 15–18 min and confirm the verdicts match a normal run.
+Quality is unchanged: it is the same set, comparer and per-question diff, still after every landing.
+
+**Tried and adopted (52qh landing, 9964a534, 2026-11-21).** Run 52qh-1 took 930 s (896 s for growth-2) while two
+children worked and twelve oracle questions ran beside it. Its verdicts equal growth-2's on all 1,043 questions but
+the one the change moved (pop-visibility-snapshot: call 43 to Requery at 56): 178 of 1,043 on both. The procedure above
+now uses it.
 
 ## Proposed: one landing-check command over a persistent check folder
 

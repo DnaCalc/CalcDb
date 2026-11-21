@@ -596,3 +596,10 @@ AGENTS.md and landing-check.md. 3 and 4 are register rows (`mvgk`, `6zkg`) taken
 owner: 5 (a persistent check clone is a second checkout) and the two 6v2c decisions (keep completed tasks, commit
 `.alta/tasks/`). The probe round beside the children this morning (r-q11-ddl-closure, eac88c49: about 25 calls, one card)
 stayed with the organizer.
+
+**Change 1 measured (52qh landing, 2026-11-21).** The snapshot compare 52qh-1 ran in 930 s against growth-2's 896 s,
+with two children and an organizer probe round (r-q12-snapshot-fix, six questions) running beside it, and its verdicts
+equal growth-2's on every question but the one the change moved. Adopted: landing-check.md step 5. Third writer started
+under change 2 (Neon trial 7 on Sql) while two were running, so three code writers ran at once for the first time.
+Also seen: a landing's follow-up probes overturned the child's per-field rule within the hour (r-q12-snapshot-fix), so
+probing the open cases a child names before its next stretch paid off again.
