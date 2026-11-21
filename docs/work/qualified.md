@@ -436,6 +436,42 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: `evidence/r-q7-index-prefix/` (14 questions: text-ascending, text-descending, text-one, text-two, text-deleted-to-one, text-index-after-rows, text-no-common-prefix, text-ascending-compacted, long-ascending, long-split, long-split-descending, long-split-delete-narrow, long-split-insert-wider, text-split). Discriminators: insertion order, entry count, deletes before and after a split, index built before and after the rows, key type, compaction, an insert past the last leaf.
 - **Open**: an insert below a split leaf's first entry that shares fewer bytes than its prefix (with an existing leaf to the left); a second-level split (intermediate pages under the root); where ACE splits (602 and 598 entries for LONG keys, 401 and 299 for the text keys); whether an intermediate page that is not the root stores a prefix.
 
+### R-FMT-2 Overflow / deletion, Map ownership and growth (W-05): a grown row that no longer fits moves to the first FreeMap page with room, else to the lowest free page; its root becomes a 4-byte locator
+- **Claim**: When an UPDATE grows a row past its page's free space, ACE keeps a 4-byte root on the page and writes the whole grown row elsewhere:
+  - **Target choice.** ACE walks the table's FreeMap (slot 1 of its usage-map page) in ascending page order. It clears the bit of each page it finds without room and takes the first page with room. With none, it takes the lowest free page of the global map (page 1), even when that page belonged to another table. With no free page inside the file, the file grows by one page.
+  - **Root page.** The row's slot becomes `0x4000 | (old offset + old length - 4)`: the row's last 4 bytes hold the locator, target slot (1 byte) then target page (3 bytes LE). The rows stored below it (lower offsets) move up by old length - 4, and their slot offsets rise by that amount. The vacated bytes at the bottom keep their old content. The free-space word (bytes 2-3) rises by old length - 4. Nothing else on the page changes.
+  - **Target on a page of the table.** A new slot is appended (deleted slots are not reused), word `0x8000 | offset`, deleted flag only. The row sits directly below the page's lowest row, and the free word falls by length + 2. The maps and page 1 are not changed. Bits the walk did not reach stay set.
+  - **Target on a free page, reused or new.** The whole page is rewritten: `01 01`, the free word, the owning TDEF page (4 bytes LE), 4 zero bytes, slot count 1, slot 0 `0x8000 | (4096 - length)`, the row at the end of the page. Every other byte is zero, and a reused page's old rows are erased. The page is set in the table's owned map (slot 0) and its FreeMap (slot 1) and cleared in page 1. The previous owner's pages are not touched.
+  - **Page 0.** Byte 3586 counts +1 for the statement, and +1 more for the session's Close commit when page 1 changed (a free page was taken), as the extent note below says. Page 0 changes at no other byte.
+- **Byte values** (fixture r-fmt-2b-w-accdb, 4f42d3fa: Pg rows 1-4 on page 55, 1004 bytes each, 58 bytes free; Pg's maps on page 53, owned {55, 56, 57}, FreeMap {57}; page 122 the only free page inside the 123-page file; T1 of row 2 grown by 30 characters, so the row is 1064 bytes):
+  - Page 55: bytes 2-3 `3a 00` > `22 04` (1058). Slot 1 (bytes 16-17) `0828` > `4c10`, slot 2 `043c` > `0824`, slot 3 `0050` > `0438`. Locator `00 7a 00 00` at 3088. Rows 3 and 4 now lie at 2084 and 1080, and 80-1079 keep old bytes.
+  - Page 122: `01 01 c8 0b 34 00 00 00 00 00 00 00 01 00 d8 8b`, the row at 3032-4095, the rest zero.
+  - Page 53: owned map +122 (byte 4047 `00` > `04`). FreeMap {57} > {122}: byte 3970 `02` > `00` (57 had 58 bytes free, no room), 3978 `00` > `04`.
+  - Page 1: byte 4047 `fc` > `f8`. Page 0: byte 3586 `00` > `02`.
+  - Changed pages: 0, 1, 53, 55 and 122 only. The file's hash, 6f22c95a, equals r-fmt-2b pg-grow-row2-plus-30's, so this is the complete after-image.
+  - Row 2 grown by 60 characters (1124 bytes) gives the same page 55, and page 122 with free `8c 0b` and slot `9c 8b`. Row 4 (slot 3, the lowest row) moves no other row: slot 3 becomes `4438`, the locator sits at 1080, and 80-1079 keep old bytes.
+- **Conditions**: ACCDB, DAO `Database.Execute` UPDATE with dbFailOnError, shared sessions closed before the pages were read. The before-state was set up by earlier sessions in the same question. The FreeMap rows are type-0 bitmaps starting at page 0.
+- **Records**: `evidence/r-q16-overflow/` (9 questions, every page's hash after each session, pages 0 3584-3591, 1, 52-57, 106-110 and 119-125 kept inline):
+  - grow-row2-plus-30, grow-row2-plus-60, grow-row4-plus-60 repeat r-fmt-2b's after-hashes exactly (6f22c95a, df7b3622, b5db2da5).
+  - Discriminators of the target choice:
+    - no-free-grow-row2-plus-30: an earlier session's insert into Au4 takes page 122. The target is new page 123, the file is 507904 bytes, and page 1 4047 becomes `f0`.
+    - lower-free-grow-row2-plus-30: an earlier DELETE FROM Au1 frees page 110. The target is 110, and 122 stays free.
+    - reserved-grow-row2-plus-30: the insert in the same session. Every kept page equals no-free's, and only the counter differs: 3 for the one session against 4 for two.
+  - Discriminators of the FreeMap walk:
+    - room-last: rows 11 and 12 deleted, so 57 has 2066 bytes free. The target is 57 slot 4 (`8400`, locator `04 39 00 00`), and the FreeMap stays {57}.
+    - room-middle: rows 5 and 6 deleted, so 56 has room. The target is 56 slot 4, and the FreeMap stays {56, 57} although 57 has no room. This rules out a reset of the FreeMap to the target.
+    - noroom-middle-room-last: rows 5, 11 and 12 deleted, so 56 has 1062 bytes free, no room for 1064. The target is 57, and 56 is cleared from the FreeMap.
+  - Every target page, reused 122 or 110 or new 123, is byte for byte the same.
+- **Open**:
+  - The room test's exact bound, with or without the 2-byte slot: 1062 against 1064 does not decide it.
+  - Whether the walk starts at the FreeMap's first page or at the root page.
+  - "Lowest free page" and "first free page of the session's extent" coincide here, because the extent starts at the byte of the first free page.
+  - A page freed earlier in the same session.
+  - A row that is already an overflow row growing again, or shrinking back.
+  - DAO recordset Edit/Update instead of SQL UPDATE.
+  - MDB (r-fmt-2b mdb-pg-grow-row2-plus-30).
+  - The extent note's Open on free pages inside the file is answered for the net result only: a session that takes page 110 leaves 122 free after Close. Page 1 was not read inside the session.
+
 ### R-FMT-2 Text grammar (public round trip, corrected): Text and Memo store UTF-16 units as given, including NUL and lone surrogates, within the declared length, but a leading U+FEFF is not reliably kept
 
 - **Claim**: "wide €", a mixed narrow/wide string, a surrogate pair, a pair written reversed, a lone high and a lone low surrogate (alone and between letters), "a" NUL "b", U+0001, 254 letters plus a lone high surrogate, 253 letters plus a pair and letters around a pair are stored and read back with exactly the stored units, in Text and Memo, ACCDB and MDB (the bytes `00d8`, `00dc`, `00dc00d8` and `610000d86200` are read back; LEN counts each lone unit as 1 and a pair as 2; AscW of the lone surrogates reads -10240 and -9216). 50 narrow or 50 wide characters are accepted and 51 narrow characters are refused with 0x800A0C5B (3163). A string of U+FEFF followed by "x" reads back as "x" with LEN 1 in both columns and both formats, while U+FEFF followed by "bom first" read back intact in `text-grammar`; the lone-U+FEFF case reads back empty (R-STRING-1). An SQL UPDATE of a Text(20) column with 25 characters is not refused and stores the first 20.
