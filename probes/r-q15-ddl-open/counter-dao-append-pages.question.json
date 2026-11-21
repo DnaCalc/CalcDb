@@ -1,0 +1,433 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q15-ddl-open/counter-dao-append-pages",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-X",
+    "R-PRESERVE-1",
+    "R-TXN-1",
+    "TXN-DDL",
+    "R-CRASH-1",
+    "CRASH-ORDER",
+    "W-07/native-metadata-write"
+  ],
+  "description": "A copy of the r-cat-1-accdb-empty fixture (an empty database ACE created) opened read/write through DAO. One session: CreateTableDef(\"T\") with one Long field n, TableDefs.Append; pages 0-3, 17 and 42-43 kept at the return and 1.5 s later. The bytes 3584..3591 of page 0 and the page hashes are read after the open, right after each step, 1.5 s later, and after Close, with the ETW file-I/O trace. Asks when the page-0 commit counter at 3586 is written and when it rises.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo",
+    "etwFileIo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "h",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "h",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "h"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "td"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfs"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "n"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "tf"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "tf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tf"
+    },
+    {
+      "op": "release",
+      "target": "tfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "td"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "release",
+      "target": "td"
+    },
+    {
+      "op": "observeFiles",
+      "label": "append-at-return",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "h",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "h",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "h"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "ap",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 0,
+      "count": 16384,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 69632,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 172032,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "ap"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "append-1500ms",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "h",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "h",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "h"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "ap",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 0,
+      "count": 16384,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 69632,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 172032,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "ap"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "h",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "h",
+      "offset": 3584,
+      "count": 8,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "h"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "ap",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 0,
+      "count": 16384,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 69632,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "ap",
+      "offset": 172032,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "ap"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 1,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 0,
+      "count": 16384,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 28672,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 40960,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 69632,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 167936,
+      "count": 4096,
+      "keep": true
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg",
+      "offset": 172032,
+      "count": 8192,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg"
+    }
+  ]
+}

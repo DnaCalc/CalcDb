@@ -632,3 +632,16 @@ Quality held: every rule rechecked held, the note names its discriminators and o
 child's stops follow the rule. **Adopted:** a probe round of more than a few questions goes to an Opus high prober
 child; the organizer keeps single discriminators and reviews each note against its records before landing (AGENTS.md,
 Sub-sessions).
+
+**Change 6, second use (prober `01a1fbad`, r-q15-ddl-open, 2026-11-21).** The four cases the DDL child stopped on
+(inline long-value boundary, the file change of a refused 3010, when the extra commit is written, five orders) took
+about 100 calls and 40 min for 56 questions in 4 rounds, while four code writers ran. Review: 2 calls, three call-level
+rules rechecked against their records, all held; page-level rules are left to the next DDL stretch's byte tests. One
+gap: `show` prints no kept page bytes or diffs, so the prober wrote helpers in `%TEMP%` (task `8jq6`).
+
+**Observations (organizer 01a1fb8b, 2026-11-21).**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| `alta session send --queue-if-busy` to a running child | the note (the compare store is busy again) would reach it only after its turn | steer a running child (send without `--queue-if-busy`) when the note matters now; queue only what belongs to its next turn |
+| A child's ACE-side file bytes came from leftover unretained local attempts (c4rv) | a Matched verdict would rest on observations not retained (The Plan §2.4) and differ between machines | ACE's side of a byte comparison reads retained artifacts only; retaining new-file bytes is an owner decision (`fh8f`) |
