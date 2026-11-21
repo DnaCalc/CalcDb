@@ -94,9 +94,21 @@ try {
             }
             if (-not $trx) { Get-Content $log -Tail 15 | ForEach-Object { "  $_" } }
         }
-        # Replay counters the replay tests print (matched / mismatched / not modelled).
-        [regex]::Matches($text, '\d+ (checks )?matched[^.]{0,160}') | ForEach-Object { $_.Value } |
-            Group-Object | ForEach-Object { "    $($_.Count) x $($_.Name)" } | Select-Object -First 12
+        # Replay counters the replay tests print per record, summed by form (edit/lock "checks", action "actions").
+        $sums = @{}
+        foreach ($m in [regex]::Matches($text, '(\d+) (checks )?matched(?: \((\d+) actions\))?, (\d+) mismatched, (\d+) not modelled')) {
+            $form = if ($m.Groups[2].Success) { 'checks' } elseif ($m.Groups[3].Success) { 'actions' } else { 'values' }
+            if (-not $sums[$form]) { $sums[$form] = @(0, 0, 0, 0, 0) }
+            $s = $sums[$form]
+            $s[0] += [int] $m.Groups[1].Value; $s[1] += [int] $m.Groups[4].Value; $s[2] += [int] $m.Groups[5].Value
+            if ($m.Groups[3].Success) { $s[3] += [int] $m.Groups[3].Value }
+            $s[4]++
+        }
+        foreach ($form in $sums.Keys) {
+            $s = $sums[$form]
+            $acts = if ($form -eq 'actions') { " ($($s[3]) actions)" } else { "" }
+            "    replay $form`: $($s[0]) matched$acts, $($s[1]) mismatched, $($s[2]) not modelled, over $($s[4]) records"
+        }
         [regex]::Matches($text, 'MISMATCH: .{0,300}') | Select-Object -First 10 | ForEach-Object { "  $($_.Value)" }
     }
     $runner = Join-Path $Export "src\CalcDb.Oracle.Runner\bin\Debug\net11.0\calcdb-oracle.exe"
