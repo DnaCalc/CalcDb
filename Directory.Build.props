@@ -14,17 +14,25 @@
   </PropertyGroup>
 
   <!-- The source state a binary was built from (commit, plus "+dirty" when tooling paths had changes), embedded
-       as assembly metadata "CalcDbSource". Evidence records name the binaries that ran, not the tree at run time. -->
+       as assembly metadata "CalcDbSource". Evidence records name the binaries that ran, not the tree at run time.
+       An export has no .git: tools/landing-check.ps1 writes its state into calcdb-source.txt, which wins when
+       present; a tree with neither says "unknown". -->
   <Target Name="CalcDbSourceState" BeforeTargets="GetAssemblyAttributes" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+    <PropertyGroup>
+      <CalcDbSourceFile>$(MSBuildThisFileDirectory)calcdb-source.txt</CalcDbSourceFile>
+    </PropertyGroup>
+    <Exec Condition="!Exists('$(CalcDbSourceFile)')" Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitHead" />
+      <Output TaskParameter="ExitCode" PropertyName="CalcDbGitExit" />
     </Exec>
-    <Exec Command="git status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+    <Exec Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0'" Command="git status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitStatus" />
     </Exec>
     <PropertyGroup>
-      <CalcDbSource>$(CalcDbGitHead)</CalcDbSource>
-      <CalcDbSource Condition="'$(CalcDbGitStatus)' != ''">$(CalcDbGitHead)+dirty</CalcDbSource>
+      <CalcDbSource Condition="Exists('$(CalcDbSourceFile)')">$([System.IO.File]::ReadAllText('$(CalcDbSourceFile)').Trim())</CalcDbSource>
+      <CalcDbSource Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0'">$(CalcDbGitHead)</CalcDbSource>
+      <CalcDbSource Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0' And '$(CalcDbGitStatus)' != ''">$(CalcDbGitHead)+dirty</CalcDbSource>
+      <CalcDbSource Condition="'$(CalcDbSource)' == ''">unknown</CalcDbSource>
     </PropertyGroup>
     <ItemGroup>
       <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">

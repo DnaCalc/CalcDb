@@ -15,6 +15,10 @@ param(
     [switch] $Snapshot,                             # copy runner, worker, native to compare-bin\<Name>
     [string] $Export = "")
 $ErrorActionPreference = 'Stop'
+# pwsh -File passes "a,b" as one string: split lists on commas.
+$Files = @($Files | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$Tests = @($Tests | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$Questions = @($Questions | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 if ($Snapshot -and -not $Publish) { throw "-Snapshot needs -Publish: the compare set runs the export's native deployment" }
 $repo = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
 $head = (git -C $repo rev-parse --short HEAD).Trim()
@@ -48,6 +52,11 @@ foreach ($f in $Files) {
     Copy-Item $from $to -Force
 }
 Step "copied $($Files.Count) files"
+# The export has no .git; Directory.Build.props reads the source state the binaries record from this file.
+$full = (git -C $repo rev-parse HEAD).Trim()
+$tooling = $Files | Where-Object { ($_ -replace '\\', '/') -match '^(src|tools|tests)/|^(Directory\.Build\.props|global\.json|CalcDb\.slnx)$' }
+$changed = if ($tooling) { git -C $repo status --porcelain --untracked-files=all -- @tooling } else { $null }
+Set-Content (Join-Path $Export "calcdb-source.txt") ($(if ($changed) { "$full+dirty" } else { $full })) -NoNewline
 $staleFiles = git -C $repo status --porcelain --untracked-files=all | ForEach-Object { $_.Substring(3) -replace '"', '' } |
     Where-Object { $_ -notin ($Files | ForEach-Object { $_ -replace '\\', '/' }) -and $_ -notlike '.alta/*' }
 if ($staleFiles) { "  not in this landing (other children's or unrelated changes): $($staleFiles.Count) files" }
