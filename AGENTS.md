@@ -47,10 +47,10 @@ scope or design, the book wins.
   a single discriminator itself, a larger round through a prober child that writes only cards, probes,
   evidence and its qualified.md note (process log, change 6, 2026-11-21).
 - Before landing, check every rule the child wrote against a record that shows the very case the rule names, not a
-  neighbouring one, and read every test assertion a child changed against its record. Expect one generalization beyond the records
-  in a larger task; a Neon stretch of about 3,400 lines had eleven. For a stretch of more than about 1,000 lines, a
-  read-only reviewer child (a session other than the writer) does the rule-against-record check (process log, 2026-11-21, organizer 01a1fc2f).
-  Keep Neon stretches to one deliverable each.
+  neighbouring one, and read every test assertion a child changed against its record. Expect one generalization
+  beyond the records in a larger task; a Neon stretch of about 3,400 lines had eleven. For a stretch of more than
+  about 1,000 lines, a read-only reviewer child (a session other than the writer) does the rule-against-record check
+  (process log, 2026-11-21, organizer 01a1fc2f). Keep Neon stretches to one deliverable each.
 - Land a child's work by [docs/work/landing-check.md](docs/work/landing-check.md). When two children edited one file,
   stage only the landing child's hunks (a copy of the file, `git hash-object -w`, `git update-index --cacheinfo`) and
   check the staged diff; the working tree keeps the other child's lines.
