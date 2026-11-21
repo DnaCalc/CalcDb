@@ -117,11 +117,22 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 
     /// <summary>
     /// The failure an Invoke publishes when a declared scalar argument does not coerce, or null for the standard HRESULT
-    /// of VariantChangeType (DISP_E_TYPEMISMATCH). The argument's position is set either way. <paramref name="missing"/>
-    /// is a Missing argument for a required scalar parameter, which without a failure here reaches the operation as
-    /// omitted. A DAO Recordset answers 3421, and 3001 for Missing.
+    /// of VariantChangeType (DISP_E_TYPEMISMATCH). <paramref name="missing"/> is a Missing argument for a required scalar
+    /// parameter, which without a failure here reaches the operation as omitted. A DAO Recordset answers 3421, and 3001
+    /// for Missing.
     /// </summary>
     protected virtual Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => null;
+
+    /// <summary>
+    /// Whether an argument-conversion failure published through EXCEPINFO (<see cref="ArgumentConversionFailure"/>) also
+    /// writes the failing argument's rgvarg index into *puArgErr. DAO writes it across DbEngine, Database, Recordset, and
+    /// Field for both 3421 and Missing/3001 (r-dao-1-err-1/err-bind-types seq 58, 84; r-cursor-1b/open-argument-shapes
+    /// seq 204, seek-operator-spelling seq 138, 164; r-def-cursor-dao/chunk-read-offsets seq 27; r-wire/opt-createdatabase,
+    /// opt-createworkspace, opt-seek). ADO leaves *puArgErr untouched (0) on conversion exceptions
+    /// (r-ado-1b/conn-open-args seq 111: Connection.Open(Missing, Null, Null) fails at rgvarg[1] with argErr 0; zero
+    /// non-zero argErr events exist in any ADO record).
+    /// </summary>
+    protected virtual bool WritesArgErrorOnConversionException => true;
 
     /// <summary>
     /// The VariantChangeType flags of a declared scalar parameter's coercion: 0, as DispInvoke coerces, unless a class
@@ -143,6 +154,16 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         if (ArgumentCountFailure(member) is not { } failure)
         {
             return standard;
+        }
+        OnFailure(failure);
+        return ErrorPublication.ToExcepInfo(failure, info);
+    }
+
+    private int PublishConversionFailure(Failure failure, uint position, ExcepInfo* info, uint* argError)
+    {
+        if (argError is not null && WritesArgErrorOnConversionException)
+        {
+            *argError = position;
         }
         OnFailure(failure);
         return ErrorPublication.ToExcepInfo(failure, info);
@@ -339,12 +360,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                     if (passed && !member.Parameters[k].Optional && TypedCall.ScalarType(member.Parameters[k].Type) is not null
                         && ArgumentConversionFailure(member, missing: true) is { } missingFailure)
                     {
-                        if (argError is not null)
-                        {
-                            *argError = positions[k];
-                        }
-                        OnFailure(missingFailure);
-                        return ErrorPublication.ToExcepInfo(missingFailure, info);
+                        return PublishConversionFailure(missingFailure, positions[k], info, argError);
                     }
                     args[k] = 0;
                     if (!passed && !member.Parameters[k].Optional)
@@ -353,21 +369,19 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                     }
                     continue;
                 }
-                // Declared scalar parameters are coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's); a failure names the argument.
+                // Declared scalar parameters are coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's).
                 if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt && ((NativeVariant*)args[k])->Vt != (ushort)vt)
                 {
                     OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
                     if (c is null)
                     {
-                        // The argument's position is reported on both routes (r-cursor-1b/seek-operator-spelling: puArgErr 1 with 3421).
+                        if (ArgumentConversionFailure(member, missing: false) is { } conversion)
+                        {
+                            return PublishConversionFailure(conversion, positions[k], info, argError);
+                        }
                         if (argError is not null)
                         {
                             *argError = positions[k];
-                        }
-                        if (ArgumentConversionFailure(member, missing: false) is { } conversion)
-                        {
-                            OnFailure(conversion);
-                            return ErrorPublication.ToExcepInfo(conversion, info);
                         }
                         return hr;
                     }

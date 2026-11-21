@@ -105,6 +105,13 @@ internal abstract class AdoObject : DispatchObject
 
     protected override Operation? Find(MemberDecl member) => Table.Find(member);
 
+    /// <summary>
+    /// ACE's ADO leaves *puArgErr untouched (0) on argument-conversion failures published through EXCEPINFO
+    /// (r-ado-1b/conn-open-args seq 111: Connection.Open(Missing, Null, Null) fails at rgvarg[1] with argErr 0;
+    /// zero non-zero argErr values occur in any retained ADO record).
+    /// </summary>
+    protected override bool WritesArgErrorOnConversionException => false;
+
     public CallResult Fail(AdoError error, bool publishesErrorInfo = true) =>
         CallResult.Fail(AdoFailure(error, Source, Declaration.Iid, publishesErrorInfo));
 
