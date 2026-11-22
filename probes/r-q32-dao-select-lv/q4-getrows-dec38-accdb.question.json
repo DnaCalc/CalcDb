@@ -1,0 +1,97 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q32-dao-select-lv/q4-getrows-dec38-accdb",
+  "bookRefs": ["R-STRING-1", "R-ORACLE-1", "OR-WIRE", "W-08"],
+  "description": "Recordset.GetRows on ACCDB SELECT projecting Decimal(38) FDec: row-0 non-Null (WHERE ID >= 3) and row-0 Null / row-2 non-Null (all rows) on dynaset (2), snapshot (4) and forward-only (8), reading DBEngine.Errors, EOF, BOF and cursor position immediately after GetRows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q32-accdb.accdb",
+      "sha256": "55b55055cb8bcf929f6a3b29450ed0545dcb638b14d5b2a4134ac9f15588b0d0",
+      "length": 196608,
+      "provenance": "r-q32-dao-select-lv.create-accdb.8824e38fef.a1 qk1-8824e38fefc052646e65d875fc618064498a8c90056c010febf573f2e4ae94c0 output:r-q32-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db",
+      "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }]
+    },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rd0", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T WHERE ID >= 3 ORDER BY ID" }, { "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "rd0", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ed0" },
+    { "op": "forEachItem", "target": "ed0", "bind": "err", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "err", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Description", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "ed0" },
+    { "op": "invoke", "target": "rd0", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd0", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd0", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rd0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rd0" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rs0", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T WHERE ID >= 3 ORDER BY ID" }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "rs0", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "es0" },
+    { "op": "forEachItem", "target": "es0", "bind": "err", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "err", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Description", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "es0" },
+    { "op": "invoke", "target": "rs0", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rs0", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rs0", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rs0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs0" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rf0", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T WHERE ID >= 3 ORDER BY ID" }, { "type": "i4", "value": 8 }] },
+    { "op": "invoke", "target": "rf0", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ef0" },
+    { "op": "forEachItem", "target": "ef0", "bind": "err", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "err", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Description", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "ef0" },
+    { "op": "invoke", "target": "rf0", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rf0", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rf0", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rf0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rf0" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rd1", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T ORDER BY ID" }, { "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "rd1", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ed1" },
+    { "op": "forEachItem", "target": "ed1", "bind": "err", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "err", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Description", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "ed1" },
+    { "op": "invoke", "target": "rd1", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd1", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rd1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rd1" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rs1", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T ORDER BY ID" }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "rs1", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "rs1", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rs1", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rs1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs1" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rf1", "args": [{ "type": "bstr", "text": "SELECT ID, FDec FROM T ORDER BY ID" }, { "type": "i4", "value": 8 }] },
+    { "op": "invoke", "target": "rf1", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 10 }] },
+    { "op": "invoke", "target": "rf1", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rf1", "member": "Collect", "kind": "propertyGet", "args": [{ "type": "bstr", "text": "ID" }] },
+    { "op": "invoke", "target": "rf1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rf1" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
