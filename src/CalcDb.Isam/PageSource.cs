@@ -32,6 +32,9 @@ public readonly struct PageSource
     /// <summary>True when the overlay is resolved on each read from a <see cref="TransactionCoordinator"/> rather than fixed at construction.</summary>
     public bool IsDynamic => _overlaySource is TransactionCoordinator;
 
+    /// <summary>The Workspace transaction coordinator this source resolves dynamic overlays from, or null.</summary>
+    internal TransactionCoordinator? Coordinator => _overlaySource as TransactionCoordinator;
+
     /// <summary>The locker's current overlay whose revisions this source reads, or null for the committed images.</summary>
     public PrivateOverlay? Overlay => _overlaySource is TransactionCoordinator coordinator
         ? coordinator.OverlayOf(Cache)

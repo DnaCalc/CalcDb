@@ -1,5 +1,6 @@
 using CalcDb.Format;
 using CalcDb.Foundation.Diagnostics;
+using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
 
 namespace CalcDb.Isam;
@@ -898,6 +899,8 @@ internal static class StoragePercentLanding
 /// </summary>
 internal sealed class PopulationFamily : IDisposable
 {
+    private readonly record struct PopulationSavepoint(ExplicitFrame Frame, int ObservedCount);
+
     private PageSource _pages;
     private readonly FormatDescriptor _d;
     private readonly TableDefinition _table;
@@ -911,6 +914,11 @@ internal sealed class PopulationFamily : IDisposable
     private OccurrenceStore<RowId> _store;
     private SnapshotValues? _snapshot;
     private readonly List<PopulationCursor> _members = [];
+    private readonly List<PopulationSavepoint> _savepoints = [];
+    private TransactionCoordinator? _coordinator;
+    private ExplicitFrame? _lastRollbackFrame;
+    private bool _lastRollbackTruncated;
+    private int _lastRollbackBeforeCount;
     private PopulationCursor? _root;
     private bool _disposed;
 
@@ -928,6 +936,11 @@ internal sealed class PopulationFamily : IDisposable
         // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
         _snapshot = snapshot ? new SnapshotValues(pages.Cache) : null;
+        if (!snapshot && !forwardOnly && pages.Coordinator is { } coordinator)
+        {
+            _coordinator = coordinator;
+            coordinator.Register(this);
+        }
     }
 
     public PageSource Pages => _pages;
@@ -951,6 +964,16 @@ internal sealed class PopulationFamily : IDisposable
     public PopulationCursor? Root => _root;
 
     public bool RootAlive => _root is not null && _members.Contains(_root);
+
+    public bool TruncatedInRollback(ExplicitFrame frame) => ReferenceEquals(_lastRollbackFrame, frame) && _lastRollbackTruncated;
+
+    public int RollbackBeforeCount(ExplicitFrame frame) => ReferenceEquals(_lastRollbackFrame, frame) ? _lastRollbackBeforeCount : 0;
+
+    public bool IsMdbFile()
+    {
+        using PagePin? page0 = _pages.Cache.Pin(0).Pin;
+        return page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d);
+    }
 
     public void Attach(PopulationCursor member, bool isRoot)
     {
@@ -977,9 +1000,63 @@ internal sealed class PopulationFamily : IDisposable
             return;
         }
         _disposed = true;
+        _coordinator?.Unregister(this);
+        _coordinator = null;
+        _savepoints.Clear();
         _source.Dispose();
         _snapshot?.Dispose();
         _snapshot = null;
+    }
+
+    /// <summary>
+    /// Snapshot the current keyset population frontier when an explicit transaction level begins
+    /// (R-CURSOR-1 CUR-POP; r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail).
+    /// </summary>
+    internal void OnTransactionBegin(ExplicitFrame frame)
+    {
+        if (!_disposed)
+        {
+            _savepoints.Add(new PopulationSavepoint(frame, _store.ObservedCount));
+        }
+    }
+
+    /// <summary>Keep all occurrences populated inside <paramref name="frame"/> on CommitTrans (q5-dyn-big-addnew-unmoved-begintrans).</summary>
+    internal void OnTransactionCommit(ExplicitFrame frame)
+    {
+        if (_savepoints.Count > 0 && ReferenceEquals(_savepoints[^1].Frame, frame))
+        {
+            _savepoints.RemoveAt(_savepoints.Count - 1);
+        }
+    }
+
+    /// <summary>
+    /// Revert occurrences populated inside <paramref name="frame"/> on Rollback and update live family members:
+    /// a member on an ordinal at or past the saved frontier loses its current record (<see cref="PositionTag.RolledBackNoCurrent"/>:
+    /// q5-dyn-big-addnew-begintrans-after-open, r-cursor-1/edit-rollback-opened-before), while a member on an earlier
+    /// pre-transaction ordinal stays current with its row binding cleared so subsequent reads fetch committed pages
+    /// (r2-q5-dyn-big-begintrans-rollback-detail, r-txn-1b/rs-types-after-rollback, rs-position-after-rollback).
+    /// </summary>
+    internal void OnTransactionRollback(ExplicitFrame frame)
+    {
+        if (_disposed || _savepoints.Count == 0 || !ReferenceEquals(_savepoints[^1].Frame, frame))
+        {
+            return;
+        }
+        int savedCount = _savepoints[^1].ObservedCount;
+        _savepoints.RemoveAt(_savepoints.Count - 1);
+        int beforeCount = _store.ObservedCount;
+        bool truncated = beforeCount > savedCount;
+        _lastRollbackFrame = frame;
+        _lastRollbackTruncated = truncated;
+        _lastRollbackBeforeCount = beforeCount;
+        if (truncated)
+        {
+            _store.TruncateTo(savedCount);
+        }
+        foreach (PopulationCursor member in _members)
+        {
+            member.OnTransactionRollback(savedCount);
+        }
     }
 
     /// <summary>
@@ -1057,11 +1134,21 @@ internal sealed class PopulationFamily : IDisposable
             return false;
         }
         bool pagesChanged = !pages.SameSource(_pages);
+        if (pagesChanged && !_isSnapshot && !_forwardOnly && !ReferenceEquals(_coordinator, pages.Coordinator))
+        {
+            _coordinator?.Unregister(this);
+            _coordinator = pages.Coordinator;
+            _coordinator?.Register(this);
+        }
         _pages = pages;
         _pageCount = extent;
         _source.Dispose();
         _source = newScanSource;
         _store = newStore;
+        _savepoints.Clear();
+        _lastRollbackFrame = null;
+        _lastRollbackTruncated = false;
+        _lastRollbackBeforeCount = 0;
         _bookmarksInvalidatedByDelete = false;
         if (_isSnapshot)
         {
@@ -1205,6 +1292,21 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>True when this cursor was in BookmarkInvalid and a sibling deleted the remembered anchor row.</summary>
     public bool IsBookmarkInvalidAnchorDeleted => _bookmarkInvalidAnchorDeleted && _position.Tag == PositionTag.BookmarkInvalid;
 
+    /// <summary>True when the family's occurrence store has reached the end of its underlying scan.</summary>
+    public bool IsStoreComplete => _family.Store.Complete;
+
+    /// <summary>True when the family has populated past the initial 1-row frontier without completing the scan (e.g. RecordCount 501).</summary>
+    public bool IsPartiallyPopulated => !_family.Store.Complete && _family.Store.ObservedCount > 1;
+
+    /// <summary>True when rolling back <paramref name="frame"/> truncated rows populated inside that transaction.</summary>
+    public bool TruncatedInRollback(ExplicitFrame frame) => _family.TruncatedInRollback(frame);
+
+    /// <summary>The populated occurrence count immediately before <paramref name="frame"/> was rolled back, or 0 if not rolled back.</summary>
+    public int RollbackBeforeCount(ExplicitFrame frame) => _family.RollbackBeforeCount(frame);
+
+    /// <summary>True when this cursor reads from a Jet 4 MDB file rather than an ACCDB or synthetic cache.</summary>
+    public bool IsMdbFile => _family.IsMdbFile();
+
     public bool Bof => _position.Bof;
 
     public bool Eof => _position.Eof;
@@ -1283,6 +1385,25 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     }
 
     internal void RebindRow(PageSource pages) => _row.Rebind(pages);
+
+    internal void OnTransactionRollback(int savedCount)
+    {
+        _row.Unbind();
+        if (_position.Tag == PositionTag.At && _position.Current is int ord && ord >= savedCount)
+        {
+            _bookmarkInvalidAnchorDeleted = false;
+            _position.MarkRolledBackNoCurrent();
+        }
+        else if (_position.Tag == PositionTag.BookmarkInvalid && _position.BookmarkInvalidAnchor is int inv && inv >= savedCount)
+        {
+            _position.ClearBookmarkInvalidAnchor();
+            _bookmarkInvalidAnchorDeleted = false;
+        }
+        else if (_position.Tag is PositionTag.Deleted or PositionTag.DeletedBySibling && _position.DeletedBySiblingAnchor is int del && del >= savedCount)
+        {
+            _position.MarkRolledBackNoCurrent();
+        }
+    }
 
     /// <summary>
     /// Register a row inserted by this cursor's AddNew+Update at the end of the keyset and return its ordinal.
@@ -1506,7 +1627,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         OccurrenceStore<RowId> store = _family.Store;
         PositionTag tag = _position.Tag;
         int? current = _position.Current;
-        if (tag == PositionTag.CloneRequeried)
+        if (tag is PositionTag.CloneRequeried or PositionTag.RolledBackNoCurrent)
         {
             return new FindResult(FindOutcome.NotModelled);
         }

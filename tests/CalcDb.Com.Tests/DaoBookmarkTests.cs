@@ -347,10 +347,11 @@ public sealed unsafe class DaoBookmarkTests : IDisposable
     }
 
     [Fact]
-    public void Dynaset_with_in_transaction_AddNew_refuses_reads_after_Rollback_by_name()
+    public void Dynaset_opened_before_BeginTrans_reverts_AddNew_keyset_on_Rollback_and_opened_inside_refuses_by_name()
     {
-        // r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail: ACE reverts keyset rows populated during a rolled-back
-        // transaction and preserves the pre-transaction current row; refuse by name instead of answering 3021 or stale state.
+        // r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail: a dynaset opened before BeginTrans reverts rows
+        // populated during the rolled-back transaction while preserving its pre-transaction current row; Rollback on a
+        // dynaset opened inside BeginTrans after AddNew is not recorded and stays refused by name.
         DatabaseObject db = Open(Cursor1bMain, readOnly: false);
         WorkspaceObject ws = _engine.DefaultWorkspace;
         RecordsetObject d = OpenRecordset(db, "F", 2);
@@ -363,15 +364,35 @@ public sealed unsafe class DaoBookmarkTests : IDisposable
         Ok(PutFieldValue(d, "N", 9001));
         Ok(PutFieldValue(d, "S", "added"));
         Ok(Method(d, "Update"));
+        Assert.Equal(9, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal("08020000", Hex(BytesValue(Ok(Get(d, "LastModified")))));
         Ok(Method(ws, "Rollback"));
 
-        AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Get(d, "AbsolutePosition"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Get(d, "Bookmark"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Get(d, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Get(idField, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Method(d, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+        Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal(1, Int32Value(Ok(Get(idField, "Value"))));
         Ok(Method(d, "Close"));
+
+        // Opened inside BeginTrans + AddNew + Rollback: not recorded (q5-dyn-big-addnew-unmoved-begintrans only commits).
+        Ok(Method(ws, "BeginTrans"));
+        RecordsetObject inside = OpenRecordset(db, "F", 2);
+        FieldsObject insideFields = Recover<FieldsObject>(Ok(Get(inside, "Fields")));
+        FieldObject insideId = Recover<FieldObject>(Ok(Get(insideFields, "Item", "ID")));
+        Ok(Method(inside, "AddNew"));
+        Ok(PutFieldValue(inside, "ID", 9002));
+        Ok(PutFieldValue(inside, "N", 9002));
+        Ok(PutFieldValue(inside, "S", "inside"));
+        Ok(Method(inside, "Update"));
+        Ok(Method(ws, "Rollback"));
+
+        AssertNotModelled(Get(inside, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(inside, "AbsolutePosition"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(inside, "Bookmark"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(inside, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(insideId, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(inside, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+        Ok(Method(inside, "Close"));
     }
 
     [Fact]

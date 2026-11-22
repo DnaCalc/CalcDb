@@ -113,8 +113,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
         public (string Name, string Detail)? BookmarkBaseRefusal { get; set; }
 
-        /// <summary>Outermost explicit transaction frame in which this family executed an AddNew+Update (for Rollback refusal).</summary>
+        /// <summary>Outermost explicit transaction frame in which this family executed an AddNew+Update.</summary>
         public ExplicitFrame? AddedInFrame { get; set; }
+
+        /// <summary>Outermost explicit transaction frame in which this family executed an Edit+Update.</summary>
+        public ExplicitFrame? EditedInFrame { get; set; }
 
         public List<RecordsetObject> Live { get; } = [];
 
@@ -1008,9 +1011,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             {
                 Database.Engine.Changes.MarkPublished([change]);
             }
-            else if (mode == EditMode.AddNew && Database.Workspace.Transactions.Depth > 0)
+            else if (Database.Workspace.Transactions.Depth > 0)
             {
-                _family.AddedInFrame = Database.Workspace.Transactions.Frames[0];
+                if (mode == EditMode.AddNew)
+                {
+                    _family.AddedInFrame = Database.Workspace.Transactions.Frames[0];
+                }
+                else if (mode == EditMode.Edit)
+                {
+                    _family.EditedInFrame = Database.Workspace.Transactions.Frames[0];
+                }
             }
             Modified(mode, outcome);
         }
@@ -1020,11 +1030,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// LastModified after an accepted Update: an Edit's row is the current row, which Update keeps (CUR-EDIT), so its
     /// bookmark is the current one (r-cursor-1/edit-cancel-rollback: LastModified equals Bookmark after the Update). A
-    /// published AddNew row gets its landing root bookmark on a table-type cursor (r-cursor-1b/lastmodified-addnew call 18),
-    /// or its appended keyset bookmark on a dynaset (r-cursor-1/edit-addnew-generated call 41, r-cursor-1b/lastmodified-addnew
-    /// call 47, r-cursor-1b/lastmodified-clone-family call 35, r-def-cursor-dao/addnew-landing-by-index-and-type); when
-    /// no ordinal or bookmark base is available (inside a transaction, after a cursor Delete, or without a recorded base)
-    /// LastModified stays named.
+    /// published or single-level transacted AddNew row gets its landing root bookmark on a table-type cursor
+    /// (r-cursor-1b/lastmodified-addnew call 18), or its appended keyset bookmark on a dynaset
+    /// (r-cursor-1/edit-addnew-generated call 41, r-cursor-1b/lastmodified-addnew call 47, r-cursor-1b/lastmodified-clone-family
+    /// call 35, r-def-cursor-dao/addnew-landing-by-index-and-type, r-q24-bookmarks/q5-dyn-big-addnew-unmoved-begintrans,
+    /// q5-dyn-big-addnew-begintrans-after-open); when no ordinal or bookmark base is available (after a cursor Delete or
+    /// without a recorded base) LastModified stays named.
     /// </summary>
     private void Modified(EditMode mode, UpdateOutcome outcome)
     {
@@ -1049,12 +1060,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit or published AddNew Update wrote;
+    /// LastModified (VT_ARRAY|VT_UI1): the bookmark of the row the last accepted Edit or AddNew Update wrote;
     /// after an outermost Rollback a null array (TXN-CLOSE: r-cursor-1/edit-rollback-*, edit-cancel-rollback;
     /// CommitTrans keeps it, edit-commit-opened-inside). Before any Update a table-type or dynaset recordset answers a
     /// null array and a snapshot or forward-only one 3251 (r-dao-1b/recordset-members-table, -dynaset, -at-eof,
-    /// -snapshot, -forward-only). An AddNew whose keyset bookmark is not recorded (inside a transaction, after a cursor
-    /// Delete, or without a recorded base) refuses by name.
+    /// -snapshot, -forward-only). An AddNew whose keyset bookmark is not recorded (after a cursor Delete or without a
+    /// recorded base) refuses by name.
     /// </summary>
     private CallResult LastModified() => _lastModified switch
     {
@@ -1078,14 +1089,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     public RecordsetAfterRollback AfterRollback => _afterRollback;
 
     /// <summary>
-    /// A Rollback of <paramref name="level"/> (qualified.md R-TXN-1 TXN-CLOSE, the recordset after the resolution). The
-    /// outermost Rollback makes a table-type or dynaset recordset opened inside the level <see cref="RecordsetAfterRollback.Invalid"/>
-    /// and a dynaset opened outside every level <see cref="RecordsetAfterRollback.LostCurrentRecord"/>; both answer
-    /// LastModified with a null array. A snapshot or forward-only recordset opened inside the level, and any recordset
-    /// opened inside an inner level that is rolled back, are not recorded (<see cref="RecordsetAfterRollback.NotRecorded"/>).
-    /// A recordset opened before the level keeps its state in the cases the records do not cover (a table-type,
-    /// snapshot or forward-only one opened outside every level; any one at an inner Rollback). CommitTrans changes nothing
-    /// (edit-commit-opened-inside: the recordset reads on its row).
+    /// A Rollback of <paramref name="level"/> (qualified.md R-TXN-1 TXN-CLOSE, R-CURSOR-1 CUR-POP). The outermost Rollback
+    /// makes a table-type or dynaset recordset opened inside the level <see cref="RecordsetAfterRollback.Invalid"/> (except
+    /// a dynaset with in-transaction AddNew, which is not recorded). A dynaset opened outside every level has its keyset
+    /// reverted by <see cref="PopulationFamily"/>: if it stood on a row populated inside the level it enters
+    /// <see cref="RecordsetAfterRollback.LostCurrentRecord"/> (q5-dyn-big-addnew-begintrans-after-open, edit-rollback-opened-before);
+    /// if it stood on an unedited pre-transaction row it stays <see cref="RecordsetAfterRollback.Valid"/> on that row
+    /// (r2-q5-dyn-big-begintrans-rollback-detail, rs-types-after-rollback, rs-position-after-rollback); in both cases
+    /// LastModified is cleared to a null array. Unrecorded cases (opened-inside AddNew Rollback, inner-level keyset
+    /// rollback, MDB >500-row keyset rollback, staying on an edited pre-transaction row, snapshot/forward-only opened inside)
+    /// enter <see cref="RecordsetAfterRollback.NotRecorded"/>. CommitTrans keeps populated rows and position.
     /// </summary>
     /// <summary>A table-type or dynaset recordset locks its table against DDL while any member of its family is live; a snapshot or forward-only one is not recorded (<see cref="TableHold"/>).</summary>
     public TableHold Holds(string table) => _family.Live.Count == 0 || !string.Equals(_entry.Name, table, StringComparison.OrdinalIgnoreCase) ? TableHold.None
@@ -1113,7 +1126,13 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         if (Array.IndexOf(_openLevels, level) >= 0)
         {
-            if (outermost && RecordsetType is 1 or 2)
+            if (outermost && RecordsetType == 2 && ReferenceEquals(_family.AddedInFrame, level))
+            {
+                _afterRollback = RecordsetAfterRollback.NotRecorded;
+                _notRecorded = "a dynaset opened inside a rolled-back transaction after AddNew (not recorded; R-CURSOR-1 CUR-POP Open)";
+                _lastModified = LastModifiedMark.Cleared;
+            }
+            else if (outermost && RecordsetType is 1 or 2)
             {
                 _afterRollback = RecordsetAfterRollback.Invalid;
                 _lastModified = LastModifiedMark.Cleared;
@@ -1126,18 +1145,32 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                     : $"a recordset opened inside an inner level ({level.Level}) that was rolled back (TXN-CLOSE records the outermost level)";
             }
         }
-        else if (outermost && RecordsetType == 2 && _openLevels.Length == 0)
+        else if (RecordsetType == 2 && _openLevels.Length == 0)
         {
-            if (ReferenceEquals(_family.AddedInFrame, level))
+            if (!outermost)
+            {
+                if (Cursor is PopulationCursor innerPop && (innerPop.TruncatedInRollback(level) || innerPop.PositionTag == PositionTag.RolledBackNoCurrent) || _family.AddedInFrame is not null)
+                {
+                    _afterRollback = RecordsetAfterRollback.NotRecorded;
+                    _notRecorded = $"a dynaset opened outside the level after an inner Rollback (level {level.Level}) reverted keyset population (not recorded; R-CURSOR-1 CUR-POP Open)";
+                    _lastModified = LastModifiedMark.Cleared;
+                }
+                return;
+            }
+            _lastModified = LastModifiedMark.Cleared;
+            if (Cursor is PopulationCursor mdbPop && mdbPop.IsMdbFile && mdbPop.TruncatedInRollback(level) && mdbPop.RollbackBeforeCount(level) > 500)
             {
                 _afterRollback = RecordsetAfterRollback.NotRecorded;
-                _notRecorded = "a dynaset with an AddNew inside a rolled-back transaction: ACE reverts keyset rows populated during the transaction (r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail)";
-                _lastModified = LastModifiedMark.Cleared;
+                _notRecorded = "keyset rollback on an MDB dynaset over 500 rows (not recorded; R-CURSOR-1 CUR-POP Open)";
             }
-            else
+            else if (Cursor is PopulationCursor pop && pop.PositionTag == PositionTag.RolledBackNoCurrent)
             {
                 _afterRollback = RecordsetAfterRollback.LostCurrentRecord;
-                _lastModified = LastModifiedMark.Cleared;
+            }
+            else if (ReferenceEquals(_family.EditedInFrame, level))
+            {
+                _afterRollback = RecordsetAfterRollback.NotRecorded;
+                _notRecorded = "a dynaset staying on a pre-transaction row after an in-transaction Edit+Update was rolled back (not recorded)";
             }
         }
     }
@@ -1171,18 +1204,29 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     /// <summary>
-    /// A dynaset opened outside every level, after the outermost Rollback (r-cursor-1/edit-rollback-opened-before): EditMode
-    /// 0; Move 0 3021 from DAO.Recordset without an IErrorInfo; MoveFirst repositions and the recordset is valid again;
+    /// A dynaset opened outside every level whose current row was populated inside the rolled-back level
+    /// (r-cursor-1/edit-rollback-opened-before, r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open): EditMode 0;
+    /// RecordCount returns the reverted count; AbsolutePosition -1; Bookmark and Move 0 fail 3021 from DAO.Recordset
+    /// without an IErrorInfo; MoveFirst and MoveLast reposition onto surviving rows and make the recordset valid again;
     /// LastModified a null array; Close succeeds.
     /// </summary>
     private static readonly OperationTable LostCurrentOperations = new OperationTable(Decl)
         .Get("EditMode", (self, args) => Int16(0))
+        .Get("RecordCount", (self, args) => Operations.Find(Decl.Member("RecordCount", InvokeKind.PropertyGet))!(self, args))
+        .Get("AbsolutePosition", (self, args) => Operations.Find(Decl.Member("AbsolutePosition", InvokeKind.PropertyGet))!(self, args))
+        .Get("Bookmark", (self, args) => ((RecordsetObject)self).Fail(3021, DaoErrors.NoCurrentRecord))
         .Method("Move", (self, args) => Args.Int32(args[0], omitted: null) == 0 && (args.Length < 2 || args[1] == 0) ? ((RecordsetObject)self).Fail(3021, DaoErrors.NoCurrentRecord) : ((RecordsetObject)self).AfterRollbackNamed(Decl.Member("Move", InvokeKind.Method))(self, args))
         .Method("MoveFirst", (self, args) =>
         {
             var r = (RecordsetObject)self;
             r._afterRollback = RecordsetAfterRollback.Valid;
             return Operations.Find(Decl.Member("MoveFirst", InvokeKind.Method))!(self, args);
+        })
+        .Method("MoveLast", (self, args) =>
+        {
+            var r = (RecordsetObject)self;
+            r._afterRollback = RecordsetAfterRollback.Valid;
+            return Operations.Find(Decl.Member("MoveLast", InvokeKind.Method))!(self, args);
         })
         .Get("LastModified", (self, args) => NullArray)
         .Method("Close", (self, args) => Live(self, r => r.Close()));
@@ -1229,7 +1273,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         MoveOutcome.NotSupported when RecordsetType == 8 => Fail(3219, DaoErrors.InvalidOperation),
         MoveOutcome.NotModelled => Cursor is PopulationCursor { PositionTag: PositionTag.Requeried }
             ? CallResult.Fail(Failure.NotModelled("NotModelled.RequeriedMove", "MovePrevious or negative Move from Requeried state (not recorded)"))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkInvalidMove", "relative Move after a failed Bookmark assignment (not recorded)")),
+            : Cursor is PopulationCursor { PositionTag: PositionTag.RolledBackNoCurrent }
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "relative Move after a Rollback that lost the current record (not recorded)"))
+                : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkInvalidMove", "relative Move after a failed Bookmark assignment (not recorded)")),
         _ => CallResult.Fail(Failure.NotImplemented($"Recordset movement outcome {outcome}")),
     };
 
@@ -1435,6 +1481,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             _family.BookmarkBaseRefusal = newBookmarkBaseRefusal;
         }
         _family.AddedInFrame = null;
+        _family.EditedInFrame = null;
         _frame?.Discard();
         foreach (RecordsetObject member in _family.Live)
         {

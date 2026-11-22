@@ -1,0 +1,407 @@
+using System.Runtime.InteropServices;
+
+using CalcDb.Com.Com;
+using CalcDb.Com.Dao;
+using CalcDb.Com.Declarations;
+using CalcDb.Com.Host;
+using CalcDb.Foundation;
+using CalcDb.Values;
+
+namespace CalcDb.Com.Tests;
+
+/// <summary>
+/// R-CURSOR-1 CUR-POP (whxg): DAO-surface tests for dynaset keyset population inside transactions,
+/// <c>AddNew</c>+<c>Update</c> keyset registration and <c>LastModified</c>, <c>CommitTrans</c> preservation,
+/// <c>Rollback</c> reversion and position rules (<c>evidence/r-q24-bookmarks/q5-dyn-big-addnew-unmoved-begintrans</c>,
+/// <c>q5-dyn-big-addnew-begintrans-after-open</c>, <c>r2-q5-dyn-big-begintrans-rollback-detail</c>), and named refusals
+/// for unrecorded cases (Rollback on opened-inside AddNew dynaset, nested BeginTrans, partial-population AddNew,
+/// MDB dynasets over 500 rows, staying on a pre-transaction row after in-transaction Edit+Update Rollback).
+/// </summary>
+public sealed unsafe class DaoDynasetRollbackTests : IDisposable
+{
+    private const string QMain = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"; // r-q-cursor-dao-main.accdb
+    private const string Txn1bMdb = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75"; // r-txn-1b-main-mdb.mdb
+    private const string EditFixture = "71c42e613e63fe3e63f039644361c9de802a35d12605ec28ea0daa75f697f72b"; // r-cursor-1-edit.accdb
+
+    private readonly List<string> _files = [];
+    private readonly List<DatabaseObject> _databases = [];
+    private readonly List<nint> _cells = [];
+    private readonly List<(ComObject Obj, nint Ptr)> _held = [];
+    private readonly EngineState _engine = new(new HostBinding(0xDA0_7E62, Standalone: true, 0, 0, 0, 0, 0));
+
+    public void Dispose()
+    {
+        for (int i = _databases.Count - 1; i >= 0; i--)
+        {
+            if (!_databases[i].Closed)
+            {
+                _ = Method(_databases[i], "Close");
+            }
+        }
+        for (int i = _held.Count - 1; i >= 0; i--)
+        {
+            Marshal.Release(_held[i].Ptr);
+        }
+        foreach (nint cell in _cells)
+        {
+            var v = (NativeVariant*)cell;
+            if ((VarType)v->Vt == VarType.Bstr)
+            {
+                Marshal.FreeBSTR(v->Pointer);
+            }
+            NativeMemory.Free((void*)cell);
+        }
+        foreach (string file in _files)
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void Big_dynaset_opened_inside_BeginTrans_populates_on_AddNew_and_keeps_all_2049_rows_on_CommitTrans()
+    {
+        // r-q24-bookmarks/q5-dyn-big-addnew-unmoved-begintrans
+        DatabaseObject db = Open(QMain, ".accdb");
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+
+        Ok(Method(ws, "BeginTrans"));
+        RecordsetObject d = OpenRecordset(db, "Big", 2);
+        FieldObject fId = Field(d, "ID");
+        Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+
+        Ok(Method(d, "AddNew"));
+        Ok(Put(fId, "Value", 9001));
+        Ok(Method(d, "Update"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal("ec0a0000", Hex(BytesValue(Ok(Get(d, "LastModified")))));
+        Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+
+        Ok(Method(d, "MoveNext"));
+        Assert.Equal(1, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(2, Int32Value(Ok(Get(fId, "Value"))));
+
+        Ok(Method(d, "Move", 600));
+        Assert.Equal(601, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(602, Int32Value(Ok(Get(fId, "Value"))));
+        Assert.Equal("94040000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+
+        Ok(Method(d, "MoveLast"));
+        Assert.Equal(2048, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(9001, Int32Value(Ok(Get(fId, "Value"))));
+        Assert.Equal("ec0a0000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+
+        Ok(Method(d, "MovePrevious"));
+        Assert.Equal(2047, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(2048, Int32Value(Ok(Get(fId, "Value"))));
+        Assert.Equal("eb0a0000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+
+        Ok(Method(ws, "CommitTrans"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(2047, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("eb0a0000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal(2048, Int32Value(Ok(Get(fId, "Value"))));
+        Ok(Method(d, "Close"));
+    }
+
+    [Fact]
+    public void Big_dynaset_opened_before_BeginTrans_loses_current_after_MoveLast_and_Rollback_then_MoveLast_lands_on_row_0()
+    {
+        // r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open
+        DatabaseObject db = Open(QMain, ".accdb");
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+
+        RecordsetObject d = OpenRecordset(db, "Big", 2);
+        FieldObject fId = Field(d, "ID");
+        Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(d, "AddNew"));
+        Ok(Put(fId, "Value", 9001));
+        Ok(Method(d, "Update"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal("ec0a0000", Hex(BytesValue(Ok(Get(d, "LastModified")))));
+        Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+
+        Ok(Method(d, "Move", 600));
+        Assert.Equal(600, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(601, Int32Value(Ok(Get(fId, "Value"))));
+
+        Ok(Method(d, "MoveLast"));
+        Assert.Equal(2048, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal(9001, Int32Value(Ok(Get(fId, "Value"))));
+        Assert.Equal("ec0a0000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+
+        Ok(Method(ws, "Rollback"));
+        Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(-1, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        AssertDaoError(Get(d, "Bookmark"), 3021, "DAO.Recordset", errorInfo: false);
+        AssertDaoError(Get(fId, "Value"), 3021, "DAO.Field", errorInfo: true);
+
+        Ok(Method(d, "MoveLast"));
+        Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+        Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+        Ok(Method(d, "Close"));
+    }
+
+    [Fact]
+    public void Big_dynaset_staying_on_pre_transaction_row_reverts_frontier_for_unpopulated_and_prepopulated_cases()
+    {
+        // r-q24-bookmarks/r2-q5-dyn-big-begintrans-rollback-detail (Parts 1 & 2)
+        DatabaseObject db = Open(QMain, ".accdb");
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+
+        // Part 1: d1 unpopulated before BeginTrans -> stays on row 0, MoveNext hits EOF with RecordCount 1,
+        // MoveLast stays at RecordCount 1 / ID 1, Requery + MoveLast restores all 2048 rows.
+        RecordsetObject d1 = OpenRecordset(db, "Big", 2);
+        FieldObject f1Id = Field(d1, "ID");
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(d1, "AddNew"));
+        Ok(Put(f1Id, "Value", 9001));
+        Ok(Method(d1, "Update"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d1, "RecordCount"))));
+        Ok(Method(ws, "Rollback"));
+
+        Assert.Equal(1, Int32Value(Ok(Get(d1, "RecordCount"))));
+        Assert.Equal(0, Int32Value(Ok(Get(d1, "AbsolutePosition"))));
+        Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d1, "Bookmark")))));
+        Assert.Equal(1, Int32Value(Ok(Get(f1Id, "Value"))));
+
+        Ok(Method(d1, "MoveNext"));
+        Assert.Equal(-1, BoolValue(Ok(Get(d1, "EOF"))));
+        Assert.Equal(1, Int32Value(Ok(Get(d1, "RecordCount"))));
+
+        Ok(Method(d1, "MoveLast"));
+        Assert.Equal(1, Int32Value(Ok(Get(d1, "RecordCount"))));
+        Assert.Equal(1, Int32Value(Ok(Get(f1Id, "Value"))));
+
+        Ok(Method(d1, "Requery"));
+        Ok(Method(d1, "MoveLast"));
+        Assert.Equal(2048, Int32Value(Ok(Get(d1, "RecordCount"))));
+        Assert.Equal(2048, Int32Value(Ok(Get(f1Id, "Value"))));
+        Ok(Method(d1, "Close"));
+
+        // Part 2: d2 fully populated via MoveLast before BeginTrans -> reverts 2049 -> 2048, stays on ordinal 2047 / ID 2048.
+        RecordsetObject d2 = OpenRecordset(db, "Big", 2);
+        FieldObject f2Id = Field(d2, "ID");
+        Ok(Method(d2, "MoveLast"));
+        Assert.Equal(2048, Int32Value(Ok(Get(d2, "RecordCount"))));
+        Assert.Equal(2047, Int32Value(Ok(Get(d2, "AbsolutePosition"))));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(d2, "AddNew"));
+        Ok(Put(f2Id, "Value", 9002));
+        Ok(Method(d2, "Update"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d2, "RecordCount"))));
+        Ok(Method(ws, "Rollback"));
+
+        Assert.Equal(2048, Int32Value(Ok(Get(d2, "RecordCount"))));
+        Assert.Equal(2047, Int32Value(Ok(Get(d2, "AbsolutePosition"))));
+        Assert.Equal(2048, Int32Value(Ok(Get(f2Id, "Value"))));
+        Ok(Method(d2, "MoveLast"));
+        Assert.Equal(2048, Int32Value(Ok(Get(d2, "RecordCount"))));
+        Assert.Equal(2048, Int32Value(Ok(Get(f2Id, "Value"))));
+        Ok(Method(d2, "Close"));
+    }
+
+    [Fact]
+    public void Unrecorded_dynaset_transactional_and_population_cases_refuse_by_name()
+    {
+        // 1. Nested BeginTrans: AddNew+Update refuses by name, and inner Rollback reverting population refuses reads by name.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            FieldObject fId = Field(d, "ID");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "AddNew"));
+            Ok(Put(fId, "Value", 9001));
+            AssertNotModelled(Method(d, "Update"), "NotModelled.Edit.DynasetKeysetPopulation");
+            Ok(Method(d, "CancelUpdate"));
+
+            Ok(Method(d, "MoveNext"));
+            Assert.Equal(501, Int32Value(Ok(Get(d, "RecordCount"))));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(ws, "Rollback"));
+            Ok(Method(d, "Close"));
+        }
+
+        // 2. Partial population (RecordCount 501): AddNew+Update refuses by name.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            FieldObject fId = Field(d, "ID");
+            Ok(Method(d, "MoveNext"));
+            Assert.Equal(501, Int32Value(Ok(Get(d, "RecordCount"))));
+            Ok(Method(d, "AddNew"));
+            Ok(Put(fId, "Value", 9001));
+            AssertNotModelled(Method(d, "Update"), "NotModelled.Edit.DynasetKeysetPopulation");
+            Ok(Method(d, "CancelUpdate"));
+            Ok(Method(d, "Close"));
+        }
+
+        // 3. MDB dynaset over 500 rows: AddNew+Update refuses by name, and >500-row keyset rollback refuses by name.
+        {
+            DatabaseObject db = Open(Txn1bMdb, ".mdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            FieldObject fId = Field(d, "ID");
+
+            Ok(Method(d, "AddNew"));
+            Ok(Put(fId, "Value", 9001));
+            AssertNotModelled(Method(d, "Update"), "NotModelled.Edit.DynasetKeysetPopulation");
+            Ok(Method(d, "CancelUpdate"));
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "MoveLast"));
+            Assert.True(Int32Value(Ok(Get(d, "RecordCount"))) > 500);
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // 4. Staying on a pre-transaction row after in-transaction Edit+Update Rollback refuses by name.
+        {
+            DatabaseObject db = Open(EditFixture, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "G", 2);
+            FieldObject u = Field(d, "U");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "Edit"));
+            Ok(Put(u, "Value", "u9"));
+            Ok(Method(d, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(u, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+    }
+
+    private DatabaseObject Open(string fixtureSha, string extension)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-dyn-rollback-{Guid.NewGuid():N}{extension}");
+        File.WriteAllBytes(path, CalcDb.Evidence.ArtifactStore.ForRepository(DeclarationGenerationTests.Root()).ReadAll(fixtureSha));
+        _files.Add(path);
+        DatabaseObject db = Recover<DatabaseObject>(Ok(_engine.DefaultWorkspace.OpenDatabase([Arg(path), Arg(false), Arg(false)])));
+        _databases.Add(db);
+        return db;
+    }
+
+    private RecordsetObject OpenRecordset(DatabaseObject db, string source, int type) =>
+        Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", source, type)));
+
+    private FieldObject Field(DispatchObject rs, string name)
+    {
+        FieldsObject fields = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
+        return Recover<FieldObject>(Ok(Get(fields, "Item", name)));
+    }
+
+    private CallResult Call(DispatchObject target, string member, InvokeKind kind, params object?[] args)
+    {
+        nint[] cells = [.. args.Select(Arg)];
+        return target.Run(target.Declaration.Member(member, kind), cells);
+    }
+
+    private CallResult Method(DispatchObject target, string name, params object?[] args) =>
+        Call(target, name, InvokeKind.Method, args);
+
+    private CallResult Get(DispatchObject target, string name, params object?[] args) =>
+        Call(target, name, InvokeKind.PropertyGet, args);
+
+    private CallResult Put(DispatchObject target, string name, object? value) =>
+        Call(target, name, InvokeKind.PropertyPut, value);
+
+    private nint Arg(object? value)
+    {
+        var cell = (NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(NativeVariant));
+        switch (value)
+        {
+            case null:
+                cell->Vt = (ushort)VarType.Empty;
+                break;
+            case int i:
+                cell->Vt = (ushort)VarType.I4;
+                cell->Int64 = (uint)i;
+                break;
+            case bool b:
+                cell->Vt = (ushort)VarType.Bool;
+                cell->Int64 = b ? 0xFFFF : 0;
+                break;
+            case string s:
+                cell->Vt = (ushort)VarType.Bstr;
+                cell->Pointer = Marshal.StringToBSTR(s);
+                break;
+            default:
+                throw new NotSupportedException($"Test argument type {value.GetType()}");
+        }
+        _cells.Add((nint)cell);
+        return (nint)cell;
+    }
+
+    private static CallResult Ok(CallResult result)
+    {
+        Assert.True(result.Failure is null, result.Failure?.Description);
+        return result;
+    }
+
+    private T Recover<T>(CallResult result) where T : ComObject
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.Dispatch, result.Failure?.Description);
+        T obj = ComObject.Recover<T>(result.Scalar.Pointer);
+        _held.Add((obj, result.Scalar.Pointer));
+        return obj;
+    }
+
+    private static int Int32Value(CallResult result)
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.I4);
+        return (int)result.Scalar.Int64;
+    }
+
+    private static short BoolValue(CallResult result)
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.Bool);
+        return unchecked((short)result.Scalar.Int64);
+    }
+
+    private static byte[] BytesValue(CallResult result)
+    {
+        NativeVariant v = result.HasScalar ? result.Scalar : *result.Value!.Pointer;
+        Assert.Equal(VarType.Array | VarType.UI1, (VarType)v.Vt);
+        Assert.NotEqual(0, v.Pointer);
+        (int lower, int count) = SafeArrays.Shape(v.Pointer)[0];
+        byte[] bytes = count <= 0 ? [] : new Span<byte>(SafeArrays.ElementPointer(v.Pointer, lower), count).ToArray();
+        result.ReleaseUntaken();
+        return bytes;
+    }
+
+    private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
+
+    private static void AssertDaoError(CallResult result, int number, string source, bool errorInfo)
+    {
+        Assert.NotNull(result.Failure);
+        Assert.Equal(FailureKind.Dao, result.Failure!.Kind);
+        Assert.Equal(number, result.Failure.Number);
+        Assert.Equal(source, result.Failure.Source);
+        Assert.Equal(errorInfo, result.Failure.PublishesErrorInfo);
+    }
+
+    private static void AssertNotModelled(CallResult result, string expectedName)
+    {
+        Assert.NotNull(result.Failure);
+        Assert.Equal(FailureKind.NotModelled, result.Failure!.Kind);
+        Assert.StartsWith(expectedName + ":", result.Failure.Description);
+    }
+}
