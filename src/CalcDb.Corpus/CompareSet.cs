@@ -167,6 +167,13 @@ public static partial class CompareSet
         /// reported apart from <see cref="Gained"/> and <see cref="Lost"/> with its reason.
         /// </summary>
         TimingBoundary,
+
+        /// <summary>
+        /// A verdict flip (<c>Matched</c>/<c>AcceptedDifference</c> &lt;-&gt; <c>Mismatched</c>) between runs using different
+        /// comparison rules (<see cref="Run.Rule"/> differs); still counted in TOTAL, reported in its own section apart
+        /// from <see cref="Gained"/> and <see cref="Lost"/>.
+        /// </summary>
+        RuleChange,
     }
 
     public sealed record Change(ChangeKind Kind, string CaseId, Entry? Before, Entry? After, string? Reason = null);
@@ -176,6 +183,7 @@ public static partial class CompareSet
     {
         var old = before.Entries.ToDictionary(e => e.CaseId, StringComparer.Ordinal);
         var now = after.Entries.ToDictionary(e => e.CaseId, StringComparer.Ordinal);
+        bool ruleChanged = !string.Equals(before.Rule, after.Rule, StringComparison.Ordinal);
         Dictionary<string, string>? boundaryReasons = null;
         if (timingBoundaries is { Count: > 0 })
         {
@@ -194,12 +202,13 @@ public static partial class CompareSet
             bool isTimingBoundary = b is not null && a is not null
                 && boundaryReasons is not null
                 && boundaryReasons.TryGetValue(id, out boundaryReason)
-                && IsTimingBoundaryFlip(b, a);
+                && IsVerdictFlip(b, a);
             ChangeKind? kind = (b, a) switch
             {
                 (null, _) => ChangeKind.Added,
                 (_, null) => ChangeKind.Removed,
                 _ when isTimingBoundary => ChangeKind.TimingBoundary,
+                _ when ruleChanged && IsVerdictFlip(b, a) => ChangeKind.RuleChange,
                 _ when Good(a) && !Good(b) => ChangeKind.Gained,
                 _ when Good(b) && !Good(a) => ChangeKind.Lost,
                 _ when a.Status != b.Status => ChangeKind.Status,
@@ -209,13 +218,19 @@ public static partial class CompareSet
             };
             if (kind is { } k)
             {
-                changes.Add(new Change(k, id, b, a, k == ChangeKind.TimingBoundary ? boundaryReason : null));
+                string? reason = k switch
+                {
+                    ChangeKind.TimingBoundary => boundaryReason,
+                    ChangeKind.RuleChange => $"{before.Rule} -> {after.Rule}",
+                    _ => null,
+                };
+                changes.Add(new Change(k, id, b, a, reason));
             }
         }
         return changes;
     }
 
-    private static bool IsTimingBoundaryFlip(Entry before, Entry after) =>
+    private static bool IsVerdictFlip(Entry before, Entry after) =>
         (Good(before) && after.Status == nameof(ComparisonStatus.Mismatched))
         || (before.Status == nameof(ComparisonStatus.Mismatched) && Good(after));
 
@@ -307,6 +322,10 @@ public static partial class CompareSet
     {
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"against {before.Name} ({before.Source}, {before.Rule})\n");
+        if (!string.Equals(before.Rule, after.Rule, StringComparison.Ordinal))
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"rule changed: {before.Rule} -> {after.Rule}\n");
+        }
         var folders = before.Entries.Select(e => e.Folder).Union(after.Entries.Select(e => e.Folder)).Order(StringComparer.Ordinal);
         foreach (string folder in folders)
         {
@@ -316,7 +335,19 @@ public static partial class CompareSet
             sb.Append(CultureInfo.InvariantCulture, $"{mark} {folder,-24} {b.Count(Good),3}/{b.Length,-3} -> {a.Count(Good),3}/{a.Length,-3}\n");
         }
         sb.Append(CultureInfo.InvariantCulture, $"  {"TOTAL",-24} {before.Entries.Count(Good),3}/{before.Entries.Count,-3} -> {after.Entries.Count(Good),3}/{after.Entries.Count,-3} (matched or accepted / questions)\n");
-        foreach (IGrouping<ChangeKind, Change> group in changes.Where(c => c.Kind != ChangeKind.TimingBoundary).GroupBy(c => c.Kind).OrderBy(g => g.Key))
+        Change[] ruleFlips = [.. changes.Where(c => c.Kind == ChangeKind.RuleChange)];
+        if (ruleFlips.Length > 0)
+        {
+            int nowGood = ruleFlips.Count(c => Good(c.After!));
+            int nowBad = ruleFlips.Length - nowGood;
+            sb.Append(CultureInfo.InvariantCulture, $"RuleChange ({ruleFlips.Length}; +{nowGood}/-{nowBad}, counted in TOTAL, not in gained/lost):\n");
+            foreach (Change c in ruleFlips)
+            {
+                string first = c.After!.First.Length > 0 ? " " + c.After.First : "";
+                sb.Append(CultureInfo.InvariantCulture, $"  {c.CaseId}: {c.Before!.Status} -> {c.After.Status}{first}\n");
+            }
+        }
+        foreach (IGrouping<ChangeKind, Change> group in changes.Where(c => c.Kind is not ChangeKind.TimingBoundary and not ChangeKind.RuleChange).GroupBy(c => c.Kind).OrderBy(g => g.Key))
         {
             sb.Append(CultureInfo.InvariantCulture, $"{group.Key} ({group.Count()}):\n");
             foreach (Change c in group)

@@ -12,14 +12,16 @@ namespace CalcDb.Corpus;
 /// </summary>
 /// <remarks>
 /// A file a question created or changed is compared by its bytes outside ACE's clock fields when both files' bytes are
-/// available (revision 8, normalization <c>ace-clock-fields</c>, task c4rv); otherwise by its SHA-256, as before.
+/// available — directly or reconstructed from the capture's kept <c>nativeRead</c> pages and verified against its
+/// recorded SHA-256 (revision 8 task c4rv; revision 10 task 4t24, normalization <c>ace-clock-fields</c>) — and kept
+/// page-aligned <c>nativeRead</c> observations are compared by the same clock-field rule; otherwise by SHA-256, as before.
 /// </remarks>
 public static class CallTraceComparison
 {
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 9,
+        Revision = 10,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key; or (revision 6, R-ORACLE-1 OR-REUSE) the same question asked of the native installation twice, fresh and after a prehistory, compared with each other.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -40,9 +42,9 @@ public static class CallTraceComparison
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
-            new(ClockNormalization, "ACE writes its clock into a file it creates or changes, so two ACE runs of one question give files that differ there and nowhere else (r-fmt-1/create-accdb-empty a1/a3, r-q11-ddl-closure/create-one-long, r-q13-new-file-interop/ace-created a2/a3). This is ACE's own nondeterminism, not a CalcDb difference.",
-                "Revision 8: where the SHA-256 of a file observation differs and the bytes of both files are available (checked against their SHA-256), the files are compared byte for byte outside the clock fields each file's own structure locates (AceClockFields, ACE 2007 profile). The page-0 creation DATE, MSysObjects DateCreate and DateUpdate, and a chained long value's tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) are set aside; the page-0 password and the 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID are compared with each file's creation day and SID keystream removed. Each kind of field whose bytes differed is a note.",
-                "Any other byte, a different list of clock fields, a different length, another profile, and a file whose bytes are not available (compared by SHA-256, with a note) still differ.",
+            new(ClockNormalization, "ACE writes its clock into a file it creates or changes, so two ACE runs of one question give files and kept pages that differ there and nowhere else (r-fmt-1/create-accdb-empty a1/a3, r-q11-ddl-closure/create-one-long, r-q13-new-file-interop/ace-created a2/a3, r-q28-schema-write-open/pair-dao-Aa-aA, dao-fields-7, dao-long30-26). This is ACE's own nondeterminism, not a CalcDb difference.",
+                "Revision 8 (task c4rv) and revision 10 (task 4t24): where the SHA-256 of a file observation differs and both files' bytes are available — directly or reconstructed from the capture's kept nativeRead pages and verified against its recorded SHA-256 — the files are compared byte for byte outside the clock fields each file's own structure locates (AceClockFields, ACE 2007 profile); kept page-aligned nativeRead observations are compared by the same rule from each capture's own kept pages and input. The page-0 creation DATE, MSysObjects DateCreate and DateUpdate of every MSysObjects row — live, deleted (pair-dao-Aa-aA), or a vacated copy left below a later commit of the same row (dao-fields-7) — and a chained long value's tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) are set aside; the page-0 password and the 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID are compared with each file's creation day and SID keystream removed. Each kind of field whose bytes differed is a note.",
+                "Any other byte, a different list of clock fields, a different length, another profile, a non-page-aligned or non-MSysObjects kept read difference, and a file whose bytes are not available or do not hash to its recorded SHA-256 (compared by SHA-256, with a note) still differ.",
                 ["R-FMT-1 FMT1-CREATE", "R-CAT-1 CAT-NEW", "II-04 §7.1", "II-15 §12"]),
         ],
         AcceptedDifferences =
@@ -120,15 +122,24 @@ public static class CallTraceComparison
         HashSet<string> adoBindings = candidateModule is null ? [] : AdoBindings(expected);
         var accepted = new List<string>();
         var normalized = new List<string>();
+        var blockFiles = new Dictionary<string, VerifiedFilePair>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < Math.Min(expected.Length, actual.Length); i++)
         {
+            if (expected[i] is not HandleEvent || actual[i] is not HandleEvent)
+            {
+                blockFiles.Clear();
+            }
             if (expected[i] is InterfacesEvent { Target: var target } && adoBindings.Contains(target))
             {
                 SetAsideAdoApartment(expectedNodes[i], actualNodes[i], $"{expected[i].ProgramPath}", accepted);
             }
             if (expected[i] is FilesEvent && actual[i] is FilesEvent)
             {
-                CompareFileBytes(expectedNodes[i], actualNodes[i], $"{expected[i].ProgramPath}", oracleFiles, candidateFiles, normalized);
+                CompareFileBytes(expected, actual, i, expectedNodes[i], actualNodes[i], oracleFiles, candidateFiles, blockFiles, normalized);
+            }
+            else if (expected[i] is HandleEvent eh && actual[i] is HandleEvent ah)
+            {
+                CompareKeptRead(expected, actual, i, eh, ah, expectedNodes[i], actualNodes[i], oracleFiles, candidateFiles, blockFiles, normalized);
             }
         }
         for (int i = 0; i < Math.Max(expected.Length, actual.Length); i++)
@@ -153,35 +164,71 @@ public static class CallTraceComparison
         return Result(status, differences, truncated, [.. accepted, .. normalized]);
     }
 
+    private sealed class VerifiedFilePair(byte[] expected, byte[] actual)
+    {
+        public byte[] Expected { get; } = expected;
+        public byte[] Actual { get; } = actual;
+        public bool MapsComputed { get; set; }
+        public ClockFieldMap? ExpectedMap { get; set; }
+        public ClockFieldMap? ActualMap { get; set; }
+    }
+
+    private readonly record struct VerifiedReadSlice(long Offset, byte[] Bytes);
+
     /// <summary>
     /// Normalization <see cref="ClockNormalization"/>: each pair of observations of one file whose SHA-256 and nothing else
-    /// differs is compared by its bytes outside ACE's clock fields (<see cref="FileImageComparison"/>). Equal there, both
-    /// hashes read <see cref="EqualOutsideClock"/> and each kind of clock field that differed is a note; otherwise each
-    /// hash carries the first byte that differs outside them. Page hashes give way to the byte comparison.
+    /// differs is compared by its bytes outside ACE's clock fields (<see cref="FileImageComparison"/>). Where a side's whole
+    /// file was not retained, it may be reconstructed from the capture's kept <c>nativeRead</c> slices immediately following
+    /// the observation overlaid onto an earlier retained observation of the same file or the other side's verified full file,
+    /// accepted only when the reconstructed bytes hash to the exact recorded SHA-256 (revision 10, task 4t24). Equal outside
+    /// clock fields, both hashes read <see cref="EqualOutsideClock"/> and each kind of clock field that differed is a note;
+    /// otherwise each hash carries the first byte that differs outside them. Page hashes give way to the byte comparison.
     /// </summary>
-    private static void CompareFileBytes(JsonNode expected, JsonNode actual, string at, Func<string, byte[]?>? oracleFiles, Func<string, byte[]?>? candidateFiles, List<string> notes)
+    private static void CompareFileBytes(CaptureEvent[] expectedEvents, CaptureEvent[] actualEvents, int eventIndex,
+        JsonNode expected, JsonNode actual, Func<string, byte[]?>? oracleFiles, Func<string, byte[]?>? candidateFiles,
+        Dictionary<string, VerifiedFilePair> blockFiles, List<string> notes)
     {
         if (expected["files"] is not JsonArray e || actual["files"] is not JsonArray a)
         {
             return;
         }
+        string at = $"{expectedEvents[eventIndex].ProgramPath}";
         for (int i = 0; i < Math.Min(e.Count, a.Count); i++)
         {
             if (e[i] is not JsonObject x || a[i] is not JsonObject y
                 || x["relativePath"]?.ToJsonString() != y["relativePath"]?.ToJsonString()
                 || x["length"]?.ToJsonString() != y["length"]?.ToJsonString()
+                || x["relativePath"]?.GetValue<string>() is not { } relPath
+                || x["length"]?.GetValue<long>() is not { } length
                 || x["sha256"]?.GetValue<string>() is not { } xs || y["sha256"]?.GetValue<string>() is not { } ys
                 || string.Equals(xs, ys, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
-            string label = $"{ClockNormalization} {at} files[{i}] {x["relativePath"]?.GetValue<string>()}";
+            string label = $"{ClockNormalization} {at} files[{i}] {relPath}";
             byte[]? xb = Verified(oracleFiles, xs), yb = Verified(candidateFiles, ys);
+            if (xb is null)
+            {
+                xb = ReconstructFromReads(expectedEvents, eventIndex, relPath, length, xs, oracleFiles, otherFullFile: null);
+            }
+            if (yb is null)
+            {
+                yb = ReconstructFromReads(actualEvents, eventIndex, relPath, length, ys, candidateFiles, otherFullFile: null);
+            }
+            if (xb is null && yb is not null)
+            {
+                xb = ReconstructFromReads(expectedEvents, eventIndex, relPath, length, xs, oracleFiles, otherFullFile: yb);
+            }
+            if (yb is null && xb is not null)
+            {
+                yb = ReconstructFromReads(actualEvents, eventIndex, relPath, length, ys, candidateFiles, otherFullFile: xb);
+            }
             if (xb is null || yb is null)
             {
                 notes.Add($"{label}: the bytes of the {(xb is null ? "expected" : "actual")} file are not available; compared by SHA-256");
                 continue;
             }
+            blockFiles[relPath] = new VerifiedFilePair(xb, yb);
             FileImageVerdict verdict = FileImageComparison.Compare(xb, yb);
             x.Remove("pageHashes");
             y.Remove("pageHashes");
@@ -197,6 +244,254 @@ public static class CallTraceComparison
                 y["sha256"] = $"{ys}; at {verdict.Difference}: {verdict.Actual}";
             }
         }
+    }
+
+    /// <summary>
+    /// Normalization <see cref="ClockNormalization"/> for kept page-aligned <c>nativeRead</c> events (revision 10, task 4t24):
+    /// compares the kept pages outside ACE's clock fields using the full-file maps when verified for this block, or each
+    /// capture's own <see cref="PageClockContext"/> derived from its kept pages and retained input.
+    /// </summary>
+    private static void CompareKeptRead(CaptureEvent[] expectedEvents, CaptureEvent[] actualEvents, int eventIndex,
+        HandleEvent eh, HandleEvent ah, JsonNode expectedNode, JsonNode actualNode,
+        Func<string, byte[]?>? oracleFiles, Func<string, byte[]?>? candidateFiles,
+        Dictionary<string, VerifiedFilePair> blockFiles, List<string> notes)
+    {
+        const int pageSize = 4096;
+        if (eh.Op != "read" || ah.Op != "read" || !eh.Success || !ah.Success
+            || eh.RelativePath is not { } relPath || !string.Equals(relPath, ah.RelativePath, StringComparison.OrdinalIgnoreCase)
+            || eh.Offset is not { } offset || offset < 0 || offset != ah.Offset
+            || eh.BytesRead is not { } len || len <= 0 || len != ah.BytesRead
+            || offset % pageSize != 0 || len % pageSize != 0
+            || eh.Bytes is null || ah.Bytes is null
+            || eh.BytesSha256 is null || ah.BytesSha256 is null
+            || string.Equals(eh.BytesSha256, ah.BytesSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        byte[]? eb = VerifiedHex(eh.Bytes, eh.BytesSha256, len);
+        byte[]? ab = VerifiedHex(ah.Bytes, ah.BytesSha256, len);
+        if (eb is null || ab is null)
+        {
+            return;
+        }
+        FileImageVerdict? verdict = null;
+        if (blockFiles.TryGetValue(relPath, out VerifiedFilePair? pair)
+            && offset + len <= pair.Expected.Length && offset + len <= pair.Actual.Length
+            && pair.Expected.AsSpan((int)offset, len).SequenceEqual(eb)
+            && pair.Actual.AsSpan((int)offset, len).SequenceEqual(ab))
+        {
+            if (!pair.MapsComputed)
+            {
+                pair.ExpectedMap = AceClockFields.Find(pair.Expected, out _);
+                pair.ActualMap = AceClockFields.Find(pair.Actual, out _);
+                pair.MapsComputed = true;
+            }
+            if (pair.ExpectedMap is not null && pair.ActualMap is not null)
+            {
+                verdict = FileImageComparison.CompareSliceFromMaps(offset, eb, ab, pair.ExpectedMap, pair.ActualMap);
+            }
+        }
+        if (verdict is null)
+        {
+            PageClockContext? eCtx = BuildPageContext(expectedEvents, eventIndex, relPath, oracleFiles);
+            PageClockContext? aCtx = BuildPageContext(actualEvents, eventIndex, relPath, candidateFiles);
+            if (eCtx is null || aCtx is null)
+            {
+                return;
+            }
+            verdict = FileImageComparison.CompareSlice(offset, eb, ab, eCtx, aCtx);
+        }
+        if (expectedNode is not JsonObject xo || actualNode is not JsonObject yo)
+        {
+            return;
+        }
+        string label = $"{ClockNormalization} {eh.ProgramPath} read {relPath}@{offset}";
+        if (verdict.EqualOutsideClock)
+        {
+            xo["bytesSha256"] = EqualOutsideClock;
+            yo["bytesSha256"] = EqualOutsideClock;
+            xo["bytes"] = EqualOutsideClock;
+            yo["bytes"] = EqualOutsideClock;
+            notes.AddRange(verdict.Notes.Select(n => $"{label}: {n}"));
+        }
+        else
+        {
+            xo["bytesSha256"] = $"{eh.BytesSha256}; at {verdict.Difference}: {verdict.Expected}";
+            yo["bytesSha256"] = $"{ah.BytesSha256}; at {verdict.Difference}: {verdict.Actual}";
+        }
+    }
+
+    private static byte[]? ReconstructFromReads(CaptureEvent[] events, int filesEventIndex, string relativePath, long length,
+        string expectedSha256, Func<string, byte[]?>? filesResolver, byte[]? otherFullFile)
+    {
+        if (length <= 0 || length > int.MaxValue)
+        {
+            return null;
+        }
+        List<VerifiedReadSlice> reads = ReadsAdjacent(events, filesEventIndex, relativePath);
+        if (reads.Count == 0)
+        {
+            return null;
+        }
+        byte[]? earliest = EarliestRetainedFile(events, filesEventIndex, relativePath, filesResolver);
+        if (earliest is not null && TryOverlayReads(earliest, length, reads, expectedSha256) is { } fromEarliest)
+        {
+            return fromEarliest;
+        }
+        if (otherFullFile is not null && TryOverlayReads(otherFullFile, length, reads, expectedSha256) is { } fromOther)
+        {
+            return fromOther;
+        }
+        return null;
+    }
+
+    private static byte[]? TryOverlayReads(byte[] baseBytes, long length, List<VerifiedReadSlice> reads, string expectedSha256)
+    {
+        var rebuilt = new byte[length];
+        Array.Copy(baseBytes, 0, rebuilt, 0, Math.Min(baseBytes.Length, rebuilt.Length));
+        foreach (VerifiedReadSlice slice in reads)
+        {
+            if (slice.Offset < 0 || slice.Offset >= rebuilt.Length)
+            {
+                continue;
+            }
+            int copyLen = (int)Math.Min(slice.Bytes.Length, rebuilt.Length - slice.Offset);
+            Array.Copy(slice.Bytes, 0, rebuilt, slice.Offset, copyLen);
+        }
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(rebuilt)).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase)
+            ? rebuilt
+            : null;
+    }
+
+    private static List<VerifiedReadSlice> ReadsAdjacent(CaptureEvent[] events, int filesEventIndex, string relativePath)
+    {
+        var reads = new List<VerifiedReadSlice>();
+        for (int k = filesEventIndex + 1; k < events.Length && events[k] is HandleEvent h; k++)
+        {
+            TryAddRead(reads, h, relativePath);
+        }
+        if (reads.Count > 0)
+        {
+            return reads;
+        }
+        int start = filesEventIndex - 1;
+        while (start >= 0 && events[start] is HandleEvent)
+        {
+            start--;
+        }
+        for (int k = start + 1; k < filesEventIndex; k++)
+        {
+            TryAddRead(reads, (HandleEvent)events[k], relativePath);
+        }
+        return reads;
+    }
+
+    private static void TryAddRead(List<VerifiedReadSlice> reads, HandleEvent h, string relativePath)
+    {
+        if (h.Op == "read" && h.Success && string.Equals(h.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase)
+            && h.Offset is { } offset and >= 0 && h.BytesRead is { } len and > 0
+            && h.Bytes is not null && h.BytesSha256 is not null
+            && VerifiedHex(h.Bytes, h.BytesSha256, len) is { } bytes)
+        {
+            reads.Add(new VerifiedReadSlice(offset, bytes));
+        }
+    }
+
+    private static byte[]? EarliestRetainedFile(CaptureEvent[] events, int upToExclusive, string relativePath, Func<string, byte[]?>? filesResolver)
+    {
+        if (filesResolver is null)
+        {
+            return null;
+        }
+        for (int k = 0; k < Math.Min(upToExclusive, events.Length); k++)
+        {
+            if (events[k] is not FilesEvent fe)
+            {
+                continue;
+            }
+            foreach (FileObservation obs in fe.Files)
+            {
+                if (string.Equals(obs.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase)
+                    && obs.Sha256 is { } sha
+                    && Verified(filesResolver, sha) is { } bytes)
+                {
+                    return bytes;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static PageClockContext? BuildPageContext(CaptureEvent[] events, int handleIndex, string relativePath, Func<string, byte[]?>? filesResolver)
+    {
+        const int pageSize = 4096;
+        var blockPages = new Dictionary<uint, ReadOnlyMemory<byte>>();
+        int blockStart = handleIndex;
+        while (blockStart > 0 && events[blockStart - 1] is HandleEvent)
+        {
+            blockStart--;
+        }
+        int blockEnd = handleIndex;
+        while (blockEnd + 1 < events.Length && events[blockEnd + 1] is HandleEvent)
+        {
+            blockEnd++;
+        }
+        void CollectReads(int from, int toInclusive)
+        {
+            for (int k = from; k <= toInclusive; k++)
+            {
+                if (events[k] is not HandleEvent h || h.Op != "read" || !h.Success
+                    || !string.Equals(h.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase)
+                    || h.Offset is not { } offset || offset < 0 || offset % pageSize != 0
+                    || h.BytesRead is not { } len || len <= 0 || len % pageSize != 0
+                    || h.Bytes is null || h.BytesSha256 is null
+                    || VerifiedHex(h.Bytes, h.BytesSha256, len) is not { } bytes)
+                {
+                    continue;
+                }
+                int count = len / pageSize;
+                for (int p = 0; p < count; p++)
+                {
+                    uint pageNumber = (uint)((offset / pageSize) + p);
+                    blockPages.TryAdd(pageNumber, bytes.AsMemory(p * pageSize, pageSize));
+                }
+            }
+        }
+        CollectReads(blockStart, blockEnd);
+        CollectReads(0, blockStart - 1);
+        byte[]? retained = EarliestRetainedFile(events, events.Length, relativePath, filesResolver);
+        ReadOnlyMemory<byte>? PageAt(uint pageNumber)
+        {
+            if (blockPages.TryGetValue(pageNumber, out ReadOnlyMemory<byte> kept))
+            {
+                return kept;
+            }
+            long byteOffset = (long)pageNumber * pageSize;
+            return retained is not null && byteOffset + pageSize <= retained.Length
+                ? retained.AsMemory((int)byteOffset, pageSize)
+                : null;
+        }
+        return AceClockFields.TryBuildPageContext(PageAt, out PageClockContext? ctx, out _) ? ctx : null;
+    }
+
+    private static byte[]? VerifiedHex(string hex, string sha256, int expectedLength)
+    {
+        if (hex.Length != expectedLength * 2)
+        {
+            return null;
+        }
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromHexString(hex);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).Equals(sha256, StringComparison.OrdinalIgnoreCase)
+            ? bytes
+            : null;
     }
 
     /// <summary>The bytes a resolver gives for a SHA-256, only when they hash to it.</summary>

@@ -40,7 +40,8 @@ internal static partial class OwnedWorker
         string desktop = mainDesktop ? PrivateDesktop.MainName : PrivateDesktop.Name;
         string? instruction = mainDesktop ? MainDesktopInstruction : null;
         // R-CRASH-1 CRASH-ORDER: ACE attempts with etwFileIo record every file operation on their attempt files.
-        // Candidate attempts skip the ETW recorder (calls.trace@9 does not compare etw:file-io) and name the omission.
+        // Candidate attempts skip the ETW recorder (calls.trace@10 does not compare etw:file-io) and name the omission
+        // via Sealer.CandidateEtwSkippedStatus (historical @9 literal kept verbatim because Sealer matches it exactly).
         string questionFile = Path.Combine(attemptDir, "question.json");
         Question? question = File.Exists(questionFile) ? EvidenceJson.Read<Question>(questionFile) : null;
         EtwBridge? etw = null;

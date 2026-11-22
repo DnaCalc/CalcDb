@@ -10,10 +10,11 @@ namespace CalcDb.Corpus;
 public sealed record FileImageVerdict(bool EqualOutsideClock, string? Difference, string Expected, string Actual, IReadOnlyList<string> Notes);
 
 /// <summary>
-/// Compares two database images byte for byte except ACE's own clock (W-01/corpus-comparison, task c4rv; calls.trace
-/// revision 8): the clock fields of each file are derived from its own structure (<see cref="AceClockFields"/>), the
-/// two field lists must be the same, and the clock-normalized images must be equal. Where a file's fields cannot be
-/// derived, the images are compared strictly. This normalizes ACE's nondeterminism; it is not an accepted difference.
+/// Compares two database images (or kept page slices) byte for byte except ACE's own clock (W-01/corpus-comparison,
+/// tasks c4rv and 4t24; calls.trace revisions 8 and 10): the clock fields of each side are derived from its own
+/// structure (<see cref="AceClockFields"/>), the two field lists must be the same, and the clock-normalized bytes must
+/// be equal. Where a side's fields cannot be derived, the bytes are compared strictly. This normalizes ACE's
+/// nondeterminism; it is not an accepted difference.
 /// </summary>
 public static class FileImageComparison
 {
@@ -31,34 +32,94 @@ public static class FileImageComparison
         if (e is null || a is null)
         {
             string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
-            return First(expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+            return First(0, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
         }
-        for (int i = 0; i < Math.Max(e.Fields.Count, a.Fields.Count); i++)
+        return CompareMaps(0, expected.Span, actual.Span, e.PageSize, e.Fields, e.Normalized, a.PageSize, a.Fields, a.Normalized);
+    }
+
+    /// <summary>
+    /// Compares two page-aligned kept slices starting at <paramref name="fileOffset"/> outside ACE's clock fields using
+    /// each side's own <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24).
+    /// </summary>
+    public static FileImageVerdict CompareSlice(long fileOffset, ReadOnlyMemory<byte> expected, ReadOnlyMemory<byte> actual,
+        PageClockContext? expectedContext, PageClockContext? actualContext)
+    {
+        if (expected.Length != actual.Length)
         {
-            ClockField? x = i < e.Fields.Count ? e.Fields[i] : null;
-            ClockField? y = i < a.Fields.Count ? a.Fields[i] : null;
+            return new(false, "length", expected.Length.ToString(CultureInfo.InvariantCulture), actual.Length.ToString(CultureInfo.InvariantCulture), []);
+        }
+        if (expectedContext is null || actualContext is null)
+        {
+            string why = expectedContext is null ? "expected: no ACE 2007 page context" : "actual: no ACE 2007 page context";
+            return First(fileOffset, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+        }
+        ClockFieldMap? e = AceClockFields.FindInSlice(fileOffset, expected, expectedContext, out string? expectedRefusal);
+        ClockFieldMap? a = AceClockFields.FindInSlice(fileOffset, actual, actualContext, out string? actualRefusal);
+        if (e is null || a is null)
+        {
+            string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
+            return First(fileOffset, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+        }
+        return CompareMaps(fileOffset, expected.Span, actual.Span, e.PageSize, e.Fields, e.Normalized, a.PageSize, a.Fields, a.Normalized);
+    }
+
+    /// <summary>
+    /// Compares a slice <c>[fileOffset, fileOffset + length)</c> using full-file <see cref="ClockFieldMap"/>s already
+    /// derived for both sides (so chained LVAL stamps and MSysACEs SIDs on kept slices are included consistently).
+    /// </summary>
+    internal static FileImageVerdict CompareSliceFromMaps(long fileOffset, ReadOnlySpan<byte> expectedSlice, ReadOnlySpan<byte> actualSlice,
+        ClockFieldMap expectedMap, ClockFieldMap actualMap)
+    {
+        if (expectedSlice.Length != actualSlice.Length)
+        {
+            return new(false, "length", expectedSlice.Length.ToString(CultureInfo.InvariantCulture), actualSlice.Length.ToString(CultureInfo.InvariantCulture), []);
+        }
+        long end = fileOffset + expectedSlice.Length;
+        ClockField[] eFields = [.. expectedMap.Fields.Where(f => f.Offset >= fileOffset && f.Offset + f.Length <= end)];
+        ClockField[] aFields = [.. actualMap.Fields.Where(f => f.Offset >= fileOffset && f.Offset + f.Length <= end)];
+        return CompareMaps(fileOffset, expectedSlice, actualSlice,
+            expectedMap.PageSize, eFields, expectedMap.Normalized.AsSpan((int)fileOffset, expectedSlice.Length),
+            actualMap.PageSize, aFields, actualMap.Normalized.AsSpan((int)fileOffset, actualSlice.Length));
+    }
+
+    private static FileImageVerdict CompareMaps(long fileOffset, ReadOnlySpan<byte> expected, ReadOnlySpan<byte> actual,
+        int expectedPageSize, IReadOnlyList<ClockField> expectedFields, ReadOnlySpan<byte> expectedNormalized,
+        int actualPageSize, IReadOnlyList<ClockField> actualFields, ReadOnlySpan<byte> actualNormalized)
+    {
+        for (int i = 0; i < Math.Max(expectedFields.Count, actualFields.Count); i++)
+        {
+            ClockField? x = i < expectedFields.Count ? expectedFields[i] : null;
+            ClockField? y = i < actualFields.Count ? actualFields[i] : null;
             if (x is null || y is null || x.Kind != y.Kind || x.Offset != y.Offset || x.Length != y.Length)
             {
-                return new(false, $"clock field {i}", x is null ? "(none)" : $"{x.Kind} {x.Location(e.PageSize)} {x.Where}", y is null ? "(none)" : $"{y.Kind} {y.Location(a.PageSize)} {y.Where}", []);
+                return new(false, $"clock field {i}", x is null ? "(none)" : $"{x.Kind} {x.Location(expectedPageSize)} {x.Where}", y is null ? "(none)" : $"{y.Kind} {y.Location(actualPageSize)} {y.Where}", []);
             }
         }
-        if (First(e.Normalized, a.Normalized, e.PageSize, "outside ACE clock fields") is { } difference)
+        if (First(fileOffset, expectedNormalized, actualNormalized, expectedPageSize, "outside ACE clock fields") is { } difference)
         {
             return difference;
         }
         var notes = new List<string>();
-        int Differing(ClockField f) => CountDiffering(expected.Span.Slice((int)f.Offset, f.Length), actual.Span.Slice((int)f.Offset, f.Length));
-        foreach (IGrouping<ClockFieldKind, ClockField> kind in e.Fields.GroupBy(f => f.Kind))
+        foreach (IGrouping<ClockFieldKind, ClockField> kind in expectedFields.GroupBy(f => f.Kind))
         {
-            ClockField[] differing = [.. kind.Where(f => Differing(f) > 0)];
-            if (differing.Length == 0)
+            var differing = new List<(ClockField Field, int Bytes)>();
+            foreach (ClockField f in kind)
+            {
+                int local = (int)(f.Offset - fileOffset);
+                int diff = CountDiffering(expected.Slice(local, f.Length), actual.Slice(local, f.Length));
+                if (diff > 0)
+                {
+                    differing.Add((f, diff));
+                }
+            }
+            if (differing.Count == 0)
             {
                 continue;
             }
-            int bytes = differing.Sum(Differing);
-            string how = differing[0].SetAside ? "set aside" : "compared with the clock removed";
-            string at = string.Join(", ", differing.Take(ListedLocations).Select(f => f.Location(e.PageSize))) + (differing.Length > ListedLocations ? ", …" : "");
-            notes.Add(string.Create(CultureInfo.InvariantCulture, $"{kind.Key} ({how}): {differing.Length} of {kind.Count()} fields differ, {bytes} bytes: {at}"));
+            int bytes = differing.Sum(d => d.Bytes);
+            string how = differing[0].Field.SetAside ? "set aside" : "compared with the clock removed";
+            string at = string.Join(", ", differing.Take(ListedLocations).Select(d => d.Field.Location(expectedPageSize))) + (differing.Count > ListedLocations ? ", …" : "");
+            notes.Add(string.Create(CultureInfo.InvariantCulture, $"{kind.Key} ({how}): {differing.Count} of {kind.Count()} fields differ, {bytes} bytes: {at}"));
         }
         return new(true, null, "", "", notes);
     }
@@ -73,7 +134,7 @@ public static class FileImageComparison
         return n;
     }
 
-    private static FileImageVerdict? First(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, int pageSize, string context)
+    private static FileImageVerdict? First(long fileOffset, ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, int pageSize, string context)
     {
         int at = x.CommonPrefixLength(y);
         if (at == x.Length && x.Length == y.Length)
@@ -81,7 +142,8 @@ public static class FileImageComparison
             return null;
         }
         int end = Math.Min(Math.Min(x.Length, y.Length), at + 8);
-        string where = string.Create(CultureInfo.InvariantCulture, $"page {at / pageSize} offset 0x{at % pageSize:X} ({context})");
+        long pos = fileOffset + at;
+        string where = string.Create(CultureInfo.InvariantCulture, $"page {pos / pageSize} offset 0x{pos % pageSize:X} ({context})");
         return new(false, where, Convert.ToHexString(x[at..end]), Convert.ToHexString(y[at..end]), []);
     }
 }
