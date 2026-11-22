@@ -18,6 +18,7 @@ namespace CalcDb.Com.Tests;
 public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
 {
     private const string Txn1bAccdb = "cde7b712cc54e824851b29bf6e711b875a9018edb83b623b81a13a3798799ddb"; // r-txn-1b-main-accdb.accdb
+    private const string DefCursorMain = "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0"; // r-def-cursor-dao-main.accdb
 
     private readonly List<string> _files = [];
     private readonly List<DatabaseObject> _databases = [];
@@ -79,6 +80,71 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         AssertRow(rs, 3, 30, "r3");
         Ok(Method(rs, "Move", 0));
         AssertRow(rs, 3, 30, "r3");
+        Ok(Method(rs, "Close"));
+    }
+
+    [Fact]
+    public void Select_dynaset_opened_before_level_gives_3167_on_deleted_row_and_reads_committed_after_Rollback()
+    {
+        // r-txn-1b/rs-types-after-rollback (bd: calls 8, 12, 14-17, 34-42, 79, 92-100): SELECT dynaset opened before
+        // BeginTrans on ID=1 reads 3167 ("Record is deleted.", DAO.Field, with IErrorInfo) on ID, V and Z after the
+        // level's DELETE of ID=1, then after Rollback reads committed (1, 10, "r1").
+        DatabaseObject db = Open(Txn1bAccdb);
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+        SelectRecordsetObject bd = OpenSelect(db, "SELECT ID, V, Z FROM R ORDER BY ID", 2);
+        Ok(Method(bd, "MoveFirst"));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(db, "Execute", "DELETE FROM R WHERE ID = 1", 128));
+        Ok(Method(db, "Execute", "INSERT INTO R (ID, V, Z) VALUES (9, 90, 'r9')", 128));
+        Ok(Method(db, "Execute", "UPDATE R SET V = V + 1 WHERE ID = 3", 128));
+
+        Assert.False(BoolValue(Ok(Get(bd, "BOF"))));
+        Assert.False(BoolValue(Ok(Get(bd, "EOF"))));
+
+        foreach (string col in new[] { "ID", "V", "Z" })
+        {
+            CallResult read = FieldValue(bd, col);
+            AssertDaoError(read, 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: true);
+        }
+
+        Assert.Single(_engine.Errors);
+        Assert.Equal(3167, _engine.Errors[0].Number);
+        Assert.Equal("DAO.Field", _engine.Errors[0].Source);
+        Assert.Equal("Record is deleted.", _engine.Errors[0].Description);
+
+        Ok(Method(ws, "Rollback"));
+
+        Assert.False(BoolValue(Ok(Get(bd, "BOF"))));
+        Assert.False(BoolValue(Ok(Get(bd, "EOF"))));
+        AssertRow(bd, 1, 10, "r1");
+        Ok(Method(bd, "Close"));
+    }
+
+    [Fact]
+    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_expression_column_and_FieldSize()
+    {
+        // Unrecorded neighbouring cases on a deleted row of a SELECT dynaset stay refused by name:
+        // Collect, non-base expression column, and FieldSize of a Memo column. Uses the retained
+        // r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
+        DatabaseObject db = Open(DefCursorMain);
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+
+        SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, N + 1 AS W, Mm FROM T ORDER BY ID", 2);
+        Ok(Method(rs, "MoveFirst"));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(db, "Execute", "DELETE FROM T WHERE ID = 1", 128));
+
+        // Base column via Field.Value gives recorded 3167 (r-txn-1b/rs-types-after-rollback calls 41[0..2]).
+        AssertDaoError(FieldValue(rs, "ID"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: true);
+
+        // Neighbouring unrecorded cases stay refused by name.
+        AssertNotModelled(Get(rs, "Collect", 0), "NotModelled.CollectDeletedRow");
+        AssertNotModelled(FieldValue(rs, "W"), "NotModelled.SelectDeletedRowExpression");
+        AssertNotModelled(Get(GetField(rs, "Mm"), "FieldSize"), "NotModelled.FieldSizeDeletedRow");
+
+        Ok(Method(ws, "Rollback"));
         Ok(Method(rs, "Close"));
     }
 
@@ -465,12 +531,20 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Assert.StartsWith(expectedName + ":", result.Failure.Description);
     }
 
-    private static void AssertDaoError(CallResult result, int expectedNumber, string expectedSource)
+    private static void AssertDaoError(CallResult result, int expectedNumber, string expectedSource, string? expectedDescription = null, bool? publishesErrorInfo = null)
     {
         Assert.NotNull(result.Failure);
         Assert.Equal(FailureKind.Dao, result.Failure!.Kind);
         Assert.Equal(expectedNumber, result.Failure.Number);
         Assert.Equal(expectedSource, result.Failure.Source);
+        if (expectedDescription is not null)
+        {
+            Assert.Equal(expectedDescription, result.Failure.Description);
+        }
+        if (publishesErrorInfo is bool expectedInfo)
+        {
+            Assert.Equal(expectedInfo, result.Failure.PublishesErrorInfo);
+        }
     }
 
     private static int IntValue(CallResult result)
