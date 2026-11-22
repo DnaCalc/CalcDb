@@ -27,6 +27,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
     private QueryCatalog? _queries;
     private readonly ExpressionRuleBinder _ruleBinder;
     private IReadOnlyList<Relationship> _relationships;
+    private IReadOnlyList<CheckConstraintCatalogEntry> _checkConstraints;
     private CatalogRelationshipContext _relationshipContext;
     private ulong _pageCount;
     private readonly Dictionary<string, TableEditContext> _editContexts = new(StringComparer.OrdinalIgnoreCase);
@@ -46,6 +47,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog = CatalogBootstrap.Open(_cache, D, _pageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, _pageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
         _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, _pageCount, name => EditContext(name, out _));
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _sortOrder = header.SortOrder;
@@ -106,6 +108,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog = CatalogBootstrap.Open(_cache, D, PageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, PageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
         _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, PageCount, name => EditContext(name, out _));
     }
 
@@ -196,6 +199,33 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         return new IndexNavigator(SourceOf(workspace), D, index, table.FirstPage);
     }
 
+    private readonly Dictionary<string, (PropertyBlob Blob, CatalogCheckConstraint[] Catalog)> _syntheticChecks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Attach matching synthetic <c>LvProp CheckConstraints</c> and <c>MSysObjects Type = 9</c> metadata to a table
+    /// created by DDL in a test fixture (until <c>ALTER TABLE ... ADD CONSTRAINT ... CHECK</c> DDL writing lands).
+    /// </summary>
+    public void SetSyntheticCheckConstraints(string tableName, params (string Name, string Expression)[] constraints)
+    {
+        string key = DdlBinder.NameKey(tableName);
+        var sb = new System.Text.StringBuilder();
+        foreach ((string name, string expr) in constraints)
+        {
+            sb.Append(name).Append('\0').Append(expr).Append('\0');
+        }
+        sb.Append('\0');
+        var prop = new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, System.Text.Encoding.Unicode.GetBytes(sb.ToString()));
+        byte[] encoded = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ObjectValues, "", [prop])]);
+        PropertyBlob? blob = PropertyBlob.Read(encoded, out string? fail);
+        Assert.Null(fail);
+        CatalogCheckConstraint[] catalog = [.. constraints.Select((c, idx) => new CatalogCheckConstraint(c.Name, c.Expression, Id: unchecked((int)(0x80000005u + (uint)idx))))];
+        _syntheticChecks[key] = (blob!, catalog);
+        if (_editContexts.Remove(key, out TableEditContext? old))
+        {
+            old.Semantics.Dispose();
+        }
+    }
+
     public TableEditContext? EditContext(string tableName, out string? failure)
     {
         string key = DdlBinder.NameKey(tableName);
@@ -225,7 +255,19 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
                 return null;
             }
         }
-        MutationSemantics semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, D.IndexDescriptor);
+        IReadOnlyList<CatalogCheckConstraint> catalogChecks = CheckConstraintCatalog.ForTable(_checkConstraints, entry.Name);
+        if (_syntheticChecks.TryGetValue(key, out (PropertyBlob Blob, CatalogCheckConstraint[] Catalog) synthetic))
+        {
+            blob = synthetic.Blob;
+            catalogChecks = synthetic.Catalog;
+        }
+        MutationSemantics semantics = MutationSemantics.Compile(
+            entry.Name,
+            table,
+            blob,
+            _ruleBinder,
+            D.IndexDescriptor,
+            catalogChecks);
         IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
         var ctx = new TableEditContext(
             semantics,

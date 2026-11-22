@@ -28,6 +28,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
     private readonly CatalogSnapshot _catalog;
     private readonly ExpressionRuleBinder _binder;
     private readonly CatalogRelationshipContext _relationshipContext;
+    private readonly IReadOnlyList<CheckConstraintCatalogEntry> _checkConstraints;
     private readonly Dictionary<string, TableEditContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
 
     public ReplayFixture(string sha256)
@@ -39,6 +40,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _binder = new ExpressionRuleBinder(new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query));
         Relationships = RelationshipCatalog.Read(_cache, D, _catalog, _image.PageCount, out _) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, _image.PageCount, out _) ?? [];
         _relationshipContext = new CatalogRelationshipContext(_cache, D, Relationships, _image.PageCount, name => Table(name)?.Context);
     }
 
@@ -58,6 +60,8 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
     }
 
     public IReadOnlyList<Relationship> Relationships { get; }
+
+    public IReadOnlyList<CheckConstraintCatalogEntry> CheckConstraints => _checkConstraints;
 
     public CatalogSnapshot Catalog => _catalog;
 
@@ -102,7 +106,13 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
                     return null;
                 }
             }
-            var semantics = MutationSemantics.Compile(entry.Name, table, blob, _binder, D.IndexDescriptor);
+            var semantics = MutationSemantics.Compile(
+                entry.Name,
+                table,
+                blob,
+                _binder,
+                D.IndexDescriptor,
+                CheckConstraintCatalog.ForTable(_checkConstraints, entry.Name));
             IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
             context = new TableEditContext(semantics, new StoredUniqueProbe(_cache, D, table, _image.PageCount), 7177, relProbe is not null, new TableFootprints(_cache, D, table, _image.PageCount), relProbe);
             _contexts.Add(entry.Name, context);

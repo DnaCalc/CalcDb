@@ -484,9 +484,30 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(0, Get(rq, "EditMode"));
             Assert.Null(Call(errs, "Clear").Failure);
 
-            // #208-228: left out until fq9f: CK_Req_V was created via ALTER TABLE Req ADD CONSTRAINT CK_Req_V CHECK (V >= 0),
-            // and upstream CalcDb.Isam (MutationSemantics) currently enforces DAO ValidationRule properties (which
-            // AdoEditErrors maps to 3316 / Status=131072) without yet loading SQL CHECK constraints.
+            // #208-228: SQL CHECK constraint CK_Req_V (V >= 0) -> 3316, EditMode=2, Status=131072.
+            Assert.Null(Call(rq, "AddNew").Failure);
+            Assert.Null(Put(qId, "Value", 3).Failure);
+            Assert.Null(Put(qR, "Value", "r3").Failure);
+            Assert.Null(Put(qV, "Value", -1).Failure);
+            AssertError(
+                Call(rq, "Update"),
+                unchecked((int)0x80040E21),
+                AceSource,
+                "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.",
+                5003000u,
+                IidRowsetUpdate);
+            Assert.Equal(2, Get(rq, "EditMode"));
+            Assert.Equal(131072, Get(rq, "Status"));
+            AssertConnectionError0(
+                cn,
+                unchecked((int)0x80040E21),
+                "3316",
+                -541462135,
+                AceSource,
+                "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.");
+            Assert.Null(Call(rq, "CancelUpdate").Failure);
+            Assert.Equal(0, Get(rq, "EditMode"));
+            Assert.Null(Call(errs, "Clear").Failure);
 
             // #233-252: PK duplicate ID = 1 -> 3022, EditMode=2, Status=4096.
             Assert.Null(Call(rq, "AddNew").Failure);
@@ -870,8 +891,9 @@ public sealed unsafe class AdoImmediateEditTests
             Release(cnScope);
         }
 
-        // 3. r-oledb-odbc/txn-held-rows #146-161 on r-oledb-odbc-v2-accdb.accdb:
-        // Attributes=393216 set outside txn (never mutated inside txn); CommitTrans and RollbackTrans retain active txn.
+        // 3. r-oledb-odbc/txn-held-rows #146-161, #177 (91a0129038.a1) on r-oledb-odbc-v2-accdb.accdb:
+        // The record updates only h1 (Items.Txt), never Req; Attributes=393216 is set outside txn and CommitTrans /
+        // RollbackTrans retain an active transaction (so Close fails 0x800A0CAE).
         nint cnHeld = OpenAceConnection(dbPathHeld);
         try
         {
@@ -881,18 +903,14 @@ public sealed unsafe class AdoImmediateEditTests
             nint flds = (nint)Get(h1, "Fields")!;
             nint fTxt = (nint)Get(flds, "Item", "Txt")!;
 
-            nint hReq = New(OwnRecordset);
-            Assert.Null(Put(hReq, "CursorLocation", 2).Failure);
-            Assert.Null(Call(hReq, "Open", "SELECT ID, R FROM Req ORDER BY ID", new Dispatch(cnHeld), 1, 3, 1).Failure);
-            nint rFlds = (nint)Get(hReq, "Fields")!;
-            nint fR = (nint)Get(rFlds, "Item", "R")!;
-
             Assert.Null(Put(cnHeld, "Attributes", 393216).Failure);
+            Assert.Equal(393216, Get(cnHeld, "Attributes"));
             Assert.Equal(1, Call(cnHeld, "BeginTrans").Value);
 
-            // Upstream CalcDb.Isam (task zx68) refuses republishing Items row 1 because of unselected BINARY(16) column Bin
-            // (NotModelled.Edit.Publication). Assert the exact refusal (zx68), cancel it, and verify the
-            // retaining Attributes=393216 lifecycle on Req in the same connection while h1 remains open.
+            // Upstream CalcDb.Isam (task zx68) refuses republishing Items row 1 because of unselected BINARY(16) column
+            // Bin (NotModelled.Edit.Publication). Assert the exact zx68 refusal, cancel the edit, and verify the
+            // retaining Attributes=393216 CommitTrans/RollbackTrans/Close lifecycle from #146-161 and #177 without
+            // substituting another table.
             Assert.Null(Put(fTxt, "Value", "tx3").Failure);
             AssertError(
                 Call(h1, "Update"),
@@ -900,22 +918,12 @@ public sealed unsafe class AdoImmediateEditTests
                 expectedDescription: "NotModelled.Edit.Publication: field Bin: native type 9 has no fixed width of 16"); // zx68
             Assert.Null(Call(h1, "CancelUpdate").Failure);
 
-            Assert.Null(Put(fR, "Value", "tx3").Failure);
-            Assert.Null(Call(hReq, "Update").Failure);
-            Assert.Null(Call(cnHeld, "CommitTrans").Failure); // commits "tx3" and retains active txn
+            Assert.Null(Call(cnHeld, "CommitTrans").Failure); // retains active txn (#151)
+            Assert.Equal(4096, Get(cnHeld, "IsolationLevel")); // (#152)
+            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // retains active txn (#158)
+            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // still in retained txn (#159)
+            AssertError(Call(cnHeld, "Close"), unchecked((int)0x800A0CAE)); // (#177)
 
-            Assert.Null(Put(fR, "Value", "tx4").Failure);
-            Assert.Null(Call(hReq, "Update").Failure);
-            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // rolls back "tx4" -> "tx3" and retains active txn
-            Assert.Equal("tx3", Get(fR, "Value"));
-
-            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // still in retained txn
-            AssertError(Call(cnHeld, "Close"), unchecked((int)0x800A0CAE));
-
-            Release(fR);
-            Release(rFlds);
-            Assert.Null(Call(hReq, "Close").Failure);
-            Release(hReq);
             Release(fTxt);
             Release(flds);
             Assert.Null(Call(h1, "Close").Failure);

@@ -190,6 +190,7 @@ public sealed class EditFrame : IDisposable
     private LockResource? _editLock;
     private bool _conflictReported;
     private GeneratedTicket? _ticket;
+    private bool _autoNumberPersisted;
     private int _deferredRowCount;
     private readonly List<int> _deferredDecrements = [];
 
@@ -217,6 +218,20 @@ public sealed class EditFrame : IDisposable
 
     /// <summary>The object a lock conflict is reported from: DAO.Recordset, or DAO.Database for an action query's row (TXN-LOCAL).</summary>
     public MutationErrorSource ConflictSource { get; init; } = MutationErrorSource.Recordset;
+
+    /// <summary>
+    /// Whether an ad-hoc ADO <c>Connection.Execute</c> <c>INSERT ... VALUES</c> may evaluate a single non-null
+    /// <c>Long</c> SQL <c>CHECK</c> constraint on a Jet 4 MDB (<c>evidence/r-q30-sql-check/mdb-sat-ado-exec</c>,
+    /// <c>mdb-viol-ado-exec</c>). All other MDB routes stay refused.
+    /// </summary>
+    public bool AllowMdbCheckInsert { get; init; }
+
+    /// <summary>
+    /// Whether an ad-hoc ADO <c>Connection.Execute</c> <c>UPDATE</c> may assign <c>NULL</c> to a checked <c>Long</c>
+    /// column (<c>evidence/r-q30-sql-check/null-upd-ado-exec</c>). Other SQL <c>UPDATE</c>s setting a checked column to
+    /// a satisfying value stay refused.
+    /// </summary>
+    public bool AllowAdoCheckNullUpdate { get; init; }
 
     public EditMode Mode { get; private set; }
 
@@ -324,6 +339,13 @@ public sealed class EditFrame : IDisposable
             return EditOutcome.NotModelled(MutationOpen.RepeatedAddNew, "AddNew during AddNew: whether the first ticket is consumed and the defaults sampled again is not recorded");
         }
         MutationSemantics s = _table.Semantics;
+        if (s.AutoNumber is { } autoWithCheck && s.HasCheckConstraints)
+        {
+            if (CheckAutoNumberWithCheckNotAdmitted(s, autoWithCheck, isAddNew: true) is { } autoCheckReason)
+            {
+                return EditOutcome.NotModelled(MutationOpen.Rule, autoCheckReason);
+            }
+        }
         var defaults = new NativeValue?[_cells.Length];
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -364,12 +386,15 @@ public sealed class EditFrame : IDisposable
             }
             // Under unit increment outside a SQL action statement and outside an explicit transaction, DAO AddNew
             // persists 0x14..0x17 eagerly so CancelUpdate leaves it on disk (r-q10-commit-counter-edits/addnew-cancel-once).
+            // On a table with a CHECK constraint, defer writing 0x14..0x17 until Update confirms the CHECK stage won
+            // (evidence/r-q30-sql-check/autonum-viol-dao-rs), so an explicit AutoNumber assignment or BeginTrans before
+            // Update can refuse cleanly with zero disk writes.
             // Inside an explicit transaction (Depth > 0), disk write-back waits for CommitTrans or Rollback
             // (evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage). Inside a SQL action
             // statement (InStatement), Update/EndStatement publishes 0x14..0x17 and bumps page 0 +3586 once
             // (evidence/r-q23-counter-step/sql-100-1-ins1). Under a non-1 increment, CancelUpdate is Open
             // (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open), so disk write-back happens at Update (evidence/r-q23-counter-step/).
-            if (counter.Increment == 1 && !_workspace.InStatement && _workspace.Depth == 0 && _table.Writer is { } writer && _workspace.Publisher is not null && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
+            if (counter.Increment == 1 && !s.HasCheckConstraints && !_workspace.InStatement && _workspace.Depth == 0 && _table.Writer is { } writer && _workspace.Publisher is not null && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
             {
                 CompiledChange advance = writer.CompileAutoNumberAdvance(unchecked((uint)(int)newTicket.Value), _workspace.OverlayOf(writer.File));
                 if (advance.Change is not { } compiled)
@@ -405,6 +430,7 @@ public sealed class EditFrame : IDisposable
             }
         }
         ReleaseTicket();
+        _autoNumberPersisted = false;
         // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
         ReleaseEditLock();
         _originals = null;
@@ -453,6 +479,12 @@ public sealed class EditFrame : IDisposable
         if (column.IsAutoNumber && Mode == EditMode.Edit)
         {
             return EditOutcome.NotModelled(MutationOpen.ConversionNotRecorded, "a put into an AutoNumber field during Edit is not recorded");
+        }
+        if (column.IsAutoNumber && Mode == EditMode.AddNew && _table.Semantics.HasCheckConstraints)
+        {
+            return EditOutcome.NotModelled(
+                MutationOpen.Rule,
+                $"CHECK constraint {DescribeCheckConstraints(_table.Semantics)} on {_table.Semantics.TableName}: explicit assignment to AutoNumber column '{column.Name}' on a CHECK table is not recorded");
         }
         if (column.IsAutoNumber && Mode == EditMode.AddNew && _table.Counter is { Increment: not 1 } c)
         {
@@ -538,15 +570,16 @@ public sealed class EditFrame : IDisposable
         // (3316/3317, 3802), unique index (3022) (CUR-EDIT, edit-validation-order), and on a parent-key UPDATE whose
         // new key collides with the PK while children still reference the old key, parent RI (3200) beats PK (3022)
         // (evidence/r-dao-1-err-1/err-partial-constraint call 45, `UPDATE T SET ID = ID + 1` with dbFailOnError).
-        // Zero-length text (3315), the table rule, a Null in a Null-refusing index (3058), and child RI (3201) are
-        // each recorded alone. So the earliest failing class of the Recorded chain decides when every other failing
-        // class comes after it in the chain, and parent 3200 decides over 3022; any other combination is named, as is
-        // a failing check at depth 6 or 7, where the order of 3003 against the checks is not recorded.
-        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), default, default, default];
-        (stages[4], stages[5], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
+        // Zero-length text (3315), the table rule, SQL CHECK constraints (3317 / ADO 3316), a Null in a Null-refusing
+        // index (3058), and child RI (3201) are each recorded alone. So the earliest failing class of the Recorded
+        // chain decides when every other failing class comes after it in the chain, and parent 3200 decides over 3022;
+        // any other combination is named, as is a failing check at depth 6 or 7, where the order of 3003 against the
+        // checks is not recorded.
+        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), CheckConstraintCheck(), default, default, default];
+        (stages[5], stages[6], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
         IReadOnlyList<CascadeStep>? cascades = null;
-        stages[6] = RelationshipUpdateCheck(out cascades);
-        UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary);
+        stages[7] = RelationshipUpdateCheck(out cascades);
+        UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary, out int winningStage);
         if (decided is { } failure)
         {
             if (!failure.Succeeded && _workspace.Depth > TransactionCoordinator.MaxWriteDepth)
@@ -789,12 +822,19 @@ public sealed class EditFrame : IDisposable
                         && _workspace.OverlayOf(refusedWriter.File) is null
                         && refusedWriter.IsAccdb(null)
                         && s.Columns.Any(c => c.Column.TypeCode == NativeTypes.Memo
-                            && string.Equals(c.QualifiedName, failure.Error?.Argument, StringComparison.OrdinalIgnoreCase)))))
+                            && string.Equals(c.QualifiedName, failure.Error?.Argument, StringComparison.OrdinalIgnoreCase)))
+                    || (winningStage == CheckStage
+                        && failure.Error?.Number == MutationError.RuleWithoutText
+                        && _workspace.Depth == 0
+                        && _workspace.OverlayOf(refusedWriter.File) is null
+                        && refusedWriter.IsVerifiedAccdb(null))))
             {
                 // R-TXN-1 TXN-STMT, R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/ins-req-3314-fail,
-                // ins-val-3316-fail; memo-zerolength-false-fail, memo-zerolength-unset-fail):
-                // - 3314/3316 inside an autocommit dbFailOnError ACCDB INSERT ... SELECT statement level, or
-                // - 3315 on a Memo column in a single-row autocommit ACCDB SQL INSERT
+                // ins-val-3316-fail; memo-zerolength-false-fail, memo-zerolength-unset-fail;
+                // evidence/r-q30-sql-check/autonum-viol-ado-exec, autonum-viol-dao-exec):
+                // - 3314/3316 inside an autocommit dbFailOnError ACCDB INSERT ... SELECT statement level,
+                // - 3315 on a Memo column in a single-row autocommit ACCDB SQL INSERT, or
+                // - 3317 won by CheckStage in a single-row autocommit ACCDB SQL INSERT
                 // persists the refused row's generated AutoNumber advance (offset 20) into the statement's overlay
                 // without incrementing RowCount or index counters.
                 if (AutoNumberFloor(refusedAutoVal.Integer, reseed: false) is { } refusedFloor)
@@ -819,6 +859,49 @@ public sealed class EditFrame : IDisposable
                     {
                         return new UpdateOutcome(null, advOpen, advDetail);
                     }
+                }
+            }
+            else if (Mode == EditMode.AddNew
+                && !_workspace.InStatement
+                && winningStage == CheckStage
+                && failure.Error?.Number == MutationError.RuleWithoutText
+                && !_autoNumberPersisted
+                && s.AutoNumber is { } rsRefusedAuto
+                && !_cells[rsRefusedAuto.Ordinal].Assigned
+                && _table.Counter is { Increment: 1 }
+                && _table.Writer is { } rsRefusedWriter
+                && _workspace.Publisher is not null
+                && _workspace.Depth == 0
+                && CandidateValue(rsRefusedAuto.Ordinal) is { Kind: NativeKind.Long } rsRefusedVal
+                && rsRefusedWriter.IsVerifiedAccdb(_workspace.OverlayOf(rsRefusedWriter.File)))
+            {
+                // evidence/r-q30-sql-check/autonum-viol-dao-rs: a DAO recordset AddNew on an AutoNumber + CHECK table
+                // defers writing TableDef offset 20 until Update confirms CheckStage won (avoiding disk mutation if
+                // the caller assigns AutoNumber or opens BeginTrans before Update), then persists the consumed counter
+                // advance and +1 on ACCDB page 0 offset 3586 while leaving EditMode = AddNew.
+                if (AutoNumberFloor(rsRefusedVal.Integer, reseed: false) is { } rsFloor)
+                {
+                    CompiledChange adv = rsRefusedWriter.CompileAutoNumberAdvance(rsFloor, _workspace.OverlayOf(rsRefusedWriter.File));
+                    if (adv.Change is not { } advCompiled)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.Publication, adv.NotWritten);
+                    }
+                    (MutationOpen advOpen, string? advDetail) = _workspace.PublishNonTransactional(
+                        rsRefusedWriter.File,
+                        advCompiled.Edits,
+                        advCompiled.Footprint,
+                        CommitMode.LazyBurst,
+                        ConflictSource,
+                        out MutationError? advPubError);
+                    if (advPubError is not null)
+                    {
+                        return new UpdateOutcome(advPubError);
+                    }
+                    if (advOpen != MutationOpen.None)
+                    {
+                        return new UpdateOutcome(null, advOpen, advDetail);
+                    }
+                    _autoNumberPersisted = true;
                 }
             }
             // The refusal the statement's Rollback decides by, and the refused row's ticket consumed in the level
@@ -1093,6 +1176,10 @@ public sealed class EditFrame : IDisposable
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
+        if (s.HasCheckConstraints)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {DescribeCheckConstraints(s)} on {s.TableName}: DELETE on a table with a CHECK constraint is not recorded");
+        }
         if (_workspace.HasAcceptedChange(s, row))
         {
             return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
@@ -1233,6 +1320,10 @@ public sealed class EditFrame : IDisposable
         if (_table.HasRelationships && _table.Relationships is null)
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
+        }
+        if (s.HasCheckConstraints)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {DescribeCheckConstraints(s)} on {s.TableName}: DELETE on a table with a CHECK constraint is not recorded");
         }
         if (_workspace.HasAcceptedChanges(s))
         {
@@ -1443,6 +1534,19 @@ public sealed class EditFrame : IDisposable
                 MutationOpen.AutoNumberIncrement,
                 $"CancelUpdate on AddNew under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
         }
+        if (Mode == EditMode.AddNew
+            && !_workspace.InStatement
+            && _workspace.Depth == 0
+            && _table.Semantics.HasCheckConstraints
+            && _table.Semantics.AutoNumber is { } autoCol
+            && !_autoNumberPersisted
+            && _ticket is not null
+            && _table.Writer is not null)
+        {
+            return EditOutcome.NotModelled(
+                MutationOpen.Rule,
+                $"CHECK constraint {DescribeCheckConstraints(_table.Semantics)} on {_table.Semantics.TableName}: CancelUpdate after AddNew without a CHECK-failing Update on AutoNumber column '{autoCol.Name}' is not recorded");
+        }
         ReleaseTicket();
         Clear();
         return EditOutcome.Ok;
@@ -1583,12 +1687,13 @@ public sealed class EditFrame : IDisposable
         };
     }
 
-    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, Null in index, unique, relationship.</summary>
-    private const int RequiredStage = 0, FieldRuleStage = 2, UniqueStage = 5, RelationshipStage = 6;
+    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, SQL CHECK constraint, Null in index, unique, relationship.</summary>
+    private const int RequiredStage = 0, FieldRuleStage = 2, CheckStage = 4, UniqueStage = 6, RelationshipStage = 7;
 
     /// <summary>The outcome the stages decide (see <see cref="Update"/>), or null when every check passed.</summary>
-    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision)
+    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision, out int winningStage)
     {
+        winningStage = -1;
         int failing = 0, first = -1;
         for (int i = 0; i < stages.Length; i++)
         {
@@ -1604,6 +1709,7 @@ public sealed class EditFrame : IDisposable
         }
         if (failing == 1)
         {
+            winningStage = first;
             return stages[first];
         }
         // evidence/r-dao-1-err-1/err-partial-constraint call 45 (`UPDATE T SET ID = ID + 1` with dbFailOnError):
@@ -1615,15 +1721,32 @@ public sealed class EditFrame : IDisposable
             && stages[UniqueStage].Error?.Number == MutationError.Duplicate
             && stages[RelationshipStage].Error?.Number == MutationError.RelatedRecordsExist)
         {
+            winningStage = RelationshipStage;
             return stages[RelationshipStage];
         }
+        // Recorded order: Required (0) -> FieldRule (2, 3316 with ValidationText) -> CheckConstraint (4)
+        // (r-q30-sql-check/ord-req-before-check, ord-check-before-req, ord-req-before-check-dao,
+        // ord-valrule-same-col-*, ord-valrule-after-check-dao), and Required (0) -> FieldRule (2) -> Unique (6)
+        // (edit-validation-order). CheckConstraint (4) vs Unique (6), TableRule (3) vs CheckConstraint (4),
+        // textless FieldRule (3317) or rule evaluation error (3802) vs CheckConstraint (4), and any Open stage
+        // alongside another failing stage stay refused with MutationOpen.CheckOrder.
+        bool checkFailed = !stages[CheckStage].Succeeded;
         bool chainOnly = true;
         for (int i = first + 1; i < stages.Length; i++)
         {
-            chainOnly &= stages[i].Succeeded || i is FieldRuleStage or UniqueStage;
+            chainOnly &= stages[i].Succeeded
+                || (i is FieldRuleStage or UniqueStage && stages[i].Error is not null)
+                || (i == CheckStage && stages[i].Error is not null);
         }
-        if (first is RequiredStage or FieldRuleStage && chainOnly && stages[first].Error is not null)
+        bool fieldRuleAllowsCheck = !checkFailed
+            || first != FieldRuleStage
+            || stages[FieldRuleStage].Error?.Number == MutationError.RuleWithText;
+        if (first is RequiredStage or FieldRuleStage
+            && chainOnly
+            && stages[first].Error is not null
+            && fieldRuleAllowsCheck)
         {
+            winningStage = first;
             return stages[first];
         }
         return new UpdateOutcome(null, MutationOpen.CheckOrder, "two check classes fail whose order is not recorded: " +
@@ -1747,6 +1870,240 @@ public sealed class EditFrame : IDisposable
         EditOutcome r = Check(rule, _table.Semantics.TableName, MutationErrorSource.Recordset);
         return new UpdateOutcome(r.Error, r.Open, r.Detail);
     }
+
+    private string? CheckAutoNumberWithCheckNotAdmitted(MutationSemantics s, ColumnDescriptor autoCol, bool isAddNew)
+    {
+        if (s.CheckConstraintsNotAdmitted is { } blobReason)
+        {
+            return blobReason;
+        }
+        foreach (BoundCheckConstraint c in s.CheckConstraints)
+        {
+            if (c.Rule is null || c.Column is null)
+            {
+                return $"CHECK constraint '{c.Name}' on {s.TableName} ({c.Expression}): {c.NotAdmitted}";
+            }
+        }
+        string names = DescribeCheckConstraints(s);
+        if (!isAddNew)
+        {
+            return $"CHECK constraint {names} on {s.TableName}: UPDATE on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
+        }
+        if (ConflictSource == MutationErrorSource.Database && !_workspace.InStatement)
+        {
+            return $"CHECK constraint {names} on {s.TableName}: ADO recordset AddNew on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
+        }
+        if (_workspace.InExplicitTransaction)
+        {
+            return $"CHECK constraint {names} on {s.TableName}: write inside an explicit transaction (BeginTrans) on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
+        }
+        if (_workspace.Depth > 0)
+        {
+            return $"CHECK constraint {names} on {s.TableName}: multi-row statement transaction on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
+        }
+        if (_table.Counter is not { Increment: 1 })
+        {
+            return $"CHECK constraint {names} on {s.TableName}: AutoNumber column '{autoCol.Name}' with non-unit increment ({_table.Counter?.Increment}) and a CHECK constraint is not recorded";
+        }
+        if (_table.Writer is not { } autoWriter || !autoWriter.IsVerifiedAccdb(_workspace.OverlayOf(autoWriter.File)))
+        {
+            return $"CHECK constraint {names} on {s.TableName}: AutoNumber column '{autoCol.Name}' with a CHECK constraint is recorded only on ACCDB (r-q30-sql-check/autonum-viol-*)";
+        }
+        if (_workspace.InStatement && _workspace.OverlayOf(autoWriter.File) is not null)
+        {
+            return $"CHECK constraint {names} on {s.TableName}: multi-row SQL INSERT on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
+        }
+        return null;
+    }
+
+    private UpdateOutcome CheckConstraintCheck()
+    {
+        MutationSemantics s = _table.Semantics;
+        if (!s.HasCheckConstraints)
+        {
+            return default;
+        }
+        if (s.CheckConstraintsNotAdmitted is { } blobReason)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, blobReason);
+        }
+        foreach (BoundCheckConstraint c in s.CheckConstraints)
+        {
+            if (c.Rule is null || c.Column is null)
+            {
+                return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint '{c.Name}' on {s.TableName} ({c.Expression}): {c.NotAdmitted}");
+            }
+        }
+        string names = DescribeCheckConstraints(s);
+        if (_workspace.InExplicitTransaction)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: write inside an explicit transaction (BeginTrans) is not recorded");
+        }
+        if (s.AutoNumber is { } autoCol)
+        {
+            if (CheckAutoNumberWithCheckNotAdmitted(s, autoCol, isAddNew: Mode == EditMode.AddNew) is { } autoReason)
+            {
+                return new UpdateOutcome(null, MutationOpen.Rule, autoReason);
+            }
+            if (_cells[autoCol.Ordinal].Assigned)
+            {
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {names} on {s.TableName}: explicit assignment to AutoNumber column '{autoCol.Name}' on a CHECK table is not recorded");
+            }
+        }
+        if (_table.Writer is null)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: file format cannot be verified without a physical writer");
+        }
+        PrivateOverlay? overlay = _workspace.OverlayOf(_table.Writer.File);
+        if (!_table.Writer.IsVerifiedAccdb(overlay))
+        {
+            // r-q30-sql-check/mdb-sat-ado-exec, mdb-viol-ado-exec: Jet 4 MDB CHECK enforcement is recorded only for
+            // ad-hoc ADO Connection.Execute INSERT ... VALUES on a table with a single Long CHECK constraint, a
+            // non-null value in the checked column, and no Required, field ValidationRule, or table ValidationRule.
+            bool allowedMdb = AllowMdbCheckInsert
+                && Mode == EditMode.AddNew
+                && _workspace.InStatement
+                && _workspace.Depth == 0
+                && _table.Writer.IsJet4Mdb(overlay)
+                && s.CheckConstraints.Count == 1
+                && s.CheckConstraints[0].Column is { TypeCode: NativeTypes.Long } mdbCol
+                && CandidateValue(mdbCol.Ordinal).Kind != NativeKind.Null
+                && s.TableRule is null
+                && !s.Columns.Any(c => c.Required || c.Rule is not null);
+            if (!allowedMdb)
+            {
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {names} on {s.TableName}: MDB or unverified file format write enforcement is recorded only for ad-hoc ADO Connection.Execute INSERT ... VALUES with a single non-null Long CHECK and no Required or ValidationRule (r-q30-sql-check/mdb-sat-ado-exec, mdb-viol-ado-exec)");
+            }
+        }
+        if (Mode == EditMode.Edit && _originals is not null)
+        {
+            // r-q30-sql-check leaves open updating a row whose stored values already violate a later-added CHECK.
+            foreach (BoundCheckConstraint c in s.CheckConstraints)
+            {
+                RuleResult origResult = _candidate.EvaluateOriginals(c.Rule!);
+                if (origResult.Verdict == RuleVerdict.Reject)
+                {
+                    return new UpdateOutcome(
+                        null,
+                        MutationOpen.Rule,
+                        $"CHECK constraint '{c.Name}' on {s.TableName}: updating a row whose stored values already violate the CHECK constraint is not recorded");
+                }
+                if (origResult.Verdict != RuleVerdict.Admit)
+                {
+                    return new UpdateOutcome(
+                        null,
+                        MutationOpen.Rule,
+                        $"CHECK constraint '{c.Name}' on {s.TableName}: evaluating original row failed ({origResult.Detail ?? origResult.Verdict.ToString()})");
+                }
+            }
+        }
+
+        List<BoundCheckConstraint>? rejected = null;
+        List<(BoundCheckConstraint Constraint, string Detail)>? evalFailures = null;
+        foreach (BoundCheckConstraint c in s.CheckConstraints)
+        {
+            RuleResult result = c.Rule!.Evaluate(_candidate);
+            switch (result.Verdict)
+            {
+                case RuleVerdict.Admit:
+                    break;
+                case RuleVerdict.Reject:
+                    (rejected ??= []).Add(c);
+                    break;
+                case RuleVerdict.Failed:
+                    (evalFailures ??= []).Add((c, result.Detail ?? "evaluation failed (not recorded for SQL CHECK)"));
+                    break;
+                default:
+                    (evalFailures ??= []).Add((c, result.Detail ?? result.Verdict.ToString()));
+                    break;
+            }
+        }
+        if (evalFailures is { Count: > 0 })
+        {
+            string failedDesc = string.Join("; ", evalFailures.Select(f => $"'{f.Constraint.Name}': {f.Detail}"));
+            string afterRejected = rejected is { Count: > 0 }
+                ? $" (alongside rejected {string.Join(", ", rejected.Select(c => $"'{c.Name}'"))})"
+                : "";
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint evaluation failed on {s.TableName} ({failedDesc}){afterRejected}: SQL CHECK evaluation failure is not recorded");
+        }
+        if (rejected is { Count: > 1 } && s.CheckConstraintsOrderDisagrees)
+        {
+            string failedNames = string.Join(", ", rejected.Select(c => $"'{c.Name}'"));
+            return new UpdateOutcome(
+                null,
+                MutationOpen.CheckOrder,
+                $"multiple CHECK constraints failed on {s.TableName} ({failedNames}): LvProp CheckConstraints order disagrees with MSysObjects Type 9 Id order, and no record separates the two");
+        }
+        if (rejected is { Count: > 0 })
+        {
+            // r-q30-sql-check/ord-two-checks-ab, ord-two-checks-za, ord-two-checks-rev: when multiple CHECKs fail
+            // and LvProp list order agrees with MSysObjects Id ascending order, the first-added CHECK is reported.
+            // r-q30-sql-check/viol-dao-rs, upd-viol-dao-rs, viol-dao-exec-fail, upd-viol-dao-exec-fail, upd-viol-ado-rs;
+            // r-q-cat-txn-lock/ii11-ado-check-constraint #64-72; r-oledb-odbc/update-errors #208-228.
+            return new UpdateOutcome(new MutationError(MutationError.RuleWithoutText, MutationErrorSource.Recordset, rejected[0].Name, s.TableName));
+        }
+        if (Mode == EditMode.Edit)
+        {
+            if (!_workspace.InStatement)
+            {
+                // r-q30-sql-check/upd-viol-ado-rs, upd-viol-dao-rs record only violating recordset Edit;
+                // satisfying and other-column recordset Edit stay refused by name.
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {names} on {s.TableName}: satisfying or other-column recordset Edit is not recorded");
+            }
+            bool anyCheckedAssigned = false;
+            bool anyCheckedNonNull = false;
+            bool allAssignedLong = true;
+            foreach (BoundCheckConstraint c in s.CheckConstraints)
+            {
+                int ord = c.Column!.Ordinal;
+                if (_cells[ord].Assigned)
+                {
+                    anyCheckedAssigned = true;
+                    if (CandidateValue(ord).Kind != NativeKind.Null)
+                    {
+                        anyCheckedNonNull = true;
+                    }
+                    if (c.Column.TypeCode != NativeTypes.Long)
+                    {
+                        allAssignedLong = false;
+                    }
+                }
+            }
+            if (anyCheckedAssigned && (anyCheckedNonNull || !AllowAdoCheckNullUpdate || !allAssignedLong))
+            {
+                // r-q30-sql-check/upd-other-col-ado-exec, upd-other-col-dao-exec (checked column untouched),
+                // null-upd-ado-exec (ADO Connection.Execute setting Long checked column to NULL).
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {names} on {s.TableName}: SQL UPDATE modifying a checked column to a satisfying value is recorded only for ADO Connection.Execute setting a Long column to NULL (r-q30-sql-check/null-upd-ado-exec)");
+            }
+        }
+        return default;
+    }
+
+    private static string DescribeCheckConstraints(MutationSemantics s) =>
+        s.CheckConstraints.Count > 0
+            ? string.Join(", ", s.CheckConstraints.Select(c => $"'{c.Name}'"))
+            : s.CheckConstraintsNotAdmitted ?? "'CheckConstraints'";
 
     /// <summary>The Null-in-index check (3058) and the unique check (3022), each its first failure in index order.</summary>
     private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical, bool RefusingIsPrimary) IndexChecks()
@@ -1891,6 +2248,15 @@ public sealed class EditFrame : IDisposable
                 footprint = [];
                 return new UpdateOutcome(null, MutationOpen.Publication, $"cascade target table '{targetCtx.Semantics.TableName}' has no physical compiler");
             }
+            if (targetCtx.Semantics.HasCheckConstraints)
+            {
+                UnlockFootprint(footprint, held);
+                footprint = [];
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {DescribeCheckConstraints(targetCtx.Semantics)} on {targetCtx.Semantics.TableName}: cascading write onto a table with a CHECK constraint is not recorded");
+            }
         }
         // Acquire initial row locks on every cascade target before opening the OperationFrame.
         // In-process lock conflict on a cascade child row is not recorded (only cross-process is:
@@ -2009,6 +2375,7 @@ public sealed class EditFrame : IDisposable
         _original = null;
         _originals = null;
         _conflictReported = false;
+        _autoNumberPersisted = false;
         ReleaseEditLock();
         Mode = EditMode.None;
     }
@@ -2021,11 +2388,25 @@ public sealed class EditFrame : IDisposable
     {
         private int _provisional = -1;
         private NativeValue _provisionalValue;
+        private bool _useOriginals;
 
         public void Provisional(int ordinal, NativeValue value)
         {
             _provisional = ordinal;
             _provisionalValue = value;
+        }
+
+        public RuleResult EvaluateOriginals(IMutationRule rule)
+        {
+            _useOriginals = true;
+            try
+            {
+                return rule.Evaluate(this);
+            }
+            finally
+            {
+                _useOriginals = false;
+            }
         }
 
         public TableDefinition Table => frame._table.Semantics.Table;
@@ -2078,7 +2459,10 @@ public sealed class EditFrame : IDisposable
         {
         }
 
-        private NativeValue Value(ColumnDescriptor column) => column.Ordinal == _provisional ? _provisionalValue : frame.CandidateValue(column.Ordinal);
+        private NativeValue Value(ColumnDescriptor column) =>
+            _useOriginals ? frame._originals![column.Ordinal]
+            : column.Ordinal == _provisional ? _provisionalValue
+            : frame.CandidateValue(column.Ordinal);
     }
 }
 

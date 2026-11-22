@@ -295,6 +295,17 @@ public sealed class StatementScope : IDisposable
         return _owner.EndStatement();
     }
 
+    /// <summary>Abort the statement without publishing: outside every level, discard anything this statement staged.</summary>
+    public void Abort()
+    {
+        if (_done)
+        {
+            return;
+        }
+        _done = true;
+        _owner.AbortStatement();
+    }
+
     /// <summary>End the statement as <see cref="Complete"/> does; a caller that reports the publication's outcome calls that.</summary>
     public void Dispose() => Complete();
 }
@@ -380,6 +391,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private bool _statementHasOwnLevel;
     private int? _statementRefusal;
     private ResolutionOutcome? _statementFailure;
+    private int _statementPendingStart;
     private int _unwrittenPendingCount;
 
     /// <summary>
@@ -390,6 +402,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
     public bool InStatement => _statement is not null;
+
+    /// <summary>Whether an explicit user <c>BeginTrans</c> level is active (excluding a statement's own <c>dbFailOnError</c> level).</summary>
+    internal bool InExplicitTransaction => _statement is not null ? _statementExternalDepth > 0 : _frames.Count > 0;
 
     /// <summary>
     /// Whether the active SQL action statement started outside any explicit transaction (<c>Depth == 0</c>) and opened
@@ -2035,6 +2050,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementHasOwnLevel = false;
         _statementRefusal = null;
         _statementFailure = null;
+        _statementPendingStart = _frames.Count == 0 ? _pending.Count : 0;
         if (_frames.Count > 0)
         {
             ExplicitFrame current = _frames[^1];
@@ -2061,6 +2077,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         ResolutionOutcome? stmtFailure = _statementFailure;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementPendingStart = 0;
         if (stmtFailure is { } failed)
         {
             return failed with { ResolvedChanges = changes };
@@ -2075,6 +2092,42 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(null, open, detail, changes);
         }
         return new ResolutionOutcome(ResolvedChanges: changes);
+    }
+
+    internal void AbortStatement()
+    {
+        _statement = null;
+        _statementChanges = 0;
+        _statementHasSideEffect = false;
+        _statementAllowJet4MdbCommitCounter = false;
+        _statementExternalDepth = 0;
+        _statementHasOwnLevel = false;
+        _statementFailure = null;
+        _statementRefusal = null;
+        int pendingStart = _statementPendingStart;
+        _statementPendingStart = 0;
+        if (_frames.Count > 0)
+        {
+            return;
+        }
+        if (pendingStart == 0)
+        {
+            _pending.Clear();
+            _sideEffectRoles.Clear();
+            _pendingCloseCommit.Clear();
+            ClearAcceptedIndex();
+            ReleaseParticipants();
+            ReleaseLocks(LockLifetime.UntilPublished);
+            return;
+        }
+        if (pendingStart < _pending.Count)
+        {
+            for (int i = pendingStart; i < _pending.Count; i++)
+            {
+                IndexRemoved(_pending[i]);
+            }
+            _pending.RemoveRange(pendingStart, _pending.Count - pendingStart);
+        }
     }
 
     /// <summary>

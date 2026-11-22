@@ -1614,7 +1614,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(err.ComFailure);
         }
 
-        return ExecuteAction(session, effectiveText, isSavedQuery: false, noRecords, recordsAffectedArg);
+        return ExecuteAction(
+            session,
+            effectiveText,
+            isSavedQuery: false,
+            allowAdoConnectionExecute: string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal),
+            noRecords,
+            recordsAffectedArg);
     }
 
     private CallResult ExecuteRowReturning(
@@ -1683,13 +1689,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 "NotModelled.QuerySqlShape",
                 $"the SQL of '{query.Name}': {rendered.NotModelled}"));
         }
-        return ExecuteAction(session, sql, isSavedQuery: true, noRecords, recordsAffectedArg);
+        return ExecuteAction(session, sql, isSavedQuery: true, allowAdoConnectionExecute: false, noRecords, recordsAffectedArg);
     }
 
     private CallResult ExecuteAction(
         AdoOpenSession session,
         string sql,
         bool isSavedQuery,
+        bool allowAdoConnectionExecute,
         bool noRecords,
         nint recordsAffectedArg)
     {
@@ -1699,7 +1706,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
 
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        ActionOutcome outcome = ActionExecutor.Execute(sql, session.Sql, 128, null, ActionErrorSource.Database);
+        // Pass ActionErrorSource.Ado only for ad-hoc Connection.Execute (not Command.Execute or saved queries).
+        ActionOutcome outcome = ActionExecutor.Execute(
+            sql,
+            session.Sql,
+            128,
+            null,
+            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.Database);
         if (outcome.Failure is { } sqlFailure)
         {
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")

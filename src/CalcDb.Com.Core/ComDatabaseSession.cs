@@ -35,6 +35,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
     private QueryCatalog? _queries;
     private string? _queriesFailure;
     private IReadOnlyList<Relationship>? _relationships;
+    private IReadOnlyList<CheckConstraintCatalogEntry>? _checkConstraints;
     private CatalogRelationshipContext? _relationshipContext;
     private Dictionary<int, TableEditContext>? _editContexts;
     private List<MutationSemantics>? _retiredSemantics;
@@ -196,11 +197,27 @@ public sealed class ComDatabaseSession : IPublicationTarget
         return _relationships;
     }
 
+    /// <summary>MSysObjects Type 9 SQL CHECK constraints, read once per session at first use; null with the reason when unreadable.</summary>
+    public IReadOnlyList<CheckConstraintCatalogEntry>? CheckConstraints(out string? failure)
+    {
+        failure = null;
+        if (_checkConstraints is null)
+        {
+            _checkConstraints = CheckConstraintCatalog.Read(Cache, Format, Catalog, PageCount, out failure);
+            if (_checkConstraints is null)
+            {
+                failure = "MSysObjects CHECK constraints cannot be read: " + failure;
+            }
+        }
+        return _checkConstraints;
+    }
+
     /// <summary>
     /// The shared edit state of a table of this session (II-07 §14; W-05/edit-frames, W-05/fk-cascades): its
-    /// <see cref="MutationSemantics"/> compiled once from the TableDef and its stored property blob through
-    /// <see cref="ExpressionRuleBinder"/>, its AutoNumber counter, the unique probe over its stored trees, and the
-    /// catalog-backed referential integrity probe when <c>MSysRelationships</c> names it.
+    /// <see cref="MutationSemantics"/> compiled once from the TableDef, its stored property blob, and its
+    /// <c>MSysObjects</c> <c>Type = 9</c> CHECK constraints through <see cref="ExpressionRuleBinder"/>, its AutoNumber
+    /// counter, the unique probe over its stored trees, and the catalog-backed referential integrity probe when
+    /// <c>MSysRelationships</c> names it.
     /// </summary>
     public TableEditContext? EditContext(CatalogEntry entry, out string? failure)
     {
@@ -222,9 +239,19 @@ public sealed class ComDatabaseSession : IPublicationTarget
         {
             return null;
         }
+        if (CheckConstraints(out failure) is not { } checkConstraints)
+        {
+            return null;
+        }
         // The text compare and session LCID (R-EXPR-1 EXPR-LOCALE: user default, never the thread's), as Find binds its criteria.
         _ruleBinder ??= new ExpressionRuleBinder(CreateExpressionContext(ExpressionUse.Query));
-        var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
+        var semantics = MutationSemantics.Compile(
+            entry.Name,
+            table,
+            blob,
+            _ruleBinder,
+            Format.IndexDescriptor,
+            CheckConstraintCatalog.ForTable(checkConstraints, entry.Name));
         _relationshipContext ??= new CatalogRelationshipContext(Cache, Format, relationships, PageCount, ResolveEditContextByName);
         IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
         // The table's footprints over this session's cache: the local lock manager and the physical compiler (W-05/local-lockers-rebase, W-05/same-width-mutation, W-05/growth-structural-closure).
@@ -269,6 +296,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
         }
         Catalog = catalog;
         _relationships = null;
+        _checkConstraints = null;
         _relationshipContext = null;
         onCatalogReloaded?.Invoke();
         InvalidateEditContexts(isTableHeld);

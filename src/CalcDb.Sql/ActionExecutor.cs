@@ -32,11 +32,12 @@ public interface ISqlActionDatabase : ISqlDatabase
     TableCursor? OpenCursor(TableDefinition table, out string? failure);
 }
 
-/// <summary>Whether an action ran via <c>Database.Execute</c> or <c>QueryDef.Execute</c>.</summary>
+/// <summary>Whether an action ran via DAO <c>Database.Execute</c>, DAO <c>QueryDef.Execute</c>, or ADO <c>Connection.Execute</c>.</summary>
 public enum ActionErrorSource : byte
 {
     Database,
     QueryDef,
+    Ado,
 }
 
 /// <summary>
@@ -130,7 +131,7 @@ public static unsafe class ActionExecutor
         {
             return DdlExecutor.Execute(normalized, database, options);
         }
-        if (source == ActionErrorSource.Database)
+        if (source is ActionErrorSource.Database or ActionErrorSource.Ado)
         {
             if (!ActionParser.IsSqlStatement(normalized))
             {
@@ -161,7 +162,6 @@ public static unsafe class ActionExecutor
         IReadOnlyList<NativeVariant?>? parameters = null,
         ActionErrorSource source = ActionErrorSource.Database)
     {
-        _ = source;
         if ((options & ~AdmittedOptionsMask) != 0)
         {
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ExecuteOptions", $"Execute options 0x{options:X} outside dbFailOnError/dbConsistent/dbInconsistent"));
@@ -205,14 +205,19 @@ public static unsafe class ActionExecutor
         {
             ActionOutcome outcome = plan.Kind switch
             {
-                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues),
-                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues),
-                ActionKind.Update => ExecuteUpdate(plan, database, failOnError, paramValues),
+                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues, allowMdbCheckInsert: source == ActionErrorSource.Ado),
+                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues, source),
+                ActionKind.Update => ExecuteUpdate(plan, database, failOnError, paramValues, source),
                 ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues),
                 _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionKind", plan.Kind.ToString())),
             };
+            if (outcome.Failure is { IsNotModelled: true })
+            {
+                statement.Abort();
+                return outcome;
+            }
             ResolutionOutcome published = statement.Complete();
-            return !published.Succeeded && outcome.Failure is not { IsNotModelled: true }
+            return !published.Succeeded
                 ? ActionOutcome.Fail(MapResolutionFailure(published))
                 : outcome;
         }
@@ -228,14 +233,40 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        bool allowMdbCheckInsert)
     {
         if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
         {
             return ActionOutcome.Fail(openFailure!);
         }
+        if (editContext!.Semantics.HasCheckConstraints && editContext.Semantics.AutoNumber is { } autoCol)
+        {
+            if (!failOnError)
+            {
+                cursor!.Dispose();
+                string names = FormatCheckConstraintNames(editContext.Semantics);
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.Edit.Rule",
+                    $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT without dbFailOnError on AutoNumber column '{autoCol.Name}' is not recorded"));
+            }
+            if (plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal))
+            {
+                cursor!.Dispose();
+                string names = FormatCheckConstraintNames(editContext.Semantics);
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.Edit.Rule",
+                    $"CHECK constraint {names} on {editContext.Semantics.TableName}: explicit AutoNumber assignment on '{autoCol.Name}' is not recorded"));
+            }
+        }
         using (cursor!)
-        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace) { ConflictSource = MutationErrorSource.Database })
+        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace)
+        {
+            ConflictSource = MutationErrorSource.Database,
+            AllowMdbCheckInsert = allowMdbCheckInsert,
+        })
         {
             var evalRow = new ActionRowContext(null, paramValues);
             var converted = new NativeVariant[plan.InsertColumns.Count];
@@ -278,7 +309,7 @@ public static unsafe class ActionExecutor
                     ? ActionOutcome.Fail(rowFail)
                     : ActionOutcome.Ok(
                         inserted ? 1 : 0,
-                        editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
+                        inserted && editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
             }
             finally
             {
@@ -293,13 +324,14 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        ActionErrorSource errorSource)
     {
         // FROM-less constant SELECT (e.g. INSERT INTO U (ID, K) SELECT 602, 'y', r-def-expr-sql/sql-insert-values-forms)
-        // evaluates exactly like a single-row VALUES insert.
+        // evaluates like a single-row VALUES insert, except Jet 4 MDB CHECK admission stays restricted to INSERT VALUES.
         if (plan.SourceSelect is null)
         {
-            return ExecuteInsertValues(plan, database, failOnError, paramValues);
+            return ExecuteInsertValues(plan, database, failOnError, paramValues, allowMdbCheckInsert: false);
         }
 
         // Materialize all source rows before mutating the target so self-insert (INSERT INTO T SELECT * FROM T) is
@@ -367,6 +399,29 @@ public static unsafe class ActionExecutor
             if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
             {
                 return ActionOutcome.Fail(openFailure!);
+            }
+
+            if (editContext!.Semantics.HasCheckConstraints)
+            {
+                if ((failOnError || errorSource == ActionErrorSource.Ado) && sourceRows.Count > 1)
+                {
+                    cursor!.Dispose();
+                    string names = FormatCheckConstraintNames(editContext.Semantics);
+                    return ActionOutcome.Fail(SqlFailure.Open(
+                        SqlPhase.Execute,
+                        "NotModelled.Edit.Rule",
+                        $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row INSERT ... SELECT with dbFailOnError or through ADO is not recorded"));
+                }
+                if (editContext.Semantics.AutoNumber is { } autoCol
+                    && (!failOnError || sourceRows.Count > 1 || plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal)))
+                {
+                    cursor!.Dispose();
+                    string names = FormatCheckConstraintNames(editContext.Semantics);
+                    return ActionOutcome.Fail(SqlFailure.Open(
+                        SqlPhase.Execute,
+                        "NotModelled.Edit.Rule",
+                        $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT ... SELECT without dbFailOnError, with multiple rows, or with explicit AutoNumber assignment on '{autoCol.Name}' is not recorded"));
+                }
             }
 
             // R-SQL-2 SQL-ACT-FAIL / R-ERR-1 ERR-PARTIAL / R-TXN-1 TXN-STMT:
@@ -492,7 +547,7 @@ public static unsafe class ActionExecutor
                     }
                     return ActionOutcome.Ok(
                         affected,
-                        editContext.Counter is { } ctr && ctr.Last != beforeCounter ? ctr.Last : null);
+                        affected > 0 && editContext.Counter is { } ctr && ctr.Last != beforeCounter ? ctr.Last : null);
                 }
                 finally
                 {
@@ -519,7 +574,8 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        ActionErrorSource errorSource)
     {
         // Collect qualifying RowIds in storage scan order before mutating any row so key-moving updates
         // (R-SQL-2 ACT-SEL-01/02: r-q-expr-sql/act-sel-repeated-keys, r-sql-2-3/act-sel-range) visit each
@@ -539,6 +595,16 @@ public static unsafe class ActionExecutor
             return ActionOutcome.Fail(openFailure!);
         }
 
+        if (candidates.Count > 1 && editContext!.Semantics.HasCheckConstraints)
+        {
+            cursor!.Dispose();
+            string names = FormatCheckConstraintNames(editContext.Semantics);
+            return ActionOutcome.Fail(SqlFailure.Open(
+                SqlPhase.Execute,
+                "NotModelled.Edit.Rule",
+                $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row UPDATE on a CHECK table is not recorded"));
+        }
+
         // R-SQL-2 SQL-ACT-FAIL / R-TXN-1 TXN-STMT:
         // UPDATE with dbFailOnError stops at the failing candidate and KEEPS earlier changed rows (RecordsAffected 0):
         // r-sql-2-3/act-fail-unique, act-fail-validation, act-fail-conversion, r-q-expr-sql/fail-late-candidate,
@@ -546,7 +612,11 @@ public static unsafe class ActionExecutor
         // while RHS expression/conversion failures store Null and do not count the row (act-fail-conversion,
         // r-txn-1b/implicit-expression-nofail).
         using (cursor!)
-        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace) { ConflictSource = MutationErrorSource.Database })
+        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace)
+        {
+            ConflictSource = MutationErrorSource.Database,
+            AllowAdoCheckNullUpdate = errorSource == ActionErrorSource.Ado,
+        })
         {
             var evalRow = new ActionRowContext(cursor, paramValues);
             var evaluated = new NativeVariant[plan.Assignments.Count];
@@ -1322,6 +1392,11 @@ public static unsafe class ActionExecutor
         MutationError.RelatedRecordRequired or
         MutationError.LockedBySession or
         MutationError.WriteConflict;
+
+    private static string FormatCheckConstraintNames(MutationSemantics semantics) =>
+        semantics.CheckConstraints.Count > 0
+            ? string.Join(", ", semantics.CheckConstraints.Select(c => $"'{c.Name}'"))
+            : semantics.CheckConstraintsNotAdmitted ?? "'CheckConstraints'";
 
     private static void ClearAll(NativeVariant[] values)
     {
