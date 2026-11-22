@@ -714,3 +714,169 @@ one rule beyond its records (narrowed in four of the nine code stretches) and th
 | The old organizer forwarded every child progress note (compile errors, typos, reruns): 10 forwards, none needing action | a turn of the organizer's context each | asked it to forward only ready, blocked, contradiction or question reports |
 | The citation check failed a landing on two shorthand citations already in qualified.md (`{a,b}` and `eng-, ws-, ...` lists) | a red step for a doc file in -Files | the shorthands written out in full (abc6949c); write citations in full from the start |
 
+
+## 2026-11-21 (evening) - Landing without exports, writers in worktrees, indicators instead of a budget (session 01a1ff68, Claude Opus 5.5)
+
+**Work observed.** A disk scan of C: found 23.8 GB written to %TEMP% in a few hours, mostly 24 landing exports of
+0.96-1.26 GB each, left by failing or repeated checks (xdzw 5, c7gn 4), and 4.3 GB in %LOCALAPPDATA%\CalcDb (42
+compare snapshots, per-child stores). Organizers 5, 6 and 7 had each been created as a child of the one before, so
+every answer of a successor woke its predecessor (organizer 5's last turn decided not to forward organizer 6's
+report). Over 143 commits since 2026-11-20, 82% of the changed lines (outside evidence/) were engine code and its
+tests; process documents 774 lines, bookkeeping files 4,631. The register changed in 62 of the last 150 commits and the
+compare baseline in 38; the busiest code file in 16.
+
+**Changes adopted (owner, 2026-11-21 evening).**
+
+| Change | Replaces | Expected effect |
+| --- | --- | --- |
+| One persistent check worktree (`CalcDb-check`); incremental build; Com publish only when its closure's sources changed | a fresh 753 MB export and a full build per run, 1.2 GB per failing run left behind | a check of a small change in about a minute (estimate; measure); flat disk use |
+| Tests from the project graph | the hand-written `-Tests` list (one skipped-tests slip on 2026-11-20) | no forgotten test project |
+| Writers and probers in CodeAlta worktrees, landed by a merge; one writer per project kept | file lists, hunk staging, half-written files breaking other children's builds | the child's change is its commit; rework stays on its branch |
+| A self-check (`-InPlace`) before the child reports | whole-check reruns for the child's own test errors (6 of 10) | the organizer's check passes on the first run |
+| Bookkeeping files edited by the organizer alone; children give the lines in a fixed report | merge conflicts on the register and baseline | branches rarely conflict |
+| Reviews by a model other than the writer's; Sonnet for tooling; Opus for subtle probe design | Neon for every child | uncorrelated misses between writer and reviewer |
+| Compare tiers: the 1,360-question core per landing, the 3,158-question wide set daily and before a baseline | the undecided choice between 8 and 25 min per landing | wide coverage without slower landings |
+| An indicator table at each handover; a full review only on a trigger (The Plan v0.4 §4) | the standing 15% budget | review when something moves, not by the clock |
+| Organizer successors created with `--no-parent` at a quiet point | nested organizers | no relaying between organizers |
+
+Not done: one shared repository-root helper for the test projects. It was proposed so a code-only export could read
+`evidence/`; with no exports its purpose is gone, and the duplicated helpers stay as they are.
+
+**Measure next time.** Landing checks passed on the first run, check duration and merge minutes (landing-runs.tsv,
+tools/process-indicators.ps1); the gap from a child's report to its landing; whether any branch conflicts outside the
+bookkeeping files.
+
+**Trial: the long-lived Roslyn workspace (The Plan §4; Sonnet child 01a1ffc0-fef6, roscli 0.1.6-preview.20).** Six
+navigation tasks on CalcDb.slnx, each done with grep and file reads and again with roscli's hot workspace (daemon,
+`workspace.use`). Grep answered all six completely in 3 to 7 calls and 0.4 to 15 KB. roscli was right only where the
+query was anchored in the right file: `find_references` searches one file and `find_invocations` one project (the 41
+callers of TransactionCoordinator.BeginStatement took four anchored queries), `find_implementations` found 0 of 5
+IPageSource implementers, method-group and constructor uses were invisible, and five commands (call hierarchy, impact
+slice, call-chain slice, implementations, workspace snapshot) reload the solution on every call: 76 to 178 s. The
+warm workspace kept answering from the old state after an edit, its bundled Roslyn reported 4 false errors on .NET 11
+code, and a reload refresh wedged the host twice. Load: 77 to 153 s, 280 to 430 MB. Where it helped: telling apart three
+types named RecordsetObject, and the cross-project error cascade after a signature break, which `dotnet build` of an
+area filter stops before.
+
+| Decision | Why |
+| --- | --- |
+| Not adopted; agents navigate with grep as before | complete and cheaper on every task measured |
+| roscli fixed at its source: daemon routing and solution-wide search (RoslynSkills `r9bh`), the wedged host (`mbvr`), stale answers after edits (`49hc`), false diagnostics (`zzfs`), daemon state in the analysed repository (`vr3g`) | the gaps are in roscli, not in the idea of a persistent workspace |
+| Measure again after r9bh lands, on the same six tasks | this run is the "before" side |
+
+**Model choice corrected (owner, 2026-11-21 late evening).** The round above moved reviews, tooling and fix writers to
+Sonnet and Opus; the owner then saw only Claude children running and restated that Neon is the workhorse. Every child
+runs on Neon again, the reviewer in a session other than the writer's; a Claude child only where it clearly adds value
+(AGENTS.md, Sub-sessions). The two Claude children then running (the c7gn re-review, RoslynSkills r9bh) finish their
+tasks.
+
+**roscli adopted for semantic questions (owner, 2026-11-21 late evening).** RoslynSkills `r9bh` (004667b) routed every
+read-only semantic command to the warm daemon and made the searches solution-wide; installed as 0.1.6-preview.21.local1.
+On CalcDb, warm: `call_hierarchy` 56.8 s to 1.2 s (2 to 25 nodes), `impact_slice` 57.3 s to 1.5 s (4 to 84 hits),
+`find_implementations` 54.1 s and 0 found to 0.3 s and all 5, `find_invocations` all 41 callers in 0.4 s; an edit is seen
+by the next query. One-time: about 53 s load, 45 s for the first call graph, about 800 MB. The Plan §4 and AGENTS.md
+(Tool practice) name the query classes; grep stays for names and text. A second trial (Neon, a timing matrix of eight
+queries across git grep, ripgrep, Select-String, the harness's search tool, roscli cold and warm, and csharp-ls) sets the
+boundaries. The owner added the editing and refactoring commands (rename, signature change, member-scoped and batch
+exact edits, file creation, diagnostics-driven repair): adopted in the same guidance, and measured in that trial as six
+edit tasks done both ways and checked by a build.
+
+**Trial after r9bh (Neon child 01a2000f, roscli 0.1.6-preview.21.local1).** A matrix of eight queries across git grep,
+ripgrep, PowerShell Select-String, the harness's search tool, roscli cold and warm, and csharp-ls, plus six edit tasks done
+both ways. Navigation: ripgrep 70 to 100 ms per query (git grep 110 to 250 ms, the harness's grep 120 to 190 ms and cut at
+200 matches, Select-String 1 to 2.6 s); roscli warm 0.3 to 2 s and exact for implementers (5 of 5), the 41 callers and the
+7 constructions of RecordsetObject with its method groups, but no `new` sites of a class, no go-to-definition, a call
+hierarchy that misses method groups and a lambda, and a workspace snapshot of "." that checks one project; roscli cold 50 to
+97 s per call; csharp-ls 7 to 111 ms warm and exact where its projects were built, silently incomplete across unbuilt test
+projects. Warm-up 75 s, memory up to 950 MB. Edits: by hand 1 to 2 s and correct in all six; roscli renamed one file of
+eleven (41 callers broken), its signature change pulled a brace onto the parameter line, batch edits leaked CRLF into LF
+files, the daemon did not see a created file, and repair proposed TODO stubs. The guidance of earlier this evening
+(roscli for renames and signature changes) was wrong and is corrected: The Plan §4 and AGENTS.md keep roscli for the
+semantic queries above, ripgrep and the harness's file tools for the rest. The editing and navigation gaps are RoslynSkills
+tasks; the edit tasks are measured again when they land.
+
+**roscli edits adopted (Neon trial 01a20085, roscli 0.1.6-preview.22, 2026-11-22).** After RoslynSkills 9s8n (2d4fa8b,
+released on GitHub as v0.1.6-preview.22), the six edit tasks again, both ways, each checked by a build:
+
+| Task | By hand | roscli on the warm daemon |
+| --- | --- | --- |
+| Rename BeginStatement across the solution | 12 calls, about 4 s of tool time; correct | 1 call, 3.4 s; 11 files, 55 sites, 3 crefs, prose comments kept, 0 diagnostics; correct |
+| Add a parameter, pass it at one caller | 3 calls; correct | 2 calls, 1.8 s; formatting and LF kept; correct |
+| Replace a statement in one member | 2 calls; correct | 1 call, 0.8 s; correct |
+| Two exact edits in two files | 2 calls, under 1 s; correct | batch_exact 1.1 s, transaction 1.2 s; LF kept; correct |
+| Create a file | under 1 s, but the daemon cannot see it | 0.7 s, joins its project, seen by the next query |
+| Fix a missing using | 1 call; correct | repair proposes TODO stubs; apply_code_fix refuses CS0103 |
+
+Setup 3 s restore and 43 s load; 320 to 690 MB; no `--workspace-path` needed in a worktree; navigation unchanged (51 of 51
+callers, 5 of 5 implementers). AGENTS.md and The Plan §4 now name the rename, the signature change and file creation
+for roscli; single-file and small edits stay with the harness's tools; repair stays out (RoslynSkills 25j6).
+
+**roscli navigation completed (RoslynSkills 57zm, 4eaaa64, released on GitHub as v0.1.6-preview.23, 2026-11-22).** On
+CalcDb, warm: references to EditFrame 231 (120 `new`, 9 target-typed) in 331 ms; the 115 constructions of the IPageSource
+implementers found from find_implementations results; the call hierarchy follows lambdas (ActionExecutor.cs:859,
+via_lambda) and method groups (Activation.cs:39, :50); nav.go_to_definition 272 ms; a workspace snapshot of src or the
+solution covers 21 or 33 projects (149 errors after a break, where dotnet build stops at 144). The first type query builds
+a call-site cache once (about 24 s). AGENTS.md (Tool practice) drops "it finds no new sites" and names these commands.
+
+**roscli 0.1.6-preview.24 (RoslynSkills qfvj, qhr3, 49hc, qc9k, qhfr; 009b516, GitHub release, 2026-11-22).** The daemon
+finds the repository root from a worktree's .git file everywhere (no --workspace-path, no claim warning), resolves
+relative paths against the caller's folder, and sees files any tool creates or deletes before its next answer (430 ms
+on CalcDb; only project or solution changes reload); edit.transaction takes exact-text edits and batch_exact is its
+alias. The preview.24 release first hung on the Linux runner: the Unix daemon inherited roscli's stdout, so anything
+reading roscli's output waited forever; it now detaches to /dev/null, and every process-starting test has a timeout.
+AGENTS.md drops the caveat about files created by other tools.
+
+**roscli 0.1.6-preview.25 (RoslynSkills mbvr, vr3g; c604210, GitHub release, 2026-11-22).** The wedged host reproduced
+on 009b516 every time: a 2 s client timeout on workspace.refresh, a host that served one request at a time, a crash
+writing to a client that had gone, and a restart that lost the old process. Now a reload gets 5 minutes, requests are
+concurrent (daemon.status 239 ms during a 35 s CalcDb reload), a restart kills the verified old process tree (2.5 s),
+and the daemon's state lives in the per-user folder: nothing is written into the repository. AGENTS.md drops the
+"delete .roslynskills/" step.
+
+**roscli 0.1.6-preview.26 (RoslynSkills 25j6, 83928a1, GitHub release, 2026-11-22).** The repair commands use Roslyn's
+own code fixes (Microsoft.CodeAnalysis.CSharp.Features) on the warm daemon: add-import, implement interface or abstract
+class; no_fix_available where Roslyn has none (CS7036 included). On CalcDb a removed `using System.Diagnostics;` is
+proposed in 3.5 s and repaired in 1.4 s, the file restored byte for byte. AGENTS.md lifts the "do not use repair.*" line.
+That empties the RoslynSkills queue of this round. Practice for writers: a bash script run in WSL from PowerShell
+arrives with CRLF line endings and fails; pass it base64-encoded or as an LF file (two writers lost a run each). roscli's
+answer is nested one level deeper through the daemon (RoslynSkills task qvcn).
+
+## 2026-11-22 - Handover: organizer session 01a1ff68 to organizer 8
+
+Successor: CalcDb organizer 8, session 01a20219-e071-7a1f-b8f3-aae93e505cce, started beside 01a1ff68 (`--no-parent`) at
+07:16 UTC with the handoff prompt; 01a1ff68 lists no organizer among its children and stops here.
+
+Session 01a1ff68 (Claude Opus 5.5, 2026-11-21 18:40 to 2026-11-22 05:00 UTC, 266 tool calls, about 11 h) put the new
+process in place, landed the paused work (3x6h, f8g8, the Com split, c7gn), parked 2qbr on `alta/2qbr`, and brought
+roscli (RoslynSkills) from 0.1.6-preview.20 to .26 as CalcDb's own tool. Indicators since 2026-11-21 18:30
+(`tools/process-indicators.ps1`, the engine pattern corrected for the Com split's projects in this handover):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 93% (85,341 of 91,310; the Com split's moves count twice) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 79,554 / 5,787 / 459 / 1,190 / 4,320 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 20; **65%** (the first runs of the new check worktree included) | below 70% |
+| Landing check duration (median of 26 runs) | 180 s (first full builds included; incremental runs 26 to 60 s) | above 3 min |
+| Compare baselines | xdzw-2 413 of 1360, then 3x6h-1 428, c7gn-1 431; wide 621 of 3158 | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | 266 calls for 4 code landings, 3 baselines and about 15 process and roscli commits; 1 handover | above about 15; more than 2 a day |
+| Reviewer findings per 1,000 lines | **c7gn about 11 (15 on about 1,300), f8g8 about 23 (10 on 430)** | rising over three landings, or above about 3 |
+| Rules found wrong after landing | 0 | more than one a day |
+| Children stopped waiting for a record | 0: the W-05 and W-07 writers generalized instead of stopping | more than one per stretch |
+| Merge minutes per landing | 0 (no conflict in 4 branch landings) | above 5 min |
+| Book contradictions found | 0 | rising |
+
+**Triggered review for organizer 8.** Two lines are crossed. The reviewer findings say the Neon writers in W-05 and W-07
+still write rules beyond their records and do not stop for a missing record, though the brief says so; the first-pass
+rate says self-checks miss what the landing check finds. Measure both on the next two landings before changing the
+rules (The Plan §4: find the cause; a review layer catches them today, so nothing wrong has landed).
+
+**roscli 0.1.6-preview.27 (RoslynSkills qvcn, 17069ce, GitHub release, 2026-11-22).** One JSON answer shape in every path:
+the payload in `Data`, how it ran (in-process, daemon, MCP, transport server) in `Transport`; two writers' scripts had
+broken on the daemon's nested shape. RoslynSkills' queue of this round is empty; the NuGet.org push waits for a key
+nuget.org accepts.
+
+**RoslynSkills on NuGet.org again (2026-11-22).** 0.1.6-preview.27 of DNAKode.RoslynSkills.Cli and DNAKode.XmlSkills.Cli
+was pushed by the release workflow (run 44996799297). Three causes had stopped it since preview.20: the repository
+secret's key had expired; a regenerated expired key keeps its old expiry on nuget.org (create a new one instead); and a
+key is scoped to one package owner, so the packages (owned by the owner's account) gained the dnakode organization as
+co-owner to match the organization's key.

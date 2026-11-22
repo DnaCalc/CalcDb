@@ -1,0 +1,241 @@
+{
+  "note": "The wide compare set (calcdb-oracle compare-set --set probes/compare-set-wide.json), run once a day and before a baseline is recorded; probes/compare-set.json is the core set run after every landing (docs/work/landing-check.md, compare tiers; owner, 2026-11-21 evening). It holds every probe folder whose questions CalcDb can answer as a candidate (96 of 100 folders; 3,158 comparable questions plus 31 listed notComparable). r-q-wire and r-q2-wire hold the ado-apartment accepted differences and the thread questions. r-q3-sql to r-q20-delete-pages joined on 2026-11-21 (organizer 01a1fd54); r-q15-ddl-open, r-q18-statements, r-q2-expr-sql and r-q2-cat-txn-lock joined once candidate runs skipped ETW (named; calls.trace@9 does not compare etw:file-io) and the 11 killParticipant questions of r-q2-cat-txn-lock were listed under notComparable (task mfmr). The remaining 54 candidate-runnable folders joined on 2026-11-21 (task 3x6h), with 20 further questions listed under notComparable (11 killParticipant with no capture of participant a, 6 ACE 0xC0000005 crashes, 1 ACE join-limit timeout, 1 ACE ODBC Select Data Source dialog timeout, and 1 ADOX/JRO companion-library probe outside CalcDb.Compat.manifest). Four folders stay out by construction: r-access-host (7) and r-access-dialog (10) activate Access.Application and claim MSACCESS.EXE (owned Access front-end host and modal UI dialogs, out of CalcDb scope); r-crash-1-midcall (12) and r-txn-flush (20) use killParticipant on participant a on every question so all 32 retained ACE records are Uncertain/Incomplete with no capture of participant a.",
+  "folders": [
+    "r-oracle-1",
+    "r-cat-1",
+    "r-cat-1b",
+    "r-cursor-1",
+    "r-cursor-1b",
+    "r-cursor-1-pct",
+    "r-q-cursor-dao",
+    "r-q2-cursor-dao",
+    "r-fix-cursor-dao",
+    "r-def-cursor-dao",
+    "r-dao-1-err-1",
+    "r-dao-1b",
+    "w-01-dao-cost",
+    "w-04-key-navigation",
+    "w-10-readers-only",
+    "r-sort-3",
+    "r-sort-3b",
+    "r-q-fmt-sort",
+    "r-q2-fmt-sort",
+    "r-fix-fmt-sort",
+    "r-cursor-1-seek-keys",
+    "r-str-ado-act",
+    "r-ado-1b",
+    "r-q-ado-misc",
+    "r-q2-ado-misc",
+    "r-fix-wire-ado",
+    "r-act-1-thread",
+    "r-act-1-meta",
+    "r-q-wire",
+    "r-q2-wire",
+    "r-q2-expr-sql",
+    "r-q2-cat-txn-lock",
+    "r-q3-sql",
+    "r-q8-header-counter",
+    "r-q10-commit-counter-edits",
+    "r-q12-snapshot-fix",
+    "r-q15-ddl-open",
+    "r-q16-overflow",
+    "r-q17-growth",
+    "r-q18-statements",
+    "r-q19-growth-open",
+    "r-q20-delete-pages",
+    "r-cplx-rebuild",
+    "r-crash-1-kill",
+    "r-crash-requery",
+    "r-cursor-1-pct2",
+    "r-cursor-1-pct3",
+    "r-cursor-1-pct4",
+    "r-ddl-limits",
+    "r-dec-read",
+    "r-def-cat-txn",
+    "r-def-expr-sql",
+    "r-enc-link",
+    "r-err-1b",
+    "r-etw-rec",
+    "r-expr-1",
+    "r-expr-1b",
+    "r-expr-locale",
+    "r-fix-cat-txn",
+    "r-fix-expr-sql",
+    "r-fmt-1",
+    "r-fmt-2-pres-1",
+    "r-fmt-2b",
+    "r-lock-1-2",
+    "r-lock-3-4-txn",
+    "r-lock-perm",
+    "r-oledb-odbc",
+    "r-ops",
+    "r-par-1",
+    "r-q-cat-txn-lock",
+    "r-q-expr-sql",
+    "r-q4-values",
+    "r-q5-join-order",
+    "r-q6-bookmarks",
+    "r-q7-index-prefix",
+    "r-q9-insert-landing",
+    "r-q10-statistics-words",
+    "r-q11-ddl-closure",
+    "r-q13-new-file-interop",
+    "r-q14-dynaset-order",
+    "r-q21-ddl-types",
+    "r-q22-lv-open",
+    "r-q23-counter-step",
+    "r-q24-bookmarks",
+    "r-q25-nz-3141",
+    "r-q26-column-order",
+    "r-sample-rec",
+    "r-sort-3c",
+    "r-sort-3d",
+    "r-sql-1",
+    "r-sql-13b",
+    "r-sql-2-3",
+    "r-text-fffe",
+    "r-txn-1",
+    "r-txn-1b",
+    "r-wire"
+  ],
+  "timingBoundaries": [
+    {
+      "caseId": "r-q8-header-counter/two-deletes-470ms-apart",
+      "reason": "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND"
+    },
+    {
+      "caseId": "r-q8-header-counter/two-deletes-485ms-apart",
+      "reason": "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND"
+    },
+    {
+      "caseId": "r-q8-header-counter/two-deletes-500ms-apart",
+      "reason": "pause within 50 ms of ACE's 500-545 ms write-behind window, R-TXN-1 TXN-FLUSH-BEHIND"
+    }
+  ],
+  "notComparable": [
+    {
+      "caseId": "r-crash-requery/param-then-requery-qd",
+      "reason": "ACE access violation (0xC0000005) inside rs.Requery; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-crash-requery/requery-other-qd",
+      "reason": "ACE access violation (0xC0000005) inside rs.Requery; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-crash-requery/requery-same-qd",
+      "reason": "ACE access violation (0xC0000005) inside rs.Requery; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-expr-1/bind-parameter-lifecycle",
+      "reason": "ACE access violation (0xC0000005) inside lrs.Requery; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-expr-1/pat-11-16-counted-nul-and-reuse",
+      "reason": "ACE access violation (0xC0000005) inside prs.Requery; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-expr-1b/sandbox-array-functions",
+      "reason": "ACE access violation (0xC0000005) inside db.OpenRecordset; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-fmt-2b/kill-after-close-fixed-update",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-fmt-2b/kill-after-close-memo-many-pages",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-oledb-odbc/act-describe-companion-libraries",
+      "reason": "creates only ADOX.Catalog (system msadox.dll) and JRO.JetEngine, neither in CalcDb.Compat.manifest; candidate run instantiates system ADOX instead of CalcDb"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/crash-new-kill-mid-create-150ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/crash-new-kill-mid-create-40ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/crash-new-kill-mid-create-5ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/crash-txn-kill-between-execute-and-commit",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/txn-flush-implicit-db-close-then-kill",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/txn-flush-implicit-idle-refresh-then-kill",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/txn-flush-implicit-kill-after-500ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/txn-flush-implicit-kill-after-750ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q-cat-txn-lock/write-fail-kill-lock-holder",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-mid-commit-then-kill",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-then-kill-mid-insert-early",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-control-suspend-then-kill-mid-insert-late",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-200ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-250ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/crash-new-kill-mid-create-300ms",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/ex-life-kill-mid-statement-exclusive",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/read-life-kill-reader-mid-scan",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/txn-flush-implicit-kill-after-300ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/txn-flush-implicit-kill-after-400ms-return",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-q2-cat-txn-lock/write-fail-suspend-holder-mid-update",
+      "reason": "killParticipant ends participant a (0xDEAD); retained ACE record is Uncertain/Incomplete with no capture of participant a"
+    },
+    {
+      "caseId": "r-sql-13b/join-limit-tables",
+      "reason": "ACE worker exceeded timeout inside db.OpenRecordset and was terminated; retained ACE record is Uncertain/Incomplete with no capture"
+    },
+    {
+      "caseId": "r-wire/opt-opendatabase",
+      "reason": "ACE opened the modal ODBC Select Data Source dialog (#32770) on eng.OpenDatabase and exceeded timeout; retained ACE record is Uncertain/Incomplete with no capture"
+    }
+  ]
+}

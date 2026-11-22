@@ -1,7 +1,7 @@
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
 
-namespace CalcDb.Com.Dao;
+namespace CalcDb.Com;
 
 /// <summary>
 /// The database file of one Database session (II-09 §§2–3; W-05/same-width-mutation): one positioned file for the
@@ -13,7 +13,7 @@ namespace CalcDb.Com.Dao;
 /// <see cref="TakeWriterLease"/> therefore checks the file's identity and the bytes of the pages the publication will
 /// overwrite before it admits the write. The writer lease is held until the session closes.
 /// </summary>
-internal sealed class SessionFile : IPositionedFile
+public sealed class SessionFile : IPositionedFile
 {
     private readonly string _path;
     private WindowsFile _handle;

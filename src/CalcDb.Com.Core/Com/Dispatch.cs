@@ -13,7 +13,7 @@ namespace CalcDb.Com.Com;
 /// moves into the slot or frees when the caller takes no result. Other values that own a resource (arrays, objects)
 /// are an OwnedVariant.
 /// </summary>
-internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure)
+public readonly record struct CallResult(OwnedVariant? Value, Failure? Failure)
 {
     public NativeVariant Scalar { get; private init; }
 
@@ -78,11 +78,11 @@ internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure
 /// A typed object operation. <paramref name="args"/> holds one borrowed VARIANT pointer per declared parameter, 0 when
 /// an optional one was omitted. Parameters of declared scalar types arrive coerced to that type.
 /// </summary>
-internal delegate CallResult Operation(ComObject self, ReadOnlySpan<nint> args);
+public delegate CallResult Operation(ComObject self, ReadOnlySpan<nint> args);
 
 /// <summary>DISPPARAMS, Windows x64 layout.</summary>
 [StructLayout(LayoutKind.Sequential)]
-internal struct DispParams
+public struct DispParams
 {
     public nint Args;
     public nint NamedArgs;
@@ -95,7 +95,7 @@ internal struct DispParams
 /// binds and coerces arguments, the typed adapter (<see cref="TypedCall"/>) converts native arguments; both reach the
 /// same operation. A declared member without an operation fails with the named not-implemented outcome.
 /// </summary>
-internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable, SupportErrorInfo.Vtable)
+public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable, SupportErrorInfo.Vtable)
 {
     public InterfaceDecl Declaration { get; } = declaration;
 
@@ -471,7 +471,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 }
 
 /// <summary>The IUnknown and IDispatch entries every dual wrapper shares, and vtable construction from a declaration.</summary>
-internal static unsafe class DualEntries
+public static unsafe class DualEntries
 {
     /// <summary>The QueryInterface entry of every CalcDb vtable: a pointer whose vtable starts with it is a CalcDb wrapper.</summary>
     public static readonly nint QueryInterfaceEntry = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterface;
@@ -587,7 +587,7 @@ internal static unsafe class DualEntries
 /// borrowed VARIANT by its declared type, the operation runs, and the result is written to the retval cell by the
 /// declared return type. The retval cell is cleared first, so a failure leaves a null output (II-13 §3).
 /// </summary>
-internal static unsafe class TypedCall
+public static unsafe class TypedCall
 {
     public static int Run(nint self, InterfaceDecl declaration, int slot, ulong* raw, int count, nint retval)
     {
@@ -812,15 +812,16 @@ internal static unsafe class TypedCall
         throw new InvalidOperationException($"no typed return rule for {returnType}");
     }
 
-    private static readonly Dictionary<LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?>> DeclaredReturns =
-        DeclarationIndex.Libraries.ToDictionary<LibraryDecl, LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?>>(l => l, _ => new(StringComparer.Ordinal), ReferenceEqualityComparer.Instance);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<LibraryDecl, System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?>> DeclaredReturns =
+        new(ReferenceEqualityComparer.Instance);
 
     /// <summary>The declared interface of a returned object (a coclass name stands for its default interface), queried from <paramref name="unknown"/>.</summary>
     private static void StoreObject(InterfaceDecl declaration, string returnType, nint unknown, nint retval)
     {
         // Resolved once per declared return type in the declaring library, not per call (task hdw6).
         LibraryDecl library = DeclarationIndex.LibraryOf(declaration);
-        InterfaceDecl? declared = DeclaredReturns[library].GetOrAdd(returnType, static (t, l) => DeclarationIndex.Interface(l, t[16..]), library);
+        InterfaceDecl? declared = DeclaredReturns.GetOrAdd(library, static _ => new(StringComparer.Ordinal))
+            .GetOrAdd(returnType, static (t, l) => DeclarationIndex.Interface(l, t[16..]), library);
         nint result = 0;
         Guid iid = declared?.Iid ?? ComIids.IDispatch;
         int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)(*(nint**)unknown)[0])(unknown, &iid, &result);

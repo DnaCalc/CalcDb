@@ -12,6 +12,7 @@ namespace CalcDb.Expressions.Tests;
 /// <c>r-expr-1b/null-propagation-functions</c>, <c>r-expr-1/pat-15-strcomp-selector</c>,
 /// <c>r-sort-3b/lg-compare-ops</c>, <c>r-str-ado-act/str-projection</c>).
 /// </summary>
+[Collection(AllocationBudgets.Name)]
 public sealed class InStrStrCompTests
 {
     private static TextCollation? HostTextOrder(uint lcid) =>

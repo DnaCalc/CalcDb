@@ -1,6 +1,5 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
-using CalcDb.Com.Dao;
 using CalcDb.Com.Declarations;
 using CalcDb.Expressions;
 using CalcDb.Format;
@@ -369,7 +368,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             startedImplicitEdit = true;
         }
 
-        NativeVariant incoming = ByRefValues.Dereference((NativeVariant*)rawArg);
+        NativeVariant incoming = DereferenceByRef((NativeVariant*)rawArg);
         OwnedVariant? tempConverted = null;
         NativeVariant effective = incoming;
         if (incoming.Type == VarType.Empty && col.TypeCode != NativeTypes.Boolean)
@@ -693,6 +692,43 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             v?.Dispose();
         }
         _originalSnapshot = null;
+    }
+
+    private static unsafe NativeVariant DereferenceByRef(NativeVariant* v)
+    {
+        var vt = (VarType)v->Vt;
+        if ((vt & VarType.ByRef) == 0 || v->Pointer == 0)
+        {
+            return *v;
+        }
+        VarType target = vt & ~VarType.ByRef;
+        if (target == VarType.Variant)
+        {
+            return *(NativeVariant*)v->Pointer;
+        }
+        NativeVariant value = default;
+        value.Vt = (ushort)target;
+        switch (target)
+        {
+            case VarType.UI1:
+                value.Int64 = *(byte*)v->Pointer;
+                break;
+            case VarType.I2 or VarType.Bool:
+                value.Int64 = *(ushort*)v->Pointer;
+                break;
+            case VarType.I4 or VarType.R4:
+                value.Int64 = *(uint*)v->Pointer;
+                break;
+            case VarType.R8 or VarType.Currency or VarType.Date:
+                value.Int64 = *(long*)v->Pointer;
+                break;
+            case VarType.Bstr:
+                value.Pointer = *(nint*)v->Pointer;
+                break;
+            default:
+                return *v;
+        }
+        return value;
     }
 
     private static Failure MapReadFailure(FieldResult raw) => raw.Failure switch

@@ -104,7 +104,65 @@ public sealed class ExplicitFrame
 
     internal int UnwrittenCount { get; set; }
 
+    internal Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>? ConsumedAutoNumbers { get; set; }
+
+    internal HashSet<(PageCache Cache, uint TableDefPage)>? StatementTableDefPages { get; set; }
+
+    internal HashSet<PageCache>? RolledBackGlobalMapAllocations { get; set; }
+
+    /// <summary>
+    /// Join <paramref name="mark"/> to the level's mark of its table: the furthest value in the increment's direction (a
+    /// reseed sets it), and the first reason a consumption of the level is not the recorded case.
+    /// </summary>
+    internal void RecordAutoNumber(PageCache cache, uint tableDefPage, AutoNumberMark mark)
+    {
+        ConsumedAutoNumbers ??= [];
+        var key = (cache, tableDefPage);
+        if (!ConsumedAutoNumbers.TryGetValue(key, out AutoNumberMark existing))
+        {
+            ConsumedAutoNumbers[key] = mark;
+            return;
+        }
+        uint value = mark.Reseed || mark.IsBeyond(existing.Value) ? mark.Value : existing.Value;
+        ConsumedAutoNumbers[key] = new AutoNumberMark(value, mark.Increment, existing.Reseed || mark.Reseed, existing.Unrecorded ?? mark.Unrecorded);
+    }
+
+    /// <summary>
+    /// The marks of a resolved inner level join this one; <paramref name="unrecorded"/>, when given, names why they are no
+    /// longer the recorded case (a statement level rolled back without its counters written).
+    /// </summary>
+    internal void MergeAutoNumbersFrom(ExplicitFrame child, string? unrecorded = null)
+    {
+        if (child.ConsumedAutoNumbers is not { Count: > 0 } src)
+        {
+            return;
+        }
+        foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in src)
+        {
+            RecordAutoNumber(cache, tdefPage, mark with { Unrecorded = mark.Unrecorded ?? unrecorded });
+        }
+    }
+
     public IReadOnlyList<AcceptedRowChange> AcceptedChanges => Changes;
+}
+
+/// <summary>
+/// The AutoNumber a transaction level consumed in one table (R-FMT-2 Generated values), which the level's outermost
+/// Rollback writes to TableDef 0x14 when the file does not hold it yet. Only the case
+/// <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c> shows is written: values a SQL statement generated and
+/// inserted under unit increment, in a level that took a new page. <see cref="Unrecorded"/> names any other consumption
+/// of the level (a recordset AddNew, a refused row, an explicit value, a non-unit increment, a reseed, an inner
+/// Rollback): under unit increment, Rollback succeeds and writes nothing (keeping the in-memory counter consumed); only
+/// a non-unit increment refuses before acting (<see cref="MutationOpen.AutoNumberIncrement"/>).
+/// </summary>
+internal readonly record struct AutoNumberMark(uint Value, int Increment, bool Reseed, string? Unrecorded)
+{
+    /// <summary>Whether <see cref="Value"/> lies beyond <paramref name="stored"/> in the increment's direction.</summary>
+    public bool IsBeyond(uint stored) =>
+        Increment < 0 ? unchecked((int)Value) < unchecked((int)stored) : unchecked((int)Value) > unchecked((int)stored);
+
+    /// <summary>Whether a Rollback that writes nothing would lose this mark against the <paramref name="stored"/> word.</summary>
+    public bool IsLostAgainst(uint stored) => Reseed ? Value != stored : IsBeyond(stored);
 }
 
 /// <summary>
@@ -297,9 +355,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
     private readonly HashSet<PageCache> _allocatedGlobalMap = [];
     private readonly HashSet<PageCache> _reservedExtent = [];
+    private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
+    private readonly HashSet<PageCache> _pendingCloseCommit = [];
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
+    private bool _statementHasSideEffect;
+    private int? _statementRefusal;
+    private ResolutionOutcome? _statementFailure;
     private int _unwrittenPendingCount;
 
     /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
@@ -487,8 +550,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             // Inner commit: the level's deltas and tickets move to the parent; each overlay merges its innermost scope
             // into the parent, which keeps its own earlier before-images (F-54: A17=7 survives, B21=100 is adopted).
-            _frames[^1].Changes.AddRange(top.Changes);
-            _frames[^1].UnwrittenCount += top.UnwrittenCount;
+            ExplicitFrame parent = _frames[^1];
+            parent.Changes.AddRange(top.Changes);
+            parent.UnwrittenCount += top.UnwrittenCount;
+            parent.MergeAutoNumbersFrom(top);
+            if (top.StatementTableDefPages is { Count: > 0 } sidePages)
+            {
+                parent.StatementTableDefPages ??= [];
+                parent.StatementTableDefPages.UnionWith(sidePages);
+            }
+            if (top.RolledBackGlobalMapAllocations is { Count: > 0 } rolledAlloc)
+            {
+                parent.RolledBackGlobalMapAllocations ??= [];
+                parent.RolledBackGlobalMapAllocations.UnionWith(rolledAlloc);
+            }
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.CommitScope();
@@ -497,9 +572,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         _pending.AddRange(top.Changes);
         _unwrittenPendingCount += top.UnwrittenCount;
+        if (top.RolledBackGlobalMapAllocations is { Count: > 0 } outerRolledAlloc)
+        {
+            _pendingCloseCommit.UnionWith(outerRolledAlloc);
+        }
         bool pages = _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0);
         if (!pages && top.Changes.Count == 0)
         {
+            _sideEffectRoles.Clear();
+            _pendingCloseCommit.Clear();
             ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
             return new ResolutionOutcome();
@@ -524,9 +605,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     {
         incrementPage0 = false;
         trackLazyBurst = false;
-        FormatDescriptor d = FormatDescriptor.Jet4Family;
-        using PagePin? page0 = cache.Pin(0).Pin;
-        if (page0 is null || !DatabaseHeader.IsAccdb(page0.Bytes, d))
+        if (AccdbHeader(cache) is not true)
         {
             return (MutationOpen.None, null);
         }
@@ -558,7 +637,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
             }
         }
-        if (incrementPage0 && d.Header.CommitCounter.Read(page0.Bytes) >= byte.MaxValue)
+        if (incrementPage0 && CommitCounterAt(cache) >= byte.MaxValue)
         {
             return (MutationOpen.Publication, "ACCDB page-0 commit counter at offset 3586 is already 255: wrap or multi-byte carry is not observed (evidence/r-q8-header-counter)");
         }
@@ -709,6 +788,146 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
+    /// Whether <paramref name="cache"/>'s page 0 is an ACCDB header: <c>false</c> for an MDB, <c>null</c> for a synthetic
+    /// cache without a database header (neither the ACCDB page-0 counter nor an MDB refusal applies to it).
+    /// </summary>
+    private static bool? AccdbHeader(PageCache cache)
+    {
+        using PagePin? page0 = cache.Pin(0).Pin;
+        return page0 is null ? null : DatabaseHeader.IsAccdb(page0.Bytes, FormatDescriptor.Jet4Family);
+    }
+
+    private static ulong CommitCounterAt(PageCache cache)
+    {
+        using PagePin? page0 = cache.Pin(0).Pin;
+        return page0 is null ? 0 : FormatDescriptor.Jet4Family.Header.CommitCounter.Read(page0.Bytes);
+    }
+
+    /// <summary>
+    /// Record an AutoNumber value consumed or reseeded inside an explicit transaction level (<see cref="AutoNumberMark"/>):
+    /// the outermost <see cref="Rollback"/> writes it to TableDef 0x14 when the file does not hold it yet and
+    /// <paramref name="unrecorded"/> is null (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>), succeeds
+    /// writing nothing for every other unit-increment case (keeping the in-memory counter consumed), and refuses before
+    /// acting when <paramref name="increment"/> is not 1 (<see cref="MutationOpen.AutoNumberIncrement"/>).
+    /// </summary>
+    internal void RecordConsumedAutoNumber(PageCache cache, uint tableDefPage, uint value, int increment, bool reseed, string? unrecorded)
+    {
+        if (_frames.Count > 0)
+        {
+            _frames[^1].RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, unrecorded));
+        }
+    }
+
+    /// <summary>
+    /// The error of a refused Update of the open statement (R-TXN-1 TXN-STMT): a Rollback of the statement's own level
+    /// writes the counters the refused INSERT reached after a 3022 (<c>evidence/r-q18-statements/ins-dup-fail</c>,
+    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>) or a 3201 (bytes not recorded;
+    /// <c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c> decides the error and next ID 5 only).
+    /// </summary>
+    internal void NoteStatementRefusal(int number)
+    {
+        if (_statement is not null)
+        {
+            _statementRefusal = number;
+        }
+    }
+
+    /// <summary>
+    /// Fold a refused 3022 unique insert's TableDef side effects into the active SQL statement's or transaction's single
+    /// write group (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; <c>evidence/r-q18-statements/ins-dup-plain</c>,
+    /// <c>evidence/r-q18-statements/ins-dup-plain-txn</c>, <c>evidence/r-q18-statements/ins-dup-fail</c>,
+    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>). When <paramref name="edits"/> is empty, writes nothing:
+    /// <c>evidence/r-err-1b/con-pk-duplicate-insert</c> and
+    /// <c>evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror</c> keep identical before-open and after-close
+    /// file hashes (<c>33192b8c7ea7</c>), unlike a recordset AddNew refused 3022
+    /// (<c>evidence/r-q10-commit-counter-edits</c>).
+    /// </summary>
+    internal (MutationOpen Open, string? Detail) RecordStatementSideEffect(
+        PageCache cache,
+        IReadOnlyList<PageEdit> edits,
+        IReadOnlyList<LockResource> footprint,
+        MutationErrorSource conflictSource,
+        out MutationError? error)
+    {
+        error = null;
+        if (Publisher is null)
+        {
+            return (MutationOpen.None, null);
+        }
+        if (_unresolved.Contains(cache))
+        {
+            return (MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+        }
+        if (edits.Count == 0)
+        {
+            // A SQL statement whose refused 3022 unique insert changes no TableDef word writes nothing
+            // (evidence/r-err-1b/con-pk-duplicate-insert and
+            // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror keep identical file hashes 33192b8c7ea7).
+            return (MutationOpen.None, null);
+        }
+        if ((_participants.ContainsKey(cache) || _frames.Count > 0) && AccdbHeader(cache) is false)
+        {
+            return (MutationOpen.CounterWrite, "refused unique insert TableDef counter side effects inside a statement or transaction in an MDB file are not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+        }
+        LockResource[] lockResources = footprint.Count > 0 ? [.. footprint] : [];
+        LockLifetime lifetime = ChangeLifetime;
+        if (lockResources.Length > 0)
+        {
+            LockAcquisition got = Lock(cache, lockResources, lifetime);
+            if (got.Conflict is { } conflict)
+            {
+                if (conflict.HolderLifetime == LockLifetime.UntilPublished)
+                {
+                    return (MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
+                }
+                error = new MutationError(MutationError.LockedBySession, conflictSource);
+                return (MutationOpen.None, null);
+            }
+        }
+        FileParticipant participant = EnsureParticipant(cache);
+        for (int i = 0; i < edits.Count; i++)
+        {
+            PageEdit e = edits[i];
+            EditResult edited = participant.Edit(e.Page, e.Delta);
+            if (!edited.Succeeded)
+            {
+                if (lockResources.Length > 0)
+                {
+                    Unlock(cache, lockResources, lifetime);
+                }
+                return (MutationOpen.Publication, $"page {e.Page} could not take the statement side-effect revision: {edited.Failure} {edited.Detail}");
+            }
+            _sideEffectRoles[(cache, e.Page)] = e.Role;
+            if (_frames.Count > 0 && e.Role == PageRole.Catalog)
+            {
+                ExplicitFrame top = _frames[^1];
+                top.StatementTableDefPages ??= [];
+                top.StatementTableDefPages.Add((cache, e.Page));
+            }
+        }
+        if (_frames.Count == 0)
+        {
+            _statementHasSideEffect = true;
+        }
+        return (MutationOpen.None, null);
+    }
+
+    private FileParticipant EnsureParticipant(PageCache cache)
+    {
+        if (!_participants.TryGetValue(cache, out FileParticipant? p))
+        {
+            PrivateOverlay overlay = cache.CreateOverlay(Locker);
+            for (int level = 1; level < _frames.Count; level++)
+            {
+                overlay.BeginScope();
+            }
+            p = new FileParticipant(cache, overlay);
+            _participants.Add(cache, p);
+        }
+        return p;
+    }
+
+    /// <summary>
     /// Publish the change set awaiting publication (II-08 §19; W-05/same-width-mutation): one PublicationAttempt on the
     /// file through the native-program executor, then the published pages are released (<see cref="ReleasePublished"/>)
     /// and the changes leave the set. Nothing is written unless every change has a physical form; a change set over
@@ -755,6 +974,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     PageEdit e = edits[ei];
                     roles[e.Page] = e.Role;
+                }
+            }
+            foreach (((PageCache sideCache, ulong sidePage), PageRole sideRole) in _sideEffectRoles)
+            {
+                if (ReferenceEquals(sideCache, p.Cache) && !roles.ContainsKey(sidePage))
+                {
+                    roles[sidePage] = sideRole;
                 }
             }
             PageBracket? bracket = null;
@@ -853,7 +1079,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
             }
         }
+        if (_pendingCloseCommit.Count > 0)
+        {
+            _allocatedGlobalMap.UnionWith(_pendingCloseCommit);
+            _pendingCloseCommit.Clear();
+        }
         _pending.Clear();
+        _sideEffectRoles.Clear();
         ClearAcceptedIndex();
         ReleaseParticipants();
         return (MutationOpen.None, null);
@@ -862,7 +1094,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Rollback of the current level; without a level 3034. Its accepted changes are dropped and their tickets stay
     /// consumed. A pending Edit or AddNew of this Workspace's recordsets is dropped by the outermost Rollback (TXN-CLOSE:
-    /// EditMode 0, Update then 3020); at an inner level that is not recorded and is named.
+    /// EditMode 0, Update then 3020); at an inner level that is not recorded and is named. The outermost Rollback writes
+    /// the AutoNumber its level's SQL inserts consumed when the file does not hold it yet, with page 1, as one commit, and
+    /// the file's Close commits page 1 again (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>: no row, row and
+    /// index counts unchanged, AutoNumber 4, +2). Every other unit-increment case whose bytes are not recorded (no new
+    /// page as in <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c>, an inner Rollback, a reseed, an MDB, a refused row,
+    /// a rolled-back statement level, a recordset AddNew, an explicit value, several files) succeeds and writes nothing,
+    /// keeping the in-memory counter consumed. Only a level that consumed an AutoNumber under a non-1 increment refuses
+    /// before it acts and leaves the level as it was (<see cref="MutationOpen.AutoNumberIncrement"/>). The level a SQL
+    /// statement opened for itself is always rolled back (<see cref="RollbackStatementFrame"/>).
     /// </summary>
     public ResolutionOutcome Rollback()
     {
@@ -876,27 +1116,355 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(null, MutationOpen.PendingEditAtInnerRollback, "an edit is pending at an inner Rollback");
         }
         ExplicitFrame top = _frames[^1];
+        if (_statement is not null)
+        {
+            _frames.RemoveAt(_frames.Count - 1);
+            return RollbackStatementFrame(top);
+        }
+        // Every refusal is decided before the level is touched: a refused Rollback changes nothing.
+        if (PlanRolledBackAutoNumbers(top, out RolledBackAutoNumbers? write) is { } refused)
+        {
+            return refused;
+        }
         _frames.RemoveAt(_frames.Count - 1);
         Consume(top.Changes);
         UnindexChanges(top.Changes);
         if (_frames.Count > 0)
         {
+            _frames[^1].MergeAutoNumbersFrom(top, "an inner Rollback");
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.RollbackScope();
             }
+            return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
         }
-        else
+        foreach (EditFrame e in _edits.ToArray())
         {
-            foreach (EditFrame e in _edits.ToArray())
-            {
-                e.DropForRollback();
-            }
-            // Purely private changes: no native restore, only this locker's grants end (II-09 §25, T-TXN-31).
-            ReleaseLocks(LockLifetime.Transaction);
-            ReleaseParticipants();
+            e.DropForRollback();
         }
-        return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
+        // Purely private changes: no native restore, only this locker's grants end (II-09 §25, T-TXN-31).
+        ReleaseLocks(LockLifetime.Transaction);
+        ReleaseParticipants();
+        _sideEffectRoles.Clear();
+        _pendingCloseCommit.Clear();
+        return write is { } words ? WriteRolledBackAutoNumbers(words, top.Changes.Count) : new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
+    }
+
+    /// <summary>The AutoNumber words a Rollback writes: one file, each table's TableDef page and value.</summary>
+    private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value)> Words);
+
+    /// <summary>
+    /// Decide what Rollback of <paramref name="top"/> writes, before anything is dropped.
+    /// A level that consumed an AutoNumber under a non-1 increment refuses before it acts
+    /// (<see cref="MutationOpen.AutoNumberIncrement"/>): no record decides whether the counter reverts or stays
+    /// consumed (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open, <c>evidence/r-q23-counter-step/</c>).
+    /// Under unit increment, the answer is decided (the in-memory counter stays consumed) and only the case
+    /// <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c> shows is written: the outermost Rollback of one ACCDB
+    /// file whose level took a new page, for SQL inserts of generated values whose AutoNumber the file does not hold yet
+    /// (<see cref="AutoNumberMark.IsLostAgainst"/>). Every other unit-increment case whose bytes are not recorded
+    /// succeeds and writes nothing.
+    /// </summary>
+    private ResolutionOutcome? PlanRolledBackAutoNumbers(ExplicitFrame top, out RolledBackAutoNumbers? write)
+    {
+        write = null;
+        if (top.ConsumedAutoNumbers is not { Count: > 0 } marks)
+        {
+            return null;
+        }
+        foreach (((_, uint tdefPage), AutoNumberMark mark) in marks)
+        {
+            if (mark.Increment != 1)
+            {
+                return new ResolutionOutcome(
+                    null,
+                    MutationOpen.AutoNumberIncrement,
+                    $"Rollback after an AutoNumber consumed on TableDef page {tdefPage} under non-1 increment ({mark.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
+            }
+        }
+        if (Publisher is null || top.Level > 1)
+        {
+            return null;
+        }
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        PageCache? file = null;
+        List<(uint TableDefPage, uint Value)> words = [];
+        foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
+        {
+            uint stored;
+            using (PagePin? tdef = cache.Pin(tdefPage).Pin)
+            {
+                if (tdef is null || tdef.Bytes.Length != d.PageSize || tdef.Bytes[d.DataPage.Kind.Offset] != 0x02)
+                {
+                    return null;
+                }
+                stored = (uint)d.TableDef.AutoNumber.Read(tdef.Bytes);
+            }
+            if (!mark.IsLostAgainst(stored))
+            {
+                continue;
+            }
+            if (mark.Unrecorded is not null
+                || mark.Reseed
+                || (file is not null && !ReferenceEquals(file, cache))
+                || AccdbHeader(cache) is not true
+                || !TookGlobalMapPage(top, cache))
+            {
+                return null;
+            }
+            file = cache;
+            words.Add((tdefPage, mark.Value));
+        }
+        if (file is not null)
+        {
+            write = new RolledBackAutoNumbers(file, words);
+        }
+        return null;
+    }
+
+    private static bool TookGlobalMapPage(ExplicitFrame frame, PageCache cache)
+    {
+        for (int i = 0; i < frame.Changes.Count; i++)
+        {
+            if (frame.Changes[i].Physical is { } physical && ReferenceEquals(physical.File, cache) && AllocatesGlobalMapPage(physical))
+            {
+                return true;
+            }
+        }
+        return frame.RolledBackGlobalMapAllocations?.Contains(cache) == true;
+    }
+
+    /// <summary>
+    /// The Rollback's commit (ins-clean-fail-txn-rollback): page 1 unchanged and each TableDef's AutoNumber, +1 on page 0,
+    /// and page 1 once more at Close (<see cref="NeedsCloseCommit"/>). A failure here is the publication's own.
+    /// </summary>
+    private ResolutionOutcome WriteRolledBackAutoNumbers(RolledBackAutoNumbers write, int resolvedChanges)
+    {
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        bool page1 = AccdbHeader(write.File) is true;
+        List<PageEdit> edits = [];
+        List<LockResource> footprint = [];
+        if (page1)
+        {
+            edits.Add(new PageEdit(d.Map.GlobalMapPage, NoOpPageDelta.Instance, PageRole.Map));
+            footprint.Add(new LockResource(d.Map.GlobalMapPage, LockPurpose.Map));
+        }
+        foreach ((uint tdefPage, uint value) in write.Words)
+        {
+            edits.Add(new PageEdit(tdefPage, new TableDefCountsDelta(0, value, [], d), PageRole.Catalog));
+            footprint.Add(new LockResource(tdefPage, LockPurpose.TableDef));
+        }
+        (MutationOpen open, string? detail) = PublishNonTransactional(write.File, edits, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? pubError);
+        if (pubError is not null || open != MutationOpen.None)
+        {
+            return new ResolutionOutcome(pubError, open, detail, resolvedChanges);
+        }
+        if (page1)
+        {
+            _allocatedGlobalMap.Add(write.File);
+        }
+        return new ResolutionOutcome(ResolvedChanges: resolvedChanges);
+    }
+
+    /// <summary>The counters a statement's refused INSERT reached: one file and each TableDef page's words.</summary>
+    private sealed record StatementCounters(PageCache File, List<(uint TableDefPage, TableDefCounterSnapshotDelta Snapshot)> Snapshots, bool TookPage);
+
+    /// <summary>
+    /// Rollback of the level a SQL statement opened for itself (a multi-row INSERT ... SELECT or DELETE with
+    /// dbFailOnError); it is always rolled back. After a 3022 refused one of its INSERT rows, the TableDef counters the
+    /// statement reached are written as they stood (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER): outside a transaction as one
+    /// commit within Execute and a second at the statement's end, and inside one into the enclosing level, written by its
+    /// commit; when its rows took a new page, page 1 joins each commit and is written again at Close
+    /// (<c>evidence/r-q18-statements/ins-dup-fail</c>, +3; <c>ins-dup-fail-txn</c>, +2). Every other INSERT level that holds
+    /// rows or counters is rolled back writing nothing, and the statement ends with the named case
+    /// (<see cref="PlanStatementCounters"/>). The Rollback itself succeeds: the statement's level is gone either way.
+    /// </summary>
+    private ResolutionOutcome RollbackStatementFrame(ExplicitFrame top)
+    {
+        int resolved = top.Changes.Count;
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        StatementCounters? counters = PlanStatementCounters(top, out ResolutionOutcome? limitation);
+        Consume(top.Changes);
+        UnindexChanges(top.Changes);
+        if (_frames.Count > 0)
+        {
+            // The statement's AutoNumbers stay consumed in the enclosing level, which no record shows rolled back after this.
+            _frames[^1].MergeAutoNumbersFrom(top, "a SQL statement whose own level was rolled back");
+            foreach (FileParticipant p in _participants.Values)
+            {
+                p.Overlay.RollbackScope();
+            }
+            if (limitation is not null)
+            {
+                _statementFailure = limitation;
+                return new ResolutionOutcome(ResolvedChanges: resolved);
+            }
+            if (counters is not null)
+            {
+                FileParticipant parent = EnsureParticipant(counters.File);
+                foreach ((uint tdefPage, TableDefCounterSnapshotDelta snap) in counters.Snapshots)
+                {
+                    EditResult edited = parent.Edit(tdefPage, snap);
+                    if (!edited.Succeeded)
+                    {
+                        _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage} could not take the counters the statement reached: {edited.Failure} {edited.Detail}");
+                        return new ResolutionOutcome(ResolvedChanges: resolved);
+                    }
+                    _sideEffectRoles[(counters.File, tdefPage)] = PageRole.Catalog;
+                }
+                if (counters.TookPage && AccdbHeader(counters.File) is true)
+                {
+                    uint globalMapPage = d.Map.GlobalMapPage;
+                    if (!parent.Overlay.ChangedPages.Contains(globalMapPage))
+                    {
+                        EditResult mapEdit = parent.Edit(globalMapPage, NoOpPageDelta.Instance);
+                        if (!mapEdit.Succeeded)
+                        {
+                            _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"page {globalMapPage} could not join the counters' commit: {mapEdit.Failure} {mapEdit.Detail}");
+                            return new ResolutionOutcome(ResolvedChanges: resolved);
+                        }
+                        _sideEffectRoles[(counters.File, globalMapPage)] = PageRole.Map;
+                    }
+                    _frames[^1].RolledBackGlobalMapAllocations ??= [];
+                    _frames[^1].RolledBackGlobalMapAllocations!.Add(counters.File);
+                }
+            }
+            return new ResolutionOutcome(ResolvedChanges: resolved);
+        }
+
+        // Outside a transaction (ins-dup-fail): drop every data, index and map edit, then write the counters within
+        // Execute (group 1) and stage the same pages for the statement's end (group 2); page 1 again at Close (+3).
+        foreach (EditFrame e in _edits.ToArray())
+        {
+            e.DropForRollback();
+        }
+        ReleaseLocks(LockLifetime.Transaction);
+        ReleaseParticipants();
+        _sideEffectRoles.Clear();
+        _pendingCloseCommit.Clear();
+        if (limitation is not null)
+        {
+            _statementFailure = limitation;
+            return new ResolutionOutcome(ResolvedChanges: resolved);
+        }
+        if (counters is not null)
+        {
+            bool page1 = counters.TookPage && AccdbHeader(counters.File) is true;
+            List<PageEdit> edits = [];
+            List<LockResource> footprint = [];
+            if (page1)
+            {
+                edits.Add(new PageEdit(d.Map.GlobalMapPage, NoOpPageDelta.Instance, PageRole.Map));
+                footprint.Add(new LockResource(d.Map.GlobalMapPage, LockPurpose.Map));
+            }
+            foreach ((uint tdefPage, TableDefCounterSnapshotDelta snap) in counters.Snapshots)
+            {
+                edits.Add(new PageEdit(tdefPage, snap, PageRole.Catalog));
+                footprint.Add(new LockResource(tdefPage, LockPurpose.TableDef));
+            }
+            (MutationOpen open1, string? detail1) = PublishNonTransactional(counters.File, edits, footprint, CommitMode.Immediate, MutationErrorSource.Database, out MutationError? err1);
+            if (err1 is not null || open1 != MutationOpen.None)
+            {
+                _statementFailure = new ResolutionOutcome(err1, open1, detail1);
+                return new ResolutionOutcome(ResolvedChanges: resolved);
+            }
+            (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, edits, footprint, MutationErrorSource.Database, out MutationError? err2);
+            if (err2 is not null || open2 != MutationOpen.None)
+            {
+                _statementFailure = new ResolutionOutcome(err2, open2, detail2);
+                return new ResolutionOutcome(ResolvedChanges: resolved);
+            }
+            if (page1)
+            {
+                _pendingCloseCommit.Add(counters.File);
+            }
+        }
+        return new ResolutionOutcome(ResolvedChanges: resolved);
+    }
+
+    /// <summary>
+    /// Decide, before the statement's level is dropped, what its Rollback writes: nothing for a level with no rows and no
+    /// counters, or one of UPDATE or DELETE changes (TXN-STMT: no candidate changed); the reached counters
+    /// (<see cref="StatementCounters"/>) for an INSERT level in one ACCDB file, on one data page, after a 3022
+    /// (<c>evidence/r-q18-statements/ins-dup-fail</c> and <c>evidence/r-q18-statements/ins-dup-fail-txn</c> show the
+    /// bytes on a new page; for no new page the bytes are not recorded, while
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>, <c>evidence/r-txn-1/stmt-unique-middle-fail-d1</c>,
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d2</c>, <c>evidence/r-txn-1/stmt-unique-last-fail-d1</c>,
+    /// <c>evidence/r-txn-1b/implicit-unique-first-failonerror</c> and <c>evidence/r-txn-1b/rb-unique-failonerror-d1</c>
+    /// decide the answers) or a 3201 (the bytes are not recorded; <c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>
+    /// decides the error and the next ID 5 only); else the named <paramref name="limitation"/>: several files, an MDB,
+    /// several data pages, another refusal after earlier rows (3314, 3315, 3316, an Assign's 3464), or a stop of the
+    /// statement itself (a later conversion failure, an explicit AutoNumber below the counter). Division by zero
+    /// (<c>evidence/r-q18-statements/ins-div0-fail</c>) does not reach here: a source row that fails to read stops the
+    /// statement before its target opens.
+    /// </summary>
+    private StatementCounters? PlanStatementCounters(ExplicitFrame top, out ResolutionOutcome? limitation)
+    {
+        limitation = null;
+        if (Publisher is null
+            || (top.Changes.Count == 0 && top.StatementTableDefPages is not { Count: > 0 })
+            || top.Changes.Exists(c => c.Kind != RowChangeKind.Insert))
+        {
+            return null;
+        }
+        HashSet<PageCache> files = [];
+        HashSet<uint> dataPages = [];
+        HashSet<uint> tdefPages = [];
+        bool tookPage = false;
+        foreach (AcceptedRowChange change in top.Changes)
+        {
+            if (change.Physical is not { } physical)
+            {
+                continue;
+            }
+            files.Add(physical.File);
+            if (change.Inserted is { } inserted)
+            {
+                dataPages.Add(inserted.Page);
+            }
+            tookPage |= AllocatesGlobalMapPage(physical);
+            foreach (PageEdit e in physical.Edits)
+            {
+                if (e.Role == PageRole.Catalog && e.Delta is TableDefCountsDelta)
+                {
+                    tdefPages.Add(e.Page);
+                }
+            }
+        }
+        foreach ((PageCache sideCache, uint sidePage) in top.StatementTableDefPages ?? [])
+        {
+            files.Add(sideCache);
+            tdefPages.Add(sidePage);
+        }
+        PageCache? file = files.Count == 1 ? files.First() : null;
+        string? unrecorded = file is null ? $"{files.Count} files" : null;
+        unrecorded ??= AccdbHeader(file!) is false ? "an MDB file" : null;
+        unrecorded ??= dataPages.Count > 1 ? $"rows on {dataPages.Count} data pages" : null;
+        unrecorded ??= _statementRefusal is not (MutationError.Duplicate or MutationError.RelatedRecordRequired)
+            ? (_statementRefusal is int number ? $"refusal {number} after earlier rows" : "a stop of the statement itself after earlier rows")
+            : null;
+        if (unrecorded is null && !_participants.TryGetValue(file!, out _))
+        {
+            unrecorded = "counters this Workspace cannot read";
+        }
+        if (unrecorded is not null)
+        {
+            limitation = new ResolutionOutcome(null, MutationOpen.CounterWrite, $"a refused INSERT rolled back with {unrecorded}: its TableDef counters are not recorded, so none are written (qualified.md, the r-q18 statement-publication note: ins-dup-fail, ins-dup-fail-txn)");
+            return null;
+        }
+        FileParticipant participant = _participants[file!];
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        List<(uint TableDefPage, TableDefCounterSnapshotDelta Snapshot)> snapshots = [];
+        foreach (uint tdefPage in tdefPages)
+        {
+            using PagePin? pin = participant.Overlay.Pin(tdefPage).Pin;
+            if (pin is null || TableDefCounterSnapshotDelta.Capture(pin.Bytes, d) is not { } snap)
+            {
+                limitation = new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage}: the counters the statement reached cannot be read");
+                return null;
+            }
+            snapshots.Add((tdefPage, snap));
+        }
+        return new StatementCounters(file!, snapshots, tookPage);
     }
 
     /// <summary>Workspace.Close: every level is rolled back (TXN-CLOSE: Close with 1, 2 or 3 levels returns without error).</summary>
@@ -914,6 +1482,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             e.DropForRollback();
         }
         _lazyBursts.Clear();
+        _sideEffectRoles.Clear();
+        _pendingCloseCommit.Clear();
+        _statementHasSideEffect = false;
+        _statementRefusal = null;
+        _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
     }
@@ -959,6 +1532,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             throw new InvalidOperationException("One statement at a time per Workspace.");
         }
         _statementChanges = 0;
+        _statementHasSideEffect = false;
+        _statementRefusal = null;
+        _statementFailure = null;
         return _statement = new StatementScope(this);
     }
 
@@ -967,12 +1543,25 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statement = null;
         int changes = _statementChanges;
         _statementChanges = 0;
-        if (_frames.Count > 0 || Publisher is null || _pending.Count == 0 || _unwrittenPendingCount > 0)
+        bool hasSideEffect = _statementHasSideEffect;
+        _statementHasSideEffect = false;
+        ResolutionOutcome? stmtFailure = _statementFailure;
+        _statementFailure = null;
+        _statementRefusal = null;
+        if (stmtFailure is { } failed)
+        {
+            return failed with { ResolvedChanges = changes };
+        }
+        if (_frames.Count > 0 || Publisher is null || _unwrittenPendingCount > 0)
         {
             return new ResolutionOutcome(ResolvedChanges: changes);
         }
-        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
-        return new ResolutionOutcome(null, open, detail, changes);
+        if (_pending.Count > 0 || (hasSideEffect && _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0)))
+        {
+            (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+            return new ResolutionOutcome(null, open, detail, changes);
+        }
+        return new ResolutionOutcome(ResolvedChanges: changes);
     }
 
     /// <summary>
@@ -1222,11 +1811,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
-    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket): e.g. the second
-    /// commit of DAO <c>TableDefs.Append</c> whose pages an earlier publication of the same statement already wrote
-    /// (<c>evidence/r-q11-ddl-closure/append-dao</c>). Does not free <see cref="PhysicalChange.ReleasedAtClose"/> pages
-    /// and keeps <see cref="NeedsCloseCommit"/> intact until <see cref="PublishCloseCommit"/> runs. Nothing when the file
-    /// has no such counter.
+    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket). No production
+    /// path calls it: DAO <c>TableDefs.Append</c> now publishes one catalog change per commit (SchemaWriter.CreateTable),
+    /// and the Isam tests use it to show that a counter-only commit keeps the Close obligation. Does not free
+    /// <see cref="PhysicalChange.ReleasedAtClose"/> pages and keeps <see cref="NeedsCloseCommit"/> intact until
+    /// <see cref="PublishCloseCommit"/> runs. Nothing when the file has no such counter.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache)
     {
@@ -1244,8 +1833,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// (<c>evidence/r-q17-growth/retire-delete-au1-read-open</c>, <c>evidence/r-q15-ddl-open/counter-drop-pages</c>,
     /// <c>evidence/r-q20-delete-pages/*</c>, <c>evidence/r-q22-lv-open/lv-free-timing-update-chain-*</c>), increments the
     /// ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and extent
-    /// reservation state. Mid-session counter commits (<see cref="PublishCounterCommit"/>, e.g. DAO
-    /// <c>TableDefs.Append</c>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
+    /// reservation state. Mid-session commits (catalog changes such as DAO <c>TableDefs.Append</c>'s per-field commits,
+    /// and <see cref="PublishCounterCommit"/>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
     {
@@ -1325,7 +1914,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 else if (!commit)
                 {
                     p.Overlay.Rollback();
-                    if (_frames.Count == 0 && !_pending.Exists(c => ReferenceEquals(c.Physical?.File, p.Cache)))
+                    if (_frames.Count == 0 && !_statementHasSideEffect && !_pending.Exists(c => ReferenceEquals(c.Physical?.File, p.Cache)))
                     {
                         p.Dispose();
                         _participants.Remove(p.Cache);

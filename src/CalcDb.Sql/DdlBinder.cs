@@ -176,12 +176,16 @@ public static class DdlBinder
             {
                 return Fail(BindAce(3125, SqlMessages.InvalidObjectName(col.Name)), out failure);
             }
-            string colKey = NameKey(col.Name);
-            if (!colByKey.TryAdd(colKey, col))
+            // The one field-name rule (SchemaWriter.FieldNameClashOf): r-def-expr-sql/ddl-column-clauses Cc20/Cc21 -> 3380
+            // using the duplicate column's spelling; a pair no record decides is refused by name.
+            switch (SchemaWriter.FieldNameClashOf(colByKey.Values.Select(c => c.Name), col.Name, out string? undecided))
             {
-                // r-def-expr-sql/ddl-column-clauses: Cc20/Cc21 -> 3380 using the duplicate column's spelling.
-                return Fail(BindAce(3380, SqlMessages.FieldAlreadyExists(col.Name, stmt.TableName)), out failure);
+                case FieldNameClash.Duplicate:
+                    return Fail(BindAce(3380, SqlMessages.FieldAlreadyExists(col.Name, stmt.TableName)), out failure);
+                case FieldNameClash.Undecided:
+                    return Fail(BindOpen("NotModelled.DdlFieldNamePair", undecided!), out failure);
             }
+            colByKey.Add(NameKey(col.Name), col);
             if (ValidateDataType(col.Name, col.DataType, ref counterCount) is { } typeErr)
             {
                 return Fail(typeErr, out failure);
@@ -301,7 +305,7 @@ public static class DdlBinder
         {
             if (col.Nullability == DdlNullability.NotNull)
             {
-                // r-q15-ddl-open/lv-sql-notnull-long & lv-sql-notnull-text: NOT NULL writes an LvProp blob on MSysObjects.
+                // r-q15-ddl-open/lv-sql-notnull-1 to r-q15-ddl-open/lv-sql-notnull-64 (one Long column): NOT NULL writes an LvProp blob on MSysObjects.
                 return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on column '{col.Name}' writes an LvProp blob (r-q15-ddl-open) not yet modelled in SchemaWriter"), out failure);
             }
             switch (col.DataType.Kind)

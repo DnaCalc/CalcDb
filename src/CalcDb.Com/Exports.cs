@@ -77,6 +77,7 @@ internal static unsafe class Exports
     {
         try
         {
+            ComLibraries.EnsureRegistered();
             _ = TypeLibrary.SaveImages(TypeLibrary.ImageDirectory);
         }
         catch (Exception)

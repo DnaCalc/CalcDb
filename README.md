@@ -22,7 +22,7 @@ that hold for all work, then points into the design book, which holds the detail
   The oracle tooling is described in [docs/work/oracle-runner.md](docs/work/oracle-runner.md);
   what is built, what is next and what it depends on is in the
   [implementation register](docs/work/register.md).
-- **Approach:** [The Plan](docs/the-plan.md) (working draft v0.3, about 6.5k tokens) says
+- **Approach:** [The Plan](docs/the-plan.md) (working draft v0.4, about 7k tokens) says
   how we undertake the work. Everyone working on CalcDb reads it in full. The book
   stays the authority for scope and design.
 - **External inputs** that CalcDb consumes but does not build are listed in
@@ -68,6 +68,10 @@ src/CalcDb.Evidence/            platform-neutral evidence and job contracts (W-0
 src/CalcDb.Oracle.Runner/       calcdb-oracle: submit, run, seal, show, freeze, retain
 src/CalcDb.Oracle.Worker/       Windows x64 ACE worker (raw IDispatch capture)
 src/CalcDb.Evidence.Index/      builds the derived .accdb evidence index (never committed)
+src/CalcDb.Com.Core/            shared COM layer (vtable/IDispatch, type library, sessions, declarations)
+src/CalcDb.Com.Dao/             DAO COM wrappers and generated DAO declarations (W-08)
+src/CalcDb.Com.Ado/             ADO COM wrappers and generated ADO declarations (W-09)
+src/CalcDb.Com/                 native CalcDb.dll shell (NativeAOT exports, activation, host anchor, manifests)
 tests/                          fast unit tests
 probes/                         oracle questions, by book card
 evidence/                       retained answer records; fixtures and small answer artifacts as <sha256>.gz

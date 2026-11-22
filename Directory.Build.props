@@ -13,25 +13,22 @@
     <NoWarn>$(NoWarn);CA1515;CA1062;CA1303;CA1031;CA2007;CA1819;CA1720;CA1716;CA1848;CA1305;CA1307;CA1310;CA1859;CA1822;CA1854</NoWarn>
   </PropertyGroup>
 
-  <!-- The source state a binary was built from (commit, plus "+dirty" when tooling paths had changes), embedded
+  <!-- The source state a binary was built from (commit, plus "+dirty" when tooling paths had changes or new files,
+       which are compiled too), embedded
        as assembly metadata "CalcDbSource". Evidence records name the binaries that ran, not the tree at run time.
-       An export has no .git: tools/landing-check.ps1 writes its state into calcdb-source.txt, which wins when
-       present; a tree with neither says "unknown". -->
+       Every build runs in a git worktree (the integration checkout, the check worktree or a child's); a tree
+       without git says "unknown". -->
   <Target Name="CalcDbSourceState" BeforeTargets="GetAssemblyAttributes" Condition="'$(DesignTimeBuild)' != 'true'">
-    <PropertyGroup>
-      <CalcDbSourceFile>$(MSBuildThisFileDirectory)calcdb-source.txt</CalcDbSourceFile>
-    </PropertyGroup>
-    <Exec Condition="!Exists('$(CalcDbSourceFile)')" Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
+    <Exec Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitHead" />
       <Output TaskParameter="ExitCode" PropertyName="CalcDbGitExit" />
     </Exec>
-    <Exec Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0'" Command="git status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+    <Exec Condition="'$(CalcDbGitExit)' == '0'" Command="git status --porcelain --untracked-files=normal -- src tools tests Directory.Build.props global.json CalcDb.slnx" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitStatus" />
     </Exec>
     <PropertyGroup>
-      <CalcDbSource Condition="Exists('$(CalcDbSourceFile)')">$([System.IO.File]::ReadAllText('$(CalcDbSourceFile)').Trim())</CalcDbSource>
-      <CalcDbSource Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0'">$(CalcDbGitHead)</CalcDbSource>
-      <CalcDbSource Condition="!Exists('$(CalcDbSourceFile)') And '$(CalcDbGitExit)' == '0' And '$(CalcDbGitStatus)' != ''">$(CalcDbGitHead)+dirty</CalcDbSource>
+      <CalcDbSource Condition="'$(CalcDbGitExit)' == '0'">$(CalcDbGitHead)</CalcDbSource>
+      <CalcDbSource Condition="'$(CalcDbGitExit)' == '0' And '$(CalcDbGitStatus)' != ''">$(CalcDbGitHead)+dirty</CalcDbSource>
       <CalcDbSource Condition="'$(CalcDbSource)' == ''">unknown</CalcDbSource>
     </PropertyGroup>
     <ItemGroup>

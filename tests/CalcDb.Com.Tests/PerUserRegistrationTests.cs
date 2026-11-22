@@ -142,6 +142,10 @@ public sealed unsafe class PerUserRegistrationTests(Xunit.Abstractions.ITestOutp
     /// <summary>Every HKCU key the registration could touch, with its values, recursively; and whether the parents exist.</summary>
     private static string[] Snapshot()
     {
+        // The libraries register themselves only when first used (Com split): the snapshot taken before any
+        // registration must still list every TypeLib and Interface key.
+        ComLibraries.EnsureRegistered();
+        Assert.Equal(2, DeclarationIndex.Libraries.Count);
         var paths = new List<string> { PerUserRegistration.Root };
         string classes = PerUserRegistration.Classes;
         paths.AddRange(Parents.Select(p => $@"{classes}\{p}?"));

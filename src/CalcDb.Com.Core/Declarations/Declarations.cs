@@ -2,7 +2,7 @@ namespace CalcDb.Com.Declarations;
 
 /// <summary>INVOKEKIND as the type library declares it.</summary>
 [Flags]
-internal enum InvokeKind
+public enum InvokeKind
 {
     Method = 1,
     PropertyGet = 2,
@@ -11,10 +11,10 @@ internal enum InvokeKind
 }
 
 /// <summary>A declared default value (PARAMFLAG_FHASDEFAULT): its VARTYPE and exact integer, bits or text.</summary>
-internal sealed record ParamDefault(int Vt, long? Integer = null, ulong? Bits = null, string? Text = null);
+public sealed record ParamDefault(int Vt, long? Integer = null, ulong? Bits = null, string? Text = null);
 
 /// <summary>A parameter; PARAMFLAGS 1 in, 2 out, 8 retval, 16 optional, 32 has default. Type is the captured TYPEDESC text.</summary>
-internal sealed record ParamDecl(string Name, string Type, int Flags, ParamDefault? Default = null)
+public sealed record ParamDecl(string Name, string Type, int Flags, ParamDefault? Default = null)
 {
     public bool Optional => (Flags & 0x10) != 0;
 }
@@ -23,7 +23,7 @@ internal sealed record ParamDecl(string Name, string Type, int Flags, ParamDefau
 /// One member of the dispatch view (II-13 F-138 MemberDecl): member ID, invocation kind, the vtable byte offset of its
 /// dual entry, the dispatch parameters (without the retval) and the dispatch return type.
 /// </summary>
-internal sealed record MemberDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, string ReturnType, IReadOnlyList<ParamDecl> Parameters)
+public sealed record MemberDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, string ReturnType, IReadOnlyList<ParamDecl> Parameters)
 {
     public int Slot => VtableOffset / 8;
 }
@@ -32,7 +32,7 @@ internal sealed record MemberDecl(int MemberId, string Name, InvokeKind Kind, in
 /// One entry of the vtable view the interface itself declares (inherited entries belong to its base), with FUNCDESC's
 /// cParamsOpt as captured (the optional VARIANT parameters without a default; R-ACT-1 ACT-META).
 /// </summary>
-internal sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, int FuncFlags, string ReturnType, IReadOnlyList<ParamDecl> Parameters, int OptionalCount = 0);
+public sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, int FuncFlags, string ReturnType, IReadOnlyList<ParamDecl> Parameters, int OptionalCount = 0);
 
 /// <summary>
 /// A captured dual interface (II-13 F-138 InterfaceDecl): IID, native vtable size, base interface, type flags of the
@@ -40,7 +40,7 @@ internal sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kin
 /// <see cref="FillEntries"/> fills every declared slot with its generated typed entry (TypedCall), which reaches the
 /// member's operation or fails with the named not-implemented outcome.
 /// </summary>
-internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableBytes, string baseName, int dispatchFlags, int vtableFlags,
+public sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableBytes, string baseName, int dispatchFlags, int vtableFlags,
     IReadOnlyList<MemberDecl> members, IReadOnlyList<VtableEntryDecl> entries, delegate*<nint*, void> fillEntries)
 {
     public string Name { get; } = name;
@@ -110,12 +110,12 @@ internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableByte
 }
 
 /// <summary>An enum; its constants are declared VT_INT with a VT_I4 value and their VARFLAGS (0x40 hidden) as captured.</summary>
-internal sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Name, int MemberId, int Value, int Flags)> Constants);
+public sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Name, int MemberId, int Value, int Flags)> Constants);
 
-internal sealed record CoclassDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Interface, int ImplFlags)> Implements);
+public sealed record CoclassDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Interface, int ImplFlags)> Implements);
 
 /// <summary>A type alias (TKIND_ALIAS) and the captured type text it stands for.</summary>
-internal sealed record AliasDecl(string Name, Guid Guid, int TypeFlags, string Target);
+public sealed record AliasDecl(string Name, Guid Guid, int TypeFlags, string Target);
 
 /// <summary>
 /// A type CalcDb publishes in its type library but does not implement (R-ACT-1 ACT-META: the whole declaration graph):
@@ -123,20 +123,20 @@ internal sealed record AliasDecl(string Name, Guid Guid, int TypeFlags, string T
 /// construction interfaces (TKIND_INTERFACE, 3). No object answers their IIDs (ADO-EVENT and the OLE DB construction
 /// route are W-09/events-persistence-inventory).
 /// </summary>
-internal sealed record MetadataDecl(string Name, Guid Guid, int Kind, int TypeFlags, string BaseName, IReadOnlyList<VtableEntryDecl> Functions);
+public sealed record MetadataDecl(string Name, Guid Guid, int Kind, int TypeFlags, string BaseName, IReadOnlyList<VtableEntryDecl> Functions);
 
 /// <summary>A module of constants (TKIND_MODULE): DAO's LanguageConstants, string constants declared VT_LPSTR.</summary>
-internal sealed record ModuleDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Name, int MemberId, string Text)> Constants);
+public sealed record ModuleDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Name, int MemberId, string Text)> Constants);
 
 /// <summary>
 /// The captured library attributes the image reproduces (R-ACT-1 ACT-META): TLIBATTR's system kind and flags, the
 /// library's help string, the order of its types (ITypeLib::GetTypeInfo indexes; types CalcDb does not generate are
 /// left out) and the help strings of the types that have one.
 /// </summary>
-internal sealed record LibraryImage(int SysKind, int Flags, string? HelpString, IReadOnlyList<string> TypeOrder, IReadOnlyList<(string Type, string HelpString)> TypeHelp);
+public sealed record LibraryImage(int SysKind, int Flags, string? HelpString, IReadOnlyList<string> TypeOrder, IReadOnlyList<(string Type, string HelpString)> TypeHelp);
 
 /// <summary>The captured library identity and its types (II-13 F-138 TypeLibraryImage).</summary>
-internal sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, LibraryImage Image, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses, IReadOnlyList<AliasDecl>? Aliases = null, IReadOnlyList<ModuleDecl>? Modules = null, IReadOnlyList<MetadataDecl>? Metadata = null)
+public sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, LibraryImage Image, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses, IReadOnlyList<AliasDecl>? Aliases = null, IReadOnlyList<ModuleDecl>? Modules = null, IReadOnlyList<MetadataDecl>? Metadata = null)
 {
     public IReadOnlyList<AliasDecl> AliasList => Aliases ?? [];
 

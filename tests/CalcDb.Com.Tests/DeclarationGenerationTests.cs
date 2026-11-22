@@ -47,19 +47,19 @@ public sealed class DeclarationGenerationTests
 
     [Fact]
     public void The_generated_declarations_match_the_captured_type_library() =>
-        Check(Record, "DAO", "DaoTypes", "Dao.g.cs", new Dictionary<string, string>());
+        Check(Record, "DAO", "DaoTypes", "CalcDb.Com.Dao", "Dao.g.cs", new Dictionary<string, string>());
 
     [Fact]
     public void The_generated_ADO_declarations_match_the_captured_type_library() =>
-        Check(AdoRecord, "ADO", "AdoTypes", "Ado.g.cs", AdoAliasTargets);
+        Check(AdoRecord, "ADO", "AdoTypes", "CalcDb.Com.Ado", "Ado.g.cs", AdoAliasTargets);
 
-    private static void Check(string recordPath, string title, string className, string file, IReadOnlyDictionary<string, string> aliasTargets)
+    private static void Check(string recordPath, string title, string className, string project, string file, IReadOnlyDictionary<string, string> aliasTargets)
     {
         string root = Root();
         EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(Path.Combine(root, recordPath));
         TypeEvent types = record.Capture!.Events.OfType<TypeEvent>().Single(t => t.Library is not null && t.Types.Count > 1);
         string rendered = Render(types, recordPath, title, className, aliasTargets);
-        string target = Path.Combine(root, "src", "CalcDb.Com", "Declarations", file);
+        string target = Path.Combine(root, "src", project, "Declarations", file);
         if (Environment.GetEnvironmentVariable("CALCDB_REGENERATE") == "1")
         {
             File.WriteAllText(target, rendered);

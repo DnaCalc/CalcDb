@@ -16,12 +16,6 @@ internal enum HostLifecycle
 }
 
 /// <summary>
-/// An immutable host binding (II-13 §23, D-HOST-1 provisional): the identity a factory captures when issued and an
-/// object retains when created. Standalone is the explicit own-class mode (T-INT-49), never a fallback.
-/// </summary>
-internal sealed record HostBinding(ulong Identity, bool Standalone, ulong HostIncarnation, ushort Major, ushort Minor, uint TargetAbi, ulong Capabilities);
-
-/// <summary>
 /// The bootstrap offer, contract 1.0 (I-HOST-1 HOST-ABI): fixed-width fields only. The 16-byte header (size, version,
 /// target ABI) is validated before anything after it is read; a later minor version may be longer, and only this
 /// prefix is read.
