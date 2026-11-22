@@ -915,3 +915,15 @@ or parts, 2 duplicates, 3 nits. No writer stopped for a missing record; each ext
 First-pass landing checks: 3 of 3 (nxj9, whxg, 2qbr; the self-checks caught their errors first). Change tried: the brief
 and the report ask, for each rule, for the neighbouring cases it refuses by name (the w6z8 and dqtr briefs). dqtr's
 report (822 lines) listed them for every rule; measure its landing and w6z8's before keeping it.
+
+**roscli trial in a short real session (owner, 2026-11-22).** Task 82kf (3167 through BoundExpression.Load), a Neon
+writer (01a202f7-865a) on preview.28 with the daemon as an `alta job`: 127 tool calls in 36 min, of them 19 roscli
+(all answered), 15 rg, about 40 file reads, about 15 edits. Setup: restore 5 s, the job 0.06 s, `workspace.use` reused
+it in 27 s (33 projects), the first type query 6 s. Warm: find_references, find_implementations, find_invocations,
+go_to_definition and folder-scoped diagnostics 0.7 to 2.3 s, each checked against rg (23 of 23 semantic references,
+7 and 6 implementers); a folder-scoped compile check caught a CS1061 in 1.9 s without a build. Slow or short: a depth-4
+call hierarchy 45 s, the whole-solution snapshot 22 s, find_references on an implementing member misses callers through
+its interface (RoslynSkills 854z), filters and a brief output are missing (f624). rg stayed the tool for string
+literals (it found a string-matched workaround roscli cannot see), test fixtures and comments. Before, with preview.27,
+the whxg writer had 5 roscli calls of 222 and no answer. The reviewers of the same day: w6z8's 41 calls, 28 answered,
+13 refused for `--symbol` on find_invocations (RoslynSkills t84t), no hang. AGENTS.md (roscli) adds the scoping advice.
