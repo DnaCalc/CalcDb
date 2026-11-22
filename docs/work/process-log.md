@@ -927,3 +927,35 @@ its interface (RoslynSkills 854z), filters and a brief output are missing (f624)
 literals (it found a string-matched workaround roscli cannot see), test fixtures and comments. Before, with preview.27,
 the whxg writer had 5 roscli calls of 222 and no answer. The reviewers of the same day: w6z8's 41 calls, 28 answered,
 13 refused for `--symbol` on find_invocations (RoslynSkills t84t), no hang. AGENTS.md (roscli) adds the scoping advice.
+
+## 2026-11-22 - Handover: organizer 8 (01a20219) to organizer 9
+
+Session 01a20219 (Claude Opus 5.5, 07:13 to about 12:45 UTC, about 240 tool calls) landed nxj9 (the r-q27 probe round),
+whxg, 2qbr, dqtr, 82kf and w6z8, fixed the landing check's runner and worker build under an area filter, and brought
+roscli to 0.1.6-preview.28 (RoslynSkills 53bg: the daemon that died with the Neon harness's shell). Indicators
+(`tools/process-indicators.ps1`, window since 2026-11-21 14:28; the session rows from this session):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 92% (109,455 of 118,798) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 92,898 / 16,557 / 1,453 / 1,420 / 6,470 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 37; 70% (this session: 6 of 6 code and probe landings, two re-run only because master moved) | below 70% |
+| Landing check duration (median of 56 runs) | 201 s | above 3 min |
+| Compare baselines | core whxg-1 431, 2qbr-1 433, dqtr-1 433 of 1360 (82kf-1 not recorded: two flipping r-q8 questions, mhzd); wide wide-dqtr-1 643 of 3158 (from 621; 2 losses traced: znk8, qhs8) | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 240 calls for 6 landings, 4 baselines, a RoslynSkills release and its trial; 1 handover | above about 15; more than 2 a day |
+| Reviewer findings per 1,000 lines | **whxg about 10 (11 on 1,109), 2qbr about 10 (32 on 3,331), w6z8 about 9 (16 on 1,802)**; dqtr and 82kf had the organizer's review only (1 and 2 findings) | rising over three landings, or above about 3 |
+| Rules found wrong after landing | **3**: zdh5 (dqtr's snapshot refusal), znk8 (whxg's surviving-clone refusal), qhs8 (c7gn's final file bytes); all three found by the compares, none by a review | more than one a day |
+| Children stopped waiting for a record | 0 | more than one per stretch |
+| Merge minutes per landing | under 1 (one conflict, Edits.cs, resolved by the w6z8 writer) | above 5 min |
+| Book contradictions found | 0 | rising |
+
+**Triggered review, measured on five landings.** The reviewer rate stays at about 10 per 1,000 against a line of
+about 3, and three rules were found wrong after landing in one day, against a line of one. The cause is the same in all
+of them: no writer stops for a missing record; each extends the nearest recorded rule to its neighbours (other cursor or
+lock types, file formats, nesting depths, error numbers) or reshapes a test around a difference (82kf twice, steered
+back). Listing the refused neighbours in the brief and report (tried on w6z8 and dqtr) did not lower the rate; w6z8
+listed them and still generalized. What caught each kind: the reviewer the generalizations, the compares the refusals
+that cover recorded cases (all three wrong-after-landing rules were refusals of a recorded case, not wrong values).
+For organizer 9: keep the review layer; the organizer's own review of a stretch under 1,000 lines missed one (dqtr), so
+run the core and wide compares on every landing as now and treat a question that moves its first difference earlier as
+a finding; then try one narrower change, for example a reviewer pass for every stretch whatever its size.
