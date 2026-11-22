@@ -95,8 +95,10 @@ scope or design, the book wins.
 ## C# navigation and edits (roscli)
 
 roscli (RoslynSkills, installed as a global tool) keeps CalcDb.slnx loaded in a daemon and answers semantic questions in
-0.3 to 2 s (The Plan §4; measured on 0.1.6-preview.26, 2026-11-22, process log; installed: 0.1.6-preview.27). Every
+0.7 to 1.3 s (The Plan §4; measured on 0.1.6-preview.28, 2026-11-22, process log; installed: 0.1.6-preview.28). Every
 answer has the same JSON shape in-process and through the daemon: the payload in `Data`, how it ran in `Transport`.
+A position is `<file> <line> <column>` or `file:line:col`; `nav.find_references --symbol Type.Member` needs none, and a
+missed column names the symbols on that line.
 
 - **Text first.** ripgrep (`rg -n -w`, 70 to 100 ms) for names, text and string literals; your own file tools for
   single-file and small edits.
@@ -109,12 +111,16 @@ answer has the same JSON shape in-process and through the daemon: the payload in
   unimplemented interface (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Read the diff and build the
   area filter after every edit, roscli's included; a refactoring is reviewed like any change.
 - **Who starts a daemon.** A writer whose brief refactors or traces code across projects, and a reviewer who checks the
-  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs about 45 s
-  and up to 700 MB per worktree.
-- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then `roscli workspace.use CalcDb.slnx`; every call
-  with `ROSCLI_DAEMON=required` (no `--workspace-path` needed). The daemon sees files any tool creates or deletes before
-  its next answer; only a project or solution file change needs `roscli workspace.refresh`. `roscli daemon.stop` before
-  you end. It writes nothing into the repository.
+  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs 20 to 40 s
+  and about 450 MB per worktree, and its first type query builds a call-site cache once (about 14 s).
+- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then start the daemon as a CodeAlta background job,
+  `alta job start --command "roscli daemon.run --exit-on-stdin-eof false" --title "roscli daemon"` (preferred, owner
+  2026-11-22: visible and stoppable there; the flag until RoslynSkills `2ch9`), then `roscli workspace.use CalcDb.slnx`,
+  which reuses it. Without the job, `workspace.use` starts a detached daemon itself, bounded by a 30-minute idle timeout
+  and 8 daemons per user. Every call with `ROSCLI_DAEMON=required` (no `--workspace-path` needed); a dead daemon fails in
+  about a second with its reason. The daemon sees files any tool creates or deletes before its next answer; only a
+  project or solution file change needs `roscli workspace.refresh`. `roscli daemon.stop` before you end (it ends the
+  job); `roscli daemon.list` and `daemon.prune` show and stop leftovers. It writes nothing into the repository.
 - **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills
   (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a Neon writer in its worktree, landed on its main,
   released on GitHub, installed here), never worked around in CalcDb.

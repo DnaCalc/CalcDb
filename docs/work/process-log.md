@@ -880,3 +880,38 @@ was pushed by the release workflow (run 44996799297). Three causes had stopped i
 secret's key had expired; a regenerated expired key keeps its old expiry on nuget.org (create a new one instead); and a
 key is scoped to one package owner, so the packages (owned by the owner's account) gained the dnakode organization as
 co-owner to match the organization's key.
+
+## 2026-11-22 - Organizer 8 (01a20219): roscli in the writers' hands; the daemon that died with its shell
+
+**What the writers did with roscli (owner's question).** The whxg and 2qbr writers (Neon) each made 5 roscli calls in
+222 and 290 tool calls, and got no usable answer: two calls refused `file:line:col`, and in both worktrees the first
+`nav.find_references` hung 300 s and returned `daemon_unavailable` 6 and 23 minutes after `workspace.use` had loaded
+CalcDb.slnx (97 s and 80 s); `daemon.stop` then found no host. Both did every caller lookup with rg and file reads, and
+said rg answered in 1 to 3 s without a line and column to find first. The two reviewers, whose daemons started later,
+got 21 of 21 and 14 of 19 answers (three missed columns, one more hang).
+
+**Cause (RoslynSkills 53bg, Neon writer 01a2025a).** The Neon harness runs each shell in a Windows job object with
+KILL_ON_JOB_CLOSE and without BREAKAWAY_OK, so the daemon `workspace.use` started died with that shell; the client then
+waited its whole 300 s request timeout in the pipe connect. Measured here: a Claude Code shell under CodeAlta is in no
+job; a CodeAlta background job is in a job with no limit flags. Released as 0.1.6-preview.28 (c40d480, 06e46d6; run
+45013386853; the first run failed on Linux, where a Windows process path was not split at its backslashes): the launch
+reuses a live daemon for the same solution under a lock, breaks away from the caller's job, and only when that is
+refused starts it through WMI with a logged warning (`ROSCLI_DAEMON_LAUNCH=nodetach` forbids it); a 30-minute idle
+timeout, 8 daemons per user, `daemon.list` and `daemon.prune`; `daemon.run` serves in the foreground for a runner; a
+dead daemon fails in under a second with its reason; `.slnx` loads natively (47 s to 19 s uncontended); the default
+workspace is honoured; `file:line:col` and `--symbol` are accepted, and a missed column names the line's symbols.
+
+**Owner's decision (2026-11-22).** Prefer a CodeAlta background job for the daemon; expect breakaway in normal
+operation and log it when refused; WMI is acceptable with the cleanup above; the plan must not depend on CodeAlta.
+AGENTS.md (roscli) now starts the daemon as an `alta job` with `daemon.run --exit-on-stdin-eof false`: without the flag
+it read end of file on the job's empty stdin and stopped after 3 s (RoslynSkills 2ch9). Trial in the integration
+checkout with two writers building: `workspace.use` reused the job's daemon in 39 s, the first `--symbol` query took
+14 s (the call-site cache), later queries 0.7 to 1.3 s, about 430 MB.
+
+**Triggered review, measured on two landings (whxg, 2qbr).** Reviewer findings per 1,000 lines: whxg 11 on 1,109 (about
+10), 2qbr 32 on 3,331 (about 10). Of the 43: 9 wrong (state that drifted on paths no record covers), 19 rules beyond
+their records (the neighbouring cursor, lock, type, depth or format), 10 tests that left their record's fixture, order
+or parts, 2 duplicates, 3 nits. No writer stopped for a missing record; each extended the nearest recorded rule.
+First-pass landing checks: 3 of 3 (nxj9, whxg, 2qbr; the self-checks caught their errors first). Change tried: the brief
+and the report ask, for each rule, for the neighbouring cases it refuses by name (the w6z8 and dqtr briefs). dqtr's
+report (822 lines) listed them for every rule; measure its landing and w6z8's before keeping it.
