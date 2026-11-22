@@ -36,7 +36,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Method("MoveNext", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveNext())))
         .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
-        .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return Live(self, r => r.GetRows(count)); })
+        .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return ((SelectRecordsetObject)self).GetRows(count); })
         .Method("Clone", (self, args) => Live(self, r => r.Clone()))
         .Method("Requery", (self, args) => Live(self, r => r.Requery()))
         .Method("Close", (self, args) => Live(self, r => r.Close()))
@@ -373,6 +373,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// <summary>RecordsetTypeEnum: 2 dynaset, 4 snapshot, 8 forward-only.</summary>
     public int RecordsetType { get; }
 
+    public bool IsMdb => Database.Profile.Format == FileFormat.Jet4;
+
     public bool Closed { get; private set; }
 
     public override bool Invalid => Closed;
@@ -424,23 +426,81 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     /// <summary>
     /// GetRows(NumRows) (qualified.md R-CURSOR-1 CUR-BULK, EXPR-STAGE): a VT_ARRAY|VT_VARIANT [0+fields, 0+rows]
-    /// (dimension 1 the field) of up to NumRows rows from the current row across dynaset (2), snapshot (4) and
-    /// forward-only (8) SELECT recordsets (r-wire/getrows-shape, getrows-by-type, getrows-long-values,
-    /// getrows-recordset-types, getrows-position; r-def-cursor-dao/bulk-getrows-memo-binary; r-par-1/err-getrows-chunks).
-    /// NumRows omitted or Missing is 1; scalar conversion uses SessionLocale.Lcid (I2, UI1, R4, R8 half-to-even,
-    /// numeric BSTR; Null and non-numeric BSTR fail 3421; &lt;= 0, Empty, 0.5, True and Int32.MinValue fail 3001;
-    /// Int32.MaxValue fails 3035; all from DAO.Recordset without an IErrorInfo: r-wire/getrows-numrows-args). At EOF or
-    /// on an empty recordset, 3021. A cell read that fails with an ACE/DAO error stops silently before the failing row
-    /// without advancing or recording into DBEngine.Errors, returning the preceding rows or [0+0, 0+fields] if row 0
-    /// fails (r-wire/getrows-by-type call 53, r-par-1/err-getrows-chunks, err-two-errors-one-row, err-two-errors-two-rows).
+    /// (dimension 1 the field) of up to NumRows rows from the current row across ACCDB dynaset (2), snapshot (4) and
+    /// forward-only (8), and MDB snapshot (4) SELECT recordsets (r-wire/getrows-shape, getrows-by-type,
+    /// getrows-long-values, getrows-recordset-types, getrows-position; r-def-cursor-dao/bulk-getrows-memo-binary;
+    /// r-q-cursor-dao/bulk-getrows-large-count; r-q2-expr-sql/fold-many-FGP; r-q-expr-sql/fold-scan-FL;
+    /// r-par-1/err-getrows-chunks, order-groupby-output-order-mdb, order-top-n-ties-asc-mdb).
+    /// Recorded count ceilings: 5000 ACCDB snapshot, 1500 ACCDB dynaset, 300 MDB snapshot, 30 ACCDB forward-only.
+    /// On ACCDB snapshot (4): NumRows omitted/Missing is 1; scalar conversion uses SessionLocale.Lcid (Null and
+    /// non-numeric BSTR fail 3421; &lt;= 0, Empty, 0.5, True and Int32.MinValue fail 3001; Int32.MaxValue fails 3035;
+    /// all from DAO.Recordset without an IErrorInfo: r-wire/getrows-numrows-args); after Close, 3420
+    /// (r-wire/getrows-position call 30). At EOF or on an empty recordset, 3021 on ACCDB dynaset and snapshot
+    /// (r-wire/getrows-shape call 12, getrows-position call 22, r-q-cursor-dao/bulk-getrows-large-count calls 33, 64,
+    /// r-par-1/err-union-bad-late-arm calls 96..130). Silent row stop applies only to ACCDB projected-expression errors
+    /// (types 2, 4, 8: r-par-1/err-getrows-chunks, err-two-errors-one-row, err-two-errors-two-rows, returning
+    /// [0+0, 0+fields] on row 0) and ACCDB snapshot precision-38 Decimal 3000 after at least one row
+    /// (r-wire/getrows-by-type call 53). All unrecorded cursor types, formats, argument forms and cell errors are
+    /// refused by name.
     /// </summary>
     private CallResult GetRows(nint countArg)
     {
-        const int RecordedCountCeiling = 1_000_000;
-        int count = 1;
-        if (countArg != 0)
+        if (Closed)
         {
-            if (!OwnedVariant.TryChangeScalar(Args.Cell(countArg), VarType.I4, SessionLocale.Lcid, out NativeVariant converted, out _))
+            return !IsMdb && RecordsetType == 4
+                ? Fail(3420, DaoErrors.ObjectInvalid)
+                : CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsClosedCursorType",
+                    $"GetRows after Close on a {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT recordset (only ACCDB snapshot is recorded: r-wire/getrows-position call 30)"));
+        }
+        if (TransactionRefusal("GetRows") is { } refused)
+        {
+            return refused;
+        }
+        if (IsMdb)
+        {
+            if (RecordsetType != 4)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsMdbCursorType",
+                    $"GetRows on an MDB type {RecordsetType} SELECT recordset (only snapshot 4 is recorded: r-par-1/order-groupby-output-order-mdb)"));
+            }
+        }
+        else if (RecordsetType is not (2 or 4 or 8))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetRowsCursorType",
+                $"GetRows on a type {RecordsetType} SELECT recordset (not recorded)"));
+        }
+        bool isAccdbSnapshot = !IsMdb && RecordsetType == 4;
+        int countCeiling = IsMdb ? 300 : RecordsetType switch
+        {
+            4 => 5000,
+            2 => 1500,
+            8 => 30,
+            _ => 0,
+        };
+        int count;
+        if (countArg == 0)
+        {
+            if (!isAccdbSnapshot)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsNumRowsCursorType",
+                    $"GetRows with omitted/Missing NumRows on a {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT recordset (only ACCDB snapshot is recorded: r-wire/getrows-numrows-args)"));
+            }
+            count = 1;
+        }
+        else
+        {
+            NativeVariant* raw = Args.Cell(countArg);
+            if (!isAccdbSnapshot && ((VarType)raw->Vt != VarType.I4 || (int)raw->Int64 <= 0 || (int)raw->Int64 == int.MaxValue))
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsNumRowsCursorType",
+                    $"GetRows with non-positive-I4 or Int32.MaxValue NumRows ({(VarType)raw->Vt}) on a {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT recordset (only ACCDB snapshot is recorded: r-wire/getrows-numrows-args)"));
+            }
+            if (!OwnedVariant.TryChangeScalar(raw, VarType.I4, SessionLocale.Lcid, out NativeVariant converted, out _))
             {
                 return Fail(3421, DaoErrors.ConversionError);
             }
@@ -453,18 +513,20 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 return Fail(3035, DaoErrors.SystemResourceExceeded);
             }
-            if (count > RecordedCountCeiling)
+            if (count > countCeiling)
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCountCeiling", $"GetRows({count}): ACE's 3035 threshold between {RecordedCountCeiling} and Int32.MaxValue is not recorded"));
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsCountCeiling",
+                    $"GetRows({count}): ACE's 3035 threshold above {countCeiling} for {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT is not recorded"));
             }
-        }
-        if (RecordsetType is not (2 or 4 or 8))
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCursorType", $"GetRows on a type {RecordsetType} SELECT recordset (not recorded)"));
         }
         if (Cursor.Eof)
         {
-            return Fail(3021, DaoErrors.NoCurrentRecord);
+            return !IsMdb && RecordsetType is 2 or 4
+                ? Fail(3021, DaoErrors.NoCurrentRecord)
+                : CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetRowsEofCursorType",
+                    $"GetRows at EOF/empty on a {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT recordset (only ACCDB dynaset and snapshot are recorded)"));
         }
         if (Cursor.Bof)
         {
@@ -496,6 +558,29 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                         {
                             return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", "GetRows on a deleted row of a SELECT recordset (not recorded)"));
                         }
+                        if (IsMdb)
+                        {
+                            return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsMdbCellError", $"GetRows cell DAO error {failure.Number} on an MDB SELECT recordset (not recorded)"));
+                        }
+                        ResultColumn column = Cursor.Columns[c];
+                        if (column.Origin == ColumnOrigin.BaseColumn
+                            && column.SourceColumn?.Column is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null, NumericPrecision: 38 }
+                            && failure.Number == 3000
+                            && RecordsetType == 4)
+                        {
+                            if (rows == 0)
+                            {
+                                return CallResult.Fail(Failure.NotModelled(
+                                    "NotModelled.GetRowsDecimal38RowZero",
+                                    "GetRows meeting a precision-38 Decimal 3000 error on row 0 of a SELECT snapshot (not recorded; r-wire/getrows-by-type call 53 stops after 4 Null rows)"));
+                            }
+                        }
+                        else if (column.Origin != ColumnOrigin.Expression)
+                        {
+                            return CallResult.Fail(Failure.NotModelled(
+                                "NotModelled.GetRowsDaoCellError",
+                                $"GetRows cell DAO error {failure.Number} on {column.Origin} column {column.Name} (only ACCDB projected expression errors and non-row-0 Decimal(38) snapshot errors are recorded)"));
+                        }
                         for (int i = rowStart; i < cells.Count; i++)
                         {
                             cells[i].Dispose();
@@ -521,7 +606,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     break;
                 }
             }
-            // Row-0 ACE failure returns the degenerate [0+0, 0+colCount] shape (dim 1 is 0, dim 2 is colCount).
+            // Row-0 projected-expression failure on ACCDB returns the degenerate [0+0, 0+colCount] shape (dim 1 is 0, dim 2 is colCount).
             nint array = rows == 0
                 ? SafeArrays.Create(VarType.Variant, (0, 0), (0, colCount))
                 : SafeArrays.Create(VarType.Variant, (0, colCount), (0, rows));
@@ -702,29 +787,80 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("Required", (self, args) => Live(self, f => f.Required()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
-        .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()))
-        .Method("GetChunk", (self, args) => { nint offset = args.Length > 0 ? args[0] : 0, bytes = args.Length > 1 ? args[1] : 0; return Live(self, f => f.GetChunk(offset, bytes)); })
+        .Get("FieldSize", (self, args) => ((SelectFieldObject)self).FieldSize())
+        .Method("GetChunk", (self, args) =>
+        {
+            if (args.Length != 2)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentCount", "Field.GetChunk with wrong argument count (not recorded)"));
+            }
+            nint offset = args[0], bytes = args[1];
+            return ((SelectFieldObject)self).GetChunk(offset, bytes);
+        })
         .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     /// <summary>
-    /// FieldSize (qualified.md R-STRING-1 STR-LV): a Memo column's current value in bytes, twice its UTF-16 units
-    /// across dynaset, snapshot and forward-only (r-q-wire/str-memo-fieldsize-by-recordset-type, r-def-cursor-dao/
-    /// chunk-read-offsets, r-fmt-2b/mm-null-to-1page, mm-short-to-many-pages), 0 when Null; an OLE (type 11) column's
-    /// current value in bytes on dynaset and snapshot in ACCDB and MDB (r-def-cursor-dao/chunk-binary-roundtrip,
-    /// r-fix-wire-ado/chunk-ole-append-fieldsize, r-fmt-2-pres-1/lv-ole-page-ladder, mdb-lv-ole-page-ladder,
-    /// r-fmt-2b/ole-insert-4078, mdb-ole-insert-4078), 0 when Null; a non-long-value column (Text, Long, Binary, ...)
-    /// fails 3259 (r-def-cursor-dao/chunk-read-offsets calls 11, 13). Unrecorded cursor types (forward-only non-Null
-    /// OLE) and unidentified column types are refused by name.
+    /// FieldSize (qualified.md R-STRING-1 STR-LV):
+    /// <list type="bullet">
+    /// <item>Memo (type 12): twice the current BSTR's UTF-16 code-unit length, 0 when Null, across ACCDB dynaset (2),
+    /// snapshot (4) and forward-only (8) and MDB snapshot (4) (r-q-wire/str-memo-fieldsize-by-recordset-type,
+    /// r-def-cursor-dao/chunk-read-offsets, r-fmt-2b/mm-null-to-1page, mm-short-to-many-pages,
+    /// mdb-mm-null-to-many-pages).</item>
+    /// <item>OLE (type 11): current byte length, 0 when Null, on ACCDB dynaset (2) and snapshot (4) and MDB snapshot
+    /// (4) (r-def-cursor-dao/chunk-binary-roundtrip, chunk-read-offsets call 14, r-fix-wire-ado/chunk-ole-append-fieldsize,
+    /// r-fmt-2-pres-1/lv-ole-page-ladder, mdb-lv-ole-page-ladder, r-fmt-2b/ole-insert-4078, mdb-ole-insert-4078).</item>
+    /// <item>Non-LV 3259: Long (4) and Text (10) on ACCDB dynaset (2) (r-def-cursor-dao/chunk-read-offsets calls 11, 13;
+    /// chunk-append-memo-text call 30; r-fix-wire-ado/chunk-memo-text-append-fieldsize) and Text (10) on ACCDB snapshot
+    /// (4) (r-fix-wire-ado/str-memo-fieldsize call 98).</item>
+    /// </list>
+    /// Closed, EOF/BOF, MDB non-snapshot, forward-only OLE (including Null), Binary (9) and other unrecorded non-LV
+    /// types/cursors, and unrecorded Cursor.Read failures are refused by name.
     /// </summary>
     private CallResult FieldSize()
     {
+        if (Recordset.Closed)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeClosed", "Field.FieldSize after Close (not recorded)"));
+        }
+        if (Recordset.TransactionRefusal("Field.FieldSize") is { } refused)
+        {
+            return refused;
+        }
+        if (Recordset.IsMdb && Recordset.RecordsetType != 4)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldSizeMdbCursorType",
+                $"Field.FieldSize on an MDB type {Recordset.RecordsetType} SELECT recordset (only snapshot 4 is recorded)"));
+        }
         if (Recordset.Cursor.FieldType(_ordinal, out _) is not int type)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeType", $"Field.FieldSize of the column {Column.Name}, whose type is not identified"));
         }
         if (type is not (12 or 11))
         {
-            return Fail(3259, DaoErrors.InvalidFieldType);
+            if (!Recordset.IsMdb && ((Recordset.RecordsetType == 2 && type is 4 or 10) || (Recordset.RecordsetType == 4 && type == 10)))
+            {
+                return Fail(3259, DaoErrors.InvalidFieldType);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldSizeNonLvType",
+                $"Field.FieldSize of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
+        }
+        if (type == 11 && Recordset.RecordsetType is not (2 or 4))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldSizeOleCursorType",
+                $"Field.FieldSize of OLE column {Column.Name} on a type {Recordset.RecordsetType} SELECT recordset (only dynaset and snapshot are recorded)"));
+        }
+        if (type == 12 && Recordset.RecordsetType is not (2 or 4 or 8))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldSizeMemoCursorType",
+                $"Field.FieldSize of Memo column {Column.Name} on a type {Recordset.RecordsetType} SELECT recordset (not recorded)"));
+        }
+        if (Recordset.Cursor.Eof || Recordset.Cursor.Bof)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeNoCurrentRecord", $"Field.FieldSize of {Column.Name} at EOF/BOF (not recorded)"));
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
@@ -736,7 +872,11 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDeletedRow", $"Field.FieldSize of {Column.Name} on a deleted row (not recorded)"));
             }
-            return Fail(failure.Number, failure.Message);
+            if (failure.Number == 3021)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeNoCurrentRecord", $"Field.FieldSize of {Column.Name} with no current record (not recorded)"));
+            }
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeReadFailure", $"Field.FieldSize of {Column.Name} met Cursor.Read failure {failure.Number} (not recorded)"));
         }
         return (VarType)value.Vt switch
         {
@@ -747,12 +887,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         };
     }
 
-    private CallResult OleFieldSize(nint array)
+    private static CallResult OleFieldSize(nint array)
     {
-        if (Recordset.RecordsetType is not (2 or 4))
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeOleCursorType", $"Field.FieldSize of a non-Null OLE value on a type {Recordset.RecordsetType} SELECT recordset (only dynaset and snapshot are recorded)"));
-        }
         if (array == 0)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeValue", "Field.FieldSize of a null SAFEARRAY OLE value (not recorded)"));
@@ -764,49 +900,83 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     }
 
     /// <summary>
-    /// GetChunk(Offset, Bytes) (qualified.md R-STRING-1 STR-LV):
+    /// GetChunk(Offset, Bytes) (qualified.md R-STRING-1 STR-LV), ACCDB only:
     /// <list type="bullet">
-    /// <item>Non-long-value column: 3259 from DAO.Field without an IErrorInfo (r-def-cursor-dao/chunk-read-offsets
-    /// calls 30, 31; r-str-ado-act/str-memo-chunks call 67).</item>
-    /// <item>Offset or Bytes not coercible to I4 (e.g. Null): 3421 from DAO.Field with an IErrorInfo (chunk-read-offsets
-    /// calls 26, 27); numeric text and half-to-even doubles coerce as I4 (calls 28, 29); negative Offset or Bytes: 3001
-    /// from DAO.Field without an IErrorInfo (calls 22, 23).</item>
-    /// <item>Null Memo or OLE value: VT_NULL (chunk-read-offsets call 32; r-str-ado-act/str-memo-chunks calls 18..22;
-    /// r-fix-wire-ado/chunk-ole-append-fieldsize calls 114, 149).</item>
-    /// <item>Memo (type 12) across dynaset, snapshot and forward-only: UTF-16 code-unit slice, returning "" when
-    /// Offset &gt;= length or Bytes == 0 (r-q-wire/str-memo-fieldsize-by-recordset-type, chunk-read-offsets calls 15..29,
-    /// str-memo-chunks).</item>
-    /// <item>OLE (type 11) on dynaset: byte slice as 0-based VT_ARRAY|VT_UI1 when Offset &lt; length and Bytes &gt; 0,
-    /// and a null VT_ARRAY|VT_UI1 pointer when Offset == length and Bytes &gt; 0 (r-def-cursor-dao/chunk-binary-roundtrip
-    /// calls 18, 21..23, 29; r-fix-wire-ado/chunk-ole-append-fieldsize calls 107, 121, 128, 135, 142, 184). Unrecorded
-    /// OLE cases (Bytes == 0, Offset &gt; length, non-dynaset cursor) and GetChunk at EOF or on a deleted row are refused
-    /// by name.</item>
+    /// <item>Non-LV 3259 (no IErrorInfo): Long (4) and Text (10) on ACCDB dynaset (2) (r-def-cursor-dao/chunk-read-offsets
+    /// calls 30, 31) and Text (10) on ACCDB snapshot (4) (r-fix-wire-ado/str-memo-fieldsize call 102;
+    /// r-str-ado-act/str-memo-chunks call 67).</item>
+    /// <item>Arguments: only I4, Null, numeric BSTR and R8 are accepted; on ACCDB dynaset Memo, Null fails 3421 from
+    /// DAO.Field with an IErrorInfo (chunk-read-offsets calls 26, 27), numeric BSTR and R8 coerce to I4 under
+    /// SessionLocale.Lcid (calls 28, 29), and negative Offset or Bytes fails 3001 without an IErrorInfo (calls 22, 23).</item>
+    /// <item>Memo (type 12) across ACCDB dynaset, snapshot and forward-only: VT_NULL when Null, else UTF-16 code-unit
+    /// slice returning "" when Offset &gt;= length or Bytes == 0 (r-q-wire/str-memo-fieldsize-by-recordset-type,
+    /// chunk-read-offsets calls 15..29, r-str-ado-act/str-memo-chunks).</item>
+    /// <item>OLE (type 11) on ACCDB dynaset (2) only: VT_NULL when Null (chunk-read-offsets call 32;
+    /// r-fix-wire-ado/chunk-ole-append-fieldsize calls 114, 149), byte slice as 0-based VT_ARRAY|VT_UI1 when
+    /// Offset &lt; length and Bytes &gt; 0, and a null VT_ARRAY|VT_UI1 pointer when Offset == length and Bytes &gt; 0
+    /// (r-def-cursor-dao/chunk-binary-roundtrip calls 18, 21..23, 29; chunk-ole-append-fieldsize).</item>
     /// </list>
+    /// Closed, MDB, wrong argument count / Missing, unrecorded argument VarTypes, unrecorded non-LV types/cursors,
+    /// non-dynaset OLE (including Null), OLE Bytes == 0 or Offset &gt; length, EOF/deleted row, and unrecorded
+    /// Cursor.Read failures are refused by name.
     /// </summary>
     private CallResult GetChunk(nint offsetArg, nint bytesArg)
     {
+        if (Recordset.Closed)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkClosed", "Field.GetChunk after Close (not recorded)"));
+        }
+        if (Recordset.TransactionRefusal("Field.GetChunk") is { } refused)
+        {
+            return refused;
+        }
+        if (Recordset.IsMdb)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkMdb", "Field.GetChunk on an MDB SELECT recordset (not recorded)"));
+        }
         if (offsetArg == 0 || bytesArg == 0)
         {
-            return Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
-        }
-        if (!OwnedVariant.TryChangeScalar(Args.Cell(offsetArg), VarType.I4, SessionLocale.Lcid, out NativeVariant offVal, out _)
-            || !OwnedVariant.TryChangeScalar(Args.Cell(bytesArg), VarType.I4, SessionLocale.Lcid, out NativeVariant lenVal, out _))
-        {
-            return Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentCount", "Field.GetChunk with omitted or missing argument (not recorded)"));
         }
         if (Recordset.Cursor.FieldType(_ordinal, out _) is not int type)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkType", $"Field.GetChunk of the column {Column.Name}, whose type is not identified"));
         }
+        bool isDynasetMemo = Recordset.RecordsetType == 2 && type == 12;
+        if (!TryParseChunkArg(offsetArg, isDynasetMemo, out int offset, out CallResult argError)
+            || !TryParseChunkArg(bytesArg, isDynasetMemo, out int bytes, out argError))
+        {
+            return argError;
+        }
         if (type is not (12 or 11))
         {
-            return Fail(3259, DaoErrors.InvalidFieldType);
+            if ((Recordset.RecordsetType == 2 && type is 4 or 10) || (Recordset.RecordsetType == 4 && type == 10))
+            {
+                return Fail(3259, DaoErrors.InvalidFieldType);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetChunkNonLvType",
+                $"Field.GetChunk of non-LV type {type} ({Column.Name}) on ACCDB type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
-        int offset = (int)offVal.Int64;
-        int bytes = (int)lenVal.Int64;
+        if (type == 11 && Recordset.RecordsetType != 2)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetChunkOleCursorType",
+                $"Field.GetChunk of OLE column {Column.Name} on a type {Recordset.RecordsetType} SELECT recordset (only ACCDB dynaset is recorded)"));
+        }
+        if (type == 12 && Recordset.RecordsetType is not (2 or 4 or 8))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetChunkMemoCursorType",
+                $"Field.GetChunk of Memo column {Column.Name} on a type {Recordset.RecordsetType} SELECT recordset (not recorded)"));
+        }
         if (offset < 0 || bytes < 0)
         {
-            return Fail(3001, DaoErrors.InvalidArgument);
+            return isDynasetMemo
+                ? Fail(3001, DaoErrors.InvalidArgument)
+                : CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkNegativeArg",
+                    $"Field.GetChunk({offset}, {bytes}) on type {type} cursor {Recordset.RecordsetType} (negative args are recorded only on ACCDB dynaset Memo: r-def-cursor-dao/chunk-read-offsets calls 22, 23)"));
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
@@ -822,7 +992,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkNoCurrentRecord", $"Field.GetChunk of {Column.Name} with no current record (not recorded)"));
             }
-            return Fail(failure.Number, failure.Message);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkReadFailure", $"Field.GetChunk of {Column.Name} met Cursor.Read failure {failure.Number} (not recorded)"));
         }
         return (VarType)value.Vt switch
         {
@@ -831,6 +1001,43 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             VarType.Array | VarType.UI1 when type == 11 => OleChunk(value.Pointer, offset, bytes),
             var other => CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {other} value of type {type} (not recorded)")),
         };
+    }
+
+    private bool TryParseChunkArg(nint arg, bool isDynasetMemo, out int value, out CallResult error)
+    {
+        value = 0;
+        error = default;
+        NativeVariant* cell = Args.Cell(arg);
+        if (TypedCall.IsMissing(cell))
+        {
+            error = CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentCount", "Field.GetChunk with a Missing argument (not recorded)"));
+            return false;
+        }
+        VarType vt = (VarType)cell->Vt;
+        if (vt == VarType.I4)
+        {
+            value = (int)cell->Int64;
+            return true;
+        }
+        if (vt == VarType.Null)
+        {
+            error = isDynasetMemo
+                ? Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk with Null on {Column.Name} (only ACCDB dynaset Memo is recorded: r-def-cursor-dao/chunk-read-offsets calls 26, 27)"));
+            return false;
+        }
+        if (vt is VarType.Bstr or VarType.R8)
+        {
+            if (isDynasetMemo && OwnedVariant.TryChangeScalar(cell, VarType.I4, SessionLocale.Lcid, out NativeVariant coerced, out _))
+            {
+                value = (int)coerced.Int64;
+                return true;
+            }
+            error = CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk with {vt} argument on {Column.Name} (only numeric BSTR and R8 on ACCDB dynaset Memo are recorded: r-def-cursor-dao/chunk-read-offsets calls 28, 29)"));
+            return false;
+        }
+        error = CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk with {vt} argument (only I4, Null, numeric BSTR and R8 are recorded)"));
+        return false;
     }
 
     private static CallResult MemoChunk(nint bstr, int offset, int bytes)
@@ -844,12 +1051,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         return CallResult.OfOwnedBstr(Bstrs.FromUnits(take, (bstr, offset), static (dest, s) => Bstrs.Chars(s.bstr).Slice(s.offset, dest.Length).CopyTo(dest)));
     }
 
-    private CallResult OleChunk(nint array, int offset, int bytes)
+    private static CallResult OleChunk(nint array, int offset, int bytes)
     {
-        if (Recordset.RecordsetType != 2)
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkOleCursorType", $"Field.GetChunk of a non-Null OLE value on a type {Recordset.RecordsetType} SELECT recordset (only dynaset is recorded)"));
-        }
         if (array == 0)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", "Field.GetChunk of a null SAFEARRAY OLE value (not recorded)"));
@@ -900,16 +1103,37 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     protected override OperationTable Table => Operations;
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) =>
-        member.Name == "GetChunk" ? InvalidArgumentCount() : null;
+        member.Name == "GetChunk"
+            ? Failure.NotModelled("NotModelled.GetChunkArgumentCount", "Field.GetChunk with wrong argument count (not recorded)")
+            : null;
 
     /// <summary>
-    /// GetChunk's scalar parameters coerce to I4 under SessionLocale.Lcid; a value that does not coerce (Null) fails
+    /// GetChunk's scalar parameters coerce to I4 under SessionLocale.Lcid; a Null argument on ACCDB dynaset Memo fails
     /// 3421 from DAO.Field with an IErrorInfo and writes *puArgErr (r-def-cursor-dao/chunk-read-offsets calls 26, 27).
+    /// Missing arguments, closed/MDB calls, and unrecorded cursor/field combinations are refused by name.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
-        member.Name == "GetChunk"
-            ? (missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true })
-            : null;
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing)
+    {
+        if (member.Name != "GetChunk")
+        {
+            return null;
+        }
+        if (Recordset.Closed)
+        {
+            return Failure.NotModelled("NotModelled.GetChunkClosed", "Field.GetChunk after Close (not recorded)");
+        }
+        if (Recordset.IsMdb)
+        {
+            return Failure.NotModelled("NotModelled.GetChunkMdb", "Field.GetChunk on an MDB SELECT recordset (not recorded)");
+        }
+        if (missing)
+        {
+            return Failure.NotModelled("NotModelled.GetChunkArgumentCount", "Field.GetChunk with a Missing argument (not recorded)");
+        }
+        return Recordset.RecordsetType == 2 && Recordset.Cursor.FieldType(_ordinal, out _) == 12
+            ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true }
+            : Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk argument conversion failure on {Column.Name} (only ACCDB dynaset Memo Null is recorded)");
+    }
 
     private static CallResult Live(ComObject self, Func<SelectFieldObject, CallResult> op)
     {
@@ -925,9 +1149,9 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <summary>
     /// Size: reads <see cref="ResultColumn.Size"/> when Sql provides it (base columns, GROUP BY keys, aggregates,
     /// union columns, derived columns). For a precision-38 Numeric base column where Sql leaves Size null, serves 20
-    /// on a snapshot recordset (r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2) and refuses other
-    /// cursor types by name. For an <see cref="ColumnOrigin.Expression"/> column where Sql leaves Size null, serves
-    /// the exact size recorded for each expression DAO type across r-def-cursor-dao/prov-alias-fields-metadata,
+    /// on an ACCDB snapshot recordset (r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2) and refuses
+    /// MDB and other cursor types by name. For an <see cref="ColumnOrigin.Expression"/> column where Sql leaves Size
+    /// null, serves the exact size recorded for each expression DAO type across r-def-cursor-dao/prov-alias-fields-metadata,
     /// query-field-metadata-expressions, recordset-field-properties, r-fix-cursor-dao/field-metadata-rw,
     /// r-expr-1b/meta-conversion-field-types, meta-memo-functions, meta-text-function-field-types, and
     /// r-def-expr-sql/str-memo-versus-text-expressions (3->2, 4->4, 5->8, 7->8, 8->8, 9->0, 10->0, 20->16).
@@ -942,11 +1166,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         if (Column.Origin == ColumnOrigin.BaseColumn
             && Column.SourceColumn?.Column is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null, NumericPrecision: 38 })
         {
+            if (Recordset.IsMdb)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.FieldSize.Decimal38Mdb",
+                    $"Field.Size of Decimal(38) base column {Column.Name} on an MDB SELECT recordset (only ACCDB snapshot is recorded: r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2)"));
+            }
             return Recordset.RecordsetType == 4
                 ? Int32(20)
                 : CallResult.Fail(Failure.NotModelled(
                     "NotModelled.FieldSize.Decimal38CursorType",
-                    $"Field.Size of Decimal(38) base column {Column.Name} on cursor type {Recordset.RecordsetType} (only snapshot 4 is recorded: r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2)"));
+                    $"Field.Size of Decimal(38) base column {Column.Name} on cursor type {Recordset.RecordsetType} (only ACCDB snapshot 4 is recorded: r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2)"));
         }
         if (Column.Origin == ColumnOrigin.Expression)
         {
@@ -1282,15 +1512,51 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             }
             return CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
         }
-        if ((VarType)value.Vt == (VarType.Array | VarType.UI1))
+        ResultColumn readColumn = recordset.Cursor.Columns[ordinal];
+        bool isByteArray = (VarType)value.Vt == (VarType.Array | VarType.UI1);
+        bool isBinaryOrOleBaseColumn = readColumn.Origin == ColumnOrigin.BaseColumn
+            && readColumn.SourceColumn?.Column is { TypeCode: NativeTypes.Binary or NativeTypes.Ole };
+        if (isByteArray || ((VarType)value.Vt == VarType.Null && isBinaryOrOleBaseColumn))
         {
             if (fromCollect)
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.CollectByteArray", "Recordset.Collect of a Binary or OLE byte array (not recorded)"));
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CollectByteArray", "Recordset.Collect of a Binary or OLE column (not recorded)"));
+            }
+            int? effectiveType = recordset.Cursor.FieldType(ordinal, out _) ?? (readColumn.SourceColumn?.Column?.TypeCode switch
+            {
+                NativeTypes.Binary => 9,
+                NativeTypes.Ole => 11,
+                _ => null,
+            });
+            if (effectiveType == 9 && recordset.IsMdb)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SelectBinaryMdb",
+                    $"Field.Value of Binary column {readColumn.Name} on an MDB SELECT recordset (only ACCDB snapshot is recorded)"));
+            }
+            if (effectiveType == 11 && recordset.IsMdb && recordset.RecordsetType != 4)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SelectOleMdbCursorType",
+                    $"Field.Value of OLE column {readColumn.Name} on an MDB type {recordset.RecordsetType} SELECT recordset (only snapshot 4 is recorded)"));
             }
             if (recordset.RecordsetType is not (2 or 4))
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.SelectByteArrayCursorType", $"Field.Value of a Binary or OLE byte array on a type {recordset.RecordsetType} SELECT recordset (only dynaset and snapshot are recorded)"));
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SelectByteArrayCursorType",
+                    $"Field.Value of a Binary or OLE column ({readColumn.Name}) on a type {recordset.RecordsetType} SELECT recordset (not recorded)"));
+            }
+            if (effectiveType == 9 && recordset.RecordsetType != 4)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SelectBinaryCursorType",
+                    $"Field.Value of Binary column {readColumn.Name} on a type {recordset.RecordsetType} SELECT recordset (only ACCDB snapshot 4 is recorded)"));
+            }
+            if (effectiveType is not (9 or 11) && recordset.IsMdb && recordset.RecordsetType != 4)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SelectOleMdbCursorType",
+                    $"Field.Value of a byte array on an MDB type {recordset.RecordsetType} SELECT recordset (only snapshot 4 is recorded)"));
             }
         }
         return SqlResults.Of(value, "Field.Value");

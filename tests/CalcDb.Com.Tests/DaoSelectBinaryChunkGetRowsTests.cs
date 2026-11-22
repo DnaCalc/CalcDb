@@ -41,6 +41,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
     private const string DefCursorMain = "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0"; // r-def-cursor-dao-main.accdb
     private const string Par1Error = "4100848678f01a94f57d313b3d3d95161cbcc8d130d4b4af32deb3ad6364b016";    // r-par-1-error.accdb
     private const string Fmt2bMdb = "42e9d43be7fd4bea53971f8e17121d0b3a07cd26d0f57e739caa2a5372ae13ef";     // r-fmt-2b-w-mdb.mdb
+    private const string Ado1bMdb = "4a447e7517e51e0ed2b734fd8a20d32ab22e83f427667a4f0e8fb2ff0b544bf7";     // r-ado-1b-mdb.mdb (table T has Decimal(38) column N)
 
     private readonly List<string> _files = [];
     private readonly List<nint> _cells = [];
@@ -138,7 +139,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
     }
 
     [Fact]
-    public void Select_Binary_and_OLE_Value_refuses_unrecorded_Collect_and_forward_only_by_name()
+    public void Select_Binary_and_OLE_Value_refuses_unrecorded_Collect_cursors_and_formats_by_name()
     {
         DatabaseObject db = Open(WireDao, ".accdb");
 
@@ -147,11 +148,41 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertNotModelled(Get(snap, "Collect", "FOle"), "NotModelled.CollectByteArray");
         Ok(Method(snap, "Close"));
 
+        // Forward-only OLE (non-Null and Null) and Binary (non-Null and Null) are refused by name.
         SelectRecordsetObject fwd = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
-            "SELECT ID, FOle FROM W WHERE ID = 1101", 8)));
-        SelectFieldObject f = Object<SelectFieldObject>(Object<SelectFieldsObject>(fwd, "Fields"), "Item", "FOle");
-        AssertNotModelled(Get(f, "Value"), "NotModelled.SelectByteArrayCursorType");
+            "SELECT ID, FOle, FBin FROM W WHERE ID IN (1000, 1100, 1101) ORDER BY ID", 8)));
+        SelectFieldsObject fwdFields = Object<SelectFieldsObject>(fwd, "Fields");
+        AssertNotModelled(Get(Object<SelectFieldObject>(fwdFields, "Item", "FBin"), "Value"), "NotModelled.SelectByteArrayCursorType");
+        AssertNotModelled(Get(Object<SelectFieldObject>(fwdFields, "Item", "FOle"), "Value"), "NotModelled.SelectByteArrayCursorType");
+        Ok(Method(fwd, "MoveNext")); // ID 1100: Null FOle
+        AssertNotModelled(Get(Object<SelectFieldObject>(fwdFields, "Item", "FOle"), "Value"), "NotModelled.SelectByteArrayCursorType");
+        Ok(Method(fwd, "MoveNext")); // ID 1101: non-Null FOle
+        AssertNotModelled(Get(Object<SelectFieldObject>(fwdFields, "Item", "FOle"), "Value"), "NotModelled.SelectByteArrayCursorType");
         Ok(Method(fwd, "Close"));
+
+        // Binary (type 9) on ACCDB dynaset is refused (only ACCDB snapshot is recorded).
+        SelectRecordsetObject binDyn = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FBin FROM W WHERE ID IN (1000, 1001) ORDER BY ID", 2)));
+        SelectFieldObject binField = Object<SelectFieldObject>(Object<SelectFieldsObject>(binDyn, "Fields"), "Item", "FBin");
+        AssertNotModelled(Get(binField, "Value"), "NotModelled.SelectBinaryCursorType"); // Null
+        Ok(Method(binDyn, "MoveNext"));
+        AssertNotModelled(Get(binField, "Value"), "NotModelled.SelectBinaryCursorType"); // non-Null
+        Ok(Method(binDyn, "Close"));
+
+        // MDB OLE is recorded on snapshot (4) only; MDB dynaset OLE is refused by name.
+        DatabaseObject mdb = Open(Fmt2bMdb, ".mdb");
+        SelectRecordsetObject mdbOleSnap = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo WHERE ID = 2", 4)));
+        byte[]? mdbBytes = NullableBytesValue(Ok(Get(Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbOleSnap, "Fields"), "Item", "O"), "Value")));
+        Assert.NotNull(mdbBytes);
+        Assert.Equal(4076, mdbBytes!.Length);
+        Ok(Method(mdbOleSnap, "Close"));
+
+        SelectRecordsetObject mdbOleDyn = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo WHERE ID = 2", 2)));
+        AssertNotModelled(Get(Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbOleDyn, "Fields"), "Item", "O"), "Value"),
+            "NotModelled.SelectOleMdbCursorType");
+        Ok(Method(mdbOleDyn, "Close"));
     }
 
     [Fact]
@@ -164,7 +195,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         SelectFieldsObject fields = Object<SelectFieldsObject>(rs, "Fields");
         SelectFieldObject idField = Object<SelectFieldObject>(fields, "Item", 0);
         SelectFieldObject decField = Object<SelectFieldObject>(fields, "Item", 1);
-        // r-wire/read-dao call 90[1].2: Decimal(38) Field.Size == 20 on snapshot.
+        // r-wire/read-dao call 90[1].2: Decimal(38) Field.Size == 20 on ACCDB snapshot.
         Assert.Equal(20, Int32Value(Ok(Get(decField, "Size"))));
 
         var nullIds = new List<int>();
@@ -194,7 +225,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         Assert.Equal([1300, 1301, 1302, 1303, 1305, 1307, 1308], nullIds);
         Assert.Equal([1304, 1306, 1309], errIds);
 
-        // r-wire/read-param call 90[1].2: Field.Size == 20 on snapshot.
+        // r-wire/read-param call 90[1].2: Field.Size == 20 on ACCDB snapshot.
         DatabaseObject paramDb = Open(WireParam, ".accdb");
         SelectRecordsetObject paramRs = Recover<SelectRecordsetObject>(Ok(Method(paramDb, "OpenRecordset",
             "SELECT ID, FDec FROM W WHERE ID BETWEEN 1300 AND 1399 ORDER BY ID", 4)));
@@ -217,6 +248,26 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         }
         Assert.Equal(10, sqlFailures);
         Ok(Method(sqlRs, "Close"));
+
+        // MDB snapshot Decimal(38): Value fails 3000 with IErrorInfo (r-dec-read/mdb-daofield-dao-put call 163),
+        // while SELECT Field.Size and GetRows on MDB Decimal(38) errors are unrecorded and refused by name.
+        DatabaseObject mdbDec = Open(Ado1bMdb, ".mdb");
+        SelectRecordsetObject mdbDecRs = Recover<SelectRecordsetObject>(Ok(Method(mdbDec, "OpenRecordset",
+            "SELECT ID, N FROM T ORDER BY ID", 4)));
+        SelectFieldObject mdbN = Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbDecRs, "Fields"), "Item", "N");
+        AssertNotModelled(Get(mdbN, "Size"), "NotModelled.FieldSize.Decimal38Mdb");
+        AssertDaoError(Get(mdbN, "Value"), 3000, "DAO.Field", publishesErrorInfo: true);
+        AssertNotModelled(Method(mdbDecRs, "GetRows", 5), "NotModelled.GetRowsMdbCellError");
+        Ok(Method(mdbDecRs, "Close"));
+
+        // MDB snapshot Decimal(38) Null row first, then non-Null row: Value is VT_NULL on Null row, and GetRows
+        // still refuses MDB cell error even after >= 1 row.
+        SelectRecordsetObject mdbDecDesc = Recover<SelectRecordsetObject>(Ok(Method(mdbDec, "OpenRecordset",
+            "SELECT ID, N FROM T ORDER BY ID DESC", 4)));
+        SelectFieldObject mdbNDesc = Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbDecDesc, "Fields"), "Item", "N");
+        AssertNull(Ok(Get(mdbNDesc, "Value")));
+        AssertNotModelled(Method(mdbDecDesc, "GetRows", 7), "NotModelled.GetRowsMdbCellError");
+        Ok(Method(mdbDecDesc, "Close"));
 
         // Unrecorded neighbouring cases: Collect and dynaset/forward-only SELECT on Decimal(38) Value & Size.
         SelectRecordsetObject snap = Recover<SelectRecordsetObject>(Ok(Method(daoDb, "OpenRecordset",
@@ -249,27 +300,34 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
                 sizes.Add(Int32Value(Ok(Get(fo, "FieldSize"))));
                 Ok(Method(rs, "MoveNext"));
             }
+            // EOF and Close FieldSize are unrecorded -> named refusals.
+            AssertNotModelled(Get(fo, "FieldSize"), "NotModelled.FieldSizeNoCurrentRecord");
             Ok(Method(rs, "Close"));
+            AssertNotModelled(Get(fo, "FieldSize"), "NotModelled.FieldSizeClosed");
             Assert.Equal([0, 3, 256, 5000, 4, 3], sizes);
         }
 
-        // Non-LV columns (Long, Text, Binary type 9) fail 3259 without IErrorInfo (r-def-cursor-dao/chunk-read-offsets calls 11, 13).
+        // Recorded non-LV 3259: Long (4) and Text (10) on ACCDB dynaset (r-def-cursor-dao/chunk-read-offsets calls 11, 13);
+        // Binary (type 9) FieldSize is unrecorded -> named refusal.
         SelectRecordsetObject nonLv = Recover<SelectRecordsetObject>(Ok(Method(accdb, "OpenRecordset",
             "SELECT ID, FText, FBin FROM W WHERE ID = 1001", 2)));
         SelectFieldsObject nlFields = Object<SelectFieldsObject>(nonLv, "Fields");
         AssertDaoError(Get(Object<SelectFieldObject>(nlFields, "Item", "ID"), "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
         AssertDaoError(Get(Object<SelectFieldObject>(nlFields, "Item", "FText"), "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
-        AssertDaoError(Get(Object<SelectFieldObject>(nlFields, "Item", "FBin"), "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
+        AssertNotModelled(Get(Object<SelectFieldObject>(nlFields, "Item", "FBin"), "FieldSize"), "NotModelled.FieldSizeNonLvType");
         Ok(Method(nonLv, "Close"));
 
-        // Forward-only non-Null OLE FieldSize is unrecorded -> named refusal.
+        // Forward-only OLE FieldSize (both Null and non-Null) is unrecorded -> named refusal.
         SelectRecordsetObject fwd = Recover<SelectRecordsetObject>(Ok(Method(accdb, "OpenRecordset",
-            "SELECT ID, FOle FROM W WHERE ID = 1101", 8)));
-        AssertNotModelled(Get(Object<SelectFieldObject>(Object<SelectFieldsObject>(fwd, "Fields"), "Item", "FOle"), "FieldSize"),
-            "NotModelled.FieldSizeOleCursorType");
+            "SELECT ID, FOle FROM W WHERE ID IN (1100, 1101) ORDER BY ID", 8)));
+        SelectFieldObject fwdOle = Object<SelectFieldObject>(Object<SelectFieldsObject>(fwd, "Fields"), "Item", "FOle");
+        AssertNotModelled(Get(fwdOle, "FieldSize"), "NotModelled.FieldSizeOleCursorType"); // Null
+        Ok(Method(fwd, "MoveNext"));
+        AssertNotModelled(Get(fwdOle, "FieldSize"), "NotModelled.FieldSizeOleCursorType"); // non-Null
         Ok(Method(fwd, "Close"));
 
-        // MDB snapshot OLE FieldSize (r-fmt-2b/mdb-ole-insert-4078 calls 9[0..5].1: 0, 4076, 4090, 100, 100, 100).
+        // MDB snapshot OLE FieldSize (r-fmt-2b/mdb-ole-insert-4078 calls 9[0..5].1: 0, 4076, 4090, 100, 100, 100);
+        // MDB dynaset FieldSize is unrecorded -> named refusal.
         DatabaseObject mdb = Open(Fmt2bMdb, ".mdb");
         SelectRecordsetObject mdbRs = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
             "SELECT ID, O FROM Lo ORDER BY ID", 4)));
@@ -282,6 +340,12 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         }
         Ok(Method(mdbRs, "Close"));
         Assert.Equal([0, 4076, 4090, 100, 100, 100], mdbSizes);
+
+        SelectRecordsetObject mdbDyn = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo ORDER BY ID", 2)));
+        AssertNotModelled(Get(Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbDyn, "Fields"), "Item", "O"), "FieldSize"),
+            "NotModelled.FieldSizeMdbCursorType");
+        Ok(Method(mdbDyn, "Close"));
     }
 
     [Fact]
@@ -317,14 +381,21 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertDaoError(Method(fId, "GetChunk", 0, 1), 3259, "DAO.Field", publishesErrorInfo: false);  // call 31
         AssertNull(Ok(Method(fBn, "GetChunk", 0, 4)));                                     // call 32 (Null OLE -> VT_NULL)
 
-        // Move past the single row -> EOF GetChunk is unrecorded -> named refusal.
+        // Unrecorded argument counts, Missing, and VarTypes refused by name.
+        AssertNotModelled(Method(fMm, "GetChunk", 0), "NotModelled.GetChunkArgumentCount");
+        AssertNotModelled(Method(fMm, "GetChunk", System.Reflection.Missing.Value, 4), "NotModelled.GetChunkArgumentCount");
+        AssertNotModelled(Method(fMm, "GetChunk", (object?)null, 4), "NotModelled.GetChunkArgumentType");
+        AssertNotModelled(Method(fMm, "GetChunk", "abc", 4), "NotModelled.GetChunkArgumentType");
+        AssertNotModelled(Method(fMm, "GetChunk", true, 4), "NotModelled.GetChunkArgumentType");
+
+        // Move past the single row -> EOF and Close GetChunk are unrecorded -> named refusals.
         Ok(Method(rs, "MoveNext"));
         AssertNotModelled(Method(fMm, "GetChunk", 0, 4), "NotModelled.GetChunkNoCurrentRecord");
         Ok(Method(rs, "Close"));
-        AssertDaoError(Method(fMm, "GetChunk", 0, 4), 3420, "DAO.Field", publishesErrorInfo: false);
+        AssertNotModelled(Method(fMm, "GetChunk", 0, 4), "NotModelled.GetChunkClosed");
 
         // Memo GetChunk on snapshot (4) and forward-only (8), preserving embedded NUL (r-q-wire/str-memo-fieldsize-by-recordset-type,
-        // r-str-ado-act/str-memo-chunks).
+        // r-str-ado-act/str-memo-chunks); negative args on snapshot/forward-only Memo are refused.
         DatabaseObject wireDb = Open(WireDao, ".accdb");
         foreach (int rsType in new[] { 4, 8 })
         {
@@ -333,8 +404,16 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
             SelectFieldObject mField = Object<SelectFieldObject>(Object<SelectFieldsObject>(mRs, "Fields"), "Item", "FMemo");
             Assert.Equal("a\0b", TextValue(Ok(Method(mField, "GetChunk", 0, 10))));
             Assert.Equal("\0b", TextValue(Ok(Method(mField, "GetChunk", 1, 10))));
+            AssertNotModelled(Method(mField, "GetChunk", -1, 4), "NotModelled.GetChunkNegativeArg");
             Ok(Method(mRs, "Close"));
         }
+
+        // Non-LV GetChunk on Binary (9) is refused by name.
+        SelectRecordsetObject binChunkRs = Recover<SelectRecordsetObject>(Ok(Method(wireDb, "OpenRecordset",
+            "SELECT ID, FBin FROM W WHERE ID = 1001", 2)));
+        AssertNotModelled(Method(Object<SelectFieldObject>(Object<SelectFieldsObject>(binChunkRs, "Fields"), "Item", "FBin"), "GetChunk", 0, 4),
+            "NotModelled.GetChunkNonLvType");
+        Ok(Method(binChunkRs, "Close"));
 
         // OLE GetChunk on dynaset (r-def-cursor-dao/chunk-binary-roundtrip calls 18, 21..23, 29; r-fix-wire-ado/chunk-ole-append-fieldsize).
         SelectRecordsetObject oleDyn = Recover<SelectRecordsetObject>(Ok(Method(wireDb, "OpenRecordset",
@@ -359,12 +438,22 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertNotModelled(Method(fo, "GetChunk", 257, 1), "NotModelled.GetChunkOlePastEnd");
         Ok(Method(oleDyn, "Close"));
 
-        // Unrecorded OLE GetChunk on snapshot (only dynaset is recorded).
+        // Unrecorded OLE GetChunk on snapshot (both Null and non-Null refused before Null branch).
         SelectRecordsetObject oleSnap = Recover<SelectRecordsetObject>(Ok(Method(wireDb, "OpenRecordset",
-            "SELECT ID, FOle FROM W WHERE ID = 1101", 4)));
+            "SELECT ID, FOle FROM W WHERE ID IN (1100, 1101) ORDER BY ID", 4)));
         SelectFieldObject foSnap = Object<SelectFieldObject>(Object<SelectFieldsObject>(oleSnap, "Fields"), "Item", "FOle");
-        AssertNotModelled(Method(foSnap, "GetChunk", 0, 3), "NotModelled.GetChunkOleCursorType");
+        AssertNotModelled(Method(foSnap, "GetChunk", 0, 3), "NotModelled.GetChunkOleCursorType"); // Null
+        Ok(Method(oleSnap, "MoveNext"));
+        AssertNotModelled(Method(foSnap, "GetChunk", 0, 3), "NotModelled.GetChunkOleCursorType"); // non-Null
         Ok(Method(oleSnap, "Close"));
+
+        // MDB GetChunk is unrecorded -> named refusal.
+        DatabaseObject mdb = Open(Fmt2bMdb, ".mdb");
+        SelectRecordsetObject mdbRs = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo ORDER BY ID", 4)));
+        AssertNotModelled(Method(Object<SelectFieldObject>(Object<SelectFieldsObject>(mdbRs, "Fields"), "Item", "O"), "GetChunk", 0, 4),
+            "NotModelled.GetChunkMdb");
+        Ok(Method(mdbRs, "Close"));
     }
 
     [Fact]
@@ -385,6 +474,42 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
             Ok(Method(rs, "Close"));
         }
 
+        // Per-cursor/format count ceilings and non-snapshot NumRows/EOF/Closed refusals.
+        SelectRecordsetObject dyn = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 305 ORDER BY ID", 2)));
+        AssertNotModelled(Method(dyn, "GetRows", 1501), "NotModelled.GetRowsCountCeiling");
+        AssertNotModelled(Method(dyn, "GetRows"), "NotModelled.GetRowsNumRowsCursorType");
+        AssertNotModelled(Method(dyn, "GetRows", 0), "NotModelled.GetRowsNumRowsCursorType");
+        AssertNotModelled(Method(dyn, "GetRows", int.MaxValue), "NotModelled.GetRowsNumRowsCursorType");
+        Ok(Method(dyn, "Close"));
+        AssertNotModelled(Method(dyn, "GetRows", 1), "NotModelled.GetRowsClosedCursorType");
+
+        SelectRecordsetObject fwd = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 301 ORDER BY ID", 8)));
+        AssertNotModelled(Method(fwd, "GetRows", 31), "NotModelled.GetRowsCountCeiling");
+        TakeArray(Ok(Method(fwd, "GetRows", 10))).Dispose();
+        AssertNotModelled(Method(fwd, "GetRows", 1), "NotModelled.GetRowsEofCursorType");
+        Ok(Method(fwd, "Close"));
+        AssertNotModelled(Method(fwd, "GetRows", 1), "NotModelled.GetRowsClosedCursorType");
+
+        // MDB snapshot GetRows (r-par-1/order-groupby-output-order-mdb): ceiling 300; MDB dynaset and EOF refused.
+        DatabaseObject mdb = Open(Fmt2bMdb, ".mdb");
+        SelectRecordsetObject mdbSnap = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo ORDER BY ID", 4)));
+        AssertNotModelled(Method(mdbSnap, "GetRows", 301), "NotModelled.GetRowsCountCeiling");
+        using (OwnedVariant mdbRows = TakeArray(Ok(Method(mdbSnap, "GetRows", 300))))
+        {
+            Assert.Equal([(0, 2), (0, 6)], SafeArrays.Shape(mdbRows.Pointer->Pointer));
+        }
+        AssertNotModelled(Method(mdbSnap, "GetRows", 1), "NotModelled.GetRowsEofCursorType");
+        Ok(Method(mdbSnap, "Close"));
+        AssertNotModelled(Method(mdbSnap, "GetRows", 1), "NotModelled.GetRowsClosedCursorType");
+
+        SelectRecordsetObject mdbDyn = Recover<SelectRecordsetObject>(Ok(Method(mdb, "OpenRecordset",
+            "SELECT ID, O FROM Lo ORDER BY ID", 2)));
+        AssertNotModelled(Method(mdbDyn, "GetRows", 1), "NotModelled.GetRowsMdbCursorType");
+        Ok(Method(mdbDyn, "Close"));
+
         // r-wire/getrows-long-values & getrows-by-type: Memo, Binary (FBin) and OLE (FOle) cells in one GetRows array.
         SelectRecordsetObject lvRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
             "SELECT ID, FMemo, FBin, FOle FROM W WHERE ID BETWEEN 900 AND 1199 ORDER BY ID", 4)));
@@ -403,10 +528,10 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         // r-wire/getrows-shape: GetRows after EOF fails 3021 without IErrorInfo.
         AssertDaoError(Method(lvRs, "GetRows", 1), 3021, "DAO.Recordset", publishesErrorInfo: false);
         Ok(Method(lvRs, "Close"));
-        // r-wire/getrows-position & recordset-closed-member-inventory: GetRows after Close fails 3420 without IErrorInfo.
+        // r-wire/getrows-position call 30: GetRows after Close on ACCDB snapshot fails 3420 without IErrorInfo.
         AssertDaoError(Method(lvRs, "GetRows", 1), 3420, "DAO.Recordset", publishesErrorInfo: false);
 
-        // r-wire/getrows-numrows-args: all argument forms and errors.
+        // r-wire/getrows-numrows-args: all argument forms and errors on ACCDB snapshot (4).
         SelectRecordsetObject argRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
             "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 311 ORDER BY ID", 4)));
         AssertDaoError(Method(argRs, "GetRows", 0), 3001, "DAO.Recordset", publishesErrorInfo: false);
@@ -418,7 +543,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertDaoError(Method(argRs, "GetRows", true), 3001, "DAO.Recordset", publishesErrorInfo: false);
         AssertDaoError(Method(argRs, "GetRows", int.MaxValue), 3035, "DAO.Recordset", publishesErrorInfo: false);
         AssertDaoError(Method(argRs, "GetRows", int.MinValue), 3001, "DAO.Recordset", publishesErrorInfo: false);
-        AssertNotModelled(Method(argRs, "GetRows", 2_000_000), "NotModelled.GetRowsCountCeiling");
+        AssertNotModelled(Method(argRs, "GetRows", 5001), "NotModelled.GetRowsCountCeiling");
 
         // Omitted -> 1 row; I2 / UI1 / R4 / R8 (2.5 -> 2) / "2" -> 2 rows.
         using (OwnedVariant one = TakeArray(Ok(Method(argRs, "GetRows"))))
@@ -447,7 +572,8 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
     [Fact]
     public void Select_GetRows_stops_silently_before_failing_cell_and_returns_degenerate_array_on_row_zero()
     {
-        // r-wire/getrows-by-type call 53: SELECT ID, FDec stops before ID 1304 (4 Null rows), then returns [0+0, 0+2].
+        // r-wire/getrows-by-type call 53: SELECT ID, FDec stops before ID 1304 after returning the 4 Null rows;
+        // starting GetRows on row 0 of a failing Decimal(38) row is unrecorded and refused by name.
         DatabaseObject wireDb = Open(WireDao, ".accdb");
         SelectRecordsetObject decRs = Recover<SelectRecordsetObject>(Ok(Method(wireDb, "OpenRecordset",
             "SELECT ID, FDec FROM W WHERE ID BETWEEN 1300 AND 1399 ORDER BY ID", 4)));
@@ -455,13 +581,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         {
             Assert.Equal([(0, 2), (0, 4)], SafeArrays.Shape(first.Pointer->Pointer));
         }
-        Assert.False(BoolValue(Ok(Get(decRs, "EOF"))));
-        using (OwnedVariant stuck = TakeArray(Ok(Method(decRs, "GetRows", 100))))
-        {
-            Assert.Equal([(0, 0), (0, 2)], SafeArrays.Shape(stuck.Pointer->Pointer));
-        }
-        Assert.False(BoolValue(Ok(Get(decRs, "EOF"))));
-        Assert.Empty(_engine.Errors);
+        AssertNotModelled(Method(decRs, "GetRows", 100), "NotModelled.GetRowsDecimal38RowZero");
         Ok(Method(decRs, "Close"));
 
         // r-par-1/err-getrows-chunks: snapshot (4), dynaset (2), forward-only (8) on SELECT id, 1 / zm AS e FROM ER (bad at id 100).
@@ -567,6 +687,10 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
                 break;
             case DBNull:
                 v->Vt = (ushort)VarType.Null;
+                break;
+            case System.Reflection.Missing:
+                v->Vt = (ushort)VarType.Error;
+                v->Int64 = unchecked((uint)HResults.DISP_E_PARAMNOTFOUND);
                 break;
             case int i:
                 v->Vt = (ushort)VarType.I4;
