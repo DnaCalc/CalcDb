@@ -23,37 +23,27 @@ public sealed class EtwBridgeTests : IDisposable
     private string Done => Path.Combine(_root, "queue", "done-abc");
 
     [Fact]
-    public async Task Stop_waits_while_the_recorder_still_holds_the_done_file_and_then_reads_it()
+    public void Stop_waits_while_the_recorder_still_holds_the_done_file_and_then_reads_it()
     {
         EtwBridge bridge = Bridge(TimeSpan.FromSeconds(20));
         // Like File.WriteAllText in the recorder: the file exists, empty and denying readers, before its line is written.
         var held = new FileStream(Done, FileMode.Create, FileAccess.Write, FileShare.None);
-        var releaser = Task.Run(() =>
-        {
-            Thread.Sleep(500);
-            held.Write("ok 12 events (0 unnamed)"u8);
-            held.Dispose();
-        });
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        using var releaser = new DelayedWriter(held, 500, "ok 12 events (0 unnamed)"u8.ToArray());
         bridge.Stop();
-        await releaser;
+        releaser.Join();
         Assert.True(clock.ElapsedMilliseconds >= 400, "Stop returned before the recorder released the file");
         Assert.Equal("recorder: ok 12 events (0 unnamed)", Status());
     }
 
     [Fact]
-    public async Task Stop_waits_for_the_line_when_the_file_is_open_for_sharing_but_still_empty()
+    public void Stop_waits_for_the_line_when_the_file_is_open_for_sharing_but_still_empty()
     {
         EtwBridge bridge = Bridge(TimeSpan.FromSeconds(20));
         var held = new FileStream(Done, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-        var writer = Task.Run(() =>
-        {
-            Thread.Sleep(300);
-            held.Write("ok 3 events (0 unnamed)"u8);
-            held.Dispose();
-        });
+        using var writer = new DelayedWriter(held, 300, "ok 3 events (0 unnamed)"u8.ToArray());
         bridge.Stop();
-        await writer;
+        writer.Join();
         Assert.Equal("recorder: ok 3 events (0 unnamed)", Status());
     }
 
@@ -90,24 +80,74 @@ public sealed class EtwBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task WaitForReady_waits_while_done_is_locked_then_reads_and_cleans_it_up()
+    public void WaitForReady_waits_while_done_is_locked_then_reads_and_cleans_it_up()
     {
         string done = Path.Combine(_root, "queue", "done-lock");
         var held = new FileStream(done, FileMode.Create, FileAccess.Write, FileShare.None);
-        var releaser = Task.Run(() =>
-        {
-            Thread.Sleep(250);
-            held.Write("failed: bad watchDir"u8);
-            held.Dispose();
-        });
+        using var releaser = new DelayedWriter(held, 250, "failed: bad watchDir"u8.ToArray());
         EtwBridge bridge = EtwBridge.AttachPending(Path.Combine(_root, "attempt"), Path.Combine(_root, "queue"), "lock");
         var clock = System.Diagnostics.Stopwatch.StartNew();
         bool ready = bridge.WaitForReady(TimeSpan.FromSeconds(20));
-        await releaser;
+        releaser.Join();
         Assert.False(ready);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3));
         Assert.False(File.Exists(done));
         Assert.Equal("recorder failed before ready: failed: bad watchDir", Status());
+    }
+
+    /// <summary>
+    /// Simulates the out-of-process recorder releasing a done file after a short delay on a dedicated OS thread rather
+    /// than the thread pool (task 4th6): parallel xUnit collections can saturate the thread pool under load and starve
+    /// a <see cref="Task.Run(Action)"/> releaser for seconds while <see cref="EtwBridge.WaitForReady"/> or
+    /// <see cref="EtwBridge.Stop"/> polls synchronously.
+    /// </summary>
+    private sealed class DelayedWriter : IDisposable
+    {
+        private readonly Thread _thread;
+        private readonly ManualResetEventSlim _started = new();
+        private Exception? _error;
+
+        public DelayedWriter(FileStream held, int delayMs, byte[] content)
+        {
+            _thread = new Thread(() =>
+            {
+                _started.Set();
+                try
+                {
+                    Thread.Sleep(delayMs);
+                    held.Write(content);
+                }
+                catch (Exception ex)
+                {
+                    _error = ex;
+                }
+                finally
+                {
+                    held.Dispose();
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "EtwBridgeTests.Recorder",
+            };
+            _thread.Start();
+            _started.Wait();
+        }
+
+        public void Join()
+        {
+            _thread.Join();
+            if (_error is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(_error).Throw();
+            }
+        }
+
+        public void Dispose()
+        {
+            _thread.Join();
+            _started.Dispose();
+        }
     }
 
     [Fact]

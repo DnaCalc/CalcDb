@@ -4,11 +4,24 @@ using Xunit.Abstractions;
 namespace CalcDb.Sql.Tests;
 
 /// <summary>
+/// The SQL allocation budgets (The Plan §3.2) run alone, as Isam's and Expressions' do (task 58sc, task 4th6):
+/// <see cref="GC.GetAllocatedBytesForCurrentThread"/> counts this thread's allocation context, and GCs triggered by
+/// parallel test collections in the same process add allocation quanta mid-pass.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class AllocationBudgets
+{
+    public const string Name = "Allocation budgets";
+}
+
+/// <summary>
 /// The allocation budget of the SELECT scan's per-row path (The Plan §3.2; W-06/parser-binder-scan, task 7tp3): a
 /// statement bound once, then (1) an open whose WHERE tests every row of a 2048-row table and keeps none, and (2) a warm
 /// pass over a populated result reading two projected columns per row (a Long field and a Text field). Measured with
-/// GC.GetAllocatedBytesForCurrentThread around the whole measured call, no assertion inside it.
+/// GC.GetAllocatedBytesForCurrentThread around the whole measured call, no assertion inside it, alone in the process
+/// (<see cref="AllocationBudgets"/>).
 /// </summary>
+[Collection(AllocationBudgets.Name)]
 public sealed class SelectAllocationTests(ITestOutputHelper output)
 {
     private const string Big = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012";
