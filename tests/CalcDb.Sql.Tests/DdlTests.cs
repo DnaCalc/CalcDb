@@ -681,10 +681,9 @@ public sealed class DdlTests
         // r-q15-ddl-open/lv-sql-notnull-1: NOT NULL writes LvProp blob -> refused by name.
         AssertNotModelled(db, "CREATE TABLE Nn (a LONG NOT NULL)", "NotModelled.DdlColumnNotNull");
 
-        // Field pairs no record decides (SchemaWriter.FieldNameClashOf): non-ASCII case and NFC/NFD are refused by name;
-        // 3380 is recorded for exact and ASCII-case pairs only (r-def-expr-sql/ddl-column-clauses Cc20, Cc21).
-        AssertNotModelled(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", "NotModelled.DdlFieldNamePair");
-        AssertNotModelled(db, "CREATE TABLE Fe2 ([Fé] LONG, [Fé] LONG)", "NotModelled.DdlFieldNamePair");
+        // r-q28-schema-write-open/pair-sql-fe-FE, pair-sql-nfc-nfd: non-ASCII case and NFC/NFD collide under General (3380).
+        AssertAceError(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", 3380);
+        AssertAceError(db, "CREATE TABLE Fe2 ([Fé] LONG, [Fe\u0301] LONG)", 3380);
 
         // Other named NotModelled.Ddl* refusals for valid DDL shapes outside SchemaWriter's current scope.
         AssertNotModelled(db, "CREATE TABLE Tz (s TEXT(0))", "NotModelled.DdlTextZeroSize");
@@ -742,6 +741,82 @@ public sealed class DdlTests
         AssertNotModelled(locked, "ALTER TABLE T ADD COLUMN a LONG", "NotModelled.DdlTableInUsePrecedence");
         AssertNotModelled(locked, "ALTER TABLE T ALTER COLUMN NoSuch LONG", "NotModelled.DdlTableInUsePrecedence");
         AssertNotModelled(locked, "ALTER TABLE T ALTER COLUMN a COUNTER(1, 1)", "NotModelled.DdlTableInUsePrecedence");
+    }
+
+    [Fact]
+    public void R_q28_field_name_pairs_follow_general_sort_order()
+    {
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+
+        // Colliding pairs under General (evidence/r-q28-schema-write-open/pair-sql-*): fail 3380 naming the second
+        // column and change zero bytes.
+        (string Question, string First, string Second)[] colliding =
+        [
+            ("pair-sql-Aa-aA", "Aa", "aA"),
+            ("pair-sql-fe-FE", "F\u00e9", "F\u00c9"),
+            ("pair-sql-nfc-nfd", "F\u00e9", "Fe\u0301"),
+            ("pair-sql-ae-lig", "\u00e6", "ae"),
+            ("pair-sql-sz-ss", "\u00df", "ss"),
+        ];
+        foreach ((string question, string first, string second) in colliding)
+        {
+            using var db = new WritableSqlFixture(fixture);
+            ActionOutcome outcome = ActionExecutor.Execute($"CREATE TABLE T ([{first}] LONG, [{second}] LONG)", db);
+            Assert.False(outcome.Succeeded, $"{question}: expected 3380");
+            Assert.NotNull(outcome.Failure);
+            Assert.False(outcome.Failure!.IsNotModelled);
+            Assert.Equal(3380, outcome.Failure.Number);
+            Assert.Equal($"Field '{second}' already exists in table 'T'.", outcome.Failure.Message);
+            Assert.Equal(fixture, db.Image.Snapshot());
+        }
+
+        // Distinct pairs under General (evidence/r-q28-schema-write-open/pair-sql-e-eacute, pair-sql-ta-te,
+        // pair-sql-o-oslash): succeed and match ACE's kept pages byte-for-byte.
+        (string Question, string First, string Second)[] distinct =
+        [
+            ("pair-sql-e-eacute", "e", "\u00e9"),
+            ("pair-sql-ta-te", "T\u00e4", "T\u00e9"),
+            ("pair-sql-o-oslash", "o", "\u00f8"),
+        ];
+        HashSet<long> unkeptCatalogPages = [2, 3, 7, 8, 10, 41];
+        foreach ((string question, string first, string second) in distinct)
+        {
+            Kept kept = Kept.Of(question, "r-q28-schema-write-open");
+            (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+            var timestamps = new Queue<ulong>([created, updated]);
+            using var db = new WritableSqlFixture(fixture) { DateBitsProvider = () => timestamps.Dequeue() };
+            ActionOutcome outcome = ActionExecutor.Execute($"CREATE TABLE T ([{first}] LONG, [{second}] LONG)", db);
+            Assert.True(outcome.Succeeded, $"{question}: {outcome.Failure}");
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            AssertAsAce(kept, fixture, db.Image.Snapshot(), unkeptCatalogPages);
+        }
+
+        // Unrecorded pairs stay refused by name (NotModelled.DdlFieldNamePair): full/half-width, hiragana/katakana,
+        // trailing-space differences, and non-General sort orders.
+        using (var db = new WritableSqlFixture(fixture))
+        {
+            AssertNotModelled(db, "CREATE TABLE W ([A] LONG, [\uFF21] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE K ([\u3042] LONG, [\u30A2] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE S ([a] LONG, [a ] LONG)", "NotModelled.DdlFieldNamePair");
+
+            var nonGeneral = new NonGeneralSortDatabase(db);
+            AssertAceError(nonGeneral, "CREATE TABLE Same ([a] LONG, [a] LONG)", 3380);
+            AssertNotModelled(nonGeneral, "CREATE TABLE Diff ([a] LONG, [b] LONG)", "NotModelled.DdlFieldNamePair");
+        }
+    }
+
+    private sealed class NonGeneralSortDatabase(WritableSqlFixture inner) : ISqlActionDatabase
+    {
+        public CalcDb.Values.Scalar.ExpressionContext Context { get; } =
+            new(1036, CalcDb.Values.Scalar.TextCompareMode.Database, null, CalcDb.Values.Scalar.ExpressionUse.Query, inner.Context.TextOrder);
+        public bool ReadOnly => inner.ReadOnly;
+        public CalcDb.Isam.Transactions.TransactionCoordinator Workspace => inner.Workspace;
+        public TableDefinition? Table(string name) => inner.Table(name);
+        public bool IsQuery(string name) => inner.IsQuery(name);
+        public CalcDb.Isam.RowReader? OpenRows(TableDefinition table, out string? failure) => inner.OpenRows(table, out failure);
+        public CalcDb.Isam.IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => inner.OpenIndex(table, index, out failure);
+        public CalcDb.Isam.Edit.TableEditContext? EditContext(string tableName, out string? failure) => inner.EditContext(tableName, out failure);
+        public CalcDb.Isam.TableCursor? OpenCursor(TableDefinition table, out string? failure) => inner.OpenCursor(table, out failure);
     }
 
     private static void AssertAceError(ISqlActionDatabase db, string sql, int expectedNumber)
@@ -830,7 +905,7 @@ public sealed class DdlTests
         return (entry.DateCreateBits!.Value, entry.DateUpdateBits!.Value);
     }
 
-    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours)
+    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours, IReadOnlySet<long>? allowedUnkeptPages = null)
     {
         byte[] ace = kept.AceImage(fixture);
         Assert.Equal(kept.Length, ours.Length);
@@ -849,6 +924,10 @@ public sealed class DdlTests
                         differences.Add($"page {page} +{i}: ours {mine[i]:X2}, ACE {theirs[i]:X2}");
                     }
                 }
+            }
+            else if (allowedUnkeptPages?.Contains(page) == true)
+            {
+                continue;
             }
             else if (page * D.PageSize < fixture.Length && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
             {

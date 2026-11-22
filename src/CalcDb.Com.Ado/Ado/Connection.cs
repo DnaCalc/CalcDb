@@ -1706,6 +1706,27 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 return CallResult.Fail(Failure.NotModelled(sqlFailure.NotModelled!, sqlFailure.Message));
             }
+            if (!sqlFailure.IsNotModelled && sqlFailure.Number == 3380 && DdlParser.Parse(sql, out _) is CreateTableStatement)
+            {
+                // evidence/r-q28-schema-write-open/pair-ado-Aa-aA, pair-ado-fe-FE, pair-ado-nfc-nfd, pair-ado-ae-lig,
+                // pair-ado-sz-ss: duplicate field on CREATE TABLE fails 0x80040E21 (DB_E_ERRORSINCOMMAND ->
+                // HResultErrorsOccurred), helpContext 5003191, SQLState "3380", NativeError -539297252, IID_ICommand.
+                const int DuplicateFieldHelpContext = 5003191;
+                const int DuplicateFieldNativeError = -539297252;
+                SetProviderError(new AdoErrorEntry(
+                    AdoObject.HResultErrorsOccurred,
+                    AdoObject.AceEngineSource,
+                    sqlFailure.Message,
+                    "",
+                    DuplicateFieldHelpContext,
+                    "3380",
+                    DuplicateFieldNativeError));
+                return CallResult.Fail(AdoObject.AceFailure(
+                    AdoObject.HResultErrorsOccurred,
+                    sqlFailure.Message,
+                    DuplicateFieldHelpContext,
+                    AdoObject.IidCommand));
+            }
             MappedProviderError? mapped = AdoSqlErrors.TryMap(sqlFailure, isSavedQuery, out Failure? unmodelled, sql);
             if (mapped is { } err)
             {

@@ -582,12 +582,15 @@ public sealed class SchemaWriterTests
     }
 
     /// <summary>
-    /// Replay one DAO Long TableDefs.Append against ACE's kept pages (0, 1, 2, 3, 7, 8, 10, 17, 18, 41-44): page 42
-    /// (TableDef), page 44 (LVAL), page 0 (N+2 commits), page 1 and page 17 (including commit 2's vacated inline prefix
-    /// outside its 8-byte DateUpdate clock field). Page 6, MSysObjects.LvProp's usage-map page, changes when LvProp
-    /// spills to page 44, and no record keeps it: it is allowed to change and not asserted (Open: what ACE writes there).
+    /// Replay one DAO Long TableDefs.Append against ACE's kept pages: page 42 (TableDef), LVAL page(s) (44..46),
+    /// page 0 (N+2 commits), page 1, page 6 when kept by the record, and page 17 (including commit 2's vacated inline
+    /// prefix outside its 8-byte DateUpdate clock field when field 1's LvProp stayed inline &lt;= 64 bytes).
     /// </summary>
-    private static void AssertDaoCreateTableMatchesAce(string card, string question, CreateTableRequest request)
+    private static byte[] AssertDaoCreateTableMatchesAce(
+        string card,
+        string question,
+        CreateTableRequest request,
+        IReadOnlySet<long>? extraUnkeptPages = null)
     {
         Kept kept = Kept.Of(question, card);
         byte[] fixture = Fixture();
@@ -602,8 +605,13 @@ public sealed class SchemaWriterTests
         CatalogEntry entry = catalog.Entries.Single(e => e.Name == request.Name && e.ParentId == catalog.TablesContainer);
         ColumnDescriptor lvProp = catalog.ObjectTable.Columns.Single(c => c.Name == "LvProp");
         LvalColumnMapSpec lvMaps = catalog.ObjectTable.LongValueMaps.Single(m => m.PhysicalNumber == lvProp.PhysicalNumber);
-        Assert.DoesNotContain((long)lvMaps.OwnedMap.Page, kept.Pages);
-        HashSet<long>? allowedUnkept = ours.Length > 44 * D.PageSize ? [lvMaps.OwnedMap.Page, lvMaps.FreeMap.Page] : null;
+        HashSet<long> keptPages = [.. kept.Pages];
+        HashSet<long> allowedUnkept = extraUnkeptPages is null ? [] : [.. extraUnkeptPages];
+        if (!keptPages.Contains(lvMaps.OwnedMap.Page) && ours.Length > 44 * D.PageSize)
+        {
+            allowedUnkept.Add(lvMaps.OwnedMap.Page);
+            allowedUnkept.Add(lvMaps.FreeMap.Page);
+        }
 
         // When Commit 2 wrote an inline 1-field LvProp (<= 64 bytes) and Commit 3 spilled to LVAL page 44, the vacated
         // prefix on page 17 holds Commit 2's 8-byte DateUpdate clock reading (which can differ by clock ticks from
@@ -627,7 +635,237 @@ public sealed class SchemaWriterTests
             }
         }
 
-        AssertAsAce(kept, fixture, ours, allowedUnkept, clockSpans);
+        AssertAsAce(kept, fixture, ours, allowedUnkept.Count > 0 ? allowedUnkept : null, clockSpans);
+        return ours;
+    }
+
+    private static NewField[] LetterFields(int count) =>
+        [.. Enumerable.Range(0, count).Select(i => Long(((char)('a' + i)).ToString()))];
+
+    private static NewField[] Long30Fields(int count) =>
+        [.. Enumerable.Range(1, count).Select(i => Long($"f{i:D2}_xxxxxxxxxxxxxxxxxxxxxxxxxx"))];
+
+    /// <summary>All 21 non-timing DAO LvProp &amp; page-6 shapes of evidence/r-q28-schema-write-open.</summary>
+    public static TheoryData<string, CreateTableRequest, bool> RQ28DaoLvPropCases() => new()
+    {
+        { "dao-fields-1-p6", new("T", LetterFields(1), SchemaRoute.Dao), false },
+        { "dao-fields-2-p6", new("T", LetterFields(2), SchemaRoute.Dao), false },
+        { "dao-fields-5", new("T", LetterFields(5), SchemaRoute.Dao), false },
+        { "dao-fields-6-p6", new("T", LetterFields(6), SchemaRoute.Dao), false },
+        { "dao-fields-7", new("T", LetterFields(7), SchemaRoute.Dao), false },
+        { "dao-fields-12", new("T", LetterFields(12), SchemaRoute.Dao), false },
+        { "dao-fields-16", new("T", LetterFields(16), SchemaRoute.Dao), false },
+        { "dao-fields-17", new("T", LetterFields(17), SchemaRoute.Dao), false },
+        { "dao-fields-18", new("T", LetterFields(18), SchemaRoute.Dao), false },
+        { "dao-fields-19", new("T", LetterFields(19), SchemaRoute.Dao), false },
+        { "dao-fields-20", new("T", LetterFields(20), SchemaRoute.Dao), false },
+        { "dao-name-8-p6", new("T", [Long("nnnnnnnn")], SchemaRoute.Dao), false },
+        { "dao-first3-2fields", new("T", [Long("nnn"), Long("b")], SchemaRoute.Dao), false },
+        { "dao-first7-2fields", new("T", [Long("nnnnnnn"), Long("b")], SchemaRoute.Dao), false },
+        { "dao-first8-2fields", new("T", [Long("nnnnnnnn"), Long("b")], SchemaRoute.Dao), false },
+        { "dao-first8-3fields", new("T", [Long("nnnnnnnn"), Long("b"), Long("c")], SchemaRoute.Dao), false },
+        { "dao-first30-2fields", new("T", [Long(new string('n', 30)), Long("b")], SchemaRoute.Dao), false },
+        { "dao-long30-24", new("T", Long30Fields(24), SchemaRoute.Dao), true },
+        { "dao-long30-25", new("T", Long30Fields(25), SchemaRoute.Dao), true },
+        { "dao-long30-26", new("T", Long30Fields(26), SchemaRoute.Dao), true },
+        { "dao-long30-27", new("T", Long30Fields(27), SchemaRoute.Dao), true },
+    };
+
+    private static readonly HashSet<long> UnkeptCatalogIndexPagesForLong30 = [7, 8, 10, 18, 41];
+    private static readonly HashSet<long> UnkeptCatalogPagesForPair = [2, 3, 7, 8, 10, 41];
+
+    [Theory]
+    [MemberData(nameof(RQ28DaoLvPropCases))]
+    public void R_q28_dao_lvprop_and_page6_write_ACE_pages(string question, CreateTableRequest request, bool subsetKept) =>
+        AssertDaoCreateTableMatchesAce("r-q28-schema-write-open", question, request, subsetKept ? UnkeptCatalogIndexPagesForLong30 : null);
+
+    /// <summary>
+    /// Explicitly assert page 6 MSysObjects.LvProp owned (offset 3347) and free (offset 3278) map bytes, plus retired
+    /// LVAL page kind 0x09 and Close-time page 1 freeing on spill (evidence/r-q28-schema-write-open/dao-fields-*-p6,
+    /// dao-name-8-p6, dao-long30-24..27). Bit positions are 1 &lt;&lt; (page % 8): page 44 -> 0x10, 45 -> 0x20, 46 -> 0x40.
+    /// </summary>
+    [Theory]
+    [InlineData("dao-fields-1-p6", 1, false, 0x00, 0x00, 44)]
+    [InlineData("dao-fields-2-p6", 2, false, 0x10, 0x10, 45)]
+    [InlineData("dao-fields-6-p6", 6, false, 0x10, 0x10, 45)]
+    [InlineData("dao-name-8-p6", 0, false, 0x10, 0x10, 45)]
+    [InlineData("dao-long30-24", 24, true, 0x10, 0x10, 45)]
+    [InlineData("dao-long30-25", 25, true, 0x10, 0x10, 45)]
+    [InlineData("dao-long30-26", 26, true, 0x20, 0x20, 46)]
+    [InlineData("dao-long30-27", 27, true, 0x40, 0x40, 47)]
+    public void R_q28_page6_lvprop_maps_and_lval_spill_match_ACE(
+        string question,
+        int count,
+        bool long30,
+        byte expectedOwnedByte,
+        byte expectedFreeByte,
+        int expectedPages)
+    {
+        NewField[] fields = count == 0 ? [Long("nnnnnnnn")] : long30 ? Long30Fields(count) : LetterFields(count);
+        byte[] ours = AssertDaoCreateTableMatchesAce(
+            "r-q28-schema-write-open",
+            question,
+            new("T", fields, SchemaRoute.Dao),
+            long30 ? UnkeptCatalogIndexPagesForLong30 : null);
+
+        Assert.Equal(expectedPages * D.PageSize, ours.Length);
+        int page6Base = 6 * D.PageSize;
+        Assert.Equal(expectedOwnedByte, ours[page6Base + 3347]);
+        Assert.Equal(expectedFreeByte, ours[page6Base + 3278]);
+
+        if (question == "dao-long30-26")
+        {
+            // Page 44 retired (kind 0x09), freed in page 1 at Close; page 45 holds the live LVAL row.
+            Assert.Equal(0x09, ours[44 * D.PageSize]);
+            Assert.Equal(0x01, ours[45 * D.PageSize]);
+        }
+        else if (question == "dao-long30-27")
+        {
+            // Pages 44 and 45 both retired (kind 0x09), freed in page 1 at Close; page 46 holds the live LVAL row.
+            Assert.Equal(0x09, ours[44 * D.PageSize]);
+            Assert.Equal(0x09, ours[45 * D.PageSize]);
+            Assert.Equal(0x01, ours[46 * D.PageSize]);
+        }
+    }
+
+    /// <summary>The 5 colliding draft DAO pairs of evidence/r-q28-schema-write-open that keep nativeRead page bytes.</summary>
+    public static TheoryData<string, string, string> RQ28PairDaoDuplicateCases() => new()
+    {
+        { "pair-dao-Aa-aA", "Aa", "aA" },
+        { "pair-dao-fe-FE", "F\u00e9", "F\u00c9" },
+        { "pair-dao-nfc-nfd", "F\u00e9", "Fe\u0301" },
+        { "pair-dao-ae-lig", "\u00e6", "ae" },
+        { "pair-dao-sz-ss", "\u00df", "ss" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ28PairDaoDuplicateCases))]
+    public void R_q28_pair_dao_duplicate_fails_3191_and_writes_ACE_rollback_pages(string question, string first, string second)
+    {
+        Kept kept = Kept.Of(question, "r-q28-schema-write-open");
+        byte[] fixture = Fixture();
+        byte[] ace = kept.AceImage(fixture);
+
+        // Locate the vacated row's DateCreate and DateUpdate offsets on page 17 via a 1-field create of the same first field.
+        using var layout = new Session(fixture);
+        layout.Create(new("T", [Long(first)], SchemaRoute.Dao), 1, 1);
+        CatalogSnapshot cat = CatalogBootstrap.Open(layout.Cache, D, layout.Pages, out _)!;
+        CatalogEntry entry = cat.Entries.Single(e => e.Name == "T" && e.ParentId == cat.TablesContainer);
+        using PagePin objPin = layout.Cache.Pin(entry.Root.Page).Pin!;
+        SlotView liveSlot = DataPages.CheckedSlot(objPin.Bytes, entry.Root.Row, D, out _)!.Value;
+        int rowBase = (int)(entry.Root.Page * (ulong)D.PageSize) + liveSlot.Start + D.Row.FixedBase;
+        int dateCreateOff = rowBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateCreate").FixedOffset;
+        int dateUpdateOff = rowBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+        ulong aceCreated = BitConverter.ToUInt64(ace, dateCreateOff);
+        ulong aceUpdated = BitConverter.ToUInt64(ace, dateUpdateOff);
+
+        using var session = new Session(fixture);
+        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long(first), Long(second)], SchemaRoute.Dao), aceCreated, aceUpdated);
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(3191, outcome.Refused?.Error);
+        Assert.Null(outcome.Refused?.NotWritten);
+        Assert.Equal(44UL, outcome.ExtentPages);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot(), UnkeptCatalogPagesForPair);
+    }
+
+    [Fact]
+    public void R_q28_pair_dao_a_a_fails_3191_and_matches_all_non_clock_ACE_page_hashes()
+    {
+        // evidence/r-q28-schema-write-open/pair-dao-a-a has no nativeRead steps; its after-close event records all 44 page hashes.
+        string folder = Path.Combine(ReplayFixture.Root(), "evidence", "r-q28-schema-write-open", "pair-dao-a-a");
+        string record = Directory.GetFiles(folder, "*.a1.json").Single();
+        using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
+        JsonElement? afterCloseFile = FindAfterCloseFile(doc.RootElement);
+        Assert.NotNull(afterCloseFile);
+        long expectedLength = afterCloseFile.Value.GetProperty("length").GetInt64();
+        string[] expectedHashes = [.. afterCloseFile.Value.GetProperty("pageHashes").EnumerateArray().Select(h => h.GetString()!)];
+
+        static JsonElement? FindAfterCloseFile(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.Object)
+            {
+                if (e.TryGetProperty("label", out JsonElement l) && l.ValueKind == JsonValueKind.String
+                    && l.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
+                {
+                    return files[0];
+                }
+                foreach (JsonProperty p in e.EnumerateObject())
+                {
+                    if (FindAfterCloseFile(p.Value) is { } found)
+                    {
+                        return found;
+                    }
+                }
+            }
+            else if (e.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement x in e.EnumerateArray())
+                {
+                    if (FindAfterCloseFile(x) is { } found)
+                    {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        }
+
+        byte[] fixture = Fixture();
+        using var session = new Session(fixture);
+        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Dao), 1, 1);
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(3191, outcome.Refused?.Error);
+        Assert.Null(outcome.Refused?.NotWritten);
+        Assert.Equal(44UL, outcome.ExtentPages);
+        session.Close();
+
+        byte[] ours = session.File.Snapshot();
+        Assert.Equal(expectedLength, ours.Length);
+        Assert.Equal(44, expectedHashes.Length);
+        for (int page = 0; page < 44; page++)
+        {
+            if (page == 17)
+            {
+                // Page 17 carries the vacated MSysObjects row's clock bytes; verified byte-for-byte in the 5 nativeRead pair-dao-* probes.
+                continue;
+            }
+            string actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(ours.AsSpan(page * D.PageSize, D.PageSize)))[..8];
+            Assert.Equal(expectedHashes[page], actual);
+        }
+    }
+
+    /// <summary>All 9 distinct non-colliding pair probes of evidence/r-q28-schema-write-open across SQL, DAO, and ADO.</summary>
+    public static TheoryData<string, SchemaRoute, string, string> RQ28PairDistinctCases() => new()
+    {
+        { "pair-sql-e-eacute", SchemaRoute.Sql, "e", "\u00e9" },
+        { "pair-sql-ta-te", SchemaRoute.Sql, "T\u00e4", "T\u00e9" },
+        { "pair-sql-o-oslash", SchemaRoute.Sql, "o", "\u00f8" },
+        { "pair-ado-e-eacute", SchemaRoute.Ado, "e", "\u00e9" },
+        { "pair-ado-ta-te", SchemaRoute.Ado, "T\u00e4", "T\u00e9" },
+        { "pair-ado-o-oslash", SchemaRoute.Ado, "o", "\u00f8" },
+        { "pair-dao-e-eacute", SchemaRoute.Dao, "e", "\u00e9" },
+        { "pair-dao-ta-te", SchemaRoute.Dao, "T\u00e4", "T\u00e9" },
+        { "pair-dao-o-oslash", SchemaRoute.Dao, "o", "\u00f8" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ28PairDistinctCases))]
+    public void R_q28_pair_distinct_writes_ACE_pages(string question, SchemaRoute route, string first, string second)
+    {
+        CreateTableRequest req = new("T", [Long(first), Long(second)], route);
+        if (route == SchemaRoute.Dao)
+        {
+            AssertDaoCreateTableMatchesAce("r-q28-schema-write-open", question, req, UnkeptCatalogPagesForPair);
+            return;
+        }
+        Kept kept = Kept.Of(question, "r-q28-schema-write-open");
+        byte[] fixture = Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+        using var session = new Session(fixture);
+        session.Create(req, created, updated);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot(), UnkeptCatalogPagesForPair);
     }
 
     [Fact]
@@ -658,56 +896,68 @@ public sealed class SchemaWriterTests
         byte[] fixture = Fixture();
         using var session = new Session(fixture);
         SchemaWriter w = session.Writer();
+        TextSortOrder general = new(TextSortOrder.GeneralIdentifier, 0, 1);
 
-        // SQL CREATE TABLE: exact and ASCII-case duplicates are 3380 (evidence/r-def-expr-sql/ddl-column-clauses Cc20
-        // A, A and Cc21 A, a; evidence/r-cat-1/names C2 a, A).
-        foreach ((string first, string second) in new[] { ("A", "A"), ("a", "A") })
+        // Colliding pairs under General (r-def-expr-sql/ddl-column-clauses Cc20/Cc21; r-cat-1/names C2;
+        // evidence/r-q28-schema-write-open/pair-sql-Aa-aA, pair-dao-Aa-aA, pair-ado-Aa-aA, pair-sql-fe-FE,
+        // pair-sql-nfc-nfd, pair-sql-ae-lig, pair-sql-sz-ss): 3380 on SQL and ADO without changing pages; 3191 on
+        // 2-Long inline-first DAO drafts.
+        (string First, string Second)[] colliding =
+        [
+            ("A", "A"), ("a", "A"), ("Aa", "aA"), ("F\u00e9", "F\u00c9"), ("F\u00e9", "Fe\u0301"), ("\u00e6", "ae"), ("\u00df", "ss"),
+        ];
+        foreach ((string first, string second) in colliding)
         {
-            SchemaOutcome outcome = w.CreateTable(session.Workspace, new("DupSql", [Long(first), Long(second)], SchemaRoute.Sql), 1, 1);
-            Assert.False(outcome.Succeeded);
-            Assert.Equal(3380, outcome.Refused?.Error);
-            Assert.Null(outcome.Refused?.NotWritten);
+            Assert.Equal(FieldNameClash.Duplicate, SchemaWriter.FieldNameClashOf([first], second, general, out _));
+            foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Ado })
+            {
+                SchemaOutcome outcome = w.CreateTable(session.Workspace, new("DupSqlAdo", [Long(first), Long(second)], route), 1, 1);
+                Assert.False(outcome.Succeeded);
+                Assert.Equal(3380, outcome.Refused?.Error);
+                Assert.Null(outcome.Refused?.NotWritten);
+            }
+            SchemaRefusal? daoCheck = w.Check(new("DupDao", [Long(first), Long(second)], SchemaRoute.Dao));
+            Assert.Equal(3191, daoCheck?.Error);
+            Assert.Null(daoCheck?.NotWritten);
         }
         Assert.Equal(fixture, session.File.Snapshot());
 
-        // DAO draft TableDefs.Append (evidence/r-dao-1-err-1/draft-tabledef-field fails 3125 earlier; 3191 is recorded
-        // only for attached TableDef.Fields.Append) and ADO CREATE TABLE stay refused by name on duplicate fields.
-        foreach (SchemaRoute route in new[] { SchemaRoute.Dao, SchemaRoute.Ado })
+        // Distinct pairs under General (evidence/r-q28-schema-write-open/pair-*-e-eacute, ta-te, o-oslash).
+        foreach ((string first, string second) in new[] { ("e", "\u00e9"), ("T\u00e4", "T\u00e9"), ("o", "\u00f8"), ("A", "AB"), ("T\u00e9", "n") })
         {
-            foreach ((string first, string second) in new[] { ("Aa", "aA"), ("F\u00e9", "F\u00c9"), ("T\u00e9", "Te\u0301") })
-            {
-                SchemaRefusal? refused = w.Check(new("DupOther", [Long(first), Long(second)], route));
-                Assert.NotNull(refused);
-                Assert.Null(refused.Value.Error);
-                Assert.NotNull(refused.Value.NotWritten);
-            }
+            Assert.Equal(FieldNameClash.None, SchemaWriter.FieldNameClashOf([first], second, general, out _));
+            Assert.Null(w.Check(new("Distinct", [Long(first), Long(second)], SchemaRoute.Sql)));
+            Assert.Null(w.Check(new("Distinct", [Long(first), Long(second)], SchemaRoute.Dao)));
+            Assert.Null(w.Check(new("Distinct", [Long(first), Long(second)], SchemaRoute.Ado)));
         }
 
-        // Field pairs no record decides stay refused by name on every route (R-CAT-1 CAT-B Open): non-ASCII case
-        // (recorded only for attached Fields.Append, 3191), NFC/NFD (recorded only for table names), accent-only pairs,
-        // a different non-ASCII letter in one place (recorded only for table names), and letters without a canonical
-        // decomposition.
-        (string, string)[] undecided =
-        [
-            ("F\u00e9", "F\u00c9"), ("F\u00e9", "Fe\u0301"), ("e", "\u00e9"), ("\u00e4", "\u00e1"),
-            ("T\u00e4", "T\u00e9"), ("o", "\u00f8"), ("d", "\u0111"),
-        ];
-        foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao, SchemaRoute.Ado })
+        // Unrecorded DAO duplicate shapes stay refused by name (3+ fields, or first field's LvProp > 64 bytes).
+        SchemaRefusal? daoThree = w.Check(new("DupDao3", [Long("a"), Long("b"), Long("A")], SchemaRoute.Dao));
+        Assert.Null(daoThree?.Error);
+        Assert.Contains("only 2-Long-field duplicates", daoThree?.NotWritten);
+        SchemaRefusal? daoLongFirst = w.Check(new("DupDao8", [Long("nnnnnnnn"), Long("NNNNNNNN")], SchemaRoute.Dao));
+        Assert.Null(daoLongFirst?.Error);
+        Assert.Contains("<= 64 bytes", daoLongFirst?.NotWritten);
+
+        // Pairs no record decides stay FieldNameClash.Undecided by name: width/kana pairs, trailing-space differences,
+        // and non-General sort orders (evidence/r-q28-schema-write-open/pair-* Open).
+        foreach ((string first, string second) in new[] { ("A", "\uFF21"), ("\u3042", "\u30A2"), ("a", "a ") })
         {
-            foreach ((string first, string second) in undecided)
+            Assert.Equal(FieldNameClash.Undecided, SchemaWriter.FieldNameClashOf([first], second, general, out string? why));
+            Assert.Contains("not recorded", why);
+            foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao, SchemaRoute.Ado })
             {
                 SchemaRefusal? refused = w.Check(new("Undecided", [Long(first), Long(second)], route));
                 Assert.NotNull(refused);
                 Assert.Null(refused.Value.Error);
                 Assert.Contains("not recorded", refused.Value.NotWritten);
-                Assert.Equal(FieldNameClash.Undecided, SchemaWriter.FieldNameClashOf([first], second, out _));
             }
         }
-
-        // Distinct ASCII names stay distinct, also beside a non-ASCII name of another length.
-        Assert.Equal(FieldNameClash.None, SchemaWriter.FieldNameClashOf(["A", "AB"], "B", out _));
-        Assert.Equal(FieldNameClash.None, SchemaWriter.FieldNameClashOf(["T\u00e9"], "n", out _));
-        Assert.Equal(FieldNameClash.Duplicate, SchemaWriter.FieldNameClashOf(["x", "Aa"], "aA", out _));
+        TextSortOrder french = new(1036, 0, 0);
+        Assert.Equal(FieldNameClash.Duplicate, SchemaWriter.FieldNameClashOf(["a"], "a", french, out _));
+        Assert.Equal(FieldNameClash.Undecided, SchemaWriter.FieldNameClashOf(["a"], "b", french, out string? nonGeneralWhy));
+        Assert.Contains("General sort order only", nonGeneralWhy);
+        Assert.Equal(FieldNameClash.Undecided, SchemaWriter.FieldNameClashOf(["a"], "b", null, out _));
     }
 
     [Fact]
@@ -717,23 +967,25 @@ public sealed class SchemaWriterTests
         using var session = new Session(fixture);
         SchemaWriter w = session.Writer();
 
-        // One commit per field is recorded for N = 1, 2, 3, 4 and 6 (r-q15-ddl-open/lv-dao-fields-*); seven is not.
-        SchemaRefusal? seven = w.Check(new("T", [.. "abcdefg".Select(c => Long(c.ToString()))], SchemaRoute.Dao));
-        Assert.Null(seven?.Error);
-        Assert.Contains("at most 6", seven?.NotWritten);
-        Assert.Null(w.Check(new("T", [.. "abcdef".Select(c => Long(c.ToString()))], SchemaRoute.Dao)));
+        // Multi-field (> 6) and long first-field name (>= 8 chars) are now admitted (evidence/r-q28-schema-write-open/dao-*).
+        Assert.Null(w.Check(new("T", LetterFields(20), SchemaRoute.Dao)));
+        Assert.Null(w.Check(new("T", [Long("nnnnnnnn"), Long("b"), Long("c")], SchemaRoute.Dao)));
+        Assert.Null(w.Check(new("T", Long30Fields(27), SchemaRoute.Dao)));
 
-        // An 8-character name is recorded only as the one field (r-q15-ddl-open/lv-dao-name-8).
-        Assert.Null(w.Check(new("T", [Long("nnnnnnnn")], SchemaRoute.Dao)));
-        SchemaRefusal? longFirst = w.Check(new("T", [Long("nnnnnnnn"), Long("a")], SchemaRoute.Dao));
-        Assert.Null(longFirst?.Error);
-        Assert.Contains("first field nnnnnnnn", longFirst?.NotWritten);
+        // LvProp exceeding the single-row LVAL limit (3,816 B) stays refused by name (chained MSysObjects.LvProp is not recorded).
+        NewField[] tooLarge = [.. Enumerable.Range(1, 55).Select(i => Long($"f{i:D2}_xxxxxxxxxxxxxxxxxxxxxxxxxx"))];
+        SchemaRefusal? chained = w.Check(new("T", tooLarge, SchemaRoute.Dao));
+        Assert.Null(chained?.Error);
+        Assert.Contains("single-row LVAL limit", chained?.NotWritten);
 
-        // Inside BeginTrans the N+1 frames would join the level: no record (task 4nfc), refused before any change.
+        // Inside BeginTrans the N+1 frames (and duplicate rollback) would join the level: no record (task 4nfc), refused before any change.
         Assert.Null(session.Workspace.BeginTrans());
         SchemaOutcome inLevel = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Dao), 1, 1);
         Assert.Null(inLevel.Refused?.Error);
         Assert.Contains("BeginTrans", inLevel.Refused?.NotWritten);
+        SchemaOutcome dupInLevel = w.CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Dao), 1, 1);
+        Assert.Null(dupInLevel.Refused?.Error);
+        Assert.Contains("BeginTrans", dupInLevel.Refused?.NotWritten);
         Assert.Equal(fixture, session.File.Snapshot());
     }
 

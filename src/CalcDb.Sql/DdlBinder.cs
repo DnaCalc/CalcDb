@@ -103,6 +103,13 @@ public static class DdlBinder
     private static bool NamesEqual(string a, string b) =>
         string.Equals(NameKey(a), NameKey(b), StringComparison.OrdinalIgnoreCase);
 
+    private static TextSortOrder? ParseGeneralSortOrder(string? identity) => identity switch
+    {
+        "1033/0" => new TextSortOrder(TextSortOrder.GeneralIdentifier, 0, 0),
+        "1033/1" => new TextSortOrder(TextSortOrder.GeneralIdentifier, 0, 1),
+        _ => null,
+    };
+
     /// <summary>Parse and bind a SQL DDL statement against <paramref name="database"/>.</summary>
     public static BoundDdl? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
     {
@@ -170,15 +177,17 @@ public static class DdlBinder
         var uniqueConstraints = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns)>();
 
+        TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
         foreach (DdlColumnDef col in stmt.Columns)
         {
             if (!IsValidObjectName(col.Name))
             {
                 return Fail(BindAce(3125, SqlMessages.InvalidObjectName(col.Name)), out failure);
             }
-            // The one field-name rule (SchemaWriter.FieldNameClashOf): r-def-expr-sql/ddl-column-clauses Cc20/Cc21 -> 3380
-            // using the duplicate column's spelling; a pair no record decides is refused by name.
-            switch (SchemaWriter.FieldNameClashOf(colByKey.Values.Select(c => c.Name), col.Name, out string? undecided))
+            // The one field-name rule (SchemaWriter.FieldNameClashOf): r-def-expr-sql/ddl-column-clauses Cc20/Cc21 and
+            // r-q28-schema-write-open/pair-sql-* -> 3380 using the duplicate column's spelling; a pair no record decides
+            // is refused by name.
+            switch (SchemaWriter.FieldNameClashOf(colByKey.Values.Select(c => c.Name), col.Name, sortOrder, out string? undecided))
             {
                 case FieldNameClash.Duplicate:
                     return Fail(BindAce(3380, SqlMessages.FieldAlreadyExists(col.Name, stmt.TableName)), out failure);
