@@ -86,28 +86,37 @@ scope or design, the book wins.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
-- Navigate C# with ripgrep (`rg -n -w`) for names, text and string literals, and make single-file and small edits with
-  your own file tools. In a session that refactors or asks semantic questions, use roscli on its warm daemon:
-  implementers (`nav.find_implementations`), the uses or constructions of a type and of an overloaded or same-named
-  member or method group (`nav.find_references`, `nav.find_invocations`), callers through lambdas and method groups
-  (`nav.call_hierarchy`), a definition (`nav.go_to_definition`), the compile errors of a project, a folder or the
-  solution (`diag.get_workspace_snapshot`), a rename across files (`edit.rename_symbol`), and a signature change
-  (`edit.change_signature`). The daemon sees files that any tool creates or deletes before its next answer; only a
-  project or solution file change needs `workspace.refresh`. A missing `using` or an unimplemented interface is one
-  call (`edit.apply_code_fix`, or `repair.propose_from_diagnostics` then `repair.apply_plan`: Roslyn's own fixes; it
-  answers `no_fix_available` where Roslyn has none). Build the area filter after every edit, roscli's included (measured
-  on 0.1.6-preview.26, 2026-11-22). Setup:
-  `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
-  `ROSCLI_DAEMON=required`; `roscli daemon.stop` before you end. A reload or a restart answers and recovers; the daemon writes
-  nothing into the repository.
-- roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills
-  (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a writer in its worktree, landed on its main and
-  released), never worked around in CalcDb.
 - Inspect oracle results with `calcdb-oracle show`, not with one-off scripts; `--pages` and `--diff` print a record's
   kept page bytes and what changed against the input or an earlier point.
 - At each organizer handover, put the table of `pwsh tools/process-indicators.ps1` in
   [docs/work/process-log.md](docs/work/process-log.md), with the session rows filled in from `alta session report`.
   A full process review runs when an indicator crosses its line, at most once a week otherwise (The Plan §4).
+
+## C# navigation and edits (roscli)
+
+roscli (RoslynSkills, installed as a global tool) keeps CalcDb.slnx loaded in a daemon and answers semantic questions in
+0.3 to 2 s (The Plan §4; measured on 0.1.6-preview.26, 2026-11-22, process log).
+
+- **Text first.** ripgrep (`rg -n -w`, 70 to 100 ms) for names, text and string literals; your own file tools for
+  single-file and small edits.
+- **roscli for what text cannot answer:** implementers (`nav.find_implementations`); the uses and constructions of a
+  type, and of an overloaded or same-named member or a method group (`nav.find_references`, `nav.find_invocations`);
+  callers through lambdas and method groups (`nav.call_hierarchy`); a definition (`nav.go_to_definition`); the compile
+  errors of a project, a folder or the solution (`diag.get_workspace_snapshot`).
+- **roscli for edits that follow a symbol:** a rename across files (`edit.rename_symbol`), a signature change
+  (`edit.change_signature`), several exact edits in one step (`edit.transaction`), and a missing `using` or an
+  unimplemented interface (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Read the diff and build the
+  area filter after every edit, roscli's included; a refactoring is reviewed like any change.
+- **Who starts a daemon.** A writer whose brief refactors or traces code across projects, and a reviewer who checks the
+  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs about 45 s
+  and up to 700 MB per worktree.
+- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then `roscli workspace.use CalcDb.slnx`; every call
+  with `ROSCLI_DAEMON=required` (no `--workspace-path` needed). The daemon sees files any tool creates or deletes before
+  its next answer; only a project or solution file change needs `roscli workspace.refresh`. `roscli daemon.stop` before
+  you end. It writes nothing into the repository.
+- **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills
+  (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a Neon writer in its worktree, landed on its main,
+  released on GitHub, installed here), never worked around in CalcDb.
 
 ## Honesty rules
 

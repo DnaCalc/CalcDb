@@ -840,3 +840,29 @@ proposed in 3.5 s and repaired in 1.4 s, the file restored byte for byte. AGENTS
 That empties the RoslynSkills queue of this round. Practice for writers: a bash script run in WSL from PowerShell
 arrives with CRLF line endings and fails; pass it base64-encoded or as an LF file (two writers lost a run each). roscli's
 answer is nested one level deeper through the daemon (RoslynSkills task qvcn).
+
+## 2026-11-22 - Handover: organizer session 01a1ff68 to organizer 8
+
+Session 01a1ff68 (Claude Opus 5.5, 2026-11-21 18:40 to 2026-11-22 05:00 UTC, 266 tool calls, about 11 h) put the new
+process in place, landed the paused work (3x6h, f8g8, the Com split, c7gn), parked 2qbr on `alta/2qbr`, and brought
+roscli (RoslynSkills) from 0.1.6-preview.20 to .26 as CalcDb's own tool. Indicators since 2026-11-21 18:30
+(`tools/process-indicators.ps1`, the engine pattern corrected for the Com split's projects in this handover):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 93% (85,341 of 91,310; the Com split's moves count twice) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 79,554 / 5,787 / 459 / 1,190 / 4,320 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 20; **65%** (the first runs of the new check worktree included) | below 70% |
+| Landing check duration (median of 26 runs) | 180 s (first full builds included; incremental runs 26 to 60 s) | above 3 min |
+| Compare baselines | xdzw-2 413 of 1360, then 3x6h-1 428, c7gn-1 431; wide 621 of 3158 | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | 266 calls for 4 code landings, 3 baselines and about 15 process and roscli commits; 1 handover | above about 15; more than 2 a day |
+| Reviewer findings per 1,000 lines | **c7gn about 11 (15 on about 1,300), f8g8 about 23 (10 on 430)** | rising over three landings, or above about 3 |
+| Rules found wrong after landing | 0 | more than one a day |
+| Children stopped waiting for a record | 0: the W-05 and W-07 writers generalized instead of stopping | more than one per stretch |
+| Merge minutes per landing | 0 (no conflict in 4 branch landings) | above 5 min |
+| Book contradictions found | 0 | rising |
+
+**Triggered review for organizer 8.** Two lines are crossed. The reviewer findings say the Neon writers in W-05 and W-07
+still write rules beyond their records and do not stop for a missing record, though the brief says so; the first-pass
+rate says self-checks miss what the landing check finds. Measure both on the next two landings before changing the
+rules (The Plan §4: find the cause; a review layer catches them today, so nothing wrong has landed).

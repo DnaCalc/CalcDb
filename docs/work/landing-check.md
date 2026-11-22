@@ -9,13 +9,17 @@ persistent check worktree and gave code writers worktrees of their own.
 1. **Ready.** No new byte decision lacks a record. Before a writer starts, a prober checks the slice's open questions
    against [qualified.md](qualified.md) and the records and runs the round that closes them, one slice ahead of the
    writers. A writer that still meets a byte no record decides stops and reports (AGENTS.md, Sub-sessions).
-2. **Brief.** The projects or files the child owns, its build limits, the book rows, and the records it relies on.
+2. **Brief.** The projects or files the child owns, its build limits, the book rows, the records it relies on, and
+   whether it starts a roscli daemon (a writer that refactors or traces code across projects does; a prober or a
+   one-file fix does not: AGENTS.md, C# navigation and edits).
 3. **Write.** In the child's own CodeAlta worktree (`alta session create --worktree`, branch `alta/<name>`). The child
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
    `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
 4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
-   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). A stretch over about 1,000 lines gets a read-only reviewer child;
-   the organizer then checks that its findings were applied. A smaller stretch has the organizer's review only.
+   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). The reviewer traces the
+   callers of every changed member with roscli (`nav.find_invocations`, `nav.call_hierarchy`), so a rule that reaches
+   further than the brief shows. A stretch over about 1,000 lines gets a read-only reviewer child; the organizer then
+   checks that its findings were applied. A smaller stretch has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
 6. **Compare.** The core compare set in the background after the landing; the wide set once a day.
 
@@ -32,7 +36,8 @@ A child ends with these parts and nothing else:
 
 The solution filters `CalcDb.Isam.slnf`, `CalcDb.Sql.slnf`, `CalcDb.Com.slnf` and `CalcDb.Oracle.slnf` each hold an
 area's projects, everything they reference and the area's tests: a child builds, and loads into an editor or a Roslyn
-workspace, only its area. A project added to the solution goes into each filter whose area references it.
+workspace, only its area. A project added to the solution goes into each filter whose area references it. A roscli
+daemon loads the whole solution once (`roscli workspace.use CalcDb.slnx`), so its answers cover every area.
 
 ## The landing check
 

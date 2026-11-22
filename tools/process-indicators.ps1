@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $repo = (git rev-parse --show-toplevel).Trim()
 
 # Lines changed per layer (added + deleted), from git; evidence/ and probes/ are counted in files.
-$engine = '^src/CalcDb\.(Com|Sql|Isam|Format|Storage|Storage\.Windows|Values|Values\.Windows|Catalog|Expressions|Foundation)/'
+$engine = '^src/CalcDb\.(Com|Com\.Core|Com\.Dao|Com\.Ado|Sql|Isam|Format|Storage|Storage\.Windows|Values|Values\.Windows|Catalog|Expressions|Foundation)/'
 $engineTests = '^tests/CalcDb\.(Com|Sql|Isam|Format|Storage|Values|Expressions)\.Tests/'
 $process = '^(AGENTS\.md|CLAUDE\.md|docs/the-plan\.md|docs/work/(landing-check|process-log)\.md|tools/(landing-check|process-indicators)\.ps1)$'
 $books = '^docs/work/(register|qualified|qualification-report|book-proposals)\.md$|^docs/work/compare-baseline.*\.tsv$'
