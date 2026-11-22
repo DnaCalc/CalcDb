@@ -184,17 +184,17 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(2, Get(fId, "Value"));
             Assert.Equal("u2", Get(fS, "Value"));
 
-            // Upstream CalcDb.Isam refuses inserting a row into table T when unselected Yes/No column Y is Null
-            // (NotModelled.Edit.Publication). Assert the exact named refusal (tracked in Open) and verify the
-            // remaining r-ado-1b/edit-update-args assertions on table T.
+            // Upstream CalcDb.Isam (task zx68) refuses inserting a row into table T when unselected Yes/No column Y is Null
+            // (NotModelled.Edit.Publication). Assert the exact named refusal (zx68) and verify the remaining
+            // r-ado-1b/edit-update-args assertions on table T.
             Outcome addNewY = Call(rs, "AddNew", "Code", "n9");
-            AssertError(addNewY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y");
+            AssertError(addNewY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y"); // zx68
             Assert.Equal(0, Get(rs, "EditMode"));
 
             Assert.Null(Call(rs, "AddNew").Failure);
             Assert.Null(Put(fCode, "Value", "n11").Failure);
             Outcome updAfterAddY = Call(rs, "Update", "S", "u3");
-            AssertError(updAfterAddY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y");
+            AssertError(updAfterAddY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y"); // zx68
             Assert.Null(Call(rs, "CancelUpdate").Failure);
 
             AssertError(Call(rs, "Update", "NoSuch", "x"), unchecked((int)0x800A0CC1), expectedHelpContext: 1240649u, expectedInfoGuid: IidRecordset);
@@ -484,9 +484,9 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(0, Get(rq, "EditMode"));
             Assert.Null(Call(errs, "Clear").Failure);
 
-            // #208-228: CK_Req_V was created via ALTER TABLE Req ADD CONSTRAINT CK_Req_V CHECK (V >= 0).
-            // Upstream CalcDb.Isam (MutationSemantics) currently enforces DAO ValidationRule properties (which
-            // AdoEditErrors maps to 3316 / Status=131072) but does not yet load SQL CHECK constraints (tracked in Open).
+            // #208-228: left out until fq9f: CK_Req_V was created via ALTER TABLE Req ADD CONSTRAINT CK_Req_V CHECK (V >= 0),
+            // and upstream CalcDb.Isam (MutationSemantics) currently enforces DAO ValidationRule properties (which
+            // AdoEditErrors maps to 3316 / Status=131072) without yet loading SQL CHECK constraints.
 
             // #233-252: PK duplicate ID = 1 -> 3022, EditMode=2, Status=4096.
             Assert.Null(Call(rq, "AddNew").Failure);
@@ -691,11 +691,13 @@ public sealed unsafe class AdoImmediateEditTests
             AssertConnectionError0(cn, unchecked((int)0x80004005), "3022", -105121349, AceSource);
             Release(cmd);
 
-            // #49-50: Recordset.Open with failing INSERT (adCmdText) -> 3022, State=0, cn.Errors.Count=1.
+            // #49-50: Recordset.Open refuses action SQL before executing (only the failing case is recorded).
             nint ro = New(OwnRecordset);
-            AssertError(Call(ro, "Open", "INSERT INTO T (Code) VALUES ('a1')", new Dispatch(cn), 0, 1, 1), unchecked((int)0x80004005), AceSource, expectedHelpContext: 5003022u, expectedInfoGuid: IidCommand);
+            AssertError(
+                Call(ro, "Open", "INSERT INTO T (Code) VALUES ('a1')", new Dispatch(cn), 0, 1, 1),
+                HResults.E_NOTIMPL,
+                expectedDescription: "NotModelled.Ado: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
             Assert.Equal(0, Get(ro, "State"));
-            AssertConnectionError0(cn, unchecked((int)0x80004005), "3022", -105121349, AceSource);
             Release(ro);
 
             // #72, #90, #174: Recordset AddNew dup 3022, Close while editing -> 0x800A0C93, and Edit dup 3022 on T.
@@ -888,14 +890,14 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Null(Put(cnHeld, "Attributes", 393216).Failure);
             Assert.Equal(1, Call(cnHeld, "BeginTrans").Value);
 
-            // Upstream CalcDb.Isam refuses republishing Items row 1 because of unselected BINARY(16) column Bin
-            // (NotModelled.Edit.Publication, tracked in Open). Assert the exact refusal, cancel it, and verify the
+            // Upstream CalcDb.Isam (task zx68) refuses republishing Items row 1 because of unselected BINARY(16) column Bin
+            // (NotModelled.Edit.Publication). Assert the exact refusal (zx68), cancel it, and verify the
             // retaining Attributes=393216 lifecycle on Req in the same connection while h1 remains open.
             Assert.Null(Put(fTxt, "Value", "tx3").Failure);
             AssertError(
                 Call(h1, "Update"),
                 HResults.E_NOTIMPL,
-                expectedDescription: "NotModelled.Edit.Publication: field Bin: native type 9 has no fixed width of 16");
+                expectedDescription: "NotModelled.Edit.Publication: field Bin: native type 9 has no fixed width of 16"); // zx68
             Assert.Null(Call(h1, "CancelUpdate").Failure);
 
             Assert.Null(Put(fR, "Value", "tx3").Failure);
@@ -1100,9 +1102,12 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(HResults.E_NOTIMPL, Call(cmd, "Execute").Failure!.Value.Scode);
             Release(cmd);
 
-            // Finding #20: Recordset.Open with succeeding INSERT rolls back and refuses E_NOTIMPL.
+            // Finding #20: Recordset.Open refuses action SQL before executing (no side effects).
             nint rsIns = New(OwnRecordset);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rsIns, "Open", "INSERT INTO W (Code, V, S) VALUES ('nope', 1, 'x')", new Dispatch(cn), 0, 1, 1).Failure!.Value.Scode);
+            AssertError(
+                Call(rsIns, "Open", "INSERT INTO W (Code, V, S) VALUES ('nope', 1, 'x')", new Dispatch(cn), 0, 1, 1),
+                HResults.E_NOTIMPL,
+                expectedDescription: "NotModelled.Ado: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
             Assert.Equal(0, Get(rsIns, "State"));
             Release(rsIns);
             nint rsVerify = (nint)Call(cn, "Execute", "SELECT COUNT(*) FROM W WHERE Code = 'nope'", Missing, 1).Value!;

@@ -562,15 +562,12 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(unchecked((int)0x800A0CB3), nrClosed.Failure!.Value.Scode);
             Release(rs);
 
-            // 3. Recordset.Open with an action SQL statement executes it and reports provider error 3022 (r-ado-1b/errors-by-route #49-58).
+            // 3. Recordset.Open refuses action SQL before executing (only the failing case is recorded in r-ado-1b/errors-by-route #49-50).
             nint ro = New(OwnRecordset);
             Outcome dup = Call(ro, "Open", "INSERT INTO K (Code, T, N) VALUES ('a1', 'dup', 99)", new Dispatch(cn), 0, 1, 1);
-            Assert.Equal(unchecked((int)0x80004005), dup.Failure!.Value.Scode);
-            Assert.Equal(5003022u, dup.Failure!.Value.HelpContext);
+            Assert.Equal(HResults.E_NOTIMPL, dup.Failure!.Value.Scode);
+            Assert.Contains("only the failing case is recorded", dup.Failure!.Value.Description);
             Assert.Equal(0, Get(ro, "State"));
-            nint errs = (nint)Get(cn, "Errors")!;
-            Assert.Equal(1, Get(errs, "Count"));
-            Release(errs);
             Release(ro);
 
             // 4. Bare table open via adCmdTable (2) and adCmdUnknown (8) uses TableRowSource while preserving Source rewrite (r-ado-1b/rs-source-kinds #15, #31).

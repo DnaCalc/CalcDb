@@ -2499,35 +2499,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
         }
 
-        // Action SQL passed to Recordset.Open: only failing adCmdText INSERT is recorded
-        // (r-ado-1b/errors-by-route #49-50: INSERT duplicate key fails 3022 with State=0 and cn.Errors.Count=1).
+        // Action SQL passed to Recordset.Open: only the failing adCmdText INSERT case is recorded
+        // (r-ado-1b/errors-by-route #49-50); refuse every action statement before executing so a
+        // rolled-back INSERT cannot advance AutoNumber counters (r-q27-autonumber-txn/ins-one-existing-txn-rb)
+        // or nest inside a caller transaction.
         if (cmdType is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified
             && ActionParser.IsAction(_source))
         {
-            if (cmdType != AdoSqlText.AdCmdText
-                || !_source.TrimStart().StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)
-                || session.ReadOnly)
-            {
-                return NotImplemented("Action SQL in Recordset.Open (only failing adCmdText INSERT on a writable connection is recorded)");
-            }
-            if (session.Transactions.BeginTrans() is not null)
-            {
-                return NotImplemented("Action SQL in Recordset.Open when a temporary transaction cannot be opened");
-            }
-            ActionOutcome act = ActionExecutor.Execute(_source, session.Sql, 128, null, ActionErrorSource.Database);
-            session.Transactions.Rollback();
-            if (act.Failure is { } sqlFailure)
-            {
-                MappedProviderError? actErr = AdoSqlErrors.TryMap(sqlFailure, isSavedQuery: false, out Failure? actRefusal, _source);
-                if (actErr is { } pe)
-                {
-                    FieldsCollection.RecordFailedOpen(null);
-                    ReportProviderError(pe);
-                    return CallResult.Fail(pe.ComFailure);
-                }
-                return CallResult.Fail(actRefusal!);
-            }
-            return NotImplemented("Succeeding INSERT in Recordset.Open (only failing adCmdText INSERT is recorded in r-ado-1b/errors-by-route #49-50)");
+            return NotImplemented("Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
         }
 
         bool isClient = effectiveLoc == 3;
