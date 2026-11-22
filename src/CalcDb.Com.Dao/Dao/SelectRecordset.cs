@@ -38,7 +38,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
         .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return ((SelectRecordsetObject)self).GetRows(count); })
         .Method("Clone", (self, args) => Live(self, r => r.Clone()))
-        .Method("Requery", (self, args) => Live(self, r => r.Requery()))
+        .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
         .Method("Close", (self, args) => Live(self, r => r.Close()))
         .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
         // A query recordset's edits are not built, so no edit is ever pending: a dynaset's Collect put is 3020 from DAO.Field
@@ -66,12 +66,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private CollectionNames? _fieldNames;
     private Dictionary<string, (PropertyBlob? Blob, string? Failure)>? _tableBlobs;
     private readonly ExplicitFrame[] _openLevels;
-    private readonly PrivateOverlay? _openOverlay;
-    private readonly (ulong Page, ImageId Image)[]? _openOverlaySnapshot;
-    private readonly ReadView? _snapshotView;
-    private readonly PrivateOverlay? _snapshotOverlay;
-    private readonly ulong _openPublishedSerial;
+    private PrivateOverlay? _openOverlay;
+    private (ulong Page, ImageId Image)[]? _openOverlaySnapshot;
+    private ReadView? _snapshotView;
+    private PrivateOverlay? _snapshotOverlay;
+    private ulong _openPublishedSerial;
     private readonly bool _isSingleTableRowSelect;
+    private readonly bool _hasOrderBy;
     private readonly bool _dynamicOverlay;
     private readonly bool _isMaterializedSnapshot;
     private string? _resolvedOverlayAfterCommit;
@@ -85,6 +86,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         SelectCursor cursor,
         int recordsetType,
         bool singleTableRowSelect,
+        bool hasOrderBy,
         ReadView? snapshotView = null,
         PrivateOverlay? snapshotOverlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
@@ -98,6 +100,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _snapshotOverlay = snapshotOverlay;
         _openPublishedSerial = database.Cache.PublishedSerial;
         _isSingleTableRowSelect = singleTableRowSelect;
+        _hasOrderBy = hasOrderBy;
         _dynamicOverlay = recordsetType == 2 && singleTableRowSelect;
         _isMaterializedSnapshot = recordsetType == 4 && IsMaterializedPlan(plan);
         if (recordsetType == 4 && _openOverlay is { } openOverlay)
@@ -357,18 +360,28 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 
     /// <summary>
-    /// RecordCount: the rows populated so far (CUR-POP), or named where the cursor says the population at open is not
-    /// ACE's (<see cref="SelectCursor.RecordCountOpen"/>: a join or union without ORDER BY is read whole at open).
+    /// RecordCount: the rows populated so far (CUR-POP), or named where no retained ACE record decides the shape,
+    /// cursor kind, format, or partial-move state (<see cref="SelectCursor.TryRecordCount"/>; MDB is refused because
+    /// no retained MDB record reads RecordCount on a DAO SELECT).
     /// </summary>
-    private CallResult RecordCount() => Cursor.RecordCountOpen is { } open
-        ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordCount", "RecordCount: " + open))
-        : Int32((int)Cursor.RecordCount);
+    private CallResult RecordCount()
+    {
+        if (IsMdb)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordCount.Mdb",
+                "RecordCount: RecordCount on an MDB DAO SELECT recordset is not recorded (CUR-POP)"));
+        }
+        return Cursor.TryRecordCount(out long count, out string? openName, out string? openDetail)
+            ? Int32((int)count)
+            : CallResult.Fail(Failure.NotModelled(openName!, "RecordCount: " + openDetail));
+    }
 
     public DatabaseObject Database { get; }
 
     public BoundSelect Plan { get; }
 
-    public SelectCursor Cursor { get; }
+    public SelectCursor Cursor { get; private set; }
 
     /// <summary>RecordsetTypeEnum: 2 dynaset, 4 snapshot, 8 forward-only.</summary>
     public int RecordsetType { get; }
@@ -629,8 +642,64 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private CallResult Clone() =>
         CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on a SELECT query recordset (SelectCursor has no Clone yet)"));
 
-    private CallResult Requery() =>
-        CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetRequery", "Requery on a SELECT query recordset (SelectCursor has no Requery yet)"));
+    /// <summary>
+    /// Requery(NewQueryDef) on a SELECT recordset (docs/work/qualified.md R-CURSOR-1 CUR-POP): reopens the bound
+    /// single-table ORDER BY ACCDB dynaset or snapshot at its original transaction depth (0 or 1) with no parameters
+    /// and no NewQueryDef argument, returning a dynaset to row 1 / RecordCount 1 and an ORDER BY snapshot to row 1 /
+    /// full count (r-txn-1b/rs-position-after-rollback, r-txn-1b/rs-types-after-rollback,
+    /// r-def-cursor-dao/delete-by-other-cursor-current-row, r-def-cursor-dao/edit-under-commit,
+    /// r-fix-cursor-dao/edit-under-commit-second-workspace). All other shapes, formats, cursor types, arguments and
+    /// depths are refused by name.
+    /// </summary>
+    private CallResult Requery(nint newQueryDefArg)
+    {
+        if (newQueryDefArg != 0
+            && !TypedCall.IsMissing(Args.Cell(newQueryDefArg))
+            && (Args.TypeOf(newQueryDefArg) & ~VarType.ByRef) != VarType.Empty)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetRequeryArg",
+                "Recordset.Requery with a NewQueryDef argument on a SELECT recordset (not recorded)"));
+        }
+        if (IsMdb
+            || RecordsetType is not (2 or 4)
+            || !_isSingleTableRowSelect
+            || !_hasOrderBy
+            || Plan.Parameters.Count > 0
+            || Database.Workspace.Transactions.Depth != _openLevels.Length
+            || _openLevels.Length > 1)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetRequery",
+                "Requery on this SELECT recordset shape, cursor type, format or transaction depth is not recorded (CUR-POP)"));
+        }
+        SelectCursor? next = SelectRoute.OpenCursor(
+            Database, Plan, RecordsetType, _isSingleTableRowSelect, _hasOrderBy,
+            values: null,
+            out ReadView? nextSnapshotView, out PrivateOverlay? nextSnapshotOverlay,
+            out SqlFailure? failure, out CallResult? viewRefusal);
+        if (next is null)
+        {
+            return viewRefusal ?? SelectRoute.Published(Database, failure!);
+        }
+        SelectCursor previousCursor = Cursor;
+        PrivateOverlay? previousSnapshotOverlay = _snapshotOverlay;
+        ReadView? previousSnapshotView = _snapshotView;
+        Cursor = next;
+        _snapshotView = nextSnapshotView;
+        _snapshotOverlay = nextSnapshotOverlay;
+        _openOverlay = Database.Workspace.Transactions.OverlayOf(Database.Cache);
+        _openOverlaySnapshot = RecordsetType == 4 && _openOverlay is { } overlay ? CaptureOverlayPages(overlay) : null;
+        _openPublishedSerial = Database.Cache.PublishedSerial;
+        previousCursor.Dispose();
+        previousSnapshotOverlay?.Dispose();
+        previousSnapshotView?.Dispose();
+        if (RecordsetType == 4)
+        {
+            Database.Workspace.Transactions.EndLazyBurst(Database.Cache);
+        }
+        return CallResult.Nothing;
+    }
 
     private CallResult Close()
     {

@@ -134,57 +134,17 @@ internal static class SelectRoute
         bool adopted = false;
         try
         {
-            ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
             bool singleTableRowSelect = IsSingleTableRowSelect(plan);
-            // Single-table row-backed SELECT dynasets read through the Workspace's live overlay while active and committed
-            // pages before the first write and after the level ends (task dqtr; r-txn-1b/rs-position-after-rollback,
-            // r-txn-1b/rs-types-after-rollback, r-txn-1b/temp-querydef-recordset-rollback, r-def-cursor-dao/edit-under-commit,
-            // r-fix-cursor-dao/edit-under-commit-second-workspace, r-txn-1/local-visibility,
-            // r-txn-1b/ws2-reader-own-level-before-other-commit). Single-table ORDER BY ACCDB snapshots opened at
-            // transaction depth 0 with no Memo or OLE projected columns register a PageCache ReadView so they keep
-            // open-time row values across later publishes (task zdh5; docs/work/qualified.md R-CURSOR-1 CUR-POP;
-            // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
-            // r-q2-cursor-dao/pop-snapshot-orderby-small; r-txn-1b/rs-types-after-rollback bs). Unordered SELECT snapshots
-            // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), MDB snapshots, snapshots projecting Memo or OLE columns,
-            // snapshots opened inside a transaction (r-txn-1b/rs-types-after-rollback ks), forward-only and complex
-            // shapes keep database.Sql and refuse unrecorded transitions by name.
-            ISqlDatabase scanDatabase;
-            if (recordsetType == 2 && singleTableRowSelect)
-            {
-                scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
-            }
-            else if (recordsetType == 4
-                && singleTableRowSelect
-                && hasOrderBy
-                && database.Profile.IsAce
-                && database.Workspace.Transactions.Depth == 0
-                && !ProjectsMemoOrOle(plan))
-            {
-                ViewResult registered = database.Cache.RegisterView();
-                if (!registered.Succeeded)
-                {
-                    return CallResult.Fail(Failure.NotModelled(
-                        "NotModelled.Edit.SnapshotReadView",
-                        "OpenRecordset snapshot ReadView registration failed: " + (registered.Detail ?? registered.Failure.ToString())));
-                }
-                snapshotView = registered.View!;
-                snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), snapshotView);
-                scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
-            }
-            else
-            {
-                scanDatabase = database.Sql;
-            }
-            cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
+            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal);
             if (cursor is null)
             {
-                return Published(database, failure!);
+                return viewRefusal ?? Published(database, failure!);
             }
             if (recordsetType == 4)
             {
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, snapshotView, snapshotOverlay);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -198,6 +158,79 @@ internal static class SelectRoute
                 snapshotView?.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Open a <see cref="SelectCursor"/> over <paramref name="plan"/> with the page-source and snapshot-view rules of
+    /// <see cref="Open"/>; reused by <see cref="SelectRecordsetObject.Requery"/>. On failure, disposes any snapshot
+    /// view/overlay it created and returns null with either <paramref name="viewRefusal"/> or <paramref name="failure"/>.
+    /// </summary>
+    internal static SelectCursor? OpenCursor(
+        DatabaseObject database,
+        BoundSelect plan,
+        int recordsetType,
+        bool singleTableRowSelect,
+        bool hasOrderBy,
+        IReadOnlyList<NativeVariant?>? values,
+        out ReadView? snapshotView,
+        out PrivateOverlay? snapshotOverlay,
+        out SqlFailure? failure,
+        out CallResult? viewRefusal)
+    {
+        snapshotView = null;
+        snapshotOverlay = null;
+        failure = null;
+        viewRefusal = null;
+        ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
+        // Single-table row-backed SELECT dynasets read through the Workspace's live overlay while active and committed
+        // pages before the first write and after the level ends (task dqtr; r-txn-1b/rs-position-after-rollback,
+        // r-txn-1b/rs-types-after-rollback, r-txn-1b/temp-querydef-recordset-rollback, r-def-cursor-dao/edit-under-commit,
+        // r-fix-cursor-dao/edit-under-commit-second-workspace, r-txn-1/local-visibility,
+        // r-txn-1b/ws2-reader-own-level-before-other-commit). Single-table ORDER BY ACCDB snapshots opened at
+        // transaction depth 0 with no Memo or OLE projected columns register a PageCache ReadView so they keep
+        // open-time row values across later publishes (task zdh5; docs/work/qualified.md R-CURSOR-1 CUR-POP;
+        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
+        // r-q2-cursor-dao/pop-snapshot-orderby-small; r-txn-1b/rs-types-after-rollback bs). Unordered SELECT snapshots
+        // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), MDB snapshots, snapshots projecting Memo or OLE columns,
+        // snapshots opened inside a transaction (r-txn-1b/rs-types-after-rollback ks), forward-only and complex
+        // shapes keep database.Sql and refuse unrecorded transitions by name.
+        ISqlDatabase scanDatabase;
+        if (recordsetType == 2 && singleTableRowSelect)
+        {
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
+        }
+        else if (recordsetType == 4
+            && singleTableRowSelect
+            && hasOrderBy
+            && database.Profile.IsAce
+            && database.Workspace.Transactions.Depth == 0
+            && !ProjectsMemoOrOle(plan))
+        {
+            ViewResult registered = database.Cache.RegisterView();
+            if (!registered.Succeeded)
+            {
+                viewRefusal = CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.Edit.SnapshotReadView",
+                    "OpenRecordset snapshot ReadView registration failed: " + (registered.Detail ?? registered.Failure.ToString())));
+                return null;
+            }
+            snapshotView = registered.View!;
+            snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), snapshotView);
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
+        }
+        else
+        {
+            scanDatabase = database.Sql;
+        }
+        SelectCursor? cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
+        if (cursor is null)
+        {
+            snapshotOverlay?.Dispose();
+            snapshotView?.Dispose();
+            snapshotOverlay = null;
+            snapshotView = null;
+        }
+        return cursor;
     }
 
     /// <summary>
@@ -260,7 +293,7 @@ internal static class SelectRoute
     }
 
     /// <summary>A statement failure as DatabaseObject publishes it: ACE's number and text, or the named case.</summary>
-    private static CallResult Published(DatabaseObject database, SqlFailure failure) => failure.IsNotModelled
+    internal static CallResult Published(DatabaseObject database, SqlFailure failure) => failure.IsNotModelled
         ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
         : database.Fail(failure.Number, failure.Message);
 
