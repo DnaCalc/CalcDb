@@ -137,13 +137,49 @@ internal static class AdoSqlErrors
         -72156238,
         AdoObject.IidCommand);
 
-    /// <summary>Duplicate key / primary key / unique index on server keyset Update (3022; r-ado-1b/errors-by-route).</summary>
+    /// <summary>Duplicate key / primary key / unique index on server keyset Update (3022; r-ado-1b/errors-by-route, r-oledb-odbc/update-errors #86/#131/#236).</summary>
     public static MappedProviderError DuplicateOnRowset() => Make(
         AdoObject.HResultErrorsOccurred,
         "The changes you requested to the table were not successful because they would create duplicate values in the index, primary key, or relationship. Change the data in the field or fields that contain duplicate data, remove the index, or redefine the index to permit duplicate entries and try again.",
         5003022,
         "3022",
         -105121349,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Update after a failed engine Field.Value put inside AddNew (3020; r-oledb-odbc/update-errors #260-272).</summary>
+    public static MappedProviderError UpdateWithoutAddNewOrEdit() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "Update or CancelUpdate without AddNew or Edit.",
+        5003020,
+        "3020",
+        -105383497,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Missing value in a Required field on server keyset Update (3314; r-oledb-odbc/update-errors #187-199).</summary>
+    public static MappedProviderError RequiredOnRowset(string description) => Make(
+        AdoObject.HResultErrorsOccurred,
+        description,
+        5003000,
+        "3314",
+        -541331061,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Validation rule / CHECK violation on server keyset Update (3316; r-oledb-odbc/update-errors #212-224).</summary>
+    public static MappedProviderError ValidationRuleOnRowset(string description) => Make(
+        AdoObject.HResultErrorsOccurred,
+        description,
+        5003000,
+        "3316",
+        -541462135,
+        AdoObject.IidRowsetUpdate);
+
+    /// <summary>Foreign-key related records block server keyset Delete (3200; r-oledb-odbc/update-errors #153-164).</summary>
+    public static MappedProviderError RelatedRecordsOnRowset(string description) => Make(
+        AdoObject.HResultErrorsOccurred,
+        description,
+        5003000,
+        "3200",
+        -534971980,
         AdoObject.IidRowsetUpdate);
 
     /// <summary>Assigning a read-only/AutoNumber field during Edit (3164; r-ado-1b/fields-assign-conversion #194).</summary>
@@ -305,16 +341,36 @@ internal static unsafe class AdoEditErrors
     public static Failure MapOpen(CalcDb.Isam.Edit.MutationOpen open, string? detail) =>
         Failure.NotModelled("NotModelled.Edit." + open, detail ?? open.ToString());
 
-    public static MappedProviderError? MapUpdateError(CalcDb.Isam.Edit.MutationError error, out Failure? unmodelled)
+    public static MappedProviderError? MapUpdateError(
+        CalcDb.Isam.Edit.MutationError error,
+        bool allowOptimisticLockConflict,
+        out Failure? unmodelled)
     {
         unmodelled = null;
         return error.Number switch
         {
             CalcDb.Isam.Edit.MutationError.WriteConflict => AdoSqlErrors.WriteConflict(),
-            CalcDb.Isam.Edit.MutationError.LockedBySession => AdoSqlErrors.CurrentlyLockedOnRowset(),
+            // Finding #8 (r-ado-1b/errors-lock-timeout #66): ISAM emits LockedBySession (3188) for same-process
+            // cross-connection locks; ACE OLE DB reports 3218 on optimistic Recordset.Update() (IidRowsetUpdate).
+            // Pessimistic Field.Value put lock conflict, Delete() lock conflict, and RecordDeleted (3167) on
+            // Update/Delete/Edit are unrecorded and refuse as NotModelled.
+            CalcDb.Isam.Edit.MutationError.LockedBySession when allowOptimisticLockConflict => AdoSqlErrors.CurrentlyLockedOnRowset(),
             CalcDb.Isam.Edit.MutationError.Duplicate => AdoSqlErrors.DuplicateOnRowset(),
-            CalcDb.Isam.Edit.MutationError.RecordDeleted => AdoSqlErrors.RecordIsDeleted(),
-            _ => FailUnmodelled(error, "rowset mutation", out unmodelled),
+            CalcDb.Isam.Edit.MutationError.Required => AdoSqlErrors.RequiredOnRowset(error.Describe()),
+            CalcDb.Isam.Edit.MutationError.RuleWithText or CalcDb.Isam.Edit.MutationError.RuleWithoutText =>
+                AdoSqlErrors.ValidationRuleOnRowset(error.Describe()),
+            _ => FailUnmodelled(error, "rowset update", out unmodelled),
+        };
+    }
+
+    public static MappedProviderError? MapDeleteError(CalcDb.Isam.Edit.MutationError error, out Failure? unmodelled)
+    {
+        unmodelled = null;
+        return error.Number switch
+        {
+            // r-oledb-odbc/update-errors #153-164: FK delete violation on server keyset reports 3200 on IidRowsetUpdate.
+            CalcDb.Isam.Edit.MutationError.RelatedRecordsExist => AdoSqlErrors.RelatedRecordsOnRowset(error.Describe()),
+            _ => FailUnmodelled(error, "rowset delete", out unmodelled),
         };
     }
 
@@ -333,10 +389,13 @@ internal static unsafe class AdoEditErrors
         }
         if (error.Number == CalcDb.Isam.Edit.MutationError.Conversion)
         {
-            if (column.TypeCode is CalcDb.Format.NativeTypes.Guid or CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Numeric)
+            // Finding #6: gate MultipleStepOn(iid) strictly to recorded (VarType, ColumnType) conversion error pairs:
+            // r-ado-1b/fields-assign-conversion #139/#144/#149 (Numeric <= Bstr/R8/Currency), #159 (Guid <= Bstr),
+            // #184 (Binary <= Bstr), and r-fix-wire-ado/ado-write-values-text-binary #1272 (Ole <= Bstr).
+            if ((column.TypeCode == CalcDb.Format.NativeTypes.Guid && incoming.Type == VarType.Bstr)
+                || (column.TypeCode is CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole && incoming.Type == VarType.Bstr)
+                || (column.TypeCode == CalcDb.Format.NativeTypes.Numeric && incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency))
             {
-                // r-ado-1b/fields-assign-conversion #139, #144, #149, #159, #184:
-                // Decimal, GUID, and Binary conversion refusals report Provider 0x80040E21 Multiple-step.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
             if (TryMapRecordedScalarConversionError(in incoming, column, lcid, iid) is { } scalarErr)
@@ -351,7 +410,8 @@ internal static unsafe class AdoEditErrors
     /// <summary>
     /// Map <see cref="CalcDb.Isam.Edit.MutationOpen"/> outcomes from <c>EditFrame.Assign</c> where ADO has an exact
     /// recorded Provider error (r-ado-1b/fields-assign-conversion #84, #139, #144, #149, #164, #169, #174, #179, #184, #199;
-    /// r-ado-1b/edit-update-args #130; r-oledb-odbc/update-errors #18, #40).
+    /// r-ado-1b/edit-update-args #130; r-oledb-odbc/update-errors #18, #40; r-fix-wire-ado/ado-write-values-numeric #405, #1180;
+    /// r-fix-wire-ado/ado-write-values-text-binary #1272).
     /// Returns null for unrecorded cases so the caller keeps the named <c>NotModelled</c> refusal.
     /// </summary>
     public static MappedProviderError? TryMapOpenAssignError(
@@ -369,10 +429,10 @@ internal static unsafe class AdoEditErrors
                 // r-ado-1b/fields-assign-conversion #139, #144, #149: Decimal put of String/Double/Currency -> Provider 0x80040E21.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
-            if (column.TypeCode == CalcDb.Format.NativeTypes.Binary
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole
                 && incoming.Type == VarType.Bstr)
             {
-                // r-ado-1b/fields-assign-conversion #184: Binary put of String -> Provider 0x80040E21.
+                // r-ado-1b/fields-assign-conversion #184, r-fix-wire-ado/ado-write-values-text-binary #1272: Binary/Ole put of String -> Provider 0x80040E21.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
             return null;
@@ -398,14 +458,18 @@ internal static unsafe class AdoEditErrors
         CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
         if (hr == AdoObject.HResultOutOfRange)
         {
-            // r-ado-1b/fields-assign-conversion #169, #174: Byte overflow -> Provider 0x80040E21 Multiple-step.
-            if (column.TypeCode == CalcDb.Format.NativeTypes.Byte)
+            // Finding #6: gate overflow mappings strictly to recorded (VarType, ColumnType) pairs.
+            // r-ado-1b/fields-assign-conversion #169, #174: VT_I4 into Byte overflow -> Provider 0x80040E21 Multiple-step.
+            if (column.TypeCode == CalcDb.Format.NativeTypes.Byte && incoming.Type == VarType.I4)
             {
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
-            // r-ado-1b/fields-assign-conversion #164 (Short), #179 (Single); r-oledb-odbc/update-errors #40 (Long):
-            // recorded numeric overflow -> Provider 0x8002000A Out of present range.
-            if (column.TypeCode is CalcDb.Format.NativeTypes.Integer or CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.Single)
+            // r-ado-1b/fields-assign-conversion #164 (VT_I4 -> Integer), #179 (VT_R8 -> Single);
+            // r-oledb-odbc/update-errors #40 (VT_R8 -> Long);
+            // r-fix-wire-ado/ado-write-values-numeric #405 (VT_R8 -> Single), #1180 (VT_R8 -> Currency).
+            if ((column.TypeCode == CalcDb.Format.NativeTypes.Integer && incoming.Type == VarType.I4)
+                || (column.TypeCode is CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.Single or CalcDb.Format.NativeTypes.Currency
+                    && incoming.Type == VarType.R8))
             {
                 return AdoSqlErrors.OutOfRangeOn(iid);
             }
@@ -413,9 +477,10 @@ internal static unsafe class AdoEditErrors
         }
         if (hr == AdoObject.HResultTypeMismatch)
         {
-            // r-ado-1b/fields-assign-conversion #84 (DateTime), #199 (Long); r-ado-1b/edit-update-args #130 (Long);
-            // r-oledb-odbc/update-errors #18 (Long): non-convertible text -> Provider 0x80020005 Type mismatch.
-            if (column.TypeCode is CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.DateTime)
+            // r-ado-1b/fields-assign-conversion #84 (VT_BSTR -> DateTime), #199 (VT_BSTR -> Long);
+            // r-ado-1b/edit-update-args #130 (VT_BSTR -> Long); r-oledb-odbc/update-errors #18 (VT_BSTR -> Long).
+            if (incoming.Type == VarType.Bstr
+                && column.TypeCode is CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.DateTime)
             {
                 return AdoSqlErrors.TypeMismatchOn(iid);
             }

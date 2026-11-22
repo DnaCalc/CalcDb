@@ -47,7 +47,7 @@ internal static class AdoErrors
     /// <summary>0x800A0CB3 (Recordset.Sort on a server cursor; r-ado-1b/view-sort-server).</summary>
     public static readonly AdoError SortOrFilterNotSupported = BookmarksNotSupported.WithText("Current provider does not support the necessary interfaces for sorting or filtering.");
 
-    /// <summary>0x800A0CB3 (Field.UnderlyingValue on server cursor, Recordset.Resync on server keyset/static; r-str-ado-act/ado-edit #22, r-ado-1b/values-keyset-conflict #30/#69, r-ado-1b/rs-cache-same-connection #556).</summary>
+    /// <summary>0x800A0CB3 (Field.UnderlyingValue on updatable server keyset, Recordset.Resync on recorded server cursors; r-fix-wire-ado/ado-edit-fresh #90/#102, r-ado-1b/values-keyset-conflict #30/#69, r-ado-1b/rs-cache-same-connection #469/#556).</summary>
     public static readonly AdoError RefreshingUnderlyingNotSupported = BookmarksNotSupported.WithText("Current provider does not support refreshing underlying values.");
 
     /// <summary>0x800A0CAE (Connection.Close while inside an open transaction; r-oledb-odbc/txn-held-rows #248).</summary>

@@ -260,14 +260,29 @@ internal sealed unsafe class CommandObject : AdoObject
         }
         if (_commandType == AdoSqlText.AdCmdText)
         {
-            // r-ado-1b/errors-lock-timeout #45, r-ado-1b/errors-by-route #34, r-ado-1b/txn-rollback-scope-objects #27:
-            // non-parameterized adCmdText Command.Execute runs over the active connection's SQL executor.
-            return _activeConnection.ExecuteCommandText(
-                _commandText ?? "",
-                _commandType,
-                args.Length > 0 ? args[0] : 0,
-                args.Length > 2 ? args[2] : 0,
-                "Command.Execute");
+            // Finding #19 (r-ado-1b/errors-lock-timeout #45, r-ado-1b/errors-by-route #34, r-ado-1b/txn-rollback-scope-objects #27):
+            // only non-parameterized UPDATE/INSERT action SQL with explicit Options=129 (adCmdText | adExecuteNoRecords)
+            // and omitted RecordsAffected is recorded on Command.Execute.
+            nint recordsAffectedArg = args.Length > 0 ? args[0] : 0;
+            if (recordsAffectedArg != 0 && !TypedCall.IsMissing(Args.Cell(recordsAffectedArg)))
+            {
+                return NotImplemented("Command.Execute with RecordsAffected argument (not recorded for non-parameterized Command.Execute)");
+            }
+            nint optionsArg = args.Length > 2 ? args[2] : 0;
+            int? options = optionsArg != 0 && !TypedCall.IsMissing(Args.Cell(optionsArg)) ? AdoArgs.Int32(optionsArg) : null;
+            if (options != (AdoSqlText.AdCmdText | AdoSqlText.AdExecuteNoRecords))
+            {
+                return NotImplemented($"Command.Execute with Options={options?.ToString() ?? "omitted"} (only Options=129 is recorded)");
+            }
+            string text = _commandText ?? "";
+            string trimmed = text.TrimStart();
+            if (!CalcDb.Sql.ActionParser.IsAction(text)
+                || (!trimmed.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase)
+                    && !trimmed.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)))
+            {
+                return NotImplemented("Command.Execute for non-UPDATE/INSERT command text (only UPDATE and INSERT are recorded)");
+            }
+            return _activeConnection.ExecuteCommandText(text, _commandType, 0, optionsArg, "Command.Execute");
         }
         return NotImplemented("Command.Execute of a non-parameterized Command (not recorded)");
     }

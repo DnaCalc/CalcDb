@@ -776,16 +776,24 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return CallResult.Nothing;
     }
 
-    /// <summary>Attributes: 0 or XactAttributeEnum flags (adXactCommitRetaining 131072, adXactAbortRetaining 262144; conn-set-while-open).</summary>
+    /// <summary>
+    /// Attributes: 0, 131072 (r-ado-1b/conn-set-while-open), or 393216 (adXactCommitRetaining | adXactAbortRetaining;
+    /// r-oledb-odbc/txn-held-rows #146-161). Mid-transaction mutation and other values refuse by name; starting a
+    /// transaction requires 0 or 393216 (single retaining flags are unrecorded for transactions).
+    /// </summary>
     private CallResult PutAttributes(nint arg)
     {
         if (AdoArgs.Int32(arg) is not int attrs)
         {
             return NotImplemented("Connection.Attributes = a value that is not a number");
         }
-        if ((attrs & ~(131072 | 262144)) != 0)
+        if (IsOpen && _session!.Transactions.Depth > 0)
         {
-            return NotImplemented($"Connection.Attributes = {attrs} (not asked)");
+            return NotImplemented("Connection.Attributes mutation inside an active transaction (not recorded)");
+        }
+        if (attrs is not (0 or 131072 or (131072 | 262144)))
+        {
+            return NotImplemented($"Connection.Attributes = {attrs} (only 0, 131072, and 393216 are recorded)");
         }
         _attributes = attrs;
         return CallResult.Nothing;
@@ -1319,13 +1327,17 @@ internal sealed unsafe class ConnectionObject : AdoObject
     /// <summary>
     /// BeginTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
     /// returns the new 1-based nesting level (<c>VT_I4</c>); IsolationLevel 1048576 (adXactSerializable) fails 0x8004D008
-    /// without opening a transaction.
+    /// without opening a transaction. Depths > 3, retaining nested transactions, and Mode=1 read-only connections refuse by name.
     /// </summary>
     private CallResult BeginTrans()
     {
         if (!IsOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_session!.ReadOnly)
+        {
+            return NotImplemented("Connection.BeginTrans on a Mode=1 read-only connection (not recorded)");
         }
         if (_isolationLevel == 1048576) // adXactSerializable
         {
@@ -1337,7 +1349,19 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return NotImplemented($"Connection.BeginTrans with IsolationLevel={_isolationLevel} (only 4096 and 1048576 are recorded)");
         }
-        if (_session!.Transactions.BeginTrans() is { } mutErr)
+        if (_attributes is not (0 or (131072 | 262144)))
+        {
+            return NotImplemented($"Connection.BeginTrans with Attributes={_attributes} (only 0 and 393216 are recorded for transactions)");
+        }
+        if (_attributes == (131072 | 262144) && _session.Transactions.Depth >= 1)
+        {
+            return NotImplemented("Connection.BeginTrans nested while Attributes=393216 (retaining is only recorded at depth 1)");
+        }
+        if (_session.Transactions.Depth >= 3)
+        {
+            return NotImplemented("Connection.BeginTrans beyond nesting depth 3 (only depths 1-3 are recorded)");
+        }
+        if (_session.Transactions.BeginTrans() is { } mutErr)
         {
             MappedProviderError? mapped = AdoEditErrors.MapTxnError(mutErr, out Failure? unmodelled);
             if (mapped is { } pe)
@@ -1353,8 +1377,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     /// <summary>
     /// CommitTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
-    /// commits the innermost level; when <c>Attributes</c> includes <c>adXactCommitRetaining</c> (131072), starts a new
-    /// transaction immediately after committing.
+    /// commits the innermost level; when <c>Attributes</c> is 393216 at depth 1, starts a new transaction immediately.
     /// </summary>
     private CallResult CommitTrans()
     {
@@ -1362,12 +1385,20 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return Fail(AdoErrors.ObjectClosed);
         }
-        TransactionCoordinator tx = _session!.Transactions;
+        if (_session!.ReadOnly)
+        {
+            return NotImplemented("Connection.CommitTrans on a Mode=1 read-only connection (not recorded)");
+        }
+        TransactionCoordinator tx = _session.Transactions;
         if (tx.Depth == 0)
         {
             MappedProviderError err = AdoSqlErrors.NoTransaction();
             SetProviderError(err.ErrorEntry);
             return CallResult.Fail(err.ComFailure);
+        }
+        if (_attributes == (131072 | 262144) && tx.Depth > 1)
+        {
+            return NotImplemented("Connection.CommitTrans with Attributes=393216 at nested depth > 1 (not recorded)");
         }
         ResolutionOutcome res = tx.CommitTrans(0);
         if (res.Error is { } mutErr)
@@ -1385,7 +1416,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(AdoEditErrors.MapOpen(res.Open, res.Detail));
         }
         _session.NotifyTransactionCommitted(tx.Depth);
-        if ((_attributes & 131072) != 0 && tx.BeginTrans() is { } retainErr)
+        if (_attributes == (131072 | 262144) && tx.BeginTrans() is { } retainErr)
         {
             MappedProviderError? mapped = AdoEditErrors.MapTxnError(retainErr, out Failure? unmodelled);
             if (mapped is { } pe)
@@ -1402,7 +1433,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
     /// <summary>
     /// RollbackTrans (R-ADO-1 ADO-TXN; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three, r-oledb-odbc/txn-held-rows):
     /// rolls back the innermost level, notifies open cursors to drop uncommitted inserts/edits at that depth, and when
-    /// <c>Attributes</c> includes <c>adXactAbortRetaining</c> (262144), starts a new transaction immediately.
+    /// <c>Attributes</c> is 393216 at depth 1, starts a new transaction immediately.
     /// </summary>
     private CallResult RollbackTrans()
     {
@@ -1410,12 +1441,20 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return Fail(AdoErrors.ObjectClosed);
         }
-        TransactionCoordinator tx = _session!.Transactions;
+        if (_session!.ReadOnly)
+        {
+            return NotImplemented("Connection.RollbackTrans on a Mode=1 read-only connection (not recorded)");
+        }
+        TransactionCoordinator tx = _session.Transactions;
         if (tx.Depth == 0)
         {
             MappedProviderError err = AdoSqlErrors.NoTransaction();
             SetProviderError(err.ErrorEntry);
             return CallResult.Fail(err.ComFailure);
+        }
+        if (_attributes == (131072 | 262144) && tx.Depth > 1)
+        {
+            return NotImplemented("Connection.RollbackTrans with Attributes=393216 at nested depth > 1 (not recorded)");
         }
         ResolutionOutcome res = tx.Rollback();
         if (res.Error is { } mutErr)
@@ -1433,7 +1472,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(AdoEditErrors.MapOpen(res.Open, res.Detail));
         }
         _session.NotifyTransactionRolledBack(tx.Depth);
-        if ((_attributes & 262144) != 0 && tx.BeginTrans() is { } retainErr)
+        if (_attributes == (131072 | 262144) && tx.BeginTrans() is { } retainErr)
         {
             MappedProviderError? mapped = AdoEditErrors.MapTxnError(retainErr, out Failure? unmodelled);
             if (mapped is { } pe)

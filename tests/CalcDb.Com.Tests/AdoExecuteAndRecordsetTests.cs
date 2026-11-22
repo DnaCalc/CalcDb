@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using CalcDb.Com.Com;
 using CalcDb.Foundation;
 using CalcDb.Values;
+using static CalcDb.Com.Tests.AdoTestHarness;
 using static CalcDb.Com.Tests.NativeRoute;
 
 namespace CalcDb.Com.Tests;
@@ -16,14 +17,6 @@ namespace CalcDb.Com.Tests;
 [Collection(PublishedModuleTests.Name)]
 public sealed unsafe class AdoExecuteAndRecordsetTests
 {
-    private static readonly Guid OwnEngine = new("D44A3A3E-4FD9-4426-A7B7-8351E8421EBF");
-    private static readonly Guid OwnConnection = new("B29F5595-8BF1-4AA8-9397-1F2F10F3A101");
-    private static readonly Guid OwnRecordset = new("892D19AC-84CA-4F73-8A3E-00B7C066245A");
-    private static readonly Guid IidCommandText = new("0C733A26-2A1C-11CE-ADE5-00AA0044773D");
-    private static readonly Guid IidCommand = new("0C733A63-2A1C-11CE-ADE5-00AA0044773D");
-    private static readonly Guid IidRowset = new("0C733A7C-2A1C-11CE-ADE5-00AA0044773D");
-    private static readonly Guid IidEnumVariant = new("00020404-0000-0000-C000-000000000046");
-    private const string Ace = "Microsoft.ACE.OLEDB.12.0";
 
     [Fact]
     public void CalcDb_ADO_Connection_Execute_and_Recordset_Open_match_retained_ACE_records()
@@ -90,24 +83,6 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         Assert.Null(Call(db, "Close").Failure);
         Release(db);
         Release(eng);
-    }
-
-    private static nint OpenAceConnection(string dbPath, int? mode = null)
-    {
-        nint cn = New(OwnConnection);
-        Assert.Null(Put(cn, "Provider", Ace).Failure);
-        nint props = (nint)Get(cn, "Properties")!;
-        nint ds = (nint)Get(props, "Item", "Data Source")!;
-        Assert.Null(Put(ds, "Value", dbPath).Failure);
-        Release(ds);
-        Release(props);
-        if (mode is { } m)
-        {
-            Assert.Null(Put(cn, "Mode", m).Failure);
-        }
-        Assert.Null(Call(cn, "Open").Failure);
-        Assert.Equal(1, Get(cn, "State"));
-        return cn;
     }
 
     private static void ConnectionExecuteRowsDmlDdlAndByRef(string dbPath)
@@ -312,7 +287,7 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal("Code", Get(fCode, "Name"));
             Assert.Equal(202, Get(fCode, "Type")); // adVarWChar
             Assert.Equal(10, Get(fCode, "DefinedSize"));
-            Assert.Equal(0, Get(fCode, "Status")); // Field.Status = adFieldOK (0) on server keyset (r-q-ado-misc/values-witness-keyset #56, #76)
+            Assert.Equal(HResults.E_NOTIMPL, Invoke(fCode, "Status", 2).Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Invoke(rs, "Collect", 2, "Code").Failure!.Value.Scode);
 
             // _NewEnum returns IEnumVARIANT yielding 4 Field items; Skip reaching end returns S_FALSE (F6; r-q2-wire/retain-enum-ado-after-close #29-31).
@@ -522,10 +497,10 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Open", "SELECT ID FROM K", new Dispatch(cn), 0, 1, 17).Failure!.Value.Scode);
             Assert.Null(Call(rs, "Open", "K", new Dispatch(cn), 1, 3, 2).Failure);
 
-            // Out-of-scope Recordset methods remain refused by name; server keyset Resync fails 0x800A0CB3.
+            // Out-of-scope Recordset methods remain refused by name (0-arg Resync has no retained record).
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "UpdateBatch").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "CancelBatch").Failure!.Value.Scode);
-            Assert.Equal(unchecked((int)0x800A0CB3), Call(rs, "Resync").Failure!.Value.Scode);
+            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Resync").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Requery").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Seek", 1).Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Index", "PK_K").Failure!.Value.Scode);
@@ -626,13 +601,7 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         }
     }
 
-    // ---- Low-level IDispatch helpers (self-contained, mirroring AdoConnectionOpenTests) ----
-
-    private sealed class MissingValue;
-    private static readonly MissingValue Missing = new();
-    private readonly record struct Dispatch(nint Pointer);
-    private readonly record struct Error(int Scode, string? Source, string? Description, string? HelpFile, uint HelpContext, Guid InfoGuid);
-    private readonly record struct Outcome(object? Value, Error? Failure);
+    // ---- ByRef RecordsAffected Execute helpers specific to this test ----
 
     private static Outcome ExecuteWithByRefVariant(nint cn, string sql, NativeVariant* target)
     {
@@ -666,194 +635,6 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         finally
         {
             Marshal.FreeBSTR(raw[2].Pointer);
-        }
-    }
-
-    private static object? Get(nint target, string member, params object[] args)
-    {
-        Outcome o = Invoke(target, member, 2, args);
-        Assert.True(o.Failure is null, $"{member} failed: {o.Failure}");
-        return o.Value;
-    }
-
-    private static Outcome Put(nint target, string member, object value) => Invoke(target, member, 4, value);
-
-    private static Outcome Call(nint target, string member, params object[] args) => Invoke(target, member, 1, args);
-
-    private static int GetDispId(nint target, string member)
-    {
-        nint* vt = *(nint**)target;
-        Guid iidNull = Guid.Empty;
-        int dispId;
-        fixed (char* name = member)
-        {
-            char* pName = name;
-            int hr = ((delegate* unmanaged<nint, Guid*, char**, uint, uint, int*, int>)vt[5])(target, &iidNull, &pName, 1, 1033, &dispId);
-            Assert.Equal(0, hr);
-        }
-        return dispId;
-    }
-
-    private static int QueryInterface(nint target, Guid iid, out nint result)
-    {
-        nint* vt = *(nint**)target;
-        nint p = 0;
-        int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)vt[0])(target, &iid, &p);
-        result = p;
-        return hr;
-    }
-
-    private static nint New(Guid clsid)
-    {
-        Assert.Equal(0, Create(clsid, 0, ClsctxInprocServer, IidIDispatch, out nint created));
-        return created;
-    }
-
-    private static Outcome Invoke(nint target, string member, ushort flags, params object[] args)
-    {
-        int dispId = GetDispId(target, member);
-        NativeVariant* raw = stackalloc NativeVariant[Math.Max(args.Length, 1)];
-        for (int i = 0; i < args.Length; i++)
-        {
-            raw[args.Length - 1 - i] = VariantOf(args[i]);
-        }
-        int namedPut = -3;
-        try
-        {
-            return InvokeDispId(target, dispId, flags, args.Length == 0 ? null : raw, (uint)args.Length, flags == 4 ? 1u : 0u, flags == 4 ? &namedPut : null);
-        }
-        finally
-        {
-            for (int i = 0; i < args.Length; i++)
-            {
-                if (raw[i].Vt == (ushort)VarType.Bstr && raw[i].Pointer != 0)
-                {
-                    Marshal.FreeBSTR(raw[i].Pointer);
-                }
-            }
-        }
-    }
-
-    private static Outcome InvokeDispId(nint target, int dispId, ushort flags, NativeVariant* raw, uint argCount, uint namedCount, int* namedIds)
-    {
-        nint* vt = *(nint**)target;
-        Guid iidNull = Guid.Empty;
-        DispParams dp = new()
-        {
-            Args = (nint)raw,
-            NamedArgs = (nint)namedIds,
-            ArgCount = argCount,
-            NamedArgCount = namedCount,
-        };
-        NativeVariant result = default;
-        ExcepInfo ex = default;
-        uint argErr;
-        if (GetErrorInfo(0, out nint staleInfo) == 0 && staleInfo != 0)
-        {
-            Release(staleInfo);
-        }
-        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)vt[6])(
-            target, dispId, &iidNull, 1033, flags, &dp, &result, &ex, &argErr);
-        if (hr == 0)
-        {
-            return new(Value(result), null);
-        }
-        Guid infoGuid = Guid.Empty;
-        if (GetErrorInfo(0, out nint info) == 0 && info != 0)
-        {
-            nint* ivt = *(nint**)info;
-            ((delegate* unmanaged<nint, Guid*, int>)ivt[3])(info, &infoGuid);
-            Release(info);
-        }
-        string? src = TakeBstr(ex.Source);
-        string? desc = TakeBstr(ex.Description);
-        string? help = TakeBstr(ex.HelpFile);
-        return new(null, new(hr == HResults.DISP_E_EXCEPTION ? ex.Scode : hr, src, desc, help, ex.HelpContext, infoGuid));
-    }
-
-    private static string? TakeBstr(nint bstr)
-    {
-        if (bstr == 0)
-        {
-            return null;
-        }
-        string s = Marshal.PtrToStringBSTR(bstr);
-        Marshal.FreeBSTR(bstr);
-        return s;
-    }
-
-    private static NativeVariant VariantOf(object value)
-    {
-        NativeVariant v = default;
-        switch (value)
-        {
-            case int i:
-                v.Vt = (ushort)VarType.I4;
-                v.Int64 = (uint)i;
-                break;
-            case double d:
-                v.Vt = (ushort)VarType.R8;
-                v.Int64 = BitConverter.DoubleToInt64Bits(d);
-                break;
-            case bool b:
-                v.Vt = (ushort)VarType.Bool;
-                v.Int64 = b ? unchecked((ushort)(-1)) : 0;
-                break;
-            case string s:
-                v.Vt = (ushort)VarType.Bstr;
-                v.Pointer = Marshal.StringToBSTR(s);
-                break;
-            case DBNull:
-                v.Vt = (ushort)VarType.Null;
-                break;
-            case Dispatch d:
-                v.Vt = (ushort)VarType.Dispatch;
-                v.Pointer = d.Pointer;
-                break;
-            case nint p:
-                v.Vt = (ushort)VarType.Dispatch;
-                v.Pointer = p;
-                break;
-            default:
-                Assert.Same(Missing, value);
-                v.Vt = (ushort)VarType.Error;
-                v.Int64 = unchecked((uint)HResults.DISP_E_PARAMNOTFOUND);
-                break;
-        }
-        return v;
-    }
-
-    private static object? Value(NativeVariant v)
-    {
-        switch ((VarType)v.Vt)
-        {
-            case VarType.Empty:
-                return null;
-            case VarType.Null:
-                return DBNull.Value;
-            case VarType.I4:
-                return (int)v.Int64;
-            case VarType.I2:
-                return (short)v.Int64;
-            case VarType.I8:
-                return v.Int64;
-            case VarType.UI1:
-                return (byte)v.Int64;
-            case VarType.R8:
-                return BitConverter.Int64BitsToDouble(v.Int64);
-            case VarType.Bool:
-                return (short)v.Int64 != 0;
-            case VarType.Bstr when v.Pointer == 0:
-                return null;
-            case VarType.Bstr:
-                string s = Marshal.PtrToStringBSTR(v.Pointer);
-                Marshal.FreeBSTR(v.Pointer);
-                return s;
-            case VarType.Dispatch:
-            case VarType.Unknown:
-                return v.Pointer;
-            default:
-                throw new InvalidOperationException("unexpected result type " + (VarType)v.Vt);
         }
     }
 }
