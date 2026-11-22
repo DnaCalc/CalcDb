@@ -1,5 +1,6 @@
 using CalcDb.Format;
 using CalcDb.Isam;
+using CalcDb.Isam.Edit;
 using CalcDb.Storage;
 
 namespace CalcDb.Catalog;
@@ -11,6 +12,8 @@ namespace CalcDb.Catalog;
 /// (verified on retained fixtures <c>r-oledb-odbc-v2-accdb.accdb</c>, <c>r-oledb-odbc-v2-mdb.mdb</c>,
 /// <c>r-oledb-odbc-accdb.accdb</c>, <c>r-oledb-odbc-mdb.mdb</c>; <c>r-oledb-odbc/create-v2-accdb</c>,
 /// <c>r-oledb-odbc/create-v2-mdb</c>).
+/// When a <c>Type = 9</c> row deviates from that recorded shape, <see cref="NotAdmitted"/> names the mismatch so
+/// writes refuse by name rather than silently ignoring the row.
 /// </summary>
 public sealed record CheckConstraintCatalogEntry(
     int Id,
@@ -19,7 +22,8 @@ public sealed record CheckConstraintCatalogEntry(
     string TableName,
     string Expression,
     int Flags,
-    RowId Root);
+    RowId Root,
+    string? NotAdmitted = null);
 
 /// <summary>Reads SQL <c>CHECK</c> constraint rows (<c>Type = 9</c>) from <c>MSysObjects</c>.</summary>
 public static class CheckConstraintCatalog
@@ -27,9 +31,18 @@ public static class CheckConstraintCatalog
     /// <summary><c>MSysObjects.Type</c> for a SQL <c>CHECK</c> constraint row.</summary>
     public const short ObjectType = 9;
 
+    /// <summary>Recorded <c>MSysObjects.ParentId</c> (Relationships container) on all four retained CHECK fixtures.</summary>
+    public const int RecordedParentId = 0x0F000003;
+
+    /// <summary>Recorded <c>MSysObjects.Flags</c> on all four retained CHECK fixtures.</summary>
+    public const int RecordedFlags = 0x10000000;
+
     /// <summary>
     /// Reads every <c>Type = 9</c> constraint row from <c>MSysObjects</c> in scan order, or returns null with a
-    /// diagnostic if a required column is missing or unreadable.
+    /// diagnostic if a required column is missing or unreadable. Any <c>Type = 9</c> row whose field kinds,
+    /// <c>ParentId</c>, <c>Flags</c>, or non-empty <c>Name</c>/<c>ForeignName</c>/<c>Connect</c> deviate from the
+    /// four retained fixtures is returned with <see cref="CheckConstraintCatalogEntry.NotAdmitted"/> populated so
+    /// writes refuse by name.
     /// </summary>
     public static IReadOnlyList<CheckConstraintCatalogEntry>? Read(
         PageCache cache,
@@ -105,14 +118,89 @@ public static class CheckConstraintCatalog
                     failure = $"check constraint row {row.Root}: {fields[bad].Failure}";
                     return null;
                 }
+
+                List<string>? reasons = null;
+                int idVal = 0;
+                if (id.Kind == NativeKind.Long)
+                {
+                    idVal = (int)id.Integer;
+                }
+                else
+                {
+                    (reasons ??= []).Add($"Id has kind {id.Kind}, expected Long");
+                }
+
+                int parentVal = 0;
+                if (parent.Kind != NativeKind.Long)
+                {
+                    (reasons ??= []).Add($"ParentId has kind {parent.Kind}, expected Long");
+                }
+                else
+                {
+                    parentVal = (int)parent.Integer;
+                    if (parentVal != RecordedParentId)
+                    {
+                        (reasons ??= []).Add($"ParentId 0x{unchecked((uint)parentVal):X8} is not recorded (expected 0x{RecordedParentId:X8})");
+                    }
+                }
+
+                int flagsVal = 0;
+                if (flags.Kind != NativeKind.Long)
+                {
+                    (reasons ??= []).Add($"Flags has kind {flags.Kind}, expected Long");
+                }
+                else
+                {
+                    flagsVal = (int)flags.Integer;
+                    if (flagsVal != RecordedFlags)
+                    {
+                        (reasons ??= []).Add($"Flags 0x{unchecked((uint)flagsVal):X8} is not recorded (expected 0x{RecordedFlags:X8})");
+                    }
+                }
+
+                string nameVal = "";
+                if (name.Kind != NativeKind.Text || string.IsNullOrEmpty(name.Text))
+                {
+                    (reasons ??= []).Add($"Name is {(name.Kind == NativeKind.Null ? "Null" : name.Kind == NativeKind.Text ? "empty" : $"kind {name.Kind}")}");
+                }
+                else
+                {
+                    nameVal = name.Text;
+                }
+
+                string tableVal = "";
+                if (foreignName.Kind != NativeKind.Text || string.IsNullOrEmpty(foreignName.Text?.TrimEnd('\0')))
+                {
+                    (reasons ??= []).Add($"ForeignName is {(foreignName.Kind == NativeKind.Null ? "Null" : foreignName.Kind == NativeKind.Text ? "empty" : $"kind {foreignName.Kind}")}");
+                }
+                else
+                {
+                    tableVal = foreignName.Text!.TrimEnd('\0');
+                }
+
+                string exprVal = "";
+                if (connect.Kind != NativeKind.Text || string.IsNullOrEmpty(connect.Text?.TrimEnd('\0')))
+                {
+                    (reasons ??= []).Add($"Connect is {(connect.Kind == NativeKind.Null ? "Null" : connect.Kind == NativeKind.Text ? "empty" : $"kind {connect.Kind}")}");
+                }
+                else
+                {
+                    exprVal = connect.Text!.TrimEnd('\0');
+                }
+
+                string? notAdmitted = reasons is null
+                    ? null
+                    : $"MSysObjects Type 9 row {row.Root}{(string.IsNullOrEmpty(nameVal) ? "" : $" '{nameVal}'")}{(string.IsNullOrEmpty(tableVal) ? "" : $" on '{tableVal}'")}: {string.Join("; ", reasons)}";
+
                 constraints.Add(new CheckConstraintCatalogEntry(
-                    Id: (int)id.Integer,
-                    ParentId: (int)parent.Integer,
-                    Name: name.Text ?? "",
-                    TableName: (foreignName.Text ?? "").TrimEnd('\0'),
-                    Expression: (connect.Text ?? "").TrimEnd('\0'),
-                    Flags: (int)flags.Integer,
-                    Root: row.Root));
+                    Id: idVal,
+                    ParentId: parentVal,
+                    Name: nameVal,
+                    TableName: tableVal,
+                    Expression: exprVal,
+                    Flags: flagsVal,
+                    Root: row.Root,
+                    NotAdmitted: notAdmitted));
             }
         }
         if (scanFailures.Count > 0)
@@ -121,6 +209,30 @@ public static class CheckConstraintCatalog
             return null;
         }
         return constraints;
+    }
+
+    /// <summary>
+    /// Projects the <c>MSysObjects</c> <c>Type = 9</c> rows belonging to <paramref name="tableName"/> (plus any
+    /// unattributed <see cref="CheckConstraintCatalogEntry.NotAdmitted"/> row whose <c>ForeignName</c> was missing so
+    /// no table can silently bypass it) into <see cref="CatalogCheckConstraint"/> records for
+    /// <see cref="MutationSemantics.Compile"/>.
+    /// </summary>
+    public static IReadOnlyList<CatalogCheckConstraint> ForTable(
+        IReadOnlyList<CheckConstraintCatalogEntry> entries,
+        string tableName)
+    {
+        List<CatalogCheckConstraint>? matched = null;
+        foreach (CheckConstraintCatalogEntry entry in entries)
+        {
+            bool belongs = !string.IsNullOrEmpty(entry.TableName)
+                ? CatalogRelationshipContext.NamesEqual(entry.TableName, tableName)
+                : entry.NotAdmitted is not null;
+            if (belongs)
+            {
+                (matched ??= []).Add(new CatalogCheckConstraint(entry.Name, entry.Expression, entry.NotAdmitted));
+            }
+        }
+        return matched is null ? [] : matched;
     }
 
     private static ColumnDescriptor? Find(TableDefinition table, string name, byte expectedType, out string? failure)
@@ -135,3 +247,4 @@ public static class CheckConstraintCatalog
         return matches[0];
     }
 }
+

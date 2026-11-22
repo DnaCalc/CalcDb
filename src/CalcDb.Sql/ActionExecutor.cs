@@ -911,6 +911,23 @@ public static unsafe class ActionExecutor
             return null;
         }
         frame.Discard();
+        MutationSemantics semantics = frame.Table.Semantics;
+        if (!failOnError
+            && semantics.HasCheckConstraints
+            && outcome.Open == MutationOpen.None
+            && outcome.Error is { } err
+            && IsSkippableRowError(err.Number))
+        {
+            string names = err.Number == MutationError.RuleWithoutText && !string.IsNullOrEmpty(err.Argument)
+                ? $"'{err.Argument}'"
+                : semantics.CheckConstraints.Count > 0
+                    ? string.Join(", ", semantics.CheckConstraints.Select(c => $"'{c.Name}'"))
+                    : "'CheckConstraints'";
+            return SqlFailure.Open(
+                SqlPhase.Execute,
+                "NotModelled.Edit.Rule",
+                $"CHECK constraint {names} on {semantics.TableName}: SQL Execute without dbFailOnError (error {err.Number}) is not recorded");
+        }
         return HandleUpdateOutcome(outcome, failOnError, out SqlFailure? fail) ? fail : null;
     }
 

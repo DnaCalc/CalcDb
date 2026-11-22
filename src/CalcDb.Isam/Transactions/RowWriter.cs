@@ -528,6 +528,16 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         return page0 is null || DatabaseHeader.IsAccdb(page0.Bytes, _d);
     }
 
+    /// <summary>
+    /// Whether page 0 is readable and positively identifies ACCDB (format version 2); false for Jet 4 MDB or when page 0
+    /// cannot be pinned.
+    /// </summary>
+    public bool IsVerifiedAccdb(PrivateOverlay? seen = null)
+    {
+        using PagePin? page0 = Seen(seen).Pin(0).Pin;
+        return page0 is not null && DatabaseHeader.IsAccdb(page0.Bytes, _d);
+    }
+
     /// <summary>Whether the file header at page 0 positively selects the Jet 4 MDB profile (not an ACCDB or rejected page 0).</summary>
     public bool IsJet4Mdb(PrivateOverlay? seen = null)
     {

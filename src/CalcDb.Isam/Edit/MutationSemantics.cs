@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using CalcDb.Format;
 using CalcDb.Values;
 
@@ -62,12 +64,25 @@ public sealed record BoundRule(string StoredText, string? ValidationText, IMutat
 }
 
 /// <summary>
+/// A table's SQL <c>CHECK</c> constraint row projected from <c>MSysObjects</c> (<c>Type = 9</c>,
+/// <c>ParentId = 0x0F000003</c>, <c>Flags = 0x10000000</c>) for cross-checking against the table's MR2
+/// <c>ObjectMap["CheckConstraints"]</c> property in <see cref="MutationSemantics.Compile"/>.
+/// When <see cref="NotAdmitted"/> is non-null, the catalog row deviated from the recorded shape and writes refuse by name.
+/// </summary>
+public sealed record CatalogCheckConstraint(
+    string Name,
+    string Expression,
+    string? NotAdmitted = null);
+
+/// <summary>
 /// A table-level SQL <c>CHECK</c> constraint loaded from the table's MR2 <c>ObjectMap["CheckConstraints"]</c>
-/// memo property (<c>name\0expression\0\0</c>; verified on <c>r-oledb-odbc-v2-accdb.accdb</c>,
-/// <c>r-oledb-odbc-v2-mdb.mdb</c>, <c>r-oledb-odbc-accdb.accdb</c>, <c>r-oledb-odbc-mdb.mdb</c>).
-/// Only a single-column scalar comparison against a literal on one column of the table is bound through
-/// <see cref="IMutationRuleBinder"/>; any other expression stays unbound with <see cref="NotAdmitted"/> set so
-/// writes refuse by name rather than silently bypassing the constraint.
+/// memo property (<c>name\0expression\0\0</c>) and cross-checked against <c>MSysObjects</c> <c>Type = 9</c>
+/// (verified on <c>r-oledb-odbc-v2-accdb.accdb</c>, <c>r-oledb-odbc-v2-mdb.mdb</c>,
+/// <c>r-oledb-odbc-accdb.accdb</c>, <c>r-oledb-odbc-mdb.mdb</c>).
+/// Only the recorded shape — a bare <c>Long</c> column on the left, <c>&gt;=</c>, <c>&gt;</c>, or <c>&lt;</c>, and a
+/// non-negative 32-bit integer literal on the right (<c>V &gt;= 0</c>, <c>V &gt; 0</c>, <c>V &lt; 20</c>) — is bound
+/// as a full expression via <see cref="IMutationRuleBinder.BindTableRule"/>; any other expression stays unbound with
+/// <see cref="NotAdmitted"/> set so writes refuse by name rather than silently bypassing the constraint.
 /// </summary>
 public sealed record BoundCheckConstraint(
     string Name,
@@ -158,10 +173,17 @@ public sealed class MutationSemantics : IDisposable
     public ColumnDescriptor? AutoNumber { get; }
 
     /// <summary>
-    /// Compile from the table definition, its MR2 property blob (II-06 §5; v8qw's <see cref="PropertyBlob"/>) and the
-    /// expression service's binder. A blob without a column's map leaves that column without stored properties.
+    /// Compile from the table definition, its MR2 property blob (II-06 §5; v8qw's <see cref="PropertyBlob"/>), its
+    /// <c>MSysObjects</c> <c>Type = 9</c> rows (when supplied by a catalog reader), and the expression service's binder.
+    /// A blob without a column's map leaves that column without stored properties.
     /// </summary>
-    public static MutationSemantics Compile(string tableName, TableDefinition table, PropertyBlob? properties, IMutationRuleBinder binder, IndexDescriptorRules indexRules)
+    public static MutationSemantics Compile(
+        string tableName,
+        TableDefinition table,
+        PropertyBlob? properties,
+        IMutationRuleBinder binder,
+        IndexDescriptorRules indexRules,
+        IReadOnlyList<CatalogCheckConstraint>? catalogCheckConstraints = null)
     {
         var columns = new ColumnSemantics[table.Columns.Count];
         for (int i = 0; i < columns.Length; i++)
@@ -202,7 +224,8 @@ public sealed class MutationSemantics : IDisposable
             IMutationRule? bound = binder.BindTableRule(table, tableRuleText, out string? notAdmitted);
             tableRule = new BoundRule(tableRuleText, NonEmpty(Text(own, "ValidationText")), bound, notAdmitted);
         }
-        (BoundCheckConstraint[] checkConstraints, string? checkConstraintsNotAdmitted) = CompileCheckConstraints(tableName, table, own, binder);
+        (BoundCheckConstraint[] checkConstraints, string? checkConstraintsNotAdmitted) =
+            CompileCheckConstraints(tableName, table, own, binder, catalogCheckConstraints);
         var indexes = new List<IndexCheck>();
         foreach (LogicalIndex logical in table.LogicalIndexes)
         {
@@ -233,40 +256,112 @@ public sealed class MutationSemantics : IDisposable
         string tableName,
         TableDefinition table,
         PropertyMap? own,
-        IMutationRuleBinder binder)
+        IMutationRuleBinder binder,
+        IReadOnlyList<CatalogCheckConstraint>? catalogConstraints)
     {
-        if (own is null)
+        StoredProperty[] matches = own is null
+            ? []
+            : [.. own.Properties.Where(p => string.Equals(p.Name, "CheckConstraints", StringComparison.OrdinalIgnoreCase))];
+        bool hasLvProp = matches.Length > 0;
+        bool hasCatalog = catalogConstraints is { Count: > 0 };
+
+        if (!hasLvProp && !hasCatalog)
         {
             return ([], null);
         }
-        StoredProperty[] matches = [.. own.Properties.Where(p => string.Equals(p.Name, "CheckConstraints", StringComparison.OrdinalIgnoreCase))];
-        if (matches.Length == 0)
+
+        if (hasCatalog)
         {
-            return ([], null);
+            string[] badCatalog = [.. catalogConstraints!.Where(c => c.NotAdmitted is not null).Select(c => c.NotAdmitted!)];
+            if (badCatalog.Length > 0)
+            {
+                return ([], string.Join("; ", badCatalog));
+            }
         }
-        if (matches.Length > 1)
+
+        List<(string Name, string Expression)>? lvPairs = null;
+        if (hasLvProp)
         {
-            return ([], $"table '{tableName}' has {matches.Length} CheckConstraints properties; only a single CheckConstraints property is recorded");
+            if (matches.Length > 1)
+            {
+                return ([], $"table '{tableName}' has {matches.Length} CheckConstraints properties; only a single CheckConstraints property is recorded");
+            }
+            PropertyValue decoded = PropertyBlob.Decode(matches[0]);
+            if (decoded.Failure is not null || decoded.Text is null)
+            {
+                return ([], $"CheckConstraints property on '{tableName}' could not be decoded ({decoded.Failure ?? $"type 0x{matches[0].NativeType:X2} has no text payload"})");
+            }
+            if (!TryParseCheckConstraints(decoded.Text, out lvPairs, out string? parseError))
+            {
+                return ([], $"CheckConstraints property on '{tableName}' has an unrecorded format: {parseError}");
+            }
         }
-        PropertyValue decoded = PropertyBlob.Decode(matches[0]);
-        if (decoded.Failure is not null || decoded.Text is null)
+
+        if (hasLvProp && catalogConstraints is null)
         {
-            return ([], $"CheckConstraints property on '{tableName}' could not be decoded ({decoded.Failure ?? $"type 0x{matches[0].NativeType:X2} has no text payload"})");
+            string lvNames = string.Join(", ", lvPairs!.Select(p => $"'{p.Name}'"));
+            return ([], $"CHECK constraint {lvNames} on '{tableName}': MSysObjects Type 9 rows were not supplied to cross-check against LvProp CheckConstraints");
         }
-        if (!TryParseCheckConstraints(decoded.Text, out List<(string Name, string Expression)> pairs, out string? parseError))
+        if (hasLvProp && !hasCatalog)
         {
-            return ([], $"CheckConstraints property on '{tableName}' has an unrecorded format: {parseError}");
+            string lvNames = string.Join(", ", lvPairs!.Select(p => $"'{p.Name}'"));
+            return ([], $"CHECK constraint {lvNames} on '{tableName}': present in LvProp CheckConstraints but missing from MSysObjects Type 9");
         }
-        var bound = new BoundCheckConstraint[pairs.Count];
-        for (int i = 0; i < pairs.Count; i++)
+        if (!hasLvProp && hasCatalog)
         {
-            (string name, string expr) = pairs[i];
+            string catNames = string.Join(", ", catalogConstraints!.Select(c => $"'{c.Name}'"));
+            return ([], $"CHECK constraint {catNames} on '{tableName}': present in MSysObjects Type 9 but missing from LvProp CheckConstraints");
+        }
+
+        // Cross-check both sources: unique names in each source and exact (Name, Expression) agreement.
+        var lvByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, string expr) in lvPairs!)
+        {
+            if (!lvByName.TryAdd(name, expr))
+            {
+                return ([], $"duplicate CHECK constraint '{name}' in LvProp CheckConstraints on '{tableName}' is not recorded");
+            }
+        }
+        var catByName = new Dictionary<string, CatalogCheckConstraint>(StringComparer.OrdinalIgnoreCase);
+        foreach (CatalogCheckConstraint c in catalogConstraints!)
+        {
+            if (!catByName.TryAdd(c.Name, c))
+            {
+                return ([], $"duplicate CHECK constraint '{c.Name}' in MSysObjects Type 9 on '{tableName}' is not recorded");
+            }
+        }
+        bool agrees = lvPairs.Count == catalogConstraints.Count;
+        if (agrees)
+        {
+            foreach ((string name, string expr) in lvPairs)
+            {
+                if (!catByName.TryGetValue(name, out CatalogCheckConstraint? cat)
+                    || !string.Equals(cat.Name, name, StringComparison.Ordinal)
+                    || !string.Equals(cat.Expression, expr, StringComparison.Ordinal))
+                {
+                    agrees = false;
+                    break;
+                }
+            }
+        }
+        if (!agrees)
+        {
+            string lvDesc = string.Join(", ", lvPairs.Select(p => $"'{p.Name}' ({p.Expression})"));
+            string catDesc = string.Join(", ", catalogConstraints.Select(c => $"'{c.Name}' ({c.Expression})"));
+            return ([], $"CHECK constraints on '{tableName}' disagree between LvProp [{lvDesc}] and MSysObjects Type 9 [{catDesc}]");
+        }
+
+        var bound = new BoundCheckConstraint[lvPairs.Count];
+        for (int i = 0; i < lvPairs.Count; i++)
+        {
+            (string name, string expr) = lvPairs[i];
             if (!TryMatchSingleColumnComparison(table, expr, out ColumnDescriptor? column, out string? reason))
             {
                 bound[i] = new BoundCheckConstraint(name, expr, null, null, reason);
                 continue;
             }
-            IMutationRule? rule = binder.BindFieldRule(table, column!, expr, out string? notAdmitted);
+            // Bind as a full expression without BindFieldRule's implied-operand rewrite.
+            IMutationRule? rule = binder.BindTableRule(table, expr, out string? notAdmitted);
             bound[i] = new BoundCheckConstraint(name, expr, column, rule, rule is null ? (notAdmitted ?? "expression binder did not admit the CHECK constraint") : null);
         }
         return (bound, null);
@@ -306,22 +401,18 @@ public sealed class MutationSemantics : IDisposable
         return true;
     }
 
-    private enum CheckTokenKind : byte { Ident, Literal, BoolLiteral, Op }
-
-    private readonly record struct CheckToken(CheckTokenKind Kind, string Text);
-
     private static readonly HashSet<string> DisallowedCheckKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "SELECT", "FROM", "WHERE", "EXISTS", "IN", "BETWEEN", "LIKE", "IS", "NULL", "AND", "OR", "NOT", "XOR", "EQV", "IMP", "MOD",
+        "SELECT", "FROM", "WHERE", "EXISTS", "IN", "BETWEEN", "LIKE", "IS", "NULL", "AND", "OR", "NOT", "XOR", "EQV", "IMP", "MOD", "TRUE", "FALSE",
     };
 
     /// <summary>
-    /// Admits only a single-column scalar comparison against a literal on one column of <paramref name="table"/>
-    /// (<c>col op literal</c> or <c>literal op col</c>, with optional balanced outer parentheses), as recorded by
-    /// <c>r-oledb-odbc/update-errors</c> (<c>V &gt;= 0</c>), <c>r-oledb-odbc/error-record-channels</c> (<c>V &gt;= 0</c>),
-    /// and <c>r-q-cat-txn-lock/ii11-ado-check-constraint</c> (<c>V &gt; 0</c>, <c>V &lt; 20</c>).
-    /// Rejects subqueries, cross-table references, multi-column expressions, compound predicates, and function calls so
-    /// they stay refused by name.
+    /// Admits only the recorded CHECK expression shape: a bare <c>Long</c> column of <paramref name="table"/> on the
+    /// left, operator <c>&gt;=</c>, <c>&gt;</c>, or <c>&lt;</c>, and a non-negative 32-bit integer literal on the right
+    /// (<c>V &gt;= 0</c> in <c>r-oledb-odbc/update-errors</c> and <c>r-oledb-odbc/error-record-channels</c>;
+    /// <c>V &gt; 0</c> and <c>V &lt; 20</c> in <c>r-q-cat-txn-lock/ii11-ado-check-constraint</c>).
+    /// Refuses every other operator, literal type, parenthesized/bracketed/reversed form, column type, subquery,
+    /// cross-table reference, compound predicate, or function call so they stay refused by name.
     /// </summary>
     internal static bool TryMatchSingleColumnComparison(
         TableDefinition table,
@@ -330,191 +421,90 @@ public sealed class MutationSemantics : IDisposable
         out string? reason)
     {
         column = null;
-        ReadOnlySpan<char> span = StripOuterParens(expression.AsSpan().Trim());
+        ReadOnlySpan<char> span = expression.AsSpan().Trim();
         if (span.IsEmpty)
         {
             reason = "CHECK expression is empty";
             return false;
         }
-        var tokens = new List<CheckToken>(4);
+
         int i = 0;
-        while (i < span.Length)
+        if (!(char.IsLetter(span[i]) || span[i] == '_'))
         {
-            char ch = span[i];
-            if (char.IsWhiteSpace(ch))
+            reason = "only a bare Long column on the left compared with >=, >, or < against a non-negative integer literal is recorded";
+            return false;
+        }
+        int identStart = i;
+        i++;
+        while (i < span.Length && (char.IsLetterOrDigit(span[i]) || span[i] == '_'))
+        {
+            i++;
+        }
+        string columnName = span[identStart..i].ToString();
+        if (DisallowedCheckKeywords.Contains(columnName))
+        {
+            reason = $"CHECK expression uses keyword '{columnName}'; only a bare Long column comparison against a non-negative integer literal is recorded";
+            return false;
+        }
+
+        while (i < span.Length && char.IsWhiteSpace(span[i]))
+        {
+            i++;
+        }
+        if (i >= span.Length)
+        {
+            reason = "CHECK expression is missing a comparison operator";
+            return false;
+        }
+
+        if (span[i] == '>')
+        {
+            i++;
+            if (i < span.Length && span[i] == '=')
             {
                 i++;
-                continue;
             }
-            if (tokens.Count >= 3)
+        }
+        else if (span[i] == '<')
+        {
+            i++;
+            if (i < span.Length && span[i] is '=' or '>')
             {
-                reason = "only a single-column comparison against a literal is recorded";
+                reason = $"CHECK operator '{span[(i - 1)..(i + 1)]}' is not recorded (only >=, >, and < are recorded)";
                 return false;
             }
-            if (ch == '[')
-            {
-                int close = span[(i + 1)..].IndexOf(']');
-                if (close <= 0)
-                {
-                    reason = "unterminated or empty bracketed identifier in CHECK expression";
-                    return false;
-                }
-                string name = span.Slice(i + 1, close).ToString();
-                tokens.Add(new CheckToken(CheckTokenKind.Ident, name));
-                i += close + 2;
-                continue;
-            }
-            if (ch is '\'' or '"')
-            {
-                char quote = ch;
-                int start = i;
-                i++;
-                bool closed = false;
-                while (i < span.Length)
-                {
-                    if (span[i] == quote)
-                    {
-                        if (i + 1 < span.Length && span[i + 1] == quote)
-                        {
-                            i += 2;
-                            continue;
-                        }
-                        i++;
-                        closed = true;
-                        break;
-                    }
-                    i++;
-                }
-                if (!closed)
-                {
-                    reason = "unterminated string literal in CHECK expression";
-                    return false;
-                }
-                tokens.Add(new CheckToken(CheckTokenKind.Literal, span[start..i].ToString()));
-                continue;
-            }
-            if (ch == '#')
-            {
-                int close = span[(i + 1)..].IndexOf('#');
-                if (close <= 0)
-                {
-                    reason = "unterminated or empty date literal in CHECK expression";
-                    return false;
-                }
-                tokens.Add(new CheckToken(CheckTokenKind.Literal, span.Slice(i, close + 2).ToString()));
-                i += close + 2;
-                continue;
-            }
-            if (ch is '=' or '<' or '>')
-            {
-                int start = i;
-                i++;
-                if (i < span.Length && ((ch == '<' && span[i] is '>' or '=') || (ch == '>' && span[i] == '=')))
-                {
-                    i++;
-                }
-                tokens.Add(new CheckToken(CheckTokenKind.Op, span[start..i].ToString()));
-                continue;
-            }
-            bool unarySignAllowed = tokens.Count == 0 || tokens[^1].Kind == CheckTokenKind.Op;
-            if (char.IsAsciiDigit(ch) || (unarySignAllowed && ch is '+' or '-' && i + 1 < span.Length && (char.IsAsciiDigit(span[i + 1]) || span[i + 1] == '.')))
-            {
-                int start = i;
-                if (ch is '+' or '-')
-                {
-                    i++;
-                }
-                bool sawDigit = false;
-                while (i < span.Length && char.IsAsciiDigit(span[i]))
-                {
-                    sawDigit = true;
-                    i++;
-                }
-                if (i < span.Length && span[i] == '.')
-                {
-                    i++;
-                    while (i < span.Length && char.IsAsciiDigit(span[i]))
-                    {
-                        sawDigit = true;
-                        i++;
-                    }
-                }
-                if (!sawDigit)
-                {
-                    reason = "malformed numeric literal in CHECK expression";
-                    return false;
-                }
-                if (i < span.Length && span[i] is 'e' or 'E')
-                {
-                    int expPos = i + 1;
-                    if (expPos < span.Length && span[expPos] is '+' or '-')
-                    {
-                        expPos++;
-                    }
-                    int expDigits = expPos;
-                    while (expDigits < span.Length && char.IsAsciiDigit(span[expDigits]))
-                    {
-                        expDigits++;
-                    }
-                    if (expDigits == expPos)
-                    {
-                        reason = "malformed numeric exponent in CHECK expression";
-                        return false;
-                    }
-                    i = expDigits;
-                }
-                tokens.Add(new CheckToken(CheckTokenKind.Literal, span[start..i].ToString()));
-                continue;
-            }
-            if (char.IsLetter(ch) || ch == '_')
-            {
-                int start = i;
-                i++;
-                while (i < span.Length && (char.IsLetterOrDigit(span[i]) || span[i] == '_'))
-                {
-                    i++;
-                }
-                string word = span[start..i].ToString();
-                if (string.Equals(word, "True", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(word, "False", StringComparison.OrdinalIgnoreCase))
-                {
-                    tokens.Add(new CheckToken(CheckTokenKind.BoolLiteral, word));
-                }
-                else if (DisallowedCheckKeywords.Contains(word))
-                {
-                    reason = $"CHECK expression uses keyword '{word}'; only a single-column comparison against a literal is recorded";
-                    return false;
-                }
-                else
-                {
-                    tokens.Add(new CheckToken(CheckTokenKind.Ident, word));
-                }
-                continue;
-            }
-            reason = ch switch
-            {
-                '.' => "qualified or cross-table reference in CHECK expression is not recorded",
-                '(' or ')' => "subquery, function call, or grouped predicate in CHECK expression is not recorded",
-                _ => $"character '{ch}' in CHECK expression: only a single-column comparison against a literal is recorded",
-            };
+        }
+        else
+        {
+            reason = $"CHECK expression character '{span[i]}': only operators >=, >, and < on a bare Long column are recorded";
             return false;
         }
-        if (tokens.Count != 3 || tokens[1].Kind != CheckTokenKind.Op)
+
+        while (i < span.Length && char.IsWhiteSpace(span[i]))
         {
-            reason = "only a single-column comparison against a literal is recorded";
+            i++;
+        }
+        if (i >= span.Length || !char.IsAsciiDigit(span[i]))
+        {
+            reason = "CHECK right-hand operand must be a non-negative integer literal";
             return false;
         }
-        string? columnName = (tokens[0].Kind, tokens[2].Kind) switch
+        int litStart = i;
+        while (i < span.Length && char.IsAsciiDigit(span[i]))
         {
-            (CheckTokenKind.Ident, CheckTokenKind.Literal or CheckTokenKind.BoolLiteral) => tokens[0].Text,
-            (CheckTokenKind.Literal or CheckTokenKind.BoolLiteral, CheckTokenKind.Ident) => tokens[2].Text,
-            _ => null,
-        };
-        if (columnName is null)
+            i++;
+        }
+        if (i != span.Length)
         {
-            reason = "CHECK expression must compare one column of the table against a scalar literal";
+            reason = "only a bare Long column compared with >=, >, or < against a non-negative integer literal is recorded";
             return false;
         }
+        if (!int.TryParse(span[litStart..i], NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        {
+            reason = $"CHECK integer literal '{span[litStart..i]}' is outside the non-negative 32-bit integer range";
+            return false;
+        }
+
         ColumnDescriptor[] matched = [.. table.Columns.Where(c => string.Equals(c.Name, columnName, StringComparison.OrdinalIgnoreCase))];
         if (matched.Length != 1)
         {
@@ -523,70 +513,14 @@ public sealed class MutationSemantics : IDisposable
                 : $"CHECK expression column '{columnName}' is ambiguous";
             return false;
         }
+        if (matched[0].TypeCode != NativeTypes.Long)
+        {
+            reason = $"CHECK column '{matched[0].Name}' has type 0x{matched[0].TypeCode:X2}; only Long (0x04) columns are recorded";
+            return false;
+        }
         column = matched[0];
         reason = null;
         return true;
-    }
-
-    private static ReadOnlySpan<char> StripOuterParens(ReadOnlySpan<char> span)
-    {
-        while (span.Length >= 2 && span[0] == '(' && span[^1] == ')')
-        {
-            int depth = 0;
-            bool wrapsWhole = true;
-            for (int i = 0; i < span.Length - 1; i++)
-            {
-                char c = span[i];
-                if (c is '\'' or '"')
-                {
-                    char quote = c;
-                    i++;
-                    while (i < span.Length - 1)
-                    {
-                        if (span[i] == quote)
-                        {
-                            if (i + 1 < span.Length - 1 && span[i + 1] == quote)
-                            {
-                                i += 2;
-                                continue;
-                            }
-                            break;
-                        }
-                        i++;
-                    }
-                    continue;
-                }
-                if (c == '[')
-                {
-                    int close = span[(i + 1)..].IndexOf(']');
-                    if (close < 0)
-                    {
-                        return span;
-                    }
-                    i += close + 1;
-                    continue;
-                }
-                if (c == '(')
-                {
-                    depth++;
-                }
-                else if (c == ')')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        wrapsWhole = false;
-                        break;
-                    }
-                }
-            }
-            if (!wrapsWhole)
-            {
-                break;
-            }
-            span = span[1..^1].Trim();
-        }
-        return span;
     }
 
     private static string? NonEmpty(string? text) => string.IsNullOrEmpty(text) ? null : text;

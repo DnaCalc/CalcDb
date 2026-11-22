@@ -324,6 +324,12 @@ public sealed class EditFrame : IDisposable
             return EditOutcome.NotModelled(MutationOpen.RepeatedAddNew, "AddNew during AddNew: whether the first ticket is consumed and the defaults sampled again is not recorded");
         }
         MutationSemantics s = _table.Semantics;
+        if (s.AutoNumber is { } autoWithCheck && s.HasCheckConstraints)
+        {
+            return EditOutcome.NotModelled(
+                MutationOpen.Rule,
+                $"CHECK constraint {DescribeCheckConstraints(s)} on {s.TableName}: table with AutoNumber column '{autoWithCheck.Name}' and a CHECK constraint is not recorded");
+        }
         var defaults = new NativeValue?[_cells.Length];
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -531,11 +537,6 @@ public sealed class EditFrame : IDisposable
                     return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, "AddNew+Update on an MDB dynaset over 500 rows is not recorded (R-CURSOR-1 CUR-POP Open)");
                 }
             }
-        }
-
-        if (CheckConstraintPrecondition() is { } checkPrecondition)
-        {
-            return checkPrecondition;
         }
 
         // The checks of the candidate row (II-10 §21 F-91 "Scheduled field and row checks"), each class reporting its
@@ -1783,12 +1784,13 @@ public sealed class EditFrame : IDisposable
         return new UpdateOutcome(r.Error, r.Open, r.Detail);
     }
 
-    private UpdateOutcome? CheckConstraintPrecondition()
+    private UpdateOutcome CheckConstraintCheck(out BoundCheckConstraint? nullChecked)
     {
+        nullChecked = null;
         MutationSemantics s = _table.Semantics;
         if (!s.HasCheckConstraints)
         {
-            return null;
+            return default;
         }
         if (s.CheckConstraintsNotAdmitted is { } blobReason)
         {
@@ -1802,25 +1804,48 @@ public sealed class EditFrame : IDisposable
             }
         }
         string names = DescribeCheckConstraints(s);
+        if (s.AutoNumber is { } autoCol)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded");
+        }
         // All retained CHECK enforcement records are on ACCDB (r-oledb-odbc/update-errors #208-228,
         // r-oledb-odbc/error-record-channels #142, r-q-cat-txn-lock/ii11-ado-check-constraint #20, #22, #64);
-        // MDB write enforcement is not recorded.
-        if (_table.Writer is { } writer && writer.IsJet4Mdb(_workspace.OverlayOf(writer.File)))
+        // MDB and unverified file formats (including Writer == null) are not recorded.
+        if (_table.Writer is null)
         {
-            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {names} on {s.TableName}: MDB write enforcement is not recorded");
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: ACCDB format cannot be verified without a physical writer");
         }
-        return null;
-    }
+        if (!_table.Writer.IsVerifiedAccdb(_workspace.OverlayOf(_table.Writer.File)))
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: MDB or unverified file format write enforcement is not recorded");
+        }
+        if (Mode != EditMode.AddNew)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: UPDATE (Edit mode) on a table with a CHECK constraint is not recorded");
+        }
+        if (ConflictSource == MutationErrorSource.Recordset && !_workspace.InStatement)
+        {
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint {names} on {s.TableName}: DAO recordset AddNew on a table with a CHECK constraint is not recorded");
+        }
 
-    private UpdateOutcome CheckConstraintCheck(out BoundCheckConstraint? nullChecked)
-    {
-        nullChecked = null;
-        MutationSemantics s = _table.Semantics;
-        if (!s.HasCheckConstraints)
-        {
-            return default;
-        }
         List<BoundCheckConstraint>? rejected = null;
+        List<(BoundCheckConstraint Constraint, string Detail)>? evalFailures = null;
+        int admittedCount = 0;
         foreach (BoundCheckConstraint c in s.CheckConstraints)
         {
             if (CandidateValue(c.Column!.Ordinal).Kind == NativeKind.Null)
@@ -1832,15 +1857,29 @@ public sealed class EditFrame : IDisposable
             switch (result.Verdict)
             {
                 case RuleVerdict.Admit:
+                    admittedCount++;
                     break;
                 case RuleVerdict.Reject:
                     (rejected ??= []).Add(c);
                     break;
                 case RuleVerdict.Failed:
-                    return Fail(MutationError.RuleEvaluation);
+                    (evalFailures ??= []).Add((c, result.Detail ?? "evaluation failed (not recorded for SQL CHECK)"));
+                    break;
                 default:
-                    return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint '{c.Name}' on {s.TableName}: {result.Detail}");
+                    (evalFailures ??= []).Add((c, result.Detail ?? result.Verdict.ToString()));
+                    break;
             }
+        }
+        if (evalFailures is { Count: > 0 })
+        {
+            string failedDesc = string.Join("; ", evalFailures.Select(f => $"'{f.Constraint.Name}': {f.Detail}"));
+            string afterRejected = rejected is { Count: > 0 }
+                ? $" (alongside rejected {string.Join(", ", rejected.Select(c => $"'{c.Name}'"))})"
+                : "";
+            return new UpdateOutcome(
+                null,
+                MutationOpen.Rule,
+                $"CHECK constraint evaluation failed on {s.TableName} ({failedDesc}){afterRejected}: SQL CHECK evaluation failure is not recorded");
         }
         if (rejected is { Count: 1 })
         {
@@ -1863,13 +1902,27 @@ public sealed class EditFrame : IDisposable
                 MutationOpen.CheckOrder,
                 $"multiple CHECK constraints failed on {s.TableName} ({failedNames}): their evaluation order is not recorded");
         }
-        return default;
+        if (nullChecked is not null)
+        {
+            if (admittedCount > 0)
+            {
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint '{nullChecked.Name}' on {s.TableName} has Null in column '{nullChecked.Column!.Name}' while another CHECK constraint was satisfied, which is not recorded");
+            }
+            return default;
+        }
+        return new UpdateOutcome(
+            null,
+            MutationOpen.Rule,
+            $"CHECK constraint {names} on {s.TableName}: accepting a row that satisfies the CHECK constraint is not recorded");
     }
 
     private static string DescribeCheckConstraints(MutationSemantics s) =>
         s.CheckConstraints.Count > 0
             ? string.Join(", ", s.CheckConstraints.Select(c => $"'{c.Name}'"))
-            : "'CheckConstraints'";
+            : s.CheckConstraintsNotAdmitted ?? "'CheckConstraints'";
 
     /// <summary>The Null-in-index check (3058) and the unique check (3022), each its first failure in index order.</summary>
     private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical, bool RefusingIsPrimary) IndexChecks()

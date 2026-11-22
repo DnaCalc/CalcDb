@@ -27,6 +27,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
     private QueryCatalog? _queries;
     private readonly ExpressionRuleBinder _ruleBinder;
     private IReadOnlyList<Relationship> _relationships;
+    private IReadOnlyList<CheckConstraintCatalogEntry> _checkConstraints;
     private CatalogRelationshipContext _relationshipContext;
     private ulong _pageCount;
     private readonly Dictionary<string, TableEditContext> _editContexts = new(StringComparer.OrdinalIgnoreCase);
@@ -46,6 +47,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog = CatalogBootstrap.Open(_cache, D, _pageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, _pageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, _pageCount, out _) ?? [];
         _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, _pageCount, name => EditContext(name, out _));
         DatabaseHeader header = DatabaseHeader.Decode(file.AsSpan(0, D.PageSize), D);
         _sortOrder = header.SortOrder;
@@ -106,6 +108,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog = CatalogBootstrap.Open(_cache, D, PageCount, out _, readProperties: true)!;
         _queries = QueryCatalog.Read(_cache, D, _catalog, PageCount, out _);
         _relationships = RelationshipCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
         _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, PageCount, name => EditContext(name, out _));
     }
 
@@ -225,7 +228,13 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
                 return null;
             }
         }
-        MutationSemantics semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, D.IndexDescriptor);
+        MutationSemantics semantics = MutationSemantics.Compile(
+            entry.Name,
+            table,
+            blob,
+            _ruleBinder,
+            D.IndexDescriptor,
+            CheckConstraintCatalog.ForTable(_checkConstraints, entry.Name));
         IRelationshipProbe? relProbe = _relationshipContext.ForTable(entry.Name, table);
         var ctx = new TableEditContext(
             semantics,
