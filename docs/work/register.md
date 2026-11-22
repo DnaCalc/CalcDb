@@ -218,6 +218,7 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 | A clone that survives the original's Close inside a level keeps reading: whxg's review fix sends it to NotRecorded, but r-fix-cat-txn/clone-close-update-only records the case (lost in wide-dqtr-1: Matched on c7gn and nxj9, Mismatched from whxg; W-04, W-05) | P2 | whxg | not started (found 2026-11-22, organizer 01a20219, wide-set trace: a rule found wrong after landing) | `znk8` |
 | r-txn-1b/implicit-unique-first-failonerror writes ACE's final file bytes again: every call matches, the file hash differs since the c7gn landing (lost in wide-dqtr-1; W-05) | P2 | c7gn | not started (found 2026-11-22, organizer 01a20219, wide-set trace) | `qhs8` |
 | A SELECT dynaset's RecordCount follows its population (1 after open): SelectCursor counts every row (r-txn-1b/rs-types-after-rollback calls 37, 95, 151, 211: ACE 1, CalcDb 8; one r-ado-1b question the same; qualified.md R-CURSOR-1 CUR-POP; W-06, W-08) | P2 | — | not started (found 2026-11-22, 82kf writer) | `vpfd` |
+| r-q8-header-counter two-deletes-300ms-apart and -400ms-apart fail call 10 on the candidate now and then under load (core compare 82kf-1 lost both; a rerun on the same snapshot matched them; CalcDb's deferred write depends on wall-clock load; R-TXN-1 TXN-FLUSH-BEHIND; W-05) | P2 | — | not started (found 2026-11-22, organizer 01a20219; 82kf-1 not recorded as a baseline) | `mhzd` |
 
 ### W-01/capture-core branches (R-ORACLE-1)
 
