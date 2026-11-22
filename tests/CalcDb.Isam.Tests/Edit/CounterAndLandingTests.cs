@@ -845,7 +845,7 @@ public sealed class CounterAndLandingTests
     /// <summary>One SQL statement inserting <paramref name="rows"/> rows into G (generated IDs), optionally in a level of its own, as an INSERT ... SELECT with dbFailOnError opens.</summary>
     private static void InsertRows(Rig rig, EditFrame frame, TableDefinition g, int rows, string prefix, bool ownLevel)
     {
-        using StatementScope stmt = rig.A.BeginStatement();
+        using StatementScope stmt = rig.A.BeginStatement(isInsertSelect: ownLevel || rows > 1);
         if (ownLevel)
         {
             Assert.Null(rig.A.BeginTrans());

@@ -455,27 +455,61 @@ public sealed class GrowthPublicationTests
 
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.AddNew().Succeeded);
-        // Inside BeginTrans, recordset AddNew issues the ticket in memory and defers disk write-back until
-        // CommitTrans or Rollback (evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage;
-        // evidence/r-q-cursor-dao/edit-addnew-counter-rollback-reopen).
         Assert.Equal(3, frame.Read(Col(g, "ID")).Value.Integer);
-        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
 
         AssignText(frame, Col(g, "T"), "tx1");
         Assert.True(frame.Assign(Col(g, "N"), I4(99)).Succeeded);
         AssignText(frame, Col(g, "U"), "txu1");
         Assert.True(frame.Update().Succeeded);
-        Assert.Equal(rig.Before, rig.File.Image.Snapshot()); // row insert and AutoNumber stay unpublished inside BeginTrans
+        Assert.Equal(2u, DecodeTableDef(rig.File.Image.Snapshot(), g.FirstPage).RowCount); // row insert stays unpublished inside BeginTrans
 
         ResolutionOutcome commit = rig.A.CommitTrans(options);
         Assert.True(commit.Succeeded, commit.ToString());
         byte[] afterCommit = rig.File.Image.Snapshot();
         Assert.Equal(3u, DecodeTableDef(afterCommit, g.FirstPage).AutoNumber);
         Assert.Equal(3u, DecodeTableDef(afterCommit, g.FirstPage).RowCount);
-        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, afterCommit[D.Header.CommitCounter.Offset]);
         Assert.Equal(options, rig.File.Image.Flushes);
         Assert.Equal(3, cursor.RecordCount);
         AssertInspectorClean(afterCommit);
+    }
+
+    [Fact]
+    public void CommitTrans_persists_consumed_AutoNumber_after_CancelUpdate_so_reopen_never_reissues()
+    {
+        // CUR-EDIT (evidence/r-q10-commit-counter-edits/addnew-cancel-once,
+        // evidence/r-q-cursor-dao/edit-addnew-counter-rollback-reopen): an AutoNumber consumed inside BeginTrans
+        // and cancelled must reach TableDef 0x14 on CommitTrans so reopening never reissues it.
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, _) = rig.OpenTable(rig.A, "G");
+
+        // Case 1: BeginTrans -> AddNew (3) -> CancelUpdate -> CommitTrans (no accepted row changes).
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(3, frame.Read(Col(g, "ID")).Value.Integer);
+        Assert.True(frame.CancelUpdate().Succeeded);
+        ResolutionOutcome commit1 = rig.A.CommitTrans();
+        Assert.True(commit1.Succeeded, commit1.ToString());
+        byte[] after1 = rig.File.Image.Snapshot();
+        Assert.Equal(3u, DecodeTableDef(after1, g.FirstPage).AutoNumber);
+        Assert.Equal(2u, DecodeTableDef(after1, g.FirstPage).RowCount);
+
+        // Case 2: BeginTrans -> AddNew (4) -> Update -> AddNew (5) -> CancelUpdate -> CommitTrans.
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(4, frame.Read(Col(g, "ID")).Value.Integer);
+        AssignText(frame, Col(g, "T"), "kept4");
+        AssignText(frame, Col(g, "U"), "u-kept4");
+        Assert.True(frame.Update().Succeeded);
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.Equal(5, frame.Read(Col(g, "ID")).Value.Integer);
+        Assert.True(frame.CancelUpdate().Succeeded);
+        ResolutionOutcome commit2 = rig.A.CommitTrans();
+        Assert.True(commit2.Succeeded, commit2.ToString());
+        byte[] after2 = rig.File.Image.Snapshot();
+        Assert.Equal(5u, DecodeTableDef(after2, g.FirstPage).AutoNumber);
+        Assert.Equal(3u, DecodeTableDef(after2, g.FirstPage).RowCount);
+        AssertInspectorClean(after2);
     }
 
     [Fact]

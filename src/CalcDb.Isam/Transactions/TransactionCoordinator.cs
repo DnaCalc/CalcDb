@@ -104,6 +104,10 @@ public sealed class ExplicitFrame
 
     internal int UnwrittenCount { get; set; }
 
+    internal int StatementCount { get; set; }
+
+    internal bool HasNonInsertSelectWork { get; set; }
+
     internal Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>? ConsumedAutoNumbers { get; set; }
 
     internal HashSet<(PageCache Cache, uint TableDefPage)>? StatementTableDefPages { get; set; }
@@ -147,13 +151,18 @@ public sealed class ExplicitFrame
 }
 
 /// <summary>
-/// The AutoNumber a transaction level consumed in one table (R-FMT-2 Generated values), which the level's outermost
-/// Rollback writes to TableDef 0x14 when the file does not hold it yet. Only the case
-/// <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c> shows is written: values a SQL statement generated and
-/// inserted under unit increment, in a level that took a new page. <see cref="Unrecorded"/> names any other consumption
-/// of the level (a recordset AddNew, a refused row, an explicit value, a non-unit increment, a reseed, an inner
-/// Rollback): under unit increment, Rollback succeeds and writes nothing (keeping the in-memory counter consumed); only
-/// a non-unit increment refuses before acting (<see cref="MutationOpen.AutoNumberIncrement"/>).
+/// The AutoNumber a transaction level consumed in one table (R-FMT-2 Generated values), persisted to TableDef 0x14 by
+/// outer <see cref="TransactionCoordinator.CommitTrans"/> when not yet written by an accepted insert, and by outer
+/// <see cref="TransactionCoordinator.Rollback"/> for recorded cases: unit-increment ACCDB levels on an existing or new
+/// page (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>,
+/// <c>evidence/r-q27-autonumber-txn/ins-one-existing-txn-rb</c>, <c>ins-four-existing-txn-rb</c>,
+/// <c>rs-addnew-txn-rb-existing</c>, <c>rs-addnew-txn-rb-newpage</c>, <c>ins-dup-plain-txn-rb</c>,
+/// <c>ins-nested-inner-rb-outer-rb</c>), Jet 4 MDB clean SQL <c>INSERT ... SELECT</c> taking a new page
+/// (<c>ins-txn-rb-mdb</c>), and positive non-1 increment ACCDB multi-row <c>INSERT ... SELECT</c> into an empty table
+/// taking a new page (<c>ins-txn-rb-counter-100-5</c>). <see cref="Unrecorded"/> names any unrecorded consumption of the
+/// level: unrecorded non-1 increment Rollbacks refuse with <see cref="MutationOpen.AutoNumberIncrement"/>, unrecorded
+/// Jet 4 MDB Rollbacks refuse with <see cref="MutationOpen.CounterWrite"/>, and other unrecorded unit-increment ACCDB
+/// cases succeed writing nothing (keeping the in-memory counter consumed).
 /// </summary>
 internal readonly record struct AutoNumberMark(uint Value, int Increment, bool Reseed, string? Unrecorded)
 {
@@ -364,12 +373,29 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private int _statementChanges;
     private bool _statementHasSideEffect;
     private bool _statementAllowJet4MdbCommitCounter;
+    private int _statementExternalDepth;
+    private bool _statementHasOwnLevel;
     private int? _statementRefusal;
     private ResolutionOutcome? _statementFailure;
     private int _unwrittenPendingCount;
 
+    /// <summary>
+    /// Invoked after a publication writes a TableDef page to disk (<c>(cache, tableDefPage, publishedAutoNumber)</c>),
+    /// so the DAO adapter advances its stored-counter floor only when the value actually reaches the file (CUR-EDIT).
+    /// </summary>
+    public Action<PageCache, uint, uint>? AutoNumberPublished { get; set; }
+
     /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
     public bool InStatement => _statement is not null;
+
+    /// <summary>
+    /// Whether the active SQL action statement started outside any explicit transaction (<c>Depth == 0</c>) and opened
+    /// its own <c>dbFailOnError</c> statement level (<c>Depth == 1</c>).
+    /// </summary>
+    internal bool InAutocommitFailOnErrorStatementLevel => _statement is not null && _statementExternalDepth == 0 && _statementHasOwnLevel && _frames.Count == 1;
+
+    /// <summary>Whether the active statement's current transaction level already allocated a GlobalMap page on <paramref name="cache"/>.</summary>
+    internal bool HasStatementGlobalMapAllocation(PageCache cache) => _frames.Count > 0 && TookGlobalMapPage(_frames[^1], cache);
 
     /// <summary>
     /// Whether published changes of this Workspace released data pages, dropped-table pages, or reserved page-1 extent
@@ -522,6 +548,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         ExplicitFrame frame = new(_frames.Count + 1);
         _frames.Add(frame);
+        if (_statement is not null)
+        {
+            _statementHasOwnLevel = true;
+        }
         if (_frames.Count > 1)
         {
             foreach (FileParticipant p in _participants.Values)
@@ -552,6 +582,29 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(new MutationError(MutationError.NoTransaction, MutationErrorSource.Workspace));
         }
         ExplicitFrame top = _frames[^1];
+        List<(PageCache Cache, uint TableDefPage, uint Value)>? lostAutoNumbers = null;
+        if (_frames.Count == 1)
+        {
+            if (PlanCommittedAutoNumbers(top, out lostAutoNumbers) is { } refusedCommit)
+            {
+                return refusedCommit;
+            }
+            if (lostAutoNumbers is { Count: > 0 })
+            {
+                foreach ((PageCache cache, uint tdefPage, _) in lostAutoNumbers)
+                {
+                    LockAcquisition got = Lock(cache, [new LockResource(tdefPage, LockPurpose.TableDef)], LockLifetime.Transaction);
+                    if (got.Conflict is { } conflict)
+                    {
+                        if (conflict.HolderLifetime == LockLifetime.UntilPublished)
+                        {
+                            return new ResolutionOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
+                        }
+                        return new ResolutionOutcome(new MutationError(MutationError.LockedBySession, MutationErrorSource.Workspace));
+                    }
+                }
+            }
+        }
         _frames.RemoveAt(_frames.Count - 1);
         int resolved = top.Changes.Count;
         if (_frames.Count > 0)
@@ -561,6 +614,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             ExplicitFrame parent = _frames[^1];
             parent.Changes.AddRange(top.Changes);
             parent.UnwrittenCount += top.UnwrittenCount;
+            parent.StatementCount += top.StatementCount;
+            parent.HasNonInsertSelectWork |= top.HasNonInsertSelectWork;
             parent.MergeAutoNumbersFrom(top);
             if (top.StatementTableDefPages is { Count: > 0 } sidePages)
             {
@@ -581,6 +636,24 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 pop.OnTransactionCommit(top);
             }
             return new ResolutionOutcome(ResolvedChanges: resolved);
+        }
+        // CUR-EDIT (evidence/r-q10-commit-counter-edits/addnew-cancel-once,
+        // evidence/r-q-cursor-dao/edit-addnew-counter-rollback-reopen): any unit-increment AutoNumber consumed inside
+        // BeginTrans that is not yet reflected in the overlay or on disk must reach TableDef 0x14 on outer CommitTrans
+        // so reopening never reissues it (e.g. BeginTrans -> AddNew -> CancelUpdate -> CommitTrans).
+        if (lostAutoNumbers is { Count: > 0 })
+        {
+            FormatDescriptor d = FormatDescriptor.Jet4Family;
+            foreach ((PageCache cache, uint tdefPage, uint value) in lostAutoNumbers)
+            {
+                FileParticipant participant = EnsureParticipant(cache);
+                EditResult edited = participant.Edit(tdefPage, new TableDefCountsDelta(0, value, [], d));
+                if (!edited.Succeeded)
+                {
+                    return new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage} could not take the consumed AutoNumber on CommitTrans: {edited.Failure} {edited.Detail}", resolved);
+                }
+                _sideEffectRoles[(cache, tdefPage)] = PageRole.Catalog;
+            }
         }
         _pending.AddRange(top.Changes);
         _unwrittenPendingCount += top.UnwrittenCount;
@@ -613,6 +686,54 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             pop.OnTransactionCommit(top);
         }
         return new ResolutionOutcome(null, open, detail, resolved);
+    }
+
+    private ResolutionOutcome? PlanCommittedAutoNumbers(ExplicitFrame top, out List<(PageCache Cache, uint TableDefPage, uint Value)>? lost)
+    {
+        lost = null;
+        if (top.ConsumedAutoNumbers is not { Count: > 0 } marks)
+        {
+            return null;
+        }
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
+        {
+            uint current;
+            if (_participants.TryGetValue(cache, out FileParticipant? participant) && participant.Overlay.ChangedPages.Contains(tdefPage))
+            {
+                using PagePin? pin = participant.Overlay.Pin(tdefPage).Pin;
+                if (pin is null || pin.Bytes.Length != d.PageSize || pin.Bytes[d.DataPage.Kind.Offset] != 0x02)
+                {
+                    continue;
+                }
+                current = (uint)d.TableDef.AutoNumber.Read(pin.Bytes);
+            }
+            else
+            {
+                using PagePin? pin = cache.Pin(tdefPage).Pin;
+                if (pin is null || pin.Bytes.Length != d.PageSize || pin.Bytes[d.DataPage.Kind.Offset] != 0x02)
+                {
+                    continue;
+                }
+                current = (uint)d.TableDef.AutoNumber.Read(pin.Bytes);
+            }
+            if (!mark.IsLostAgainst(current))
+            {
+                continue;
+            }
+            if (mark.Increment != 1)
+            {
+                return new ResolutionOutcome(
+                    null,
+                    MutationOpen.AutoNumberIncrement,
+                    $"CommitTrans after an AutoNumber consumed on TableDef page {tdefPage} under non-1 increment ({mark.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
+            }
+            if (!mark.Reseed && Publisher is not null)
+            {
+                (lost ??= []).Add((cache, tdefPage, mark.Value));
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -794,6 +915,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _publications.Add(new PublicationReceipt(0, attempt.Program!));
             }
+            NotifyPublishedAutoNumbers(cache, roles);
             RecordBurst(cache, mode, trackLazyBurst);
             return (MutationOpen.None, null);
         }
@@ -806,6 +928,27 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     Unlock(cache, lockResources, LockLifetime.UntilPublished);
                 }
+            }
+        }
+    }
+
+    private void NotifyPublishedAutoNumbers(PageCache cache, Dictionary<ulong, PageRole> roles)
+    {
+        if (AutoNumberPublished is not { } callback)
+        {
+            return;
+        }
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        foreach ((ulong page, PageRole role) in roles)
+        {
+            if (role != PageRole.Catalog || page > uint.MaxValue)
+            {
+                continue;
+            }
+            using PagePin? pin = cache.Pin(page).Pin;
+            if (pin is not null && pin.Bytes.Length == d.PageSize && pin.Bytes[d.DataPage.Kind.Offset] == 0x02)
+            {
+                callback(cache, (uint)page, (uint)d.TableDef.AutoNumber.Read(pin.Bytes));
             }
         }
     }
@@ -837,24 +980,33 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// Record an AutoNumber value consumed or reseeded inside an explicit transaction level (<see cref="AutoNumberMark"/>):
-    /// the outermost <see cref="Rollback"/> writes it to TableDef 0x14 when the file does not hold it yet and
-    /// <paramref name="unrecorded"/> is null (<c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>), succeeds
-    /// writing nothing for every other unit-increment case (keeping the in-memory counter consumed), and refuses before
-    /// acting when <paramref name="increment"/> is not 1 (<see cref="MutationOpen.AutoNumberIncrement"/>).
+    /// outer <see cref="CommitTrans"/> writes any unpersisted unit-increment value to TableDef 0x14, and outer
+    /// <see cref="Rollback"/> writes recorded cases (ACCDB unit-increment existing/new page, Jet 4 MDB clean
+    /// <c>INSERT ... SELECT</c> new page, ACCDB positive non-1 increment multi-row <c>INSERT ... SELECT</c> into an
+    /// empty table taking a new page) while refusing unrecorded non-1 increment (<see cref="MutationOpen.AutoNumberIncrement"/>)
+    /// and unrecorded Jet 4 MDB (<see cref="MutationOpen.CounterWrite"/>) Rollbacks before acting.
     /// </summary>
     internal void RecordConsumedAutoNumber(PageCache cache, uint tableDefPage, uint value, int increment, bool reseed, string? unrecorded)
     {
         if (_frames.Count > 0)
         {
-            _frames[^1].RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, unrecorded));
+            ExplicitFrame top = _frames[^1];
+            top.RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, unrecorded));
+            if (_statement is null)
+            {
+                top.HasNonInsertSelectWork = true;
+            }
         }
     }
 
     /// <summary>
-    /// The error of a refused Update of the open statement (R-TXN-1 TXN-STMT): a Rollback of the statement's own level
-    /// writes the counters the refused INSERT reached after a 3022 (<c>evidence/r-q18-statements/ins-dup-fail</c>,
-    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>) or a 3201 (bytes not recorded;
-    /// <c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c> decides the error and next ID 5 only).
+    /// The error of a refused Update or conversion failure of the open statement (R-TXN-1 TXN-STMT): a Rollback of the
+    /// statement's own level at external depth 0 writes the counters the refused ACCDB INSERT reached after 3022
+    /// (<c>evidence/r-q18-statements/ins-dup-fail</c>, <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>,
+    /// <c>ins-dup-fail-two-pages</c>), 3201 (<c>ins-fk-3201-fail</c>), 3314 (<c>ins-req-3314-fail</c>), 3316
+    /// (<c>ins-val-3316-fail</c>), or 3464 (<c>ins-conv-3464-fail</c>), or in a Jet 4 MDB taking a new page after 3022
+    /// (<c>ins-dup-fail-mdb</c>); inside an explicit transaction only ACCDB 3022 (<c>ins-dup-fail-txn</c>) and 3201
+    /// (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>, answers only) are admitted.
     /// </summary>
     internal void NoteStatementRefusal(int number)
     {
@@ -865,10 +1017,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     }
 
     /// <summary>
-    /// Fold a refused 3022 unique insert's TableDef side effects into the active SQL statement's or transaction's single
-    /// write group (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; <c>evidence/r-q18-statements/ins-dup-plain</c>,
-    /// <c>evidence/r-q18-statements/ins-dup-plain-txn</c>, <c>evidence/r-q18-statements/ins-dup-fail</c>,
-    /// <c>evidence/r-q18-statements/ins-dup-fail-txn</c>). When <paramref name="edits"/> is empty, writes nothing:
+    /// Fold a refused insert's TableDef side effects into the active SQL statement's or transaction's single write group
+    /// (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER; <c>evidence/r-q18-statements/ins-dup-plain</c>,
+    /// <c>ins-dup-plain-txn</c>, <c>ins-dup-fail</c>, <c>ins-dup-fail-txn</c>;
+    /// <c>evidence/r-q27-autonumber-txn/ins-fk-3201-fail</c>, <c>ins-req-3314-fail</c>, <c>ins-val-3316-fail</c>,
+    /// <c>ins-conv-3464-fail</c>, <c>ins-dup-fail-mdb</c>). When <paramref name="edits"/> is empty, writes nothing:
     /// <c>evidence/r-err-1b/con-pk-duplicate-insert</c> and
     /// <c>evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror</c> keep identical before-open and after-close
     /// file hashes (<c>33192b8c7ea7</c>), unlike a recordset AddNew refused 3022
@@ -879,7 +1032,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         IReadOnlyList<PageEdit> edits,
         IReadOnlyList<LockResource> footprint,
         MutationErrorSource conflictSource,
-        out MutationError? error)
+        out MutationError? error,
+        bool allowJet4Mdb = false)
     {
         error = null;
         if (Publisher is null)
@@ -897,7 +1051,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror keep identical file hashes 33192b8c7ea7).
             return (MutationOpen.None, null);
         }
-        if ((_participants.ContainsKey(cache) || _frames.Count > 0) && AccdbHeader(cache) is false && !Jet4MdbHeader(cache))
+        if ((_participants.ContainsKey(cache) || _frames.Count > 0) && AccdbHeader(cache) is false && !(allowJet4Mdb && Jet4MdbHeader(cache)))
         {
             return (MutationOpen.CounterWrite, "refused unique insert TableDef counter side effects inside a statement or transaction in an MDB file are not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
         }
@@ -1063,6 +1217,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _publications.Add(new PublicationReceipt(_pending.Count, attempt.Program!));
             }
+            NotifyPublishedAutoNumbers(p.Cache, roles);
             if (publishedExtent > p.Cache.KnownExtentPages)
             {
                 p.Cache.NoteExtent(publishedExtent);
@@ -1265,85 +1420,80 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Capture level 2's reached TableDef counters before an inner Rollback from depth 2 to depth 1
     /// (<c>evidence/r-q27-autonumber-txn/ins-nested-inner-rb-outer-commit</c>,
-    /// <c>ins-nested-existing-inner-rb-outer-commit</c>, <c>ins-nested-inner-rb-outer-rb</c>). Only recorded for
-    /// single-file ACCDB unit-increment AutoNumber inserts with no reseed or unrecorded mark; depth &gt;= 3, MDB,
-    /// multi-file, and non-insert levels return null.
+    /// <c>ins-nested-existing-inner-rb-outer-commit</c>, <c>ins-nested-inner-rb-outer-rb</c>). Only recorded when
+    /// level 1 is empty and level 2 is a single SQL <c>INSERT ... SELECT</c> into one ACCDB unit-increment AutoNumber
+    /// table with no reseed or unrecorded mark; every other inner level returns null.
     /// </summary>
     private StatementCounters? PlanNestedRollbackCounters(ExplicitFrame top)
     {
         if (Publisher is null
             || top.Level != 2
+            || _frames.Count != 2
+            || top.StatementCount != 1
+            || top.HasNonInsertSelectWork
             || top.Changes.Count == 0
-            || top.Changes.Exists(c => c.Kind != RowChangeKind.Insert)
-            || top.ConsumedAutoNumbers is not { Count: > 0 } marks)
+            || top.ConsumedAutoNumbers is not { Count: 1 } marks)
         {
             return null;
         }
-        foreach (AutoNumberMark mark in marks.Values)
+        ExplicitFrame outer = _frames[0];
+        if (outer.Changes.Count > 0
+            || outer.StatementCount > 0
+            || outer.HasNonInsertSelectWork
+            || outer.ConsumedAutoNumbers is { Count: > 0 }
+            || outer.StatementTableDefPages is { Count: > 0 }
+            || outer.RolledBackGlobalMapAllocations is { Count: > 0 })
         {
-            if (mark.Increment != 1 || mark.Reseed || mark.Unrecorded is not null)
-            {
-                return null;
-            }
+            return null;
         }
-        HashSet<PageCache> files = [];
-        HashSet<uint> tdefPages = [];
-        bool tookPage = false;
+        ((PageCache file, uint onlyTdefPage), AutoNumberMark mark) = marks.First();
+        if (mark.Increment != 1 || mark.Reseed || mark.Unrecorded is not null || AccdbHeader(file) is not true)
+        {
+            return null;
+        }
+        bool tookPage = top.RolledBackGlobalMapAllocations?.Contains(file) == true;
         foreach (AcceptedRowChange change in top.Changes)
         {
-            if (change.Physical is not { } physical)
-            {
-                continue;
-            }
-            files.Add(physical.File);
-            tookPage |= AllocatesGlobalMapPage(physical);
-            foreach (PageEdit e in physical.Edits)
-            {
-                if (e.Role == PageRole.Catalog && e.Delta is TableDefCountsDelta)
-                {
-                    tdefPages.Add(e.Page);
-                }
-            }
-        }
-        if (files.Count != 1 || tdefPages.Count == 0)
-        {
-            return null;
-        }
-        PageCache file = files.First();
-        if (AccdbHeader(file) is not true || !_participants.TryGetValue(file, out FileParticipant? participant))
-        {
-            return null;
-        }
-        tookPage |= top.RolledBackGlobalMapAllocations?.Contains(file) == true;
-        FormatDescriptor d = FormatDescriptor.Jet4Family;
-        List<(uint TableDefPage, TableDefCounterSnapshotDelta Snapshot)> snapshots = [];
-        foreach (uint tdefPage in tdefPages)
-        {
-            using PagePin? pin = participant.Overlay.Pin(tdefPage).Pin;
-            if (pin is null || TableDefCounterSnapshotDelta.Capture(pin.Bytes, d) is not { } snap)
+            if (change.Kind != RowChangeKind.Insert
+                || change.Physical is not { } physical
+                || !ReferenceEquals(physical.File, file)
+                || change.Table.Table.FirstPage != onlyTdefPage)
             {
                 return null;
             }
-            snapshots.Add((tdefPage, snap));
+            tookPage |= AllocatesGlobalMapPage(physical);
         }
-        return new StatementCounters(file, snapshots, tookPage);
+        if (!_participants.TryGetValue(file, out FileParticipant? participant))
+        {
+            return null;
+        }
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        using PagePin? pin = participant.Overlay.Pin(onlyTdefPage).Pin;
+        if (pin is null || TableDefCounterSnapshotDelta.Capture(pin.Bytes, d) is not { } snap)
+        {
+            return null;
+        }
+        return new StatementCounters(file, [(onlyTdefPage, snap)], tookPage);
     }
 
     /// <summary>
     /// Decide what Rollback of <paramref name="top"/> writes, before anything is dropped.
     /// <list type="bullet">
-    /// <item>Non-1 increment: admitted only on outermost Rollback of one ACCDB file for positive increment SQL INSERT
-    /// generated values when the level took a new page (<c>evidence/r-q27-autonumber-txn/ins-txn-rb-counter-100-5</c>);
-    /// every other non-1 increment Rollback (negative increment, existing page, recordset AddNew, MDB, nested level,
-    /// explicit value, several files) refuses before acting (<see cref="MutationOpen.AutoNumberIncrement"/>).</item>
-    /// <item>Unit increment: on outermost Rollback of one ACCDB file writes TableDef 0x14 for both new-page levels (+2
-    /// with page 1 and Close: <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>,
+    /// <item>Non-1 increment: admitted only on outermost Rollback of one ACCDB file for a single multi-row SQL
+    /// <c>INSERT ... SELECT</c> into one empty table under a positive increment taking a new page
+    /// (<c>evidence/r-q27-autonumber-txn/ins-txn-rb-counter-100-5</c>); every other non-1 increment Rollback refuses
+    /// before acting (<see cref="MutationOpen.AutoNumberIncrement"/>).</item>
+    /// <item>Jet 4 MDB: admitted only on outermost Rollback for a single clean SQL <c>INSERT ... SELECT</c> into one
+    /// unit-increment AutoNumber table taking a new page (<c>ins-txn-rb-mdb</c>, writing TableDef 0x14 + page 1 + Close,
+    /// +2 on page 0); every other Jet 4 MDB Rollback whose consumed AutoNumber would be lost refuses before acting
+    /// (<see cref="MutationOpen.CounterWrite"/>).</item>
+    /// <item>Unit increment on ACCDB: on outermost Rollback of one ACCDB file writes TableDef 0x14 for both new-page
+    /// levels (+2 with page 1 and Close: <c>evidence/r-q18-statements/ins-clean-fail-txn-rollback</c>,
     /// <c>evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-newpage</c>, <c>ins-dup-plain-txn-rb</c>,
     /// <c>ins-nested-inner-rb-outer-rb</c>) and existing-page levels (+1, no page 1 or Close:
-    /// <c>ins-one-existing-txn-rb</c>, <c>ins-four-existing-txn-rb</c>, <c>rs-addnew-txn-rb-existing</c>); on Jet 4
-    /// MDB writes TableDef 0x14 + page 1 + Close (+2) when a new page was taken (<c>ins-txn-rb-mdb</c>). Unrecorded
-    /// unit-increment cases (reseed, inner Rollback at depth &gt;= 3, MDB existing page, explicit value, several files)
-    /// succeed and write nothing, keeping the in-memory counter consumed.</item>
+    /// <c>ins-one-existing-txn-rb</c>, <c>ins-four-existing-txn-rb</c>, <c>rs-addnew-txn-rb-existing</c>). Unrecorded
+    /// ACCDB unit-increment cases (reseed, inner Rollback at depth &gt;= 3, explicit value, several files) succeed and
+    /// write nothing, keeping the in-memory counter consumed.</item>
     /// </list>
     /// </summary>
     private ResolutionOutcome? PlanRolledBackAutoNumbers(ExplicitFrame top, out RolledBackAutoNumbers? write)
@@ -1354,19 +1504,32 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return null;
         }
         FormatDescriptor d = FormatDescriptor.Jet4Family;
-        PageCache? nonUnitFile = null;
         foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
         {
             if (mark.Increment != 1)
             {
+                bool emptyBeforeTxn = false;
+                if (AccdbHeader(cache) is true)
+                {
+                    using PagePin? tdef = cache.Pin(tdefPage).Pin;
+                    if (tdef is not null && tdef.Bytes.Length == d.PageSize && tdef.Bytes[d.DataPage.Kind.Offset] == 0x02)
+                    {
+                        emptyBeforeTxn = d.TableDef.RowCount.Read(tdef.Bytes) == 0;
+                    }
+                }
                 bool recordedNonUnit = Publisher is not null
                     && top.Level == 1
+                    && marks.Count == 1
                     && mark.Increment > 1
                     && !mark.Reseed
                     && mark.Unrecorded is null
                     && AccdbHeader(cache) is true
+                    && emptyBeforeTxn
                     && TookGlobalMapPage(top, cache)
-                    && (nonUnitFile is null || ReferenceEquals(nonUnitFile, cache));
+                    && top.StatementCount == 1
+                    && !top.HasNonInsertSelectWork
+                    && top.Changes.Count > 1
+                    && top.Changes.TrueForAll(c => c.Kind == RowChangeKind.Insert && c.Table.Table.FirstPage == tdefPage && ReferenceEquals(c.Physical?.File, cache));
                 if (!recordedNonUnit)
                 {
                     return new ResolutionOutcome(
@@ -1374,7 +1537,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         MutationOpen.AutoNumberIncrement,
                         $"Rollback after an AutoNumber consumed on TableDef page {tdefPage} under non-1 increment ({mark.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
                 }
-                nonUnitFile = cache;
             }
         }
         if (Publisher is null || top.Level > 1)
@@ -1403,10 +1565,30 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             bool isAccdb = AccdbHeader(cache) is true;
             bool isJet4Mdb = !isAccdb && Jet4MdbHeader(cache);
             bool cacheTookPage = TookGlobalMapPage(top, cache);
+            if (isJet4Mdb)
+            {
+                bool recordedJet4Mdb = top.Level == 1
+                    && marks.Count == 1
+                    && mark.Increment == 1
+                    && !mark.Reseed
+                    && mark.Unrecorded is null
+                    && cacheTookPage
+                    && top.StatementCount == 1
+                    && !top.HasNonInsertSelectWork
+                    && top.Changes.Count > 0
+                    && top.Changes.TrueForAll(c => c.Kind == RowChangeKind.Insert && c.Table.Table.FirstPage == tdefPage && ReferenceEquals(c.Physical?.File, cache));
+                if (!recordedJet4Mdb)
+                {
+                    return new ResolutionOutcome(
+                        null,
+                        MutationOpen.CounterWrite,
+                        $"Rollback after an AutoNumber consumed on TableDef page {tdefPage} in a Jet 4 MDB file is recorded only for a single clean SQL INSERT ... SELECT taking a new page (evidence/r-q27-autonumber-txn/ins-txn-rb-mdb)");
+                }
+            }
             if (mark.Unrecorded is not null
                 || mark.Reseed
                 || (file is not null && !ReferenceEquals(file, cache))
-                || (!isAccdb && !(isJet4Mdb && mark.Increment == 1 && cacheTookPage)))
+                || (!isAccdb && !isJet4Mdb))
             {
                 return null;
             }
@@ -1479,11 +1661,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// Rollback of the level a SQL statement opened for itself (a multi-row INSERT ... SELECT or DELETE with
-    /// dbFailOnError); it is always rolled back. After a recorded refusal (3022, 3201, 3314, 3316/3317, 3464 on ACCDB;
-    /// 3022 on Jet 4 MDB), the TableDef counters the statement reached are written as they stood (R-TXN-1 TXN-STMT,
-    /// R-CRASH-1 CRASH-ORDER): outside a transaction as one commit within Execute and a second at the statement's end,
-    /// and inside one into the enclosing level, written by its commit; when its rows took a new page, page 1 joins each
-    /// commit and is written again at Close (+3 outside a transaction, +2 inside; existing page: +2 outside, +1 inside;
+    /// dbFailOnError); it is always rolled back. After a recorded refusal (at external depth 0: 3022, 3201, 3314, 3316,
+    /// 3464 on ACCDB, or 3022 taking a new page on Jet 4 MDB; inside an explicit transaction: ACCDB 3022 or 3201), the
+    /// TableDef counters the statement reached are written as they stood (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER):
+    /// outside a transaction as one commit within Execute and a second at the statement's end, and inside one into the
+    /// enclosing level, written by its commit; when its rows took a new page, page 1 joins each commit and is written
+    /// again at Close (+3 outside a transaction, +2 inside; existing page: +2 outside, +1 inside;
     /// <c>evidence/r-q18-statements/ins-dup-fail</c>, <c>ins-dup-fail-txn</c>,
     /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>, <c>ins-fk-3201-fail</c>, <c>ins-req-3314-fail</c>,
     /// <c>ins-val-3316-fail</c>, <c>ins-conv-3464-fail</c>, <c>ins-dup-fail-two-pages</c>, <c>ins-dup-fail-mdb</c>).
@@ -1523,7 +1706,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     }
                     _sideEffectRoles[(counters.File, tdefPage)] = PageRole.Catalog;
                 }
-                if (counters.TookPage && (AccdbHeader(counters.File) is true || Jet4MdbHeader(counters.File)))
+                if (counters.TookPage && AccdbHeader(counters.File) is true)
                 {
                     uint globalMapPage = d.Map.GlobalMapPage;
                     if (!parent.Overlay.ChangedPages.Contains(globalMapPage))
@@ -1583,7 +1766,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 return new ResolutionOutcome(ResolvedChanges: resolved);
             }
             _statementAllowJet4MdbCommitCounter = isJet4Mdb;
-            (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, edits, footprint, MutationErrorSource.Database, out MutationError? err2);
+            (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, edits, footprint, MutationErrorSource.Database, out MutationError? err2, allowJet4Mdb: isJet4Mdb);
             if (err2 is not null || open2 != MutationOpen.None)
             {
                 _statementFailure = new ResolutionOutcome(err2, open2, detail2);
@@ -1601,12 +1784,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// Decide, before the statement's level is dropped, what its Rollback writes: nothing for a level with no rows and no
     /// counters, or one of UPDATE or DELETE changes (TXN-STMT: no candidate changed); the reached counters
     /// (<see cref="StatementCounters"/>) for an INSERT level in one ACCDB file (one or several data pages,
-    /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-two-pages</c>) after a 3022
-    /// (<c>evidence/r-q18-statements/ins-dup-fail</c>, <c>ins-dup-fail-txn</c>,
-    /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>), 3201 (<c>ins-fk-3201-fail</c>), 3314
-    /// (<c>ins-req-3314-fail</c>), 3316/3317 (<c>ins-val-3316-fail</c>), or 3464 (<c>ins-conv-3464-fail</c>), or in one
-    /// Jet 4 MDB file after a 3022 (<c>ins-dup-fail-mdb</c>); else the named <paramref name="limitation"/>: several
-    /// files, an MDB with a non-3022 refusal, non-1 increment, another refusal after earlier rows (3315, 3058, 3188),
+    /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-two-pages</c>) at external depth 0 after 3022
+    /// (<c>evidence/r-q18-statements/ins-dup-fail</c>, <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>),
+    /// 3201 (<c>ins-fk-3201-fail</c>), 3314 (<c>ins-req-3314-fail</c>), 3316 (<c>ins-val-3316-fail</c>), or 3464
+    /// (<c>ins-conv-3464-fail</c>), or inside an explicit transaction after 3022 (<c>ins-dup-fail-txn</c>) or 3201
+    /// (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>, <c>evidence/r-def-cat-txn/txn-stmt-compound-relation-fail</c>,
+    /// answers only), or in one Jet 4 MDB file at external depth 0 after 3022 taking a new page
+    /// (<c>ins-dup-fail-mdb</c>); else the named <paramref name="limitation"/>: several files, an unrecorded MDB case,
+    /// non-1 increment, another refusal after earlier rows (3315, 3317, 3058, 3188, or 3314/3316/3464 inside BeginTrans),
     /// or a stop of the statement itself. Division by zero (<c>evidence/r-q18-statements/ins-div0-fail</c>) does not
     /// reach here: a source row that fails to read stops the statement before its target opens.
     /// </summary>
@@ -1647,16 +1832,19 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         PageCache? file = files.Count == 1 ? files.First() : null;
         string? unrecorded = file is null ? $"{files.Count} files" : null;
         unrecorded ??= nonUnitIncrement ? "a non-1 AutoNumber increment" : null;
-        bool isRecordedRefusal = _statementRefusal is MutationError.Duplicate
-            or MutationError.RelatedRecordRequired
-            or MutationError.Required
-            or MutationError.RuleWithText
-            or MutationError.RuleWithoutText
-            or 3464;
+        bool inExplicitTxn = _frames.Count > 0;
+        bool isRecordedRefusal = inExplicitTxn
+            ? _statementRefusal is MutationError.Duplicate or MutationError.RelatedRecordRequired
+            : _statementRefusal is MutationError.Duplicate
+                or MutationError.RelatedRecordRequired
+                or MutationError.Required
+                or MutationError.RuleWithText
+                or 3464;
         if (unrecorded is null && AccdbHeader(file!) is false)
         {
-            // Jet 4 MDB statement Rollback counters are recorded only for 3022 (evidence/r-q27-autonumber-txn/ins-dup-fail-mdb).
-            if (!(Jet4MdbHeader(file!) && _statementRefusal == MutationError.Duplicate))
+            // Jet 4 MDB statement Rollback counters are recorded only at external depth 0 for 3022 taking a new page
+            // (evidence/r-q27-autonumber-txn/ins-dup-fail-mdb).
+            if (!(Jet4MdbHeader(file!) && !inExplicitTxn && _statementRefusal == MutationError.Duplicate && tookPage))
             {
                 unrecorded = "an MDB file";
             }
@@ -1711,6 +1899,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _jet4MdbCloseCommit.Clear();
         _statementHasSideEffect = false;
         _statementAllowJet4MdbCommitCounter = false;
+        _statementExternalDepth = 0;
+        _statementHasOwnLevel = false;
         _statementRefusal = null;
         _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
@@ -1761,7 +1951,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// Begin the publication scope of one SQL action statement (<see cref="StatementScope"/>). One statement at a time per
     /// Workspace; a BeginTrans inside it comes before its first change.
     /// </summary>
-    public StatementScope BeginStatement()
+    public StatementScope BeginStatement(bool isInsertSelect = false)
     {
         if (_statement is not null)
         {
@@ -1770,8 +1960,19 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementChanges = 0;
         _statementHasSideEffect = false;
         _statementAllowJet4MdbCommitCounter = false;
+        _statementExternalDepth = _frames.Count;
+        _statementHasOwnLevel = false;
         _statementRefusal = null;
         _statementFailure = null;
+        if (_frames.Count > 0)
+        {
+            ExplicitFrame current = _frames[^1];
+            current.StatementCount++;
+            if (!isInsertSelect)
+            {
+                current.HasNonInsertSelectWork = true;
+            }
+        }
         return _statement = new StatementScope(this);
     }
 
@@ -1784,6 +1985,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementHasSideEffect = false;
         bool allowJet4Mdb = _statementAllowJet4MdbCommitCounter;
         _statementAllowJet4MdbCommitCounter = false;
+        _statementExternalDepth = 0;
+        _statementHasOwnLevel = false;
         ResolutionOutcome? stmtFailure = _statementFailure;
         _statementFailure = null;
         _statementRefusal = null;
@@ -2212,6 +2415,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             ExplicitFrame frame = _frames[^1];
             frame.Changes.Add(change);
+            if (_statement is null)
+            {
+                frame.HasNonInsertSelectWork = true;
+            }
             if (change.Physical is null)
             {
                 frame.UnwrittenCount++;

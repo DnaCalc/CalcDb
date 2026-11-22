@@ -41,13 +41,32 @@ public sealed class AutonumberTxnReplayTests
 
     private sealed record Step(string Kind, string? Arg0 = null, int? Arg1 = null, IReadOnlyList<(string Field, object Value)>? PutFields = null);
 
-    public static TheoryData<string> AllTwentySevenQuestions()
+    public static TheoryData<string> AllAccdbRecords()
     {
         var data = new TheoryData<string>();
         string root = Path.Combine(SqlFixture.Root(), "evidence", "r-q27-autonumber-txn");
         foreach (string dir in Directory.GetDirectories(root).Order(StringComparer.Ordinal))
         {
             string question = Path.GetFileName(dir);
+            if (question is "ins-txn-rb-mdb" or "ins-dup-fail-mdb")
+            {
+                continue;
+            }
+            foreach (string file in Directory.GetFiles(dir, "*.json").Order(StringComparer.Ordinal))
+            {
+                data.Add($"{question}/{Path.GetFileName(file)}");
+            }
+        }
+        return data;
+    }
+
+    public static TheoryData<string> AllJet4MdbRecords()
+    {
+        var data = new TheoryData<string>();
+        string root = Path.Combine(SqlFixture.Root(), "evidence", "r-q27-autonumber-txn");
+        foreach (string question in new[] { "ins-dup-fail-mdb", "ins-txn-rb-mdb" })
+        {
+            string dir = Path.Combine(root, question);
             foreach (string file in Directory.GetFiles(dir, "*.json").Order(StringComparer.Ordinal))
             {
                 data.Add($"{question}/{Path.GetFileName(file)}");
@@ -57,47 +76,78 @@ public sealed class AutonumberTxnReplayTests
     }
 
     [Theory]
-    [MemberData(nameof(AllTwentySevenQuestions))]
-    public void R_q27_record_matches_ace_kept_pages_after_statement_and_after_next(string relativeRecord)
+    [MemberData(nameof(AllAccdbRecords))]
+    public void R_q27_accdb_record_matches_ace_kept_pages_after_statement_and_after_next(string relativeRecord)
     {
         string[] parts = relativeRecord.Split('/');
         RecordPlan plan = LoadPlan(parts[0], parts[1]);
 
-        // Stage 1: run the statement / transaction / recordset AddNew session on ACE's after-setup pages, then Close.
-        byte[] afterStatement;
-        using (var db = new KeptSetupDatabase(plan.SetupImage, plan.Question))
-        {
-            ExecuteSteps(db, plan);
-            if (db.Workspace.NeedsCloseCommit(db.Cache))
-            {
-                (MutationOpen closeOpen, string? closeDetail) = db.Workspace.PublishCloseCommit(db.Cache);
-                Assert.Equal(MutationOpen.None, closeOpen);
-                Assert.Null(closeDetail);
-            }
-            afterStatement = db.Image.Snapshot();
-        }
-        AssertMatchesCheckpoint(plan.Question, "after-statement", plan.Statement, afterStatement, mdbNormalInsertCounterOpen: false);
+        byte[] afterStatement = RunStage1(plan);
+        AssertMatchesCheckpoint(plan.Question, "after-statement", plan.Statement, afterStatement);
 
-        // Stage 2: reopen from Stage 1's closed image, run the follow-up INSERT, then Close.
-        byte[] afterNext;
-        using (var db = new KeptSetupDatabase(afterStatement, plan.Question))
+        byte[] afterNext = RunStage2(plan, afterStatement);
+        AssertMatchesCheckpoint(plan.Question, "after-next", plan.Next, afterNext);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllJet4MdbRecords))]
+    public void R_q27_jet4_mdb_record_matches_ace_after_statement_and_non_counter_after_next(string relativeRecord)
+    {
+        string[] parts = relativeRecord.Split('/');
+        RecordPlan plan = LoadPlan(parts[0], parts[1]);
+
+        // after-statement matches ACE 100% byte-for-byte including page 0 offset 3586.
+        byte[] afterStatement = RunStage1(plan);
+        AssertMatchesCheckpoint(plan.Question, "after-statement", plan.Statement, afterStatement);
+
+        // after-next: normal Jet 4 MDB INSERT + Close commit counter at page 0 offset 3586 remains an open gap
+        // (qualified.md R-CRASH-1; CounterAndLandingTests.CommitCounter_carries_across_reopen_refuses_overflow_at_255_and_ignores_jet4_mdb).
+        // Assert the exact +2 open gap at page 0 offset 3586 and strict byte equality on every other kept byte.
+        byte[] afterNext = RunStage2(plan, afterStatement);
+        int counterOffset = D.Header.CommitCounter.Offset;
+        byte? expectedCounter = null;
+        foreach ((long offset, byte[] bytes) in plan.Next.Reads)
         {
-            ActionOutcome next = ActionExecutor.Execute(plan.NextSql, db, options: plan.NextOptions);
-            Assert.True(next.Succeeded, $"{plan.Question} follow-up failed: {next.Failure}");
-            Assert.Equal(1, next.RecordsAffected);
-            if (db.Workspace.NeedsCloseCommit(db.Cache))
+            if (counterOffset >= offset && counterOffset < offset + bytes.Length)
             {
-                (MutationOpen closeOpen, string? closeDetail) = db.Workspace.PublishCloseCommit(db.Cache);
-                Assert.Equal(MutationOpen.None, closeOpen);
-                Assert.Null(closeDetail);
+                expectedCounter = bytes[counterOffset - offset];
+                break;
             }
-            afterNext = db.Image.Snapshot();
         }
-        // Normal Jet 4 MDB INSERT + Close commit-counter at page 0 offset 3586 stays Open (qualified.md R-CRASH-1;
-        // CounterAndLandingTests.CommitCounter_carries_across_reopen_refuses_overflow_at_255_and_ignores_jet4_mdb).
-        // Every other kept byte of after-next (and 100% of after-statement including offset 3586) must match ACE byte-for-byte.
-        bool isMdb = plan.Question is "ins-txn-rb-mdb" or "ins-dup-fail-mdb";
-        AssertMatchesCheckpoint(plan.Question, "after-next", plan.Next, afterNext, mdbNormalInsertCounterOpen: isMdb);
+        Assert.NotNull(expectedCounter);
+        Assert.Equal((byte)(afterNext[counterOffset] + 2), expectedCounter!.Value);
+
+        byte[] normalizedForNonCounterCheck = (byte[])afterNext.Clone();
+        normalizedForNonCounterCheck[counterOffset] = expectedCounter.Value;
+        AssertMatchesCheckpoint(plan.Question, "after-next (non-counter bytes)", plan.Next, normalizedForNonCounterCheck);
+    }
+
+    private static byte[] RunStage1(RecordPlan plan)
+    {
+        using var db = new KeptSetupDatabase(plan.SetupImage, plan.Question);
+        ExecuteSteps(db, plan);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            (MutationOpen closeOpen, string? closeDetail) = db.Workspace.PublishCloseCommit(db.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+        }
+        return db.Image.Snapshot();
+    }
+
+    private static byte[] RunStage2(RecordPlan plan, byte[] afterStatement)
+    {
+        using var db = new KeptSetupDatabase(afterStatement, plan.Question);
+        ActionOutcome next = ActionExecutor.Execute(plan.NextSql, db, options: plan.NextOptions);
+        Assert.True(next.Succeeded, $"{plan.Question} follow-up failed: {next.Failure}");
+        Assert.Equal(1, next.RecordsAffected);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            (MutationOpen closeOpen, string? closeDetail) = db.Workspace.PublishCloseCommit(db.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+        }
+        return db.Image.Snapshot();
     }
 
     [Fact]
@@ -113,7 +163,8 @@ public sealed class AutonumberTxnReplayTests
             Assert.Equal("NotModelled.Edit.AutoNumberIncrement", expNonUnit.Failure.NotModelled);
         }
 
-        // 2. Non-1 increment Rollback on an existing page (no new page taken): refused before acting (MutationOpen.AutoNumberIncrement).
+        // 2. Non-1 increment Rollback on an existing page (no new page taken) or single-row INSERT VALUES on a new page:
+        // refused before acting (MutationOpen.AutoNumberIncrement).
         using (var db = new KeptSetupDatabase(incPlan.SetupImage, incPlan.Question))
         {
             ActionOutcome seed = ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (1, 'seed')", db, options: 128);
@@ -121,6 +172,16 @@ public sealed class AutonumberTxnReplayTests
             Assert.Null(db.Workspace.BeginTrans());
             ActionOutcome inTxn = ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (2, 'room')", db, options: 128);
             Assert.True(inTxn.Succeeded, inTxn.Failure?.ToString());
+            ResolutionOutcome rb = db.Workspace.Rollback();
+            Assert.Equal(MutationOpen.AutoNumberIncrement, rb.Open);
+            Assert.Equal(1, db.Workspace.Depth);
+            Assert.True(db.Workspace.CommitTrans().Succeeded);
+        }
+        using (var db = new KeptSetupDatabase(incPlan.SetupImage, incPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome singleVal = ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (1, 'one-val')", db, options: 128);
+            Assert.True(singleVal.Succeeded, singleVal.Failure?.ToString());
             ResolutionOutcome rb = db.Workspace.Rollback();
             Assert.Equal(MutationOpen.AutoNumberIncrement, rb.Open);
             Assert.Equal(1, db.Workspace.Depth);
@@ -149,7 +210,8 @@ public sealed class AutonumberTxnReplayTests
             Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", lateDivZero.Failure.NotModelled);
         }
 
-        // 5. Jet 4 MDB existing-page Rollback: unrecorded; Rollback leaves file unchanged (no MDB existing-page rollback record).
+        // 5. Jet 4 MDB existing-page Rollback (no new page taken) and Jet 4 MDB INSERT VALUES new-page Rollback:
+        // unrecorded; Rollback refuses by name (MutationOpen.CounterWrite) before acting and leaves disk untouched.
         RecordPlan mdbPlan = LoadPlan("ins-txn-rb-mdb", FirstA1("ins-txn-rb-mdb"));
         using (var db = new KeptSetupDatabase(mdbPlan.SetupImage, mdbPlan.Question))
         {
@@ -165,8 +227,155 @@ public sealed class AutonumberTxnReplayTests
             ActionOutcome inTxn = ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (2, 'room')", db, options: 128);
             Assert.True(inTxn.Succeeded, inTxn.Failure?.ToString());
             ResolutionOutcome rb = db.Workspace.Rollback();
-            Assert.True(rb.Succeeded, rb.ToString());
+            Assert.False(rb.Succeeded);
+            Assert.Equal(MutationOpen.CounterWrite, rb.Open);
+            Assert.Equal(1, db.Workspace.Depth);
             Assert.Equal(beforeTxn, db.Image.Snapshot());
+            Assert.True(db.Workspace.CommitTrans().Succeeded);
+        }
+        using (var db = new KeptSetupDatabase(mdbPlan.SetupImage, mdbPlan.Question))
+        {
+            byte[] beforeTxn = db.Image.Snapshot();
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome singleVal = ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (1, 'one-val')", db, options: 128);
+            Assert.True(singleVal.Succeeded, singleVal.Failure?.ToString());
+            ResolutionOutcome rb = db.Workspace.Rollback();
+            Assert.False(rb.Succeeded);
+            Assert.Equal(MutationOpen.CounterWrite, rb.Open);
+            Assert.Equal(1, db.Workspace.Depth);
+            Assert.Equal(beforeTxn, db.Image.Snapshot());
+            Assert.True(db.Workspace.CommitTrans().Succeeded);
+        }
+
+        // 6. Jet 4 MDB 3022 statement rollback inside BeginTrans and on an existing page: refused (CounterWrite).
+        RecordPlan mdbDupPlan = LoadPlan("ins-dup-fail-mdb", FirstA1("ins-dup-fail-mdb"));
+        using (var db = new KeptSetupDatabase(mdbDupPlan.SetupImage, mdbDupPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnMdbDup = ActionExecutor.Execute("INSERT INTO An (K, S) SELECT K, S FROM Src ORDER BY N", db, options: 128);
+            Assert.False(inTxnMdbDup.Succeeded);
+            Assert.True(inTxnMdbDup.Failure!.IsNotModelled, inTxnMdbDup.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.CounterWrite", inTxnMdbDup.Failure.NotModelled);
+            Assert.Equal(MutationOpen.CounterWrite, db.Workspace.Rollback().Open);
+        }
+        using (var db = new KeptSetupDatabase(mdbDupPlan.SetupImage, mdbDupPlan.Question))
+        {
+            Assert.True(ActionExecutor.Execute("INSERT INTO An (K, S) VALUES (999, 'seed')", db, options: 128).Succeeded);
+            ActionOutcome existingMdbDup = ActionExecutor.Execute("INSERT INTO An (K, S) SELECT K, S FROM Src ORDER BY N", db, options: 128);
+            Assert.False(existingMdbDup.Succeeded);
+            Assert.True(existingMdbDup.Failure!.IsNotModelled, existingMdbDup.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.CounterWrite", existingMdbDup.Failure.NotModelled);
+        }
+
+        // 7. 3464 on explicit AutoNumber INSERT...SELECT does not consume a generated ticket and stays refused;
+        // 3464 inside BeginTrans stays refused; 3464 under non-1 increment surfaces AutoNumberIncrement (not CounterWrite).
+        string convSql = convPlan.StatementSteps.Single(s => s.Kind == "Execute").Arg0!;
+        string explicitConvSql = convSql.Replace("INSERT INTO An (", "INSERT INTO An (ID, ", StringComparison.Ordinal)
+            .Replace("SELECT ", "SELECT N + 100, ", StringComparison.Ordinal);
+        using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
+        {
+            TableEditContext ctx = db.EditContext("An", out string? err)!;
+            Assert.Null(err);
+            ActionOutcome explicitConv = ActionExecutor.Execute(explicitConvSql, db, options: 128);
+            Assert.False(explicitConv.Succeeded);
+            Assert.True(explicitConv.Failure!.IsNotModelled, explicitConv.Failure.ToString());
+            Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", explicitConv.Failure.NotModelled);
+            Assert.Equal(102, ctx.Counter!.Last); // rows 1..2 observed explicit IDs 101..102; row 3 did not consume a generated ticket (103)
+        }
+        using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnConv = ActionExecutor.Execute(convSql, db, options: 128);
+            Assert.False(inTxnConv.Succeeded);
+            Assert.True(inTxnConv.Failure!.IsNotModelled, inTxnConv.Failure.ToString());
+            Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", inTxnConv.Failure.NotModelled);
+        }
+        using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
+        {
+            uint anPage = db.Table("An")!.FirstPage;
+            byte[] tdef = db.Image.Snapshot().AsSpan((int)(anPage * D.PageSize), D.PageSize).ToArray();
+            D.TableDef.AutoNumberIncrement.Write(tdef, 5u);
+            db.Image.WriteAt(anPage * (ulong)D.PageSize, tdef);
+            db.Cache.PublishReuse(anPage);
+            using var nonUnitDb = new KeptSetupDatabase(db.Image.Snapshot(), convPlan.Question);
+            ActionOutcome nonUnitConv = ActionExecutor.Execute(convSql, nonUnitDb, options: 128);
+            Assert.False(nonUnitConv.Succeeded);
+            Assert.True(nonUnitConv.Failure!.IsNotModelled, nonUnitConv.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.AutoNumberIncrement", nonUnitConv.Failure.NotModelled);
+        }
+
+        // 8. Downward explicit AutoNumber reseed inside BeginTrans or on recordset AddNew is refused with AutoNumberReseed.
+        RecordPlan gapPlan = LoadPlan("exp-gap-5", FirstA1("exp-gap-5"));
+        using (var db = new KeptSetupDatabase(gapPlan.SetupImage, gapPlan.Question))
+        {
+            TableEditContext ctx = db.EditContext("An", out string? err)!;
+            Assert.Null(err);
+            byte[] before = db.Image.Snapshot();
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnDown = ActionExecutor.Execute("INSERT INTO An (ID, K, S) VALUES (5, 105, 'gap5')", db, options: 128);
+            Assert.False(inTxnDown.Succeeded);
+            Assert.True(inTxnDown.Failure!.IsNotModelled, inTxnDown.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.AutoNumberReseed", inTxnDown.Failure.NotModelled);
+            Assert.Equal(before, db.Image.Snapshot());
+            Assert.True(ctx.Counter!.Last >= 10);
+        }
+        using (var db = new KeptSetupDatabase(gapPlan.SetupImage, gapPlan.Question))
+        {
+            TableDefinition an = db.Table("An")!;
+            TableEditContext ctx = db.EditContext("An", out string? err)!;
+            Assert.Null(err);
+            using TableCursor cursor = db.OpenCursor(an, out string? curErr)!;
+            Assert.Null(curErr);
+            using var frame = new EditFrame(ctx, cursor, db.Workspace);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(an.Columns.Single(c => c.Name == "ID"), new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 5 }).Succeeded);
+            Assert.True(frame.Assign(an.Columns.Single(c => c.Name == "K"), new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 105 }).Succeeded);
+            UpdateOutcome rsDown = frame.Update();
+            Assert.False(rsDown.Succeeded);
+            Assert.Equal(MutationOpen.AutoNumberReseed, rsDown.Open);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // 9. 3314 and 3316 statement rollback inside BeginTrans are refused with CounterWrite.
+        RecordPlan reqPlan = LoadPlan("ins-req-3314-fail", FirstA1("ins-req-3314-fail"));
+        string reqSql = reqPlan.StatementSteps.Single(s => s.Kind == "Execute").Arg0!;
+        using (var db = new KeptSetupDatabase(reqPlan.SetupImage, reqPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnReq = ActionExecutor.Execute(reqSql, db, options: 128);
+            Assert.False(inTxnReq.Succeeded);
+            Assert.True(inTxnReq.Failure!.IsNotModelled, inTxnReq.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.CounterWrite", inTxnReq.Failure.NotModelled);
+        }
+        RecordPlan valPlan = LoadPlan("ins-val-3316-fail", FirstA1("ins-val-3316-fail"));
+        string valSql = valPlan.StatementSteps.Single(s => s.Kind == "Execute").Arg0!;
+        using (var db = new KeptSetupDatabase(valPlan.SetupImage, valPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnVal = ActionExecutor.Execute(valSql, db, options: 128);
+            Assert.False(inTxnVal.Succeeded);
+            Assert.True(inTxnVal.Failure!.IsNotModelled, inTxnVal.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.CounterWrite", inTxnVal.Failure.NotModelled);
+        }
+
+        // 10. INSERT (...) SELECT keeps AliasShadowsColumn and DuplicateOutputName (duplicate alias, qualified repeat).
+        RecordPlan twoPagePlan = LoadPlan("ins-clean-two-pages", FirstA1("ins-clean-two-pages"));
+        using (var db = new KeptSetupDatabase(twoPagePlan.SetupImage, twoPagePlan.Question))
+        {
+            ActionOutcome aliasShadows = ActionExecutor.Execute("INSERT INTO An (K, S1, S2, S3, S4) SELECT K, K AS P, P, P, P FROM Src ORDER BY N", db, options: 128);
+            Assert.False(aliasShadows.Succeeded);
+            Assert.True(aliasShadows.Failure!.IsNotModelled, aliasShadows.Failure.ToString());
+            Assert.Equal("NotModelled.AliasShadowsColumn", aliasShadows.Failure.NotModelled);
+
+            ActionOutcome duplicateAlias = ActionExecutor.Execute("INSERT INTO An (K, S1, S2, S3, S4) SELECT K, P AS X, P AS X, P, P FROM Src ORDER BY N", db, options: 128);
+            Assert.False(duplicateAlias.Succeeded);
+            Assert.False(duplicateAlias.Failure!.IsNotModelled, duplicateAlias.Failure.ToString());
+            Assert.Equal(3062, duplicateAlias.Failure.Number);
+
+            ActionOutcome qualifiedRepeat = ActionExecutor.Execute("INSERT INTO An (K, S1, S2, S3, S4) SELECT K, Src.P, Src.P, Src.P, Src.P FROM Src ORDER BY N", db, options: 128);
+            Assert.False(qualifiedRepeat.Succeeded);
+            Assert.True(qualifiedRepeat.Failure!.IsNotModelled, qualifiedRepeat.Failure.ToString());
+            Assert.Equal("NotModelled.DuplicateOutputName", qualifiedRepeat.Failure.NotModelled);
         }
     }
 
@@ -445,11 +654,10 @@ public sealed class AutonumberTxnReplayTests
             nextOptions);
     }
 
-    private static void AssertMatchesCheckpoint(string question, string label, Checkpoint expected, byte[] actual, bool mdbNormalInsertCounterOpen)
+    private static void AssertMatchesCheckpoint(string question, string label, Checkpoint expected, byte[] actual)
     {
         Assert.Equal(expected.Length, actual.Length);
         List<string> diffs = [];
-        int counterOffset = D.Header.CommitCounter.Offset;
         foreach ((long offset, byte[] expectedBytes) in expected.Reads)
         {
             ReadOnlySpan<byte> mine = actual.AsSpan((int)offset, expectedBytes.Length);
@@ -458,13 +666,6 @@ public sealed class AutonumberTxnReplayTests
                 if (mine[i] != expectedBytes[i])
                 {
                     long abs = offset + i;
-                    if (mdbNormalInsertCounterOpen && abs == counterOffset)
-                    {
-                        // Normal Jet 4 MDB INSERT + Close commit counter is Open (qualified.md R-CRASH-1); verify the
-                        // exact +2 gap (+1 statement +1 Close) while asserting every other kept byte matches ACE.
-                        Assert.Equal((byte)(mine[i] + 2), expectedBytes[i]);
-                        continue;
-                    }
                     long page = abs / D.PageSize;
                     long pageOff = abs % D.PageSize;
                     diffs.Add($"page {page} +{pageOff} (abs {abs}): ours {mine[i]:X2}, ACE {expectedBytes[i]:X2}");

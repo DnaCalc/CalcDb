@@ -174,14 +174,14 @@ public sealed class BoundAction : IDisposable
         if (_syntax.SourceSelectHasFrom)
         {
             // INSERT INTO T (c1, c2, ...) SELECT ... maps the SELECT's outputs by position rather than by name, so
-            // repeated unaliased source columns (evidence/r-q27-autonumber-txn ins-clean-two-pages,
-            // ins-dup-fail-two-pages: SELECT K, P, P, P, P) do not collide on a caller-visible output name.
+            // repeated unqualified unaliased base columns of one source table (evidence/r-q27-autonumber-txn
+            // ins-clean-two-pages, ins-dup-fail-two-pages: SELECT K, P, P, P, P) do not collide; other collisions stay refused.
             BoundSelect? boundSelect = BoundSelect.BindWithParameters(
                 select,
                 database,
                 ParameterList,
                 out SqlFailure? sf,
-                allowDuplicateOutputNames: _syntax.TargetColumns is not null);
+                allowRepeatedSingleSourceColumn: _syntax.TargetColumns is not null);
             if (boundSelect is null)
             {
                 return sf;

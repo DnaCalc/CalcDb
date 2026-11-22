@@ -711,8 +711,8 @@ public sealed class BoundSelect : IDisposable
         ISqlDatabase database,
         List<QueryParameter> parameters,
         out SqlFailure? failure,
-        bool allowDuplicateOutputNames = false) =>
-        Bind(syntax, database, ownsSyntax: false, parameters, out failure, allowDuplicateOutputNames);
+        bool allowRepeatedSingleSourceColumn = false) =>
+        Bind(syntax, database, ownsSyntax: false, parameters, out failure, allowRepeatedSingleSourceColumn);
 
     private static BoundSelect? Bind(
         SelectSyntax syntax,
@@ -720,7 +720,7 @@ public sealed class BoundSelect : IDisposable
         bool ownsSyntax,
         List<QueryParameter> parameters,
         out SqlFailure? failure,
-        bool allowDuplicateOutputNames = false)
+        bool allowRepeatedSingleSourceColumn = false)
     {
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
@@ -736,7 +736,7 @@ public sealed class BoundSelect : IDisposable
         }
         else if (failure is null)
         {
-            failure = new Binder(bound, syntax, database, allowDuplicateOutputNames).Run();
+            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn).Run();
         }
         if (failure is not null)
         {
@@ -1292,7 +1292,7 @@ public sealed class BoundSelect : IDisposable
         }
     }
 
-    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowDuplicateOutputNames = false)
+    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false)
     {
         private readonly ExpressionContext _context = database.Context;
         private SourceScope _scope = null!;
@@ -1366,7 +1366,7 @@ public sealed class BoundSelect : IDisposable
                 // qualified.md R-SQL-1 SQL-B: 255 output columns open, 256 fail 3190.
                 return SqlFailure.Ace(SqlPhase.Bind, 3190, "Too many fields defined.");
             }
-            if (!allowDuplicateOutputNames && Collisions() is { } collision)
+            if (Collisions() is { } collision)
             {
                 return collision;
             }
@@ -1422,14 +1422,26 @@ public sealed class BoundSelect : IDisposable
         /// Output names that collide. Two or more unaliased field columns of one name from different sources — whether
         /// written qualified (<c>SELECT a.id, b.id</c>, r-sql-1/b-output-names) or expanded by <c>*</c> / <c>s.*</c>
         /// (<c>SELECT * FROM PA INNER JOIN CH …</c>, r-def-cursor-dao/join-field-names-and-lookup) — are named <c>q.f</c>;
-        /// other collisions rename by a rule not identified (<c>R.lid, R.lid</c> gives "Expr1001", "lid"; an alias equal to
-        /// another column's name renames that column, r-expr-1/b-floating-fidelity).
+        /// inside <c>INSERT INTO T (c1, c2, ...) SELECT ...</c>, repeating an unqualified unaliased base column of a single
+        /// non-subquery source table is allowed (evidence/r-q27-autonumber-txn/ins-clean-two-pages, ins-dup-fail-two-pages:
+        /// <c>SELECT K, P, P, P, P</c>); other collisions rename by a rule not identified (<c>R.lid, R.lid</c> gives
+        /// "Expr1001", "lid"; an alias equal to another column's name renames that column, r-expr-1/b-floating-fidelity).
         /// </summary>
         private SqlFailure? Collisions()
         {
             foreach (IGrouping<string, ResultColumn> same in bound.ColumnList.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
             {
                 List<ResultColumn> group = [.. same];
+                if (allowRepeatedSingleSourceColumn
+                    && bound.SourceList.Count == 1
+                    && bound.SourceList[0].Subquery is null
+                    && group.All(c => c.Program.BareField is { Source: 0 }
+                        && c.Root is { Kind: SyntaxKind.Name, Text: { } nameText }
+                        && !nameText.Contains('.')
+                        && !syntax.Items.Any(i => i.Alias is not null && ReferenceEquals(i.Expression?.Syntax.Root, c.Root))))
+                {
+                    continue;
+                }
                 bool unaliasedFields = group.All(c => c.Program.BareField is not null
                     && (c.Root is null
                         || (c.Root is { Kind: SyntaxKind.Name, Text: { } t } && t.Contains('.')

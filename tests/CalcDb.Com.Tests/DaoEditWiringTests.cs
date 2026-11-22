@@ -102,4 +102,29 @@ public sealed unsafe class DaoEditWiringTests
         Assert.Equal(FailureKind.NotModelled, gap.Kind);
         Assert.StartsWith("NotModelled.Edit.CommitBurstGap:", gap.Description, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void MarkAutoNumberPublished_by_cache_and_tableDefPage_clears_CounterAhead_across_databases()
+    {
+        using var file = new CalcDb.Storage.MemoryDatabaseFile(new byte[4096 * 4], 4096);
+        var cache1 = new CalcDb.Storage.PageCache(file, file.Incarnation, 4096, 8);
+        var cache2 = new CalcDb.Storage.PageCache(file, file.Incarnation, 4096, 8);
+        var changes = new UnpublishedChanges();
+        var first = new AutoNumberCounter(10);
+        var second = new AutoNumberCounter(10);
+        changes.Register(@"C:\f.accdb", "An", first, 10, cache1, tableDefPage: 42);
+        changes.Register(@"C:\F.ACCDB", "an", second, 10, cache2, tableDefPage: 42);
+
+        // Issuing a ticket inside BeginTrans does not publish to disk yet: second Database sees CounterAhead == true.
+        first.Issue(); // 11
+        Assert.True(changes.CounterAhead(@"C:\f.accdb", "An", second));
+
+        // Unrelated page publication does not clear CounterAhead.
+        changes.MarkAutoNumberPublished(cache1, tableDefPage: 99, floor: 11);
+        Assert.True(changes.CounterAhead(@"C:\f.accdb", "An", second));
+
+        // Publication of TableDef page 42 on cache1 updates stored floor for all Databases on that file/table.
+        changes.MarkAutoNumberPublished(cache1, tableDefPage: 42, floor: 11);
+        Assert.False(changes.CounterAhead(@"C:\f.accdb", "An", second));
+    }
 }
