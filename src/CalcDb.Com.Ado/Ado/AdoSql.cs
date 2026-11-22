@@ -273,6 +273,15 @@ internal static class AdoSqlErrors
             3010 => Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003010, "3010", -534840599, AdoObject.IidCommand),
             // r-str-ado-act/ado-errors (DROP TABLE missing)
             3376 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, "3376", -539034905, AdoObject.IidCommand),
+            // evidence/r-q28-schema-write-open/pair-ado-Aa-aA, pair-ado-fe-FE, pair-ado-nfc-nfd, pair-ado-ae-lig,
+            // pair-ado-sz-ss: ad-hoc CREATE TABLE duplicate field fails 0x80040E21 (DB_E_ERRORSOCCURRED),
+            // helpContext 5003191, SQLState "3380", NativeError -539297252, IID_ICommand; saved queries and other
+            // 3380 shapes have no ADO record.
+            3380 when !isSavedQuery && sql is not null && DdlParser.Parse(sql, out _) is CreateTableStatement =>
+                Make(AdoObject.HResultErrorsOccurred, failure.Message, 5003191, "3380", -539297252, AdoObject.IidCommand),
+            3380 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3380 on this statement is not recorded (only ad-hoc CREATE TABLE is recorded in evidence/r-q28-schema-write-open/pair-ado-*)",
+                out unmodelled),
             // r-fix-wire-ado/fields-refresh-ddl-keyset-only #27-35, r-ado-1b/fields-refresh-ddl #29-37:
             // ADO 3211 error tuple is recorded only for ALTER TABLE ADD COLUMN on a held table; DROP TABLE and other DDL
             // shapes have DAO records only (no ADO Errors SQLState/NativeError record) and refuse by name.
