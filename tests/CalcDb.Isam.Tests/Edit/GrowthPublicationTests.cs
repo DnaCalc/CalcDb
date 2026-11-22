@@ -455,23 +455,27 @@ public sealed class GrowthPublicationTests
 
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.AddNew().Succeeded);
-        // AddNew immediately persists the consumed AutoNumber and starts its own burst (evidence/r-q10-commit-counter-edits).
-        byte[] afterAddNew = rig.File.Image.Snapshot();
-        Assert.Equal(3u, DecodeTableDef(afterAddNew, g.FirstPage).AutoNumber);
-        Assert.Equal(2u, DecodeTableDef(afterAddNew, g.FirstPage).RowCount);
-        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, afterAddNew[D.Header.CommitCounter.Offset]);
+        // Inside BeginTrans, recordset AddNew issues the ticket in memory and defers disk write-back until
+        // CommitTrans or Rollback (evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage;
+        // evidence/r-q-cursor-dao/edit-addnew-counter-rollback-reopen).
+        Assert.Equal(3, frame.Read(Col(g, "ID")).Value.Integer);
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
 
         AssignText(frame, Col(g, "T"), "tx1");
         Assert.True(frame.Assign(Col(g, "N"), I4(99)).Succeeded);
         AssignText(frame, Col(g, "U"), "txu1");
         Assert.True(frame.Update().Succeeded);
-        Assert.Equal(afterAddNew, rig.File.Image.Snapshot()); // row insert stays unpublished inside BeginTrans
+        Assert.Equal(rig.Before, rig.File.Image.Snapshot()); // row insert and AutoNumber stay unpublished inside BeginTrans
 
         ResolutionOutcome commit = rig.A.CommitTrans(options);
         Assert.True(commit.Succeeded, commit.ToString());
+        byte[] afterCommit = rig.File.Image.Snapshot();
+        Assert.Equal(3u, DecodeTableDef(afterCommit, g.FirstPage).AutoNumber);
+        Assert.Equal(3u, DecodeTableDef(afterCommit, g.FirstPage).RowCount);
+        Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, afterCommit[D.Header.CommitCounter.Offset]);
         Assert.Equal(options, rig.File.Image.Flushes);
         Assert.Equal(3, cursor.RecordCount);
-        AssertInspectorClean(rig.File.Image.Snapshot());
+        AssertInspectorClean(afterCommit);
     }
 
     [Fact]
@@ -489,14 +493,15 @@ public sealed class GrowthPublicationTests
         Assert.True(frame.Update().Succeeded);
         Assert.True(rig.A.Rollback().Succeeded);
 
-        // R-FMT-2 Generated values & evidence/r-q10-commit-counter-edits/rolled-back-addnew:
-        // AddNew's AutoNumber advance and its page-0 commit-counter burst survive Rollback while RowCount stays 2.
+        // R-FMT-2 Generated values, evidence/r-q10-commit-counter-edits/rolled-back-addnew, and
+        // evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing: Rollback writes the consumed AutoNumber
+        // (+1 on page 0) while RowCount stays 2.
         byte[] after = rig.File.Image.Snapshot();
         TableDefinition gAfter = DecodeTableDef(after, g.FirstPage);
         Assert.Equal(2u, gAfter.RowCount);
         Assert.Equal(3u, gAfter.AutoNumber);
         Assert.Equal(rig.Before[D.Header.CommitCounter.Offset] + 1, after[D.Header.CommitCounter.Offset]);
-        Assert.Single(rig.A.Publications); // only the non-transactional AddNew AutoNumber publication
+        Assert.Single(rig.A.Publications); // only the Rollback AutoNumber publication
 
         // AutoNumber ticket 3 was consumed and stays burned: next AddNew gets 4.
         Assert.True(frame.AddNew().Succeeded);
@@ -566,7 +571,7 @@ public sealed class GrowthPublicationTests
             Assert.True(frame.Assign(Col(t0, "ID"), I4(1)).Succeeded);
             Assert.True(frame.Assign(Col(t0, "B"), Bool(false)).Succeeded);
             UpdateOutcome out0 = frame.Update();
-            // evidence/r-q16-overflow/no-free (INSERT INTO Au4, whose FreeMap is empty): the row takes a page of its own.
+            // evidence/r-q16-overflow/no-free-grow-row2-plus-30 (INSERT INTO Au4, whose FreeMap is empty): the row takes a page of its own.
             AssertNewDataPage(rig, t0, out0, previousFreePage: null);
         }
 
@@ -616,7 +621,7 @@ public sealed class GrowthPublicationTests
             Assert.True(foundNonFree, "expected a row of M on a page outside FreeMap");
             uint page = cursor.CurrentRow!.Value.Page;
             UpdateOutcome del = frame.Delete();
-            // evidence/r-q16-overflow/room-middle: the page returns to the FreeMap.
+            // evidence/r-q16-overflow/room-middle-grow-row2-plus-30: the page returns to the FreeMap.
             Assert.True(del.Succeeded, del.ToString());
             Assert.NotNull(del.Change?.Physical);
             Assert.Contains(page, UsageMaps.Pages(rig.File.Cache, D, m.FreeMap, rig.File.Image.PageCount, out _)!);

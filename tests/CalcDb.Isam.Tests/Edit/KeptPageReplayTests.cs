@@ -2594,25 +2594,22 @@ public sealed class KeptPageReplayTests
             }
         }
 
-        // 1. 0-byte Memo and 0-byte OLE (unset AllowZeroLength admits "" through EditFrame.ZeroLengthCheck per
-        // evidence/r-q-cursor-dao/edit-required-memo-addnew, then RowWriter refuses 0-byte LV encoding by name;
-        // empty OLE SAFEARRAY coerces to Null per AssignmentConversion; FieldEncoder and RowWriter refuse 0-byte directly).
+        // 1. 0-byte Memo is recorded (evidence/r-q27-autonumber-txn/memo-zerolength-true-fail: 12-byte inline LV header
+        // with length 0, flags 0x8000); 0-byte OLE remains unrecorded and refused by name in FieldEncoder and RowWriter.
         using (var s = new Session(SeedGrowthOpen("lv-inline-memo")))
         {
-            UpdateOutcome r = TryInsertLv(s, 1, memo: true, byteLength: 0);
-            Assert.False(r.Succeeded);
-            Assert.Equal(MutationOpen.Publication, r.Open);
-            Assert.Contains("0-byte", r.Detail);
-
             TableDefinition t = TableDefDecoder.Decode(TableDefSegmentView.Open(42, p => s.Cache.Pin(p).Pin is { } pin ? Session.Copy(pin) : null, D, 8, out _)!, 42, D, out _)!;
             var emptyMemo = new NativeValue(NativeKind.Text) { Text = "" };
-            Assert.False(FieldEncoder.TryEncodeVariable(emptyMemo, t.Columns[1], D, out _, out string? encErr));
-            Assert.Contains("0-byte", encErr);
+            Assert.True(FieldEncoder.TryEncodeVariable(emptyMemo, t.Columns[1], D, out byte[]? encodedMemo, out string? encErr), encErr);
+            Assert.Equal(LongValuePlan.EncodeInline([]), encodedMemo);
             using var semantics = MutationSemantics.Compile("V", t, null, new NoRules(), D.IndexDescriptor);
             var writer = new SameWidthWriter(new TableFootprints(s.Cache, D, t, s.File.PageCount));
             CompiledChange compiled = writer.CompileInsert(semantics, [new NativeValue(NativeKind.Long) { Integer = 1 }, emptyMemo], null);
-            Assert.Null(compiled.Change);
-            Assert.Contains("0-byte", compiled.NotWritten);
+            Assert.NotNull(compiled.Change);
+            Assert.Null(compiled.NotWritten);
+
+            UpdateOutcome r = TryInsertLv(s, 1, memo: true, byteLength: 0);
+            Assert.True(r.Succeeded, r.ToString());
         }
         using (var s = new Session(SeedGrowthOpen("lv-inline-ole")))
         {

@@ -362,12 +362,14 @@ public sealed class EditFrame : IDisposable
             {
                 return EditOutcome.NotModelled(counterOpen, counterDetail);
             }
-            // Under unit increment outside a SQL action statement, DAO AddNew persists 0x14..0x17 eagerly so
-            // CancelUpdate leaves it on disk (r-q10-commit-counter-edits/addnew-cancel-once). Inside a SQL action
+            // Under unit increment outside a SQL action statement and outside an explicit transaction, DAO AddNew
+            // persists 0x14..0x17 eagerly so CancelUpdate leaves it on disk (r-q10-commit-counter-edits/addnew-cancel-once).
+            // Inside an explicit transaction (Depth > 0), disk write-back waits for CommitTrans or Rollback
+            // (evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage). Inside a SQL action
             // statement (InStatement), Update/EndStatement publishes 0x14..0x17 and bumps page 0 +3586 once
             // (evidence/r-q23-counter-step/sql-100-1-ins1). Under a non-1 increment, CancelUpdate is Open
             // (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open), so disk write-back happens at Update (evidence/r-q23-counter-step/).
-            if (counter.Increment == 1 && !_workspace.InStatement && _table.Writer is { } writer && _workspace.Publisher is not null && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
+            if (counter.Increment == 1 && !_workspace.InStatement && _workspace.Depth == 0 && _table.Writer is { } writer && _workspace.Publisher is not null && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
             {
                 CompiledChange advance = writer.CompileAutoNumberAdvance(unchecked((uint)(int)newTicket.Value), _workspace.OverlayOf(writer.File));
                 if (advance.Change is not { } compiled)
@@ -393,11 +395,13 @@ public sealed class EditFrame : IDisposable
                     return EditOutcome.NotModelled(open, detail);
                 }
             }
-            // A recordset AddNew's ticket inside a level: no record shows a Rollback dropping it (R-TXN-1 TXN-STMT); a SQL
-            // insert's ticket is recorded at its Update.
+            // A recordset AddNew's ticket inside a level: recorded for unit increment on ACCDB
+            // (evidence/r-q27-autonumber-txn/rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage); non-1 increment on
+            // recordset AddNew remains unrecorded and refused on Rollback (MutationOpen.AutoNumberIncrement).
             if (_workspace.Depth > 0 && !_workspace.InStatement && _table.Writer is { } txnWriter && newTicket!.Value is >= int.MinValue and <= int.MaxValue)
             {
-                _workspace.RecordConsumedAutoNumber(txnWriter.File, s.Table.FirstPage, unchecked((uint)(int)newTicket.Value), counter.Increment, reseed: false, "a recordset AddNew");
+                string? unrecorded = counter.Increment == 1 ? null : $"increment {counter.Increment} on recordset AddNew";
+                _workspace.RecordConsumedAutoNumber(txnWriter.File, s.Table.FirstPage, unchecked((uint)(int)newTicket.Value), counter.Increment, reseed: false, unrecorded);
             }
         }
         ReleaseTicket();
@@ -551,16 +555,20 @@ public sealed class EditFrame : IDisposable
             }
             // R-FMT-2 II-05, R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q-fmt-sort/dc-rules-accdb,
             // evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain, ins-dup-plain-txn,
-            // ins-dup-fail, ins-dup-fail-txn): a refused 3022 unique insert on AddNew persists UniqueEntryCount
+            // ins-dup-fail, ins-dup-fail-txn, evidence/r-q27-autonumber-txn/exp-pk-dup-10, exp-pk-dup-5,
+            // exp-uk-dup-40, exp-uk-dup-5): a refused 3022 unique insert on AddNew persists UniqueEntryCount
             // increments of physical indexes strictly before the refusing index and the AutoNumber floor, and outside a
             // SQL statement commits immediately (+1 on ACCDB page 0 offset 3586); inside a SQL statement it folds
             // non-empty TableDef edits into the statement's or transaction's single write group, and writes nothing when
             // no TableDef word changes (evidence/r-err-1b/con-pk-duplicate-insert,
             // evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror). An explicit AutoNumber under unit increment
-            // refused as a duplicate of the AutoNumber's own primary key reseeds the counter to it, also downward
-            // (evidence/r-q-expr-sql/act-ins-autonumber seq 349 and 441, evidence/r-q-fmt-sort/auto-cancel-fail-accdb
-            // seq 257 and 283, evidence/r-sql-2-3/act-ins-defaults seq 81 and 91); a non-unit increment or refusal by
-            // another index is not recorded.
+            // refused as a duplicate of the AutoNumber's own primary key reseeds the counter to it, also downward or when
+            // equal (writing +1 on page 0 even when the word stays equal, exp-pk-dup-10; evidence/r-q-expr-sql/act-ins-autonumber
+            // seq 349 and 441, evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 257 and 283, evidence/r-sql-2-3/act-ins-defaults
+            // seq 81 and 91, exp-pk-dup-5); a single-row autocommit ACCDB SQL INSERT with an explicit AutoNumber refused
+            // by a secondary unique index writes two groups (+2 on page 0): the AutoNumber reseed first, then prior-index
+            // UniqueEntryCount increments (exp-uk-dup-40, exp-uk-dup-5). Non-unit increments and unrecorded non-PK
+            // shapes stay refused with MutationOpen.AutoNumberReseed.
             if (failure.Error?.Number == MutationError.Duplicate
                 && Mode == EditMode.AddNew
                 && refusingPhysical is int refPhys
@@ -573,53 +581,114 @@ public sealed class EditFrame : IDisposable
                     candidateValues[i] = CandidateValue(i);
                 }
                 bool reseedRefuseAuto = false;
+                bool twoGroupNonPkReseed = false;
                 uint? autoFloor = null;
                 if (s.AutoNumber is { } autoCol && candidateValues[autoCol.Ordinal].Kind == NativeKind.Long)
                 {
                     if (_cells[autoCol.Ordinal].Assigned)
                     {
-                        if (CheckExplicitAutoNumberReseed(s.TableName, candidateValues[autoCol.Ordinal].Integer, _table.Counter, refusingIsPrimary, IsKeyOf(refPhys, autoCol)) is { } reseedOpen)
+                        bool allowNonPkSingleRowAccdb = _workspace.InStatement
+                            && _workspace.Depth == 0
+                            && _workspace.OverlayOf(refuseWriter.File) is null
+                            && refuseWriter.IsAccdb(null)
+                            && refPhys > 0;
+                        if (CheckExplicitAutoNumberReseed(
+                                s.TableName,
+                                candidateValues[autoCol.Ordinal].Integer,
+                                _table.Counter,
+                                refusingIsPrimary,
+                                IsKeyOf(refPhys, autoCol),
+                                allowNonPkSingleRowAccdb) is { } reseedOpen)
                         {
                             return reseedOpen;
                         }
                         reseedRefuseAuto = true;
+                        twoGroupNonPkReseed = !refusingIsPrimary || !IsKeyOf(refPhys, autoCol);
                     }
                     autoFloor = AutoNumberFloor(candidateValues[autoCol.Ordinal].Integer, reseedRefuseAuto);
                 }
-                CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File), reseedRefuseAuto);
-                if (sideEffect.Change is not { } sideCompiled)
+                if (twoGroupNonPkReseed && autoFloor is { } reseedFloor)
                 {
-                    return new UpdateOutcome(null, MutationOpen.Publication, sideEffect.NotWritten);
-                }
-                MutationOpen open;
-                string? detail;
-                MutationError? pubError;
-                if (_workspace.InStatement)
-                {
-                    (open, detail) = _workspace.RecordStatementSideEffect(
+                    // Group 1 (exp-uk-dup-40, exp-uk-dup-5): commit the explicit AutoNumber reseed immediately (+1 on page 0).
+                    CompiledChange reseedChange = refuseWriter.CompileAutoNumberAdvance(reseedFloor, _workspace.OverlayOf(refuseWriter.File), reseedAutoNumber: true);
+                    if (reseedChange.Change is not { } reseedCompiled)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.Publication, reseedChange.NotWritten);
+                    }
+                    (MutationOpen open1, string? detail1) = _workspace.PublishNonTransactional(
                         refuseWriter.File,
-                        sideCompiled.Edits,
-                        sideCompiled.Footprint,
+                        reseedCompiled.Edits,
+                        reseedCompiled.Footprint,
+                        CommitMode.Immediate,
                         ConflictSource,
-                        out pubError);
+                        out MutationError? pubError1);
+                    if (pubError1 is not null)
+                    {
+                        return new UpdateOutcome(pubError1);
+                    }
+                    if (open1 != MutationOpen.None)
+                    {
+                        return new UpdateOutcome(null, open1, detail1);
+                    }
+                    // Group 2 (exp-uk-dup-40, exp-uk-dup-5): stage prior-index UniqueEntryCount increments (e.g. PK +1)
+                    // for EndStatement (+2 total on page 0).
+                    CompiledChange priorChange = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoNumberFloor: null, _workspace.OverlayOf(refuseWriter.File), reseedAutoNumber: false);
+                    if (priorChange.Change is not { } priorCompiled)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.Publication, priorChange.NotWritten);
+                    }
+                    (MutationOpen open2, string? detail2) = _workspace.RecordStatementSideEffect(
+                        refuseWriter.File,
+                        priorCompiled.Edits,
+                        priorCompiled.Footprint,
+                        ConflictSource,
+                        out MutationError? pubError2);
+                    if (pubError2 is not null)
+                    {
+                        return new UpdateOutcome(pubError2);
+                    }
+                    if (open2 != MutationOpen.None)
+                    {
+                        return new UpdateOutcome(null, open2, detail2);
+                    }
                 }
                 else
                 {
-                    (open, detail) = _workspace.PublishNonTransactional(
-                        refuseWriter.File,
-                        sideCompiled.Edits,
-                        sideCompiled.Footprint,
-                        CommitMode.Immediate,
-                        ConflictSource,
-                        out pubError);
-                }
-                if (pubError is not null)
-                {
-                    return new UpdateOutcome(pubError);
-                }
-                if (open != MutationOpen.None)
-                {
-                    return new UpdateOutcome(null, open, detail);
+                    CompiledChange sideEffect = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoFloor, _workspace.OverlayOf(refuseWriter.File), reseedRefuseAuto);
+                    if (sideEffect.Change is not { } sideCompiled)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.Publication, sideEffect.NotWritten);
+                    }
+                    MutationOpen open;
+                    string? detail;
+                    MutationError? pubError;
+                    if (_workspace.InStatement)
+                    {
+                        (open, detail) = _workspace.RecordStatementSideEffect(
+                            refuseWriter.File,
+                            sideCompiled.Edits,
+                            sideCompiled.Footprint,
+                            ConflictSource,
+                            out pubError);
+                    }
+                    else
+                    {
+                        (open, detail) = _workspace.PublishNonTransactional(
+                            refuseWriter.File,
+                            sideCompiled.Edits,
+                            sideCompiled.Footprint,
+                            CommitMode.Immediate,
+                            ConflictSource,
+                            out pubError);
+                    }
+                    if (pubError is not null)
+                    {
+                        return new UpdateOutcome(pubError);
+                    }
+                    if (open != MutationOpen.None)
+                    {
+                        return new UpdateOutcome(null, open, detail);
+                    }
                 }
                 if (s.AutoNumber is { } autoCol2 && _table.Counter is { } refuseCounter && candidateValues[autoCol2.Ordinal].Kind == NativeKind.Long)
                 {
@@ -634,31 +703,110 @@ public sealed class EditFrame : IDisposable
                     }
                     if (autoFloor is { } floorVal && _workspace.Depth > 0)
                     {
-                        _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto, "a refused row");
+                        // Generated AutoNumber on a refused row inside an explicit transaction's plain SQL INSERT is
+                        // persisted by Rollback (evidence/r-q27-autonumber-txn/ins-dup-plain-txn-rb); explicit reseed or
+                        // non-1 increment stays unrecorded.
+                        string? unrecorded = !reseedRefuseAuto && _workspace.InStatement && refuseCounter.Increment == 1 ? null : "a refused row";
+                        _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto, unrecorded);
                     }
                 }
             }
-            // The refusal the statement's Rollback decides by (only a 3022 writes the counters it reached), and the
-            // refused row's ticket, consumed in the level.
+            else if (failure.Error?.Number == MutationError.RelatedRecordRequired
+                && Mode == EditMode.AddNew
+                && _workspace.InStatement
+                && _workspace.Depth > 0
+                && _table.Writer is { } fkWriter
+                && _workspace.Publisher is not null)
+            {
+                // R-TXN-1 TXN-STMT (evidence/r-q27-autonumber-txn/ins-fk-3201-fail): a 3201 FK refusal on AddNew inside
+                // a statement transaction persists UniqueEntryCount increments of physical indexes strictly before the
+                // refusing FK index (e.g. PK +1) and the refused row's AutoNumber floor into the statement's overlay.
+                // Multiple child-side FK indexes on the same table have no recorded check/counter order and are named.
+                byte fkType = FormatDescriptor.Jet4Family.IndexDescriptor.ForeignKeyType;
+                List<LogicalIndex> childFks = [.. s.Table.LogicalIndexes.Where(l => l.IndexType == fkType && l.RelatedTableType != 1)];
+                if (childFks.Count != 1)
+                {
+                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"a 3201 FK refusal on {s.TableName} with {childFks.Count} child foreign-key indexes: prior-index UniqueEntryCount order is not recorded (evidence/r-q27-autonumber-txn/ins-fk-3201-fail)");
+                }
+                var candidateValues = new NativeValue[_cells.Length];
+                for (int i = 0; i < candidateValues.Length; i++)
+                {
+                    candidateValues[i] = CandidateValue(i);
+                }
+                uint? autoFloor = null;
+                if (s.AutoNumber is { } fkAutoCol && !_cells[fkAutoCol.Ordinal].Assigned && candidateValues[fkAutoCol.Ordinal].Kind == NativeKind.Long)
+                {
+                    autoFloor = AutoNumberFloor(candidateValues[fkAutoCol.Ordinal].Integer, reseed: false);
+                }
+                CompiledChange fkSide = fkWriter.CompileRefusedUniqueInsert(s, candidateValues, childFks[0].PhysicalNumber, autoFloor, _workspace.OverlayOf(fkWriter.File), reseedAutoNumber: false);
+                if (fkSide.Change is not { } fkCompiled)
+                {
+                    return new UpdateOutcome(null, MutationOpen.Publication, fkSide.NotWritten);
+                }
+                (MutationOpen fkOpen, string? fkDetail) = _workspace.RecordStatementSideEffect(
+                    fkWriter.File,
+                    fkCompiled.Edits,
+                    fkCompiled.Footprint,
+                    ConflictSource,
+                    out MutationError? fkPubError);
+                if (fkPubError is not null)
+                {
+                    return new UpdateOutcome(fkPubError);
+                }
+                if (fkOpen != MutationOpen.None)
+                {
+                    return new UpdateOutcome(null, fkOpen, fkDetail);
+                }
+            }
+            else if (failure.Error?.Number is MutationError.Required or MutationError.ZeroLength or MutationError.RuleWithText or MutationError.RuleWithoutText
+                && Mode == EditMode.AddNew
+                && _workspace.InStatement
+                && s.AutoNumber is { } refusedAuto
+                && !_cells[refusedAuto.Ordinal].Assigned
+                && _table.Counter is { Increment: 1 }
+                && _table.Writer is { } refusedWriter
+                && _workspace.Publisher is not null
+                && CandidateValue(refusedAuto.Ordinal) is { Kind: NativeKind.Long } refusedAutoVal)
+            {
+                // R-TXN-1 TXN-STMT, R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/ins-req-3314-fail,
+                // ins-val-3316-fail, memo-zerolength-false-fail, memo-zerolength-unset-fail;
+                // evidence/r-q-expr-sql/act-ins-autonumber seq 185): a 3314/3315/3316 refusal inside a SQL INSERT
+                // persists the refused row's generated AutoNumber advance (offset 20) into the statement's overlay
+                // without incrementing RowCount or index counters.
+                if (AutoNumberFloor(refusedAutoVal.Integer, reseed: false) is { } refusedFloor)
+                {
+                    CompiledChange adv = refusedWriter.CompileAutoNumberAdvance(refusedFloor, _workspace.OverlayOf(refusedWriter.File));
+                    if (adv.Change is not { } advCompiled)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.Publication, adv.NotWritten);
+                    }
+                    (MutationOpen advOpen, string? advDetail) = _workspace.RecordStatementSideEffect(
+                        refusedWriter.File,
+                        advCompiled.Edits,
+                        advCompiled.Footprint,
+                        ConflictSource,
+                        out MutationError? advPubError);
+                    if (advPubError is not null)
+                    {
+                        return new UpdateOutcome(advPubError);
+                    }
+                    if (advOpen != MutationOpen.None)
+                    {
+                        return new UpdateOutcome(null, advOpen, advDetail);
+                    }
+                }
+            }
+            // The refusal the statement's Rollback decides by, and the refused row's ticket consumed in the level
+            // (3022 already recorded its AutoNumber mark above).
             if (failure.Error is { } refusal)
             {
                 _workspace.NoteStatementRefusal(refusal.Number);
-                if (_workspace.InStatement && _workspace.Depth > 0 && _ticket is { Value: >= int.MinValue and <= int.MaxValue } refusedTicket && _table.Counter is { } ticketCounter && _table.Writer is { } ticketWriter)
+                if (refusal.Number != MutationError.Duplicate && _workspace.InStatement && _workspace.Depth > 0 && _ticket is { Value: >= int.MinValue and <= int.MaxValue } refusedTicket && _table.Counter is { } ticketCounter && _table.Writer is { } ticketWriter)
                 {
                     _workspace.RecordConsumedAutoNumber(ticketWriter.File, s.Table.FirstPage, unchecked((uint)(int)refusedTicket.Value), ticketCounter.Increment, reseed: false, "a refused row");
                 }
             }
             return failure;
-        }
-
-        // An explicit AutoNumber below the counter, accepted: whether ACE lowers the counter to it is not recorded (the
-        // records show an accepted value above it, evidence/r-fix-fmt-sort/fmt2b-au-explicit-high-ladder seq 139 and 302,
-        // and refused duplicates of the primary key, see the 3022 case above).
-        if (Mode == EditMode.AddNew && s.AutoNumber is { } explicitAuto && _cells[explicitAuto.Ordinal].Assigned
-            && _table.Counter is { Increment: 1 } explicitCounter && CandidateValue(explicitAuto.Ordinal) is { Kind: NativeKind.Long } explicitValue
-            && explicitValue.Integer < explicitCounter.Last)
-        {
-            return new UpdateOutcome(null, MutationOpen.AutoNumberReseed, $"an explicit AutoNumber {explicitValue.Integer} below {s.TableName}'s counter {explicitCounter.Last}, accepted: its effect on the counter is not recorded");
         }
 
         // 4. The lock footprint and, for an optimistic edit, the stored image (W-05/local-lockers-rebase).
@@ -703,11 +851,15 @@ public sealed class EditFrame : IDisposable
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
+            // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10): an accepted explicit
+            // AutoNumber under unit increment reseeds TableDef offset 20 to the explicit value (also downward or equal).
+            bool reseedAcceptedAuto = false;
             if (s.AutoNumber is { } autoCol && values[autoCol.Ordinal].Kind == NativeKind.Long)
             {
-                acceptedAutoFloor = AutoNumberFloor(values[autoCol.Ordinal].Integer, reseed: false);
+                reseedAcceptedAuto = assigned[autoCol.Ordinal] && _table.Counter is { Increment: 1 };
+                acceptedAutoFloor = AutoNumberFloor(values[autoCol.Ordinal].Integer, reseed: reseedAcceptedAuto);
             }
-            physical = insertWriter.CompileInsert(s, values, acceptedAutoFloor, _workspace.OverlayOf(insertWriter.File));
+            physical = insertWriter.CompileInsert(s, values, acceptedAutoFloor, _workspace.OverlayOf(insertWriter.File), reseedAutoNumber: reseedAcceptedAuto);
         }
         else
         {
@@ -758,14 +910,25 @@ public sealed class EditFrame : IDisposable
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
-            counter.Observe(values[auto.Ordinal].Integer);
+            bool reseedAccepted = assigned[auto.Ordinal] && counter.Increment == 1;
+            if (reseedAccepted)
+            {
+                counter.Reseed(values[auto.Ordinal].Integer);
+            }
+            else
+            {
+                counter.Observe(values[auto.Ordinal].Integer);
+            }
             if (acceptedAutoFloor is { } floorVal && _workspace.Depth > 0 && _table.Writer is { } acceptWriter)
             {
-                string? unrecorded = !_workspace.InStatement ? "a recordset AddNew"
-                    : assigned[auto.Ordinal] ? "an explicit AutoNumber"
-                    : counter.Increment != 1 ? $"increment {counter.Increment}"
+                // Explicit AutoNumbers inside a transaction remain unrecorded on Rollback; non-1 increment recordset
+                // AddNew stays refused on Rollback (MutationOpen.AutoNumberIncrement); unit-increment recordset AddNew
+                // (rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage) and positive non-1 increment ACCDB SQL INSERT
+                // taking a new page (ins-txn-rb-counter-100-5) are decided by PlanRolledBackAutoNumbers.
+                string? unrecorded = assigned[auto.Ordinal] ? "an explicit AutoNumber"
+                    : !_workspace.InStatement && counter.Increment != 1 ? $"increment {counter.Increment} on recordset AddNew"
                     : null;
-                _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseed: false, unrecorded);
+                _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseed: reseedAccepted, unrecorded);
             }
         }
         if (_ticket is not null)
@@ -781,6 +944,66 @@ public sealed class EditFrame : IDisposable
         }
         // An automatic operation that could not be published is accepted and named (the change set keeps it).
         return new UpdateOutcome(null, accepted.Open, accepted.Detail, change, insertedOrdinal);
+    }
+
+    /// <summary>
+    /// Record a SQL <c>INSERT ... SELECT</c> conversion failure (3464) on a row after earlier rows
+    /// (<c>evidence/r-q27-autonumber-txn/ins-conv-3464-fail</c>): issues the row's generated AutoNumber ticket, folds
+    /// its offset-20 advance into the statement's overlay (RowCount and index counts unchanged), notes the refusal for
+    /// statement Rollback, and discards the pending buffer so the ticket stays consumed.
+    /// </summary>
+    public UpdateOutcome RecordStatementConversionFailure(int aceErrorNumber)
+    {
+        EditOutcome add = AddNew();
+        if (!add.Succeeded)
+        {
+            return new UpdateOutcome(add.Error, add.Open, add.Detail);
+        }
+        MutationSemantics s = _table.Semantics;
+        try
+        {
+            if (s.AutoNumber is not null
+                && _ticket is { Value: >= int.MinValue and <= int.MaxValue } ticket
+                && _table.Counter is { } counter
+                && _table.Writer is { } writer
+                && _workspace.Publisher is not null)
+            {
+                if (counter.Increment != 1)
+                {
+                    return new UpdateOutcome(null, MutationOpen.AutoNumberIncrement, $"conversion failure {aceErrorNumber} on {s.TableName} under non-1 increment ({counter.Increment}) is not recorded");
+                }
+                uint floor = unchecked((uint)(int)ticket.Value);
+                CompiledChange adv = writer.CompileAutoNumberAdvance(floor, _workspace.OverlayOf(writer.File));
+                if (adv.Change is not { } advCompiled)
+                {
+                    return new UpdateOutcome(null, MutationOpen.Publication, adv.NotWritten);
+                }
+                (MutationOpen open, string? detail) = _workspace.RecordStatementSideEffect(
+                    writer.File,
+                    advCompiled.Edits,
+                    advCompiled.Footprint,
+                    ConflictSource,
+                    out MutationError? pubError);
+                if (pubError is not null)
+                {
+                    return new UpdateOutcome(pubError);
+                }
+                if (open != MutationOpen.None)
+                {
+                    return new UpdateOutcome(null, open, detail);
+                }
+                if (_workspace.Depth > 0)
+                {
+                    _workspace.RecordConsumedAutoNumber(writer.File, s.Table.FirstPage, floor, counter.Increment, reseed: false, "a refused row");
+                }
+            }
+            _workspace.NoteStatementRefusal(aceErrorNumber);
+            return default;
+        }
+        finally
+        {
+            Discard();
+        }
     }
 
     /// <summary>
@@ -1361,30 +1584,26 @@ public sealed class EditFrame : IDisposable
         return default;
     }
 
-    // R-CAT-1, R-SQL-2, R-CURSOR-1 CUR-EDIT: ACE refuses "" in a Text column with 3315 when LvProp stores
+    // R-CAT-1, R-SQL-2, R-CURSOR-1 CUR-EDIT: ACE refuses "" in a Text or Memo column with 3315 when LvProp stores
     // AllowZeroLength = False (evidence/r-cat-1b/field-zerolength-effect: TP.ZlOff refused at seq 9, 3315 at seq 13, and
     // TP.Req refused at seq 18, while TP.ZlOn, stored True, is accepted at seq 5 with no error at seq 7;
-    // evidence/r-fix-cursor-dao/con-zero-length-required-failonerror, P.Req). Columns storing no AllowZeroLength (SQL DDL
-    // columns) admit "" for Required False and True, Text and Memo (evidence/r-sql-2-3/act-ins-defaults seq 11-12 [R.Z]
-    // and 31-32 [R.Req]; evidence/r-q-cursor-dao/edit-required-memo-addnew seq 56-67 [Rm.Mm];
+    // evidence/r-fix-cursor-dao/con-zero-length-required-failonerror, P.Req;
+    // evidence/r-q27-autonumber-txn/memo-zerolength-false-fail, memo-zerolength-unset-fail, while memo-zerolength-true-fail
+    // stores True and admits "" as a 12-byte inline LV header). Columns storing no AllowZeroLength (SQL DDL columns)
+    // admit "" for Required False and True, Text and Memo (evidence/r-sql-2-3/act-ins-defaults seq 11-12 [R.Z] and 31-32
+    // [R.Req]; evidence/r-q-cursor-dao/edit-required-memo-addnew seq 56-67 [Rm.Mm];
     // evidence/r-def-expr-sql/str-unique-index-acceptance [U.K]; evidence/r-fix-fmt-sort/fmt2-var-null-empty-ladder [T.N]).
-    // A Memo storing False is recorded nowhere and is named.
     private UpdateOutcome ZeroLengthCheck()
     {
         MutationSemantics s = _table.Semantics;
         for (int i = 0; i < _cells.Length; i++)
         {
             ColumnSemantics c = s.Columns[i];
-            if (c.AllowZeroLength == false && CandidateValue(i) is { Kind: NativeKind.Text, Text.Length: 0 })
+            if (c.AllowZeroLength == false
+                && c.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo
+                && CandidateValue(i) is { Kind: NativeKind.Text, Text.Length: 0 })
             {
-                if (c.Column.TypeCode == NativeTypes.Text)
-                {
-                    return Fail(MutationError.ZeroLength, c.QualifiedName);
-                }
-                if (c.Column.TypeCode == NativeTypes.Memo)
-                {
-                    return new UpdateOutcome(null, MutationOpen.ZeroLength, $"an empty text in Memo {c.QualifiedName}, which stores AllowZeroLength False: the records show such a refusal for Text only");
-                }
+                return Fail(MutationError.ZeroLength, c.QualifiedName);
             }
         }
         return default;
@@ -1393,7 +1612,7 @@ public sealed class EditFrame : IDisposable
     /// <summary>
     /// The AutoNumber word an insert's TableDef counts carry for <paramref name="candidate"/> (R-FMT-2 Generated values): the
     /// counter's last value or the candidate, whichever lies further in the increment's direction, or the candidate itself
-    /// for the reseed of a refused primary-key duplicate. Null outside the signed 32-bit range.
+    /// for the reseed of an explicit AutoNumber under unit increment. Null outside the signed 32-bit range.
     /// </summary>
     private uint? AutoNumberFloor(long candidate, bool reseed)
     {
@@ -1408,19 +1627,23 @@ public sealed class EditFrame : IDisposable
         _table.Semantics.Indexes.Any(x => x.Physical.Number == physical && x.Columns.Count == 1 && x.Columns[0].Ordinal == column.Ordinal);
 
     /// <summary>
-    /// Decide whether an explicit AutoNumber refused 3022 may reseed the counter (R-FMT-2 Generated values): only under
-    /// unit increment when the refusing index is the AutoNumber's own primary key
+    /// Decide whether an explicit AutoNumber refused 3022 may reseed the counter (R-FMT-2 Generated values): under unit
+    /// increment when the refusing index is the AutoNumber's own primary key
     /// (<c>evidence/r-q-expr-sql/act-ins-autonumber</c>, <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c>,
-    /// <c>evidence/r-sql-2-3/act-ins-defaults</c>). Under a non-unit increment (where TableDef 0x14 and
-    /// <see cref="AutoNumberCounter.Reseed"/> would disagree and no record covers it) or refusal by another index,
-    /// refuses with <see cref="MutationOpen.AutoNumberReseed"/>.
+    /// <c>evidence/r-sql-2-3/act-ins-defaults</c>, <c>evidence/r-q27-autonumber-txn/exp-pk-dup-10</c>,
+    /// <c>exp-pk-dup-5</c>), or for a single-row autocommit ACCDB SQL INSERT refused by a secondary unique index
+    /// (<paramref name="allowNonPkSingleRowAccdb"/>: <c>evidence/r-q27-autonumber-txn/exp-uk-dup-40</c>,
+    /// <c>exp-uk-dup-5</c>). Under a non-unit increment (where TableDef 0x14 and <see cref="AutoNumberCounter.Reseed"/>
+    /// would disagree and no record covers it) or any other non-PK shape (recordset AddNew, in-transaction, multi-row
+    /// after earlier rows, MDB), refuses with <see cref="MutationOpen.AutoNumberReseed"/>.
     /// </summary>
     internal static UpdateOutcome? CheckExplicitAutoNumberReseed(
         string tableName,
         long explicitValue,
         AutoNumberCounter? counter,
         bool refusingIsPrimary,
-        bool refusingIndexCoversAuto)
+        bool refusingIndexCoversAuto,
+        bool allowNonPkSingleRowAccdb = false)
     {
         if (counter is not { Increment: 1 })
         {
@@ -1429,7 +1652,7 @@ public sealed class EditFrame : IDisposable
                 MutationOpen.AutoNumberReseed,
                 $"an explicit AutoNumber {explicitValue} refused 3022 on {tableName} under non-1 increment ({counter?.Increment}): reseed under non-1 increment is not recorded");
         }
-        if (!refusingIsPrimary || !refusingIndexCoversAuto)
+        if ((!refusingIsPrimary || !refusingIndexCoversAuto) && !allowNonPkSingleRowAccdb)
         {
             return new UpdateOutcome(
                 null,

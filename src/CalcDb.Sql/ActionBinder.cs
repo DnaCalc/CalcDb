@@ -173,7 +173,15 @@ public sealed class BoundAction : IDisposable
         SelectSyntax select = _syntax.SourceSelect!;
         if (_syntax.SourceSelectHasFrom)
         {
-            BoundSelect? boundSelect = BoundSelect.BindWithParameters(select, database, ParameterList, out SqlFailure? sf);
+            // INSERT INTO T (c1, c2, ...) SELECT ... maps the SELECT's outputs by position rather than by name, so
+            // repeated unaliased source columns (evidence/r-q27-autonumber-txn ins-clean-two-pages,
+            // ins-dup-fail-two-pages: SELECT K, P, P, P, P) do not collide on a caller-visible output name.
+            BoundSelect? boundSelect = BoundSelect.BindWithParameters(
+                select,
+                database,
+                ParameterList,
+                out SqlFailure? sf,
+                allowDuplicateOutputNames: _syntax.TargetColumns is not null);
             if (boundSelect is null)
             {
                 return sf;

@@ -528,14 +528,17 @@ public sealed class ActionExecutionTests
     }
 
     [Fact]
-    public void Rollback_of_sql_insert_without_new_page_succeeds_writes_nothing_and_keeps_autonumber_consumed()
+    public void Rollback_of_sql_insert_without_new_page_persists_autonumber_and_keeps_it_consumed()
     {
-        // evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 82-101: BeginTrans, SQL INSERT into an AutoNumber table
-        // fitting on the existing page (no new page), Rollback succeeds writing nothing, and the next insert receives
-        // the following AutoNumber.
+        // evidence/r-q27-autonumber-txn/ins-one-existing-txn-rb (and evidence/r-q-fmt-sort/auto-cancel-fail-accdb
+        // seq 82-101): BeginTrans, SQL INSERT into an AutoNumber table fitting on the existing page (no new page),
+        // Rollback writes only the AutoNumber counter (+1 on page 0, no Close commit), drops the row, and the next
+        // insert receives the following AutoNumber.
         using var db = new WritableSqlFixture(Fmt2bAccdb);
+        TableDefinition au1 = db.Table("Au1")!;
         int maxBefore = int.Parse(db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer!);
         byte[] before = db.Image.Snapshot();
+        byte p0Before = before[FormatDescriptor.Jet4Family.Header.CommitCounter.Offset];
 
         Assert.Null(db.Workspace.BeginTrans());
         ActionOutcome inTxn = ActionExecutor.Execute("INSERT INTO Au1 (S) VALUES ('in-txn')", db, options: 128);
@@ -545,8 +548,12 @@ public sealed class ActionExecutionTests
 
         ResolutionOutcome rb = db.Workspace.Rollback();
         Assert.True(rb.Succeeded, rb.ToString());
-        Assert.Empty(db.Workspace.Publications);
-        Assert.Equal(before, db.Image.Snapshot());
+        Assert.Single(db.Workspace.Publications);
+        Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+        byte[] afterRb = db.Image.Snapshot();
+        Assert.Equal(p0Before + 1, afterRb[FormatDescriptor.Jet4Family.Header.CommitCounter.Offset]);
+        Assert.Equal((uint)(maxBefore + 1), (uint)FormatDescriptor.Jet4Family.TableDef.AutoNumber.Read(afterRb.AsSpan((int)(au1.FirstPage * 4096), 4096)));
+        Assert.Equal(au1.RowCount, (uint)FormatDescriptor.Jet4Family.TableDef.RowCount.Read(afterRb.AsSpan((int)(au1.FirstPage * 4096), 4096)));
         Assert.Equal(maxBefore.ToString(), db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer);
 
         ActionOutcome after = ActionExecutor.Execute("INSERT INTO Au1 (S) VALUES ('after-rb')", db, options: 128);

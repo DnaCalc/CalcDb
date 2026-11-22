@@ -706,10 +706,21 @@ public sealed class BoundSelect : IDisposable
     public static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, out SqlFailure? failure) =>
         Bind(syntax, database, ownsSyntax: true, parameters: [], out failure);
 
-    internal static BoundSelect? BindWithParameters(SelectSyntax syntax, ISqlDatabase database, List<QueryParameter> parameters, out SqlFailure? failure) =>
-        Bind(syntax, database, ownsSyntax: false, parameters, out failure);
+    internal static BoundSelect? BindWithParameters(
+        SelectSyntax syntax,
+        ISqlDatabase database,
+        List<QueryParameter> parameters,
+        out SqlFailure? failure,
+        bool allowDuplicateOutputNames = false) =>
+        Bind(syntax, database, ownsSyntax: false, parameters, out failure, allowDuplicateOutputNames);
 
-    private static BoundSelect? Bind(SelectSyntax syntax, ISqlDatabase database, bool ownsSyntax, List<QueryParameter> parameters, out SqlFailure? failure)
+    private static BoundSelect? Bind(
+        SelectSyntax syntax,
+        ISqlDatabase database,
+        bool ownsSyntax,
+        List<QueryParameter> parameters,
+        out SqlFailure? failure,
+        bool allowDuplicateOutputNames = false)
     {
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
@@ -725,7 +736,7 @@ public sealed class BoundSelect : IDisposable
         }
         else if (failure is null)
         {
-            failure = new Binder(bound, syntax, database).Run();
+            failure = new Binder(bound, syntax, database, allowDuplicateOutputNames).Run();
         }
         if (failure is not null)
         {
@@ -1281,7 +1292,7 @@ public sealed class BoundSelect : IDisposable
         }
     }
 
-    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database)
+    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowDuplicateOutputNames = false)
     {
         private readonly ExpressionContext _context = database.Context;
         private SourceScope _scope = null!;
@@ -1355,7 +1366,7 @@ public sealed class BoundSelect : IDisposable
                 // qualified.md R-SQL-1 SQL-B: 255 output columns open, 256 fail 3190.
                 return SqlFailure.Ace(SqlPhase.Bind, 3190, "Too many fields defined.");
             }
-            if (Collisions() is { } collision)
+            if (!allowDuplicateOutputNames && Collisions() is { } collision)
             {
                 return collision;
             }
