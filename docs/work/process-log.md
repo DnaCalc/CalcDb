@@ -843,6 +843,9 @@ answer is nested one level deeper through the daemon (RoslynSkills task qvcn).
 
 ## 2026-11-22 - Handover: organizer session 01a1ff68 to organizer 8
 
+Successor: CalcDb organizer 8, session 01a20219-e071-7a1f-b8f3-aae93e505cce, started beside 01a1ff68 (`--no-parent`) at
+07:16 UTC with the handoff prompt; 01a1ff68 lists no organizer among its children and stops here.
+
 Session 01a1ff68 (Claude Opus 5.5, 2026-11-21 18:40 to 2026-11-22 05:00 UTC, 266 tool calls, about 11 h) put the new
 process in place, landed the paused work (3x6h, f8g8, the Com split, c7gn), parked 2qbr on `alta/2qbr`, and brought
 roscli (RoslynSkills) from 0.1.6-preview.20 to .26 as CalcDb's own tool. Indicators since 2026-11-21 18:30
