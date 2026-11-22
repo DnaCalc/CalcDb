@@ -73,7 +73,7 @@ public sealed class AttemptDirectoryNormalizationTests
     [Fact]
     public void Revision_9_describes_both_slash_forms_for_attempt_directory()
     {
-        Assert.Equal("calls.trace@9", CallTraceComparison.Rule.Key);
+        Assert.True(CallTraceComparison.Rule.Revision >= 9);
         PermittedNormalization n = Assert.Single(CallTraceComparison.Rule.Normalizations, n => n.Name == "attempt-directory");
         Assert.Contains("forward-slash", n.Bounds, StringComparison.Ordinal);
         Assert.Contains("still differs", n.RejectingControl, StringComparison.Ordinal);

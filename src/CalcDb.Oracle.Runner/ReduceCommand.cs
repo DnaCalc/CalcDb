@@ -73,7 +73,10 @@ internal static class ReduceCommand
                 {
                     return new CandidateRun { OracleAttempt = ace.AttemptId, CandidateAttempt = calc.AttemptId, Unavailable = Incomplete("CalcDb", calc) };
                 }
-                ComparisonRecord comparison = CallTraceComparison.Compare(candidate.Probe + " (reduction candidate)", ace.AttemptId, aceCapture, calc.AttemptId, ReadCapture(store, calc), "CalcDb.dll");
+                var retained = new ArtifactStore(Path.Combine(evidenceDir, "artifacts"), Path.Combine(store.Root, "cas"));
+                ComparisonRecord comparison = CallTraceComparison.Compare(candidate.Probe + " (reduction candidate)", ace.AttemptId, aceCapture, calc.AttemptId, ReadCapture(store, calc), "CalcDb.dll",
+                    oracleFiles: Program.AttemptFiles(store, retained, ace.AttemptId, ace.Artifacts),
+                    candidateFiles: Program.AttemptFiles(store, retained, calc.AttemptId, calc.Artifacts));
                 return new CandidateRun { OracleAttempt = ace.AttemptId, CandidateAttempt = calc.AttemptId, Verdict = comparison };
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or EvidenceFormatException or JobConflictException)
