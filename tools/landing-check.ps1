@@ -204,11 +204,16 @@ try {
         if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
         Step "built $Solution"
         # The tests run with --no-build: a selected test project outside an area filter is built too, or it would run
-        # older binaries (found by the c7gn writer's self-check, 2026-11-21).
+        # older binaries (found by the c7gn writer's self-check, 2026-11-21). So are the runner and the worker that the
+        # candidate check and the snapshot use (only the Oracle filter holds them: under the Com filter a fresh worktree
+        # left all 54 r-q24 candidates NotStarted, whxg writer, 2026-11-22).
         if ($Solution -ne "CalcDb.slnx") {
             $inFilter = @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
-            foreach ($t in $Tests) {
-                $proj = "tests/CalcDb.$t.Tests/CalcDb.$t.Tests.csproj"
+            $extra = @($Tests | ForEach-Object { "tests/CalcDb.$_.Tests/CalcDb.$_.Tests.csproj" })
+            if ($Questions.Count -or $Snapshot) {
+                $extra += "src/CalcDb.Oracle.Runner/CalcDb.Oracle.Runner.csproj", "src/CalcDb.Oracle.Worker/CalcDb.Oracle.Worker.csproj"
+            }
+            foreach ($proj in $extra) {
                 if ($proj -in $inFilter) { continue }
                 $build = dotnet build $proj -v q -clp:ErrorsOnly 2>&1
                 if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED $proj"; exit $failed }
