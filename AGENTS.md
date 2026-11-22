@@ -91,10 +91,10 @@ scope or design, the book wins.
   implementers (`nav.find_implementations`), the uses or constructions of a type and of an overloaded or same-named
   member or method group (`nav.find_references`, `nav.find_invocations`), callers through lambdas and method groups
   (`nav.call_hierarchy`), a definition (`nav.go_to_definition`), the compile errors of a project, a folder or the
-  solution (`diag.get_workspace_snapshot`), a rename across files (`edit.rename_symbol`), a signature change
-  (`edit.change_signature`), and a new `.cs` file while the daemon runs (`edit.create_file`; a file your own tool creates
-  stays invisible to it until a reload). Do not use `repair.*` or `edit.apply_code_fix` (they propose TODO stubs). Build
-  the area filter after every edit, roscli's included (measured on 0.1.6-preview.23, 2026-11-22). Setup:
+  solution (`diag.get_workspace_snapshot`), a rename across files (`edit.rename_symbol`), and a signature change
+  (`edit.change_signature`). The daemon sees files that any tool creates or deletes before its next answer; only a
+  project or solution file change needs `workspace.refresh`. Do not use `repair.*` or `edit.apply_code_fix` (they propose
+  TODO stubs). Build the area filter after every edit, roscli's included (measured on 0.1.6-preview.24, 2026-11-22). Setup:
   `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
   `ROSCLI_DAEMON=required`; `roscli daemon.stop` and delete `.roslynskills/` before you end.
 - roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills

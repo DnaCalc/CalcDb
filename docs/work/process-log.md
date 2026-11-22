@@ -817,3 +817,11 @@ implementers found from find_implementations results; the call hierarchy follows
 via_lambda) and method groups (Activation.cs:39, :50); nav.go_to_definition 272 ms; a workspace snapshot of src or the
 solution covers 21 or 33 projects (149 errors after a break, where dotnet build stops at 144). The first type query builds
 a call-site cache once (about 24 s). AGENTS.md (Tool practice) drops "it finds no new sites" and names these commands.
+
+**roscli 0.1.6-preview.24 (RoslynSkills qfvj, qhr3, 49hc, qc9k, qhfr; 009b516, GitHub release, 2026-11-22).** The daemon
+finds the repository root from a worktree's .git file everywhere (no --workspace-path, no claim warning), resolves
+relative paths against the caller's folder, and sees files any tool creates or deletes before its next answer (430 ms
+on CalcDb; only project or solution changes reload); edit.transaction takes exact-text edits and batch_exact is its
+alias. The preview.24 release first hung on the Linux runner: the Unix daemon inherited roscli's stdout, so anything
+reading roscli's output waited forever; it now detaches to /dev/null, and every process-starting test has a timeout.
+AGENTS.md drops the caveat about files created by other tools.
