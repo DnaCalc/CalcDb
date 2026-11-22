@@ -284,6 +284,30 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
 
     public int CurrentIndex => _currentIndex;
 
+    public bool IsDeletedCurrent => _deletedCurrent;
+
+    /// <summary>
+    /// Remove a row deleted through this same server keyset when the cursor moves away from it
+    /// (r-oledb-odbc/rowlife-clone-delete-requery #24-40: MoveNext lands on next live row, MovePrevious skips deleted row,
+    /// RecordCount decreases by 1). Returns true when the row at <see cref="CurrentIndex"/> was removed.
+    /// </summary>
+    public bool ConsumeDeletedCurrent()
+    {
+        if (!_deletedCurrent)
+        {
+            return false;
+        }
+        if (_currentIndex >= 0 && _currentIndex < _rowIds.Count)
+        {
+            _rowIds.RemoveAt(_currentIndex);
+            _rowDepths.RemoveAt(_currentIndex);
+        }
+        _deletedCurrent = false;
+        _recordStatus = 0;
+        _currentIndex = -1;
+        return true;
+    }
+
     public bool TrySeek(int index, out Failure? failure)
     {
         failure = null;
@@ -303,6 +327,12 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     public OwnedVariant? ReadValue(int ordinal, bool isClientCursor, out Failure? failure)
     {
         failure = null;
+        if (_deletedCurrent && (_frame is null || _frame.Mode == EditMode.None))
+        {
+            // r-oledb-odbc/rowlife-clone-delete-requery #26: reading a field on a self-deleted row fails 0x80040E23 / 5000000.
+            failure = AdoSqlErrors.SelfDeletedRow().ComFailure;
+            return null;
+        }
         AdoFieldDescriptor desc = _columns[ordinal];
         ColumnDescriptor col = _columnMap[ordinal];
         FieldResult raw = _frame is not null && _frame.Mode != EditMode.None
@@ -322,6 +352,11 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         if (_originalSnapshot is not null)
         {
             return AdoFieldValues.Clone(_originalSnapshot[ordinal]);
+        }
+        if (_deletedCurrent)
+        {
+            failure = AdoSqlErrors.SelfDeletedRow().ComFailure;
+            return null;
         }
         AdoFieldDescriptor desc = _columns[ordinal];
         FieldResult raw = ReadStored(_columnMap[ordinal]);
@@ -371,14 +406,14 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         NativeVariant incoming = DereferenceByRef((NativeVariant*)rawArg);
         OwnedVariant? tempConverted = null;
         NativeVariant effective = incoming;
-        if (incoming.Type == VarType.Empty && col.TypeCode != NativeTypes.Boolean)
+        if (incoming.Type == VarType.Empty && col.TypeCode == NativeTypes.Long)
         {
-            // r-ado-1b/fields-assign-conversion #44-45: VT_EMPTY into a nullable field stores Null.
+            // r-ado-1b/fields-assign-conversion #44-45: VT_EMPTY into Long stores Null.
             effective = new NativeVariant { Vt = (ushort)VarType.Null };
         }
         else if (col.TypeCode is NativeTypes.Text or NativeTypes.Memo && incoming.Type != VarType.Bstr && incoming.Type != VarType.Null)
         {
-            if (TryCoerceToTextVariant(in incoming, out tempConverted))
+            if (TryCoerceToTextVariant(col.TypeCode, in incoming, out tempConverted))
             {
                 effective = *tempConverted!.Pointer;
             }
@@ -420,31 +455,42 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     /// <summary>
     /// Convert ADO-recorded non-BSTR values assigned to a Text or Memo field into a temporary BSTR variant before
     /// handing to <see cref="EditFrame.Assign"/> so <c>EditFrame</c> enforces length checks (3163) and owns the edit
-    /// cell (r-ado-1b/fields-assign-conversion #49-75, #189-190).
+    /// cell (r-ado-1b/fields-assign-conversion #49-75 for Text; #189-190 for Memo).
     /// </summary>
-    private static bool TryCoerceToTextVariant(in NativeVariant incoming, out OwnedVariant? converted)
+    private static bool TryCoerceToTextVariant(byte columnTypeCode, in NativeVariant incoming, out OwnedVariant? converted)
     {
         converted = null;
-        if (incoming.Type is VarType.I2 or VarType.I4 or VarType.R4 or VarType.R8 or VarType.Bool or VarType.Date or VarType.Currency or VarType.UI1 or VarType.Decimal)
+        if (columnTypeCode == NativeTypes.Text)
         {
+            if (incoming.Type is VarType.I4 or VarType.R8 or VarType.Bool or VarType.Date or VarType.Currency)
+            {
+                NativeVariant copy = incoming;
+                converted = OwnedVariant.ChangeType(&copy, VarType.Bstr, SessionLocale.Lcid, flags: 0, out _);
+                return converted is not null;
+            }
+            if (incoming.Type == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
+            {
+                (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
+                if (shape.Length == 1 && (shape[0].Count & 1) == 0)
+                {
+                    // r-ado-1b/fields-assign-conversion #74-75: even-length 1-D byte array reinterprets as UTF-16LE code units.
+                    int byteLen = shape[0].Count;
+                    string text = byteLen == 0
+                        ? ""
+                        : new string(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, char>(
+                            new ReadOnlySpan<byte>(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), byteLen)));
+                    converted = OwnedVariant.FromText(text);
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (columnTypeCode == NativeTypes.Memo && incoming.Type == VarType.I4)
+        {
+            // r-ado-1b/fields-assign-conversion #189-190: VT_I4 into Memo converts to BSTR.
             NativeVariant copy = incoming;
             converted = OwnedVariant.ChangeType(&copy, VarType.Bstr, SessionLocale.Lcid, flags: 0, out _);
             return converted is not null;
-        }
-        if (incoming.Type == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
-        {
-            (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
-            if (shape.Length == 1 && (shape[0].Count & 1) == 0)
-            {
-                // r-ado-1b/fields-assign-conversion #74-75: even-length 1-D byte array reinterprets as UTF-16LE code units.
-                int byteLen = shape[0].Count;
-                string text = byteLen == 0
-                    ? ""
-                    : new string(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, char>(
-                        new ReadOnlySpan<byte>(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), byteLen)));
-                converted = OwnedVariant.FromText(text);
-                return true;
-            }
         }
         return false;
     }
@@ -497,6 +543,11 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
                     // keep EditMode=1 and proposed Value, refresh OriginalValue to stored row, set Status=16.
                     _recordStatus = 16;
                     CaptureOriginalSnapshot(fromFrame: false);
+                }
+                else if (mutErr.Number == MutationError.Duplicate)
+                {
+                    // r-oledb-odbc/update-errors #86-88, #236-238: duplicate key keeps EditMode active and sets Status=4096 (adRecIntegrityViolation).
+                    _recordStatus = 4096;
                 }
                 providerError = AdoEditErrors.MapUpdateError(mutErr, out refusal);
             }
@@ -573,7 +624,9 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             }
             return false;
         }
+        // r-oledb-odbc/rowlife-clone-delete-requery #24-25: self-Delete sets Status = 262144 (adRecDBDeleted).
         _deletedCurrent = true;
+        _recordStatus = 262144;
         return true;
     }
 

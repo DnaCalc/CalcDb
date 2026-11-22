@@ -737,8 +737,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     {
         if (!_fields.Recordset.IsOpen)
         {
-            _fields.Recordset.ClearConnectionErrors();
-            return Fail(AdoErrors.NoCurrentRecord);
+            return NotImplemented("Field.OriginalValue on a closed Recordset (not recorded)");
         }
         return _fields.Recordset.ReadFieldOriginalValue(_ordinal, this);
     }
@@ -747,8 +746,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     {
         if (!_fields.Recordset.IsOpen)
         {
-            _fields.Recordset.ClearConnectionErrors();
-            return Fail(AdoErrors.NoCurrentRecord);
+            return NotImplemented("Field.UnderlyingValue on a closed Recordset (not recorded)");
         }
         return _fields.Recordset.ReadFieldUnderlyingValue(_ordinal, this);
     }
@@ -757,8 +755,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     {
         if (!_fields.Recordset.IsOpen)
         {
-            _fields.Recordset.ClearConnectionErrors();
-            return Fail(AdoErrors.ObjectClosed);
+            return NotImplemented("Field.Status on a closed Recordset (not recorded)");
         }
         return _fields.Recordset.ReadFieldStatus(_ordinal, this);
     }

@@ -1337,6 +1337,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
         }
 
+        if (fieldMissing && ks!.EditModeValue == 0)
+        {
+            // r-oledb-odbc/update-errors #18-23, #40-45, #62-67: no-op Update() when EditMode==0 succeeds without clearing Connection.Errors.
+            return CallResult.Nothing;
+        }
+
         if (!ks!.TryUpdate(out int? newPos, out MappedProviderError? pe, out Failure? refFail))
         {
             if (pe is { } provErr)
@@ -1436,10 +1442,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        int? affect = args.Length > 0 && !IsMissingArg(args[0]) ? AdoArgs.Int32(args[0]) : 3;
+        int? resync = args.Length > 1 && !IsMissingArg(args[1]) ? AdoArgs.Int32(args[1]) : 2;
+        if (!((affect == 1 && resync == 1) || (affect == 3 && resync == 2)))
+        {
+            return NotImplemented($"Recordset.Resync(AffectRecords={affect?.ToString() ?? "non-int"}, ResyncValues={resync?.ToString() ?? "non-int"}) (not recorded)");
+        }
         if (!IsClientCursor && _effectiveCursorType is 1 or 3)
         {
-            // r-ado-1b/values-keyset-conflict #69, r-ado-1b/rs-cache-same-connection #556:
-            // ACE server keyset/static cursors refuse Resync with 0x800A0CB3.
+            // r-ado-1b/values-keyset-conflict #69 (1,1), r-ado-1b/rs-cache-same-connection #469/#556 (3,2),
+            // r-oledb-odbc/rowlife-clone-delete-requery #39 (3,2): ACE server keyset/static cursors refuse Resync with 0x800A0CB3.
             return FailAdo(AdoErrors.RefreshingUnderlyingNotSupported);
         }
         return NotImplemented("Recordset.Resync on this cursor type (belongs to a later stretch)");
@@ -2025,6 +2037,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return flushFail;
         }
+        ConsumeDeletedCurrent();
         int count = ViewKnownCount;
         if (!_hasBookmarks || count < 0)
         {
@@ -2170,6 +2183,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return flushFail;
         }
+        ConsumeDeletedCurrent();
         int count = ViewKnownCount;
         if (!_hasBookmarks || count < 0)
         {
@@ -2866,7 +2880,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (IsEditing)
         {
-            // r-ado-1b/edit-pending-ops #697, #719: Close while an edit is pending fails 0x800A0C93.
+            // r-ado-1b/errors-by-route #174: server keyset Close while an edit is pending fails 0x800A0C93.
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
         DisposeOpenRows();
@@ -2902,6 +2916,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _supportedOptions = 0;
     }
 
+    private bool ConsumeDeletedCurrent() => _rows is KeysetRowSource ks && ks.ConsumeDeletedCurrent();
+
     // ---- Navigation (r-oledb-odbc/fetch-moves, r-str-ado-act/ado-rs-cursors, r-ado-1b/book-raw-forms, r-fix-wire-ado/book-position-readback) ----
 
     private CallResult MoveFirst()
@@ -2914,6 +2930,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return flushFail;
         }
+        ConsumeDeletedCurrent();
         if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
@@ -2940,6 +2957,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return flushFail;
         }
+        ConsumeDeletedCurrent();
         if (_effectiveCursorType == 0)
         {
             // r-str-ado-act/ado-rs-cursors #36, r-oledb-odbc/fetch-moves #58, r-fix-wire-ado/book-position-readback #54-73:
@@ -2981,7 +2999,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return flushFail;
         }
-        if (ViewIsEmpty)
+        bool removedCurrent = ConsumeDeletedCurrent();
+        if (!removedCurrent && ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -3025,14 +3044,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
-        int target = _bof ? 0 : _position + 1;
+        // When the current row was self-deleted and just removed from the keyset, the next live row shifted into _position.
+        int target = removedCurrent ? _position : (_bof ? 0 : _position + 1);
         if (!TrySeekView(target, out Failure? fail))
         {
             if (fail is not null)
             {
                 return CallResult.Fail(fail);
             }
-            _bof = false;
+            _bof = ViewIsEmpty;
             _eof = true;
             _position = target;
             return CallResult.Nothing;
@@ -3057,7 +3077,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
-        if (ViewIsEmpty || _bof)
+        bool removedCurrent = ConsumeDeletedCurrent();
+        if ((!removedCurrent && ViewIsEmpty) || _bof)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -3074,7 +3095,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (target < 0)
         {
             _bof = true;
-            _eof = false;
+            _eof = ViewIsEmpty;
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
             return CallResult.Nothing;
@@ -3121,6 +3142,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ReportProviderError(err);
             return CallResult.Fail(err.ComFailure);
         }
+        bool removedCurrent = delta != 0 && ConsumeDeletedCurrent();
         if (ViewIsEmpty)
         {
             _bof = true;
@@ -3142,7 +3164,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         int known = ViewKnownCount;
         int current = _bof ? -1 : _eof ? (known >= 0 ? known : ScanToLast() + 1) : _position;
-        int target = current + delta;
+        int target = removedCurrent && delta > 0 ? current + delta - 1 : current + delta;
         if (target < 0)
         {
             _bof = true;
@@ -3204,6 +3226,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     // ---- Field value, OriginalValue, UnderlyingValue, Status, ActualSize & PutValue (called by AdoFieldObject) ----
 
+    private MappedProviderError DeletedRowError() =>
+        _rows is KeysetRowSource { IsDeletedCurrent: true }
+            ? AdoSqlErrors.SelfDeletedRow()
+            : AdoSqlErrors.RecordIsDeleted();
+
     public CallResult ReadFieldValue(int ordinal, AdoFieldObject field)
     {
         if (!IsOpen || (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast)))
@@ -3220,7 +3247,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             if (readFail is { Scode: HResultDeletedRecord })
             {
-                ReportProviderError(AdoSqlErrors.RecordIsDeleted());
+                ReportProviderError(DeletedRowError());
             }
             return CallResult.Fail(readFail!);
         }
@@ -3245,7 +3272,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             {
                 if (readFail is { Scode: HResultDeletedRecord })
                 {
-                    ReportProviderError(AdoSqlErrors.RecordIsDeleted());
+                    ReportProviderError(DeletedRowError());
                 }
                 return CallResult.Fail(readFail!);
             }
@@ -3347,7 +3374,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             if (readFail is { Scode: HResultDeletedRecord })
             {
-                ReportProviderError(AdoSqlErrors.RecordIsDeleted());
+                ReportProviderError(DeletedRowError());
             }
             return CallResult.Fail(readFail!);
         }

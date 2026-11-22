@@ -98,10 +98,16 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>OLE DB ICommand IID reported by ACE bind/execution/DDL/constraint/empty-command failures (3078, 3010, 3376, 3022, 3200, 3061, 3073, 3218, 0x80040E0C; r-ado-1b/errors-by-route, errors-lock-timeout, rs-open-by-properties).</summary>
     public static readonly Guid IidCommand = new("0C733A63-2A1C-11CE-ADE5-00AA0044773D");
 
-    /// <summary>OLE DB IRowset IID reported by ACE rowset navigation, deleted-row, and field-level edit failures (0x80040E24, 3167, 3163, 3164; r-str-ado-act/ado-rs-cursors, r-ado-1b/rs-cache-same-connection, fields-assign-conversion).</summary>
+    /// <summary>OLE DB IRowset IID reported by ACE rowset navigation, deleted-row, and field-level edit failures (0x80040E24, 3167, 3163, 3164, self-deleted 0x80040E23; r-str-ado-act/ado-rs-cursors, r-ado-1b/rs-cache-same-connection, fields-assign-conversion, r-oledb-odbc/update-errors #62-75, r-oledb-odbc/rowlife-clone-delete-requery #26).</summary>
     public static readonly Guid IidRowset = new("0C733A7C-2A1C-11CE-ADE5-00AA0044773D");
 
-    /// <summary>OLE DB IRowsetUpdate IID ({0C733A6D-...}) reported by ACE rowset Update failures (3022, 3197, 3218; r-ado-1b/errors-by-route #72/#90, values-keyset-conflict #46, r-q-ado-misc/values-witness-keyset #65, errors-lock-timeout #66).</summary>
+    /// <summary>
+    /// OLE DB <c>IID_IRowsetUpdate</c> (<c>{0C733A6D-2A1C-11CE-ADE5-00AA0044773D}</c>, Microsoft Windows SDK <c>oledb.h</c>;
+    /// distinct from <c>IID_IRowsetChange</c> = <c>{0C733A05-2A1C-11CE-ADE5-00AA0044773D}</c>, whose derived interface
+    /// <c>IRowsetUpdate : IRowsetChange</c> exposes <c>Update()</c>) reported by ACE rowset Update failures
+    /// (3022, 3197, 3218; r-ado-1b/errors-by-route #72/#90, r-ado-1b/values-keyset-conflict #46,
+    /// r-q-ado-misc/values-witness-keyset #65, r-ado-1b/errors-lock-timeout #66, r-oledb-odbc/update-errors #86/#236).
+    /// </summary>
     public static readonly Guid IidRowsetUpdate = new("0C733A6D-2A1C-11CE-ADE5-00AA0044773D");
 
     /// <summary>OLE DB ITransactionLocal IID reported by ACE transaction failures (0x8004D00E 3034, 0x8004D008; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three).</summary>

@@ -155,11 +155,20 @@ internal static class AdoSqlErrors
         null,
         AdoObject.IidRowset);
 
-    /// <summary>Text value longer than the column's defined size (3163; r-ado-1b/fields-assign-conversion).</summary>
+    /// <summary>Text value longer than the column's defined size (3163; r-oledb-odbc/update-errors #62-75).</summary>
     public static MappedProviderError FieldTooSmall() => Make(
         AdoObject.HResultErrorsOccurred,
         "The field is too small to accept the amount of data you attempted to add. Try inserting or pasting less data.",
         5003163,
+        "3163",
+        -68551703,
+        AdoObject.IidRowset);
+
+    /// <summary>Reading a field on a row deleted through the same server keyset before moving off it (r-oledb-odbc/rowlife-clone-delete-requery #26; SQLState/NativeError not observed).</summary>
+    public static MappedProviderError SelfDeletedRow() => Make(
+        AdoObject.HResultDeletedRecord,
+        "Row handle referred to a deleted row or a row marked for deletion.",
+        5000000,
         null,
         null,
         AdoObject.IidRowset);
@@ -324,29 +333,15 @@ internal static unsafe class AdoEditErrors
         }
         if (error.Number == CalcDb.Isam.Edit.MutationError.Conversion)
         {
-            if (column.TypeCode is CalcDb.Format.NativeTypes.Guid or CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole or CalcDb.Format.NativeTypes.Numeric)
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Guid or CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Numeric)
             {
                 // r-ado-1b/fields-assign-conversion #139, #144, #149, #159, #184:
                 // Decimal, GUID, and Binary conversion refusals report Provider 0x80040E21 Multiple-step.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
-            VarType? target = TargetScalarVarType(column.TypeCode);
-            if (target is { } vt)
+            if (TryMapRecordedScalarConversionError(in incoming, column, lcid, iid) is { } scalarErr)
             {
-                CalcDb.Values.NativeVariant copy = incoming;
-                CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
-                if (hr == AdoObject.HResultOutOfRange)
-                {
-                    // r-ado-1b/fields-assign-conversion #169, #174: Byte overflow -> Provider 0x80040E21 Multiple-step;
-                    // #164, #179: Short / Single overflow -> Provider 0x8002000A Out of present range.
-                    return column.TypeCode == CalcDb.Format.NativeTypes.Byte
-                        ? AdoSqlErrors.MultipleStepOn(iid)
-                        : AdoSqlErrors.OutOfRangeOn(iid);
-                }
-                if (hr == AdoObject.HResultTypeMismatch)
-                {
-                    return AdoSqlErrors.TypeMismatchOn(iid);
-                }
+                return scalarErr;
             }
             return FailUnmodelled(error, "field assignment", out unmodelled);
         }
@@ -355,7 +350,8 @@ internal static unsafe class AdoEditErrors
 
     /// <summary>
     /// Map <see cref="CalcDb.Isam.Edit.MutationOpen"/> outcomes from <c>EditFrame.Assign</c> where ADO has an exact
-    /// recorded Provider error (r-ado-1b/fields-assign-conversion #139, #144, #149, #184, #199; r-ado-1b/edit-update-args #134).
+    /// recorded Provider error (r-ado-1b/fields-assign-conversion #84, #139, #144, #149, #164, #169, #174, #179, #184, #199;
+    /// r-ado-1b/edit-update-args #130; r-oledb-odbc/update-errors #18, #40).
     /// Returns null for unrecorded cases so the caller keeps the named <c>NotModelled</c> refusal.
     /// </summary>
     public static MappedProviderError? TryMapOpenAssignError(
@@ -373,32 +369,57 @@ internal static unsafe class AdoEditErrors
                 // r-ado-1b/fields-assign-conversion #139, #144, #149: Decimal put of String/Double/Currency -> Provider 0x80040E21.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
-            if (column.TypeCode is CalcDb.Format.NativeTypes.Binary or CalcDb.Format.NativeTypes.Ole
+            if (column.TypeCode == CalcDb.Format.NativeTypes.Binary
                 && incoming.Type == VarType.Bstr)
             {
-                // r-ado-1b/fields-assign-conversion #184: Binary/OLE put of String -> Provider 0x80040E21.
+                // r-ado-1b/fields-assign-conversion #184: Binary put of String -> Provider 0x80040E21.
                 return AdoSqlErrors.MultipleStepOn(iid);
             }
             return null;
         }
         if (open == CalcDb.Isam.Edit.MutationOpen.ConversionNotRecorded)
         {
-            if (TargetScalarVarType(column.TypeCode) is { } vt)
+            return TryMapRecordedScalarConversionError(in incoming, column, lcid, iid);
+        }
+        return null;
+    }
+
+    private static MappedProviderError? TryMapRecordedScalarConversionError(
+        in CalcDb.Values.NativeVariant incoming,
+        CalcDb.Format.ColumnDescriptor column,
+        uint lcid,
+        in Guid iid)
+    {
+        if (TargetScalarVarType(column.TypeCode) is not { } vt)
+        {
+            return null;
+        }
+        CalcDb.Values.NativeVariant copy = incoming;
+        CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
+        if (hr == AdoObject.HResultOutOfRange)
+        {
+            // r-ado-1b/fields-assign-conversion #169, #174: Byte overflow -> Provider 0x80040E21 Multiple-step.
+            if (column.TypeCode == CalcDb.Format.NativeTypes.Byte)
             {
-                CalcDb.Values.NativeVariant copy = incoming;
-                CalcDb.Values.OwnedVariant.TryChangeScalar(&copy, vt, lcid, out _, out int hr);
-                if (hr == AdoObject.HResultOutOfRange)
-                {
-                    return column.TypeCode == CalcDb.Format.NativeTypes.Byte
-                        ? AdoSqlErrors.MultipleStepOn(iid)
-                        : AdoSqlErrors.OutOfRangeOn(iid);
-                }
-                if (hr == AdoObject.HResultTypeMismatch)
-                {
-                    // r-ado-1b/fields-assign-conversion #199, r-ado-1b/edit-update-args #134: non-numeric BSTR into Long/etc.
-                    return AdoSqlErrors.TypeMismatchOn(iid);
-                }
+                return AdoSqlErrors.MultipleStepOn(iid);
             }
+            // r-ado-1b/fields-assign-conversion #164 (Short), #179 (Single); r-oledb-odbc/update-errors #40 (Long):
+            // recorded numeric overflow -> Provider 0x8002000A Out of present range.
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Integer or CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.Single)
+            {
+                return AdoSqlErrors.OutOfRangeOn(iid);
+            }
+            return null;
+        }
+        if (hr == AdoObject.HResultTypeMismatch)
+        {
+            // r-ado-1b/fields-assign-conversion #84 (DateTime), #199 (Long); r-ado-1b/edit-update-args #130 (Long);
+            // r-oledb-odbc/update-errors #18 (Long): non-convertible text -> Provider 0x80020005 Type mismatch.
+            if (column.TypeCode is CalcDb.Format.NativeTypes.Long or CalcDb.Format.NativeTypes.DateTime)
+            {
+                return AdoSqlErrors.TypeMismatchOn(iid);
+            }
+            return null;
         }
         return null;
     }
