@@ -88,12 +88,13 @@ scope or design, the book wins.
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
 - Navigate C# with ripgrep (`rg -n -w`) for names, text and string literals, and make single-file and small edits with
   your own file tools. In a session that refactors or asks semantic questions, use roscli on its warm daemon:
-  implementers (`nav.find_implementations`), the uses of an overloaded or same-named member or of a method group
-  (`nav.find_invocations`, `nav.find_references`), the compile errors of one project (`diag.get_workspace_snapshot
-  <project dir>`, never `.`), a rename across files (`edit.rename_symbol`), a signature change (`edit.change_signature`),
-  and a new `.cs` file while the daemon runs (`edit.create_file`; a file your own tool creates stays invisible to it
-  until a reload). It finds no `new` sites of a class; do not use `repair.*` or `edit.apply_code_fix` (they propose TODO
-  stubs). Build the area filter after every edit, roscli's included (measured on 0.1.6-preview.22, 2026-11-22). Setup:
+  implementers (`nav.find_implementations`), the uses or constructions of a type and of an overloaded or same-named
+  member or method group (`nav.find_references`, `nav.find_invocations`), callers through lambdas and method groups
+  (`nav.call_hierarchy`), a definition (`nav.go_to_definition`), the compile errors of a project, a folder or the
+  solution (`diag.get_workspace_snapshot`), a rename across files (`edit.rename_symbol`), a signature change
+  (`edit.change_signature`), and a new `.cs` file while the daemon runs (`edit.create_file`; a file your own tool creates
+  stays invisible to it until a reload). Do not use `repair.*` or `edit.apply_code_fix` (they propose TODO stubs). Build
+  the area filter after every edit, roscli's included (measured on 0.1.6-preview.23, 2026-11-22). Setup:
   `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
   `ROSCLI_DAEMON=required`; `roscli daemon.stop` and delete `.roslynskills/` before you end.
 - roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills

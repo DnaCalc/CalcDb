@@ -810,3 +810,10 @@ released on GitHub as v0.1.6-preview.22), the six edit tasks again, both ways, e
 Setup 3 s restore and 43 s load; 320 to 690 MB; no `--workspace-path` needed in a worktree; navigation unchanged (51 of 51
 callers, 5 of 5 implementers). AGENTS.md and The Plan §4 now name the rename, the signature change and file creation
 for roscli; single-file and small edits stay with the harness's tools; repair stays out (RoslynSkills 25j6).
+
+**roscli navigation completed (RoslynSkills 57zm, 4eaaa64, released on GitHub as v0.1.6-preview.23, 2026-11-22).** On
+CalcDb, warm: references to EditFrame 231 (120 `new`, 9 target-typed) in 331 ms; the 115 constructions of the IPageSource
+implementers found from find_implementations results; the call hierarchy follows lambdas (ActionExecutor.cs:859,
+via_lambda) and method groups (Activation.cs:39, :50); nav.go_to_definition 272 ms; a workspace snapshot of src or the
+solution covers 21 or 33 projects (149 errors after a break, where dotnet build stops at 144). The first type query builds
+a call-site cache once (about 24 s). AGENTS.md (Tool practice) drops "it finds no new sites" and names these commands.
