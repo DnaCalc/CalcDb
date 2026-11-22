@@ -832,3 +832,11 @@ writing to a client that had gone, and a restart that lost the old process. Now 
 concurrent (daemon.status 239 ms during a 35 s CalcDb reload), a restart kills the verified old process tree (2.5 s),
 and the daemon's state lives in the per-user folder: nothing is written into the repository. AGENTS.md drops the
 "delete .roslynskills/" step.
+
+**roscli 0.1.6-preview.26 (RoslynSkills 25j6, 83928a1, GitHub release, 2026-11-22).** The repair commands use Roslyn's
+own code fixes (Microsoft.CodeAnalysis.CSharp.Features) on the warm daemon: add-import, implement interface or abstract
+class; no_fix_available where Roslyn has none (CS7036 included). On CalcDb a removed `using System.Diagnostics;` is
+proposed in 3.5 s and repaired in 1.4 s, the file restored byte for byte. AGENTS.md lifts the "do not use repair.*" line.
+That empties the RoslynSkills queue of this round. Practice for writers: a bash script run in WSL from PowerShell
+arrives with CRLF line endings and fails; pass it base64-encoded or as an LF file (two writers lost a run each). roscli's
+answer is nested one level deeper through the daemon (RoslynSkills task qvcn).

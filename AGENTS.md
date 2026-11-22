@@ -93,8 +93,10 @@ scope or design, the book wins.
   (`nav.call_hierarchy`), a definition (`nav.go_to_definition`), the compile errors of a project, a folder or the
   solution (`diag.get_workspace_snapshot`), a rename across files (`edit.rename_symbol`), and a signature change
   (`edit.change_signature`). The daemon sees files that any tool creates or deletes before its next answer; only a
-  project or solution file change needs `workspace.refresh`. Do not use `repair.*` or `edit.apply_code_fix` (they propose
-  TODO stubs). Build the area filter after every edit, roscli's included (measured on 0.1.6-preview.24, 2026-11-22). Setup:
+  project or solution file change needs `workspace.refresh`. A missing `using` or an unimplemented interface is one
+  call (`edit.apply_code_fix`, or `repair.propose_from_diagnostics` then `repair.apply_plan`: Roslyn's own fixes; it
+  answers `no_fix_available` where Roslyn has none). Build the area filter after every edit, roscli's included (measured
+  on 0.1.6-preview.26, 2026-11-22). Setup:
   `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
   `ROSCLI_DAEMON=required`; `roscli daemon.stop` before you end. A reload or a restart answers and recovers; the daemon writes
   nothing into the repository.
