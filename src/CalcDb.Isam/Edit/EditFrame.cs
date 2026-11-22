@@ -509,6 +509,25 @@ public sealed class EditFrame : IDisposable
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
+        if (Mode == EditMode.AddNew && _cursor is PopulationCursor pop)
+        {
+            if (_workspace.Depth > 1 && _workspace.Depth <= TransactionCoordinator.MaxWriteDepth)
+            {
+                return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, "AddNew+Update on a dynaset inside a nested BeginTrans is not recorded (R-CURSOR-1 CUR-POP Open)");
+            }
+            if (pop.IsPartiallyPopulated)
+            {
+                return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, $"AddNew+Update on a partially populated dynaset (RecordCount {pop.RecordCount}, incomplete) is not recorded (R-CURSOR-1 CUR-POP Open)");
+            }
+            if (_table.Writer is { } formatWriter)
+            {
+                PrivateOverlay? overlay = _workspace.OverlayOf(formatWriter.File);
+                if (formatWriter.IsJet4Mdb(overlay) && (formatWriter.LiveRowCount(overlay) > 500 || pop.RecordCount > 500))
+                {
+                    return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, "AddNew+Update on an MDB dynaset over 500 rows is not recorded (R-CURSOR-1 CUR-POP Open)");
+                }
+            }
+        }
 
         // The checks of the candidate row (II-10 §21 F-91 "Scheduled field and row checks"), each class reporting its
         // first failure in declaration order. ACE's order is qualified along Required (3314), field rule
@@ -756,7 +775,7 @@ public sealed class EditFrame : IDisposable
         }
         Clear();
         int? insertedOrdinal = null;
-        if (mode == EditMode.AddNew && _workspace.Depth == 0 && accepted.Open == MutationOpen.None && change.Inserted is { } insertedRow && _cursor is IMutableCursor mutable)
+        if (mode == EditMode.AddNew && _workspace.Depth <= 1 && accepted.Open == MutationOpen.None && change.Inserted is { } insertedRow && _cursor is IMutableCursor mutable)
         {
             insertedOrdinal = mutable.OnRowInserted(insertedRow);
         }

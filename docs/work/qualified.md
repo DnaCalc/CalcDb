@@ -1072,31 +1072,54 @@ is summarised in [qualification-report.md](qualification-report.md).
   - *Counters.* The TableDef's first page holds the row count (16), the AutoNumber counter (20, the last value issued) and the unique-entry counts of physical indexes 0 and 1 (67, 79). They are written in the rows' group. INSERT…SELECT of K 1–4 gives IDs 1–4 and every counter 4. The next insert gets ID 5.
   - *Duplicate, no flag.* The refused row is the later of the two in source order ('g2-c-second12'), and it consumes its AutoNumber: IDs 1, 2 and 4 are stored. `RecordsAffected` is 3, and `Errors` is empty. Row count 3, AutoNumber 4, PK count 4 (the refused row's PK entry was counted), UK count 3. One group, as for a clean statement, inside `BeginTrans`/`CommitTrans` as well.
   - *Duplicate, `dbFailOnError`.* 3022, `RecordsAffected` 0, one `Errors` entry (3022). No row is stored and no data or index page is written. The TableDef counters are written as they stood at the refusal: row count 2, AutoNumber 3, PK count 3, UK count 2, on an empty table. `TableDef.RecordCount` and a table-type `RecordCount` read 2. After the next insert they read 3, with one row (ID 4).
-  - *One row refused, nothing counted.* A single-row `INSERT … VALUES` refused 3022 by the first unique index changes
-    nothing on the file, page 0 included, with or without `dbFailOnError` (`evidence/r-err-1b/con-pk-duplicate-insert`,
+  - *One row refused, nothing counted.* On a table whose key is not an AutoNumber given explicitly, a single-row
+    `INSERT … VALUES` refused 3022 by the first unique index changes nothing on the file, page 0 included, with or without `dbFailOnError` (`evidence/r-err-1b/con-pk-duplicate-insert`,
     `evidence/r-fix-cursor-dao/con-pk-duplicate-insert-failonerror`: identical hashes before open and after close). The
     +1 on page 0 of r-q10 belongs to a recordset `AddNew`.
   - *How the refusal is written.* Outside a transaction, three groups: one inside `Execute` (page 1, TableDef), the deferred one 0.5 s later (the same pages), and page 1 at `Close` (+3). Inside a transaction: one group at `CommitTrans` and page 1 at `Close` (+2).
   - *Division by zero, `dbFailOnError`.* Error 11 in the third source row does the same: no rows; row count 2, AutoNumber 3, both index counts 2 (the failing row reached no index); +3.
   - *Rollback.* `BeginTrans`, the clean 4-row insert, `Rollback`: no row, row count 0. AutoNumber 4 is written with page 1 within `Rollback`, and page 1 again at `Close` (+2). The next insert gets ID 5.
+    The AutoNumber is the only counter a Rollback writes: on a page with room the field rises by 1 (one row or four:
+    ins-one-existing-txn-rb, ins-four-existing-txn-rb), and by 2 after a new page. A recordset `AddNew` + `Update`
+    rolled back writes the same (rs-addnew-txn-rb-newpage +2, rs-addnew-txn-rb-existing +1), and so does a duplicate
+    insert without `dbFailOnError` (ins-dup-plain-txn-rb: all four values consumed, next ID 5). Under `COUNTER(100, 5)`
+    the word starts at 95 (seed minus increment) and four rolled-back rows leave 115, next ID 120
+    (ins-txn-rb-counter-100-5). Jet 4 MDB does the same on its TableDef page 19 (ins-txn-rb-mdb).
+  - *Nested levels.* `BeginTrans` twice, a 4-row insert, the inner `Rollback`, then the outer `CommitTrans`: no row, but
+    the row count, the AutoNumber and both index counts are written as 4, `TableDef.RecordCount` reads 4 on an empty
+    table, and after the next insert 5 on one row (ins-nested-inner-rb-outer-commit, a1 and a2; with one earlier row 5
+    and 6: ins-nested-existing-inner-rb-outer-commit). With the outer `Rollback` instead, only the AutoNumber is written
+    (ins-nested-inner-rb-outer-rb).
+  - *Explicit AutoNumber.* With unit increment, an explicit value accepted below the counter lowers the word to it
+    (counter 10, ID 5 into a gap: 20 becomes 5, next ID 6; exp-gap-5, a1 and a2), and one equal to it leaves it
+    (exp-gap-10, next 11). Refused 3022 by the primary key it sets the word the same way (exp-pk-dup-5, a1 and a2: 10 to
+    5, next 6; exp-pk-dup-10) and the field rises by 1. Refused 3022 by another unique index, it sets the word
+    (exp-uk-dup-40: 40, next 41; exp-uk-dup-5: 5, next 6), the primary key's count rises by 1, the row count and the
+    other index's count stay, and the field rises by 2.
+  - *Other refusals in INSERT…SELECT, `dbFailOnError`.* On a page with room the 3022 refusal adds 2, not 3
+    (ins-dup-fail-existing). A 3201 at row 3 leaves row count 2, AutoNumber 3, primary key count 3 and foreign key
+    index count 2 (ins-fk-3201-fail); 3314, 3316 and a 3464 conversion at row 3 reach neither index (row count 2,
+    AutoNumber 3, both index counts 2: ins-req-3314-fail, ins-val-3316-fail, ins-conv-3464-fail); each adds 3. A refusal
+    at row 6 of rows that fill three data pages when accepted (ins-clean-two-pages) writes no data or index page and
+    takes none: pages 0 and the TableDef change, +3 (ins-dup-fail-two-pages). Jet 4 MDB writes the same counters on its
+    TableDef page (ins-dup-fail-mdb; its repeat differs only in an MSysObjects date).
+  - *Memo AllowZeroLength.* A Memo made by DAO `CreateField` reads `AllowZeroLength` False when it is not set; '' into it
+    fails 3315 under `dbFailOnError` and consumes the AutoNumber (+1; memo-zerolength-unset-fail,
+    memo-zerolength-false-fail a1 and a2). With True it stores '' (memo-zerolength-true-fail).
   - *UPDATE making two rows equal.* `UPDATE U SET K = 9 WHERE ID IN (2, 3)` sets ID 2 and refuses ID 3, in key order: `IN (3, 2)` gives the same, and `WHERE ID >= 2` changes only ID 2. Without the flag `RecordsAffected` is 1 and no error is raised. With `dbFailOnError`: 3022, `RecordsAffected` 0, and ID 2 stays 9 (SQL-ACT-FAIL). Both write one deferred group (data page, unique index page; no TableDef change): +1.
   - *Read-only database.* `Execute` of an INSERT on a database opened read-only fails 3073 "Operation must use an updateable query.", with `RecordsAffected` 0 and one `Errors` entry. This holds shared or exclusive, with or without `dbFailOnError`, with no read/write handle in the process. The file hash is unchanged, and ETW shows no write to the database.
   - *Failed value, no flag.* Text 'x43' into the Long K, or `1 / (K - 33)` = 1/0 into D, in `INSERT…SELECT` stores that row with Null in the field. `RecordsAffected` is 3 for 4 stored rows, and `Errors` is empty. The counters count the row (row count, AutoNumber and index counts 4). A one-row `INSERT … VALUES ('x', …)` or `(…, 1 / 0)` stores its row with Null and reports `RecordsAffected` 0.
 - **Conditions**: ACCDB, DAO `Database.Execute`, one process. Each question builds An (COUNTER primary key, unique K), Src and U (unique K) on a copy of r-fmt-1-accdb-empty in a setup session. Then one statement session runs, with a 1500 ms pause before `Close` except in ins-clean-fail-nopause. Pages are read after each closed session, and the ETW recorder is on.
-- **Records**: `evidence/r-q18-statements/` (27 questions). Clean insert: ins-clean-{fail,plain,fail-txn,plain-txn,fail-txn-rollback,fail-nopause}. Duplicate: ins-dup-{fail,plain,fail-txn,plain-txn,fail-count,plain-count}. Allocation: ins-one-newpage-fail, ins-one-existing-fail, ins-clean-existing-fail. UPDATE: upd-dup-{fail,plain,plain-desc,plain-three}. Failed values: ins-conv-plain, ins-conv-values-plain, ins-div0-{plain,fail,values-plain}. Read-only: ro-ins-{fail,plain}, ro-excl-ins-fail.
+- **Records**: `evidence/r-q27-autonumber-txn/` (27 questions, 10 repeated; task nxj9) for the transaction, explicit,
+  other-refusal and Memo cases. `evidence/r-q18-statements/` (27 questions). Clean insert: ins-clean-{fail,plain,fail-txn,plain-txn,fail-txn-rollback,fail-nopause}. Duplicate: ins-dup-{fail,plain,fail-txn,plain-txn,fail-count,plain-count}. Allocation: ins-one-newpage-fail, ins-one-existing-fail, ins-clean-existing-fail. UPDATE: upd-dup-{fail,plain,plain-desc,plain-three}. Failed values: ins-conv-plain, ins-conv-values-plain, ins-div0-{plain,fail,values-plain}. Read-only: ro-ins-{fail,plain}, ro-excl-ins-fail.
 - **Discriminators**: a new page against a page with room, and one row against four (the allocation probes); the pause; the IN order; the public RecordCount against its no-flag control; the transaction variants.
 - **Contradicts**: ERR-PARTIAL's "constraint refusals under dbFailOnError change nothing". A refused `INSERT…SELECT` leaves the rows unchanged, but it changes the TableDef counters and the public `RecordCount` (ins-dup-fail-count). This also explains PRES-ROLLBACK-FAILED's changed hash and ERR-PARTIAL's open d1e hash.
 - **Open**:
   - The values of the three 3586 writes within a group: ETW gives offsets only, and the closed file the net.
   - Whether Compact & Repair resets the drifted row count.
-  - A refusal in a statement that spans pages; MDB.
   - The first ro-ins-fail attempt's `Execute` took 3.15 s. Its repeat (a2, retained) took 11 ms.
-  - The counter bytes of a refused 3022 that took no new page, and of a 3201 after earlier rows: their answers are
-    recorded (`evidence/r-txn-1/stmt-unique-middle-fail-d1`, `stmt-fk-counter-fail-d1`: 3201, next ID 5), their
-    pages are not. CalcDb writes the counters it reached there (task c7gn).
-  - Rollback of a generated AutoNumber that took no new page, an inner Rollback, or under an increment other than 1:
-    `evidence/r-q-fmt-sort/auto-cancel-fail-accdb` (no new page; next ID 10) records the answer, not the bytes.
-    CalcDb writes nothing, and refuses a non-unit increment by name.
+  - After the word was lowered (exp-gap-5), a generated value that already exists as a row: 3022, or skipped.
+  - Explicit values under an increment other than 1.
 
 ### R-TXN-1 TXN-MULTI: files and Workspaces
 - **Claim**: Within one Workspace, changes in files A and B resolve together by one `Rollback`/`CommitTrans` in either touch order; a file opened after the first `BeginTrans` joins; a statement failure in B after a change in A is statement-only; closing B inside the level still rolls back both; three handles to one file roll back together. Two Workspaces touching the same two files in opposite order (w1: A then B, w2: B then A) resolve independently: on rows that do not share a page (unindexed field, all four updates admitted) the three resolution orders (w1 Rollback then w2 CommitTrans; w2 CommitTrans then w1 CommitTrans; w2 Rollback then w1 CommitTrans) each leave exactly the committing Workspace's changes on both files and nothing of the rolled-back one (A and B rows 1/64: (0,10), (1,20), (2,20)), in each Workspace's own reads and in a third Workspace after a pause and Idle; no deadlock. An update colliding with the other Workspace's page (three rows on one page) is refused 3188. A refused second-file admission (`OpenDatabase` on a file another process holds exclusively, 3045) leaves the level usable: later updates and `CommitTrans` succeed and both main-file changes are committed (independent final read), and the file opens after the other process closes.
@@ -1372,6 +1395,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Claim.** On a table-opened dynaset of 2048 rows (`Big` with PK `ID`, or unindexed `BigNoPk`) right after open (`RecordCount` 1, `AbsolutePosition` 0, `Bookmark` `00020000`, `ID` 1), `AddNew` + `Update` immediately populates the entire table and appends the new row at ordinal 2048: right after `Update`, `RecordCount` is 2049, the current row stays at ordinal 0 (`ID` 1, `00020000`), and `LastModified` is `ec0a0000` (matching `MoveLast` -> ordinal 2048, `Bookmark` `ec0a0000`; `MovePrevious` -> ordinal 2047, `ID` 2048, `eb0a0000`). Rows beyond the 500-row chunk are immediately reachable (`MoveNext` -> `ID` 2; `Move 600` -> ordinal 601, `ID` 602, `94040000`; direct `Bookmark = ec0a0000` with no prior move lands on ordinal 2048). Inserting a PK lower than all existing rows (`ID` 0) still populates all 2048 rows and appends `ID` 0 at ordinal 2048 (`ec0a0000`). Inside `BeginTrans` (started either before or after `OpenRecordset`), `Update` behaves identically (`RecordCount` 2049, `LastModified` `ec0a0000`, all 2049 rows visible) and `CommitTrans` preserves all 2049 rows. On `Rollback` when `BeginTrans` started after open on an unpopulated dynaset (`RecordCount` 1 before `BeginTrans`), ACE rolls back both the inserted row and the keyset rows populated during the transaction: `RecordCount` drops back to 1; if positioned on the rolled-back row (`MoveLast` before `Rollback`), `AbsolutePosition` is −1 and `Bookmark`/`Field.Value` fail 3021 (`0x800A0BCD`) while a subsequent `MoveLast` lands on row 0 (`RecordCount` 1, `ID` 1); if still on row 0 at `Rollback`, row 0 stays current, `MoveNext` sets `EOF` True, and `MoveLast` stays at `RecordCount` 1 (`ID` 1) until `Requery()` restores all 2048 rows. When `MoveLast` populated all 2048 rows before `BeginTrans`, `Rollback` after `AddNew`+`Update` reverts `RecordCount` to 2048 (`ID` 2048 at ordinal 2047).
 - **Conditions.** ACCDB; fixture `r-q-cursor-dao-main.accdb` (`Big`, 2048 rows, PK `ID`; and `BigNoPk` heap copy); default `Workspaces(0)` transactions.
 - **Records.** `r-q24-bookmarks/q5-dyn-big-addnew-unmoved`, `q5-dyn-big-addnew-unmoved-nopk` (discriminating: PK vs unindexed heap), `q5-dyn-big-addnew-unmoved-begintrans` (open inside `BeginTrans` + `CommitTrans`), `q5-dyn-big-addnew-begintrans-after-open` (`BeginTrans` after open + `MoveLast` + `Rollback`), `r2-q5-dyn-big-addnew-jump-lm` (direct `Bookmark = LastModified` without prior move), `r2-q5-dyn-big-addnew-low-pk` (discriminating: `ID = 0 < 1` still appends at ordinal 2048), `r2-q5-dyn-big-begintrans-rollback-detail` (`.a1` and `.a2` repeat; discriminating: unpopulated before `BeginTrans` drops to 1 and hits EOF on `MoveNext` until `Requery`, versus pre-populated before `BeginTrans` reverting to 2048).
+- **Implemented** (whxg, 48a3b0c8): the recorded cases above; everything the Open line lists is refused by name in CalcDb (NotModelled.Txn.RecordsetAfterRollback, NotModelled.Edit.DynasetKeysetPopulation).
 - **Open.** `AddNew`+`Update` after partial population (`RecordCount` 501 after one `MoveNext`); `Rollback` on an unpopulated dynaset opened inside `BeginTrans`; nested `BeginTrans`; MDB and SQL dynasets over >500 rows.
 
 ### R-CURSOR-1 CUR-ID: Bookmark representation, assignment errors, validity after Requery, and the held Field across delete and reinsert

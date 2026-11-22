@@ -346,6 +346,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly List<ExplicitFrame> _frames = [];
     private readonly Dictionary<PageCache, FileParticipant> _participants = [];
     private readonly List<EditFrame> _edits = [];
+    private readonly List<PopulationFamily> _populations = [];
     private readonly List<AcceptedRowChange> _pending = [];
     private readonly Dictionary<MutationSemantics, TableAcceptedIndex> _acceptedByTable = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<PageCache, int> _unpublishedGlobalMapActivity = [];
@@ -517,13 +518,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new MutationError(MutationError.TooManyTransactions, MutationErrorSource.Workspace);
         }
-        _frames.Add(new ExplicitFrame(_frames.Count + 1));
+        ExplicitFrame frame = new(_frames.Count + 1);
+        _frames.Add(frame);
         if (_frames.Count > 1)
         {
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.BeginScope();
             }
+        }
+        foreach (PopulationFamily pop in _populations)
+        {
+            pop.OnTransactionBegin(frame);
         }
         return null;
     }
@@ -568,6 +574,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 p.Overlay.CommitScope();
             }
+            foreach (PopulationFamily pop in _populations)
+            {
+                pop.OnTransactionCommit(top);
+            }
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
         _pending.AddRange(top.Changes);
@@ -583,6 +593,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _pendingCloseCommit.Clear();
             ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
+            foreach (PopulationFamily pop in _populations)
+            {
+                pop.OnTransactionCommit(top);
+            }
             return new ResolutionOutcome();
         }
         // The level's pages stay held until its publication writes them (LockLifetime.UntilPublished).
@@ -592,6 +606,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         // The outer commit publishes the change set before it returns (TXN-FLUSH-COMMIT; PublicationPolicy).
         (MutationOpen open, string? detail) = Publish(forceFlush: options == 1, CommitMode.Immediate);
+        foreach (PopulationFamily pop in _populations)
+        {
+            pop.OnTransactionCommit(top);
+        }
         return new ResolutionOutcome(null, open, detail, resolved);
     }
 
@@ -1119,7 +1137,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_statement is not null)
         {
             _frames.RemoveAt(_frames.Count - 1);
-            return RollbackStatementFrame(top);
+            ResolutionOutcome stmtOutcome = RollbackStatementFrame(top);
+            foreach (PopulationFamily pop in _populations)
+            {
+                pop.OnTransactionRollback(top);
+            }
+            return stmtOutcome;
         }
         // Every refusal is decided before the level is touched: a refused Rollback changes nothing.
         if (PlanRolledBackAutoNumbers(top, out RolledBackAutoNumbers? write) is { } refused)
@@ -1136,6 +1159,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 p.Overlay.RollbackScope();
             }
+            foreach (PopulationFamily pop in _populations)
+            {
+                pop.OnTransactionRollback(top);
+            }
             return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
         }
         foreach (EditFrame e in _edits.ToArray())
@@ -1145,6 +1172,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         // Purely private changes: no native restore, only this locker's grants end (II-09 §25, T-TXN-31).
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
+        foreach (PopulationFamily pop in _populations)
+        {
+            pop.OnTransactionRollback(top);
+        }
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
         return write is { } words ? WriteRolledBackAutoNumbers(words, top.Changes.Count) : new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
@@ -1470,10 +1501,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>Workspace.Close: every level is rolled back (TXN-CLOSE: Close with 1, 2 or 3 levels returns without error).</summary>
     public void Close()
     {
+        List<ExplicitFrame>? rolledBack = _frames.Count > 0 ? new List<ExplicitFrame>(_frames.Count) : null;
         while (_frames.Count > 0)
         {
             ExplicitFrame top = _frames[^1];
             _frames.RemoveAt(_frames.Count - 1);
+            rolledBack!.Add(top);
             Consume(top.Changes);
             UnindexChanges(top.Changes);
         }
@@ -1489,6 +1522,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
+        if (rolledBack is not null)
+        {
+            foreach (ExplicitFrame frame in rolledBack)
+            {
+                foreach (PopulationFamily pop in _populations)
+                {
+                    pop.OnTransactionRollback(frame);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1958,6 +2001,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     internal void Register(EditFrame frame) => _edits.Add(frame);
 
     internal void Unregister(EditFrame frame) => _edits.Remove(frame);
+
+    internal void Register(PopulationFamily population) => _populations.Add(population);
+
+    internal void Unregister(PopulationFamily population) => _populations.Remove(population);
 
     public void Dispose() => Close();
 

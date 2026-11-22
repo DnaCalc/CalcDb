@@ -65,6 +65,14 @@ public enum PositionTag
     /// while the prior ordinal is remembered for AbsolutePosition.
     /// </summary>
     BookmarkInvalid,
+
+    /// <summary>
+    /// After an explicit transaction Rollback reverted the keyset rows populated inside that transaction while this
+    /// cursor stood on one of those reverted rows (R-CURSOR-1 CUR-POP; r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open,
+    /// r-cursor-1/edit-rollback-opened-before): BOF and EOF are false, no current row (AbsolutePosition -1, Bookmark,
+    /// Field.Value and Move 0 give 3021), while MoveFirst and MoveLast reposition onto the surviving rows.
+    /// </summary>
+    RolledBackNoCurrent,
 }
 
 /// <summary>
@@ -196,6 +204,20 @@ public sealed class PositionState<T> where T : struct
         {
             _invalidAnchor = null;
         }
+    }
+
+    /// <summary>
+    /// Record that a transaction Rollback reverted the occurrence this cursor stood on
+    /// (R-CURSOR-1 CUR-POP; r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r-cursor-1/edit-rollback-opened-before):
+    /// BOF/EOF false, no current row, prior anchors cleared.
+    /// </summary>
+    public void MarkRolledBackNoCurrent()
+    {
+        NoMatch = false;
+        _deletedAnchor = null;
+        _invalidAnchor = null;
+        Current = null;
+        Tag = PositionTag.RolledBackNoCurrent;
     }
 
     /// <summary>Update any stored occurrence after a sibling removed an occurrence from the shared store.</summary>
@@ -372,7 +394,7 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag == PositionTag.BookmarkInvalid)
+        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent)
         {
             return MoveOutcome.NotModelled;
         }
@@ -399,7 +421,7 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag is PositionTag.Requeried or PositionTag.BookmarkInvalid)
+        if (Tag is PositionTag.Requeried or PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent)
         {
             return MoveOutcome.NotModelled;
         }
@@ -436,7 +458,7 @@ public sealed class PositionState<T> where T : struct
             }
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag == PositionTag.BookmarkInvalid || (Tag == PositionTag.Requeried && rows < 0))
+        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent || (Tag == PositionTag.Requeried && rows < 0))
         {
             return MoveOutcome.NotModelled;
         }
@@ -533,6 +555,23 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
         {
             _occurrences.RemoveAt(ordinal);
         }
+    }
+
+    /// <summary>
+    /// Discard occurrences populated at or past <paramref name="count"/> when an outermost transaction rolls back a
+    /// complete store populated by in-transaction AddNew+Update (R-CURSOR-1 CUR-POP;
+    /// r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail).
+    /// Requires <see cref="Complete"/> to be true and keeps it true so a later MoveNext hits EOF and MoveLast stays
+    /// at the reverted frontier until Requery; returns false without modifying an incomplete store.
+    /// </summary>
+    public bool TruncateTo(int count)
+    {
+        if (!_complete || count < 0 || count >= _occurrences.Count)
+        {
+            return false;
+        }
+        _occurrences.RemoveRange(count, _occurrences.Count - count);
+        return true;
     }
 
     /// <summary>Append a newly inserted occurrence when this store is already complete; returns its ordinal if appended.</summary>

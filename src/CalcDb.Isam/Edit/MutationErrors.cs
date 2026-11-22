@@ -253,4 +253,11 @@ public enum MutationOpen : byte
     /// 3022 or 3201 after earlier rows, a refused INSERT whose rows span data pages, or an MDB or several files.
     /// </summary>
     CounterWrite,
+
+    /// <summary>
+    /// An unrecorded dynaset keyset population or transactional AddNew case (R-CURSOR-1 CUR-POP Open;
+    /// <c>evidence/r-q24-bookmarks/</c>): <c>AddNew</c>+<c>Update</c> inside a nested <c>BeginTrans</c>, after partial
+    /// population (<c>RecordCount</c> 501), or on an MDB dynaset over 500 rows.
+    /// </summary>
+    DynasetKeysetPopulation,
 }
