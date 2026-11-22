@@ -1121,6 +1121,15 @@ is summarised in [qualification-report.md](qualification-report.md).
     at row 6 of rows that fill three data pages when accepted (ins-clean-two-pages) writes no data or index page and
     takes none: pages 0 and the TableDef change, +3 (ins-dup-fail-two-pages). Jet 4 MDB writes the same counters on its
     TableDef page (ins-dup-fail-mdb; its repeat differs only in an MSysObjects date).
+  - *No AutoNumber column.* On a table with no AutoNumber column, a 3022 under `dbFailOnError` on an existing page
+    writes no group inside `Execute`. Only the deferred group writes the counters reached, +1: the primary key's
+    count after a first-row refusal by a second unique index (`evidence/r-txn-1b/implicit-unique-first-failonerror`),
+    and row count +1, primary key +2, unique +1 after one accepted row (`evidence/r-txn-1/stmt-unique-middle-fail-d0`).
+    The group inside `Execute` therefore goes with the consumed AutoNumber. These two records keep the final file
+    hash only, not the pages. An AutoNumber table whose rows give explicit values, a new page, 3314 and MDB are not
+    decided without an AutoNumber column (task qhs8). `r-sql-2-3/act-fail-insert-required`,
+    `r-q-expr-sql/fail-late-candidate` and `r-fix-expr-sql/fail-insert-required-cross-table` record 3314 by final
+    hash only.
   - *Memo AllowZeroLength.* A Memo made by DAO `CreateField` reads `AllowZeroLength` False when it is not set; '' into it
     fails 3315 under `dbFailOnError` and consumes the AutoNumber (+1; memo-zerolength-unset-fail,
     memo-zerolength-false-fail a1 and a2). With True it stores '' (memo-zerolength-true-fail).
