@@ -100,6 +100,12 @@ internal static class DaoErrors
 
     /// <summary>3228 (r-sort-3/create-locale-spellings: LANGID=0x0000).</summary>
     public const string CollatingSequenceNotSupported = "Selected collating sequence not supported by the operating system.";
+
+    /// <summary>3000 (r-wire/read-dao, r-wire/read-sql, r-dec-read/*-daofield-*: non-Null read of a precision-38 Decimal column).</summary>
+    public const string DecimalPrecision38 = "Reserved error (-1038); there is no message for this error.";
+
+    /// <summary>3035 (r-wire/getrows-numrows-args: GetRows(Int32.MaxValue)).</summary>
+    public const string SystemResourceExceeded = "System resource exceeded.";
 }
 
 /// <summary>
