@@ -1699,7 +1699,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
 
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        ActionOutcome outcome = ActionExecutor.Execute(sql, session.Sql, 128, null, ActionErrorSource.Database);
+        ActionOutcome outcome = ActionExecutor.Execute(sql, session.Sql, 128, null, ActionErrorSource.Ado);
         if (outcome.Failure is { } sqlFailure)
         {
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")

@@ -391,6 +391,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>Whether a SQL action statement is open (<see cref="BeginStatement"/>): its changes publish at its end.</summary>
     public bool InStatement => _statement is not null;
 
+    /// <summary>Whether an explicit user <c>BeginTrans</c> level is active (excluding a statement's own <c>dbFailOnError</c> level).</summary>
+    internal bool InExplicitTransaction => _statement is not null ? _statementExternalDepth > 0 : _frames.Count > 0;
+
     /// <summary>
     /// Whether the active SQL action statement started outside any explicit transaction (<c>Depth == 0</c>) and opened
     /// its own <c>dbFailOnError</c> statement level (<c>Depth == 1</c>).

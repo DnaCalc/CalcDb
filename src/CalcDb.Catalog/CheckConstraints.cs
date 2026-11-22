@@ -229,7 +229,7 @@ public static class CheckConstraintCatalog
                 : entry.NotAdmitted is not null;
             if (belongs)
             {
-                (matched ??= []).Add(new CatalogCheckConstraint(entry.Name, entry.Expression, entry.NotAdmitted));
+                (matched ??= []).Add(new CatalogCheckConstraint(entry.Name, entry.Expression, entry.NotAdmitted, entry.Id));
             }
         }
         return matched is null ? [] : matched;

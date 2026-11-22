@@ -32,11 +32,12 @@ public interface ISqlActionDatabase : ISqlDatabase
     TableCursor? OpenCursor(TableDefinition table, out string? failure);
 }
 
-/// <summary>Whether an action ran via <c>Database.Execute</c> or <c>QueryDef.Execute</c>.</summary>
+/// <summary>Whether an action ran via DAO <c>Database.Execute</c>, DAO <c>QueryDef.Execute</c>, or ADO <c>Connection.Execute</c>.</summary>
 public enum ActionErrorSource : byte
 {
     Database,
     QueryDef,
+    Ado,
 }
 
 /// <summary>
@@ -130,7 +131,7 @@ public static unsafe class ActionExecutor
         {
             return DdlExecutor.Execute(normalized, database, options);
         }
-        if (source == ActionErrorSource.Database)
+        if (source is ActionErrorSource.Database or ActionErrorSource.Ado)
         {
             if (!ActionParser.IsSqlStatement(normalized))
             {
@@ -161,7 +162,6 @@ public static unsafe class ActionExecutor
         IReadOnlyList<NativeVariant?>? parameters = null,
         ActionErrorSource source = ActionErrorSource.Database)
     {
-        _ = source;
         if ((options & ~AdmittedOptionsMask) != 0)
         {
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ExecuteOptions", $"Execute options 0x{options:X} outside dbFailOnError/dbConsistent/dbInconsistent"));
@@ -205,8 +205,8 @@ public static unsafe class ActionExecutor
         {
             ActionOutcome outcome = plan.Kind switch
             {
-                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues),
-                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues),
+                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues, source),
+                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues, source),
                 ActionKind.Update => ExecuteUpdate(plan, database, failOnError, paramValues),
                 ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues),
                 _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionKind", plan.Kind.ToString())),
@@ -228,14 +228,19 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        ActionErrorSource source)
     {
         if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
         {
             return ActionOutcome.Fail(openFailure!);
         }
         using (cursor!)
-        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace) { ConflictSource = MutationErrorSource.Database })
+        using (var frame = new EditFrame(editContext!, cursor!, database.Workspace)
+        {
+            ConflictSource = MutationErrorSource.Database,
+            AllowMdbCheckInsert = source == ActionErrorSource.Ado,
+        })
         {
             var evalRow = new ActionRowContext(null, paramValues);
             var converted = new NativeVariant[plan.InsertColumns.Count];
@@ -293,13 +298,14 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        ActionErrorSource errorSource)
     {
         // FROM-less constant SELECT (e.g. INSERT INTO U (ID, K) SELECT 602, 'y', r-def-expr-sql/sql-insert-values-forms)
         // evaluates exactly like a single-row VALUES insert.
         if (plan.SourceSelect is null)
         {
-            return ExecuteInsertValues(plan, database, failOnError, paramValues);
+            return ExecuteInsertValues(plan, database, failOnError, paramValues, errorSource);
         }
 
         // Materialize all source rows before mutating the target so self-insert (INSERT INTO T SELECT * FROM T) is
@@ -537,6 +543,18 @@ public static unsafe class ActionExecutor
         if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
         {
             return ActionOutcome.Fail(openFailure!);
+        }
+
+        if (!failOnError && candidates.Count > 1 && editContext!.Semantics.HasCheckConstraints)
+        {
+            cursor!.Dispose();
+            string names = editContext.Semantics.CheckConstraints.Count > 0
+                ? string.Join(", ", editContext.Semantics.CheckConstraints.Select(c => $"'{c.Name}'"))
+                : "'CheckConstraints'";
+            return ActionOutcome.Fail(SqlFailure.Open(
+                SqlPhase.Execute,
+                "NotModelled.Edit.Rule",
+                $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row UPDATE without dbFailOnError is not recorded"));
         }
 
         // R-SQL-2 SQL-ACT-FAIL / R-TXN-1 TXN-STMT:
@@ -911,23 +929,6 @@ public static unsafe class ActionExecutor
             return null;
         }
         frame.Discard();
-        MutationSemantics semantics = frame.Table.Semantics;
-        if (!failOnError
-            && semantics.HasCheckConstraints
-            && outcome.Open == MutationOpen.None
-            && outcome.Error is { } err
-            && IsSkippableRowError(err.Number))
-        {
-            string names = err.Number == MutationError.RuleWithoutText && !string.IsNullOrEmpty(err.Argument)
-                ? $"'{err.Argument}'"
-                : semantics.CheckConstraints.Count > 0
-                    ? string.Join(", ", semantics.CheckConstraints.Select(c => $"'{c.Name}'"))
-                    : "'CheckConstraints'";
-            return SqlFailure.Open(
-                SqlPhase.Execute,
-                "NotModelled.Edit.Rule",
-                $"CHECK constraint {names} on {semantics.TableName}: SQL Execute without dbFailOnError (error {err.Number}) is not recorded");
-        }
         return HandleUpdateOutcome(outcome, failOnError, out SqlFailure? fail) ? fail : null;
     }
 

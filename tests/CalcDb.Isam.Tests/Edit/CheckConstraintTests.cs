@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 
 using CalcDb.Catalog;
@@ -14,10 +15,12 @@ namespace CalcDb.Isam.Tests.Edit;
 
 /// <summary>
 /// W-05 (fq9f): SQL <c>CHECK</c> constraints — catalog (<c>MSysObjects</c> <c>Type = 9</c>) &amp; MR2
-/// <c>CheckConstraints</c> cross-checking, narrowed single-column Long comparison enforcement through
-/// <see cref="IMutationRuleBinder.BindTableRule"/>, and named refusals for every unrecorded case
+/// <c>CheckConstraints</c> cross-checking, single-column Long/Text comparison enforcement through
+/// <see cref="IMutationRuleBinder.BindTableRule"/>, stage ordering, AutoNumber consumption, Jet 4 MDB ADO Execute,
+/// and named refusals for every unrecorded case
 /// (<c>evidence/r-oledb-odbc/update-errors</c> #185-252, <c>evidence/r-oledb-odbc/error-record-channels</c> #122, #142,
-/// <c>evidence/r-q-cat-txn-lock/ii11-ado-check-constraint</c> #19-22, #64-72).
+/// <c>evidence/r-q-cat-txn-lock/ii11-ado-check-constraint</c> #19-22, #64-72,
+/// <c>evidence/r-q30-sql-check/*</c>).
 /// </summary>
 public sealed class CheckConstraintTests
 {
@@ -43,6 +46,7 @@ public sealed class CheckConstraintTests
         Assert.NotNull(catalogConstraints);
         CheckConstraintCatalogEntry entry = Assert.Single(catalogConstraints);
         Assert.Null(entry.NotAdmitted);
+        Assert.NotEqual(0, entry.Id);
         Assert.Equal("CK_Req_V", entry.Name);
         Assert.Equal("Req", entry.TableName);
         Assert.Equal("V >= 0", entry.Expression);
@@ -52,6 +56,7 @@ public sealed class CheckConstraintTests
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
         Assert.True(ctx.Semantics.HasCheckConstraints);
         Assert.Null(ctx.Semantics.CheckConstraintsNotAdmitted);
+        Assert.False(ctx.Semantics.CheckConstraintsOrderDisagrees);
         BoundCheckConstraint bound = Assert.Single(ctx.Semantics.CheckConstraints);
         Assert.Equal("CK_Req_V", bound.Name);
         Assert.Equal("V >= 0", bound.Expression);
@@ -63,69 +68,155 @@ public sealed class CheckConstraintTests
     }
 
     [Fact]
-    public void AccdbReq_RejectsNegativeV_RefusesSatisfyingRowsAndDaoRecordsetAddNew()
+    public void AccdbReq_AdmitsSatisfyingAndBoundary_RejectsViolating_OnAdoAndDaoRecordsets()
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
         using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
-        IRecordCursor cursor = fixture.Open(table, 2)!;
-        var adoFrame = new EditFrame(ctx, cursor, ws) { ConflictSource = MutationErrorSource.Database };
+        var adoFrame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+        var daoFrame = new EditFrame(ctx, fixture.Open(table, 2)!, ws);
 
         ColumnDescriptor id = Col(table, "ID");
         ColumnDescriptor r = Col(table, "R");
         ColumnDescriptor v = Col(table, "V");
 
-        // r-oledb-odbc/update-errors #208-228: V = -1 rejected by CK_Req_V with 3317 text.
+        // r-oledb-odbc/update-errors #208-228: V = -1 rejected by CK_Req_V with 3317 text, no pages changed.
+        byte[] beforeViol = fixture.Image.Snapshot();
         Assert.True(adoFrame.AddNew().Succeeded);
         Assert.True(AssignLong(adoFrame, id, 3).Succeeded);
         Assert.True(AssignText(adoFrame, r, "r3").Succeeded);
         Assert.True(AssignLong(adoFrame, v, -1).Succeeded);
-        UpdateOutcome rejected = adoFrame.Update();
-        Assert.False(rejected.Succeeded);
-        Assert.Equal(MutationOpen.None, rejected.Open);
-        Assert.NotNull(rejected.Error);
-        Assert.Equal(MutationError.RuleWithoutText, rejected.Error!.Value.Number);
-        Assert.Equal("CK_Req_V", rejected.Error.Value.Argument);
-        Assert.Equal("Req", rejected.Error.Value.Owner);
+        UpdateOutcome adoRejected = adoFrame.Update();
+        Assert.False(adoRejected.Succeeded);
+        Assert.Equal(MutationOpen.None, adoRejected.Open);
+        Assert.NotNull(adoRejected.Error);
+        Assert.Equal(MutationError.RuleWithoutText, adoRejected.Error!.Value.Number);
+        Assert.Equal("CK_Req_V", adoRejected.Error.Value.Argument);
+        Assert.Equal("Req", adoRejected.Error.Value.Owner);
         Assert.Equal(
             "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.",
-            rejected.Error.Value.Describe());
+            adoRejected.Error.Value.Describe());
         Assert.Equal(EditMode.AddNew, adoFrame.Mode);
         Assert.True(adoFrame.CancelUpdate().Succeeded);
         Assert.Equal(EditMode.None, adoFrame.Mode);
+        Assert.Equal(beforeViol, fixture.Image.Snapshot());
 
-        // No record yet for a row that satisfies the CHECK constraint (boundary V = 0 and positive V = 10).
-        foreach ((int rowId, int val) in new[] { (3, 0), (4, 10) })
-        {
-            Assert.True(adoFrame.AddNew().Succeeded);
-            Assert.True(AssignLong(adoFrame, id, rowId).Succeeded);
-            Assert.True(AssignText(adoFrame, r, $"r{rowId}").Succeeded);
-            Assert.True(AssignLong(adoFrame, v, val).Succeeded);
-            UpdateOutcome satisfied = adoFrame.Update();
-            Assert.False(satisfied.Succeeded);
-            Assert.Null(satisfied.Error);
-            Assert.Equal(MutationOpen.Rule, satisfied.Open);
-            Assert.Contains("CK_Req_V", satisfied.Detail);
-            Assert.True(adoFrame.CancelUpdate().Succeeded);
-        }
-
-        // No record yet for a DAO recordset AddNew on a CHECK table (ConflictSource = Recordset, !InStatement).
-        var daoFrame = new EditFrame(ctx, fixture.Open(table, 2)!, ws);
+        // evidence/r-q30-sql-check/viol-dao-rs: DAO dynaset AddNew/Update fails 3317 from DAO.Recordset,
+        // EditMode stays 2 (AddNew) until CancelUpdate, no page changed.
         Assert.True(daoFrame.AddNew().Succeeded);
-        Assert.True(AssignLong(daoFrame, id, 5).Succeeded);
-        Assert.True(AssignText(daoFrame, r, "r5").Succeeded);
+        Assert.True(AssignLong(daoFrame, id, 4).Succeeded);
+        Assert.True(AssignText(daoFrame, r, "r4").Succeeded);
         Assert.True(AssignLong(daoFrame, v, -1).Succeeded);
-        UpdateOutcome daoOutcome = daoFrame.Update();
-        Assert.False(daoOutcome.Succeeded);
-        Assert.Null(daoOutcome.Error);
-        Assert.Equal(MutationOpen.Rule, daoOutcome.Open);
-        Assert.Contains("CK_Req_V", daoOutcome.Detail);
-        Assert.Contains("DAO", daoOutcome.Detail);
+        UpdateOutcome daoRejected = daoFrame.Update();
+        Assert.False(daoRejected.Succeeded);
+        Assert.Equal(MutationOpen.None, daoRejected.Open);
+        Assert.NotNull(daoRejected.Error);
+        Assert.Equal(MutationError.RuleWithoutText, daoRejected.Error!.Value.Number);
+        Assert.Equal(MutationErrorSource.Recordset, daoRejected.Error.Value.Source);
+        Assert.Equal("CK_Req_V", daoRejected.Error.Value.Argument);
+        Assert.Equal("Req", daoRejected.Error.Value.Owner);
+        Assert.Equal(EditMode.AddNew, daoFrame.Mode);
         Assert.True(daoFrame.CancelUpdate().Succeeded);
+        Assert.Equal(EditMode.None, daoFrame.Mode);
+        Assert.Equal(beforeViol, fixture.Image.Snapshot());
+
+        // evidence/r-q30-sql-check/sat-0-ado-rs, sat-10-ado-rs, sat-0-dao-rs, sat-10-dao-rs:
+        // boundary (V = 0) and positive (V = 10) rows succeed and persist on both ADO and DAO recordsets.
+        foreach ((EditFrame frame, int rowId, int val) in new[]
+        {
+            (adoFrame, 3, 0),
+            (adoFrame, 4, 10),
+            (daoFrame, 5, 0),
+            (daoFrame, 6, 10),
+        })
+        {
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(AssignLong(frame, id, rowId).Succeeded);
+            Assert.True(AssignText(frame, r, $"r{rowId}").Succeeded);
+            Assert.True(AssignLong(frame, v, val).Succeeded);
+            UpdateOutcome ok = frame.Update();
+            Assert.True(ok.Succeeded, ok.Detail ?? ok.Error?.Describe());
+            Assert.Equal(MutationOpen.None, ok.Open);
+            Assert.Equal(EditMode.None, frame.Mode);
+        }
     }
 
     [Fact]
-    public void AccdbReq_NullInCheckedColumn_PreservesRecordedRequiredAndDuplicate_RefusesOtherwise()
+    public void AccdbReq_EditMode_RejectsViolating_AdmitsSatisfyingAndOtherColumn_RefusesDelete()
+    {
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        IRecordCursor adoCursor = fixture.Open(table, 2)!;
+        Assert.Equal(MoveOutcome.Moved, adoCursor.MoveFirst());
+        var adoFrame = new EditFrame(ctx, adoCursor, ws) { ConflictSource = MutationErrorSource.Database };
+
+        IRecordCursor daoCursor = fixture.Open(table, 2)!;
+        Assert.Equal(MoveOutcome.Moved, daoCursor.MoveFirst());
+        var daoFrame = new EditFrame(ctx, daoCursor, ws);
+
+        ColumnDescriptor r = Col(table, "R");
+        ColumnDescriptor v = Col(table, "V");
+
+        // evidence/r-q30-sql-check/upd-viol-ado-rs, upd-viol-dao-rs: Edit + V = -1 fails 3317, EditMode stays Edit, no pages changed.
+        byte[] beforeViol = fixture.Image.Snapshot();
+        foreach (EditFrame frame in new[] { adoFrame, daoFrame })
+        {
+            Assert.True(frame.Edit().Succeeded);
+            Assert.True(AssignLong(frame, v, -1).Succeeded);
+            UpdateOutcome neg = frame.Update();
+            Assert.False(neg.Succeeded);
+            Assert.Equal(MutationOpen.None, neg.Open);
+            Assert.Equal(MutationError.RuleWithoutText, neg.Error?.Number);
+            Assert.Equal(MutationErrorSource.Recordset, neg.Error?.Source);
+            Assert.Equal("CK_Req_V", neg.Error?.Argument);
+            Assert.Equal("Req", neg.Error?.Owner);
+            Assert.Equal(EditMode.Edit, frame.Mode);
+            Assert.True(frame.CancelUpdate().Succeeded);
+            Assert.Equal(EditMode.None, frame.Mode);
+        }
+        Assert.Equal(beforeViol, fixture.Image.Snapshot());
+
+        // evidence/r-q30-sql-check/upd-other-col-ado-exec, upd-other-col-dao-exec: editing another column succeeds.
+        Assert.True(adoFrame.Edit().Succeeded);
+        Assert.True(AssignText(adoFrame, r, "r1b").Succeeded);
+        UpdateOutcome adoOther = adoFrame.Update();
+        Assert.True(adoOther.Succeeded, adoOther.Detail ?? adoOther.Error?.Describe());
+
+        Assert.True(daoFrame.Edit().Succeeded);
+        Assert.True(AssignText(daoFrame, r, "r1c").Succeeded);
+        UpdateOutcome daoOther = daoFrame.Update();
+        Assert.True(daoOther.Succeeded, daoOther.Detail ?? daoOther.Error?.Describe());
+
+        // Satisfying V = 0 succeeds; setting V = Null passes CHECK (reaches unrelated RowWriter fixed-field nulling Publication open, never 3317 or Rule).
+        Assert.True(adoFrame.Edit().Succeeded);
+        Assert.True(AssignLong(adoFrame, v, 0).Succeeded);
+        UpdateOutcome vZero = adoFrame.Update();
+        Assert.True(vZero.Succeeded, vZero.Detail ?? vZero.Error?.Describe() ?? vZero.Open.ToString());
+
+        Assert.True(adoFrame.Edit().Succeeded);
+        Assert.True(adoFrame.Assign(v, new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+        UpdateOutcome vNull = adoFrame.Update();
+        Assert.Null(vNull.Error);
+        Assert.Equal(MutationOpen.Publication, vNull.Open);
+        Assert.True(adoFrame.CancelUpdate().Succeeded);
+
+        // DELETE and DeleteEveryRow on a table with a CHECK constraint remain unrecorded -> refuse by name.
+        UpdateOutcome delOutcome = adoFrame.Delete();
+        Assert.False(delOutcome.Succeeded);
+        Assert.Null(delOutcome.Error);
+        Assert.Equal(MutationOpen.Rule, delOutcome.Open);
+        Assert.Contains("CK_Req_V", delOutcome.Detail);
+
+        UpdateOutcome delAllOutcome = adoFrame.DeleteEveryRow(out int rows);
+        Assert.False(delAllOutcome.Succeeded);
+        Assert.Equal(0, rows);
+        Assert.Equal(MutationOpen.Rule, delAllOutcome.Open);
+        Assert.Contains("CK_Req_V", delAllOutcome.Detail);
+    }
+
+    [Fact]
+    public void AccdbReq_NullInCheckedColumn_PassesCheck_AndPreservesRecordedRequiredAndDuplicate()
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
@@ -153,26 +244,109 @@ public sealed class CheckConstraintTests
         Assert.Equal(MutationError.Duplicate, dupFail.Error?.Number);
         Assert.True(frame.CancelUpdate().Succeeded);
 
-        // Otherwise valid insert with V = Null: no retained record decides Null on CHECK -> named refusal.
+        // evidence/r-q30-sql-check/null-ado-exec, null-dao-exec: Null in checked column passes CHECK.
         Assert.True(frame.AddNew().Succeeded);
         Assert.True(AssignLong(frame, id, 5).Succeeded);
         Assert.True(AssignText(frame, r, "r5").Succeeded);
-        UpdateOutcome nullOpen = frame.Update();
-        Assert.False(nullOpen.Succeeded);
-        Assert.Null(nullOpen.Error);
-        Assert.Equal(MutationOpen.Rule, nullOpen.Open);
-        Assert.Contains("CK_Req_V", nullOpen.Detail);
-        Assert.Contains("V", nullOpen.Detail);
-        Assert.True(frame.CancelUpdate().Succeeded);
+        UpdateOutcome nullOk = frame.Update();
+        Assert.True(nullOk.Succeeded, nullOk.Detail ?? nullOk.Error?.Describe());
+        Assert.Equal(MutationOpen.None, nullOk.Open);
+    }
 
-        // Combined failures (Required + CHECK, Unique + CHECK, Required + satisfying V = 0): CheckOrder.
+    [Fact]
+    public void AccdbReq_CheckOrder_RequiredAndFieldRuleBeatCheck_UniqueAndTableRuleRefuseCheckOrder()
+    {
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+
+        ColumnDescriptor id = Col(table, "ID");
+        ColumnDescriptor r = Col(table, "R");
+        ColumnDescriptor v = Col(table, "V");
+
+        var frame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+
+        // evidence/r-q30-sql-check/ord-req-before-check, ord-req-before-check-dao:
+        // Required (3314) beats failing CHECK (3317) when Required column R precedes CHECK column V.
         Assert.True(frame.AddNew().Succeeded);
         Assert.True(AssignLong(frame, id, 6).Succeeded);
         Assert.True(AssignLong(frame, v, -1).Succeeded);
-        UpdateOutcome reqAndCheck = frame.Update();
-        Assert.Equal(MutationOpen.CheckOrder, reqAndCheck.Open);
+        UpdateOutcome reqBeforeCheck = frame.Update();
+        Assert.Equal(MutationOpen.None, reqBeforeCheck.Open);
+        Assert.Equal(MutationError.Required, reqBeforeCheck.Error?.Number);
+        Assert.Equal("Req.R", reqBeforeCheck.Error?.Argument);
         Assert.True(frame.CancelUpdate().Succeeded);
 
+        // Required with satisfying V = 0 also reports 3314.
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(AssignLong(frame, id, 7).Succeeded);
+        Assert.True(AssignLong(frame, v, 0).Succeeded);
+        UpdateOutcome reqWithSat = frame.Update();
+        Assert.Equal(MutationOpen.None, reqWithSat.Open);
+        Assert.Equal(MutationError.Required, reqWithSat.Error?.Number);
+        Assert.True(frame.CancelUpdate().Succeeded);
+
+        // evidence/r-q30-sql-check/ord-check-before-req:
+        // Required (3314) still beats failing CHECK (3317) even when the CHECK column (ID) precedes the Required column (R).
+        (string, string)[] checkIdPair = [("CK_Req_ID", "ID >= 10")];
+        PropertyBlob blobCheckBeforeReq = BuildBlob(
+            checkConstraints: checkIdPair,
+            columnProps: [("R", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [1])])]);
+        using MutationSemantics semCheckBeforeReq = MutationSemantics.Compile("Req", table, blobCheckBeforeReq, binder, D.IndexDescriptor, ToCatalog(checkIdPair));
+        var frameCheckBeforeReq = new EditFrame(new TableEditContext(semCheckBeforeReq, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameCheckBeforeReq.AddNew().Succeeded);
+        Assert.True(AssignLong(frameCheckBeforeReq, id, 5).Succeeded);
+        UpdateOutcome reqAfterCheckCol = frameCheckBeforeReq.Update();
+        Assert.Equal(MutationOpen.None, reqAfterCheckCol.Open);
+        Assert.Equal(MutationError.Required, reqAfterCheckCol.Error?.Number);
+        Assert.Equal("Req.R", reqAfterCheckCol.Error?.Argument);
+        Assert.True(frameCheckBeforeReq.CancelUpdate().Succeeded);
+
+        // evidence/r-q30-sql-check/ord-valrule-same-col-ado, ord-valrule-same-col-dao:
+        // Field ValidationRule (3316) beats failing CHECK (3317) on the same column.
+        (string, string)[] checkVPair = [("CK_Req_V", "V >= 0")];
+        PropertyBlob blobSameColRule = BuildBlob(
+            checkConstraints: checkVPair,
+            columnProps: [("V", [
+                new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("> 5")),
+                new StoredProperty("ValidationText", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("v must exceed 5")),
+            ])]);
+        using MutationSemantics semSameCol = MutationSemantics.Compile("Req", table, blobSameColRule, binder, D.IndexDescriptor, ToCatalog(checkVPair));
+        var frameSameCol = new EditFrame(new TableEditContext(semSameCol, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameSameCol.AddNew().Succeeded);
+        Assert.True(AssignLong(frameSameCol, id, 20).Succeeded);
+        Assert.True(AssignText(frameSameCol, r, "ok").Succeeded);
+        Assert.True(AssignLong(frameSameCol, v, -1).Succeeded);
+        UpdateOutcome sameColValRule = frameSameCol.Update();
+        Assert.Equal(MutationOpen.None, sameColValRule.Open);
+        Assert.Equal(MutationError.RuleWithText, sameColValRule.Error?.Number);
+        Assert.Equal("v must exceed 5", sameColValRule.Error?.Argument);
+        Assert.True(frameSameCol.CancelUpdate().Succeeded);
+
+        // evidence/r-q30-sql-check/ord-valrule-after-check-dao:
+        // Field ValidationRule (3316) on a LATER column (V) still beats failing CHECK on an EARLIER column (ID).
+        PropertyBlob blobValAfterCheck = BuildBlob(
+            checkConstraints: checkIdPair,
+            columnProps: [("V", [
+                new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("> 0")),
+                new StoredProperty("ValidationText", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("v positive")),
+            ])]);
+        using MutationSemantics semValAfter = MutationSemantics.Compile("Req", table, blobValAfterCheck, binder, D.IndexDescriptor, ToCatalog(checkIdPair));
+        var frameValAfter = new EditFrame(new TableEditContext(semValAfter, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameValAfter.AddNew().Succeeded);
+        Assert.True(AssignLong(frameValAfter, id, 5).Succeeded);
+        Assert.True(AssignText(frameValAfter, r, "ok").Succeeded);
+        Assert.True(AssignLong(frameValAfter, v, -1).Succeeded);
+        UpdateOutcome valAfterCheck = frameValAfter.Update();
+        Assert.Equal(MutationOpen.None, valAfterCheck.Open);
+        Assert.Equal(MutationError.RuleWithText, valAfterCheck.Error?.Number);
+        Assert.Equal("v positive", valAfterCheck.Error?.Argument);
+        Assert.True(frameValAfter.CancelUpdate().Succeeded);
+
+        // Open: PK/Unique (3022) vs CHECK (3317) -> CheckOrder.
         Assert.True(frame.AddNew().Succeeded);
         Assert.True(AssignLong(frame, id, 1).Succeeded);
         Assert.True(AssignText(frame, r, "x").Succeeded);
@@ -181,125 +355,27 @@ public sealed class CheckConstraintTests
         Assert.Equal(MutationOpen.CheckOrder, dupAndCheck.Open);
         Assert.True(frame.CancelUpdate().Succeeded);
 
-        Assert.True(frame.AddNew().Succeeded);
-        Assert.True(AssignLong(frame, id, 7).Succeeded);
-        Assert.True(AssignLong(frame, v, 0).Succeeded);
-        UpdateOutcome reqAndSatisfying = frame.Update();
-        Assert.Equal(MutationOpen.CheckOrder, reqAndSatisfying.Open);
-        Assert.True(frame.CancelUpdate().Succeeded);
+        // Open: TableDef ValidationRule vs CHECK (3317) -> CheckOrder.
+        PropertyBlob blobTableRuleAndCheck = BuildBlob(
+            checkConstraints: checkVPair,
+            tableRule: ("ID > 100", "id too small"));
+        using MutationSemantics semTableRule = MutationSemantics.Compile("Req", table, blobTableRuleAndCheck, binder, D.IndexDescriptor, ToCatalog(checkVPair));
+        var frameTableRule = new EditFrame(new TableEditContext(semTableRule, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameTableRule.AddNew().Succeeded);
+        Assert.True(AssignLong(frameTableRule, id, 25).Succeeded);
+        Assert.True(AssignText(frameTableRule, r, "ok").Succeeded);
+        Assert.True(AssignLong(frameTableRule, v, -1).Succeeded);
+        UpdateOutcome tableRuleAndCheck = frameTableRule.Update();
+        Assert.Equal(MutationOpen.CheckOrder, tableRuleAndCheck.Open);
     }
 
-    [Fact]
-    public void AccdbReq_EditModeAndDelete_RefuseByName()
-    {
-        using var fixture = new ReplayFixture(V2AccdbSha);
-        (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
-        IRecordCursor cursor = fixture.Open(table, 2)!;
-        Assert.Equal(MoveOutcome.Moved, cursor.MoveFirst());
-        var frame = new EditFrame(ctx, cursor, ws) { ConflictSource = MutationErrorSource.Database };
-
-        ColumnDescriptor r = Col(table, "R");
-        ColumnDescriptor v = Col(table, "V");
-
-        // UPDATE (Edit mode) on a CHECK table has no record: refuse by name for violating, satisfying, and untouched V.
-        Assert.True(frame.Edit().Succeeded);
-        Assert.True(AssignLong(frame, v, -1).Succeeded);
-        UpdateOutcome negEdit = frame.Update();
-        Assert.False(negEdit.Succeeded);
-        Assert.Null(negEdit.Error);
-        Assert.Equal(MutationOpen.Rule, negEdit.Open);
-        Assert.Contains("CK_Req_V", negEdit.Detail);
-        Assert.Contains("UPDATE", negEdit.Detail);
-        Assert.True(frame.CancelUpdate().Succeeded);
-
-        Assert.True(frame.Edit().Succeeded);
-        Assert.True(AssignText(frame, r, "r1b").Succeeded);
-        UpdateOutcome validOtherCol = frame.Update();
-        Assert.False(validOtherCol.Succeeded);
-        Assert.Null(validOtherCol.Error);
-        Assert.Equal(MutationOpen.Rule, validOtherCol.Open);
-        Assert.Contains("CK_Req_V", validOtherCol.Detail);
-        Assert.True(frame.CancelUpdate().Succeeded);
-
-        // Edit mode alongside a Required failure -> CheckOrder (does not hide Required).
-        Assert.True(frame.Edit().Succeeded);
-        Assert.True(frame.Assign(r, new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
-        UpdateOutcome editAndRequired = frame.Update();
-        Assert.Equal(MutationOpen.CheckOrder, editAndRequired.Open);
-        Assert.True(frame.CancelUpdate().Succeeded);
-
-        // DELETE and DeleteEveryRow on a table with a CHECK constraint are not recorded.
-        UpdateOutcome delOutcome = frame.Delete();
-        Assert.False(delOutcome.Succeeded);
-        Assert.Null(delOutcome.Error);
-        Assert.Equal(MutationOpen.Rule, delOutcome.Open);
-        Assert.Contains("CK_Req_V", delOutcome.Detail);
-
-        UpdateOutcome delAllOutcome = frame.DeleteEveryRow(out int rows);
-        Assert.False(delAllOutcome.Succeeded);
-        Assert.Equal(0, rows);
-        Assert.Equal(MutationOpen.Rule, delAllOutcome.Open);
-        Assert.Contains("CK_Req_V", delAllOutcome.Detail);
-    }
-
-    [Fact]
-    public void MdbReq_AndNullWriter_RefuseWritesByName_AndReportCheckOrderWithOtherFailures()
-    {
-        using var mdbFixture = new ReplayFixture(V2MdbSha);
-        (TableDefinition mdbTable, TableEditContext mdbCtx) = mdbFixture.Table("Req")!.Value;
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdbFixture };
-        var mdbFrame = new EditFrame(mdbCtx, mdbFixture.Open(mdbTable, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
-
-        ColumnDescriptor id = Col(mdbTable, "ID");
-        ColumnDescriptor r = Col(mdbTable, "R");
-        ColumnDescriptor v = Col(mdbTable, "V");
-
-        // Neither violating nor satisfying inserts are recorded on MDB.
-        Assert.True(mdbFrame.AddNew().Succeeded);
-        Assert.True(AssignLong(mdbFrame, id, 3).Succeeded);
-        Assert.True(AssignText(mdbFrame, r, "r3").Succeeded);
-        Assert.True(AssignLong(mdbFrame, v, -1).Succeeded);
-        UpdateOutcome neg = mdbFrame.Update();
-        Assert.Equal(MutationOpen.Rule, neg.Open);
-        Assert.Contains("CK_Req_V", neg.Detail);
-        Assert.Contains("MDB", neg.Detail);
-        Assert.True(mdbFrame.CancelUpdate().Succeeded);
-
-        // MDB refusal must not hide another failing check (Required 3314 -> CheckOrder).
-        Assert.True(mdbFrame.AddNew().Succeeded);
-        Assert.True(AssignLong(mdbFrame, id, 4).Succeeded);
-        Assert.True(AssignLong(mdbFrame, v, -1).Succeeded);
-        UpdateOutcome mdbAndReq = mdbFrame.Update();
-        Assert.Equal(MutationOpen.CheckOrder, mdbAndReq.Open);
-        Assert.True(mdbFrame.CancelUpdate().Succeeded);
-
-        // Writer == null must NOT skip the ACCDB format check.
-        using var accdbFixture = new ReplayFixture(V2AccdbSha);
-        (TableDefinition accdbTable, TableEditContext accdbCtx) = accdbFixture.Table("Req")!.Value;
-        var noWriterCtx = new TableEditContext(accdbCtx.Semantics, new StoredUniqueProbe(accdbFixture.Cache, D, accdbTable, accdbFixture.Image.PageCount), lcid: 7177);
-        using var ws2 = new TransactionCoordinator(new LockerId(2));
-        var noWriterFrame = new EditFrame(noWriterCtx, accdbFixture.Open(accdbTable, 2)!, ws2) { ConflictSource = MutationErrorSource.Database };
-
-        Assert.True(noWriterFrame.AddNew().Succeeded);
-        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "ID"), 3).Succeeded);
-        Assert.True(AssignText(noWriterFrame, Col(accdbTable, "R"), "r3").Succeeded);
-        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "V"), -1).Succeeded);
-        UpdateOutcome noWriterOutcome = noWriterFrame.Update();
-        Assert.Equal(MutationOpen.Rule, noWriterOutcome.Open);
-        Assert.Contains("CK_Req_V", noWriterOutcome.Detail);
-        Assert.True(noWriterFrame.CancelUpdate().Succeeded);
-
-        // Writer == null alongside Required -> CheckOrder.
-        Assert.True(noWriterFrame.AddNew().Succeeded);
-        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "ID"), 4).Succeeded);
-        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "V"), -1).Succeeded);
-        UpdateOutcome noWriterAndReq = noWriterFrame.Update();
-        Assert.Equal(MutationOpen.CheckOrder, noWriterAndReq.Open);
-    }
-
-    [Fact]
-    public void MultipleCheckConstraints_SingleFailureReportsItsName_SimultaneousAndSatisfyingRefuseByName()
+    [Theory]
+    [InlineData("CK_Eq", "V = 5", 5, 4)]
+    [InlineData("CK_Le", "V <= 5", 5, 6)]
+    [InlineData("CK_Ne", "V <> 5", 4, 5)]
+    [InlineData("CK_Neg", "V >= -3", -3, -4)]
+    [InlineData("CK_Rhs", "0 <= V", 0, -1)]
+    public void Accdb_AdmittedLongOperatorsAndLiterals_AdmitSatisfyingAndRejectViolating(string name, string expr, int okValue, int badValue)
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, _) = fixture.Table("Req")!.Value;
@@ -307,16 +383,83 @@ public sealed class CheckConstraintTests
         var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
 
-        // Matches r-q-cat-txn-lock/ii11-ado-check-constraint (CK_V: V > 0, CK_V2: V < 20).
-        (string, string)[] twoPairs = [("CK_V", "V > 0"), ("CK_V2", "V < 20")];
-        using MutationSemantics sem1 = MutationSemantics.Compile("T", table, BuildCheckBlob(twoPairs), binder, D.IndexDescriptor, ToCatalog(twoPairs));
-        var ctx1 = new TableEditContext(sem1, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1));
-        var frame1 = new EditFrame(ctx1, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+        (string, string)[] pair = [(name, expr)];
+        using MutationSemantics sem = MutationSemantics.Compile("Req", table, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        var frame = new EditFrame(new TableEditContext(sem, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "ID"), 30).Succeeded);
+        Assert.True(AssignText(frame, Col(table, "R"), "ok").Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "V"), badValue).Succeeded);
+        UpdateOutcome bad = frame.Update();
+        Assert.Equal(MutationError.RuleWithoutText, bad.Error?.Number);
+        Assert.Equal(name, bad.Error?.Argument);
+        Assert.True(frame.CancelUpdate().Succeeded);
+
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "ID"), 31).Succeeded);
+        Assert.True(AssignText(frame, Col(table, "R"), "ok").Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "V"), okValue).Succeeded);
+        UpdateOutcome ok = frame.Update();
+        Assert.True(ok.Succeeded, ok.Detail ?? ok.Error?.Describe());
+    }
+
+    [Fact]
+    public void Accdb_TextNotEqualOperator_IsCaseInsensitive()
+    {
+        // evidence/r-q30-sql-check/op-text-ne-sat, op-text-ne-viol, op-text-ne-upper:
+        // R <> 'x' admits 'y', rejects 'x' and rejects 'X' (database case-insensitive comparison).
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, _) = fixture.Table("Req")!.Value;
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
+
+        (string, string)[] pair = [("CK_Text", "R <> 'x'")];
+        using MutationSemantics sem = MutationSemantics.Compile("Req", table, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        var frame = new EditFrame(new TableEditContext(sem, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+
+        foreach (string badText in new[] { "x", "X" })
+        {
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(AssignLong(frame, Col(table, "ID"), 40).Succeeded);
+            Assert.True(AssignText(frame, Col(table, "R"), badText).Succeeded);
+            Assert.True(AssignLong(frame, Col(table, "V"), 1).Succeeded);
+            UpdateOutcome bad = frame.Update();
+            Assert.Equal(MutationError.RuleWithoutText, bad.Error?.Number);
+            Assert.Equal("CK_Text", bad.Error?.Argument);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "ID"), 41).Succeeded);
+        Assert.True(AssignText(frame, Col(table, "R"), "y").Succeeded);
+        Assert.True(AssignLong(frame, Col(table, "V"), 1).Succeeded);
+        UpdateOutcome ok = frame.Update();
+        Assert.True(ok.Succeeded, ok.Detail ?? ok.Error?.Describe());
+    }
+
+    [Fact]
+    public void MultipleCheckConstraints_FirstAddedWinsWhenOrdersAgree_DisagreeingOrderRefusesCheckOrder()
+    {
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, _) = fixture.Table("Req")!.Value;
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
 
         ColumnDescriptor id = Col(table, "ID");
         ColumnDescriptor r = Col(table, "R");
         ColumnDescriptor v = Col(table, "V");
+
+        // Disjoint constraints (r-q-cat-txn-lock/ii11-ado-check-constraint): single failure names its constraint; satisfying succeeds.
+        (string, string)[] twoPairs = [("CK_V", "V > 0"), ("CK_V2", "V < 20")];
+        using MutationSemantics sem1 = MutationSemantics.Compile("T", table, BuildCheckBlob(twoPairs), binder, D.IndexDescriptor, ToCatalog(twoPairs));
+        Assert.False(sem1.CheckConstraintsOrderDisagrees);
+        var frame1 = new EditFrame(new TableEditContext(sem1, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
 
         Assert.True(frame1.AddNew().Succeeded);
         Assert.True(AssignLong(frame1, id, 100).Succeeded);
@@ -338,35 +481,365 @@ public sealed class CheckConstraintTests
         Assert.Equal("T", fail2.Error?.Owner);
         Assert.True(frame1.CancelUpdate().Succeeded);
 
-        // Satisfying both constraints (V = 10) is not recorded -> named refusal.
         Assert.True(frame1.AddNew().Succeeded);
         Assert.True(AssignLong(frame1, id, 102).Succeeded);
         Assert.True(AssignText(frame1, r, "c").Succeeded);
         Assert.True(AssignLong(frame1, v, 10).Succeeded);
-        UpdateOutcome satisfied = frame1.Update();
-        Assert.False(satisfied.Succeeded);
-        Assert.Null(satisfied.Error);
-        Assert.Equal(MutationOpen.Rule, satisfied.Open);
-        Assert.Contains("CK_V", satisfied.Detail);
-        Assert.Contains("CK_V2", satisfied.Detail);
-        Assert.True(frame1.CancelUpdate().Succeeded);
+        UpdateOutcome ok = frame1.Update();
+        Assert.True(ok.Succeeded, ok.Detail ?? ok.Error?.Describe());
 
-        // Overlapping constraints failing on the same write: evaluation order is not recorded.
-        (string, string)[] overlappingPairs = [("CK_A", "V > 0"), ("CK_B", "V > 5")];
-        using MutationSemantics sem2 = MutationSemantics.Compile("T", table, BuildCheckBlob(overlappingPairs), binder, D.IndexDescriptor, ToCatalog(overlappingPairs));
-        var ctx2 = new TableEditContext(sem2, probe, lcid: 7177, footprints: footprints);
-        var frame2 = new EditFrame(ctx2, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+        // evidence/r-q30-sql-check/ord-two-checks-za: CK_Z added first (Id 100), CK_A second (Id 101) -> reports CK_Z.
+        (string, string)[] zaPairs = [("CK_Z", "V >= 0"), ("CK_A", "V >= 10")];
+        using MutationSemantics semZa = MutationSemantics.Compile("T", table, BuildCheckBlob(zaPairs), binder, D.IndexDescriptor, ToCatalog(zaPairs));
+        Assert.False(semZa.CheckConstraintsOrderDisagrees);
+        var frameZa = new EditFrame(new TableEditContext(semZa, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameZa.AddNew().Succeeded);
+        Assert.True(AssignLong(frameZa, id, 200).Succeeded);
+        Assert.True(AssignText(frameZa, r, "d").Succeeded);
+        Assert.True(AssignLong(frameZa, v, -1).Succeeded);
+        UpdateOutcome zaFail = frameZa.Update();
+        Assert.Equal(MutationError.RuleWithoutText, zaFail.Error?.Number);
+        Assert.Equal("CK_Z", zaFail.Error?.Argument);
+        Assert.True(frameZa.CancelUpdate().Succeeded);
 
-        Assert.True(frame2.AddNew().Succeeded);
-        Assert.True(AssignLong(frame2, id, 200).Succeeded);
-        Assert.True(AssignText(frame2, r, "d").Succeeded);
-        Assert.True(AssignLong(frame2, v, -1).Succeeded);
-        UpdateOutcome bothFail = frame2.Update();
-        Assert.False(bothFail.Succeeded);
-        Assert.Null(bothFail.Error);
-        Assert.Equal(MutationOpen.CheckOrder, bothFail.Open);
-        Assert.Contains("CK_A", bothFail.Detail);
-        Assert.Contains("CK_B", bothFail.Detail);
+        // evidence/r-q30-sql-check/ord-two-checks-rev: CK_A (V >= 10, Id 100) added before CK_B (V >= 0, Id 101) -> reports CK_A.
+        (string, string)[] revPairs = [("CK_A", "V >= 10"), ("CK_B", "V >= 0")];
+        using MutationSemantics semRev = MutationSemantics.Compile("T", table, BuildCheckBlob(revPairs), binder, D.IndexDescriptor, ToCatalog(revPairs));
+        Assert.False(semRev.CheckConstraintsOrderDisagrees);
+        var frameRev = new EditFrame(new TableEditContext(semRev, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameRev.AddNew().Succeeded);
+        Assert.True(AssignLong(frameRev, id, 201).Succeeded);
+        Assert.True(AssignText(frameRev, r, "e").Succeeded);
+        Assert.True(AssignLong(frameRev, v, -1).Succeeded);
+        UpdateOutcome revFail = frameRev.Update();
+        Assert.Equal(MutationError.RuleWithoutText, revFail.Error?.Number);
+        Assert.Equal("CK_A", revFail.Error?.Argument);
+        Assert.True(frameRev.CancelUpdate().Succeeded);
+
+        // Open: LvProp order (CK_Z, CK_A) disagrees with MSysObjects Id ascending order (CK_A Id 100, CK_Z Id 101) -> CheckOrder.
+        CatalogCheckConstraint[] reversedIds = [new("CK_Z", "V >= 0", Id: 101), new("CK_A", "V >= 10", Id: 100)];
+        using MutationSemantics semDisagree = MutationSemantics.Compile("T", table, BuildCheckBlob(zaPairs), binder, D.IndexDescriptor, reversedIds);
+        Assert.True(semDisagree.CheckConstraintsOrderDisagrees);
+        var frameDisagree = new EditFrame(new TableEditContext(semDisagree, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameDisagree.AddNew().Succeeded);
+        Assert.True(AssignLong(frameDisagree, id, 202).Succeeded);
+        Assert.True(AssignText(frameDisagree, r, "f").Succeeded);
+        Assert.True(AssignLong(frameDisagree, v, -1).Succeeded);
+        UpdateOutcome disagreeFail = frameDisagree.Update();
+        Assert.Equal(MutationOpen.CheckOrder, disagreeFail.Open);
+        Assert.Contains("CK_Z", disagreeFail.Detail);
+        Assert.Contains("CK_A", disagreeFail.Detail);
+        Assert.True(frameDisagree.CancelUpdate().Succeeded);
+
+        // Missing catalog Ids also flags order disagreement on simultaneous failure.
+        CatalogCheckConstraint[] missingIds = [new("CK_Z", "V >= 0"), new("CK_A", "V >= 10")];
+        using MutationSemantics semNoIds = MutationSemantics.Compile("T", table, BuildCheckBlob(zaPairs), binder, D.IndexDescriptor, missingIds);
+        Assert.True(semNoIds.CheckConstraintsOrderDisagrees);
+        var frameNoIds = new EditFrame(new TableEditContext(semNoIds, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameNoIds.AddNew().Succeeded);
+        Assert.True(AssignLong(frameNoIds, id, 203).Succeeded);
+        Assert.True(AssignText(frameNoIds, r, "g").Succeeded);
+        Assert.True(AssignLong(frameNoIds, v, -1).Succeeded);
+        UpdateOutcome noIdsFail = frameNoIds.Update();
+        Assert.Equal(MutationOpen.CheckOrder, noIdsFail.Open);
+    }
+
+    [Fact]
+    public void UpdateRowAlreadyViolatingLaterCheck_AndBeginTrans_RefuseByName()
+    {
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, TableEditContext reqCtx) = fixture.Table("Req")!.Value;
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+
+        ColumnDescriptor id = Col(table, "ID");
+        ColumnDescriptor r = Col(table, "R");
+        ColumnDescriptor v = Col(table, "V");
+
+        // Open: updating a row whose stored original values already violate a later-added CHECK.
+        // Row ID = 1 in Req has stored V = 10, which already violates V > 50.
+        (string, string)[] highPair = [("CK_Req_High", "V > 50")];
+        PropertyBlob blobHigh = BuildBlob(
+            checkConstraints: highPair,
+            columnProps: [("R", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [1])])]);
+        using MutationSemantics semHigh = MutationSemantics.Compile("Req", table, blobHigh, binder, D.IndexDescriptor, ToCatalog(highPair));
+        IRecordCursor cursorHigh = fixture.Open(table, 2)!;
+        Assert.Equal(MoveOutcome.Moved, cursorHigh.MoveFirst());
+        var frameHigh = new EditFrame(new TableEditContext(semHigh, probe, 7177, footprints: footprints), cursorHigh, ws);
+
+        // Touching another column -> MutationOpen.Rule naming CK_Req_High.
+        Assert.True(frameHigh.Edit().Succeeded);
+        Assert.True(AssignText(frameHigh, r, "r1b").Succeeded);
+        UpdateOutcome preViolOther = frameHigh.Update();
+        Assert.Equal(MutationOpen.Rule, preViolOther.Open);
+        Assert.Contains("CK_Req_High", preViolOther.Detail);
+        Assert.True(frameHigh.CancelUpdate().Succeeded);
+
+        // Changing V to a satisfying value on a pre-violating row -> still MutationOpen.Rule.
+        Assert.True(frameHigh.Edit().Succeeded);
+        Assert.True(AssignLong(frameHigh, v, 100).Succeeded);
+        UpdateOutcome preViolFix = frameHigh.Update();
+        Assert.Equal(MutationOpen.Rule, preViolFix.Open);
+        Assert.Contains("CK_Req_High", preViolFix.Detail);
+        Assert.True(frameHigh.CancelUpdate().Succeeded);
+
+        // Pre-violating CHECK alongside Required failure -> CheckOrder (does not hide Required behind Open).
+        Assert.True(frameHigh.Edit().Succeeded);
+        Assert.True(frameHigh.Assign(r, new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+        UpdateOutcome preViolAndReq = frameHigh.Update();
+        Assert.Equal(MutationOpen.CheckOrder, preViolAndReq.Open);
+        Assert.True(frameHigh.CancelUpdate().Succeeded);
+
+        // Open: write inside an explicit BeginTrans on a CHECK table -> MutationOpen.Rule (and CheckOrder alongside Required).
+        var txnFrame = new EditFrame(reqCtx, fixture.Open(table, 2)!, ws);
+        Assert.Null(ws.BeginTrans());
+        try
+        {
+            Assert.True(txnFrame.AddNew().Succeeded);
+            Assert.True(AssignLong(txnFrame, id, 50).Succeeded);
+            Assert.True(AssignText(txnFrame, r, "r50").Succeeded);
+            Assert.True(AssignLong(txnFrame, v, 10).Succeeded);
+            UpdateOutcome txnSat = txnFrame.Update();
+            Assert.Equal(MutationOpen.Rule, txnSat.Open);
+            Assert.Contains("CK_Req_V", txnSat.Detail);
+            Assert.Contains("BeginTrans", txnSat.Detail);
+            Assert.True(txnFrame.CancelUpdate().Succeeded);
+
+            Assert.True(txnFrame.AddNew().Succeeded);
+            Assert.True(AssignLong(txnFrame, id, 51).Succeeded);
+            Assert.True(AssignLong(txnFrame, v, -1).Succeeded);
+            UpdateOutcome txnAndReq = txnFrame.Update();
+            Assert.Equal(MutationOpen.CheckOrder, txnAndReq.Open);
+            Assert.True(txnFrame.CancelUpdate().Succeeded);
+        }
+        finally
+        {
+            ws.Rollback();
+        }
+    }
+
+    [Fact]
+    public void MdbReq_AndNullWriter_RefuseNonAdoExecuteRoutes_AdmitMdbAdoExecuteInsert()
+    {
+        using var mdbFixture = new ReplayFixture(V2MdbSha);
+        (TableDefinition mdbTable, TableEditContext mdbCtx) = mdbFixture.Table("Req")!.Value;
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdbFixture };
+
+        ColumnDescriptor id = Col(mdbTable, "ID");
+        ColumnDescriptor r = Col(mdbTable, "R");
+        ColumnDescriptor v = Col(mdbTable, "V");
+
+        // Non-ADO-Execute routes on MDB (recordset AddNew, DAO Execute) refuse by name, and report CheckOrder with Required.
+        var mdbRsFrame = new EditFrame(mdbCtx, mdbFixture.Open(mdbTable, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+        Assert.True(mdbRsFrame.AddNew().Succeeded);
+        Assert.True(AssignLong(mdbRsFrame, id, 3).Succeeded);
+        Assert.True(AssignText(mdbRsFrame, r, "r3").Succeeded);
+        Assert.True(AssignLong(mdbRsFrame, v, -1).Succeeded);
+        UpdateOutcome mdbRsNeg = mdbRsFrame.Update();
+        Assert.Equal(MutationOpen.Rule, mdbRsNeg.Open);
+        Assert.Contains("CK_Req_V", mdbRsNeg.Detail);
+        Assert.Contains("MDB", mdbRsNeg.Detail);
+        Assert.True(mdbRsFrame.CancelUpdate().Succeeded);
+
+        Assert.True(mdbRsFrame.AddNew().Succeeded);
+        Assert.True(AssignLong(mdbRsFrame, id, 4).Succeeded);
+        Assert.True(AssignLong(mdbRsFrame, v, -1).Succeeded);
+        UpdateOutcome mdbAndReq = mdbRsFrame.Update();
+        Assert.Equal(MutationOpen.CheckOrder, mdbAndReq.Open);
+        Assert.True(mdbRsFrame.CancelUpdate().Succeeded);
+
+        // evidence/r-q30-sql-check/mdb-viol-ado-exec, mdb-sat-ado-exec:
+        // Jet 4 MDB single-row ADO Execute INSERT enforces CHECK (3317 on violation, admits satisfying row).
+        IRecordCursor mdbCursor = mdbFixture.Open(mdbTable, 2)!;
+        var mdbAdoExecFrame = new EditFrame(mdbCtx, mdbCursor, ws)
+        {
+            ConflictSource = MutationErrorSource.Database,
+            AllowMdbCheckInsert = true,
+        };
+        ws.BeginStatement();
+        try
+        {
+            Assert.True(mdbAdoExecFrame.AddNew().Succeeded);
+            Assert.True(AssignLong(mdbAdoExecFrame, id, 5).Succeeded);
+            Assert.True(AssignText(mdbAdoExecFrame, r, "r5").Succeeded);
+            Assert.True(AssignLong(mdbAdoExecFrame, v, -1).Succeeded);
+            UpdateOutcome mdbViol = mdbAdoExecFrame.Update();
+            Assert.Equal(MutationOpen.None, mdbViol.Open);
+            Assert.Equal(MutationError.RuleWithoutText, mdbViol.Error?.Number);
+            Assert.Equal("CK_Req_V", mdbViol.Error?.Argument);
+            Assert.True(mdbAdoExecFrame.CancelUpdate().Succeeded);
+        }
+        finally
+        {
+            ws.EndStatement();
+        }
+
+        ws.BeginStatement();
+        try
+        {
+            Assert.True(mdbAdoExecFrame.AddNew().Succeeded);
+            Assert.True(AssignLong(mdbAdoExecFrame, id, 6).Succeeded);
+            Assert.True(AssignText(mdbAdoExecFrame, r, "r6").Succeeded);
+            Assert.True(AssignLong(mdbAdoExecFrame, v, 10).Succeeded);
+            UpdateOutcome mdbSat = mdbAdoExecFrame.Update();
+            Assert.True(mdbSat.Succeeded, mdbSat.Detail ?? mdbSat.Error?.Describe());
+        }
+        finally
+        {
+            ws.EndStatement();
+        }
+
+        // MDB UPDATE remains refused even when AllowMdbCheckInsert is set.
+        Assert.Equal(MoveOutcome.Moved, mdbCursor.MoveFirst());
+        ws.BeginStatement();
+        try
+        {
+            Assert.True(mdbAdoExecFrame.Edit().Succeeded);
+            Assert.True(AssignLong(mdbAdoExecFrame, v, -1).Succeeded);
+            UpdateOutcome mdbUpd = mdbAdoExecFrame.Update();
+            Assert.Equal(MutationOpen.Rule, mdbUpd.Open);
+            Assert.Contains("MDB", mdbUpd.Detail);
+            Assert.True(mdbAdoExecFrame.CancelUpdate().Succeeded);
+        }
+        finally
+        {
+            ws.EndStatement();
+        }
+
+        // Writer == null must NOT skip the ACCDB format check.
+        using var accdbFixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition accdbTable, TableEditContext accdbCtx) = accdbFixture.Table("Req")!.Value;
+        var noWriterCtx = new TableEditContext(accdbCtx.Semantics, new StoredUniqueProbe(accdbFixture.Cache, D, accdbTable, accdbFixture.Image.PageCount), lcid: 7177);
+        using var ws2 = new TransactionCoordinator(new LockerId(2));
+        var noWriterFrame = new EditFrame(noWriterCtx, accdbFixture.Open(accdbTable, 2)!, ws2) { ConflictSource = MutationErrorSource.Database };
+
+        Assert.True(noWriterFrame.AddNew().Succeeded);
+        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "ID"), 3).Succeeded);
+        Assert.True(AssignText(noWriterFrame, Col(accdbTable, "R"), "r3").Succeeded);
+        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "V"), -1).Succeeded);
+        UpdateOutcome noWriterOutcome = noWriterFrame.Update();
+        Assert.Equal(MutationOpen.Rule, noWriterOutcome.Open);
+        Assert.Contains("CK_Req_V", noWriterOutcome.Detail);
+        Assert.True(noWriterFrame.CancelUpdate().Succeeded);
+
+        Assert.True(noWriterFrame.AddNew().Succeeded);
+        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "ID"), 4).Succeeded);
+        Assert.True(AssignLong(noWriterFrame, Col(accdbTable, "V"), -1).Succeeded);
+        UpdateOutcome noWriterAndReq = noWriterFrame.Update();
+        Assert.Equal(MutationOpen.CheckOrder, noWriterAndReq.Open);
+    }
+
+    [Fact]
+    public void AutoNumberTableWithCheckConstraint_AdmitsDaoRsAndSingleRowSqlInsert_ConsumesCounter_RefusesOtherRoutes()
+    {
+        const string Ado5AccdbSha = "f0e5a1384126593d7cd78696de7102db28c8d805a628e7789fe3b9ec4fa81cb3";
+        using var fixture = new ReplayFixture(Ado5AccdbSha);
+        (TableDefinition kTable, _) = fixture.Table("K")!.Value;
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, kTable, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, kTable, fixture.Image.PageCount);
+
+        (string, string)[] pair = [("CK_K_T", "T <> 'x'")];
+        using MutationSemantics sem = MutationSemantics.Compile("K", kTable, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
+        Assert.NotNull(sem.AutoNumber);
+        Assert.True(sem.HasCheckConstraints);
+
+        var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        ColumnDescriptor idCol = Col(kTable, "ID");
+        ColumnDescriptor codeCol = Col(kTable, "Code");
+        ColumnDescriptor tCol = Col(kTable, "T");
+
+        (int initialRows, int initialAuto) = ReadTableDefCounts(fixture, kTable.FirstPage);
+
+        // 1. evidence/r-q30-sql-check/autonum-viol-dao-rs:
+        //    DAO recordset AddNew consumes AutoNumber on disk (offset 20 +1, RowCount unchanged) even when Update fails 3317.
+        var daoFrame = new EditFrame(ctx, fixture.Open(kTable, 2)!, ws);
+        Assert.True(daoFrame.AddNew().Succeeded);
+        Assert.True(AssignText(daoFrame, codeCol, "chk1").Succeeded);
+        Assert.True(AssignText(daoFrame, tCol, "x").Succeeded);
+        UpdateOutcome daoViol = daoFrame.Update();
+        Assert.Equal(MutationOpen.None, daoViol.Open);
+        Assert.Equal(MutationError.RuleWithoutText, daoViol.Error?.Number);
+        Assert.Equal("CK_K_T", daoViol.Error?.Argument);
+        Assert.True(daoFrame.CancelUpdate().Succeeded);
+        (int rowsAfterDaoViol, int autoAfterDaoViol) = ReadTableDefCounts(fixture, kTable.FirstPage);
+        Assert.Equal(initialRows, rowsAfterDaoViol);
+        Assert.Equal(initialAuto + 1, autoAfterDaoViol);
+
+        // Next DAO recordset insert gets the subsequent ID (initialAuto + 2).
+        Assert.True(daoFrame.AddNew().Succeeded);
+        Assert.True(AssignText(daoFrame, codeCol, "chk2").Succeeded);
+        Assert.True(AssignText(daoFrame, tCol, "y").Succeeded);
+        UpdateOutcome daoSat = daoFrame.Update();
+        Assert.True(daoSat.Succeeded, daoSat.Detail ?? daoSat.Error?.Describe());
+        (int rowsAfterDaoSat, int autoAfterDaoSat) = ReadTableDefCounts(fixture, kTable.FirstPage);
+        Assert.Equal(initialRows + 1, rowsAfterDaoSat);
+        Assert.Equal(initialAuto + 2, autoAfterDaoSat);
+
+        // 2. evidence/r-q30-sql-check/autonum-viol-ado-exec, autonum-viol-dao-exec:
+        //    Single-row autocommit SQL INSERT failing CHECK persists AutoNumber advance (offset 20 +1, RowCount unchanged).
+        var sqlFrame = new EditFrame(ctx, fixture.Open(kTable, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
+        ws.BeginStatement();
+        try
+        {
+            Assert.True(sqlFrame.AddNew().Succeeded);
+            Assert.True(AssignText(sqlFrame, codeCol, "chk3").Succeeded);
+            Assert.True(AssignText(sqlFrame, tCol, "x").Succeeded);
+            UpdateOutcome sqlViol = sqlFrame.Update();
+            Assert.Equal(MutationOpen.None, sqlViol.Open);
+            Assert.Equal(MutationError.RuleWithoutText, sqlViol.Error?.Number);
+            Assert.Equal("CK_K_T", sqlViol.Error?.Argument);
+            Assert.True(sqlFrame.CancelUpdate().Succeeded);
+        }
+        finally
+        {
+            ws.EndStatement();
+        }
+        (int rowsAfterSqlViol, int autoAfterSqlViol) = ReadTableDefCounts(fixture, kTable.FirstPage);
+        Assert.Equal(initialRows + 1, rowsAfterSqlViol);
+        Assert.Equal(initialAuto + 3, autoAfterSqlViol);
+
+        // 3. Open: ADO recordset AddNew on an AutoNumber+CHECK table refuses immediately before issuing a ticket.
+        IRecordCursor adoCursor = fixture.Open(kTable, 2)!;
+        Assert.Equal(MoveOutcome.Moved, adoCursor.MoveFirst());
+        var adoFrame = new EditFrame(ctx, adoCursor, ws) { ConflictSource = MutationErrorSource.Database };
+        EditOutcome adoAdd = adoFrame.AddNew();
+        Assert.False(adoAdd.Succeeded);
+        Assert.Null(adoAdd.Error);
+        Assert.Equal(MutationOpen.Rule, adoAdd.Open);
+        Assert.Contains("CK_K_T", adoAdd.Detail);
+        Assert.Contains("ADO recordset", adoAdd.Detail);
+        Assert.Equal(autoAfterSqlViol, ReadTableDefCounts(fixture, kTable.FirstPage).AutoNumber);
+
+        // 4. Open: UPDATE on an AutoNumber+CHECK table refuses by name.
+        Assert.True(adoFrame.Edit().Succeeded);
+        Assert.True(AssignText(adoFrame, tCol, "x").Succeeded);
+        UpdateOutcome upd = adoFrame.Update();
+        Assert.Equal(MutationOpen.Rule, upd.Open);
+        Assert.Contains("CK_K_T", upd.Detail);
+        Assert.Contains("ID", upd.Detail);
+        Assert.True(adoFrame.CancelUpdate().Succeeded);
+
+        // 5. Open: explicit AutoNumber assignment on SQL INSERT refuses by name.
+        ws.BeginStatement();
+        try
+        {
+            Assert.True(sqlFrame.AddNew().Succeeded);
+            Assert.True(AssignLong(sqlFrame, idCol, 999).Succeeded);
+            Assert.True(AssignText(sqlFrame, codeCol, "chk4").Succeeded);
+            Assert.True(AssignText(sqlFrame, tCol, "y").Succeeded);
+            UpdateOutcome explicitAuto = sqlFrame.Update();
+            Assert.Equal(MutationOpen.Rule, explicitAuto.Open);
+            Assert.Contains("explicit", explicitAuto.Detail);
+            Assert.True(sqlFrame.CancelUpdate().Succeeded);
+        }
+        finally
+        {
+            ws.EndStatement();
+        }
     }
 
     [Fact]
@@ -438,11 +911,11 @@ public sealed class CheckConstraintTests
         // 2. LvProp present, catalog rows empty.
         AssertSourceRefusal(table, lvBlob, [], binder, probe, footprints, fixture, "CK_Req_V");
         // 3. LvProp absent, catalog row present.
-        AssertSourceRefusal(table, null, [new CatalogCheckConstraint("CK_CatOnly", "V >= 0")], binder, probe, footprints, fixture, "CK_CatOnly");
+        AssertSourceRefusal(table, null, [new CatalogCheckConstraint("CK_CatOnly", "V >= 0", Id: 100)], binder, probe, footprints, fixture, "CK_CatOnly");
         // 4. Expression disagreement.
-        AssertSourceRefusal(table, lvBlob, [new CatalogCheckConstraint("CK_Req_V", "V > 0")], binder, probe, footprints, fixture, "CK_Req_V");
+        AssertSourceRefusal(table, lvBlob, [new CatalogCheckConstraint("CK_Req_V", "V > 0", Id: 100)], binder, probe, footprints, fixture, "CK_Req_V");
         // 5. Name disagreement.
-        AssertSourceRefusal(table, lvBlob, [new CatalogCheckConstraint("CK_Other", "V >= 0")], binder, probe, footprints, fixture, "CK_Other");
+        AssertSourceRefusal(table, lvBlob, [new CatalogCheckConstraint("CK_Other", "V >= 0", Id: 100)], binder, probe, footprints, fixture, "CK_Other");
         // 6. Unrecorded MSysObjects Type 9 row (e.g. non-recorded Flags/ParentId or null ForeignName).
         CheckConstraintCatalogEntry badEntry = new(
             Id: 42,
@@ -471,17 +944,16 @@ public sealed class CheckConstraintTests
     [Theory]
     [InlineData("CK_Bracket", "[V] >= 0")]
     [InlineData("CK_Parens", "(V >= 0)")]
-    [InlineData("CK_Reversed", "0 <= V")]
-    [InlineData("CK_Le", "V <= 0")]
-    [InlineData("CK_Eq", "V = 0")]
-    [InlineData("CK_Ne", "V <> 0")]
-    [InlineData("CK_NegLit", "V >= -1")]
     [InlineData("CK_FloatLit", "V >= 1.5")]
     [InlineData("CK_StrLit", "V >= '0'")]
     [InlineData("CK_BoolLit", "V >= True")]
     [InlineData("CK_DateLit", "V >= #2020-01-01#")]
     [InlineData("CK_Implied", ">= 0")]
     [InlineData("CK_TextCol", "R >= 0")]
+    [InlineData("CK_TextEq", "R = 'x'")]
+    [InlineData("CK_TextLt", "R < 'x'")]
+    [InlineData("CK_TextRhs", "'x' <> R")]
+    [InlineData("CK_TextDbl", "R <> \"x\"")]
     [InlineData("CK_Sub", "V IN (SELECT X FROM Other)")]
     [InlineData("CK_Exists", "EXISTS (SELECT 1 FROM Other)")]
     [InlineData("CK_OtherTbl", "Other.V >= 0")]
@@ -499,7 +971,7 @@ public sealed class CheckConstraintTests
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
 
         PropertyBlob blob = BuildCheckBlob((constraintName, expression));
-        using MutationSemantics sem = MutationSemantics.Compile("Req", table, blob, binder, D.IndexDescriptor, [new CatalogCheckConstraint(constraintName, expression)]);
+        using MutationSemantics sem = MutationSemantics.Compile("Req", table, blob, binder, D.IndexDescriptor, [new CatalogCheckConstraint(constraintName, expression, Id: 100)]);
         Assert.True(sem.HasCheckConstraints);
         BoundCheckConstraint c = Assert.Single(sem.CheckConstraints);
         Assert.Null(c.Rule);
@@ -521,9 +993,11 @@ public sealed class CheckConstraintTests
         Assert.Contains(constraintName, outcome.Detail);
         Assert.True(frame.CancelUpdate().Succeeded);
 
-        // Alongside a Required failure (R unset) -> CheckOrder (does not hide Required).
-        PropertyBlob blobWithReq = BuildCheckBlobWithRequiredR((constraintName, expression));
-        using MutationSemantics semReq = MutationSemantics.Compile("Req", table, blobWithReq, binder, D.IndexDescriptor, [new CatalogCheckConstraint(constraintName, expression)]);
+        // Alongside a Required failure (R unset) -> CheckOrder (does not hide Required behind unadmitted Open).
+        PropertyBlob blobWithReq = BuildBlob(
+            checkConstraints: [(constraintName, expression)],
+            columnProps: [("R", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [1])])]);
+        using MutationSemantics semReq = MutationSemantics.Compile("Req", table, blobWithReq, binder, D.IndexDescriptor, [new CatalogCheckConstraint(constraintName, expression, Id: 100)]);
         var frameReq = new EditFrame(new TableEditContext(semReq, probe, lcid: 7177, footprints: footprints), fixture.Open(table, 2)!, ws)
         {
             ConflictSource = MutationErrorSource.Database,
@@ -568,43 +1042,12 @@ public sealed class CheckConstraintTests
         Assert.Contains("CheckConstraints", outcome.Detail);
     }
 
-    [Fact]
-    public void AutoNumberTableWithCheckConstraint_RefusesWritesByName()
+    private static (int RowCount, int AutoNumber) ReadTableDefCounts(ReplayFixture fixture, uint tableDefPage)
     {
-        using var fixture = new ReplayFixture(V2AccdbSha);
-        (TableDefinition itemsTable, _) = fixture.Table("Items")!.Value;
-        ExpressionRuleBinder binder = MakeBinder(fixture);
-        var probe = new StoredUniqueProbe(fixture.Cache, D, itemsTable, fixture.Image.PageCount);
-        var footprints = new TableFootprints(fixture.Cache, D, itemsTable, fixture.Image.PageCount);
-
-        (string, string)[] pair = [("CK_Items_L", "L >= 0")];
-        using MutationSemantics sem = MutationSemantics.Compile("Items", itemsTable, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
-        Assert.NotNull(sem.AutoNumber);
-        Assert.True(sem.HasCheckConstraints);
-
-        var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1));
-        IRecordCursor cursor = fixture.Open(itemsTable, 2)!;
-        Assert.Equal(MoveOutcome.Moved, cursor.MoveFirst());
-        var frame = new EditFrame(ctx, cursor, ws) { ConflictSource = MutationErrorSource.Database };
-
-        // AddNew refuses immediately by name before issuing or persisting an AutoNumber ticket.
-        EditOutcome add = frame.AddNew();
-        Assert.False(add.Succeeded);
-        Assert.Null(add.Error);
-        Assert.Equal(MutationOpen.Rule, add.Open);
-        Assert.Contains("CK_Items_L", add.Detail);
-        Assert.Contains("ID", add.Detail);
-
-        // Edit + Update also refuses by name.
-        Assert.True(frame.Edit().Succeeded);
-        Assert.True(AssignLong(frame, Col(itemsTable, "L"), -1).Succeeded);
-        UpdateOutcome upd = frame.Update();
-        Assert.False(upd.Succeeded);
-        Assert.Null(upd.Error);
-        Assert.Equal(MutationOpen.Rule, upd.Open);
-        Assert.Contains("CK_Items_L", upd.Detail);
-        Assert.Contains("ID", upd.Detail);
+        using PagePin pin = fixture.Cache.Pin(tableDefPage).Pin!;
+        int rowCount = BinaryPrimitives.ReadInt32LittleEndian(pin.Bytes.Slice(16, 4));
+        int autoNumber = BinaryPrimitives.ReadInt32LittleEndian(pin.Bytes.Slice(20, 4));
+        return (rowCount, autoNumber);
     }
 
     private static void AssertSourceRefusal(
@@ -637,7 +1080,7 @@ public sealed class CheckConstraintTests
     }
 
     private static CatalogCheckConstraint[] ToCatalog((string Name, string Expression)[] pairs) =>
-        [.. pairs.Select(p => new CatalogCheckConstraint(p.Name, p.Expression))];
+        [.. pairs.Select((p, idx) => new CatalogCheckConstraint(p.Name, p.Expression, Id: unchecked((int)(0x80000005u + (uint)idx))))];
 
     private static ExpressionRuleBinder MakeBinder(ReplayFixture fixture)
     {
@@ -646,29 +1089,35 @@ public sealed class CheckConstraintTests
         return new ExpressionRuleBinder(new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query));
     }
 
-    private static PropertyBlob BuildCheckBlob(params (string Name, string Expression)[] constraints)
-    {
-        var sb = new StringBuilder();
-        foreach ((string name, string expr) in constraints)
-        {
-            sb.Append(name).Append('\0').Append(expr).Append('\0');
-        }
-        sb.Append('\0');
-        return BuildRawCheckBlob(sb.ToString());
-    }
+    private static PropertyBlob BuildCheckBlob(params (string Name, string Expression)[] constraints) =>
+        BuildBlob(checkConstraints: constraints);
 
-    private static PropertyBlob BuildCheckBlobWithRequiredR(params (string Name, string Expression)[] constraints)
+    private static PropertyBlob BuildBlob(
+        (string Name, string Expression)[] checkConstraints,
+        (string Rule, string Text)? tableRule = null,
+        (string Column, StoredProperty[] Props)[]? columnProps = null)
     {
         var sb = new StringBuilder();
-        foreach ((string name, string expr) in constraints)
+        foreach ((string name, string expr) in checkConstraints)
         {
             sb.Append(name).Append('\0').Append(expr).Append('\0');
         }
         sb.Append('\0');
-        byte[] checkBytes = Encoding.Unicode.GetBytes(sb.ToString());
-        var objMap = new PropertyMap(PropertySectionKind.ObjectValues, "", [new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, checkBytes)]);
-        var colMap = new PropertyMap(PropertySectionKind.ColumnValues, "R", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [1])]);
-        byte[] encoded = PropertyBlob.Encode([objMap, colMap]);
+        List<StoredProperty> objProps = [new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes(sb.ToString()))];
+        if (tableRule is { } tr)
+        {
+            objProps.Add(new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes(tr.Rule)));
+            objProps.Add(new StoredProperty("ValidationText", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes(tr.Text)));
+        }
+        List<PropertyMap> maps = [new PropertyMap(PropertySectionKind.ObjectValues, "", objProps)];
+        if (columnProps is not null)
+        {
+            foreach ((string col, StoredProperty[] props) in columnProps)
+            {
+                maps.Add(new PropertyMap(PropertySectionKind.ColumnValues, col, props));
+            }
+        }
+        byte[] encoded = PropertyBlob.Encode(maps);
         PropertyBlob? blob = PropertyBlob.Read(encoded, out string? failure);
         Assert.Null(failure);
         return blob!;
