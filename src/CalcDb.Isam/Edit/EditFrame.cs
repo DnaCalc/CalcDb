@@ -533,20 +533,47 @@ public sealed class EditFrame : IDisposable
             }
         }
 
+        if (CheckConstraintPrecondition() is { } checkPrecondition)
+        {
+            return checkPrecondition;
+        }
+
         // The checks of the candidate row (II-10 §21 F-91 "Scheduled field and row checks"), each class reporting its
         // first failure in declaration order. ACE's order is qualified along Required (3314), field rule
         // (3316/3317, 3802), unique index (3022) (CUR-EDIT, edit-validation-order), and on a parent-key UPDATE whose
         // new key collides with the PK while children still reference the old key, parent RI (3200) beats PK (3022)
         // (evidence/r-dao-1-err-1/err-partial-constraint call 45, `UPDATE T SET ID = ID + 1` with dbFailOnError).
-        // Zero-length text (3315), the table rule, a Null in a Null-refusing index (3058), and child RI (3201) are
-        // each recorded alone. So the earliest failing class of the Recorded chain decides when every other failing
-        // class comes after it in the chain, and parent 3200 decides over 3022; any other combination is named, as is
-        // a failing check at depth 6 or 7, where the order of 3003 against the checks is not recorded.
-        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), default, default, default];
-        (stages[4], stages[5], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
+        // Zero-length text (3315), the table rule, SQL CHECK constraints (3317 / ADO 3316), a Null in a Null-refusing
+        // index (3058), and child RI (3201) are each recorded alone. So the earliest failing class of the Recorded
+        // chain decides when every other failing class comes after it in the chain, and parent 3200 decides over 3022;
+        // any other combination is named, as is a failing check at depth 6 or 7, where the order of 3003 against the
+        // checks is not recorded.
+        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), CheckConstraintCheck(out BoundCheckConstraint? nullCheckConstraint), default, default, default];
+        (stages[5], stages[6], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
         IReadOnlyList<CascadeStep>? cascades = null;
-        stages[6] = RelationshipUpdateCheck(out cascades);
+        stages[7] = RelationshipUpdateCheck(out cascades);
         UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary);
+        if (nullCheckConstraint is { } nullConstraint)
+        {
+            // r-oledb-odbc/update-errors #185-203 (Required 3314 with V=Null) and #233-252 (Unique 3022 with V=Null),
+            // and r-oledb-odbc/error-record-channels #122 (Required 3314 with V=Null), show Required and Unique
+            // rejecting while the CHECK-constrained column is Null. No retained record decides whether Null in the
+            // checked column is admitted or rejected when no other check fails (or against other check classes).
+            if (decided is null)
+            {
+                decided = new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint '{nullConstraint.Name}' on {s.TableName}: Null in checked column '{nullConstraint.Column!.Name}' is not decided by a retained record");
+            }
+            else if (decided.Value.Error?.Number is not (MutationError.Required or MutationError.Duplicate))
+            {
+                decided = new UpdateOutcome(
+                    null,
+                    MutationOpen.CheckOrder,
+                    $"CHECK constraint '{nullConstraint.Name}' on {s.TableName} has Null in checked column '{nullConstraint.Column!.Name}' alongside {(decided.Value.Error is { } e ? $"error {e.Number}" : decided.Value.Open.ToString())}, whose interaction is not recorded");
+            }
+        }
         if (decided is { } failure)
         {
             if (!failure.Succeeded && _workspace.Depth > TransactionCoordinator.MaxWriteDepth)
@@ -1093,6 +1120,10 @@ public sealed class EditFrame : IDisposable
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
         }
+        if (s.HasCheckConstraints)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {DescribeCheckConstraints(s)} on {s.TableName}: DELETE on a table with a CHECK constraint is not recorded");
+        }
         if (_workspace.HasAcceptedChange(s, row))
         {
             return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
@@ -1233,6 +1264,10 @@ public sealed class EditFrame : IDisposable
         if (_table.HasRelationships && _table.Relationships is null)
         {
             return new UpdateOutcome(null, MutationOpen.Relationship, $"{s.TableName} takes part in a relationship (W-05/fk-cascades)");
+        }
+        if (s.HasCheckConstraints)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {DescribeCheckConstraints(s)} on {s.TableName}: DELETE on a table with a CHECK constraint is not recorded");
         }
         if (_workspace.HasAcceptedChanges(s))
         {
@@ -1583,8 +1618,8 @@ public sealed class EditFrame : IDisposable
         };
     }
 
-    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, Null in index, unique, relationship.</summary>
-    private const int RequiredStage = 0, FieldRuleStage = 2, UniqueStage = 5, RelationshipStage = 6;
+    /// <summary>Stage indexes: Required, zero-length, field rule, table rule, SQL CHECK constraint, Null in index, unique, relationship.</summary>
+    private const int RequiredStage = 0, FieldRuleStage = 2, UniqueStage = 6, RelationshipStage = 7;
 
     /// <summary>The outcome the stages decide (see <see cref="Update"/>), or null when every check passed.</summary>
     private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision)
@@ -1748,6 +1783,94 @@ public sealed class EditFrame : IDisposable
         return new UpdateOutcome(r.Error, r.Open, r.Detail);
     }
 
+    private UpdateOutcome? CheckConstraintPrecondition()
+    {
+        MutationSemantics s = _table.Semantics;
+        if (!s.HasCheckConstraints)
+        {
+            return null;
+        }
+        if (s.CheckConstraintsNotAdmitted is { } blobReason)
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, blobReason);
+        }
+        foreach (BoundCheckConstraint c in s.CheckConstraints)
+        {
+            if (c.Rule is null || c.Column is null)
+            {
+                return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint '{c.Name}' on {s.TableName} ({c.Expression}): {c.NotAdmitted}");
+            }
+        }
+        string names = DescribeCheckConstraints(s);
+        // All retained CHECK enforcement records are on ACCDB (r-oledb-odbc/update-errors #208-228,
+        // r-oledb-odbc/error-record-channels #142, r-q-cat-txn-lock/ii11-ado-check-constraint #20, #22, #64);
+        // MDB write enforcement is not recorded.
+        if (_table.Writer is { } writer && writer.IsJet4Mdb(_workspace.OverlayOf(writer.File)))
+        {
+            return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint {names} on {s.TableName}: MDB write enforcement is not recorded");
+        }
+        return null;
+    }
+
+    private UpdateOutcome CheckConstraintCheck(out BoundCheckConstraint? nullChecked)
+    {
+        nullChecked = null;
+        MutationSemantics s = _table.Semantics;
+        if (!s.HasCheckConstraints)
+        {
+            return default;
+        }
+        List<BoundCheckConstraint>? rejected = null;
+        foreach (BoundCheckConstraint c in s.CheckConstraints)
+        {
+            if (CandidateValue(c.Column!.Ordinal).Kind == NativeKind.Null)
+            {
+                nullChecked ??= c;
+                continue;
+            }
+            RuleResult result = c.Rule!.Evaluate(_candidate);
+            switch (result.Verdict)
+            {
+                case RuleVerdict.Admit:
+                    break;
+                case RuleVerdict.Reject:
+                    (rejected ??= []).Add(c);
+                    break;
+                case RuleVerdict.Failed:
+                    return Fail(MutationError.RuleEvaluation);
+                default:
+                    return new UpdateOutcome(null, MutationOpen.Rule, $"CHECK constraint '{c.Name}' on {s.TableName}: {result.Detail}");
+            }
+        }
+        if (rejected is { Count: 1 })
+        {
+            if (nullChecked is not null)
+            {
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint '{rejected[0].Name}' rejected while CHECK constraint '{nullChecked.Name}' on {s.TableName} has Null in column '{nullChecked.Column!.Name}', whose ordering is not recorded");
+            }
+            // r-q-cat-txn-lock/ii11-ado-check-constraint #64-72 (DAO 3317); r-oledb-odbc/update-errors #208-228
+            // (ADO rowset 3316 / Status=131072 via AdoEditErrors.MapUpdateError); r-oledb-odbc/error-record-channels #142.
+            return new UpdateOutcome(new MutationError(MutationError.RuleWithoutText, MutationErrorSource.Recordset, rejected[0].Name, s.TableName));
+        }
+        if (rejected is { Count: > 1 })
+        {
+            string failedNames = string.Join(", ", rejected.Select(c => $"'{c.Name}'"));
+            return new UpdateOutcome(
+                null,
+                MutationOpen.CheckOrder,
+                $"multiple CHECK constraints failed on {s.TableName} ({failedNames}): their evaluation order is not recorded");
+        }
+        return default;
+    }
+
+    private static string DescribeCheckConstraints(MutationSemantics s) =>
+        s.CheckConstraints.Count > 0
+            ? string.Join(", ", s.CheckConstraints.Select(c => $"'{c.Name}'"))
+            : "'CheckConstraints'";
+
     /// <summary>The Null-in-index check (3058) and the unique check (3022), each its first failure in index order.</summary>
     private (UpdateOutcome NullIndex, UpdateOutcome Unique, int? RefusingPhysical, bool RefusingIsPrimary) IndexChecks()
     {
@@ -1890,6 +2013,15 @@ public sealed class EditFrame : IDisposable
                 UnlockFootprint(footprint, held);
                 footprint = [];
                 return new UpdateOutcome(null, MutationOpen.Publication, $"cascade target table '{targetCtx.Semantics.TableName}' has no physical compiler");
+            }
+            if (targetCtx.Semantics.HasCheckConstraints)
+            {
+                UnlockFootprint(footprint, held);
+                footprint = [];
+                return new UpdateOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CHECK constraint {DescribeCheckConstraints(targetCtx.Semantics)} on {targetCtx.Semantics.TableName}: cascading write onto a table with a CHECK constraint is not recorded");
             }
         }
         // Acquire initial row locks on every cascade target before opening the OperationFrame.

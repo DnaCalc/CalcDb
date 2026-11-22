@@ -484,9 +484,30 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(0, Get(rq, "EditMode"));
             Assert.Null(Call(errs, "Clear").Failure);
 
-            // #208-228: left out until fq9f: CK_Req_V was created via ALTER TABLE Req ADD CONSTRAINT CK_Req_V CHECK (V >= 0),
-            // and upstream CalcDb.Isam (MutationSemantics) currently enforces DAO ValidationRule properties (which
-            // AdoEditErrors maps to 3316 / Status=131072) without yet loading SQL CHECK constraints.
+            // #208-228: SQL CHECK constraint CK_Req_V (V >= 0) -> 3316, EditMode=2, Status=131072.
+            Assert.Null(Call(rq, "AddNew").Failure);
+            Assert.Null(Put(qId, "Value", 3).Failure);
+            Assert.Null(Put(qR, "Value", "r3").Failure);
+            Assert.Null(Put(qV, "Value", -1).Failure);
+            AssertError(
+                Call(rq, "Update"),
+                unchecked((int)0x80040E21),
+                AceSource,
+                "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.",
+                5003000u,
+                IidRowsetUpdate);
+            Assert.Equal(2, Get(rq, "EditMode"));
+            Assert.Equal(131072, Get(rq, "Status"));
+            AssertConnectionError0(
+                cn,
+                unchecked((int)0x80040E21),
+                "3316",
+                -541462135,
+                AceSource,
+                "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.");
+            Assert.Null(Call(rq, "CancelUpdate").Failure);
+            Assert.Equal(0, Get(rq, "EditMode"));
+            Assert.Null(Call(errs, "Clear").Failure);
 
             // #233-252: PK duplicate ID = 1 -> 3022, EditMode=2, Status=4096.
             Assert.Null(Call(rq, "AddNew").Failure);
