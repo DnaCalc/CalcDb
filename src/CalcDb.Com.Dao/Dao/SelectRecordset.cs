@@ -680,7 +680,17 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             out SqlFailure? failure, out CallResult? viewRefusal);
         if (next is null)
         {
-            return viewRefusal ?? SelectRoute.Published(Database, failure!);
+            if (viewRefusal is { } refused)
+            {
+                return refused;
+            }
+            if (failure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetRequeryFailure",
+                $"Recordset.Requery failed with ACE {failure.Number} ({failure.Message}); error Source and post-failure cursor state are not recorded"));
         }
         SelectCursor previousCursor = Cursor;
         PrivateOverlay? previousSnapshotOverlay = _snapshotOverlay;

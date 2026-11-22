@@ -93,8 +93,14 @@ public sealed unsafe class DaoSelectPopulationTests : IDisposable
         Assert.Equal(1, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
         Ok(Method(snapNoOrd, "MoveNext"));
         Assert.Equal(501, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
+        Ok(Method(snapNoOrd, "Move", 9));
+        Assert.Equal(501, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
+        Ok(Method(snapNoOrd, "Move", 90));
+        Assert.Equal(501, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
+        Ok(Method(snapNoOrd, "Move", 400));
+        Assert.Equal(501, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
         Ok(Method(snapNoOrd, "Move", 1500));
-        Assert.Equal(1502, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
+        Assert.Equal(2001, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
         Ok(Method(snapNoOrd, "MoveLast"));
         Assert.Equal(2048, IntValue(Ok(Get(snapNoOrd, "RecordCount"))));
         Ok(Method(snapNoOrd, "Close"));
@@ -174,17 +180,21 @@ public sealed unsafe class DaoSelectPopulationTests : IDisposable
         Ok(Method(snap, "Close"));
         Ok(Method(ws, "Rollback"));
 
-        // r-def-cursor-dao/edit-under-commit: depth-0 dynaset Requery after CommitTrans resets to 1 and sees committed change.
+        // r-def-cursor-dao/edit-under-commit: depth-0 dynaset Requery after CommitTrans succeeds and sees the committed state
+        // (post-Requery RecordCount reset to 1 is established by r-txn-1b/rs-position-after-rollback and delete-by-other-cursor-current-row).
         SelectRecordsetObject committed = OpenSelect(db, "SELECT ID, N FROM T ORDER BY ID", 2);
         Ok(Method(committed, "MoveLast"));
         Assert.Equal(8, IntValue(Ok(Get(committed, "RecordCount"))));
+        Assert.Equal(8, IntValue(Ok(FieldValue(committed, "ID"))));
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "DELETE FROM T WHERE ID = 8", 128));
         Ok(Method(ws, "CommitTrans"));
 
         Ok(Method(committed, "Requery"));
+        Assert.Equal(1, IntValue(Ok(FieldValue(committed, "ID"))));
         Assert.Equal(1, IntValue(Ok(Get(committed, "RecordCount"))));
         Ok(Method(committed, "MoveLast"));
+        Assert.Equal(7, IntValue(Ok(FieldValue(committed, "ID"))));
         Assert.Equal(7, IntValue(Ok(Get(committed, "RecordCount"))));
         Ok(Method(committed, "Close"));
     }
@@ -261,14 +271,28 @@ public sealed unsafe class DaoSelectPopulationTests : IDisposable
         Ok(Method(inner, "Close"));
         Ok(Method(ord, "Close"));
 
-        // Unordered SELECT Requery and non-single-table SELECT Requery are refused by name.
+        // Unordered single-table SELECT dynaset: RecordCount is 1 at open (r-cursor-1b/open-argument-shapes),
+        // post-move RecordCount and Requery are refused by name.
         SelectRecordsetObject noOrd = OpenSelect(accdb, "SELECT ID, V FROM R", 2);
+        Assert.Equal(1, IntValue(Ok(Get(noOrd, "RecordCount"))));
+        Ok(Method(noOrd, "MoveNext"));
+        AssertNotModelled(Get(noOrd, "RecordCount"), "NotModelled.QueryRecordCount.UnorderedDynasetMove");
         AssertNotModelled(Method(noOrd, "Requery"), "NotModelled.QueryRecordsetRequery");
         Ok(Method(noOrd, "Close"));
 
         SelectRecordsetObject distinct = OpenSelect(accdb, "SELECT DISTINCT V FROM R ORDER BY V", 2);
         AssertNotModelled(Method(distinct, "Requery"), "NotModelled.QueryRecordsetRequery");
         Ok(Method(distinct, "Close"));
+
+        // Requery hitting an ACE failure during reopen refuses by name without publishing DAO.Database or dropping the cursor.
+        SelectRecordsetObject failOnRequery = OpenSelect(accdb, "SELECT ID, V FROM R ORDER BY 100 / (V + 1000), ID", 4);
+        Assert.Equal(8, IntValue(Ok(Get(failOnRequery, "RecordCount"))));
+        int firstId = IntValue(Ok(FieldValue(failOnRequery, "ID")));
+        Ok(Method(accdb, "Execute", "UPDATE R SET V = -1000 WHERE ID = 1", 128));
+        AssertNotModelled(Method(failOnRequery, "Requery"), "NotModelled.QueryRecordsetRequeryFailure");
+        Assert.Equal(8, IntValue(Ok(Get(failOnRequery, "RecordCount"))));
+        Assert.Equal(firstId, IntValue(Ok(FieldValue(failOnRequery, "ID"))));
+        Ok(Method(failOnRequery, "Close"));
     }
 
     private string CopyFixture(string fixture, string extension = ".accdb")

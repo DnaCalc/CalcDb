@@ -293,7 +293,7 @@ internal static class SelectRoute
     }
 
     /// <summary>A statement failure as DatabaseObject publishes it: ACE's number and text, or the named case.</summary>
-    internal static CallResult Published(DatabaseObject database, SqlFailure failure) => failure.IsNotModelled
+    private static CallResult Published(DatabaseObject database, SqlFailure failure) => failure.IsNotModelled
         ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
         : database.Fail(failure.Number, failure.Message);
 
