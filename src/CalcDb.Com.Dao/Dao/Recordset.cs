@@ -1091,11 +1091,14 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// rs-types-after-rollback, rs-position-after-rollback); in both cases LastModified is cleared to a null array. Pure
     /// navigation without AddNew does not truncate and admits only the recorded r-cursor-1/edit-rollback-opened-before
     /// sequence (<see cref="RecordsetAfterRollback.LostCurrentPureNavigation"/> -&gt;
-    /// <see cref="RecordsetAfterRollback.AfterMoveFirstPureNavigation"/>). Every unrecorded case (opened/requeried inside
+    /// <see cref="RecordsetAfterRollback.AfterMoveFirstPureNavigation"/>). An in-transaction Edit+Update on a pre-transaction
+    /// row with no keyset growth admits only the recorded r-fix-cat-txn/clone-close-update-only sequence
+    /// (<see cref="RecordsetAfterRollback.EditedBeforeMoveFirst"/> -&gt;
+    /// <see cref="RecordsetAfterRollback.AfterMoveFirstAfterEdit"/>). Every unrecorded case (opened/requeried inside
     /// the level, nested BeginTrans, Jet 4 MDB at any size, empty pre-transaction table, Deleted/DeletedBySibling/
     /// BookmarkInvalid across truncation, surviving clone on an in-transaction row during clone-close abort, staying on an
-    /// edited pre-transaction row, snapshot/forward-only opened inside) enters <see cref="RecordsetAfterRollback.NotRecorded"/>.
-    /// CommitTrans keeps populated rows and position.
+    /// edited pre-transaction row across truncation, snapshot/forward-only opened inside) enters
+    /// <see cref="RecordsetAfterRollback.NotRecorded"/>. CommitTrans keeps populated rows and position.
     /// </summary>
     /// <summary>A table-type or dynaset recordset locks its table against DDL while any member of its family is live; a snapshot or forward-only one is not recorded (<see cref="TableHold"/>).</summary>
     public TableHold Holds(string table) => _family.Live.Count == 0 || !string.Equals(_entry.Name, table, StringComparison.OrdinalIgnoreCase) ? TableHold.None
@@ -1232,8 +1235,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                         _lastModified = LastModifiedMark.Cleared;
                         if (ReferenceEquals(_family.EditedInFrame, level))
                         {
-                            _afterRollback = RecordsetAfterRollback.NotRecorded;
-                            _notRecorded = "a dynaset staying on a pre-transaction row after an in-transaction Edit+Update was rolled back (not recorded)";
+                            _afterRollback = RecordsetAfterRollback.EditedBeforeMoveFirst;
+                            _notRecorded = "a dynaset staying on a pre-transaction row after an in-transaction Edit+Update was rolled back (only MoveFirst -> Fields -> Field.Value -> Close is recorded; r-fix-cat-txn/clone-close-update-only)";
                         }
                     }
                     break;
@@ -1249,6 +1252,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         RecordsetAfterRollback.LostCurrentRecord => LostCurrentOperations.Find(member) ?? AfterRollbackNamed(member),
         RecordsetAfterRollback.LostCurrentPureNavigation => LostCurrentPureNavigationOperations.Find(member) ?? AfterRollbackNamed(member),
         RecordsetAfterRollback.AfterMoveFirstPureNavigation => AfterMoveFirstPureNavigationOperations.Find(member) ?? AfterRollbackNamed(member),
+        RecordsetAfterRollback.EditedBeforeMoveFirst => EditedBeforeMoveFirstOperations.Find(member) ?? AfterRollbackNamed(member),
+        RecordsetAfterRollback.AfterMoveFirstAfterEdit => AfterMoveFirstAfterEditOperations.Find(member) ?? AfterRollbackNamed(member),
         _ => member.Name == "Close" ? base.Find(member) : AfterRollbackNamed(member),
     };
 
@@ -1312,6 +1317,25 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("EditMode", (self, args) => Int16(0))
         .Get("Bookmark", (self, args) => Operations.Find(Decl.Member("Bookmark", InvokeKind.PropertyGet))!(self, args))
         .Get("LastModified", (self, args) => NullArray)
+        .Method("Close", (self, args) => Live(self, r => r.Close()));
+
+    /// <summary>
+    /// A dynaset opened outside every level whose family stayed on a pre-transaction row (no keyset growth) after an
+    /// in-transaction Edit+Update was rolled back (r-fix-cat-txn/clone-close-update-only): MoveFirst repositions onto
+    /// row 0 and enters <see cref="RecordsetAfterRollback.AfterMoveFirstAfterEdit"/>; Close succeeds. Every member read
+    /// before MoveFirst is not recorded and refuses by name.
+    /// </summary>
+    private static readonly OperationTable EditedBeforeMoveFirstOperations = new OperationTable(Decl)
+        .Method("MoveFirst", (self, args) => RepositionAfterRollback((RecordsetObject)self, "MoveFirst", args, RecordsetAfterRollback.AfterMoveFirstAfterEdit))
+        .Method("Close", (self, args) => Live(self, r => r.Close()));
+
+    /// <summary>
+    /// After MoveFirst following an in-transaction Edit+Update Rollback with no keyset growth
+    /// (r-fix-cat-txn/clone-close-update-only): only Fields (Count, Item and row-0 Field.Value) and Close are recorded;
+    /// every other member refuses by name.
+    /// </summary>
+    private static readonly OperationTable AfterMoveFirstAfterEditOperations = new OperationTable(Decl)
+        .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     private static CallResult RepositionAfterRollback(RecordsetObject r, string moveName, ReadOnlySpan<nint> args, RecordsetAfterRollback nextState)
@@ -1824,7 +1848,7 @@ internal sealed unsafe class FieldsObject : DaoObject
     private static readonly InterfaceDecl Decl = DaoTypes.Fields;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Count", (self, args) => Live(self, f => Int16(f.Recordset.Cursor.Table.Columns.Count)))
+        .Get("Count", (self, args) => LiveRead(self, f => Int16(f.Recordset.Cursor.Table.Columns.Count)))
         .Get("Item", static (self, args) => (FieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((FieldsObject)self).Item(args[0]))
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
@@ -1848,12 +1872,20 @@ internal sealed unsafe class FieldsObject : DaoObject
         return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : f.Recordset.AfterRollback != RecordsetAfterRollback.Valid ? AfterRollbackNamed("Fields") : op(f);
     }
 
+    private static CallResult LiveRead(ComObject self, Func<FieldsObject, CallResult> op)
+    {
+        var f = (FieldsObject)self;
+        return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid)
+            : f.Recordset.AfterRollback is not (RecordsetAfterRollback.Valid or RecordsetAfterRollback.AfterMoveFirstAfterEdit) ? AfterRollbackNamed("Fields")
+            : op(f);
+    }
+
     /// <summary>A Fields or Field member of a recordset a Rollback changed, other than the Value get: not recorded (TXN-CLOSE).</summary>
     public static CallResult AfterRollbackNamed(string member) => CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", $"{member} of a recordset a Rollback changed, not recorded (TXN-CLOSE)"));
 
     private CallResult Item(nint index)
     {
-        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        if (Recordset.AfterRollback is not (RecordsetAfterRollback.Valid or RecordsetAfterRollback.AfterMoveFirstAfterEdit))
         {
             return AfterRollbackNamed("Fields.Item");
         }
@@ -2067,6 +2099,7 @@ internal sealed unsafe class FieldObject : DaoObject
             case RecordsetAfterRollback.LostCurrentPureNavigation:
                 return FieldFailure(3021, DaoErrors.NoCurrentRecord);
             case RecordsetAfterRollback.NotRecorded:
+            case RecordsetAfterRollback.EditedBeforeMoveFirst:
                 return FieldsObject.AfterRollbackNamed("Field.Value");
         }
         if (recordset.FrameIfMade is { Mode: not EditMode.None } frame)
@@ -2330,6 +2363,20 @@ internal enum RecordsetAfterRollback : byte
     /// and movement members refuse by name.
     /// </summary>
     AfterMoveFirstPureNavigation,
+
+    /// <summary>
+    /// <b>Opened before the level, family stayed on a pre-transaction row (no keyset growth) after an in-transaction
+    /// Edit+Update was rolled back</b> (r-fix-cat-txn/clone-close-update-only): MoveFirst repositions onto row 0 into
+    /// <see cref="AfterMoveFirstAfterEdit"/> and Close succeeds; every member read before MoveFirst refuses by name.
+    /// </summary>
+    EditedBeforeMoveFirst,
+
+    /// <summary>
+    /// <b>Repositioned to row 0 by MoveFirst after an in-transaction Edit+Update Rollback with no keyset growth</b>
+    /// (r-fix-cat-txn/clone-close-update-only): only Fields (Count, Item and row-0 Field.Value) and Close are recorded;
+    /// every other member refuses by name.
+    /// </summary>
+    AfterMoveFirstAfterEdit,
 
     /// <summary>
     /// <b>Opened inside the level, it is invalid but not closed.</b> Field.Value, Move 0, MoveFirst and Bookmark give 3420,

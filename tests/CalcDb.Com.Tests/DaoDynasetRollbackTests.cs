@@ -486,6 +486,61 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Clone_edit_update_rollback_allows_MoveFirst_and_row_0_Fields_read_while_refusing_unrecorded_members()
+    {
+        // r-fix-cat-txn/clone-close-update-only (task znk8): dynaset rs and clone rc opened before BeginTrans;
+        // rc edits and updates row 0; ws.Rollback() reverts the change; rs.MoveFirst() then rs.Fields -> Count/Item/Value
+        // read the reverted row-0 values while pre-MoveFirst reads and unrecorded post-MoveFirst members stay refused by name.
+        const string Txn1aAccdb = "f7231a9c03dc37d275873d9e37b12b27b272064cb4e81c5bd82f05b3d64faa0b"; // r-txn-1-a-accdb.accdb
+        DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+
+        RecordsetObject rs = OpenRecordset(db, "T", 2);
+        RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(rc, "MoveFirst"));
+        Ok(Method(rc, "Edit"));
+        FieldObject rcV = Field(rc, "V");
+        Ok(Put(rcV, "Value", 777));
+        Ok(Method(rc, "Update"));
+
+        Ok(Method(rs, "MoveFirst"));
+        FieldObject rsVBefore = Field(rs, "V");
+        Assert.Equal(777, Int32Value(Ok(Get(rsVBefore, "Value"))));
+
+        Ok(Method(ws, "Rollback"));
+
+        // Pre-MoveFirst members are not recorded and stay refused by name.
+        AssertNotModelled(Get(rsVBefore, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rs, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rs, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+
+        // MoveFirst -> Fields -> Count / Item / Value reads reverted row 0 (1, 10, "a", 1).
+        Ok(Method(rs, "MoveFirst"));
+        FieldsObject fields = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
+        Assert.Equal(4, Int16Value(Ok(Get(fields, "Count"))));
+        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 0))), "Value"))));
+        Assert.Equal(10, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 1))), "Value"))));
+        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 3))), "Value"))));
+
+        // Unrecorded post-MoveFirst members stay refused by name.
+        AssertNotModelled(Get(rs, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(rs, "MoveNext"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(rs, "Edit"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(fields, "Refresh"), "NotModelled.Txn.RecordsetAfterRollback");
+
+        Ok(Method(rc, "Close"));
+        Ok(Method(rs, "Close"));
+    }
+
+    private static short Int16Value(CallResult result)
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.I2);
+        return unchecked((short)result.Scalar.Int64);
+    }
+
     private DatabaseObject Open(string fixtureSha, string extension)
     {
         string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-dyn-rollback-{Guid.NewGuid():N}{extension}");

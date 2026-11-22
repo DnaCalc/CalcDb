@@ -67,6 +67,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private readonly ExplicitFrame[] _openLevels;
     private readonly PrivateOverlay? _openOverlay;
     private readonly (ulong Page, ImageId Image)[]? _openOverlaySnapshot;
+    private readonly ReadView? _snapshotView;
+    private readonly PrivateOverlay? _snapshotOverlay;
     private readonly ulong _openPublishedSerial;
     private readonly bool _isSingleTableRowSelect;
     private readonly bool _dynamicOverlay;
@@ -76,7 +78,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private string? _forwardOnlyResolved;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
-    public SelectRecordsetObject(DatabaseObject database, BoundSelect plan, SelectCursor cursor, int recordsetType, bool singleTableRowSelect) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    public SelectRecordsetObject(
+        DatabaseObject database,
+        BoundSelect plan,
+        SelectCursor cursor,
+        int recordsetType,
+        bool singleTableRowSelect,
+        ReadView? snapshotView = null,
+        PrivateOverlay? snapshotOverlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
@@ -84,6 +93,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         RecordsetType = recordsetType;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
+        _snapshotView = snapshotView;
+        _snapshotOverlay = snapshotOverlay;
         _openPublishedSerial = database.Cache.PublishedSerial;
         _isSingleTableRowSelect = singleTableRowSelect;
         _dynamicOverlay = recordsetType == 2 && singleTableRowSelect;
@@ -155,7 +166,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         : base.Find(member);
 
     /// <summary>
-    /// Named refusal for any transaction or overlay state not backed by a retained record (task dqtr).
+    /// Named refusal for any transaction or overlay state not backed by a retained record (tasks dqtr, zdh5).
     /// <list type="bullet">
     /// <item>Allowed — single-table SELECT dynaset (type 2) opened at depth 0: reads own Workspace's overlay during a
     /// depth-1 level (r-txn-1b/rs-position-after-rollback, r-txn-1b/rs-types-after-rollback, r-def-cursor-dao/edit-under-commit)
@@ -166,8 +177,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// reads an overlay created after open (r-txn-1b/temp-querydef-recordset-rollback) or already present at open
     /// (r-txn-1b/rs-types-after-rollback kd, r-def-cursor-dao/edit-under-commit ro,
     /// r-fix-cursor-dao/edit-under-commit-second-workspace ro).</item>
-    /// <item>Allowed — SELECT snapshot (type 4) opened before writes: reads committed pages only, ignoring its own
-    /// Workspace's uncommitted overlay and after Rollback (r-txn-1b/rs-types-after-rollback bs,
+    /// <item>Allowed — single-table ORDER BY SELECT snapshot (type 4) opened before writes: keeps a registered
+    /// <see cref="ReadView"/> of open-time committed pages across later publishes as well as own Workspace's uncommitted
+    /// overlay and Rollback (r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
+    /// r-q2-cursor-dao/pop-snapshot-orderby-small, r-txn-1b/rs-types-after-rollback bs,
     /// r-def-cursor-dao/delete-by-other-cursor-current-row rs, r-txn-1b/ws2-reader-after-other-rollback rss).</item>
     /// <item>Allowed — SELECT snapshot (type 4) opened inside a depth-1 level over an existing overlay: reads that
     /// overlay while unchanged (r-txn-1b/rs-types-after-rollback ks).</item>
@@ -177,8 +190,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// <c>NotModelled.Edit.ResolvedOverlay</c>); dynaset reading an overlay at nested depth &gt;= 2
     /// (<c>NotModelled.Edit.NestedSelectOverlay</c>); non-single-table dynaset across an overlay
     /// (<c>NotModelled.Edit.ComplexSelectOverlay</c>); snapshot over a mutated overlay
-    /// (<c>NotModelled.Edit.SnapshotOverlayMutated</c>); row-backed snapshot after a committed write to the Database
-    /// (<c>NotModelled.Edit.SnapshotAfterPublish</c>); unpublished changes outside this Database's PageCache
+    /// (<c>NotModelled.Edit.SnapshotOverlayMutated</c>); unordered or non-single-table row-backed snapshot after a
+    /// committed write to the Database (<c>NotModelled.Edit.SnapshotAfterPublish</c>;
+    /// r-q2-cursor-dao/pop-snapshot-select-noorder-big); unpublished changes outside this Database's PageCache
     /// (<c>NotModelled.Edit.UnpublishedRows</c>).</item>
     /// </list>
     /// </summary>
@@ -234,7 +248,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotOverlayMutated", $"{member}: a SELECT snapshot opened over an overlay that was modified after open (not recorded)"));
             }
-            if (!_isMaterializedSnapshot && Database.Cache.PublishedSerial != _openPublishedSerial)
+            if (!_isMaterializedSnapshot && _snapshotView is null && Database.Cache.PublishedSerial != _openPublishedSerial)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotAfterPublish", $"{member}: a row-backed SELECT snapshot after a write was published to its Database (not recorded)"));
             }
@@ -425,6 +439,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             Cursor.Dispose();
             Plan.Dispose();
+            _snapshotOverlay?.Dispose();
+            _snapshotView?.Dispose();
             Closed = true;
         }
     }

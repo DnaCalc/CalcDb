@@ -330,20 +330,26 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_snapshot_refuses_after_same_database_publish_and_after_overlay_mutation()
+    public void Select_snapshot_preserves_orderby_after_publish_while_unordered_and_mutated_overlay_refuse()
     {
-        // Row-backed SELECT snapshots do not copy base-table columns at open; reading after a committed publish or
-        // after an in-place overlay mutation is unrecorded and must stay refused by name.
+        // Task zdh5: single-table ORDER BY SELECT snapshots register a PageCache ReadView at open and keep open-time
+        // row values across later publishes (r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast,
+        // -after-first-move, r-q2-cursor-dao/pop-snapshot-orderby-small). Unordered SELECT snapshots still refuse
+        // NotModelled.Edit.SnapshotAfterPublish (r-q2-cursor-dao/pop-snapshot-select-noorder-big), and snapshots over
+        // an active overlay still refuse NotModelled.Edit.SnapshotOverlayMutated when the overlay is mutated.
         DatabaseObject db = Open(Txn1bAccdb);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
-        SelectRecordsetObject snapBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+        SelectRecordsetObject orderByBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+        SelectRecordsetObject unorderedBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R", 4);
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "UPDATE R SET V = 111 WHERE ID = 1", 128));
-        Assert.Equal(10, IntValue(Ok(FieldValue(snapBeforeCommit, "V"))));
+        Assert.Equal(10, IntValue(Ok(FieldValue(orderByBeforeCommit, "V"))));
         Ok(Method(ws, "CommitTrans"));
-        AssertNotModelled(FieldValue(snapBeforeCommit, "V"), "NotModelled.Edit.SnapshotAfterPublish");
-        Ok(Method(snapBeforeCommit, "Close"));
+        Assert.Equal(10, IntValue(Ok(FieldValue(orderByBeforeCommit, "V"))));
+        AssertNotModelled(FieldValue(unorderedBeforeCommit, "V"), "NotModelled.Edit.SnapshotAfterPublish");
+        Ok(Method(orderByBeforeCommit, "Close"));
+        Ok(Method(unorderedBeforeCommit, "Close"));
 
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "UPDATE R SET V = 222 WHERE ID = 2", 128));
@@ -355,6 +361,57 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         AssertNotModelled(FieldValue(snapOnOverlay, "V"), "NotModelled.Edit.SnapshotOverlayMutated");
         Ok(Method(ws, "Rollback"));
         Ok(Method(snapOnOverlay, "Close"));
+    }
+
+    [Fact]
+    public void OrderBy_select_snapshot_on_Big_keeps_open_time_values_after_open_movelast_and_first_move()
+    {
+        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move;
+        // unordered SELECT stays refused per r-q2-cursor-dao/pop-snapshot-select-noorder-big.
+        const string QMain = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"; // r-q-cursor-dao-main.accdb
+        foreach (string variant in new[] { "after-open", "after-movelast", "after-first-move" })
+        {
+            DatabaseObject db = Open(QMain);
+            SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, V FROM Big ORDER BY ID", 4);
+            SelectRecordsetObject unordered = OpenSelect(db, "SELECT ID, V FROM Big", 4);
+
+            string originalV = TextValue(Ok(FieldValue(rs, "V")));
+            Assert.StartsWith("vvvv", originalV);
+
+            if (variant == "after-movelast")
+            {
+                Ok(Method(rs, "MoveLast"));
+                Ok(Method(rs, "MoveFirst"));
+            }
+            else if (variant == "after-first-move")
+            {
+                Ok(Method(rs, "MoveNext"));
+                Assert.Equal(2, IntValue(Ok(FieldValue(rs, "ID"))));
+                Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+            }
+
+            Ok(Method(db, "Execute", "UPDATE Big SET V = 'chg' WHERE ID IN (2, 1000, 2000)", 128));
+
+            Ok(Method(rs, "MoveFirst"));
+            Assert.Equal(1, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 1));
+            Assert.Equal(2, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 998));
+            Assert.Equal(1000, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 1000));
+            Assert.Equal(2000, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            AssertNotModelled(Method(unordered, "MoveFirst"), "NotModelled.Edit.SnapshotAfterPublish");
+            Ok(Method(unordered, "Close"));
+            Ok(Method(rs, "Close"));
+        }
     }
 
     [Fact]
