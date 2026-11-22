@@ -30,6 +30,7 @@ public sealed class CounterAndLandingTests
     private const string BulkWordsFixture = "47f8fa36bfcd0df6185061dc39e47fd46cdac20f372942f9a8ff3a177a8bfbf6";
     private const string Jet4MdbFixture = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75";
     private const string Err1bBaseFixture = "33192b8c7ea72f4d74393996eedd0b157654218c623c63c99de672149b49e5ed";
+    private const string Txn1bMainFixture = "cde7b712cc54e824851b29bf6e711b875a9018edb83b623b81a13a3798799ddb";
 
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
 
@@ -1582,6 +1583,159 @@ public sealed class CounterAndLandingTests
 
             Assert.Single(rsRig.A.Publications);
             Assert.Equal(p0Before + 1, rsRig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+        }
+    }
+
+    [Fact]
+    public void Statement_rollback_without_consumed_AutoNumber_writes_single_group_on_existing_page_3022_and_refuses_unrecorded_cases()
+    {
+        // 1. evidence/r-txn-1b/implicit-unique-first-failonerror: non-AutoNumber table T, autocommit dbFailOnError
+        //    INSERT ... SELECT whose first row fails 3022 on UX_K (after PK_T): no group-1 AutoNumber commit, only
+        //    the single end-of-statement publication (+1 on page 0 offset 3586, PK_T +1, RowCount and UX_K unchanged).
+        using (var rig = new Rig(Txn1bMainFixture))
+        {
+            (TableDefinition t, _) = rig.Table("T");
+            (EditFrame frame, _) = rig.OpenTable("T");
+            uint rowsBefore = t.RowCount;
+            uint pkBefore = t.PhysicalOf(t.FindIndex("PK_T")!)!.UniqueEntryCount;
+            uint uxBefore = t.PhysicalOf(t.FindIndex("UX_K")!)!.UniqueEntryCount;
+            byte p0Before = rig.Before[D.Header.CommitCounter.Offset];
+
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                Assert.Null(rig.A.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(13)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "V"), I4(130)).Succeeded);
+                AssignText(frame, Col(t, "K"), "a");
+                Assert.True(frame.Assign(Col(t, "N"), I4(99)).Succeeded);
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(rig.A.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+
+            Assert.Single(rig.A.Publications);
+            Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+            byte[] after = rig.File.Image.Snapshot();
+            TableDefinition tAfter = DecodeTableDef(after, t.FirstPage);
+            Assert.Equal(rowsBefore, tAfter.RowCount);
+            Assert.Equal(pkBefore + 1u, tAfter.PhysicalOf(tAfter.FindIndex("PK_T")!)!.UniqueEntryCount);
+            Assert.Equal(uxBefore, tAfter.PhysicalOf(tAfter.FindIndex("UX_K")!)!.UniqueEntryCount);
+            Assert.Equal(p0Before + 1, after[D.Header.CommitCounter.Offset]);
+        }
+
+        // 2. evidence/r-txn-1/stmt-unique-middle-fail-d0: non-AutoNumber table T, autocommit dbFailOnError
+        //    INSERT ... SELECT accepting row 1 on an existing page and failing 3022 on row 2 by UX_K: no group-1
+        //    commit, single end-of-statement publication (+1 on page 0, RowCount +1, PK_T +2, UX_K +1), no row stored.
+        using (var rig = new Rig(Txn1bMainFixture))
+        {
+            (TableDefinition t, _) = rig.Table("T");
+            (EditFrame frame, TableCursor cursor) = rig.OpenTable("T");
+            uint rowsBefore = t.RowCount;
+            uint pkBefore = t.PhysicalOf(t.FindIndex("PK_T")!)!.UniqueEntryCount;
+            uint uxBefore = t.PhysicalOf(t.FindIndex("UX_K")!)!.UniqueEntryCount;
+            byte p0Before = rig.Before[D.Header.CommitCounter.Offset];
+
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                Assert.Null(rig.A.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(11)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "V"), I4(110)).Succeeded);
+                AssignText(frame, Col(t, "K"), "k11");
+                Assert.True(frame.Assign(Col(t, "N"), I4(1)).Succeeded);
+                Assert.True(frame.Update().Succeeded);
+
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(13)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "V"), I4(130)).Succeeded);
+                AssignText(frame, Col(t, "K"), "a");
+                Assert.True(frame.Assign(Col(t, "N"), I4(99)).Succeeded);
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(rig.A.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+
+            Assert.Single(rig.A.Publications);
+            Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+            byte[] after = rig.File.Image.Snapshot();
+            TableDefinition tAfter = DecodeTableDef(after, t.FirstPage);
+            Assert.Equal(rowsBefore + 1u, tAfter.RowCount);
+            Assert.Equal(pkBefore + 2u, tAfter.PhysicalOf(tAfter.FindIndex("PK_T")!)!.UniqueEntryCount);
+            Assert.Equal(uxBefore + 1u, tAfter.PhysicalOf(tAfter.FindIndex("UX_K")!)!.UniqueEntryCount);
+            Assert.Equal(p0Before + 1, after[D.Header.CommitCounter.Offset]);
+            int storedRows = 0;
+            for (cursor.MoveFirst(); !cursor.Eof; cursor.MoveNext())
+            {
+                storedRows++;
+            }
+            Assert.Equal(5, storedRows);
+        }
+
+        // 3. Unrecorded: non-AutoNumber table taking a new data page before 3022 at depth 0 refuses by name.
+        using (var rig = new Rig(Txn1bMainFixture))
+        {
+            (TableDefinition t, _) = rig.Table("T");
+            (EditFrame frame, _) = rig.OpenTable("T");
+            ShrinkFirstFreePage(rig, t, 4);
+            byte[] start = rig.File.Image.Snapshot();
+
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.Null(rig.A.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(t, "ID"), I4(11)).Succeeded);
+            Assert.True(frame.Assign(Col(t, "V"), I4(110)).Succeeded);
+            AssignText(frame, Col(t, "K"), "k11");
+            Assert.True(frame.Assign(Col(t, "N"), I4(1)).Succeeded);
+            Assert.True(frame.Update().Succeeded);
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(t, "ID"), I4(13)).Succeeded);
+            Assert.True(frame.Assign(Col(t, "V"), I4(130)).Succeeded);
+            AssignText(frame, Col(t, "K"), "a");
+            Assert.True(frame.Assign(Col(t, "N"), I4(99)).Succeeded);
+            Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+            Assert.True(frame.CancelUpdate().Succeeded);
+
+            Assert.True(rig.A.Rollback().Succeeded);
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            Assert.Contains("new data page with no consumed AutoNumber", end.Detail, StringComparison.Ordinal);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+        }
+
+        // 4. Unrecorded: non-AutoNumber table failing 3314 (Required) after an earlier row at depth 0 refuses by name.
+        using (var rig = new Rig(Err1bBaseFixture))
+        {
+            (TableDefinition p, _) = rig.Table("P");
+            (EditFrame frame, _) = rig.OpenTable("P");
+            byte[] start = rig.File.Image.Snapshot();
+
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.Null(rig.A.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(p, "ID"), I4(99)).Succeeded);
+            AssignText(frame, Col(p, "Code"), "c99");
+            AssignText(frame, Col(p, "Req"), "r99");
+            Assert.True(frame.Assign(Col(p, "Flg"), new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = 0 }).Succeeded);
+            UpdateOutcome r1 = frame.Update();
+            Assert.True(r1.Succeeded, r1.ToString());
+
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(p, "ID"), I4(100)).Succeeded);
+            AssignText(frame, Col(p, "Code"), "c100");
+            Assert.Equal(MutationError.Required, frame.Update().Error?.Number);
+            Assert.True(frame.CancelUpdate().Succeeded);
+
+            Assert.True(rig.A.Rollback().Succeeded);
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            Assert.Contains("refusal 3314", end.Detail, StringComparison.Ordinal);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
         }
     }
 
