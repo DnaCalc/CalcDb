@@ -642,7 +642,8 @@ public sealed class EditFrame : IDisposable
                         priorCompiled.Edits,
                         priorCompiled.Footprint,
                         ConflictSource,
-                        out MutationError? pubError2);
+                        out MutationError? pubError2,
+                        targetHasAutoNumber: true);
                     if (pubError2 is not null)
                     {
                         return new UpdateOutcome(pubError2);
@@ -674,7 +675,8 @@ public sealed class EditFrame : IDisposable
                             sideCompiled.Footprint,
                             ConflictSource,
                             out pubError,
-                            allowJet4Mdb: allowJet4MdbSideEffect);
+                            allowJet4Mdb: allowJet4MdbSideEffect,
+                            targetHasAutoNumber: s.AutoNumber is not null);
                     }
                     else
                     {
@@ -760,7 +762,8 @@ public sealed class EditFrame : IDisposable
                     fkCompiled.Edits,
                     fkCompiled.Footprint,
                     ConflictSource,
-                    out MutationError? fkPubError);
+                    out MutationError? fkPubError,
+                    targetHasAutoNumber: s.AutoNumber is not null);
                 if (fkPubError is not null)
                 {
                     return new UpdateOutcome(fkPubError);
@@ -806,7 +809,8 @@ public sealed class EditFrame : IDisposable
                         advCompiled.Edits,
                         advCompiled.Footprint,
                         ConflictSource,
-                        out MutationError? advPubError);
+                        out MutationError? advPubError,
+                        targetHasAutoNumber: true);
                     if (advPubError is not null)
                     {
                         return new UpdateOutcome(advPubError);
@@ -1036,7 +1040,8 @@ public sealed class EditFrame : IDisposable
                     advCompiled.Edits,
                     advCompiled.Footprint,
                     ConflictSource,
-                    out MutationError? pubError);
+                    out MutationError? pubError,
+                    targetHasAutoNumber: true);
                 if (pubError is not null)
                 {
                     return new UpdateOutcome(pubError);

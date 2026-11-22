@@ -1587,10 +1587,10 @@ public sealed class CounterAndLandingTests
     }
 
     [Fact]
-    public void Statement_rollback_without_consumed_AutoNumber_writes_single_group_on_existing_page_3022_and_refuses_unrecorded_cases()
+    public void Statement_rollback_with_no_AutoNumber_column_writes_single_group_on_existing_page_3022_and_refuses_unrecorded_cases()
     {
-        // 1. evidence/r-txn-1b/implicit-unique-first-failonerror: non-AutoNumber table T, autocommit dbFailOnError
-        //    INSERT ... SELECT whose first row fails 3022 on UX_K (after PK_T): no group-1 AutoNumber commit, only
+        // 1. evidence/r-txn-1b/implicit-unique-first-failonerror: table T has no AutoNumber column, autocommit
+        //    dbFailOnError INSERT ... SELECT whose first row fails 3022 on UX_K (after PK_T): no group-1 commit, only
         //    the single end-of-statement publication (+1 on page 0 offset 3586, PK_T +1, RowCount and UX_K unchanged).
         using (var rig = new Rig(Txn1bMainFixture))
         {
@@ -1625,7 +1625,7 @@ public sealed class CounterAndLandingTests
             Assert.Equal(p0Before + 1, after[D.Header.CommitCounter.Offset]);
         }
 
-        // 2. evidence/r-txn-1/stmt-unique-middle-fail-d0: non-AutoNumber table T, autocommit dbFailOnError
+        // 2. evidence/r-txn-1/stmt-unique-middle-fail-d0: table T has no AutoNumber column, autocommit dbFailOnError
         //    INSERT ... SELECT accepting row 1 on an existing page and failing 3022 on row 2 by UX_K: no group-1
         //    commit, single end-of-statement publication (+1 on page 0, RowCount +1, PK_T +2, UX_K +1), no row stored.
         using (var rig = new Rig(Txn1bMainFixture))
@@ -1674,7 +1674,7 @@ public sealed class CounterAndLandingTests
             Assert.Equal(5, storedRows);
         }
 
-        // 3. Unrecorded: non-AutoNumber table taking a new data page before 3022 at depth 0 refuses by name.
+        // 3. Unrecorded: table with no AutoNumber column taking a new data page before 3022 at depth 0 refuses by name.
         using (var rig = new Rig(Txn1bMainFixture))
         {
             (TableDefinition t, _) = rig.Table("T");
@@ -1702,12 +1702,12 @@ public sealed class CounterAndLandingTests
             Assert.True(rig.A.Rollback().Succeeded);
             ResolutionOutcome end = stmt.Complete();
             Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("new data page with no consumed AutoNumber", end.Detail, StringComparison.Ordinal);
+            Assert.Contains("new data page on a table with no AutoNumber column", end.Detail, StringComparison.Ordinal);
             Assert.Empty(rig.A.Publications);
             Assert.Equal(start, rig.File.Image.Snapshot());
         }
 
-        // 4. Unrecorded: non-AutoNumber table failing 3314 (Required) after an earlier row at depth 0 refuses by name.
+        // 4. Unrecorded: table with no AutoNumber column failing 3314 (Required) after an earlier row at depth 0 refuses by name.
         using (var rig = new Rig(Err1bBaseFixture))
         {
             (TableDefinition p, _) = rig.Table("P");
@@ -1734,6 +1734,104 @@ public sealed class CounterAndLandingTests
             ResolutionOutcome end = stmt.Complete();
             Assert.Equal(MutationOpen.CounterWrite, end.Open);
             Assert.Contains("refusal 3314", end.Detail, StringComparison.Ordinal);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+        }
+
+        // 5. Unrecorded: AutoNumber table G (EditFixture, same shape as ins-dup-fail / ins-dup-fail-existing:
+        //    ID COUNTER PK_G, T TEXT, U TEXT UX_U) on an existing ACCDB page at depth 0 with row 1 accepted via
+        //    explicit AutoNumber leaving no consumed mark and row 2 failing 3022 on UX_U refuses by name.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            Assert.NotNull(ctx.Semantics.AutoNumber);
+            SameWidthWriter writer = ctx.Writer!;
+            byte[] start = rig.File.Image.Snapshot();
+
+            NativeValue[] MakeRow(int idVal, string tVal, string uVal)
+            {
+                var row = new NativeValue[g.Columns.Count];
+                for (int i = 0; i < row.Length; i++)
+                {
+                    row[i] = NativeValue.Null;
+                }
+                row[Col(g, "ID").Ordinal] = new NativeValue(NativeKind.Long) { Integer = idVal, Bits = unchecked((uint)idVal) };
+                row[Col(g, "T").Ordinal] = new NativeValue(NativeKind.Text) { Text = tVal };
+                row[Col(g, "U").Ordinal] = new NativeValue(NativeKind.Text) { Text = uVal };
+                return row;
+            }
+
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.Null(rig.A.BeginTrans());
+
+            NativeValue[] row1 = MakeRow(5, "exp1", "u-exp-1");
+            bool[] assigned = Enumerable.Repeat(true, g.Columns.Count).ToArray();
+            CompiledChange ins1 = writer.CompileInsert(ctx.Semantics, row1, autoNumberFloor: null, rig.A.OverlayOf(writer.File));
+            Assert.NotNull(ins1.Change);
+            AcceptOutcome accepted = rig.A.Accept(new AcceptedRowChange(ctx.Semantics, RowChangeKind.Insert, null, row1, assigned, null, ins1));
+            Assert.True(accepted.Accepted, accepted.ToString());
+
+            NativeValue[] row2 = MakeRow(6, "exp2", "u-exp-1");
+            int uxPhys = g.PhysicalOf(g.FindIndex("UX_U")!)!.Number;
+            CompiledChange side2 = writer.CompileRefusedUniqueInsert(ctx.Semantics, row2, uxPhys, autoNumberFloor: null, rig.A.OverlayOf(writer.File));
+            Assert.NotNull(side2.Change);
+            (MutationOpen sideOpen, string? sideDetail) = rig.A.RecordStatementSideEffect(
+                writer.File,
+                side2.Change.Edits,
+                side2.Change.Footprint,
+                MutationErrorSource.Database,
+                out MutationError? sideErr,
+                targetHasAutoNumber: true);
+            Assert.Null(sideErr);
+            Assert.Equal(MutationOpen.None, sideOpen);
+            Assert.Null(sideDetail);
+            rig.A.NoteStatementRefusal(MutationError.Duplicate);
+
+            Assert.True(rig.A.Rollback().Succeeded);
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            Assert.Contains("AutoNumber table with no consumed AutoNumber", end.Detail, StringComparison.Ordinal);
+            Assert.Empty(rig.A.Publications);
+            Assert.Equal(start, rig.File.Image.Snapshot());
+        }
+
+        // 6. Unrecorded: AutoNumber table G with row 1 itself failing 3022 on UX_U (no accepted rows, only a
+        //    statement side effect and no consumed mark) at depth 0 also refuses by name.
+        using (var rig = new Rig(EditFixture))
+        {
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
+            SameWidthWriter writer = ctx.Writer!;
+            byte[] start = rig.File.Image.Snapshot();
+
+            var row1 = new NativeValue[g.Columns.Count];
+            for (int i = 0; i < row1.Length; i++)
+            {
+                row1[i] = NativeValue.Null;
+            }
+            row1[Col(g, "ID").Ordinal] = new NativeValue(NativeKind.Long) { Integer = 5, Bits = 5u };
+            row1[Col(g, "T").Ordinal] = new NativeValue(NativeKind.Text) { Text = "exp-dup" };
+            row1[Col(g, "U").Ordinal] = new NativeValue(NativeKind.Text) { Text = "u1" };
+
+            using StatementScope stmt = rig.A.BeginStatement();
+            Assert.Null(rig.A.BeginTrans());
+            int uxPhys = g.PhysicalOf(g.FindIndex("UX_U")!)!.Number;
+            CompiledChange side = writer.CompileRefusedUniqueInsert(ctx.Semantics, row1, uxPhys, autoNumberFloor: null, rig.A.OverlayOf(writer.File));
+            Assert.NotNull(side.Change);
+            (MutationOpen sideOpen, _) = rig.A.RecordStatementSideEffect(
+                writer.File,
+                side.Change.Edits,
+                side.Change.Footprint,
+                MutationErrorSource.Database,
+                out MutationError? sideErr,
+                targetHasAutoNumber: true);
+            Assert.Null(sideErr);
+            Assert.Equal(MutationOpen.None, sideOpen);
+            rig.A.NoteStatementRefusal(MutationError.Duplicate);
+
+            Assert.True(rig.A.Rollback().Succeeded);
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            Assert.Contains("AutoNumber table with no consumed AutoNumber", end.Detail, StringComparison.Ordinal);
             Assert.Empty(rig.A.Publications);
             Assert.Equal(start, rig.File.Image.Snapshot());
         }

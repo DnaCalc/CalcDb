@@ -112,6 +112,8 @@ public sealed class ExplicitFrame
 
     internal HashSet<(PageCache Cache, uint TableDefPage)>? StatementTableDefPages { get; set; }
 
+    internal bool HasAutoNumberTarget { get; set; }
+
     internal HashSet<PageCache>? RolledBackGlobalMapAllocations { get; set; }
 
     /// <summary>
@@ -616,6 +618,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             parent.UnwrittenCount += top.UnwrittenCount;
             parent.StatementCount += top.StatementCount;
             parent.HasNonInsertSelectWork |= top.HasNonInsertSelectWork;
+            parent.HasAutoNumberTarget |= top.HasAutoNumberTarget;
             parent.MergeAutoNumbersFrom(top);
             if (top.StatementTableDefPages is { Count: > 0 } sidePages)
             {
@@ -1033,7 +1036,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         IReadOnlyList<LockResource> footprint,
         MutationErrorSource conflictSource,
         out MutationError? error,
-        bool allowJet4Mdb = false)
+        bool allowJet4Mdb = false,
+        bool targetHasAutoNumber = false)
     {
         error = null;
         if (Publisher is null)
@@ -1089,6 +1093,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 ExplicitFrame top = _frames[^1];
                 top.StatementTableDefPages ??= [];
                 top.StatementTableDefPages.Add((cache, e.Page));
+                if (targetHasAutoNumber)
+                {
+                    top.HasAutoNumberTarget = true;
+                }
             }
         }
         if (_frames.Count == 0)
@@ -1662,15 +1670,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Rollback of the level a SQL statement opened for itself (a multi-row INSERT ... SELECT or DELETE with
     /// dbFailOnError); it is always rolled back. After a recorded refusal (at external depth 0: 3022, 3201, 3314, 3316,
-    /// 3464 on ACCDB with a consumed AutoNumber, 3022 on an existing ACCDB page with no consumed AutoNumber, or 3022
-    /// taking a new page on Jet 4 MDB with a consumed AutoNumber; inside an explicit transaction: ACCDB 3022 or 3201),
-    /// the TableDef counters the statement reached are written as they stood (R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER):
-    /// outside a transaction with a consumed AutoNumber as one commit within Execute (group 1) and a second at the
-    /// statement's end (group 2), and without a consumed AutoNumber only at the statement's end (+1 on page 0:
-    /// <c>evidence/r-txn-1b/implicit-unique-first-failonerror</c>, <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>);
-    /// inside an explicit transaction into the enclosing level, written by its commit; when its rows took a new page,
-    /// page 1 joins each commit and is written again at Close (+3 outside a transaction with a consumed AutoNumber, +2
-    /// inside; existing page: +2 outside with a consumed AutoNumber, +1 outside without one, +1 inside;
+    /// 3464 on ACCDB with a consumed AutoNumber, 3022 on an existing ACCDB page of a table with no AutoNumber column,
+    /// or 3022 taking a new page on Jet 4 MDB with a consumed AutoNumber; inside an explicit transaction: ACCDB 3022 or
+    /// 3201), the TableDef counters the statement reached are written as they stood (R-TXN-1 TXN-STMT, R-CRASH-1
+    /// CRASH-ORDER): outside a transaction with a consumed AutoNumber as one commit within Execute (group 1) and a
+    /// second at the statement's end (group 2), and on a table with no AutoNumber column only at the statement's end
+    /// (+1 on page 0: <c>evidence/r-txn-1b/implicit-unique-first-failonerror</c>,
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>); inside an explicit transaction into the enclosing level,
+    /// written by its commit; when its rows took a new page, page 1 joins each commit and is written again at Close
+    /// (+3 outside a transaction with a consumed AutoNumber, +2 inside; existing page: +2 outside with a consumed
+    /// AutoNumber, +1 outside on a table with no AutoNumber column, +1 inside;
     /// <c>evidence/r-q18-statements/ins-dup-fail</c>, <c>ins-dup-fail-txn</c>,
     /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>, <c>ins-fk-3201-fail</c>, <c>ins-req-3314-fail</c>,
     /// <c>ins-val-3316-fail</c>, <c>ins-conv-3464-fail</c>, <c>ins-dup-fail-two-pages</c>, <c>ins-dup-fail-mdb</c>).
@@ -1734,7 +1743,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         // (ins-dup-fail, ins-dup-fail-existing, ins-fk-3201-fail, ins-req-3314-fail, ins-val-3316-fail,
         // ins-conv-3464-fail, ins-dup-fail-two-pages, ins-dup-fail-mdb), write the counters within Execute (group 1)
         // and stage the same pages for the statement's end (group 2); page 1 again at Close when a new page was taken
-        // (+3 new page, +2 existing page). When no AutoNumber was consumed
+        // (+3 new page, +2 existing page). When the target table has no AutoNumber column
         // (evidence/r-txn-1b/implicit-unique-first-failonerror, evidence/r-txn-1/stmt-unique-middle-fail-d0), omit
         // group 1 and stage only group 2 for the statement's end (+1 on page 0).
         foreach (EditFrame e in _edits.ToArray())
@@ -1797,16 +1806,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// AutoNumber (one or several data pages, <c>evidence/r-q27-autonumber-txn/ins-dup-fail-two-pages</c>) after 3022
     /// (<c>evidence/r-q18-statements/ins-dup-fail</c>, <c>evidence/r-q27-autonumber-txn/ins-dup-fail-existing</c>),
     /// 3201 (<c>ins-fk-3201-fail</c>), 3314 (<c>ins-req-3314-fail</c>), 3316 (<c>ins-val-3316-fail</c>), or 3464
-    /// (<c>ins-conv-3464-fail</c>), or at external depth 0 on an existing page with no consumed AutoNumber after 3022
-    /// (<c>evidence/r-txn-1b/implicit-unique-first-failonerror</c>, <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>),
-    /// or inside an explicit transaction after 3022 (<c>ins-dup-fail-txn</c>) or 3201
-    /// (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>, <c>evidence/r-def-cat-txn/txn-stmt-compound-relation-fail</c>,
-    /// answers only), or in one Jet 4 MDB file at external depth 0 with a consumed AutoNumber after 3022 taking a new
-    /// page (<c>ins-dup-fail-mdb</c>); else the named <paramref name="limitation"/>: several files, an unrecorded MDB
-    /// case, non-1 increment, a new data page with no consumed AutoNumber, another refusal after earlier rows (3315,
-    /// 3317, 3058, 3188, 3314/3316/3464 inside BeginTrans, or non-3022 at depth 0 with no consumed AutoNumber), or a
-    /// stop of the statement itself. Division by zero (<c>evidence/r-q18-statements/ins-div0-fail</c>) does not reach
-    /// here: a source row that fails to read stops the statement before its target opens.
+    /// (<c>ins-conv-3464-fail</c>), or at external depth 0 on an existing page of a table with no AutoNumber column
+    /// after 3022 (<c>evidence/r-txn-1b/implicit-unique-first-failonerror</c>,
+    /// <c>evidence/r-txn-1/stmt-unique-middle-fail-d0</c>), or inside an explicit transaction after 3022
+    /// (<c>ins-dup-fail-txn</c>) or 3201 (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>,
+    /// <c>evidence/r-def-cat-txn/txn-stmt-compound-relation-fail</c>, answers only), or in one Jet 4 MDB file at
+    /// external depth 0 with a consumed AutoNumber after 3022 taking a new page (<c>ins-dup-fail-mdb</c>); else the
+    /// named <paramref name="limitation"/>: several files, an unrecorded MDB case, non-1 increment, an AutoNumber table
+    /// with no consumed AutoNumber at depth 0, a new data page on a table with no AutoNumber column, another refusal
+    /// after earlier rows (3315, 3317, 3058, 3188, 3314/3316/3464 inside BeginTrans, or non-3022 at depth 0 on a table
+    /// with no AutoNumber column), or a stop of the statement itself. Division by zero
+    /// (<c>evidence/r-q18-statements/ins-div0-fail</c>) does not reach here: a source row that fails to read stops the
+    /// statement before its target opens.
     /// </summary>
     private StatementCounters? PlanStatementCounters(ExplicitFrame top, out ResolutionOutcome? limitation)
     {
@@ -1820,8 +1831,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         HashSet<PageCache> files = [];
         HashSet<uint> tdefPages = [];
         bool tookPage = false;
+        bool hasAutoNumberTarget = top.HasAutoNumberTarget;
         foreach (AcceptedRowChange change in top.Changes)
         {
+            hasAutoNumberTarget |= change.Table.AutoNumber is not null;
             if (change.Physical is not { } physical)
             {
                 continue;
@@ -1842,6 +1855,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             tdefPages.Add(sidePage);
         }
         bool hasConsumedAutoNumber = top.ConsumedAutoNumbers is { Count: > 0 };
+        hasAutoNumberTarget |= hasConsumedAutoNumber;
         bool nonUnitIncrement = top.ConsumedAutoNumbers?.Values.Any(m => m.Increment != 1) == true;
         PageCache? file = files.Count == 1 ? files.First() : null;
         string? unrecorded = file is null ? $"{files.Count} files" : null;
@@ -1849,7 +1863,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         bool inExplicitTxn = _frames.Count > 0;
         bool isRecordedRefusal = inExplicitTxn
             ? _statementRefusal is MutationError.Duplicate or MutationError.RelatedRecordRequired
-            : hasConsumedAutoNumber
+            : hasAutoNumberTarget
                 ? _statementRefusal is MutationError.Duplicate
                     or MutationError.RelatedRecordRequired
                     or MutationError.Required
@@ -1865,16 +1879,26 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 unrecorded = "an MDB file";
             }
         }
-        if (unrecorded is null && !inExplicitTxn && !hasConsumedAutoNumber && tookPage)
+        if (unrecorded is null && !inExplicitTxn && hasAutoNumberTarget && !hasConsumedAutoNumber)
         {
-            // Without a consumed AutoNumber, external depth 0 statement Rollback is recorded only on an existing data
-            // page after 3022 (evidence/r-txn-1b/implicit-unique-first-failonerror,
-            // evidence/r-txn-1/stmt-unique-middle-fail-d0); taking a new page with no AutoNumber has no record.
-            unrecorded = "a new data page with no consumed AutoNumber";
+            // Every recorded group-2-only statement Rollback is on a table with no AutoNumber column
+            // (evidence/r-txn-1b/implicit-unique-first-failonerror, evidence/r-txn-1/stmt-unique-middle-fail-d0), and
+            // every recorded group-1 + group-2 Rollback consumed an AutoNumber (evidence/r-q18-statements/ins-dup-fail,
+            // evidence/r-q27-autonumber-txn/ins-dup-fail-existing); an AutoNumber table with no consumed mark at
+            // external depth 0 has no record.
+            unrecorded = "an AutoNumber table with no consumed AutoNumber";
+        }
+        if (unrecorded is null && !inExplicitTxn && !hasAutoNumberTarget && tookPage)
+        {
+            // On a table with no AutoNumber column, external depth 0 statement Rollback is recorded only on an existing
+            // data page after 3022 (evidence/r-txn-1b/implicit-unique-first-failonerror,
+            // evidence/r-txn-1/stmt-unique-middle-fail-d0); taking a new page on a table with no AutoNumber column has
+            // no record.
+            unrecorded = "a new data page on a table with no AutoNumber column";
         }
         unrecorded ??= !isRecordedRefusal
             ? (_statementRefusal is int number
-                ? (top.Changes.Count > 0 ? $"refusal {number} after earlier rows" : $"refusal {number} with no consumed AutoNumber")
+                ? (top.Changes.Count > 0 ? $"refusal {number} after earlier rows" : $"refusal {number} on a table with no AutoNumber column")
                 : "a stop of the statement itself after earlier rows")
             : null;
         if (unrecorded is null && !_participants.TryGetValue(file!, out _))
