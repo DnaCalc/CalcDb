@@ -12,6 +12,10 @@
 #   pwsh tools/landing-check.ps1 -Name 2qbr -Branch alta/2qbr -Questions probes/r-q-ado-misc -Snapshot
 #   pwsh tools/landing-check.ps1 -Name f8g8 -Files src/CalcDb.Catalog/SchemaWriter.cs,tests/... -Snapshot
 #   pwsh tools/landing-check.ps1 -Name 2qbr-self -InPlace -Solution CalcDb.Com.slnf -Filter FullyQualifiedName~AdoImmediateEditTests
+#   pwsh tools/landing-check.ps1 -Name 4t24 -Branch alta/4t24 -Snapshot -Land -Compare
+# With -Land a passing -Branch check fast-forwards the integration checkout's master to the checked commit and pushes;
+# with -Compare it then runs the core compare from the snapshot, after the check worktree is released. One job then
+# checks, lands and compares (process log, 2026-11-22, organizer 10: about 4 organizer calls fewer per landing).
 param(
     [Parameter(Mandatory)] [string] $Name,          # topic of the landing; names the logs and the snapshot
     [string] $Branch = "",                          # a child's branch, merged onto master
@@ -22,7 +26,9 @@ param(
     [switch] $Snapshot,                             # copy runner, worker, native and compare sets to compare-bin\<Name>
     [string] $Filter = "",                          # dotnet test --filter while iterating; never on a landing run
     [string] $Solution = "CalcDb.slnx",             # with -InPlace, an area's filter (CalcDb.Sql.slnf ...) builds only that area
-    [string] $CheckTree = "")                       # default: <repository>-check beside the integration checkout
+    [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
+    [switch] $Land,                                 # with -Branch: after a pass, fast-forward master to the checked commit and push
+    [switch] $Compare)                              # with -Land and -Snapshot: then run the core compare from the snapshot
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
 $Files = @($Files | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
@@ -32,6 +38,8 @@ $modes = @([bool] $Branch, [bool] $Files.Count, [bool] $InPlace) | Where-Object 
 if (@($modes).Count -ne 1) { throw "give exactly one of -Branch, -Files and -InPlace" }
 if ($Solution -ne "CalcDb.slnx" -and -not $InPlace) { throw "-Solution is for a child's -InPlace self-check; a landing builds the whole solution" }
 if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for iterating, not for a landing run with -Snapshot" }
+if ($Land -and (-not $Branch -or $Filter)) { throw "-Land lands a -Branch check that ran every selected test (no -Filter)" }
+if ($Compare -and -not ($Land -and $Snapshot)) { throw "-Compare compares what -Land landed, from the -Snapshot binaries" }
 $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 function Step([string] $what) { "[{0,5:n0} s] {1}" -f $sw.Elapsed.TotalSeconds, $what }
@@ -320,12 +328,33 @@ try {
     if ($failed -eq 0 -and $Branch) {
         $tree = ((git -C $repo worktree list --porcelain) -join "`n") -split "`n`n" | Where-Object { $_ -match "branch refs/heads/$([regex]::Escape($Branch))(\n|$)" } |
             ForEach-Object { ($_ -split "`n")[0] -replace '^worktree ', '' }
-        "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
-        "           (if master moved meanwhile, run the check again)"
+        if ($Land) {
+            $merge = git -C $repo merge --ff-only -q $candidate 2>&1
+            if ($LASTEXITCODE) { $failed++; Step "LAND REFUSED (master moved meanwhile? run the check again)"; $merge | ForEach-Object { "  $_" } }
+            else {
+                $push = git -C $repo push -q 2>&1
+                if ($LASTEXITCODE) { $failed++; Step "landed $($candidate.Substring(0, 8)) on master; PUSH FAILED"; $push | ForEach-Object { "  $_" } }
+                else { Step "landed $($candidate.Substring(0, 8)) on master and pushed" }
+            }
+        } else {
+            "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
+            "           (if master moved meanwhile, run the check again)"
+        }
         if ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
         else { "  then:    git branch -d $Branch" }
     } elseif ($failed -eq 0 -and $Files.Count) {
         "  land:    commit exactly the listed files in the integration checkout, then push"
     }
-    exit $failed
+    if (-not ($Compare -and $failed -eq 0)) { exit $failed }
 } finally { $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue }
+
+# The core compare of what landed, from the snapshot, with the check worktree already free for the next landing.
+Push-Location $repo
+try {
+    Step "core compare $Name-1 from $snap"
+    & "$snap\runner\calcdb-oracle.exe" compare-set --rerun --name "$Name-1" --against baseline --set "$snap\compare-set.json" `
+        --worker "$snap\worker\CalcDb.Oracle.Worker.exe" --deployment "$snap\native" --store "$env:LOCALAPPDATA\CalcDb\compare-store" 2>&1
+    $code = $LASTEXITCODE
+    Step "core compare $Name-1 (exit $code): $env:LOCALAPPDATA\CalcDb\compare-store\compare-sets\$Name-1.tsv"
+    exit $(if ($code) { 1 } else { 0 })
+} finally { Pop-Location }

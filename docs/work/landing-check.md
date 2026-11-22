@@ -46,7 +46,7 @@ repository: a detached worktree that only this script uses and that keeps its `b
 The script creates it on its first run (that one build is a full one).
 
 ```
-pwsh tools/landing-check.ps1 -Name <topic> -Branch alta/<name> [-Questions probes/<card>] -Snapshot
+pwsh tools/landing-check.ps1 -Name <topic> -Branch alta/<name> [-Questions probes/<card>] -Snapshot [-Land [-Compare]]
 pwsh tools/landing-check.ps1 -Name <topic> -Files a,b,c [-Questions probes/<card>] -Snapshot
 ```
 
@@ -73,7 +73,9 @@ landings form a queue, and each one is checked on top of the master it lands on.
 refused with `-Snapshot`: the run that lands is unfiltered.
 
 **After a passing check.** For a branch, the script prints the landing: `git merge --ff-only <checked commit>` in the
-integration checkout and `git push`. If master moved meanwhile, the fast-forward refuses and the check runs again. Once
+integration checkout and `git push`. With `-Land` it runs them itself, and with `-Compare` it then runs the core compare
+from the snapshot once the check worktree is free, so one job checks, lands and compares and its result is the
+compare's verdicts. If master moved meanwhile, the fast-forward refuses and the check runs again. Once
 the child's session has ended, remove its worktree (`git worktree remove`) and delete its branch (`git branch -d`). For
 a file list, commit exactly those files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and
 push. When two children in the integration checkout edited one file, stage only the landing child's hunks (a copy of

@@ -122,7 +122,11 @@ public class QuestionKeyTests
         Assert.Equal(q.Key(), back.Key());
     }
 
-    /// <summary>Contract changes must never change the key of a question already retained as evidence.</summary>
+    /// <summary>
+    /// Contract changes must never change the key of a question already retained as evidence. Only the key and the
+    /// question are read, in parallel (The Plan §3.2): every record read whole on one thread, about 700 MB, took 55 to
+    /// 100 s of each landing check; this takes about 5 s (process log, 2026-11-22, organizer 10).
+    /// </summary>
     [Fact]
     public void Retained_question_keys_are_stable()
     {
@@ -133,16 +137,18 @@ public class QuestionKeyTests
         }
         Assert.NotNull(dir);
         string evidence = Path.Combine(dir!, "evidence");
-        var records = Directory.EnumerateFiles(evidence, "*.json", SearchOption.AllDirectories)
-            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            .Select(EvidenceJson.Read<EvidenceRecord>)
-            .ToList();
-        Assert.NotEmpty(records);
-        foreach (EvidenceRecord r in records)
-        {
-            Assert.Equal(r.QuestionKey, r.Question.Key());
-        }
+        string[] files = [.. Directory.EnumerateFiles(evidence, "*.json", SearchOption.AllDirectories)
+            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.Ordinal))];
+        Assert.NotEmpty(files);
+        string[] changed = [.. files.AsParallel()
+            .Select(f => (File: f, Record: EvidenceJson.Read<KeyedQuestion>(f)))
+            .Where(r => r.Record.QuestionKey != r.Record.Question.Key())
+            .Select(r => Path.GetRelativePath(evidence, r.File))
+            .Order(StringComparer.Ordinal)];
+        Assert.Empty(changed);
     }
+
+    private sealed record KeyedQuestion(string QuestionKey, Question Question);
 
     [Fact]
     public void Ill_formed_utf16_argument_is_refused()

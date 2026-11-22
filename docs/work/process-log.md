@@ -1047,3 +1047,29 @@ landing runs all test projects, and checks ran beside compares and probers), the
 reviewed landing costs a review brief, a findings decision and a re-check), and reviewer findings (falling from 14 and
 41 to 8, 8 and 4). Organizer 10 runs the triggered review. Organizer 9 finishes only the forwarding of the fq9f and 4t24
 writers' answers and stops.
+
+## 2026-11-22 - Organizer 10 (01a2043d): triggered review of the three crossed indicators
+
+**Landing check duration (median 237 s, line 3 min).** Measured from the step times of the last landing jobs and the
+trx start and finish of 24 runs since 13:38 UTC. One test was the largest single cost:
+`QuestionKeyTests.Retained_question_keys_are_stable` read all 3,681 retained records whole (698 MB) on one thread, 55 to
+100 s of the Evidence project's 32 to 114 s. Evidence runs on every probe or evidence landing and on most code landings.
+Workstation GC made it GC-bound: whole records in parallel took 19 s, 9 s with server GC. A projection of the key and
+the question, in parallel (The Plan §3.2, "read only what you use"), takes 5 s with the same assertion. In the check
+worktree the Evidence project went from 32 to 114 s to 14 s and the evid-keys check took 40 s. The rest, from 2tkf's
+313 s rerun: build 142 s (Catalog, Sql and both Com projects changed), NativeAOT publish 64 s when CalcDb.Com's closure
+changed, the other tests about 90 s, three candidate-check folders 41 s. A no-op build of CalcDb.slnx takes 8 s here; the
+probe landing r-q30 built for 59 s because organizer 9 started it in the same second as the 2tkf core compare. Change:
+the projection. Expected effect: the median drops by about a minute. Measure it over the next ten landings. Running all
+test projects on a probe landing stays: without the Evidence test, the projects other than Isam and Sql take about 60 s.
+
+**Organizer calls per landing (about 22, line about 15).** After a passing check, landing a branch took four calls:
+the fast-forward and push, the compare job, its result, and the cleanup. Change: `-Land` lands a passing `-Branch`
+check itself, and `-Compare` then runs the core compare from the snapshot once the check worktree is free. One job
+checks, lands and compares, and one result prompt carries the compare's verdicts. Expected effect: about 4 calls
+fewer per landing. Recording the baseline, the bookkeeping and the worktree cleanup stay with the organizer. The review
+loop (brief, findings, forward, re-check) is the other large share; left as it is until this change is measured.
+
+**Reviewer findings per 1,000 lines (14, 41, 8, 8, 4; line about 3).** Falling, and since the reviewer pass for every
+stretch no rule was found wrong after landing (organizer 9's table). No change: the findings are what the reviewer layer
+catches before landing. Re-measure on fq9f's lifted refusals and 94fd.
