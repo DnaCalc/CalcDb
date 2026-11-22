@@ -1,5 +1,6 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
+using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
@@ -18,6 +19,12 @@ internal interface IDatabaseRecordset
 
     /// <summary>The Workspace rolled back <paramref name="level"/> (the outermost one when <paramref name="outermost"/>): qualified.md R-TXN-1 TXN-CLOSE.</summary>
     void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost);
+
+    /// <summary>
+    /// The Workspace committed <paramref name="level"/> (the outermost one when <paramref name="outermost"/>);
+    /// <paramref name="hadOverlay"/> is true when this Database had an active overlay of its file before the commit.
+    /// </summary>
+    void Committed(Isam.Transactions.ExplicitFrame level, bool outermost, bool hadOverlay) { }
 
     /// <summary>How this recordset holds local table <paramref name="table"/> against a DDL statement of its Database (<see cref="TableHold"/>).</summary>
     TableHold Holds(string table);
@@ -116,7 +123,19 @@ internal static class SelectRoute
             return Published(database, failure!);
         }
         ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
-        SelectCursor? cursor = SelectCursor.Open(plan, database.Sql, kind, values, out failure);
+        bool singleTableRowSelect = IsSingleTableRowSelect(plan);
+        // Single-table row-backed SELECT dynasets read through the Workspace's live overlay while active and committed
+        // pages before the first write and after the level ends (task dqtr; r-txn-1b/rs-position-after-rollback,
+        // r-txn-1b/rs-types-after-rollback, r-txn-1b/temp-querydef-recordset-rollback, r-def-cursor-dao/edit-under-commit,
+        // r-fix-cursor-dao/edit-under-commit-second-workspace, r-txn-1/local-visibility,
+        // r-txn-1b/ws2-reader-own-level-before-other-commit). Snapshots keep their open-time PageSource (committed pages
+        // when opened before writes: r-txn-1b/rs-types-after-rollback bs, r-def-cursor-dao/delete-by-other-cursor-current-row rs;
+        // the active overlay when opened after writes: r-txn-1b/rs-types-after-rollback ks); forward-only and complex
+        // shapes stay fixed to open-time Source and refuse unrecorded overlay transitions by name.
+        ISqlDatabase scanDatabase = recordsetType == 2 && singleTableRowSelect
+            ? new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions))
+            : database.Sql;
+        SelectCursor? cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
         if (cursor is null)
         {
             plan.Dispose();
@@ -126,8 +145,20 @@ internal static class SelectRoute
         {
             database.Workspace.Transactions.EndLazyBurst(database.Cache);
         }
-        return database.Adopt(new SelectRecordsetObject(database, plan, cursor, recordsetType));
+        return database.Adopt(new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect));
     }
+
+    /// <summary>
+    /// True for a plain single-table SELECT projecting base rows (no UNION, GROUP BY, aggregates, DISTINCT, DISTINCTROW,
+    /// TOP, joins, or derived tables): the shape recorded across Workspace overlays (task dqtr).
+    /// </summary>
+    internal static bool IsSingleTableRowSelect(BoundSelect plan) =>
+        plan.Sources.Count == 1
+        && plan.Sources[0].Table is not null
+        && !plan.IsUnion
+        && plan.Predicate == SelectPredicate.All
+        && plan.Top is null
+        && plan.TryUpdatable(ResultKind.Dynaset, out _) == true;
 
     /// <summary>
     /// Whether <paramref name="sql"/> is a SELECT the parser reads: Execute refuses it with 3065. Anything else, action
@@ -143,6 +174,35 @@ internal static class SelectRoute
     private static CallResult Published(DatabaseObject database, SqlFailure failure) => failure.IsNotModelled
         ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
         : database.Fail(failure.Number, failure.Message);
+
+    /// <summary>
+    /// Thin <see cref="ISqlDatabase"/> adapter for <see cref="SelectCursor.Open"/> that opens ISAM row and index
+    /// readers over a specific <see cref="PageSource"/> (such as a dynamic Workspace coordinator source) while
+    /// forwarding all catalog, table and expression queries to the Database's <see cref="DatabaseSql"/>.
+    /// </summary>
+    private sealed class SelectSourceDatabase(DatabaseSql inner, DatabaseObject database, PageSource source) : ISqlDatabase
+    {
+        public ExpressionContext Context => inner.Context;
+
+        public TableDefinition? Table(string name) => inner.Table(name);
+
+        public bool IsQuery(string name) => inner.IsQuery(name);
+
+        public bool IsSystemTable(string name, TableDefinition table) => ((ISqlDatabase)inner).IsSystemTable(name, table);
+
+        public RowReader? OpenRows(TableDefinition table, out string? failure)
+        {
+            RowReader? reader = RowReader.Open(source, database.Format, table, database.PageCount, out TraversalFailure? f);
+            failure = f?.Predicate;
+            return reader;
+        }
+
+        public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+        {
+            failure = null;
+            return new IndexNavigator(source, database.Format, index, table.FirstPage);
+        }
+    }
 }
 
 /// <summary>
