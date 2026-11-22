@@ -37,6 +37,22 @@ internal interface IAdoRowSource : IDisposable
     OwnedVariant? ReadValue(int ordinal, bool isClientCursor, out Failure? failure);
 }
 
+internal enum AdoSelectRoute
+{
+    RecordsetOpenSql,
+    RecordsetOpenCommand,
+    ConnectionExecuteSql,
+    CommandExecuteSql,
+    SavedQuery,
+}
+
+internal readonly record struct AdoSelectContext(
+    bool IsMdb,
+    AdoSelectRoute Route,
+    int CursorLocation,
+    int CursorType,
+    int LockType);
+
 /// <summary>Server-side row source over <see cref="SelectCursor"/> (shared through <see cref="CalcDb.Sql"/>).</summary>
 internal sealed unsafe class SelectRowSource : IAdoRowSource
 {
@@ -44,24 +60,29 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
     private readonly SelectCursor _cursor;
     private readonly AdoFieldDescriptor[] _columns;
     private readonly string[] _heldTables;
+    private readonly AdoSelectContext _context;
     private int _cursorIndex;
     private int _knownCount;
 
-    private SelectRowSource(BoundSelect plan, SelectCursor cursor, AdoFieldDescriptor[] columns, string[] heldTables, int knownCount)
+    private SelectRowSource(BoundSelect plan, SelectCursor cursor, AdoFieldDescriptor[] columns, string[] heldTables, int knownCount, AdoSelectContext context)
     {
         _plan = plan;
         _cursor = cursor;
         _columns = columns;
         _heldTables = heldTables;
+        _context = context;
         _knownCount = knownCount;
         _cursorIndex = cursor.Eof ? -1 : 0;
     }
+
+    public AdoSelectContext Context => _context;
 
     public static SelectRowSource? Open(
         AdoOpenSession session,
         string sql,
         bool isSavedQuery,
         bool countAllAtOpen,
+        AdoSelectContext context,
         out MappedProviderError? providerError,
         out Failure? refusal)
     {
@@ -138,7 +159,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
             cursor.MoveFirst();
         }
 
-        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount);
+        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context);
     }
 
     public AdoFieldDescriptor[] Columns => _columns;
@@ -200,11 +221,18 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
     {
         failure = null;
         AdoFieldDescriptor desc = _columns[ordinal];
+        if (desc.IsBaseTableColumn && desc.AdoType is 204 or 205
+            && !IsRecordedBinaryOrOleRead(desc.AdoType, out failure))
+        {
+            return null;
+        }
+
         bool ok = _cursor.Read(ordinal, out NativeVariant sqlVal, out SqlFailure? sqlFail);
 
-        // Base table Binary, OLE, Guid, or Precision-38 Decimal columns: SelectCursor.Read already stood
+        // Base table Guid or Precision-38 Decimal columns: SelectCursor.Read already stood
         // on the row before evaluating BoundExpression, so read directly through the positioned IRecordCursor.
-        if (desc.IsBaseTableColumn && desc.BaseColumn is { } baseCol && baseCol.TypeCode is NativeTypes.Binary or NativeTypes.Ole or NativeTypes.Guid or NativeTypes.Numeric)
+        // Base table Binary (204) and OLE (205) columns now flow through CalcDb.Sql -> AdoFieldValues.FromSqlVariant.
+        if (desc.IsBaseTableColumn && desc.BaseColumn is { } baseCol && baseCol.TypeCode is NativeTypes.Guid or NativeTypes.Numeric)
         {
             if (!ok && sqlFail is { Number: 3021 })
             {
@@ -234,6 +262,11 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
 
         if (!ok)
         {
+            if (sqlFail is { Number: 3021 })
+            {
+                failure = AdoObject.AdoFailure(AdoErrors.NoCurrentRecord, "ADODB.Field", AdoTypes.Field.Iid);
+                return null;
+            }
             if (sqlFail!.IsNotModelled)
             {
                 failure = Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message);
@@ -244,7 +277,61 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
             return null;
         }
 
+        if (!desc.IsBaseTableColumn && (VarType)sqlVal.Vt == (VarType.Array | VarType.UI1))
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryNonBaseColumn",
+                $"ADO SQL SELECT byte-array value for non-base-table column '{desc.Name}' is not recorded");
+            return null;
+        }
+
         return AdoFieldValues.FromSqlVariant(sqlVal, desc, isClientCursor, out failure);
+    }
+
+    private bool IsRecordedBinaryOrOleRead(int adoType, out Failure? refusal)
+    {
+        refusal = null;
+        if (_context.IsMdb)
+        {
+            // evidence/r-ado-1b/fields-meta-mdb: MDB SQL SELECT records OLE (205) only on Recordset.Open
+            // Server ForwardOnly ReadOnly (2, 0, 1) and Client Static ReadOnly (3, 3, 1).
+            if (adoType == 205
+                && _context.Route == AdoSelectRoute.RecordsetOpenSql
+                && (_context.CursorLocation, _context.CursorType, _context.LockType) is (2, 0, 1) or (3, 3, 1))
+            {
+                return true;
+            }
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryMdb",
+                $"ADO SQL SELECT read of field type {adoType} on MDB ({_context.Route}, loc={_context.CursorLocation}, type={_context.CursorType}, lock={_context.LockType}) is not recorded");
+            return false;
+        }
+
+        bool recorded = (_context.Route, _context.CursorLocation, _context.CursorType, _context.LockType, adoType) switch
+        {
+            // evidence/r-oledb-odbc/buffer-typed-client, r-wire/ado-getrows-tags, r-fix-wire-ado/ado-write-values-text-binary,
+            // r-oledb-odbc/stream-getchunk, r-str-ado-act/ado-rs-read-close, r-ado-1b/view-sort-grammar, r-ado-1b/persist-roundtrip-typed:
+            (AdoSelectRoute.RecordsetOpenSql, 3, 3, 1, 204 or 205) => true,
+            // evidence/r-str-ado-act/ado-rs-cursors (c5), r-fix-wire-ado/ado-rs-cursors-writable (c5), r-str-ado-act/ado-persist:
+            (AdoSelectRoute.RecordsetOpenSql, 3, 3, 4, 205) => true,
+            // evidence/r-oledb-odbc/stream-getchunk (sf), r-str-ado-act/ado-rs-cursors (c1), r-fix-wire-ado/ado-rs-cursors-writable (c1):
+            (AdoSelectRoute.RecordsetOpenSql, 2, 0, 1, 205) => true,
+            // evidence/r-q-wire/str-odd-bstr-into-binary (#211-309), r-str-ado-act/ado-rs-cursors (c4), r-fix-wire-ado/ado-rs-cursors-writable (c4):
+            (AdoSelectRoute.RecordsetOpenSql, 2, 3, 1, 204 or 205) => true,
+            // evidence/r-oledb-odbc/buffer-typed-server, r-oledb-odbc/stream-appendchunk:
+            (AdoSelectRoute.ConnectionExecuteSql, 2, 0, 1, 204 or 205) => true,
+            _ => false,
+        };
+        if (recorded)
+        {
+            return true;
+        }
+        refusal = Failure.NotModelled(
+            _context.Route is AdoSelectRoute.RecordsetOpenSql or AdoSelectRoute.ConnectionExecuteSql
+                ? "NotModelled.AdoSqlBinaryCursor"
+                : "NotModelled.AdoSqlBinaryRoute",
+            $"ADO SQL SELECT read of field type {adoType} on ACCDB ({_context.Route}, loc={_context.CursorLocation}, type={_context.CursorType}, lock={_context.LockType}) is not recorded");
+        return false;
     }
 
     public void Dispose()
@@ -795,6 +882,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int _effectiveLockType = 1;
     private int _effectiveCursorLocation = 2;
     private int _openedCommandType = AdoSqlText.AdCmdUnspecified;
+    private bool _isMdb;
+    private AdoSelectContext? _openedSelectContext;
+    private bool _openedFromExecute;
+    private bool _openedFromSavedQuery;
     private bool _hasBookmarks;
     private int _supportedOptions;
     private bool _bof;
@@ -805,6 +896,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int _posBeforeAddNew;
     private bool _bofBeforeAddNew;
     private bool _eofBeforeAddNew;
+    // Per-row Field.GetChunk state (evidence/r-oledb-odbc/stream-getchunk):
+    // one active field + offset per row; switching fields resets offset to 0; moving rows resets all.
+    private int _chunkFieldOrdinal = -1;
+    private int _chunkOffset;
+    private HashSet<int>? _chunkConsumedOrdinals;
+    private HashSet<int>? _serverValueReadOrdinals;
     private AdoFieldsObject? _fields;
     private PropertiesObject? _properties;
     private string? _filterText;
@@ -826,6 +923,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
     public bool IsClientCursor => _effectiveCursorLocation == 3;
 
     internal bool IsReadOnlyLock => _effectiveLockType == 1;
+
+    internal bool IsMdb => _isMdb;
+
+    internal bool OpenedFromExecute => _openedFromExecute;
+
+    internal bool OpenedFromSavedQuery => _openedFromSavedQuery;
+
+    internal int CurrentCursorTypeValue => CurrentCursorType;
+
+    internal int CurrentLockTypeValue => CurrentLockType;
 
     /// <summary>
     /// True only for server cursors on a Mode=1 read-only connection downgraded to (0, 1)
@@ -867,6 +974,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int CurrentCursorLocation => IsOpen ? _effectiveCursorLocation : _cursorLocation;
 
     private AdoFieldsObject FieldsCollection => _fields ??= new AdoFieldsObject(this);
+
+    private void ResetChunkState()
+    {
+        _chunkFieldOrdinal = -1;
+        _chunkOffset = 0;
+        _chunkConsumedOrdinals?.Clear();
+        _serverValueReadOrdinals?.Clear();
+    }
 
     protected override ushort CoercionFlags(MemberDecl member, int parameter)
     {
@@ -921,11 +1036,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         ConnectionObject connection,
         string sourceText,
         IAdoRowSource rowSource,
+        AdoSelectContext selectContext,
         out Failure? refusal)
     {
         refusal = null;
         int loc = connection.CursorLocationValue;
         bool isClient = loc == 3;
+        AdoSelectContext? openedSelect = rowSource is SelectRowSource srs ? srs.Context : null;
         IAdoRowSource activeRows = rowSource;
         if (isClient && rowSource is not MemoryRowSource)
         {
@@ -952,7 +1069,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
             hasBookmarks: isClient,
             supportedOptions: isClient
                 ? AdHoldRecords | AdMovePrevious | AdBookmark | AdApproxPosition | AdResync | AdNotify | AdFind
-                : AdFind | AdNotify);
+                : AdFind | AdNotify,
+            isMdb: selectContext.IsMdb,
+            openedSelectContext: openedSelect,
+            openedFromExecute: true,
+            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery });
         return rs;
     }
 
@@ -1001,6 +1122,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (ks.OnTransactionRolledBack(newDepth, out int clampedCount))
         {
+            ResetChunkState();
             if (clampedCount == 0)
             {
                 _bof = true;
@@ -1074,6 +1196,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     internal void AdvancePositionAfterBulk(int nextViewIndex)
     {
+        ResetChunkState();
         if (TrySeekView(nextViewIndex, out _))
         {
             _bof = false;
@@ -1844,6 +1967,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             if (matched)
             {
+                ResetChunkState();
                 _bof = false;
                 _eof = false;
                 _bothBofEofAfterForwardMove = false;
@@ -1856,6 +1980,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         // No match: forward lands at EOF, backward lands at BOF (evidence/r-ado-1b/view-find-client).
+        ResetChunkState();
         if (dir > 0)
         {
             _bof = count == 0;
@@ -1944,6 +2069,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private void ResetPositionAfterViewChange()
     {
+        ResetChunkState();
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         if (ViewIsEmpty)
@@ -2112,6 +2238,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         int pageCount = count == 0 ? 0 : (count + _pageSize - 1) / _pageSize;
         if (page > pageCount)
         {
+            ResetChunkState();
             _bof = count == 0;
             _eof = true;
             _position = count;
@@ -2122,6 +2249,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
         }
+        ResetChunkState();
         _bof = false;
         _eof = false;
         _bothBofEofAfterForwardMove = false;
@@ -2259,6 +2387,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
         }
+        ResetChunkState();
         _bof = false;
         _eof = false;
         _bothBofEofAfterForwardMove = false;
@@ -2510,6 +2639,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         bool preferKeyset = !isClient && effCursor == 1;
         bool updatableKeyset = preferKeyset && effLock is 2 or 3;
         bool lockPessimistic = effLock == 2;
+        bool isMdb = session.Profile.Format == FileFormat.Jet4;
+        var selectContext = new AdoSelectContext(
+            isMdb,
+            sourceWasCommand ? AdoSelectRoute.RecordsetOpenCommand : AdoSelectRoute.RecordsetOpenSql,
+            effectiveLoc,
+            effCursor,
+            effLock);
 
         IAdoRowSource? rowSource = OpenRowSource(
             session,
@@ -2517,6 +2653,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _source,
             cmdType,
             countAllAtOpen,
+            selectContext,
             out MappedProviderError? providerError,
             out Failure? refusal,
             out bool recordPrepareErrorOnFields,
@@ -2541,6 +2678,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(refusal!);
         }
 
+        AdoSelectContext? openedSelect = rowSource is SelectRowSource srs ? srs.Context : null;
+
         if ((isClient || effCursor == 3) && rowSource is not MemoryRowSource)
         {
             IReadOnlyList<string>? heldTables = isClient ? null : rowSource.HeldTables;
@@ -2554,7 +2693,18 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         _activeConnection.ClearErrors();
-        InstallOpenRows(rowSource, effCursor, effLock, effectiveLoc, hasBookmarks, supported, cmdType);
+        InstallOpenRows(
+            rowSource,
+            effCursor,
+            effLock,
+            effectiveLoc,
+            hasBookmarks,
+            supported,
+            cmdType,
+            isMdb,
+            openedSelect,
+            openedFromExecute: false,
+            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery });
         return CallResult.Nothing;
     }
 
@@ -2565,6 +2715,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         string effectiveSource,
         int cmdType,
         bool countAllAtOpen,
+        AdoSelectContext selectContext,
         out MappedProviderError? providerError,
         out Failure? refusal,
         out bool recordPrepareErrorOnFields,
@@ -2593,7 +2744,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 recordPrepareErrorOnFields = true;
                 return null;
             }
-            return OpenSavedQuery(session, queryName, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+            return OpenSavedQuery(session, queryName, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
         }
 
         if (cmdType == AdoSqlText.AdCmdTable)
@@ -2601,7 +2752,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             // r-ado-1b/rs-source-kinds #31, #111: adCmdTable rewrites Source to "select * from <name>"; works on tables and saved queries.
             if (session.FindSavedQuery(originalSource) is { } savedFromTable)
             {
-                return OpenSavedQueryDirect(session, savedFromTable, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+                return OpenSavedQueryDirect(session, savedFromTable, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
             }
             if (session.Sql.Table(originalSource) is not null)
             {
@@ -2609,7 +2760,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                     ? KeysetRowSource.TryOpenTable(session, originalSource, updatableKeyset, lockPessimistic, out providerError, out refusal)
                     : TableRowSource.Open(session, originalSource, countAllAtOpen, out providerError, out refusal);
             }
-            IAdoRowSource? tableSel = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+            IAdoRowSource? tableSel = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
             if (tableSel is null && providerError is { ErrorEntry.HelpContext: 5003131 })
             {
                 recordPrepareErrorOnFields = true;
@@ -2634,7 +2785,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             if (session.FindSavedQuery(effectiveSource) is { } saved)
             {
-                IAdoRowSource? savedRows = OpenSavedQueryDirect(session, saved, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+                IAdoRowSource? savedRows = OpenSavedQueryDirect(session, saved, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
                 // r-ado-1b/rs-source-kinds #143: parameterized saved query opened under adCmdUnknown fails 3129 (not 3061).
                 if (savedRows is null && providerError is { ComFailure.Scode: AdoObject.HResultParamNotOptional })
                 {
@@ -2667,7 +2818,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return null;
         }
 
-        IAdoRowSource? rs = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+        IAdoRowSource? rs = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
         if (rs is null && providerError is { ErrorEntry.HelpContext: 5003129 or 5003131 or 5003141 or 5003142 })
         {
             recordPrepareErrorOnFields = true;
@@ -2680,6 +2831,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         string sql,
         bool isSavedQuery,
         bool countAllAtOpen,
+        AdoSelectContext selectContext,
         bool preferKeyset,
         bool updatableKeyset,
         bool lockPessimistic,
@@ -2695,13 +2847,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 return ks;
             }
         }
-        return SelectRowSource.Open(session, sql, isSavedQuery, countAllAtOpen, out providerError, out refusal);
+        AdoSelectContext effectiveContext = isSavedQuery ? selectContext with { Route = AdoSelectRoute.SavedQuery } : selectContext;
+        return SelectRowSource.Open(session, sql, isSavedQuery, countAllAtOpen, effectiveContext, out providerError, out refusal);
     }
 
     private static IAdoRowSource? OpenSavedQuery(
         AdoOpenSession session,
         string queryName,
         bool countAllAtOpen,
+        AdoSelectContext selectContext,
         bool preferKeyset,
         bool updatableKeyset,
         bool lockPessimistic,
@@ -2721,13 +2875,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
             providerError = AdoSqlErrors.TableOrQueryNotFound(queryName);
             return null;
         }
-        return OpenSavedQueryDirect(session, saved, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+        return OpenSavedQueryDirect(session, saved, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
     }
 
     private static IAdoRowSource? OpenSavedQueryDirect(
         AdoOpenSession session,
         SavedQuery saved,
         bool countAllAtOpen,
+        AdoSelectContext selectContext,
         bool preferKeyset,
         bool updatableKeyset,
         bool lockPessimistic,
@@ -2747,7 +2902,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             refusal = Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{saved.Name}': {rendered.NotModelled}");
             return null;
         }
-        return OpenSelectOrKeyset(session, sql, isSavedQuery: true, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
+        return OpenSelectOrKeyset(session, sql, isSavedQuery: true, countAllAtOpen, selectContext, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
     }
 
     /// <summary>
@@ -2894,7 +3049,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         int effectiveCursorLocation,
         bool hasBookmarks,
         int supportedOptions,
-        int openedCommandType = AdoSqlText.AdCmdUnspecified)
+        int openedCommandType = AdoSqlText.AdCmdUnspecified,
+        bool isMdb = false,
+        AdoSelectContext? openedSelectContext = null,
+        bool openedFromExecute = false,
+        bool openedFromSavedQuery = false)
     {
         _wasEverOpened = true;
         _closedAfterOpen = false;
@@ -2903,10 +3062,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _effectiveLockType = effectiveLockType;
         _effectiveCursorLocation = effectiveCursorLocation;
         _openedCommandType = openedCommandType;
+        _isMdb = isMdb;
+        _openedSelectContext = openedSelectContext;
+        _openedFromExecute = openedFromExecute;
+        _openedFromSavedQuery = openedFromSavedQuery;
         _hasBookmarks = hasBookmarks;
         _supportedOptions = supportedOptions;
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
+        ResetChunkState();
         if (rowSource.IsEmpty)
         {
             _bof = true;
@@ -2952,6 +3116,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _rows = null;
         _closedAfterOpen = true;
         _openedCommandType = AdoSqlText.AdCmdUnspecified;
+        _isMdb = false;
+        _openedSelectContext = null;
+        _openedFromExecute = false;
+        _openedFromSavedQuery = false;
+        ResetChunkState();
         _viewMap = null;
         _filterExpr = null;
         _filterText = null;
@@ -2997,6 +3166,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         _position = 0;
+        ResetChunkState();
         return CallResult.Nothing;
     }
 
@@ -3019,6 +3189,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             if (!_bof && !_eof && !ViewIsEmpty)
             {
                 _suspendedAfterForwardMoveLast = true;
+                ResetChunkState();
             }
             MappedProviderError err = AdoSqlErrors.CannotFetchBackwards();
             ReportProviderError(err);
@@ -3039,6 +3210,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         _position = last;
+        ResetChunkState();
         return CallResult.Nothing;
     }
 
@@ -3061,6 +3233,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (_suspendedAfterForwardMoveLast)
         {
             _suspendedAfterForwardMoveLast = false;
+            ResetChunkState();
             if (!TrySeekView(_position, out Failure? resumeFail))
             {
                 if (resumeFail is not null)
@@ -3091,6 +3264,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bothBofEofAfterForwardMove = false;
             _suspendedAfterForwardMoveLast = false;
             _position = 1;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         if (_eof)
@@ -3108,11 +3282,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bof = ViewIsEmpty;
             _eof = true;
             _position = target;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         _bof = false;
         _eof = false;
         _position = target;
+        ResetChunkState();
         return CallResult.Nothing;
     }
 
@@ -3151,6 +3327,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _eof = ViewIsEmpty;
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         if (!TrySeekView(target, out Failure? fail))
@@ -3162,6 +3339,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         _position = target;
+        ResetChunkState();
         return CallResult.Nothing;
     }
 
@@ -3191,6 +3369,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bothBofEofAfterForwardMove = false;
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
+            ResetChunkState();
             MappedProviderError err = AdoSqlErrors.CannotFetchBackwards();
             ReportProviderError(err);
             return CallResult.Fail(err.ComFailure);
@@ -3201,6 +3380,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bof = true;
             _eof = true;
             _suspendedAfterForwardMoveLast = false;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         if (delta == 0)
@@ -3211,6 +3391,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 _bof = true;
                 _eof = true;
                 _bothBofEofAfterForwardMove = true;
+                ResetChunkState();
             }
             return CallResult.Nothing;
         }
@@ -3225,6 +3406,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bothBofEofAfterForwardMove = false;
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         if (!TrySeekView(target, out Failure? fail))
@@ -3249,6 +3431,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
             int afterKnown = ViewKnownCount;
             _position = afterKnown >= 0 ? afterKnown : target;
+            ResetChunkState();
             return CallResult.Nothing;
         }
         _bof = false;
@@ -3256,6 +3439,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         _position = target;
+        ResetChunkState();
         return CallResult.Nothing;
     }
 
@@ -3291,11 +3475,28 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
         }
+        AdoFieldDescriptor desc = _rows!.Columns[ordinal];
+        if (_openedSelectContext is { Route: AdoSelectRoute.RecordsetOpenSql, CursorLocation: 3, CursorType: 3, LockType: 4 }
+            && desc.IsBaseTableColumn
+            && desc.AdoType is 204 or 205)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"ADO Field.Value of field type {desc.AdoType} on client Static BatchOptimistic (3, 3, 4) SQL SELECT is not recorded"));
+        }
+        if (!IsClientCursor && _chunkConsumedOrdinals is not null && _chunkConsumedOrdinals.Contains(ordinal))
+        {
+            // r-oledb-odbc/stream-getchunk #24, #47, #48: on a server ForwardOnly cursor, Field.Value after non-null
+            // Field.GetChunk on the same row fails 0x8000FFFF (Catastrophic failure, IRowset) and posts one entry to Connection.Errors.
+            MappedProviderError err = AdoSqlErrors.CatastrophicFailure();
+            ReportProviderError(err);
+            return CallResult.Fail(err.ComFailure);
+        }
         if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
-        OwnedVariant? val = _rows!.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
+        OwnedVariant? val = _rows.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
         if (val is null)
         {
             if (readFail is { Scode: HResultDeletedRecord })
@@ -3304,7 +3505,160 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             return CallResult.Fail(readFail!);
         }
+        if (!IsClientCursor
+            && _effectiveCursorType == 0
+            && _effectiveLockType == 1
+            && desc.IsBaseTableColumn
+            && desc.AdoType is 205 or 203)
+        {
+            (_serverValueReadOrdinals ??= []).Add(ordinal);
+        }
         return CallResult.Of(val);
+    }
+
+    public CallResult ReadFieldGetChunk(int ordinal, int length, AdoFieldObject field)
+    {
+        if (!IsOpen)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkClosed",
+                "Field.GetChunk on a closed Recordset is not recorded"));
+        }
+        if (_isMdb)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkMdb",
+                "Field.GetChunk on MDB is not recorded"));
+        }
+        if (_openedSelectContext is not { Route: AdoSelectRoute.RecordsetOpenSql })
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkRoute",
+                "Field.GetChunk is only recorded on Recordset.Open over a SQL SELECT"));
+        }
+        if ((_effectiveCursorLocation, _effectiveCursorType, _effectiveLockType) is not ((2, 0, 1) or (3, 3, 1)))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkCursor",
+                $"Field.GetChunk on cursor (loc={_effectiveCursorLocation}, type={_effectiveCursorType}, lock={_effectiveLockType}) is not recorded"));
+        }
+        if (IsEditingNew || _bof || _eof || _suspendedAfterForwardMoveLast)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkNoCurrentRecord",
+                "Field.GetChunk at BOF, EOF, or without a current row is not recorded"));
+        }
+        AdoFieldDescriptor desc = _rows!.Columns[ordinal];
+        if (!desc.IsBaseTableColumn || desc.AdoType is not (205 or 203))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkFieldType",
+                $"Field.GetChunk on field '{desc.Name}' (AdoType={desc.AdoType}, base={desc.IsBaseTableColumn}) is not recorded"));
+        }
+        if (length <= 0)
+        {
+            if (desc.AdoType == 205)
+            {
+                // r-oledb-odbc/stream-getchunk #44-45, #102-103: GetChunk(0) and GetChunk(-1) on OLE
+                // clear Connection.Errors and fail 0x800A0BB9 (ADODB.Field, helpContext 1240641) without altering chunk state.
+                ClearConnectionErrors();
+                return field.Fail(AdoErrors.ArgumentsWrongType);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkMemoNonPositiveLength",
+                $"Field.GetChunk({length}) on Memo field '{desc.Name}' is not recorded"));
+        }
+        if (!IsClientCursor && _serverValueReadOrdinals is not null && _serverValueReadOrdinals.Contains(ordinal))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkAfterValue",
+                $"Field.GetChunk after Field.Value on server ForwardOnly field '{desc.Name}' is not recorded"));
+        }
+        if (!TrySeekView(_position, out Failure? seekFail))
+        {
+            return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        OwnedVariant? val = _rows.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
+        if (val is null)
+        {
+            if (readFail is { Scode: HResultDeletedRecord })
+            {
+                ReportProviderError(DeletedRowError());
+            }
+            return CallResult.Fail(readFail!);
+        }
+        using (val)
+        {
+            if (desc.AdoType == 205)
+            {
+                if (val.Type is VarType.Null or VarType.Empty)
+                {
+                    // r-oledb-odbc/stream-getchunk #27, #31, #50, #85, #89, #108:
+                    // Null or 0-byte OLE returns VT_NULL without marking consumed or clearing Connection.Errors.
+                    return CallResult.Of(OwnedVariant.Null());
+                }
+                if (val.Type != (VarType.Array | VarType.UI1) || val.Pointer->Pointer == 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetChunkUnexpectedPayload",
+                        $"Field.GetChunk on OLE field '{desc.Name}' encountered unexpected variant type {val.Type}"));
+                }
+                nint psa = val.Pointer->Pointer;
+                int total = SafeArrays.Shape(psa)[0].Count;
+                if (total <= 0)
+                {
+                    return CallResult.Of(OwnedVariant.Null());
+                }
+                if (_chunkFieldOrdinal != ordinal)
+                {
+                    // r-oledb-odbc/stream-getchunk #36-46, #94-104: switching fields resets chunk offset to 0.
+                    _chunkFieldOrdinal = ordinal;
+                    _chunkOffset = 0;
+                }
+                (_chunkConsumedOrdinals ??= []).Add(ordinal);
+                if (_chunkOffset >= total)
+                {
+                    // r-oledb-odbc/stream-getchunk #23, #81: once exhausted, GetChunk returns VT_NULL.
+                    return CallResult.Of(OwnedVariant.Null());
+                }
+                int take = Math.Min(length, total - _chunkOffset);
+                nint chunk = SafeArrays.Create(VarType.UI1, (0, take));
+                new ReadOnlySpan<byte>(SafeArrays.ElementPointer(psa, 0), total)
+                    .Slice(_chunkOffset, take)
+                    .CopyTo(new Span<byte>(SafeArrays.ElementPointer(chunk, 0), take));
+                _chunkOffset += take;
+                return CallResult.Of(OwnedVariant.TakeArray(chunk, VarType.UI1));
+            }
+            else
+            {
+                if (val.Type is VarType.Null or VarType.Empty || val.Pointer->Pointer == 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetChunkMemoNullOrEmpty",
+                        $"Field.GetChunk on Null or empty Memo field '{desc.Name}' is not recorded"));
+                }
+                ReadOnlySpan<char> chars = Bstrs.Chars(val.Pointer->Pointer);
+                if (chars.Length == 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetChunkMemoNullOrEmpty",
+                        $"Field.GetChunk on Null or empty Memo field '{desc.Name}' is not recorded"));
+                }
+                if (_chunkFieldOrdinal == ordinal && _chunkOffset > 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetChunkMemoContinuation",
+                        $"Consecutive Field.GetChunk continuation on Memo field '{desc.Name}' is not recorded"));
+                }
+                // r-oledb-odbc/stream-getchunk #37, #39, #41, #43, #95, #97, #99, #101:
+                // first chunk at offset 0 returns min(length, chars.Length) UTF-16 characters and marks the field consumed.
+                _chunkFieldOrdinal = ordinal;
+                int take = Math.Min(length, chars.Length);
+                _chunkOffset = take;
+                (_chunkConsumedOrdinals ??= []).Add(ordinal);
+                return CallResult.Of(OwnedVariant.FromText(chars[..take]));
+            }
+        }
     }
 
     public CallResult ReadFieldOriginalValue(int ordinal, AdoFieldObject field)
@@ -3413,6 +3767,21 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return CallResult.Fail(metaRefusal);
         }
+        if (_chunkConsumedOrdinals is not null && _chunkConsumedOrdinals.Contains(ordinal))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoActualSizeAfterGetChunk",
+                $"Field.ActualSize after non-null Field.GetChunk on field '{desc.Name}' is not recorded"));
+        }
+        if (_openedSelectContext is { } ctx
+            && desc.IsBaseTableColumn
+            && desc.AdoType is 204 or 205
+            && !IsRecordedSqlBinaryActualSize(ctx, desc.AdoType))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoActualSizeBinaryCursor",
+                $"Field.ActualSize of field type {desc.AdoType} on SQL SELECT ({ctx.Route}, mdb={ctx.IsMdb}, loc={ctx.CursorLocation}, type={ctx.CursorType}, lock={ctx.LockType}) is not recorded"));
+        }
         if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
@@ -3430,6 +3799,27 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return Int32(AdoFieldValues.ActualSizeOf(val, desc, IsClientCursor));
         }
+    }
+
+    private static bool IsRecordedSqlBinaryActualSize(AdoSelectContext ctx, int adoType)
+    {
+        if (ctx.IsMdb)
+        {
+            // evidence/r-ado-1b/fields-meta-mdb: MDB SQL SELECT ActualSize on OLE (205) on Recordset.Open (2, 0, 1) and (3, 3, 1).
+            return adoType == 205
+                && ctx.Route == AdoSelectRoute.RecordsetOpenSql
+                && (ctx.CursorLocation, ctx.CursorType, ctx.LockType) is (2, 0, 1) or (3, 3, 1);
+        }
+        return (ctx.Route, ctx.CursorLocation, ctx.CursorType, ctx.LockType, adoType) switch
+        {
+            // evidence/r-oledb-odbc/buffer-typed-client, r-oledb-odbc/stream-getchunk, r-str-ado-act/ado-rs-read-close:
+            (AdoSelectRoute.RecordsetOpenSql, 3, 3, 1, 204 or 205) => true,
+            // evidence/r-oledb-odbc/stream-getchunk (sf):
+            (AdoSelectRoute.RecordsetOpenSql, 2, 0, 1, 205) => true,
+            // evidence/r-oledb-odbc/buffer-typed-server:
+            (AdoSelectRoute.ConnectionExecuteSql, 2, 0, 1, 204 or 205) => true,
+            _ => false,
+        };
     }
 
     protected override void OnFinalRelease()

@@ -1579,7 +1579,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return CallResult.Fail(err.ComFailure);
             }
             return saved.Family is QueryFamily.Select or QueryFamily.Union
-                ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
+                ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
                 : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
         }
 
@@ -1588,7 +1588,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             || AdoSqlText.IsSelectIdentity(effectiveText)
             || AdoSqlText.IsSelect(effectiveText))
         {
-            return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
         }
 
         // adCmdUnknown / adCmdUnspecified: bare local table or saved query name.
@@ -1596,12 +1596,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (session.Sql.Table(effectiveText) is not null)
             {
-                return ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
             }
             if (session.FindSavedQuery(effectiveText) is { } saved)
             {
                 return saved.Family is QueryFamily.Select or QueryFamily.Union
-                    ? ExecuteRowReturning(session, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
+                    ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
                     : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
             }
         }
@@ -1625,18 +1625,32 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     private CallResult ExecuteRowReturning(
         AdoOpenSession session,
+        string callerName,
         string originalText,
         string effectiveText,
         int cmdType,
         bool noRecords,
         nint recordsAffectedArg)
     {
+        int loc = CursorLocationValue;
+        bool isClient = loc == 3;
+        AdoSelectRoute route = string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal)
+            ? AdoSelectRoute.ConnectionExecuteSql
+            : AdoSelectRoute.CommandExecuteSql;
+        var selectContext = new AdoSelectContext(
+            session.Profile.Format == FileFormat.Jet4,
+            route,
+            loc,
+            isClient ? 3 : 0,
+            1);
+
         IAdoRowSource? rowSource = RecordsetObject.OpenRowSource(
             session,
             originalText,
             effectiveText,
             cmdType,
             countAllAtOpen: false,
+            selectContext,
             out MappedProviderError? providerError,
             out Failure? refusal,
             out _);
@@ -1664,7 +1678,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return Results.NullObject;
         }
 
-        RecordsetObject? rs = RecordsetObject.CreateOpenForExecute(this, effectiveText, rowSource, out Failure? createRefusal);
+        RecordsetObject? rs = RecordsetObject.CreateOpenForExecute(this, effectiveText, rowSource, selectContext, out Failure? createRefusal);
         if (rs is null)
         {
             return CallResult.Fail(createRefusal!);

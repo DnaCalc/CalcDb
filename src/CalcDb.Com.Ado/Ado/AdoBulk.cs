@@ -48,7 +48,31 @@ internal static unsafe class AdoBulk
             return fieldsFailure!.Value;
         }
 
-        int colCount = colOrdinals!.Length;
+        // Base-table Binary (204) and OLE (205) GetRows is recorded only on ACCDB Client Static ReadOnly (3, 3, 1)
+        // opened via Recordset.Open (evidence/r-wire/ado-getrows-tags #270/#296, evidence/r-fix-wire-ado/ado-write-values-text-binary #1378/#1404).
+        AdoFieldDescriptor[] allCols = rs.ColumnDescriptors;
+        for (int i = 0; i < colOrdinals!.Length; i++)
+        {
+            AdoFieldDescriptor colDesc = allCols[colOrdinals[i]];
+            if (colDesc.IsBaseTableColumn && colDesc.AdoType is 204 or 205)
+            {
+                if (rs.IsMdb)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetRowsBinaryMdb",
+                        $"Recordset.GetRows over MDB field '{colDesc.Name}' (type {colDesc.AdoType}) is not recorded"));
+                }
+                if (!rs.IsClientCursor || rs.CurrentCursorTypeValue != 3 || rs.CurrentLockTypeValue != 1
+                    || rs.OpenedFromExecute || rs.OpenedFromSavedQuery)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetRowsBinaryCursor",
+                        $"Recordset.GetRows over field '{colDesc.Name}' (type {colDesc.AdoType}) is recorded only on ACCDB Recordset.Open Client Static ReadOnly (3, 3, 1)"));
+                }
+            }
+        }
+
+        int colCount = colOrdinals.Length;
         int limit = maxRows == -1 ? int.MaxValue : maxRows;
 
         // Direct SAFEARRAY fill when the remaining view row count is known upfront (zero intermediate buffer allocations).
