@@ -108,10 +108,11 @@ public sealed record DropTableRequest(string Table, SchemaRoute Route);
 public readonly record struct SchemaRefusal(int? Error, string? NotWritten);
 
 /// <summary>
-/// A schema request's outcome: refused before any change, or accepted by the Workspace (and published, outside a level,
-/// or named why not), with the file's extent in pages its allocations reach.
+/// A schema request's outcome: refused before any change (or after a recorded rollback commit), or accepted by the
+/// Workspace (and published, outside a level, or named why not), with the file's extent in pages its allocations reach
+/// and whether any commit was published (<see cref="PublishedAny"/>).
 /// </summary>
-public readonly record struct SchemaOutcome(SchemaRefusal? Refused, AcceptOutcome Accepted, ulong ExtentPages)
+public readonly record struct SchemaOutcome(SchemaRefusal? Refused, AcceptOutcome Accepted, ulong ExtentPages, bool PublishedAny = false)
 {
     public bool Succeeded => Refused is null && Accepted.Accepted && Accepted.Error is null && Accepted.Open == MutationOpen.None;
 }
@@ -122,7 +123,8 @@ public readonly record struct SchemaOutcome(SchemaRefusal? Refused, AcceptOutcom
 /// is transactional and published like any other (R-TXN-1 TXN-DDL; <see cref="TransactionCoordinator.AcceptSchemaChange"/>).
 /// New pages come from the one <see cref="PageAllocator"/>, the catalog rows go in and out through the one row compiler
 /// (<see cref="SameWidthWriter"/>), and the TableDef through the one <see cref="TableDefEncoder"/>. Every byte rule cites
-/// the record it was read from (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types, evidence/r-q26-column-order); what no record decides is refused by name.
+/// the record it was read from (evidence/r-q11-ddl-closure, evidence/r-q21-ddl-types, evidence/r-q26-column-order,
+/// evidence/r-q28-schema-write-open); what no record decides is refused by name.
 /// </summary>
 public sealed class SchemaWriter
 {
@@ -165,6 +167,16 @@ public sealed class SchemaWriter
 
     /// <summary>Maximum LVAL columns whose 2 empty 69-byte maps plus the table's 2 maps fit on one 4096-byte map page (2 + 2*27 = 56 &lt;= 57).</summary>
     private const int MaxSinglePageLvalColumns = 27;
+
+    /// <summary>
+    /// Remaining-free-space band matching <see cref="SameWidthWriter"/> / <c>RowWriter</c> (R-FMT-2 "LV form selection
+    /// and Map ownership" Open): &lt;= 178 leaves the LV free map, &gt;= 264 stays, and 179..263 is undecided and refused.
+    /// </summary>
+    private const int LvalFreeMapLeavesAtOrBelow = 178;
+    private const int LvalFreeMapStaysAtOrAbove = 264;
+
+    /// <summary>Exclusive upper page bound for inline usage maps anchored at page 0 (64 bitmap bytes * 8 bits = 512 pages).</summary>
+    private const uint InlineMapPageLimit = 512;
 
     /// <summary>
     /// The one property a DAO-appended field stores: <c>Required</c> False, with the DDL flag 01, in the field's column
@@ -230,7 +242,8 @@ public sealed class SchemaWriter
             {
                 case FieldNameClash.Duplicate when request.Route is SchemaRoute.Sql or SchemaRoute.Ado:
                     // SQL CREATE TABLE (r-def-expr-sql/ddl-column-clauses Cc20/Cc21; r-q28-schema-write-open/pair-sql-*)
-                    // and ADO CREATE TABLE (r-q28-schema-write-open/pair-ado-*) fail 3380 without writing any page.
+                    // and ADO CREATE TABLE (r-q28-schema-write-open/pair-ado-*) fail 3380 after incrementing
+                    // MSysObjects/MSysACEs UniqueEntryCount and writing 2 commits on page 0.
                     return new SchemaRefusal(3380, null);
                 case FieldNameClash.Duplicate:
                     // Draft TableDefs.Append (r-q28-schema-write-open/pair-dao-a-a, pair-dao-Aa-aA, pair-dao-fe-FE,
@@ -341,14 +354,9 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"{lvalCount} LVAL columns exceed single-page map capacity ({MaxSinglePageLvalColumns})");
         }
-        if (request.Route == SchemaRoute.Dao)
+        if (request.Route == SchemaRoute.Dao && CheckDaoLvPropPlan(request) is { } daoLvRefusal)
         {
-            PropertyMap[] allMaps = [.. request.Fields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [DaoFieldRequired]))];
-            int blobBytes = PropertyBlob.Encode(allMaps).Length;
-            if (blobBytes > LongValuePlan.SingleRowPayloadMax)
-            {
-                return new SchemaRefusal(null, $"DAO table property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
-            }
+            return daoLvRefusal;
         }
         if (request.AllIndexes.Count > 0)
         {
@@ -366,6 +374,127 @@ public sealed class SchemaWriter
             {
                 return refused;
             }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Pre-commit validation for DAO <c>TableDefs.Append</c> per-field <c>LvProp</c> commits (so no write is ever
+    /// published and then refused): simulates every commit <c>1..N</c> before Commit 1 and refuses by name:
+    /// <list type="bullet">
+    /// <item>a blob exceeding <see cref="LongValuePlan.SingleRowPayloadMax"/> (3,816 bytes; chained LvProp),</item>
+    /// <item>a non-empty <c>MSysObjects.LvProp</c> free map (another table already uses an LvProp LVAL page),</item>
+    /// <item>an LVAL page whose remaining free space after a commit falls in <c>179..263</c> (the band <c>RowWriter</c>
+    /// refuses) or <c>&lt;= 178</c> (leaving <c>MSysObjects.LvProp</c>'s free map is not recorded), and</item>
+    /// <item>a worst-case allocation reaching page <see cref="InlineMapPageLimit"/> (512, inline usage-map limit).</item>
+    /// </list>
+    /// </summary>
+    private SchemaRefusal? CheckDaoLvPropPlan(CreateTableRequest request)
+    {
+        PropertyMap[] allMaps = [.. request.Fields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [DaoFieldRequired]))];
+        int pageDataCapacity = _d.PageSize - _d.DataPage.SlotBase;
+        bool hasLval = false;
+        int lvalFree = 0;
+        int lvalSlots = 0;
+        int lvalPagesNeeded = 0;
+
+        for (int k = 1; k <= allMaps.Length; k++)
+        {
+            int blobBytes = PropertyBlob.Encode(allMaps[..k]).Length;
+            if (blobBytes > LongValuePlan.SingleRowPayloadMax)
+            {
+                return new SchemaRefusal(null, $"DAO table property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
+            }
+            if (blobBytes <= LongValuePlan.InlinePayloadMax)
+            {
+                if (hasLval)
+                {
+                    return new SchemaRefusal(null, "MSysObjects.LvProp shrinking from SingleRow to inline is not recorded");
+                }
+                continue;
+            }
+            int needed = blobBytes + _d.DataPage.SlotEntryBytes;
+            if (!hasLval || lvalFree < needed || lvalSlots >= _d.DataPage.WriterSlotLimit)
+            {
+                lvalPagesNeeded++;
+                hasLval = true;
+                lvalSlots = 1;
+                lvalFree = pageDataCapacity - needed;
+            }
+            else
+            {
+                // Appending slot lvalSlots and deleting the prior live slot compacts the one live row to the top of the
+                // page while keeping all lvalSlots directory entries (DataPages.TryAppendRow + TryDeleteSlot).
+                lvalSlots++;
+                lvalFree = pageDataCapacity - (lvalSlots * _d.DataPage.SlotEntryBytes) - blobBytes;
+            }
+            if (lvalFree <= LvalFreeMapLeavesAtOrBelow)
+            {
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({request.Fields[k - 1].Name}) would keep {lvalFree} free bytes (<= {LvalFreeMapLeavesAtOrBelow}): leaving MSysObjects.LvProp's free map is not recorded");
+            }
+            if (lvalFree < LvalFreeMapStaysAtOrAbove)
+            {
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({request.Fields[k - 1].Name}) would keep {lvalFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection Open)");
+            }
+        }
+
+        if (lvalPagesNeeded == 0)
+        {
+            return null;
+        }
+
+        TableDefinition objects = _catalog.ObjectTable;
+        int lvPropOrdinal = Ordinal(objects, "LvProp");
+        ColumnDescriptor lvPropCol = objects.Columns[lvPropOrdinal];
+        if (objects.LongValueMaps.FirstOrDefault(m => m.PhysicalNumber == lvPropCol.PhysicalNumber) is not { } lvMaps)
+        {
+            return new SchemaRefusal(null, "MSysObjects TableDef names no long-value maps for LvProp");
+        }
+        IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, lvMaps.FreeMap, _pageCount, out TraversalFailure? freeMapFailure);
+        if (freePages is null)
+        {
+            return new SchemaRefusal(null, $"MSysObjects.LvProp free map cannot be read: {freeMapFailure?.Predicate}");
+        }
+        if (freePages.Count > 0)
+        {
+            return new SchemaRefusal(null, $"MSysObjects.LvProp free map already holds {freePages.Count} page(s) ({string.Join(", ", freePages)}): sharing an MSysObjects.LvProp LVAL page with another table is not recorded");
+        }
+
+        // Worst-case allocation check before Commit 1: Commit 1 takes TableDef + map page (2 pages) and Commits 2..N+1
+        // take lvalPagesNeeded LVAL pages (retired pages stay unreleased in page 1 until Close). Refuse if any
+        // allocated page would reach InlineMapPageLimit (512) or fall outside MSysObjects.LvProp's inline maps.
+        int totalPagesNeeded = 2 + lvalPagesNeeded;
+        byte[]? page1 = PinCopy(_d.Map.GlobalMapPage);
+        if (page1 is null)
+        {
+            return new SchemaRefusal(null, $"the global map page {_d.Map.GlobalMapPage} could not be pinned");
+        }
+        if (MapPages.InlinePages(page1, _d.Map.GlobalFreeSlot, _d, out string? globalFailure) is not { } globalFree)
+        {
+            return new SchemaRefusal(null, "the global map: " + globalFailure);
+        }
+        if (globalFree.Count < totalPagesNeeded)
+        {
+            return new SchemaRefusal(null, $"the global map's inline window has fewer than {totalPagesNeeded} free pages left for DAO TableDefs.Append");
+        }
+        uint maxPage = globalFree[totalPagesNeeded - 1];
+        if (maxPage >= InlineMapPageLimit)
+        {
+            return new SchemaRefusal(null, $"DAO TableDefs.Append worst-case allocation reaches page {maxPage} (>= {InlineMapPageLimit}): MSysObjects.LvProp inline map only covers pages < {InlineMapPageLimit}");
+        }
+        byte[]? ownedMapPage = PinCopy(lvMaps.OwnedMap.Page);
+        byte[]? freeMapPage = lvMaps.FreeMap.Page == lvMaps.OwnedMap.Page ? ownedMapPage : PinCopy(lvMaps.FreeMap.Page);
+        if (ownedMapPage is null || freeMapPage is null)
+        {
+            return new SchemaRefusal(null, $"MSysObjects.LvProp map page {lvMaps.OwnedMap.Page}/{lvMaps.FreeMap.Page} could not be pinned");
+        }
+        if (!MapPages.TryInlineBit(ownedMapPage, lvMaps.OwnedMap.Row, maxPage, _d, out _, out _, out string? ownedFailure))
+        {
+            return new SchemaRefusal(null, $"MSysObjects.LvProp owned inline map cannot address page {maxPage}: {ownedFailure}");
+        }
+        if (!MapPages.TryInlineBit(freeMapPage, lvMaps.FreeMap.Row, maxPage, _d, out _, out _, out string? freeFailure))
+        {
+            return new SchemaRefusal(null, $"MSysObjects.LvProp free inline map cannot address page {maxPage}: {freeFailure}");
         }
         return null;
     }
@@ -411,6 +540,10 @@ public sealed class SchemaWriter
             {
                 return CreateTableDaoDuplicateRollback(workspace, request, dateCreateBits, dateUpdateBits, refused);
             }
+            if (refused.Error == 3380 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+            {
+                return CreateTableSqlAdoDuplicateRollback(workspace, refused);
+            }
             return new SchemaOutcome(refused, default, _pageCount);
         }
         if (request.Route == SchemaRoute.Dao && workspace.Depth > 0)
@@ -428,9 +561,10 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(null, accepted, _pageCount);
         }
-        if (!Published(accepted) || request.Route != SchemaRoute.Dao)
+        bool publishedFirst = Published(accepted);
+        if (!publishedFirst || request.Route != SchemaRoute.Dao)
         {
-            return new SchemaOutcome(null, accepted, extent);
+            return new SchemaOutcome(null, accepted, extent, PublishedAny: publishedFirst);
         }
         for (int k = 1; k <= request.Fields.Count; k++)
         {
@@ -453,10 +587,55 @@ public sealed class SchemaWriter
                         Open = step.Open == MutationOpen.None && step.Error is null ? MutationOpen.Publication : step.Open,
                         Detail = $"DAO TableDefs.Append of {request.Name}: commit {k + 1} of {request.Fields.Count + 1} (LvProp through field {request.Fields[k - 1].Name}) failed after the table row was published: {why}",
                     },
-                    Math.Max(published, _cache.KnownExtentPages));
+                    Math.Max(published, _cache.KnownExtentPages),
+                    PublishedAny: true);
             }
         }
-        return new SchemaOutcome(null, accepted, extent);
+        return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
+    }
+
+    /// <summary>
+    /// Colliding SQL or ADO <c>CREATE TABLE</c> (evidence/r-q28-schema-write-open/pair-sql-Aa-aA, pair-sql-fe-FE,
+    /// pair-sql-nfc-nfd, pair-sql-ae-lig, pair-sql-sz-ss, pair-ado-Aa-aA, pair-ado-fe-FE, pair-ado-nfc-nfd,
+    /// pair-ado-ae-lig, pair-ado-sz-ss): every colliding record has the exact same <c>after-close</c> file
+    /// (SHA-256 <c>ba316904...</c>): page 0 offset 3586 <c>00 -&gt; 02</c> (two commits), page 2 (<c>MSysObjects</c>
+    /// TableDef) offsets 67 and 79 (<c>UniqueEntryCount</c> of physical indexes 0 and 1) <c>12 -&gt; 13</c> with
+    /// <c>RowCount</c> unchanged, page 3 (<c>MSysACEs</c> TableDef) offset 67 (<c>UniqueEntryCount</c> of physical
+    /// index 0) <c>12 -&gt; 13</c> with <c>RowCount</c> unchanged, and every other page untouched. Page 2 and 3 hashes
+    /// equal <c>pair-dao-Aa-aA</c> (whose pages are kept). Writes Commit 1 (catalog <c>UniqueEntryCount</c> increments,
+    /// page 0 +1) and Commit 2 (<see cref="TransactionCoordinator.PublishCounterCommit"/>, page 0 +1) without editing
+    /// page 1 or setting <see cref="PhysicalChange.ReleasedAtClose"/>, so <c>Database.Close</c> writes no third commit.
+    /// Note: the records capture <c>before-open</c> and <c>after-close</c> only, not an intermediate snapshot between
+    /// <c>Execute</c> and <c>Close</c> (mid-session commit timing stays Open).
+    /// </summary>
+    private SchemaOutcome CreateTableSqlAdoDuplicateRollback(TransactionCoordinator workspace, SchemaRefusal refused)
+    {
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(
+                new SchemaRefusal(null, "SQL/ADO CREATE TABLE with duplicate field inside BeginTrans: page-0 and catalog-count writes are not recorded"),
+                default,
+                _pageCount);
+        }
+        AcceptOutcome countsStep = workspace.AcceptSchemaChange(_cache, ObjectSemantics, CompileDuplicateCatalogCounts);
+        if (!Published(countsStep))
+        {
+            return new SchemaOutcome(null, countsStep, _pageCount);
+        }
+        (MutationOpen counterOpen, string? counterDetail) = workspace.PublishCounterCommit(_cache);
+        if (counterOpen != MutationOpen.None)
+        {
+            return new SchemaOutcome(
+                null,
+                countsStep with
+                {
+                    Open = counterOpen,
+                    Detail = $"SQL/ADO CREATE TABLE duplicate-field rollback: second page-0 commit failed after catalog counts were published: {counterDetail ?? counterOpen.ToString()}",
+                },
+                _pageCount,
+                PublishedAny: true);
+        }
+        return new SchemaOutcome(refused, countsStep, _pageCount, PublishedAny: true);
     }
 
     /// <summary>
@@ -504,9 +683,10 @@ public sealed class SchemaWriter
                     Open = dropStep.Open == MutationOpen.None && dropStep.Error is null ? MutationOpen.Publication : dropStep.Open,
                     Detail = $"DAO TableDefs.Append of {request.Name} (duplicate field 3191 rollback): drop commit failed after the 1-field table was published: {why}",
                 },
-                Math.Max(published, _cache.KnownExtentPages));
+                Math.Max(published, _cache.KnownExtentPages),
+                PublishedAny: true);
         }
-        return new SchemaOutcome(refused, dropStep, extent);
+        return new SchemaOutcome(refused, dropStep, extent, PublishedAny: true);
     }
 
     /// <summary>
@@ -539,11 +719,13 @@ public sealed class SchemaWriter
         }
         if (table.PhysicalIndexes.Count > 0 || table.LogicalIndexes.Count > 0 || table.RowCount > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a table with existing indexes or with rows (r-q11/r-q21 record the first index on an empty table)"), default, _pageCount);
+            return new SchemaRefusal(null, "CREATE INDEX on a table with existing indexes or with rows (r-q11/r-q21 record the first index on an empty table)") is var r
+                ? new SchemaOutcome(r, default, _pageCount)
+                : default;
         }
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent));
-        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount);
+        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 
     /// <summary>
@@ -575,7 +757,7 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, "DROP TABLE of a table with rows, indexes or long-value columns (r-q11 records an empty one-column table)"), default, _pageCount);
         }
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileDropTable(p, entry, table));
-        return new SchemaOutcome(null, accepted, _pageCount);
+        return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: Published(accepted));
     }
 
     /// <summary>MSysObjects as the change set names the table a catalog change writes (no rules: it has no property blob).</summary>
@@ -695,6 +877,30 @@ public sealed class SchemaWriter
             aceRows.Add(aceRow);
         }
         extent = PageAllocator.ExtentOf(_cache, extent, p.Overlay);
+        return work.Change(_cache);
+    }
+
+    /// <summary>
+    /// Compile Commit 1 of a colliding SQL or ADO <c>CREATE TABLE</c> (evidence/r-q28-schema-write-open/pair-sql-*,
+    /// pair-ado-*): increments <c>UniqueEntryCount</c> (<c>word1</c>) by 1 on <c>MSysObjects</c> (page 2, physical
+    /// indexes 0 and 1, offsets 67 and 79) and <c>MSysACEs</c> (page 3, physical index 0, offset 67) while leaving
+    /// <c>RowCount</c> and every other page untouched.
+    /// </summary>
+    private CompiledChange CompileDuplicateCatalogCounts(FileParticipant p)
+    {
+        var work = new Work(p);
+        TableDefinition objects = _catalog.ObjectTable;
+        if (SystemTable("MSysACEs", out string? acesFailure) is not { } aces)
+        {
+            return NotWritten(acesFailure);
+        }
+        int[] objectIndexes = [.. objects.PhysicalIndexes.Select(i => i.Number)];
+        int[] aceIndexes = [.. aces.PhysicalIndexes.Select(i => i.Number)];
+        if (!work.Apply(new PageEdit(objects.FirstPage, new TableDefUniqueCountsDelta(objectIndexes, _d), PageRole.Catalog))
+            || !work.Apply(new PageEdit(aces.FirstPage, new TableDefUniqueCountsDelta(aceIndexes, _d), PageRole.Catalog)))
+        {
+            return work.NotWritten();
+        }
         return work.Change(_cache);
     }
 
@@ -914,62 +1120,27 @@ public sealed class SchemaWriter
             else if (oldPlan is null or { Form: LongValueForm.Inline })
             {
                 // First external LvProp commit for this table (dao-fields-2-p6, dao-name-8-p6, dao-first8-2fields).
-                // Reuse an existing free MSysObjects.LvProp LVAL page if exactly one has room; otherwise allocate a new page.
-                IReadOnlyList<uint>? freePages = UsageMaps.Pages(source, _d, lvMaps.FreeMap, PageAllocator.ExtentOf(_cache, currentExtent, p.Overlay), out TraversalFailure? freeMapFailure);
-                if (freePages is null)
+                // CheckDaoLvPropPlan already verified MSysObjects.LvProp's free map is empty before Commit 1 so no
+                // write is published and then refused; allocate a fresh LVAL page and add it to the owned and free maps.
+                // Follow-up: organizer task to merge SchemaWriter's MSysObjects.LvProp LVAL writer with RowWriter's
+                // PlaceExternalLongValue / RemoveLongValue once single-page retirement is unified across both.
+                if (work.Allocate(allocator) is not { } newPage)
                 {
-                    return NotWritten($"MSysObjects.LvProp free map cannot be read: {freeMapFailure?.Predicate}");
+                    return work.NotWritten();
                 }
-                List<uint> candidates = [];
-                foreach (uint candidate in freePages)
+                byte[] newLvalBytes = new byte[_d.PageSize];
+                DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
+                if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
                 {
-                    using PagePin? cPin = source.Pin(candidate).Pin;
-                    if (cPin is not null && DataPages.IsLvalPage(cPin.Bytes, _d)
-                        && (int)_d.DataPage.FreeCount.Read(cPin.Bytes) >= needed
-                        && (int)_d.DataPage.RowCount.Read(cPin.Bytes) < _d.DataPage.WriterSlotLimit)
-                    {
-                        candidates.Add(candidate);
-                    }
+                    return NotWritten($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
                 }
-                if (candidates.Count > 1)
+                if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
+                    || !ApplyMapBit(work, p.Overlay, lvMaps.OwnedMap, newPage, member: true, out _)
+                    || !ApplyMapBit(work, p.Overlay, lvMaps.FreeMap, newPage, member: true, out _))
                 {
-                    return NotWritten($"{candidates.Count} MSysObjects.LvProp free-map pages have room: multi-page free-map choice is not recorded");
+                    return work.NotWritten();
                 }
-                if (candidates.Count == 1)
-                {
-                    uint targetPage = candidates[0];
-                    using PagePin? tPin = source.Pin(targetPage).Pin;
-                    if (tPin is null)
-                    {
-                        return NotWritten($"MSysObjects.LvProp LVAL page {targetPage} could not be pinned");
-                    }
-                    byte newSlot = (byte)_d.DataPage.RowCount.Read(tPin.Bytes);
-                    if (!work.Apply(new PageEdit(targetPage, new LvalAppendDelta(blob, newSlot, _d), PageRole.Data)))
-                    {
-                        return work.NotWritten();
-                    }
-                    newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(targetPage, newSlot), 0);
-                }
-                else
-                {
-                    if (work.Allocate(allocator) is not { } newPage)
-                    {
-                        return work.NotWritten();
-                    }
-                    byte[] newLvalBytes = new byte[_d.PageSize];
-                    DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
-                    if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
-                    {
-                        return NotWritten($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
-                    }
-                    if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.OwnedMap, newPage, member: true, out _)
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.FreeMap, newPage, member: true, out _))
-                    {
-                        return work.NotWritten();
-                    }
-                    newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
-                }
+                newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
             }
             else
             {
@@ -1305,10 +1476,15 @@ public sealed class SchemaWriter
     /// </summary>
     private TableDefSpec WithIndex(TableDefSpec spec, NewIndex index, RowLocator map, uint leaf)
     {
+        string[] specNames = [.. spec.Columns.Select(c => c.Name)];
         List<IndexColumn> keyCols = [];
         for (int i = 0; i < index.Fields.Count; i++)
         {
-            ColumnSpec column = spec.Columns.Single(c => string.Equals(c.Name, index.Fields[i], StringComparison.OrdinalIgnoreCase));
+            if (!TryMatchFieldName(index.Fields[i], specNames, out int idx, out string? undecided) || idx < 0)
+            {
+                throw new InvalidOperationException(undecided ?? $"Unchecked index field {index.Fields[i]}.");
+            }
+            ColumnSpec column = spec.Columns[idx];
             bool desc = index.Descending is not null && index.Descending[i];
             keyCols.Add(new IndexColumn(column.PhysicalNumber, !desc, desc ? DescendingColumnFlags : AscendingColumnFlags));
         }
@@ -1327,7 +1503,7 @@ public sealed class SchemaWriter
     /// Validate an index against the recorded shapes (r-q11, r-q21-ddl-types): valid name, 1–2 distinct Long or Text
     /// columns, recorded option combinations (no WITH PRIMARY + DISALLOW/IGNORE NULL, no DISALLOW NULL + IGNORE NULL).
     /// </summary>
-    private static SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, byte TypeCode)> fields, bool allowText)
+    private SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, byte TypeCode)> fields, bool allowText)
     {
         if (!IsValidName(index.Name))
         {
@@ -1349,25 +1525,58 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"index {index.Name} Descending length {index.Descending.Count} does not match Fields length {index.Fields.Count}");
         }
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        string[] fieldNames = [.. fields.Select(f => f.Name)];
+        List<string> seen = [];
         foreach (string fieldName in index.Fields)
         {
-            if (!seen.Add(fieldName))
+            if (!TryMatchFieldName(fieldName, seen, out int seenIdx, out string? dupUndecided))
+            {
+                return new SchemaRefusal(null, dupUndecided);
+            }
+            if (seenIdx >= 0)
             {
                 return new SchemaRefusal(null, $"index {index.Name} repeats field {fieldName}");
             }
-            (string Name, byte TypeCode)[] matches = [.. fields.Where(f => string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase))];
-            if (matches.Length != 1)
+            seen.Add(fieldName);
+            if (!TryMatchFieldName(fieldName, fieldNames, out int matchedIdx, out string? lookupUndecided))
+            {
+                return new SchemaRefusal(null, lookupUndecided);
+            }
+            if (matchedIdx < 0)
             {
                 return new SchemaRefusal(null, $"index {index.Name} names field {fieldName}, which the table does not have once (ACE's refusal is not recorded)");
             }
-            byte tc = matches[0].TypeCode;
+            byte tc = fields[matchedIdx].TypeCode;
             if (tc != NativeTypes.Long && !(allowText && tc == NativeTypes.Text))
             {
                 return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} of native type 0x{tc:X2} (r-q11/r-q21 record Long{(allowText ? " and Text" : "")} keys)");
             }
         }
         return null;
+    }
+
+    private bool TryMatchFieldName(string candidate, IReadOnlyList<string> available, out int matchedIndex, out string? undecided)
+    {
+        matchedIndex = -1;
+        undecided = null;
+        for (int i = 0; i < available.Count; i++)
+        {
+            switch (FieldNameLookupClashOf(available[i], candidate, _sortOrder, out string? why))
+            {
+                case FieldNameClash.Undecided:
+                    undecided = why;
+                    return false;
+                case FieldNameClash.Duplicate:
+                    if (matchedIndex >= 0)
+                    {
+                        undecided = $"field name '{candidate}' matches multiple columns ({available[matchedIndex]} and {available[i]})";
+                        return false;
+                    }
+                    matchedIndex = i;
+                    break;
+            }
+        }
+        return true;
     }
 
     private byte[] EmptyLeaf(uint owner)
@@ -1398,14 +1607,50 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
+    /// Field-name comparison for routes beyond <c>CREATE TABLE</c> column lists (constraints, <c>CREATE INDEX</c>,
+    /// <c>ALTER TABLE</c>, <see cref="IndexRefusal"/>), where no <c>pair-*</c> record establishes whether ACE uses
+    /// General (<c>1033/0</c>) or ordinal case-insensitive comparison: returns <see cref="FieldNameClash.Duplicate"/>
+    /// or <see cref="FieldNameClash.None"/> only when <c>FormC + OrdinalIgnoreCase</c> and
+    /// <see cref="FieldNameClashOf"/> agree, and <see cref="FieldNameClash.Undecided"/> by name whenever
+    /// <see cref="FieldNameClashOf"/> is undecided or the two comparisons disagree.
+    /// </summary>
+    public static FieldNameClash FieldNameLookupClashOf(
+        string existing,
+        string candidate,
+        TextSortOrder? sortOrder,
+        out string? undecided)
+    {
+        FieldNameClash general = FieldNameClashOf([existing], candidate, sortOrder, out undecided);
+        if (general == FieldNameClash.Undecided)
+        {
+            return FieldNameClash.Undecided;
+        }
+        bool ordinalCi = string.Equals(
+            existing.Normalize(System.Text.NormalizationForm.FormC),
+            candidate.Normalize(System.Text.NormalizationForm.FormC),
+            StringComparison.OrdinalIgnoreCase);
+        bool generalMatch = general == FieldNameClash.Duplicate;
+        if (ordinalCi != generalMatch)
+        {
+            undecided = $"field name '{candidate}' against '{existing}': FormC/OrdinalIgnoreCase and General (1033/0) sort order disagree (no record covers this route beyond CREATE TABLE)";
+            return FieldNameClash.Undecided;
+        }
+        return generalMatch ? FieldNameClash.Duplicate : FieldNameClash.None;
+    }
+
+    /// <summary>
     /// The one field-name rule of a new table (R-CAT-1 CAT-B; evidence/r-q28-schema-write-open/pair-*), for the SQL
     /// binder and this writer alike: compares <paramref name="name"/> with the <paramref name="earlier"/> fields using
-    /// the engine's General sort-order comparison (<see cref="TextOrder.Compare"/> with <see cref="SortDescriptors.For"/>).
-    /// Under General (<c>1033/0</c> or <c>1033/1</c>): exact, ASCII-case (<c>Aa/aA</c>), non-ASCII case (<c>Fé/FÉ</c>),
-    /// canonical NFC/NFD (<c>Fé/Fe&#x301;</c>), and General ligature/expansion pairs (<c>æ/ae</c>, <c>ß/ss</c>) collide as
-    /// <see cref="FieldNameClash.Duplicate"/>; <c>e/é</c>, <c>Tä/Té</c>, and <c>o/ø</c> stay distinct
-    /// (<see cref="FieldNameClash.None"/>). Pairs no record decides stay <see cref="FieldNameClash.Undecided"/> by name:
-    /// non-General sort orders, full/half-width or hiragana/katakana pairs, and trailing-space differences.
+    /// the engine's General Legacy (<c>1033/0</c>) sort-order comparison (<see cref="TextOrder.Compare"/> with
+    /// <see cref="SortDescriptors.For"/>). Under <c>1033/0</c>: exact, ASCII-case (<c>Aa/aA</c>), non-ASCII case
+    /// (<c>Fé/FÉ</c>), canonical NFC/NFD (<c>Fé/Fe&#x301;</c>), and General ligature/expansion pairs (<c>æ/ae</c>,
+    /// <c>ß/ss</c>) collide as <see cref="FieldNameClash.Duplicate"/>; <c>e/é</c>, <c>Tä/Té</c>, and <c>o/ø</c> stay
+    /// distinct (<see cref="FieldNameClash.None"/>). Pairs no record decides stay <see cref="FieldNameClash.Undecided"/>
+    /// by name: sort orders other than <c>1033/0</c> (including <c>1033/1</c>), code points whose General key is empty
+    /// (ignored characters and surrogates), pairs where <c>FormC + OrdinalIgnoreCase</c> and General (<c>1033/0</c>)
+    /// disagree (such as <c>ƒ/Ƒ</c> and <c>µ/Μ</c>), full/half-width or hiragana/katakana pairs, trailing-space
+    /// differences, two distinct diacritics on the same base (<c>ä/á</c>), and non-Latin-1 same-length letter pairs
+    /// (<c>d/đ</c>).
     /// </summary>
     public static FieldNameClash FieldNameClashOf(
         IEnumerable<string> earlier,
@@ -1414,8 +1659,8 @@ public sealed class SchemaWriter
         out string? undecided)
     {
         undecided = null;
-        bool isGeneral = sortOrder is { Identifier: TextSortOrder.GeneralIdentifier, Reserved: 0, Version: 0 or 1 };
-        SortDescriptor? sort = isGeneral ? SortDescriptors.For(sortOrder!.Value, out _) : null;
+        bool isGeneralLegacy = sortOrder is { Identifier: TextSortOrder.GeneralIdentifier, Reserved: 0, Version: 0 };
+        SortDescriptor? sort = isGeneralLegacy ? SortDescriptors.For(sortOrder!.Value, out _) : null;
         if (sort is null)
         {
             string? firstEarlier = null;
@@ -1431,17 +1676,30 @@ public sealed class SchemaWriter
             {
                 return FieldNameClash.None;
             }
-            undecided = $"fields {firstEarlier} and {name} under sort order {sortOrder?.ToString() ?? "unknown"}: field-name comparison is recorded for General sort order only (evidence/r-q28-schema-write-open/pair-*)";
+            undecided = $"fields {firstEarlier} and {name} under sort order {sortOrder?.ToString() ?? "unknown"}: field-name comparison is recorded for General Legacy sort order (1033/0) only (evidence/r-q28-schema-write-open/pair-*)";
             return FieldNameClash.Undecided;
         }
 
         string? possible = null;
         string? possibleReason = null;
+        bool nameHasEmptyKey = HasEmptyGeneralKeyChar(sort, name);
+        string nameFormC = name.Normalize(System.Text.NormalizationForm.FormC);
+        bool nameIsAscii = IsAsciiOnly(name);
+        bool nameHasNonLatin1 = HasNonLatin1(nameFormC);
         foreach (string e in earlier)
         {
             if (string.Equals(e, name, StringComparison.Ordinal))
             {
                 return FieldNameClash.Duplicate;
+            }
+            if (nameHasEmptyKey || HasEmptyGeneralKeyChar(sort, e))
+            {
+                if (possible is null)
+                {
+                    possible = e;
+                    possibleReason = "code point with empty General (1033/0) sort key or surrogate: whether ACE ignores or distinguishes it in field names is not recorded (evidence/r-q28-schema-write-open/pair-* Open)";
+                }
+                continue;
             }
             if ((HasWidthOrKana(e) || HasWidthOrKana(name))
                 && TextOrder.Compare(sort, FoldWidthAndKana(e), FoldWidthAndKana(name)) == 0)
@@ -1453,7 +1711,19 @@ public sealed class SchemaWriter
                 }
                 continue;
             }
-            if (TextOrder.Compare(sort, e, name) == 0)
+            string eFormC = e.Normalize(System.Text.NormalizationForm.FormC);
+            bool generalEqual = TextOrder.Compare(sort, e, name) == 0;
+            bool ordinalCiEqual = string.Equals(eFormC, nameFormC, StringComparison.OrdinalIgnoreCase);
+            if (ordinalCiEqual && !generalEqual)
+            {
+                if (possible is null)
+                {
+                    possible = e;
+                    possibleReason = "ordinal case-insensitive and General (1033/0) sort order disagree: whether ACE takes them for one field name is not recorded (evidence/r-q28-schema-write-open/pair-* Open)";
+                }
+                continue;
+            }
+            if (generalEqual)
             {
                 if (TrailingSpaces(e) != TrailingSpaces(name))
                 {
@@ -1466,6 +1736,26 @@ public sealed class SchemaWriter
                 }
                 return FieldNameClash.Duplicate;
             }
+            if (!nameIsAscii && !IsAsciiOnly(e)
+                && string.Equals(StripNonSpacingMarks(e), StripNonSpacingMarks(name), StringComparison.OrdinalIgnoreCase))
+            {
+                if (possible is null)
+                {
+                    possible = e;
+                    possibleReason = "two distinct diacritic forms of the same base letter: whether ACE takes them for one field name is not recorded (evidence/r-q28-schema-write-open/pair-* Open)";
+                }
+                continue;
+            }
+            if ((nameHasNonLatin1 || HasNonLatin1(eFormC))
+                && SameLengthMatchingAsciiPositions(eFormC, nameFormC))
+            {
+                if (possible is null)
+                {
+                    possible = e;
+                    possibleReason = "non-Latin-1 letter pair: only Latin-1 distinct pairs (e/é, Tä/Té, o/ø) are recorded (evidence/r-q28-schema-write-open/pair-* Open)";
+                }
+                continue;
+            }
         }
         if (possible is null)
         {
@@ -1473,6 +1763,75 @@ public sealed class SchemaWriter
         }
         undecided = $"fields {possible} and {name}: {possibleReason}";
         return FieldNameClash.Undecided;
+    }
+
+    private static bool HasEmptyGeneralKeyChar(SortDescriptor sort, string value)
+    {
+        foreach (char ch in value)
+        {
+            if (char.IsSurrogate(ch) || sort.ClassOf(ch) == TextRecordClass.Ignored)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsAsciiOnly(string value)
+    {
+        foreach (char ch in value)
+        {
+            if (!char.IsAscii(ch))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool HasNonLatin1(string value)
+    {
+        foreach (char ch in value)
+        {
+            if (ch > '\u00FF')
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool SameLengthMatchingAsciiPositions(string ca, string cb)
+    {
+        if (ca.Length != cb.Length)
+        {
+            return false;
+        }
+        for (int i = 0; i < ca.Length; i++)
+        {
+            char x = ca[i];
+            char y = cb[i];
+            if (char.IsAscii(x) && char.IsAscii(y) && x != y
+                && !(char.IsAsciiLetter(x) && char.IsAsciiLetter(y) && (x | 0x20) == (y | 0x20)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static string StripNonSpacingMarks(string value)
+    {
+        string decomposed = value.Normalize(System.Text.NormalizationForm.FormD);
+        System.Text.StringBuilder sb = new(decomposed.Length);
+        foreach (char ch in decomposed)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(ch);
+            }
+        }
+        return sb.ToString();
     }
 
     private static bool HasWidthOrKana(string value)
@@ -1561,6 +1920,22 @@ public sealed class SchemaWriter
 
     private SameWidthWriter Writer(TableDefinition table, ulong? extent = null) =>
         new(new TableFootprints(_cache, _d, table, extent ?? _pageCount));
+
+    /// <summary>
+    /// Increment <c>UniqueEntryCount</c> (<c>word1</c>) on the named physical indexes of a TableDef page while leaving
+    /// <c>RowCount</c> unchanged (<see cref="TableDefUpdater.TryUpdateCounts"/>; evidence/r-q28-schema-write-open/pair-sql-*,
+    /// pair-ado-*).
+    /// </summary>
+    private sealed class TableDefUniqueCountsDelta(int[] physicalIndexes, FormatDescriptor d) : IPageDelta
+    {
+        public void Apply(Span<byte> decodedPage)
+        {
+            if (!TableDefUpdater.TryUpdateCounts(decodedPage, rowCountDelta: 0, autoNumberFloor: null, physicalIndexes, d, out string? failure))
+            {
+                throw new FormatViolationException($"TableDef UniqueEntryCount update: {failure}");
+            }
+        }
+    }
 
     /// <summary>
     /// Delete the last live slot of an LVAL page and mark the emptied page released (<c>0x01 -&gt; 0x09</c>,

@@ -106,9 +106,42 @@ public static class DdlBinder
     private static TextSortOrder? ParseGeneralSortOrder(string? identity) => identity switch
     {
         "1033/0" => new TextSortOrder(TextSortOrder.GeneralIdentifier, 0, 0),
-        "1033/1" => new TextSortOrder(TextSortOrder.GeneralIdentifier, 0, 1),
         _ => null,
     };
+
+    /// <summary>
+    /// Resolve <paramref name="candidate"/> against <paramref name="available"/> using
+    /// <see cref="SchemaWriter.FieldNameLookupClashOf"/> (requiring <c>FormC + OrdinalIgnoreCase</c> and General
+    /// <c>1033/0</c> to agree, refusing by name whenever undecided or they disagree).
+    /// </summary>
+    private static bool TryResolveFieldName(
+        string candidate,
+        IReadOnlyList<string> available,
+        TextSortOrder? sortOrder,
+        out int matchedIndex,
+        out SqlFailure? undecided)
+    {
+        matchedIndex = -1;
+        undecided = null;
+        for (int i = 0; i < available.Count; i++)
+        {
+            switch (SchemaWriter.FieldNameLookupClashOf(available[i], candidate, sortOrder, out string? why))
+            {
+                case FieldNameClash.Undecided:
+                    undecided = BindOpen("NotModelled.DdlFieldNamePair", why!);
+                    return false;
+                case FieldNameClash.Duplicate:
+                    if (matchedIndex >= 0)
+                    {
+                        undecided = BindOpen("NotModelled.DdlFieldNamePair", $"field name '{candidate}' matches multiple columns ({available[matchedIndex]} and {available[i]})");
+                        return false;
+                    }
+                    matchedIndex = i;
+                    break;
+            }
+        }
+        return true;
+    }
 
     /// <summary>Parse and bind a SQL DDL statement against <paramref name="database"/>.</summary>
     public static BoundDdl? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
@@ -168,7 +201,8 @@ public static class DdlBinder
             return Fail(BindAce(3190, SqlMessages.TooManyFields), out failure);
         }
 
-        var colByKey = new Dictionary<string, DdlColumnDef>(StringComparer.OrdinalIgnoreCase);
+        var columns = new List<DdlColumnDef>(stmt.Columns.Count);
+        var colNames = new List<string>(stmt.Columns.Count);
         int counterCount = 0;
         bool hasPrimaryKey = false;
         int totalIndexes = 0;
@@ -187,14 +221,15 @@ public static class DdlBinder
             // The one field-name rule (SchemaWriter.FieldNameClashOf): r-def-expr-sql/ddl-column-clauses Cc20/Cc21 and
             // r-q28-schema-write-open/pair-sql-* -> 3380 using the duplicate column's spelling; a pair no record decides
             // is refused by name.
-            switch (SchemaWriter.FieldNameClashOf(colByKey.Values.Select(c => c.Name), col.Name, sortOrder, out string? undecided))
+            switch (SchemaWriter.FieldNameClashOf(colNames, col.Name, sortOrder, out string? undecided))
             {
                 case FieldNameClash.Duplicate:
                     return Fail(BindAce(3380, SqlMessages.FieldAlreadyExists(col.Name, stmt.TableName)), out failure);
                 case FieldNameClash.Undecided:
                     return Fail(BindOpen("NotModelled.DdlFieldNamePair", undecided!), out failure);
             }
-            colByKey.Add(NameKey(col.Name), col);
+            columns.Add(col);
+            colNames.Add(col.Name);
             if (ValidateDataType(col.Name, col.DataType, ref counterCount) is { } typeErr)
             {
                 return Fail(typeErr, out failure);
@@ -247,15 +282,23 @@ public static class DdlBinder
             {
                 return Fail(BindAce(3277, SqlMessages.TooManyIndexFields), out failure);
             }
-            var seenCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenCols = new List<string>(tc.Columns.Count);
             foreach (string c in tc.Columns)
             {
-                string ck = NameKey(c);
-                if (!seenCols.Add(ck))
+                if (!TryResolveFieldName(c, seenCols, sortOrder, out int seenIdx, out SqlFailure? dupUndecided))
+                {
+                    return Fail(dupUndecided!, out failure);
+                }
+                if (seenIdx >= 0)
                 {
                     return Fail(BindAce(3285, SqlMessages.InvalidIndexDefinition), out failure);
                 }
-                if (!colByKey.TryGetValue(ck, out DdlColumnDef? colDef) || colDef.DataType.Kind == DdlTypeKind.LongBinary)
+                seenCols.Add(c);
+                if (!TryResolveFieldName(c, colNames, sortOrder, out int colIdx, out SqlFailure? lookupUndecided))
+                {
+                    return Fail(lookupUndecided!, out failure);
+                }
+                if (colIdx < 0 || columns[colIdx].DataType.Kind == DdlTypeKind.LongBinary)
                 {
                     return Fail(BindAce(3409, SqlMessages.InvalidIndexOrRelationField(c)), out failure);
                 }
@@ -278,7 +321,7 @@ public static class DdlBinder
         // Validate foreign keys now that all columns and self-table PK/UNIQUE constraints are known (supports self-FK Fx6).
         foreach ((DdlColumnDef col, DdlColumnConstraint fk) in deferredInlineFks)
         {
-            if (ValidateForeignKey(database, stmt.TableName, colByKey, primaryKeys, uniqueConstraints, [col.Name], fk.RefTable!, fk.RefColumns) is { } fkErr)
+            if (ValidateForeignKey(database, sortOrder, stmt.TableName, columns, primaryKeys, uniqueConstraints, [col.Name], fk.RefTable!, fk.RefColumns) is { } fkErr)
             {
                 return Fail(fkErr, out failure);
             }
@@ -287,7 +330,7 @@ public static class DdlBinder
         {
             if (tc.Kind == DdlConstraintKind.ForeignKey)
             {
-                if (ValidateForeignKey(database, stmt.TableName, colByKey, primaryKeys, uniqueConstraints, tc.Columns, tc.RefTable!, tc.RefColumns) is { } fkErr)
+                if (ValidateForeignKey(database, sortOrder, stmt.TableName, columns, primaryKeys, uniqueConstraints, tc.Columns, tc.RefTable!, tc.RefColumns) is { } fkErr)
                 {
                     return Fail(fkErr, out failure);
                 }
@@ -439,7 +482,11 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", "multi-column PRIMARY KEY is not modelled in SchemaWriter"), out failure);
             }
-            DdlColumnDef pkCol = colByKey[NameKey(pkCols[0])];
+            if (!TryResolveFieldName(pkCols[0], colNames, sortOrder, out int pkIdx, out SqlFailure? pkUndecided) || pkIdx < 0)
+            {
+                return Fail(pkUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(pkCols[0])), out failure);
+            }
+            DdlColumnDef pkCol = columns[pkIdx];
             if (pkCol.DataType.Kind != DdlTypeKind.Long)
             {
                 return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY on {pkCol.DataType.Kind} column '{pkCol.Name}' is not modelled in SchemaWriter"), out failure);
@@ -482,8 +529,9 @@ public static class DdlBinder
 
     private static SqlFailure? ValidateForeignKey(
         ISqlDatabase database,
+        TextSortOrder? sortOrder,
         string? creatingTable,
-        Dictionary<string, DdlColumnDef>? creatingCols,
+        IReadOnlyList<DdlColumnDef>? creatingCols,
         List<(string? Name, IReadOnlyList<string> Columns)>? creatingPks,
         List<(string? Name, IReadOnlyList<string> Columns)>? creatingUqs,
         IReadOnlyList<string> fkColumns,
@@ -491,6 +539,7 @@ public static class DdlBinder
         IReadOnlyList<string>? refColumns,
         TableDefinition? alterSourceTable = null)
     {
+        IReadOnlyList<string>? creatingColNames = creatingCols is null ? null : [.. creatingCols.Select(c => c.Name)];
         bool selfRef = creatingTable is not null && NamesEqual(creatingTable, refTableName);
         if (selfRef)
         {
@@ -508,7 +557,11 @@ public static class DdlBinder
                 targetCols = refColumns;
                 foreach (string rc in targetCols)
                 {
-                    if (!creatingCols!.ContainsKey(NameKey(rc)))
+                    if (!TryResolveFieldName(rc, creatingColNames!, sortOrder, out int rcIdx, out SqlFailure? rcUndecided))
+                    {
+                        return rcUndecided;
+                    }
+                    if (rcIdx < 0)
                     {
                         return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(rc));
                     }
@@ -520,15 +573,38 @@ public static class DdlBinder
             }
             for (int i = 0; i < fkColumns.Count; i++)
             {
-                byte fkType = DdlTypeToNativeType(creatingCols![NameKey(fkColumns[i])].DataType.Kind);
-                byte pkType = DdlTypeToNativeType(creatingCols![NameKey(targetCols[i])].DataType.Kind);
+                if (!TryResolveFieldName(fkColumns[i], creatingColNames!, sortOrder, out int fkIdx, out SqlFailure? fkUndecided))
+                {
+                    return fkUndecided;
+                }
+                if (fkIdx < 0)
+                {
+                    return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(fkColumns[i]));
+                }
+                if (!TryResolveFieldName(targetCols[i], creatingColNames!, sortOrder, out int pkIdx, out SqlFailure? pkUndecided))
+                {
+                    return pkUndecided;
+                }
+                if (pkIdx < 0)
+                {
+                    return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(targetCols[i]));
+                }
+                byte fkType = DdlTypeToNativeType(creatingCols![fkIdx].DataType.Kind);
+                byte pkType = DdlTypeToNativeType(creatingCols![pkIdx].DataType.Kind);
                 if (fkType != pkType)
                 {
                     return BindOpen("NotModelled.DdlForeignKeyTypeMismatch", "foreign key column type mismatch in SQL DDL (3368 is recorded only for DAO CreateRelation and SQL column-count mismatch)");
                 }
             }
-            bool hasUnique = MatchesConstraint(creatingPks, targetCols) || MatchesConstraint(creatingUqs, targetCols);
-            if (!hasUnique)
+            if (!TryMatchesConstraint(creatingPks, targetCols, sortOrder, out bool matchesPk, out SqlFailure? pkMatchUndecided))
+            {
+                return pkMatchUndecided;
+            }
+            if (!TryMatchesConstraint(creatingUqs, targetCols, sortOrder, out bool matchesUq, out SqlFailure? uqMatchUndecided))
+            {
+                return uqMatchUndecided;
+            }
+            if (!matchesPk && !matchesUq)
             {
                 return BindAce(3609, SqlMessages.NoUniqueReferencedIndex);
             }
@@ -564,16 +640,20 @@ public static class DdlBinder
         }
         else
         {
+            IReadOnlyList<string> refColNames = [.. refTable.Columns.Select(col => col.Name)];
             targetDescriptors = new List<ColumnDescriptor>(refColumns.Count);
             foreach (string rc in refColumns)
             {
-                ColumnDescriptor? c = refTable.Columns.FirstOrDefault(col => NamesEqual(col.Name, rc));
-                if (c is null)
+                if (!TryResolveFieldName(rc, refColNames, sortOrder, out int rcIdx, out SqlFailure? rcUndecided))
+                {
+                    return rcUndecided;
+                }
+                if (rcIdx < 0)
                 {
                     // r-def-expr-sql/ddl-fk-actions: Fx4 REFERENCES Fp1 (Nope) -> 3409.
                     return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(rc));
                 }
-                targetDescriptors.Add(c);
+                targetDescriptors.Add(refTable.Columns[rcIdx]);
             }
         }
 
@@ -582,16 +662,33 @@ public static class DdlBinder
             // r-def-expr-sql/ddl-fk-actions: Fx2, Fx8 -> 3368.
             return BindAce(3368, SqlMessages.RelationshipColumnMismatch);
         }
+        IReadOnlyList<string>? alterColNames = alterSourceTable is null ? null : [.. alterSourceTable.Columns.Select(c => c.Name)];
         for (int i = 0; i < fkColumns.Count; i++)
         {
             byte fkType;
-            if (creatingCols is not null && creatingCols.TryGetValue(NameKey(fkColumns[i]), out DdlColumnDef? newCol))
+            int foundCreating = -1;
+            if (creatingColNames is not null)
             {
-                fkType = DdlTypeToNativeType(newCol.DataType.Kind);
+                if (!TryResolveFieldName(fkColumns[i], creatingColNames, sortOrder, out foundCreating, out SqlFailure? fkUndecided))
+                {
+                    return fkUndecided;
+                }
             }
-            else if (alterSourceTable is not null && alterSourceTable.Columns.FirstOrDefault(c => NamesEqual(c.Name, fkColumns[i])) is { } existingCol)
+            if (foundCreating >= 0)
             {
-                fkType = existingCol.TypeCode;
+                fkType = DdlTypeToNativeType(creatingCols![foundCreating].DataType.Kind);
+            }
+            else if (alterColNames is not null)
+            {
+                if (!TryResolveFieldName(fkColumns[i], alterColNames, sortOrder, out int foundExisting, out SqlFailure? fkUndecided))
+                {
+                    return fkUndecided;
+                }
+                if (foundExisting < 0)
+                {
+                    return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(fkColumns[i]));
+                }
+                fkType = alterSourceTable!.Columns[foundExisting].TypeCode;
             }
             else
             {
@@ -615,20 +712,49 @@ public static class DdlBinder
         return null;
     }
 
-    private static bool MatchesConstraint(List<(string? Name, IReadOnlyList<string> Columns)>? list, IReadOnlyList<string> cols)
+    private static bool TryMatchesConstraint(
+        List<(string? Name, IReadOnlyList<string> Columns)>? list,
+        IReadOnlyList<string> cols,
+        TextSortOrder? sortOrder,
+        out bool matched,
+        out SqlFailure? undecided)
     {
+        matched = false;
+        undecided = null;
         if (list is null)
         {
-            return false;
+            return true;
         }
         foreach ((_, IReadOnlyList<string> c) in list)
         {
-            if (c.Count == cols.Count && Enumerable.Range(0, cols.Count).All(i => NamesEqual(c[i], cols[i])))
+            if (c.Count != cols.Count)
             {
+                continue;
+            }
+            bool allMatch = true;
+            for (int i = 0; i < cols.Count; i++)
+            {
+                switch (SchemaWriter.FieldNameLookupClashOf(c[i], cols[i], sortOrder, out string? why))
+                {
+                    case FieldNameClash.Undecided:
+                        undecided = BindOpen("NotModelled.DdlFieldNamePair", why!);
+                        return false;
+                    case FieldNameClash.None:
+                        allMatch = false;
+                        break;
+                }
+                if (!allMatch)
+                {
+                    break;
+                }
+            }
+            if (allMatch)
+            {
+                matched = true;
                 return true;
             }
         }
-        return false;
+        return true;
     }
 
     private static byte DdlTypeToNativeType(DdlTypeKind kind) => kind switch
@@ -676,12 +802,15 @@ public static class DdlBinder
             return Fail(BindAce(3371, SqlMessages.CannotFindTableOrConstraint), out failure);
         }
 
-        SqlFailure? indexErr = ValidateCreateIndexBody(stmt, table, out List<ColumnDescriptor>? boundCols);
+        TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
+        SqlFailure? indexErr = ValidateCreateIndexBody(stmt, table, sortOrder, out List<ColumnDescriptor>? boundCols);
         if (inUse)
         {
             if (indexErr is not null)
             {
-                return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", $"held table '{stmt.TableName}' meets another CREATE INDEX error ({indexErr.Number})"), out failure);
+                return Fail(indexErr.IsNotModelled
+                    ? indexErr
+                    : BindOpen("NotModelled.DdlTableInUsePrecedence", $"held table '{stmt.TableName}' meets another CREATE INDEX error ({indexErr.Number})"), out failure);
             }
             // Recorded: CREATE UNIQUE INDEX on a held table fails 3211 before runtime duplicate-row 3022.
             return Fail(BindAce(3211, SqlMessages.TableInUse(stmt.TableName)), out failure);
@@ -728,7 +857,11 @@ public static class DdlBinder
             CreateIndex: new CreateIndexRequest(stmt.TableName, newIndex, SchemaRoute.Sql));
     }
 
-    private static SqlFailure? ValidateCreateIndexBody(CreateIndexStatement stmt, TableDefinition table, out List<ColumnDescriptor>? boundCols)
+    private static SqlFailure? ValidateCreateIndexBody(
+        CreateIndexStatement stmt,
+        TableDefinition table,
+        TextSortOrder? sortOrder,
+        out List<ColumnDescriptor>? boundCols)
     {
         boundCols = null;
         if (stmt.Columns.Count > 10)
@@ -748,23 +881,31 @@ public static class DdlBinder
             return BindAce(3283, SqlMessages.PrimaryKeyAlreadyExists);
         }
 
-        var seenCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<string> tableColNames = [.. table.Columns.Select(c => c.Name)];
+        var seenCols = new List<string>(stmt.Columns.Count);
         var cols = new List<ColumnDescriptor>(stmt.Columns.Count);
         foreach (DdlIndexColumn ic in stmt.Columns)
         {
-            string ck = NameKey(ic.Name);
-            if (!seenCols.Add(ck))
+            if (!TryResolveFieldName(ic.Name, seenCols, sortOrder, out int seenIdx, out SqlFailure? dupUndecided))
+            {
+                return dupUndecided;
+            }
+            if (seenIdx >= 0)
             {
                 // r-def-expr-sql/ddl-index-forms: ixg ON Dm (N, N) -> 3285.
                 return BindAce(3285, SqlMessages.InvalidIndexDefinition);
             }
-            ColumnDescriptor? col = table.Columns.FirstOrDefault(c => NamesEqual(c.Name, ic.Name));
-            if (col is null || col.TypeCode == NativeTypes.Ole)
+            seenCols.Add(ic.Name);
+            if (!TryResolveFieldName(ic.Name, tableColNames, sortOrder, out int colIdx, out SqlFailure? lookupUndecided))
+            {
+                return lookupUndecided;
+            }
+            if (colIdx < 0 || table.Columns[colIdx].TypeCode == NativeTypes.Ole)
             {
                 // r-def-expr-sql/ddl-index-forms (ix8), r-q-cursor-dao/index-nonindexable-types -> 3409.
                 return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(ic.Name));
             }
-            cols.Add(col);
+            cols.Add(table.Columns[colIdx]);
         }
 
         if (table.LogicalIndexes.Count >= 32)
@@ -889,12 +1030,15 @@ public static class DdlBinder
 
     private static SqlFailure ValidateAlterAction(AlterTableStatement stmt, TableDefinition table, ISqlDatabase database)
     {
+        TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
+        IReadOnlyList<string> tableColNames = [.. table.Columns.Select(c => c.Name)];
         switch (stmt.Action)
         {
             case AddColumnsAlterAction addCols:
             {
                 int counterCount = table.Columns.Count(c => c.IsAutoNumber);
-                var addedKeys = new Dictionary<string, DdlColumnDef>(StringComparer.OrdinalIgnoreCase);
+                var addedCols = new List<DdlColumnDef>(addCols.Columns.Count);
+                var addedColNames = new List<string>(addCols.Columns.Count);
                 bool hasPk = table.LogicalIndexes.Any(li => li.IndexType == D.IndexDescriptor.PrimaryKeyType);
                 foreach (DdlColumnDef col in addCols.Columns)
                 {
@@ -902,12 +1046,21 @@ public static class DdlBinder
                     {
                         return BindAce(3125, SqlMessages.InvalidObjectName(col.Name));
                     }
-                    string ck = NameKey(col.Name);
-                    if (table.Columns.Any(c => NamesEqual(c.Name, col.Name)) || !addedKeys.TryAdd(ck, col))
+                    if (!TryResolveFieldName(col.Name, tableColNames, sortOrder, out int existingIdx, out SqlFailure? existingUndecided))
+                    {
+                        return existingUndecided!;
+                    }
+                    if (!TryResolveFieldName(col.Name, addedColNames, sortOrder, out int addedIdx, out SqlFailure? addedUndecided))
+                    {
+                        return addedUndecided!;
+                    }
+                    if (existingIdx >= 0 || addedIdx >= 0)
                     {
                         // r-def-expr-sql/ddl-alter-column-forms: ADD COLUMN ID LONG -> 3380.
                         return BindAce(3380, SqlMessages.FieldAlreadyExists(col.Name, stmt.TableName));
                     }
+                    addedCols.Add(col);
+                    addedColNames.Add(col.Name);
                     if (ValidateDataType(col.Name, col.DataType, ref counterCount) is { } typeErr)
                     {
                         return typeErr;
@@ -928,7 +1081,7 @@ public static class DdlBinder
                         }
                         else if (cc.Kind == DdlConstraintKind.ForeignKey)
                         {
-                            if (ValidateForeignKey(database, null, addedKeys, null, null, [col.Name], cc.RefTable!, cc.RefColumns, table) is { } fkErr)
+                            if (ValidateForeignKey(database, sortOrder, null, addedCols, null, null, [col.Name], cc.RefTable!, cc.RefColumns, table) is { } fkErr)
                             {
                                 return fkErr;
                             }
@@ -959,23 +1112,30 @@ public static class DdlBinder
                 {
                     return BindAce(3277, SqlMessages.TooManyIndexFields);
                 }
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seen = new List<string>(tc.Columns.Count);
                 foreach (string c in tc.Columns)
                 {
-                    string ck = NameKey(c);
-                    if (!seen.Add(ck))
+                    if (!TryResolveFieldName(c, seen, sortOrder, out int seenIdx, out SqlFailure? dupUndecided))
+                    {
+                        return dupUndecided!;
+                    }
+                    if (seenIdx >= 0)
                     {
                         return BindAce(3285, SqlMessages.InvalidIndexDefinition);
                     }
-                    ColumnDescriptor? col = table.Columns.FirstOrDefault(x => NamesEqual(x.Name, c));
-                    if (col is null || col.TypeCode == NativeTypes.Ole)
+                    seen.Add(c);
+                    if (!TryResolveFieldName(c, tableColNames, sortOrder, out int colIdx, out SqlFailure? lookupUndecided))
+                    {
+                        return lookupUndecided!;
+                    }
+                    if (colIdx < 0 || table.Columns[colIdx].TypeCode == NativeTypes.Ole)
                     {
                         return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(c));
                     }
                 }
                 if (tc.Kind == DdlConstraintKind.ForeignKey)
                 {
-                    if (ValidateForeignKey(database, null, null, null, null, tc.Columns, tc.RefTable!, tc.RefColumns, table) is { } fkErr)
+                    if (ValidateForeignKey(database, sortOrder, null, null, null, null, tc.Columns, tc.RefTable!, tc.RefColumns, table) is { } fkErr)
                     {
                         return fkErr;
                     }
@@ -989,12 +1149,16 @@ public static class DdlBinder
 
             case AlterColumnAlterAction alterCol:
             {
-                ColumnDescriptor? existing = table.Columns.FirstOrDefault(c => NamesEqual(c.Name, alterCol.ColumnName));
-                if (existing is null)
+                if (!TryResolveFieldName(alterCol.ColumnName, tableColNames, sortOrder, out int existingIdx, out SqlFailure? lookupUndecided))
+                {
+                    return lookupUndecided!;
+                }
+                if (existingIdx < 0)
                 {
                     // r-def-expr-sql/ddl-alter-column-forms: ALTER COLUMN Nope LONG -> 3018.
                     return BindAce(3018, SqlMessages.CouldNotFindField);
                 }
+                ColumnDescriptor existing = table.Columns[existingIdx];
                 if (alterCol.DataType.Kind == DdlTypeKind.Counter && !existing.IsAutoNumber)
                 {
                     // r-def-expr-sql/ddl-alter-column-forms: changing a non-AutoNumber column to COUNTER fails 3259;
@@ -1013,12 +1177,16 @@ public static class DdlBinder
             {
                 foreach (string name in dropCols.ColumnNames)
                 {
-                    ColumnDescriptor? existing = table.Columns.FirstOrDefault(c => NamesEqual(c.Name, name));
-                    if (existing is null)
+                    if (!TryResolveFieldName(name, tableColNames, sortOrder, out int existingIdx, out SqlFailure? lookupUndecided))
+                    {
+                        return lookupUndecided!;
+                    }
+                    if (existingIdx < 0)
                     {
                         // r-def-expr-sql/ddl-alter-column-forms, r-def-cursor-dao/err-drop-missing-index-column -> 3381.
                         return BindAce(3381, SqlMessages.NoFieldNamed(name, stmt.TableName));
                     }
+                    ColumnDescriptor existing = table.Columns[existingIdx];
                     if (database is ISqlSchemaDatabase sd && sd.IsColumnInRelationship(stmt.TableName, existing.Name))
                     {
                         // r-def-cat-txn/cat-drop-column-in-relation -> 3383.
@@ -1087,12 +1255,69 @@ public static class DdlExecutor
         {
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle"));
         }
-        BoundDdl? plan = DdlBinder.Prepare(sql, database, out SqlFailure? failure);
-        if (plan is null)
+        DdlStatement? stmt = DdlParser.Parse(sql, out SqlFailure? failure);
+        if (stmt is null)
         {
             return ActionOutcome.Fail(failure!);
         }
+        BoundDdl? plan = DdlBinder.Bind(stmt, database, out failure);
+        if (plan is null)
+        {
+            // Colliding SQL/ADO CREATE TABLE (3380) is not a no-op on ACE: it increments MSysObjects/MSysACEs
+            // UniqueEntryCount and writes two page-0 commits (r-q28-schema-write-open/pair-sql-*, pair-ado-*).
+            if (stmt is CreateTableStatement ct && failure is { IsNotModelled: false, Number: 3380 })
+            {
+                return ExecuteDuplicateCreateTable(ct, failure, database);
+            }
+            return ActionOutcome.Fail(failure!);
+        }
         return Execute(plan, database, options);
+    }
+
+    private static ActionOutcome ExecuteDuplicateCreateTable(CreateTableStatement ct, SqlFailure bindFailure, ISqlActionDatabase database)
+    {
+        if (database is not ISqlSchemaDatabase schemaDb)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaHost", "database host does not implement ISqlSchemaDatabase"));
+        }
+        if (database.Workspace.Depth > 0)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "DDL inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
+        }
+        SchemaWriter? writer = schemaDb.OpenSchemaWriter(out string? writerFailure);
+        if (writer is null)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", writerFailure ?? "SchemaWriter unavailable"));
+        }
+        var request = new CreateTableRequest(
+            ct.TableName,
+            [.. ct.Columns.Select(c => new NewField(c.Name, NewFieldType.Long))],
+            SchemaRoute.Sql);
+        SchemaOutcome outcome = writer.CreateTable(database.Workspace, request, schemaDb.NowDateBits(), schemaDb.NowDateBits());
+        if (outcome.PublishedAny)
+        {
+            schemaDb.OnSchemaPublished(outcome.ExtentPages);
+        }
+        if (outcome.Refused is { } refused)
+        {
+            if (refused.Error == 3380)
+            {
+                return ActionOutcome.Fail(bindFailure);
+            }
+            if (refused.Error is int errNum)
+            {
+                return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, $"ACE schema error {errNum}"));
+            }
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", refused.NotWritten ?? "SchemaWriter refused request"));
+        }
+        if (outcome.Accepted.Error is { } mutErr)
+        {
+            return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, mutErr.Number, mutErr.Describe()));
+        }
+        return ActionOutcome.Fail(SqlFailure.Open(
+            SqlPhase.Execute,
+            $"NotModelled.SchemaAccept.{outcome.Accepted.Open}",
+            outcome.Accepted.Detail ?? outcome.Accepted.Open.ToString()));
     }
 
     /// <summary>Execute a bound SQL DDL plan through <see cref="SchemaWriter"/>.</summary>
@@ -1135,9 +1360,12 @@ public static class DdlExecutor
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
-        if (outcome.Succeeded)
+        if (outcome.PublishedAny)
         {
             schemaDb.OnSchemaPublished(outcome.ExtentPages);
+        }
+        if (outcome.Succeeded)
+        {
             // r-def-expr-sql/ddl-counter-seed-increment, r-sql-2-3/act-ddl-columns-indexes:
             // successful DDL preserves the database's last successful DML RecordsAffected (0 before any DML).
             return ActionOutcome.OkDdl();

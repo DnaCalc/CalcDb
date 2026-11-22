@@ -829,7 +829,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         SchemaOutcome outcome = writer.CreateTable(workspace, request, SchemaWriter.DateBits(draft.Created), SchemaWriter.DateBits(DateTime.Now));
         if (outcome.Refused is { } refused)
         {
-            if (outcome.ExtentPages > PageCount && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
             {
                 return CallResult.Fail(Failure.NotImplemented(staleRefused));
             }
@@ -845,7 +845,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.Succeeded && SchemaPublished(outcome.ExtentPages) is { } stale)
+        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
         {
             return CallResult.Fail(Failure.NotImplemented(stale));
         }
