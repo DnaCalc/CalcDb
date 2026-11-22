@@ -452,8 +452,9 @@ public sealed class MutationSemantics : IDisposable
     /// <item>A bare <c>Text</c> column on the left compared with <c>&lt;&gt;</c> against a single-quoted string literal
     /// (<c>r-q30-sql-check/op-text-ne-sat</c>, <c>op-text-ne-upper</c>, <c>op-text-ne-viol</c>).</item>
     /// </list>
-    /// Refuses every other operator on Text, other column types, other literal types, parenthesized/bracketed forms,
-    /// multi-column comparisons, compound predicates, function calls, and subqueries so they stay refused by name.
+    /// Refuses every other operator/literal sign combination, other column types, other literal types, empty/escaped/
+    /// trailing-space/non-ASCII Text literals, parenthesized/bracketed forms, multi-column comparisons, compound
+    /// predicates, function calls, and subqueries so they stay refused by name.
     /// </summary>
     internal static bool TryMatchSingleColumnComparison(
         TableDefinition table,
@@ -469,17 +470,28 @@ public sealed class MutationSemantics : IDisposable
             return false;
         }
 
-        // Case 1: signed 32-bit integer literal on the left, bare Long column on the right (r-q30-sql-check/op-rhs-*).
-        if (span[0] == '-' || char.IsAsciiDigit(span[0]))
+        // Case 1: non-negative 32-bit integer literal on the left, <=, bare Long column on the right
+        // (r-q30-sql-check/op-rhs-sat, op-rhs-viol). Negative left literals and other operators stay refused.
+        if (span[0] == '-')
+        {
+            reason = "CHECK expression with a negative integer literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
+            return false;
+        }
+        if (char.IsAsciiDigit(span[0]))
         {
             int i = 0;
-            if (!TryReadSignedInt32(span, ref i, out reason))
+            if (!TryReadSignedInt32(span, ref i, out _, out reason))
             {
                 return false;
             }
             SkipWhitespace(span, ref i);
-            if (!TryReadComparisonOp(span, ref i, out _, out reason))
+            if (!TryReadComparisonOp(span, ref i, out ReadOnlySpan<char> lhsOp, out reason))
             {
+                return false;
+            }
+            if (!lhsOp.SequenceEqual("<="))
+            {
+                reason = $"CHECK operator '{lhsOp}' with a literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
                 return false;
             }
             SkipWhitespace(span, ref i);
@@ -489,7 +501,7 @@ public sealed class MutationSemantics : IDisposable
             }
             if (i != span.Length)
             {
-                reason = "only a single-column comparison against an integer literal is recorded";
+                reason = "only a single-column comparison against a non-negative integer literal is recorded";
                 return false;
             }
             if (!TryResolveColumn(table, rhsColName, out ColumnDescriptor? rhsCol, out reason))
@@ -506,10 +518,11 @@ public sealed class MutationSemantics : IDisposable
             return true;
         }
 
-        // Case 2: bare column on the left (Long vs signed int32 with any comparison op, or Text vs '...' with <>).
+        // Case 2: bare column on the left (Long vs non-negative int32 with >=, >, <=, <, =, <>; Long >= negative int32;
+        // or Text <> non-empty ASCII string literal without trailing spaces or doubled quotes).
         if (!(char.IsLetter(span[0]) || span[0] == '_'))
         {
-            reason = "only a bare Long column compared with >=, >, <=, <, =, or <> against a signed 32-bit integer literal, or a bare Text column compared with <> against a single-quoted string literal, is recorded";
+            reason = "only a bare Long column compared against a recorded integer literal, or a bare Text column compared with <> against a non-empty ASCII string literal, is recorded";
             return false;
         }
 
@@ -536,13 +549,18 @@ public sealed class MutationSemantics : IDisposable
 
         if (matchedCol!.TypeCode == NativeTypes.Long)
         {
-            if (!TryReadSignedInt32(span, ref pos, out reason))
+            if (!TryReadSignedInt32(span, ref pos, out bool isNegative, out reason))
             {
                 return false;
             }
             if (pos != span.Length)
             {
-                reason = "only a bare Long column compared against a signed 32-bit integer literal is recorded";
+                reason = "only a bare Long column compared against a 32-bit integer literal is recorded";
+                return false;
+            }
+            if (isNegative && !op.SequenceEqual(">="))
+            {
+                reason = $"CHECK operator '{op}' with a negative integer literal on Long column '{matchedCol.Name}' is not recorded (only '>=' is recorded, r-q30-sql-check/op-ge-neg-*)";
                 return false;
             }
             column = matchedCol;
@@ -554,16 +572,16 @@ public sealed class MutationSemantics : IDisposable
         {
             if (!op.SequenceEqual("<>"))
             {
-                reason = $"CHECK operator '{op}' on Text column '{matchedCol.Name}' is not recorded (only <> against a single-quoted string literal is recorded)";
+                reason = $"CHECK operator '{op}' on Text column '{matchedCol.Name}' is not recorded (only <> against a non-empty ASCII string literal is recorded)";
                 return false;
             }
-            if (!TryReadSingleQuotedString(span, ref pos, out reason))
+            if (!TryReadSingleQuotedAsciiString(span, ref pos, out reason))
             {
                 return false;
             }
             if (pos != span.Length)
             {
-                reason = "only a bare Text column compared with <> against a single-quoted string literal is recorded";
+                reason = "only a bare Text column compared with <> against a non-empty ASCII string literal is recorded";
                 return false;
             }
             column = matchedCol;
@@ -647,11 +665,13 @@ public sealed class MutationSemantics : IDisposable
         return true;
     }
 
-    private static bool TryReadSignedInt32(ReadOnlySpan<char> span, ref int i, out string? reason)
+    private static bool TryReadSignedInt32(ReadOnlySpan<char> span, ref int i, out bool isNegative, out string? reason)
     {
         int start = i;
+        isNegative = false;
         if (i < span.Length && span[i] == '-')
         {
+            isNegative = true;
             i++;
         }
         int digitsStart = i;
@@ -664,16 +684,17 @@ public sealed class MutationSemantics : IDisposable
             reason = "CHECK integer operand must be a signed 32-bit integer literal";
             return false;
         }
-        if (!int.TryParse(span[start..i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
+        if (!int.TryParse(span[start..i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int parsed))
         {
             reason = $"CHECK integer literal '{span[start..i]}' is outside the signed 32-bit integer range";
             return false;
         }
+        isNegative = isNegative || parsed < 0;
         reason = null;
         return true;
     }
 
-    private static bool TryReadSingleQuotedString(ReadOnlySpan<char> span, ref int i, out string? reason)
+    private static bool TryReadSingleQuotedAsciiString(ReadOnlySpan<char> span, ref int i, out string? reason)
     {
         if (i >= span.Length || span[i] != '\'')
         {
@@ -681,18 +702,36 @@ public sealed class MutationSemantics : IDisposable
             return false;
         }
         i++;
+        int contentStart = i;
         while (i < span.Length)
         {
-            if (span[i] == '\'')
+            char ch = span[i];
+            if (ch == '\'')
             {
                 if (i + 1 < span.Length && span[i + 1] == '\'')
                 {
-                    i += 2;
-                    continue;
+                    reason = "CHECK Text comparison with doubled-quote string literal is not recorded";
+                    return false;
+                }
+                ReadOnlySpan<char> content = span[contentStart..i];
+                if (content.IsEmpty)
+                {
+                    reason = "CHECK Text comparison with empty string literal '' is not recorded";
+                    return false;
+                }
+                if (content[^1] == ' ')
+                {
+                    reason = "CHECK Text comparison with trailing space in string literal is not recorded";
+                    return false;
                 }
                 i++;
                 reason = null;
                 return true;
+            }
+            if (ch < 0x20 || ch > 0x7E)
+            {
+                reason = "CHECK Text comparison with non-ASCII or control character in string literal is not recorded";
+                return false;
             }
             i++;
         }
