@@ -1004,6 +1004,10 @@ for every stretch with ACE rules, and a prober started at once for the cases a w
 
 ## 2026-11-22 - Handover: organizer 9 (01a20342) to organizer 10
 
+Successor: CalcDb organizer 10, session 01a2043d-bb98-740c-81c8-d775a8763ea3, started beside 01a20342 (`--no-parent`) at
+about 17:11 UTC with the handoff prompt; 01a20342 lists no organizer among its children. Organizer 9 forwards only the
+fq9f and 4t24 writers' answers and stops.
+
 Session 01a20342 (Claude Opus 5.5, 12:37 to about 17:15 UTC, about 175 tool calls, about $19) landed kn3b (probe
 round r-q28), qhs8, znk8 and zdh5, k64d (probe round r-q29), shmk (ETW from a worktree through `--store`; the owner had
 offered a setup change, which was not needed), 2tkf and the probe round r-q30. Core baseline znk8-1, 438 of 1360. 2tkf-1
