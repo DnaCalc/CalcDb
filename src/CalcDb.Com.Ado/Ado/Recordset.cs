@@ -236,12 +236,6 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         {
             if (sqlFail!.IsNotModelled)
             {
-                if (sqlFail.NotModelled == "NotModelled.FieldRead"
-                    && sqlFail.Message.Contains("DeletedRecord", StringComparison.Ordinal))
-                {
-                    failure = AdoSqlErrors.RecordIsDeleted().ComFailure;
-                    return null;
-                }
                 failure = Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message);
                 return null;
             }

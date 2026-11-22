@@ -554,4 +554,25 @@ public sealed class ActionExecutionTests
         Assert.Equal(1, after.RecordsAffected);
         Assert.Equal((maxBefore + 2).ToString(), db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer);
     }
+
+    [Fact]
+    public void Deleted_record_expression_failure_in_action_statement_refuses_by_name()
+    {
+        // Task 82kf: BoundExpression.Load emits ACE 3167 for CursorFailure.DeletedRecord, but no record shows a
+        // deleted row met during an action statement; ActionExecutor keeps it refused by name rather than surfacing 3167.
+        const string sql = "UPDATE T SET V = V + 1";
+        using ActionSyntax? parsed = ActionParser.Parse(sql, out SqlFailure? parseFail);
+        Assert.Null(parseFail);
+        Assert.NotNull(parsed);
+
+        var exprDeleted = ExpressionFailure.Ace(ExpressionPhase.Evaluate, 3167, ExpressionMessages.RecordDeleted);
+        SqlFailure fromExpr = ActionExecutor.MapExpressionFailure(exprDeleted, sql, parsed.Assignments[0].Value);
+        Assert.True(fromExpr.IsNotModelled);
+        Assert.Equal("NotModelled.ActionDeletedRecord", fromExpr.NotModelled);
+
+        var selectDeleted = SqlFailure.Ace(SqlPhase.Read, 3167, ExpressionMessages.RecordDeleted);
+        SqlFailure fromSelect = ActionExecutor.MapSelectReadFailure(selectDeleted);
+        Assert.True(fromSelect.IsNotModelled);
+        Assert.Equal("NotModelled.ActionDeletedRecord", fromSelect.NotModelled);
+    }
 }
