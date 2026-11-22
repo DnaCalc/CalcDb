@@ -642,7 +642,8 @@ public sealed class EditFrame : IDisposable
                         priorCompiled.Edits,
                         priorCompiled.Footprint,
                         ConflictSource,
-                        out MutationError? pubError2);
+                        out MutationError? pubError2,
+                        targetHasAutoNumber: true);
                     if (pubError2 is not null)
                     {
                         return new UpdateOutcome(pubError2);
@@ -674,7 +675,8 @@ public sealed class EditFrame : IDisposable
                             sideCompiled.Footprint,
                             ConflictSource,
                             out pubError,
-                            allowJet4Mdb: allowJet4MdbSideEffect);
+                            allowJet4Mdb: allowJet4MdbSideEffect,
+                            targetHasAutoNumber: s.AutoNumber is not null);
                     }
                     else
                     {
@@ -717,7 +719,7 @@ public sealed class EditFrame : IDisposable
                             && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
                             ? null
                             : "a refused row";
-                        _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto, unrecorded);
+                        _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto, unrecorded, isExplicit: reseedRefuseAuto);
                     }
                 }
             }
@@ -760,7 +762,8 @@ public sealed class EditFrame : IDisposable
                     fkCompiled.Edits,
                     fkCompiled.Footprint,
                     ConflictSource,
-                    out MutationError? fkPubError);
+                    out MutationError? fkPubError,
+                    targetHasAutoNumber: s.AutoNumber is not null);
                 if (fkPubError is not null)
                 {
                     return new UpdateOutcome(fkPubError);
@@ -806,7 +809,8 @@ public sealed class EditFrame : IDisposable
                         advCompiled.Edits,
                         advCompiled.Footprint,
                         ConflictSource,
-                        out MutationError? advPubError);
+                        out MutationError? advPubError,
+                        targetHasAutoNumber: true);
                     if (advPubError is not null)
                     {
                         return new UpdateOutcome(advPubError);
@@ -824,7 +828,8 @@ public sealed class EditFrame : IDisposable
                 _workspace.NoteStatementRefusal(refusal.Number);
                 if (refusal.Number != MutationError.Duplicate && _workspace.InStatement && _workspace.Depth > 0 && _ticket is { Value: >= int.MinValue and <= int.MaxValue } refusedTicket && _table.Counter is { } ticketCounter && _table.Writer is { } ticketWriter)
                 {
-                    _workspace.RecordConsumedAutoNumber(ticketWriter.File, s.Table.FirstPage, unchecked((uint)(int)refusedTicket.Value), ticketCounter.Increment, reseed: false, "a refused row");
+                    bool explicitRefused = s.AutoNumber is { } refusedAutoCol && _cells[refusedAutoCol.Ordinal].Assigned;
+                    _workspace.RecordConsumedAutoNumber(ticketWriter.File, s.Table.FirstPage, unchecked((uint)(int)refusedTicket.Value), ticketCounter.Increment, reseed: false, "a refused row", isExplicit: explicitRefused);
                 }
             }
             return failure;
@@ -974,7 +979,7 @@ public sealed class EditFrame : IDisposable
                 string? unrecorded = assigned[auto.Ordinal] ? "an explicit AutoNumber"
                     : !_workspace.InStatement && counter.Increment != 1 ? $"increment {counter.Increment} on recordset AddNew"
                     : null;
-                _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseed: reseedAcceptedAuto, unrecorded);
+                _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseed: reseedAcceptedAuto, unrecorded, isExplicit: assigned[auto.Ordinal]);
             }
         }
         if (_ticket is not null)
@@ -1036,7 +1041,8 @@ public sealed class EditFrame : IDisposable
                     advCompiled.Edits,
                     advCompiled.Footprint,
                     ConflictSource,
-                    out MutationError? pubError);
+                    out MutationError? pubError,
+                    targetHasAutoNumber: true);
                 if (pubError is not null)
                 {
                     return new UpdateOutcome(pubError);
