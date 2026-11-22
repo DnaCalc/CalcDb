@@ -96,7 +96,8 @@ scope or design, the book wins.
   project or solution file change needs `workspace.refresh`. Do not use `repair.*` or `edit.apply_code_fix` (they propose
   TODO stubs). Build the area filter after every edit, roscli's included (measured on 0.1.6-preview.24, 2026-11-22). Setup:
   `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
-  `ROSCLI_DAEMON=required`; `roscli daemon.stop` and delete `.roslynskills/` before you end.
+  `ROSCLI_DAEMON=required`; `roscli daemon.stop` before you end. A reload or a restart answers and recovers; the daemon writes
+  nothing into the repository.
 - roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills
   (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a writer in its worktree, landed on its main and
   released), never worked around in CalcDb.

@@ -825,3 +825,10 @@ on CalcDb; only project or solution changes reload); edit.transaction takes exac
 alias. The preview.24 release first hung on the Linux runner: the Unix daemon inherited roscli's stdout, so anything
 reading roscli's output waited forever; it now detaches to /dev/null, and every process-starting test has a timeout.
 AGENTS.md drops the caveat about files created by other tools.
+
+**roscli 0.1.6-preview.25 (RoslynSkills mbvr, vr3g; c604210, GitHub release, 2026-11-22).** The wedged host reproduced
+on 009b516 every time: a 2 s client timeout on workspace.refresh, a host that served one request at a time, a crash
+writing to a client that had gone, and a restart that lost the old process. Now a reload gets 5 minutes, requests are
+concurrent (daemon.status 239 ms during a 35 s CalcDb reload), a restart kills the verified old process tree (2.5 s),
+and the daemon's state lives in the per-user folder: nothing is written into the repository. AGENTS.md drops the
+"delete .roslynskills/" step.
