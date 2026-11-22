@@ -866,3 +866,8 @@ roscli (RoslynSkills) from 0.1.6-preview.20 to .26 as CalcDb's own tool. Indicat
 still write rules beyond their records and do not stop for a missing record, though the brief says so; the first-pass
 rate says self-checks miss what the landing check finds. Measure both on the next two landings before changing the
 rules (The Plan §4: find the cause; a review layer catches them today, so nothing wrong has landed).
+
+**roscli 0.1.6-preview.27 (RoslynSkills qvcn, 17069ce, GitHub release, 2026-11-22).** One JSON answer shape in every path:
+the payload in `Data`, how it ran (in-process, daemon, MCP, transport server) in `Transport`; two writers' scripts had
+broken on the daemon's nested shape. RoslynSkills' queue of this round is empty; the NuGet.org push waits for a key
+nuget.org accepts.

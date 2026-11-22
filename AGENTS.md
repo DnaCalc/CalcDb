@@ -95,7 +95,8 @@ scope or design, the book wins.
 ## C# navigation and edits (roscli)
 
 roscli (RoslynSkills, installed as a global tool) keeps CalcDb.slnx loaded in a daemon and answers semantic questions in
-0.3 to 2 s (The Plan §4; measured on 0.1.6-preview.26, 2026-11-22, process log).
+0.3 to 2 s (The Plan §4; measured on 0.1.6-preview.26, 2026-11-22, process log; installed: 0.1.6-preview.27). Every
+answer has the same JSON shape in-process and through the daemon: the payload in `Data`, how it ran in `Transport`.
 
 - **Text first.** ripgrep (`rg -n -w`, 70 to 100 ms) for names, text and string literals; your own file tools for
   single-file and small edits.
