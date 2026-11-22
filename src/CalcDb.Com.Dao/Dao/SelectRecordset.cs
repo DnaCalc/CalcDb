@@ -58,7 +58,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.CollectObjectIndex", "Collect with an object index (not recorded)"));
         }
-        return ordinal is int i ? SelectFieldObject.ReadValue(this, i) : CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+        return ordinal is int i ? SelectFieldObject.ReadValue(this, i, fromCollect: true) : CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
     }
 
     private SelectFieldsObject? _fields;
@@ -562,9 +562,15 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
-            return failure!.IsNotModelled
-                ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
-                : Fail(failure.Number, failure.Message);
+            if (failure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            if (failure.Number == 3167)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDeletedRow", $"Field.FieldSize of {Column.Name} on a deleted row (not recorded)"));
+            }
+            return Fail(failure.Number, failure.Message);
         }
         return (VarType)value.Vt switch
         {
@@ -901,7 +907,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
 
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect).</summary>
-    public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal)
+    public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal, bool fromCollect = false)
     {
         if (recordset.TransactionRefusal("Field.Value") is { } refused)
         {
@@ -909,9 +915,31 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         }
         if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
         {
-            return failure!.IsNotModelled
-                ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
-                : CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
+            if (failure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            if (failure.Number == 3167)
+            {
+                // r-txn-1b/rs-types-after-rollback (calls 41[0..2]) and r-def-cursor-dao/delete-by-other-cursor-current-row
+                // (calls 56, 63) record Field.Value failing 3167 ("Record is deleted.", DAO.Field, with IErrorInfo) on a
+                // base column of a SELECT dynaset whose current row was deleted. Collect, non-dynaset SELECTs, and
+                // non-base columns on a deleted row are unrecorded neighbouring cases and stay refused by name.
+                if (fromCollect)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDeletedRow", "Recordset.Collect on a deleted row of a SELECT recordset (not recorded)"));
+                }
+                if (recordset.RecordsetType != 2)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.SelectDeletedRowCursorType", $"Field.Value on a deleted row of a type {recordset.RecordsetType} SELECT recordset (not recorded)"));
+                }
+                ResultColumn column = recordset.Cursor.Columns[ordinal];
+                if (column.Origin != ColumnOrigin.BaseColumn)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.SelectDeletedRowExpression", $"Field.Value of {column.Origin} column {column.Name} on a deleted row (not recorded)"));
+                }
+            }
+            return CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
         }
         return SqlResults.Of(value, "Field.Value");
     }

@@ -115,7 +115,9 @@ public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRul
             _row.Cursor = candidate;
             if (!bound.Evaluate(_row))
             {
-                return bound.LastFailure is { IsNotModelled: true } open ? new RuleResult(RuleVerdict.NotModelled, open.ToString()) : new RuleResult(RuleVerdict.Failed);
+                return bound.LastFailure is { IsNotModelled: true } open ? new RuleResult(RuleVerdict.NotModelled, open.ToString())
+                    : bound.LastFailure is { Number: 3167 } deleted ? new RuleResult(RuleVerdict.NotModelled, $"NotModelled.RuleDeletedRecord: {deleted.Message}")
+                    : new RuleResult(RuleVerdict.Failed);
             }
             NativeVariant v = bound.Value;
             return (VarType)v.Vt switch

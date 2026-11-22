@@ -788,7 +788,11 @@ public sealed unsafe class BoundExpression : IDisposable
         }
         if (!read.Succeeded)
         {
-            LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.FieldRead", $"field {column.Name} cannot be read: {read.Failure} {read.Detail}");
+            // Reading a field of a deleted row fails 3167 ("Record is deleted."; r-txn-1b/rs-types-after-rollback calls
+            // 41[0..2], r-def-cursor-dao/delete-by-other-cursor-current-row calls 56, 63). Other cursor failures stay named.
+            LastFailure = read.Failure == CursorFailure.DeletedRecord
+                ? ExpressionFailure.Ace(ExpressionPhase.Evaluate, 3167, ExpressionMessages.RecordDeleted)
+                : ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.FieldRead", $"field {column.Name} cannot be read: {read.Failure} {read.Detail}");
             return false;
         }
         NativeValue v = read.Value;
