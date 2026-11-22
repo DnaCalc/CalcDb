@@ -161,6 +161,8 @@ public sealed partial class PageCache
     private readonly Queue<int> _scanOrder = new();
     private readonly Dictionary<ImageId, ImageRecord> _directory = [];
     private readonly Dictionary<ulong, PageEntry> _pages = [];
+    private readonly HashSet<LockerId> _rollbackExtentOwners = [];
+    private readonly HashSet<LockerId> _abandonedRollbackExtentOwners = [];
     private readonly int _scanAllowance;
     private readonly int _maxWaiters;
     private int _clockHand;
@@ -222,6 +224,83 @@ public sealed partial class PageCache
         ulong seen;
         while ((seen = Volatile.Read(ref _knownExtentPages)) < pages && Interlocked.CompareExchange(ref _knownExtentPages, pages, seen) != seen)
         {
+        }
+    }
+
+    /// <summary>
+    /// Whether page 1 of this file currently holds an unreturned ACCDB rolled-back-statement extent reservation from
+    /// any live or abandoned locker (qualified.md R-TXN-1 TXN-STMT Open).
+    /// </summary>
+    public bool HasPendingRollbackExtent
+    {
+        get
+        {
+            lock (_latch)
+            {
+                return _rollbackExtentOwners.Count > 0 || _abandonedRollbackExtentOwners.Count > 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether any locker other than <paramref name="owner"/> (live or abandoned) holds an unreturned ACCDB
+    /// rolled-back-statement extent reservation on page 1 of this file.
+    /// </summary>
+    public bool HasOtherRollbackExtentOwner(LockerId owner)
+    {
+        lock (_latch)
+        {
+            foreach (LockerId other in _rollbackExtentOwners)
+            {
+                if (other != owner)
+                {
+                    return true;
+                }
+            }
+            foreach (LockerId other in _abandonedRollbackExtentOwners)
+            {
+                if (other != owner)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /// <summary>Record that <paramref name="owner"/> placed an ACCDB rollback extent reservation on page 1.</summary>
+    public void RegisterRollbackExtentOwner(LockerId owner)
+    {
+        lock (_latch)
+        {
+            _abandonedRollbackExtentOwners.Remove(owner);
+            _rollbackExtentOwners.Add(owner);
+        }
+    }
+
+    /// <summary>Record that <paramref name="owner"/> returned its ACCDB rollback extent reservation on page 1.</summary>
+    public void UnregisterRollbackExtentOwner(LockerId owner)
+    {
+        lock (_latch)
+        {
+            _rollbackExtentOwners.Remove(owner);
+            _abandonedRollbackExtentOwners.Remove(owner);
+        }
+    }
+
+    /// <summary>
+    /// Record that <paramref name="owner"/> closed or disposed while page 1 still held its unreturned ACCDB rollback
+    /// extent reservation: preserves the pending-extent guard for other lockers without retaining the coordinator, while
+    /// still letting <paramref name="owner"/> finish a subsequent closing commit and unregister.
+    /// </summary>
+    public void AbandonRollbackExtentOwner(LockerId owner)
+    {
+        lock (_latch)
+        {
+            if (_rollbackExtentOwners.Remove(owner))
+            {
+                _abandonedRollbackExtentOwners.Add(owner);
+            }
         }
     }
 

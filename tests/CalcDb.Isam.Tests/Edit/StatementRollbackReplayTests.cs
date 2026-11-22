@@ -778,7 +778,8 @@ public sealed partial class StatementRollbackReplayTests
             Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
         }
 
-        // 1d. PublishCloseCommit fails -> file is marked unresolved and extent tracking is never dropped silently.
+        // 1d. Pre-effect PublishCloseCommit failure (Writable lease refused before any native write): tracking stays
+        //     intact, cache is NOT marked unresolved, and a retry after the failure clears returns the extent cleanly.
         using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
         {
             using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
@@ -789,16 +790,92 @@ public sealed partial class StatementRollbackReplayTests
             }
             Assert.Equal(p50Freed, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
 
-            session.FailWritable = (_, _) => "simulated close failure";
+            session.FailWritable = (_, _) => "simulated pre-effect close failure";
             (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
             Assert.Equal(MutationOpen.Publication, closeOpen);
-            Assert.Contains("simulated close failure", closeDetail, StringComparison.Ordinal);
-            Assert.True(session.Workspace.IsUnresolved(session.Cache));
+            Assert.Contains("simulated pre-effect close failure", closeDetail, StringComparison.Ordinal);
+            Assert.False(session.Workspace.IsUnresolved(session.Cache));
             Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
-            Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            Assert.True(session.Cache.HasPendingRollbackExtent);
             Assert.Equal(p50Freed, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
 
-            // Another Workspace must still see the pending rollback extent on PageCache and refuse page allocation.
+            // Another Workspace still sees the pending rollback extent on PageCache and refuses page allocation.
+            var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
+            Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFailure));
+            Assert.Contains("pending rollback extent", allocFailure, StringComparison.Ordinal);
+
+            // Retry succeeds once the pre-effect lease failure clears.
+            session.FailWritable = null;
+            (MutationOpen retryOpen, string? retryDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, retryOpen);
+            Assert.Null(retryDetail);
+            Assert.False(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.False(session.Cache.HasPendingRollbackExtent);
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+        }
+
+        // 1e. Post-native-write PublishCloseCommit failure (write 2 fails after write 1 settled -> NeedsResolution):
+        //     marks the cache unresolved and keeps rollback-extent ownership intact on PageCache.
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            Assert.Equal(p50Freed, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+
+            session.WritableOverride = new FailOnWriteNumberFile(session.Image, failOnWrite: 2);
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.Publication, closeOpen);
+            Assert.Contains("needs resolution", closeDetail, StringComparison.Ordinal);
+            Assert.True(session.Workspace.IsUnresolved(session.Cache));
+            Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.True(session.Cache.HasPendingRollbackExtent);
+
+            var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
+            Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFailure));
+            Assert.Contains("pending rollback extent", allocFailure, StringComparison.Ordinal);
+        }
+
+        // 1f. COM release paths:
+        //     - WorkspaceObject.Close order (Transactions.Close() before Database.Close() -> PublishCloseCommit()):
+        //       PublishCloseCommit still succeeds and clears HasPendingRollbackExtent.
+        //     - Dispose without PublishCloseCommit (WorkspaceObject.OnFinalRelease / Connection.ReleaseResources):
+        //       AbandonRollbackExtentOwner leaves HasPendingRollbackExtent true for other lockers without pinning the coordinator.
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            session.Workspace.Close();
+            Assert.True(session.Cache.HasPendingRollbackExtent);
+            Assert.False(session.Cache.HasOtherRollbackExtentOwner(session.Workspace.Locker));
+            Assert.True(session.Cache.HasOtherRollbackExtentOwner(new LockerId(2)));
+
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+            Assert.False(session.Cache.HasPendingRollbackExtent);
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+        }
+
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            session.Workspace.Dispose();
+            Assert.True(session.Cache.HasPendingRollbackExtent);
+            Assert.True(session.Cache.HasOtherRollbackExtentOwner(new LockerId(2)));
+
             var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
             Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFailure));
             Assert.Contains("pending rollback extent", allocFailure, StringComparison.Ordinal);
@@ -933,33 +1010,42 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(stmt.Complete().Succeeded);
         }
 
-        // Before Close: page 1 is completely unchanged, and second write / BeginTrans refuse by name.
+        // Before Close: page 1 is completely unchanged, Jet 4 MDB NEVER registers a rollback extent on PageCache,
+        // BeginTrans is not refused, and a second write statement before Close refuses by name.
         byte[] beforeClose = session.Image.Snapshot();
         Assert.Equal(setupPage1, beforeClose.AsSpan(D.PageSize, D.PageSize).ToArray());
         Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
-        Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+        Assert.False(session.Cache.HasPendingRollbackExtent);
+        Assert.False(session.Workspace.HasPendingRollbackExtent(session.Cache));
 
-        EditOutcome secondAdd = frame.AddNew();
-        Assert.Equal(MutationOpen.Publication, secondAdd.Open);
-        ResolutionOutcome secondTxn = session.Workspace.TryBeginTrans();
-        Assert.Equal(MutationOpen.Publication, secondTxn.Open);
-        Assert.Equal(0, session.Workspace.Depth);
+        Assert.Null(session.Workspace.BeginTrans());
+        Assert.True(session.Workspace.Rollback().Succeeded);
+
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(Col(t, "ID"), I4(100)).Succeeded);
+        Assert.True(frame.Assign(Col(t, "K"), I4(100)).Succeeded);
+        AssignText(frame, Col(t, "S"), "mdb-second-write");
+        Assert.Equal(MutationOpen.Publication, frame.Update().Open);
+        Assert.True(frame.CancelUpdate().Succeeded);
         Assert.Equal(beforeClose, session.Image.Snapshot());
 
         // After Close: matches the recorded closed file (+3 on page 0, page 1 unchanged).
         (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
         Assert.Equal(MutationOpen.None, closeOpen);
         Assert.Null(closeDetail);
-        Assert.False(session.Workspace.HasPendingRollbackExtent(session.Cache));
+        Assert.False(session.Cache.HasPendingRollbackExtent);
         AssertMatchesCheckpoint("noan-dup-row2-mdb-newpage", plan.RecordFileName, "after-statement", plan.AfterStatement, session.Image.Snapshot());
     }
 
     [Fact]
-    public void Pending_rollback_extent_blocks_same_and_other_workspace_until_Close()
+    public void Pending_rollback_extent_blocks_allocating_and_page1_writes_until_Close()
     {
-        // Finding 4: while a rollback extent reservation is pending before Close, the same Workspace refuses a second
-        // write statement (AddNew, Edit, Delete, DeleteEveryRow) and BeginTrans, and a second Workspace sharing the
-        // PageCache refuses page allocation or touching page 1; after Close both work again.
+        // Pass-2 Findings 1, 2, 4, 6: while an ACCDB rollback extent reservation is pending before Close:
+        // - non-allocating writes that do not touch page 1 (Edit+Update, Delete, AddNew onto existing page) succeed;
+        // - allocating writes or page-1 writes refuse by name on both the owning and another Workspace;
+        // - BeginTrans is not refused: read-only levels, non-allocating writes, writes to another File B, and
+        //   allocating writes on File A after PublishCloseCommit(fileA) all succeed;
+        // - another Workspace's page-0-only PublishCloseCommit (empty _releaseAtClose) is not refused.
         RecordPlan plan = LoadPlan("noan-dup-row2-newpage-live", FirstRecord("noan-dup-row2-newpage-live"));
         using var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live");
         List<Dictionary<string, NativeValue>> srcRows = ReadSrcRows(session);
@@ -989,27 +1075,78 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(stmt.Complete().Succeeded);
         }
 
-        byte[] pendingSnapshot = session.Image.Snapshot();
+        Assert.True(session.Cache.HasPendingRollbackExtent);
+        Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
 
-        // Same Workspace: writes refuse by name.
-        Assert.Equal(MutationOpen.Publication, tFrame.AddNew().Open);
-        srcCursor.MoveFirst();
-        Assert.Equal(MutationOpen.Publication, srcFrame.Edit().Open);
-        Assert.Equal(MutationOpen.Publication, srcFrame.Delete().Open);
-        Assert.Equal(MutationOpen.Publication, srcFrame.DeleteEveryRow(out _).Open);
+        // Same Workspace: allocating write (empty T needs a new page) and page-1 writes refuse by name.
+        Assert.True(tFrame.AddNew().Succeeded);
+        Assert.True(tFrame.Assign(Col(t, "ID"), I4(100)).Succeeded);
+        Assert.True(tFrame.Assign(Col(t, "K"), I4(100)).Succeeded);
+        AssignText(tFrame, Col(t, "S"), "alloc-same-ws");
+        Assert.Equal(MutationOpen.Publication, tFrame.Update().Open);
+        Assert.True(tFrame.CancelUpdate().Succeeded);
 
-        // Same Workspace: TryBeginTrans refuses immediately; BeginTrans + CommitTrans/Rollback refuse cleanly.
-        Assert.Equal(MutationOpen.Publication, session.Workspace.TryBeginTrans().Open);
-        Assert.Equal(0, session.Workspace.Depth);
+        var sameAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
+        Assert.Null(sameAlloc.Allocate(null, out _, out string? sameAllocFail));
+        Assert.Contains("pending rollback extent", sameAllocFail, StringComparison.Ordinal);
+
+        (MutationOpen sameMapOpen, _) = session.Workspace.PublishNonTransactional(
+            session.Cache,
+            [new PageEdit(D.Map.GlobalMapPage, NoOpPageDelta.Instance, PageRole.Map)],
+            [new LockResource(D.Map.GlobalMapPage, LockPurpose.Map)],
+            CommitMode.Immediate,
+            MutationErrorSource.Database,
+            out _);
+        Assert.Equal(MutationOpen.Publication, sameMapOpen);
+
+        // Same Workspace: non-allocating writes (Edit+Update, AddNew onto existing page, Delete) SUCCEED.
+        Assert.Equal(MoveOutcome.Moved, srcCursor.MoveFirst());
+        Assert.True(srcFrame.Edit().Succeeded);
+        AssignText(srcFrame, Col(src, "S"), "upd");
+        Assert.True(srcFrame.Update().Succeeded);
+
+        Assert.True(srcFrame.AddNew().Succeeded);
+        Assert.True(srcFrame.Assign(Col(src, "N"), I4(99)).Succeeded);
+        Assert.True(srcFrame.Assign(Col(src, "ID"), I4(99)).Succeeded);
+        Assert.True(srcFrame.Assign(Col(src, "K"), I4(99)).Succeeded);
+        AssignText(srcFrame, Col(src, "S"), "fit");
+        Assert.True(srcFrame.Update().Succeeded);
+
+        Assert.Equal(MoveOutcome.Moved, srcCursor.MoveLast());
+        Assert.True(srcFrame.Delete().Succeeded);
+
+        // Same Workspace: read-only BeginTrans + CommitTrans/Rollback succeed; BeginTrans + write to File B succeeds.
         Assert.Null(session.Workspace.BeginTrans());
-        Assert.Equal(MutationOpen.Publication, session.Workspace.CommitTrans().Open);
-        Assert.Equal(0, session.Workspace.Depth);
+        Assert.True(session.Workspace.CommitTrans().Succeeded);
         Assert.Null(session.Workspace.BeginTrans());
-        Assert.Equal(MutationOpen.Publication, session.Workspace.Rollback().Open);
-        Assert.Equal(0, session.Workspace.Depth);
-        Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+        Assert.True(session.Workspace.Rollback().Succeeded);
 
-        // Second Workspace on the same PageCache: allocating a page or touching page 1 refuses by name.
+        using (var fileB = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            session.Workspace.Publisher = new MultiFileTarget(session, fileB);
+            try
+            {
+                (TableDefinition tb, TableEditContext tbCtx) = fileB.Table("T");
+                using TableCursor tbCursor = fileB.OpenCursor(tb, session.Workspace);
+                using var tbFrame = new EditFrame(tbCtx, tbCursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(tbFrame.AddNew().Succeeded);
+                Assert.True(tbFrame.Assign(Col(tb, "ID"), I4(50)).Succeeded);
+                Assert.True(tbFrame.Assign(Col(tb, "K"), I4(50)).Succeeded);
+                AssignText(tbFrame, Col(tb, "S"), "file-b-alloc");
+                Assert.True(tbFrame.Update().Succeeded);
+                Assert.True(session.Workspace.CommitTrans().Succeeded);
+                Assert.True(session.Workspace.PublishCloseCommit(fileB.Cache).Open == MutationOpen.None);
+            }
+            finally
+            {
+                session.Workspace.Publisher = session;
+            }
+        }
+
+        // Second Workspace on the same PageCache: allocating / page-1 writes refuse; page-0-only Close succeeds.
+        byte[] beforeOther = session.Image.Snapshot();
         using (var other = new TransactionCoordinator(new LockerId(2)) { Publisher = session })
         {
             var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
@@ -1034,25 +1171,36 @@ public sealed partial class StatementRollbackReplayTests
                 MutationErrorSource.Database,
                 out _);
             Assert.Equal(MutationOpen.Publication, mapOpen);
+            Assert.Equal(beforeOther, session.Image.Snapshot());
+
+            // Page-0-only PublishCloseCommit (no _releaseAtClose bits) from another Workspace is NOT refused.
+            (MutationOpen otherCloseOpen, string? otherCloseDetail) = other.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, otherCloseOpen);
+            Assert.Null(otherCloseDetail);
         }
 
-        Assert.Equal(pendingSnapshot, session.Image.Snapshot());
-
-        // After Close: extent is returned and both Workspaces can begin transactions and write again.
+        // BeginTrans opened beside File A's pending extent -> PublishCloseCommit(fileA) clears it -> allocating write on File A succeeds!
+        Assert.Null(session.Workspace.BeginTrans());
         (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
         Assert.Equal(MutationOpen.None, closeOpen);
         Assert.Null(closeDetail);
+        Assert.False(session.Cache.HasPendingRollbackExtent);
+        Assert.False(session.Workspace.HasPendingRollbackExtent(session.Cache));
 
-        Assert.True(session.Workspace.TryBeginTrans().Succeeded);
-        Assert.True(session.Workspace.Rollback().Succeeded);
+        Assert.True(tFrame.AddNew().Succeeded);
+        Assert.True(tFrame.Assign(Col(t, "ID"), I4(101)).Succeeded);
+        Assert.True(tFrame.Assign(Col(t, "K"), I4(101)).Succeeded);
+        AssignText(tFrame, Col(t, "S"), "after-close-in-txn");
+        Assert.True(tFrame.Update().Succeeded);
+        Assert.True(session.Workspace.CommitTrans().Succeeded);
 
         using (var other2 = new TransactionCoordinator(new LockerId(3)) { Publisher = session })
         {
             using TableCursor otherCursor2 = session.OpenCursor(t, other2);
             using var otherFrame2 = new EditFrame(targetCtx, otherCursor2, other2) { ConflictSource = MutationErrorSource.Database };
             Assert.True(otherFrame2.AddNew().Succeeded);
-            Assert.True(otherFrame2.Assign(Col(t, "ID"), I4(100)).Succeeded);
-            Assert.True(otherFrame2.Assign(Col(t, "K"), I4(100)).Succeeded);
+            Assert.True(otherFrame2.Assign(Col(t, "ID"), I4(102)).Succeeded);
+            Assert.True(otherFrame2.Assign(Col(t, "K"), I4(102)).Succeeded);
             AssignText(otherFrame2, Col(t, "S"), "other-ws-after-close");
             Assert.True(otherFrame2.Update().Succeeded);
         }
@@ -1297,8 +1445,8 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(frame.CancelUpdate().Succeeded);
         }
 
-        // 9b. Refused explicit above counter + new page + PK dup ID=1 -> counter keeps row 1's Observe (20) and is NOT
-        //     reseeded to 1; next AddNew yields 21.
+        // 9b. Refused explicit above counter + new page + PK dup ID=1 -> Open-list refusal writes nothing and restores
+        //     counter to 10 (neither row 1's Observe 20 nor row 2's Reseed 1 leaks); next AddNew yields 11.
         {
             RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
             byte[] image = (byte[])plan.SetupImage.Clone();
@@ -1306,6 +1454,7 @@ public sealed partial class StatementRollbackReplayTests
             using var session = new KeptSetupSession(image, "exp-sel-above-dup2-existing");
             byte[] start = session.Image.Snapshot();
             (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            Assert.Equal(10L, ctx.Counter!.Last);
             using TableCursor cursor = session.OpenCursor(an);
             using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
 
@@ -1330,19 +1479,20 @@ public sealed partial class StatementRollbackReplayTests
             }
 
             Assert.Equal(start, session.Image.Snapshot());
-            Assert.Equal(20L, ctx.Counter!.Last);
+            Assert.Equal(10L, ctx.Counter.Last);
             Assert.True(frame.AddNew().Succeeded);
-            Assert.Equal(21L, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.Equal(11L, frame.Read(Col(an, "ID")).Value.Integer);
             Assert.True(frame.CancelUpdate().Succeeded);
         }
 
-        // 9c. Refused explicit inside BeginTrans + PK dup ID=1 -> counter keeps row 1's Observe (20) and is NOT
-        //     reseeded to 1; next AddNew yields 21.
+        // 9c. Refused explicit inside BeginTrans + PK dup ID=1 -> Open-list refusal writes nothing and restores
+        //     counter to 10; next AddNew yields 11.
         {
             RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
             using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-above-dup2-existing");
             byte[] start = session.Image.Snapshot();
             (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            Assert.Equal(10L, ctx.Counter!.Last);
             using TableCursor cursor = session.OpenCursor(an);
             using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
 
@@ -1369,10 +1519,63 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(session.Workspace.Rollback().Succeeded);
 
             Assert.Equal(start, session.Image.Snapshot());
-            Assert.Equal(20L, ctx.Counter!.Last);
+            Assert.Equal(10L, ctx.Counter.Last);
             Assert.True(frame.AddNew().Succeeded);
-            Assert.Equal(21L, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.Equal(11L, frame.Read(Col(an, "ID")).Value.Integer);
             Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // 9d. Explicit BeginTrans + plain BeginStatement() + refused 3022 explicit PK dup ID=1:
+        //     Rollback writes nothing and keeps counter at 10; CommitTrans publishes offset 20 = 1 and reseeds to 1.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-below-pk-dup2-existing", FirstRecord("exp-sel-below-pk-dup2-existing"));
+            using (var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-pk-dup2-existing"))
+            {
+                byte[] start = session.Image.Snapshot();
+                (TableDefinition an, TableEditContext ctx) = session.Table("An");
+                Assert.Equal(10L, ctx.Counter!.Last);
+                using TableCursor cursor = session.OpenCursor(an);
+                using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+                Assert.Null(session.Workspace.BeginTrans());
+                using (StatementScope stmt = session.Workspace.BeginStatement())
+                {
+                    Assert.True(frame.AddNew().Succeeded);
+                    Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
+                    Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                    AssignText(frame, Col(an, "S"), "pkdup-rb");
+                    Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                    Assert.True(stmt.Complete().Succeeded);
+                }
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.Equal(start, session.Image.Snapshot());
+                Assert.Equal(10L, ctx.Counter.Last);
+            }
+
+            using (var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-pk-dup2-existing"))
+            {
+                (TableDefinition an, TableEditContext ctx) = session.Table("An");
+                Assert.Equal(10L, ctx.Counter!.Last);
+                using TableCursor cursor = session.OpenCursor(an);
+                using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+                Assert.Null(session.Workspace.BeginTrans());
+                using (StatementScope stmt = session.Workspace.BeginStatement())
+                {
+                    Assert.True(frame.AddNew().Succeeded);
+                    Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
+                    Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                    AssignText(frame, Col(an, "S"), "pkdup-commit");
+                    Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                    Assert.True(stmt.Complete().Succeeded);
+                }
+                Assert.True(session.Workspace.CommitTrans().Succeeded);
+                Assert.Equal(1L, ctx.Counter.Last);
+                byte[] tdef = session.Image.Snapshot().AsSpan((int)(an.FirstPage * D.PageSize), D.PageSize).ToArray();
+                Assert.Equal(1u, (uint)D.TableDef.AutoNumber.Read(tdef));
+            }
         }
     }
 
@@ -1710,9 +1913,10 @@ public sealed partial class StatementRollbackReplayTests
             PropertyBlob? extraProperties = null,
             IReadOnlyList<Relationship>? extraRelationships = null)
         {
-            _image = new MemoryDatabaseFile(image, D.PageSize);
+            byte[] copy = (byte[])image.Clone();
+            _image = new MemoryDatabaseFile(copy, D.PageSize);
             _cache = new PageCache(_image, _image.Incarnation, D.PageSize, 256);
-            DatabaseHeader header = DatabaseHeader.Decode(image.AsSpan(0, D.PageSize), D);
+            DatabaseHeader header = DatabaseHeader.Decode(copy.AsSpan(0, D.PageSize), D);
             var exprCtx = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query);
             _ruleBinder = new ExpressionRuleBinder(exprCtx);
             Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this };
@@ -1809,6 +2013,8 @@ public sealed partial class StatementRollbackReplayTests
 
         public Func<PageCache, IReadOnlyCollection<ulong>, string?>? FailWritable { get; set; }
 
+        public IPositionedFile? WritableOverride { get; set; }
+
         public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
         {
             if (FailWritable?.Invoke(cache, pages) is { } injected)
@@ -1817,7 +2023,7 @@ public sealed partial class StatementRollbackReplayTests
                 return null;
             }
             failure = ReferenceEquals(cache, _cache) ? null : "another file's cache";
-            return failure is null ? _image : null;
+            return failure is null ? (WritableOverride ?? _image) : null;
         }
 
         public (TableDefinition Table, TableEditContext Context) Table(string name)
@@ -1852,6 +2058,65 @@ public sealed partial class StatementRollbackReplayTests
                 ctx.Semantics.Dispose();
             }
             _image.Dispose();
+        }
+    }
+
+    private sealed class FailOnWriteNumberFile(IPositionedFile inner, int failOnWrite) : IPositionedFile
+    {
+        private int _writes;
+
+        public ulong Incarnation => inner.Incarnation;
+
+        public FileIdentity Identity => inner.Identity;
+
+        public TransferReceipt ReadAt(ulong offset, Memory<byte> buffer, CancellationToken cancellation = default) =>
+            inner.ReadAt(offset, buffer, cancellation);
+
+        public TransferReceipt WriteAt(ulong offset, ReadOnlyMemory<byte> buffer, CancellationToken cancellation = default)
+        {
+            if (++_writes == failOnWrite)
+            {
+                var range = new ByteRange(offset, offset + (ulong)buffer.Length);
+                return new TransferReceipt
+                {
+                    FileIncarnation = inner.Incarnation,
+                    RequestId = (ulong)_writes,
+                    RequestGeneration = 1,
+                    Attempted = range,
+                    Status = TransferStatus.Failed,
+                    ProvenPrefixBytes = 0,
+                    PossibleEffect = range,
+                    NativeError = 5,
+                };
+            }
+            return inner.WriteAt(offset, buffer, cancellation);
+        }
+
+        public FileOperationResult Flush() => inner.Flush();
+
+        public ulong GetExtent() => inner.GetExtent();
+
+        public FileOperationResult SetExtent(ulong extent) => inner.SetExtent(extent);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class MultiFileTarget(params IPublicationTarget[] targets) : IPublicationTarget
+    {
+        public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
+        {
+            foreach (IPublicationTarget target in targets)
+            {
+                if (target.Writable(cache, pages, out _) is { } file)
+                {
+                    failure = null;
+                    return file;
+                }
+            }
+            failure = "unknown cache";
+            return null;
         }
     }
 }

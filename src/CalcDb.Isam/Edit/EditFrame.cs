@@ -253,10 +253,6 @@ public sealed class EditFrame : IDisposable
         {
             return EditOutcome.Fail(MutationError.NotSupported, MutationErrorSource.Recordset);
         }
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return EditOutcome.NotModelled(MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
-        }
         if (_cursor is not IRowPositioned positioned || positioned.CurrentRow is not { } row)
         {
             if (_table.Semantics.Table.Columns.Count > 0 && _cursor.Read(_table.Semantics.Table.Columns[0]).Failure == CursorFailure.DeletedRecord)
@@ -342,10 +338,6 @@ public sealed class EditFrame : IDisposable
         if (Mode == EditMode.AddNew)
         {
             return EditOutcome.NotModelled(MutationOpen.RepeatedAddNew, "AddNew during AddNew: whether the first ticket is consumed and the defaults sampled again is not recorded");
-        }
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return EditOutcome.NotModelled(MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
         }
         MutationSemantics s = _table.Semantics;
         if (s.AutoNumber is { } autoWithCheck && s.HasCheckConstraints)
@@ -552,10 +544,6 @@ public sealed class EditFrame : IDisposable
         {
             return Fail(MutationError.InvalidArgument);
         }
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return new UpdateOutcome(null, MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
-        }
         MutationSemantics s = _table.Semantics;
         if (_table.HasRelationships && _table.Relationships is null)
         {
@@ -759,10 +747,10 @@ public sealed class EditFrame : IDisposable
                     long val = candidateValues[autoCol2.Ordinal].Integer;
                     if (reseedRefuseAuto)
                     {
-                        if (_workspace.InStatementOwnLevel)
+                        if (_workspace.Depth > 0)
                         {
-                            // Defer the in-memory Reseed until RollbackStatementFrame -> PlanStatementCounters admits
-                            // the case so an Open-list explicit AutoNumber statement refusal never mutates _table.Counter.
+                            // Defer the in-memory Reseed until RollbackStatementFrame -> PlanStatementCounters or
+                            // CommitTrans admits the case so an Open-list refusal or unrecorded Rollback never mutates _table.Counter.
                             _workspace.RecordPendingCounterReseed(refuseCounter, val, _counterBeforeAddNew);
                         }
                         else
@@ -1184,7 +1172,7 @@ public sealed class EditFrame : IDisposable
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
-            if (_workspace.InStatementOwnLevel && reseedAcceptedAuto)
+            if (_workspace.Depth > 0 && assigned[auto.Ordinal])
             {
                 _workspace.SaveExplicitCounterBefore(counter, _counterBeforeAddNew);
             }
@@ -1231,10 +1219,6 @@ public sealed class EditFrame : IDisposable
     /// </summary>
     public UpdateOutcome RecordStatementConversionFailure(int aceErrorNumber)
     {
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return new UpdateOutcome(null, MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
-        }
         MutationSemantics s = _table.Semantics;
         if (s.AutoNumber is null && _table.Writer is not null && _workspace.Publisher is not null)
         {
@@ -1311,10 +1295,6 @@ public sealed class EditFrame : IDisposable
         if (!Updatable)
         {
             return Fail(MutationError.NotSupported);
-        }
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return new UpdateOutcome(null, MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
         }
         // CUR-EDIT (editmode-unusual-transitions): Delete during Edit or AddNew discards the pending edit first.
         Discard();
@@ -1469,10 +1449,6 @@ public sealed class EditFrame : IDisposable
         if (!Updatable)
         {
             return Fail(MutationError.NotSupported);
-        }
-        if (_table.Writer is { } pendingWriter && _workspace.HasPendingRollbackExtent(pendingWriter.File))
-        {
-            return new UpdateOutcome(null, MutationOpen.Publication, TransactionCoordinator.PendingRollbackExtentWriteDetail);
         }
         Discard();
         MutationSemantics s = _table.Semantics;

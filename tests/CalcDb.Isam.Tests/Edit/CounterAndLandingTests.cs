@@ -1449,7 +1449,8 @@ public sealed class CounterAndLandingTests
             Assert.Equal((long)(autoBefore + 4u), ctx.Counter!.Last);
         }
 
-        // 3. A reseed (refused explicit PK duplicate) inside a transaction then Rollback succeeds writing nothing.
+        // 3. A reseed (refused explicit PK duplicate) inside a transaction then Rollback succeeds writing nothing and
+        //    leaves the in-memory AutoNumber counter unchanged so it matches disk.
         using (var rig = new Rig(EditFixture))
         {
             (TableDefinition g, TableEditContext ctx) = rig.Table("G");
@@ -1471,7 +1472,7 @@ public sealed class CounterAndLandingTests
             Assert.True(rb.Succeeded, rb.ToString());
             Assert.Empty(rig.A.Publications);
             Assert.Equal(start, rig.File.Image.Snapshot());
-            Assert.Equal(1L, ctx.Counter!.Last);
+            Assert.Equal((long)g.AutoNumber, ctx.Counter!.Last);
         }
 
         // 4. Non-unit increment: no record decides whether the counter reverts or stays consumed on Rollback

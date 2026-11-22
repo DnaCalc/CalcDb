@@ -86,7 +86,7 @@ public sealed class PageAllocator
     public uint? Allocate(PrivateOverlay? seen, out PageEdit mapEdit, out string? failure)
     {
         mapEdit = default;
-        if (!_allowPendingRollbackExtent && RollbackExtentTracker.HasAnyOwner(_cache))
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
             return null;
@@ -142,7 +142,7 @@ public sealed class PageAllocator
     /// </summary>
     public PageEdit? Free(PrivateOverlay? seen, uint page, out string? failure)
     {
-        if (!_allowPendingRollbackExtent && RollbackExtentTracker.HasAnyOwner(_cache))
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
             return null;
@@ -176,7 +176,7 @@ public sealed class PageAllocator
     {
         firstFree = 0;
         globalMapImage = [];
-        if (!_allowPendingRollbackExtent && RollbackExtentTracker.HasAnyOwner(_cache))
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
             return false;
@@ -248,7 +248,7 @@ public sealed class PageAllocator
     /// </summary>
     public bool TryReserveExtent(uint firstFreeBefore, ReadOnlySpan<byte> globalMapBefore, List<PageEdit> edits, List<uint> reservedPages, out string? failure)
     {
-        if (!_allowPendingRollbackExtent && RollbackExtentTracker.HasAnyOwner(_cache))
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
             return false;
@@ -351,7 +351,7 @@ public sealed class PageAllocator
     internal bool TryPlanRollbackExtent(IReadOnlyCollection<uint> allocatedPages, out RollbackExtentPlan? plan, out string? failure)
     {
         plan = null;
-        if (!_allowPendingRollbackExtent && RollbackExtentTracker.HasAnyOwner(_cache))
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
             return false;
