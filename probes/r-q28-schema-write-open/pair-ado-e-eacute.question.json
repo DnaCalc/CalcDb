@@ -1,0 +1,64 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q28-schema-write-open/pair-ado-e-eacute",
+  "bookRefs": ["R-CAT-1", "CAT-B", "R-ADO-1", "W-07/native-metadata-write"],
+  "description": "ADO (Microsoft.ACE.OLEDB.12.0) CREATE TABLE T ([e] LONG, [\u00e9] LONG) on r-cat-1-accdb-empty (accent pair). Reads Connection.Errors, reopens read-only through DAO to check TableDefs(\"T\"), and keeps pages 0, 1, 17, 42.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "cnp" },
+    { "op": "invoke", "target": "cnp", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "cds" },
+    { "op": "invoke", "target": "cds", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "cds" },
+    { "op": "release", "target": "cnp" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "observeModules", "label": "after-open" },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE T ([e] LONG, [\u00e9] LONG)" }] },
+    { "op": "invoke", "target": "cn", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "errs" },
+    { "op": "forEachItem", "target": "errs", "bind": "e", "maxItems": 16, "body": [
+      { "op": "invoke", "target": "e", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "NativeError", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "SQLState", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "errs" },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg", "offset": 69632, "count": 4096, "keep": true },
+    { "op": "nativeRead", "handle": "pg", "offset": 172032, "count": 4096, "keep": true },
+    { "op": "nativeClose", "handle": "pg" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "T" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fs" },
+    { "op": "invoke", "target": "fs", "member": "Count", "kind": "propertyGet", "args": [] },
+    { "op": "forEachItem", "target": "fs", "bind": "f", "maxItems": 8, "body": [
+      { "op": "invoke", "target": "f", "member": "Name", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "fs" },
+    { "op": "release", "target": "td" },
+    { "op": "release", "target": "tds" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" }
+  ]
+}
