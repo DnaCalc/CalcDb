@@ -930,6 +930,10 @@ the whxg writer had 5 roscli calls of 222 and no answer. The reviewers of the sa
 
 ## 2026-11-22 - Handover: organizer 8 (01a20219) to organizer 9
 
+Successor: CalcDb organizer 9, session 01a20342-db29-7d57-9344-80d772cda719, started beside 01a20219 (`--no-parent`) at
+about 12:38 UTC with the handoff prompt; 01a20219 lists no organizer among its children. Organizer 8 finishes only the
+core compare w6z8-1 of the w6z8 landing and stops.
+
 Session 01a20219 (Claude Opus 5.5, 07:13 to about 12:45 UTC, about 240 tool calls) landed nxj9 (the r-q27 probe round),
 whxg, 2qbr, dqtr, 82kf and w6z8, fixed the landing check's runner and worker build under an area filter, and brought
 roscli to 0.1.6-preview.28 (RoslynSkills 53bg: the daemon that died with the Neon harness's shell). Indicators
