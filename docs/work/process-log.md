@@ -871,3 +871,9 @@ rules (The Plan §4: find the cause; a review layer catches them today, so nothi
 the payload in `Data`, how it ran (in-process, daemon, MCP, transport server) in `Transport`; two writers' scripts had
 broken on the daemon's nested shape. RoslynSkills' queue of this round is empty; the NuGet.org push waits for a key
 nuget.org accepts.
+
+**RoslynSkills on NuGet.org again (2026-11-22).** 0.1.6-preview.27 of DNAKode.RoslynSkills.Cli and DNAKode.XmlSkills.Cli
+was pushed by the release workflow (run 44996799297). Three causes had stopped it since preview.20: the repository
+secret's key had expired; a regenerated expired key keeps its old expiry on nuget.org (create a new one instead); and a
+key is scoped to one package owner, so the packages (owned by the owner's account) gained the dnakode organization as
+co-owner to match the organization's key.
