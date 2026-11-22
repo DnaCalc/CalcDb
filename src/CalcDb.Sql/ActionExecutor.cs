@@ -200,7 +200,7 @@ public static unsafe class ActionExecutor
         bool failOnError = (options & DbFailOnError) != 0;
         // R-TXN-1 TXN-STMT (task sjws): the statement publishes once, at its end, what it changed, also the rows before a
         // failure; inside a BeginTrans level its changes join the level.
-        using StatementScope statement = database.Workspace.BeginStatement();
+        using StatementScope statement = database.Workspace.BeginStatement(isInsertSelect: plan.Kind == ActionKind.InsertSelect && plan.SourceSelect is not null);
         try
         {
             ActionOutcome outcome = plan.Kind switch
@@ -212,7 +212,9 @@ public static unsafe class ActionExecutor
                 _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionKind", plan.Kind.ToString())),
             };
             ResolutionOutcome published = statement.Complete();
-            return published.Succeeded ? outcome : ActionOutcome.Fail(MapResolutionFailure(published));
+            return !published.Succeeded && outcome.Failure is not { IsNotModelled: true }
+                ? ActionOutcome.Fail(MapResolutionFailure(published))
+                : outcome;
         }
         finally
         {
@@ -265,7 +267,7 @@ public static unsafe class ActionExecutor
                     }
                 }
 
-                if (CheckAutoNumberDownwardReseed(plan.InsertColumns, converted, editContext!) is { } reseedOpen)
+                if (CheckExplicitAutoNumberIncrement(plan.InsertColumns, editContext!) is { } reseedOpen)
                 {
                     return ActionOutcome.Fail(reseedOpen);
                 }
@@ -369,6 +371,8 @@ public static unsafe class ActionExecutor
 
             // R-SQL-2 SQL-ACT-FAIL / R-ERR-1 ERR-PARTIAL / R-TXN-1 TXN-STMT:
             // Multi-row INSERT ... SELECT with dbFailOnError rolls back all rows on failure (RecordsAffected 0).
+            bool externalDepthZero = database.Workspace.Depth == 0;
+            bool explicitAutoNumber = plan.InsertColumns.Any(c => c.IsAutoNumber);
             bool wrapStmtTxn = failOnError && sourceRows.Count > 1;
             if (wrapStmtTxn && database.Workspace.Depth >= TransactionCoordinator.MaxWriteDepth)
             {
@@ -402,12 +406,40 @@ public static unsafe class ActionExecutor
                             if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, out converted[c], out SqlFailure? convFail))
                             {
                                 ClearAll(converted);
+                                if (!convFail!.IsNotModelled
+                                    && failOnError
+                                    && convFail.Number == 3464
+                                    && r > 0
+                                    && externalDepthZero
+                                    && !explicitAutoNumber
+                                    && editContext!.Semantics.AutoNumber is not null)
+                                {
+                                    // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q27-autonumber-txn/ins-conv-3464-fail):
+                                    // a 3464 conversion refusal on a later autocommit INSERT ... SELECT row under dbFailOnError
+                                    // targeting a generated AutoNumber consumes that row's ticket and rolls back the statement
+                                    // writing the reached TableDef counters.
+                                    UpdateOutcome convSide = frame.RecordStatementConversionFailure(3464);
+                                    if (txnStarted)
+                                    {
+                                        database.Workspace.Rollback();
+                                        txnStarted = false;
+                                    }
+                                    if (convSide.Open != MutationOpen.None)
+                                    {
+                                        return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit." + convSide.Open, convSide.Detail ?? convSide.Open.ToString()));
+                                    }
+                                    if (convSide.Error is { } sideErr)
+                                    {
+                                        return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, sideErr.Number, sideErr.Describe()));
+                                    }
+                                    return ActionOutcome.Fail(convFail);
+                                }
                                 if (txnStarted)
                                 {
                                     database.Workspace.Rollback();
                                     txnStarted = false;
                                 }
-                                if (convFail!.IsNotModelled)
+                                if (convFail.IsNotModelled)
                                 {
                                     return ActionOutcome.Fail(convFail);
                                 }
@@ -421,7 +453,7 @@ public static unsafe class ActionExecutor
                             }
                         }
 
-                        if (CheckAutoNumberDownwardReseed(plan.InsertColumns, converted, editContext!) is { } reseedOpen)
+                        if (CheckExplicitAutoNumberIncrement(plan.InsertColumns, editContext!) is { } reseedOpen)
                         {
                             ClearAll(converted);
                             if (txnStarted)
@@ -954,18 +986,14 @@ public static unsafe class ActionExecutor
 
     /// <summary>
     /// Guard against unrecorded explicit AutoNumber assignments before <see cref="EditFrame.AddNew"/>:
-    /// <list type="bullet">
-    /// <item>Any explicit AutoNumber column under a non-1 increment is Open (qualified.md R-CAT-1 CAT-X / R-FMT-2,
-    /// <c>evidence/r-q23-counter-step/</c>) and must refuse before issuing a ticket.</item>
-    /// <item>Under unit increment, explicit AutoNumber values strictly below <see cref="AutoNumberCounter.Last"/>: ACE
-    /// reseeds the counter downward to the explicit value even when 3022 refuses the insert (R-SQL-2 ACT-INS-01,
-    /// <c>r-q-expr-sql/act-ins-autonumber</c>), whereas <c>AutoNumberCounter.Observe</c> in <c>CalcDb.Isam</c> currently
-    /// only advances upward. Stop cleanly until ISAM supports downward reseed.</item>
-    /// </list>
+    /// any explicit AutoNumber column under a non-1 increment is Open (qualified.md R-CAT-1 CAT-X / R-FMT-2,
+    /// <c>evidence/r-q23-counter-step/</c>) and must refuse before issuing a ticket. Under unit increment, explicit
+    /// AutoNumber values (including downward reseeds, accepted or refused 3022) are handled by <see cref="EditFrame"/>
+    /// (<c>evidence/r-q27-autonumber-txn/exp-gap-5</c>, <c>exp-gap-10</c>, <c>exp-pk-dup-5</c>, <c>exp-pk-dup-10</c>,
+    /// <c>exp-uk-dup-5</c>, <c>exp-uk-dup-40</c>; <c>evidence/r-q-expr-sql/act-ins-autonumber</c>).
     /// </summary>
-    private static SqlFailure? CheckAutoNumberDownwardReseed(
+    private static SqlFailure? CheckExplicitAutoNumberIncrement(
         IReadOnlyList<ColumnDescriptor> columns,
-        NativeVariant[] converted,
         TableEditContext editContext)
     {
         if (editContext.Counter is not { } counter)
@@ -974,26 +1002,12 @@ public static unsafe class ActionExecutor
         }
         for (int i = 0; i < columns.Count; i++)
         {
-            if (columns[i].IsAutoNumber)
+            if (columns[i].IsAutoNumber && counter.Increment != 1)
             {
-                if (counter.Increment != 1)
-                {
-                    return SqlFailure.Open(
-                        SqlPhase.Execute,
-                        "NotModelled.Edit.AutoNumberIncrement",
-                        $"explicit AutoNumber value under non-1 increment ({counter.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
-                }
-                if (converted[i].Type == VarType.I4)
-                {
-                    int explicitValue = (int)converted[i].Int64;
-                    if (explicitValue < counter.Last)
-                    {
-                        return SqlFailure.Open(
-                            SqlPhase.Execute,
-                            "NotModelled.AutoNumberDownwardReseed",
-                            $"explicit AutoNumber {explicitValue} < current counter {counter.Last} requires downward counter reseed in CalcDb.Isam (r-q-expr-sql/act-ins-autonumber)");
-                    }
-                }
+                return SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.Edit.AutoNumberIncrement",
+                    $"explicit AutoNumber value under non-1 increment ({counter.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
             }
         }
         return null;

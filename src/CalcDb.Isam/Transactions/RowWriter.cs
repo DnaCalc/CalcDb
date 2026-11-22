@@ -454,13 +454,34 @@ public sealed class NoOpPageDelta : IPageDelta
     }
 }
 
-/// <summary>Increment the ACCDB page-0 commit counter at offset 3586 by 1 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits).</summary>
-public sealed class CommitCounterDelta(FormatDescriptor d) : IPageDelta
+/// <summary>
+/// Increment the page-0 commit counter at offset 3586 by 1 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter,
+/// evidence/r-q10-commit-counter-edits, and for Jet 4 MDB when <paramref name="allowJet4Mdb"/> is set:
+/// evidence/r-q27-autonumber-txn/ins-txn-rb-mdb, ins-dup-fail-mdb).
+/// </summary>
+public sealed class CommitCounterDelta(FormatDescriptor d, bool allowJet4Mdb = false) : IPageDelta
 {
     public DeltaFootprint Footprint => DeltaFootprint.None;
 
     public void Apply(Span<byte> decodedPage)
     {
+        if (allowJet4Mdb
+            && ProfileSelector.Select(decodedPage, out FileProfile? profile, d) == ProfileRefusal.None
+            && profile!.Format == FileFormat.Jet4)
+        {
+            if (decodedPage.Length != d.PageSize)
+            {
+                throw new FormatViolationException($"Page 0 commit counter: page 0 is {decodedPage.Length} bytes, not {d.PageSize}");
+            }
+            FieldRule rule = d.Header.CommitCounter;
+            ulong current = rule.Read(decodedPage);
+            if (current >= 255)
+            {
+                throw new FormatViolationException($"Page 0 commit counter: page 0 commit counter at offset {rule.Offset} is {current}: wrap or carry past 255 is not observed (R-CRASH-1)");
+            }
+            rule.Write(decodedPage, current + 1);
+            return;
+        }
         if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, out string? failure))
         {
             throw new FormatViolationException($"Page 0 commit counter: {failure}");
@@ -695,11 +716,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// (W-05/growth-structural-closure; II-04 §§1.2, 2, 9.3, II-05 §§2, 9, II-16 §17; R-LOCK-4 WRITE-ALLOC): encodes the
     /// row, places it (<see cref="PlaceRow"/>: the first FreeMap page with room, else a new data page), inserts one entry
     /// per physical index into its leaf (an entry past the rightmost leaf's last extends it; a full leaf is recompressed or
-    /// split, <see cref="GrownTree"/>), and updates TableDef RowCount, AutoNumber and each physical index's
+    /// split, <see cref="GrownTree"/>), and updates TableDef RowCount, AutoNumber (setting 0x14..0x17 to the explicit
+    /// value when <paramref name="reseedAutoNumber"/> is true under unit increment,
+    /// <c>evidence/r-q27-autonumber-txn/exp-gap-5</c>, <c>exp-gap-10</c>) and each physical index's
     /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
     /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
-    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null)
+    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
         if (_pageCount == 0)
         {
@@ -894,11 +917,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, +1, autoNumberFloor, incrementUnique, _d, out string? tdefFailure))
+        if (!TableDefCountsDelta.TryApply(tdefCopy, +1, autoNumberFloor, reseedAutoNumber, incrementUnique, [], _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], _d), PageRole.Catalog));
+        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root), null);
     }
@@ -1321,11 +1344,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
 
     /// <summary>
     /// Compile the non-transactional TableDef AutoNumber persistence when <c>AddNew</c> consumes a generated ticket
-    /// (R-FMT-2 Generated values; evidence/r-q-fmt-sort/auto-cancel-fail-accdb, evidence/r-q10-commit-counter-edits):
-    /// advances TableDef AutoNumber at offset 20 without changing RowCount or index counters, so CancelUpdate, refused
-    /// Update, and Rollback all leave the consumed counter on disk.
+    /// (R-FMT-2 Generated values; evidence/r-q-fmt-sort/auto-cancel-fail-accdb, evidence/r-q10-commit-counter-edits,
+    /// evidence/r-q27-autonumber-txn/ins-req-3314-fail, ins-val-3316-fail, ins-conv-3464-fail,
+    /// memo-zerolength-false-fail, memo-zerolength-unset-fail) or reseeds 0x14..0x17 on a refused explicit value
+    /// (<c>evidence/r-q27-autonumber-txn/exp-uk-dup-40</c>, <c>exp-uk-dup-5</c>): updates TableDef AutoNumber at offset
+    /// 20 without changing RowCount or index counters.
     /// </summary>
-    public CompiledChange CompileAutoNumberAdvance(uint autoNumberFloor, PrivateOverlay? seen = null)
+    public CompiledChange CompileAutoNumberAdvance(uint autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
         using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
@@ -1333,30 +1358,35 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, 0, autoNumberFloor, [], [], _d, out string? tdefFailure))
+        if (!TableDefCountsDelta.TryApply(tdefCopy, 0, autoNumberFloor, reseedAutoNumber, [], [], _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
+        if (!reseedAutoNumber && tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
         {
             return new CompiledChange(new PhysicalChange(_cache, [], []), null);
         }
         return new CompiledChange(new PhysicalChange(
             _cache,
-            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [], [], _d), PageRole.Catalog)],
+            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(0, autoNumberFloor, [], [], _d, reseedAutoNumber), PageRole.Catalog)],
             [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
     }
 
     /// <summary>
     /// Compile the TableDef side effects of an <c>AddNew</c> whose <c>Update</c> is refused 3022 by unique physical
     /// index <paramref name="refusingPhysicalNumber"/> (R-FMT-2 II-05, evidence/r-q-fmt-sort/dc-rules-accdb,
-    /// evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain): each physical index strictly
-    /// before <paramref name="refusingPhysicalNumber"/> whose candidate key is not already present increments its
+    /// evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain) or 3201 by a foreign-key physical
+    /// index (<c>evidence/r-q27-autonumber-txn/ins-fk-3201-fail</c>): each physical index strictly before
+    /// <paramref name="refusingPhysicalNumber"/> whose candidate key is not already present increments its
     /// UniqueEntryCount (word1, clamped to word0 while word0 &gt; 0), and the AutoNumber floor is persisted; with
-    /// <paramref name="reseedAutoNumber"/> (an explicit value refused as a duplicate of the AutoNumber's own primary key)
-    /// the word takes the value exactly, also downward (evidence/r-q-expr-sql/act-ins-autonumber seq 349,
-    /// evidence/r-q-fmt-sort/auto-cancel-fail-accdb seq 257, evidence/r-sql-2-3/act-ins-defaults seq 81 and 91). Returns
-    /// empty edits when no TableDef word changes, so the caller decides the commit of a refusal that changes nothing.
+    /// <paramref name="reseedAutoNumber"/> the word takes the explicit value exactly, also downward or when equal to the
+    /// stored word (<c>evidence/r-q-expr-sql/act-ins-autonumber</c> seq 349,
+    /// <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c> seq 257, <c>evidence/r-sql-2-3/act-ins-defaults</c> seq 81 and
+    /// 91, <c>evidence/r-q27-autonumber-txn/exp-pk-dup-10</c>, <c>exp-pk-dup-5</c>, <c>exp-uk-dup-40</c>,
+    /// <c>exp-uk-dup-5</c>). For an explicit AutoNumber reseed (<paramref name="reseedAutoNumber"/> with non-null
+    /// <paramref name="autoNumberFloor"/>), emits the TableDef edit even when the stored word already equals the target
+    /// so page 0 offset 3586 still bumps +1 (<c>exp-pk-dup-10</c>); otherwise returns empty edits when no TableDef word
+    /// changes.
     /// </summary>
     public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
@@ -1408,7 +1438,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
-        if (tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
+        if (!(reseedAutoNumber && autoNumberFloor is not null) && tdefCopy.AsSpan().SequenceEqual(tdefPin.Bytes))
         {
             return new CompiledChange(new PhysicalChange(_cache, [], []), null);
         }
@@ -1968,7 +1998,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// <summary>
     /// Encode a non-Null Memo or OLE value into its payload bytes and check preconditions common to inline and
     /// external placement: Memo text via <see cref="TextCodec.TryEncode"/> (which refuses <c>MEMO WITH COMPRESSION</c>
-    /// and a leading U+FEFF by name), OLE bytes as given, refusing 0-byte payloads and MDB files.
+    /// and a leading U+FEFF by name; 0-byte Memo is admitted as the 12-byte inline header with length 0 and inline flag
+    /// 0x80, <c>evidence/r-q27-autonumber-txn/memo-zerolength-true-fail</c>), OLE bytes as given, refusing 0-byte OLE
+    /// payloads and MDB files.
     /// </summary>
     private byte[]? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure)
     {
@@ -1989,9 +2021,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"a {value.Kind} value for the long-value column";
             return null;
         }
-        if (payload!.Length == 0)
+        if (payload!.Length == 0 && c.TypeCode != NativeTypes.Memo)
         {
-            failure = "an empty (0-byte) long value is not recorded (R-FMT-2 LV form selection)";
+            failure = "an empty (0-byte) OLE long value is not recorded (R-FMT-2 LV form selection)";
             return null;
         }
         using (PagePin? page0 = Seen(seen).Pin(0).Pin)

@@ -169,8 +169,10 @@ public static class FieldEncoder
         }
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            // Inline long values: 1..64 bytes in the data row (II-04 §7.1; R-FMT-2 "LV form selection":
-            // evidence/r-q19-growth-open/lv-inline-memo 2..64 vs 66..98, lv-inline-ole 1..64 vs 65..99).
+            // Inline long values: 0..64 bytes for Memo (II-04 §7.1; R-FMT-2 "LV form selection":
+            // evidence/r-q19-growth-open/lv-inline-memo 2..64 vs 66..98; evidence/r-q27-autonumber-txn/memo-zerolength-true-fail
+            // 0-byte Memo encodes as 12-byte inline header with length 0 and inline flag 0x80), 1..64 bytes for OLE
+            // (lv-inline-ole 1..64 vs 65..99; 0-byte OLE is not recorded).
             byte[]? payload;
             if (column.TypeCode == NativeTypes.Memo && value.Kind == NativeKind.Text)
             {
@@ -189,9 +191,9 @@ public static class FieldEncoder
                 failure = $"a {value.Kind} value for long-value column (native type {column.TypeCode})";
                 return false;
             }
-            if (payload!.Length == 0)
+            if (payload!.Length == 0 && column.TypeCode != NativeTypes.Memo)
             {
-                failure = "an empty (0-byte) long value is not recorded (R-FMT-2 LV form selection)";
+                failure = "an empty (0-byte) OLE long value is not recorded (R-FMT-2 LV form selection)";
                 return false;
             }
             if (payload.Length <= LongValuePlan.InlinePayloadMax)

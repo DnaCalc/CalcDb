@@ -355,7 +355,12 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         Name = name;
         UserName = userName;
         _isDefault = isDefault;
-        Transactions = new TransactionCoordinator(EngineState.NextLocker()) { Publisher = engine, WaitPolicy = engine.LockWait };
+        Transactions = new TransactionCoordinator(EngineState.NextLocker())
+        {
+            Publisher = engine,
+            WaitPolicy = engine.LockWait,
+            AutoNumberPublished = engine.Changes.MarkAutoNumberPublished,
+        };
         engine.Changes.Add(Transactions);
     }
 

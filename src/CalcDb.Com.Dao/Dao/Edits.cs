@@ -144,7 +144,7 @@ internal sealed class UnpublishedChanges
         return false;
     }
 
-    /// <summary>Advance stored AutoNumber floors after a non-transactional AutoNumber write publishes to disk.</summary>
+    /// <summary>Advance stored AutoNumber floors after a TableDef 0x14 write publishes to disk.</summary>
     public void MarkAutoNumberPublished(string file, string table, uint floor)
     {
         foreach (CounterEntry entry in _counters)
@@ -154,6 +154,19 @@ internal sealed class UnpublishedChanges
                 && floor > entry.Stored)
             {
                 entry.Stored = floor;
+            }
+        }
+    }
+
+    /// <summary>Advance stored AutoNumber floors for the table whose TableDef page just published to disk.</summary>
+    public void MarkAutoNumberPublished(PageCache cache, uint tableDefPage, uint floor)
+    {
+        foreach (CounterEntry entry in _counters)
+        {
+            if (ReferenceEquals(entry.Cache, cache) && entry.TableDefPage == tableDefPage)
+            {
+                MarkAutoNumberPublished(entry.File, entry.Table, floor);
+                return;
             }
         }
     }
@@ -177,17 +190,20 @@ internal sealed class UnpublishedChanges
         }
     }
 
-    private sealed class CounterEntry(string file, string table, AutoNumberCounter counter, uint stored)
+    private sealed class CounterEntry(string file, string table, AutoNumberCounter counter, uint stored, PageCache? cache, uint tableDefPage)
     {
         public string File { get; } = file;
         public string Table { get; } = table;
         public AutoNumberCounter Counter { get; } = counter;
         public uint Stored { get; set; } = stored;
+        public PageCache? Cache { get; } = cache;
+        public uint TableDefPage { get; } = tableDefPage;
     }
 
     // Kept for the engine's lifetime, after the Database that made a counter closes, so a reopen sees what it issued.
     private readonly List<CounterEntry> _counters = [];
 
     /// <summary>Record a table's counter with the stored value it started from.</summary>
-    public void Register(string file, string table, AutoNumberCounter counter, uint stored) => _counters.Add(new CounterEntry(file, table, counter, stored));
+    public void Register(string file, string table, AutoNumberCounter counter, uint stored, PageCache? cache = null, uint tableDefPage = 0) =>
+        _counters.Add(new CounterEntry(file, table, counter, stored, cache, tableDefPage));
 }

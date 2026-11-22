@@ -88,7 +88,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         Engine.Changes.Register(context.Semantics, Name);
         if (context.Counter is { } counter)
         {
-            Engine.Changes.Register(Name, entry.Name, counter, table.AutoNumber);
+            Engine.Changes.Register(Name, entry.Name, counter, table.AutoNumber, Cache, table.FirstPage);
         }
     }
 
