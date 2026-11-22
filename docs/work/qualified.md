@@ -1121,15 +1121,37 @@ is summarised in [qualification-report.md](qualification-report.md).
     at row 6 of rows that fill three data pages when accepted (ins-clean-two-pages) writes no data or index page and
     takes none: pages 0 and the TableDef change, +3 (ins-dup-fail-two-pages). Jet 4 MDB writes the same counters on its
     TableDef page (ins-dup-fail-mdb; its repeat differs only in an MSysObjects date).
-  - *No AutoNumber column.* On a table with no AutoNumber column, a 3022 under `dbFailOnError` on an existing page
-    writes no group inside `Execute`. Only the deferred group writes the counters reached, +1: the primary key's
-    count after a first-row refusal by a second unique index (`evidence/r-txn-1b/implicit-unique-first-failonerror`),
-    and row count +1, primary key +2, unique +1 after one accepted row (`evidence/r-txn-1/stmt-unique-middle-fail-d0`).
-    The group inside `Execute` therefore goes with the consumed AutoNumber. These two records keep the final file
-    hash only, not the pages. An AutoNumber table whose rows give explicit values, a new page, 3314 and MDB are not
-    decided without an AutoNumber column (task qhs8). `r-sql-2-3/act-fail-insert-required`,
-    `r-q-expr-sql/fail-late-candidate` and `r-fix-expr-sql/fail-insert-required-cross-table` record 3314 by final
-    hash only.
+  - *The group inside `Execute` comes with an AutoNumber column or a page taken.* At external depth 0 under
+    `dbFailOnError` (tasks qhs8 and k64d):
+    - **No AutoNumber column, existing page: +1.** 3022, 3314, 3201 and 3316 write no group inside `Execute` and
+      nothing at `Close`; only the deferred group writes the counters reached. ACCDB and Jet 4 MDB (TableDef page 19).
+      A first-row 3022 by a second unique index raises only the primary key's count; one accepted row then 3022 gives
+      row count +1, primary key +2, unique +1.
+    - **No AutoNumber column, a new page: +3.** Rows on one or several new pages give the same, ACCDB and MDB, with
+      page 1 unchanged after `Close`. Pages read beside ACE's open handle split it. Inside `Execute`: +1, the 32-page
+      extent reserved in page 1 at 4038, the TableDef untouched. Deferred: +1, the rolled-back page's bit freed and
+      the TableDef counters written. At `Close`: +1, the unused extent returned.
+    - **The refused row's own index entries.** 3022 by the primary key, 3314 and 3316 count no index entry for the
+      refused row. 3022 by a second unique index and 3201 count its primary key (+1).
+    - **AutoNumber table, explicit values, existing ACCDB page: +2.** As for generated values: inside `Execute`, then
+      deferred, nothing at `Close`. This holds for values below the counter, equal to it (the word stays) and above
+      it. The AutoNumber word takes the refused row's explicit value: 10 becomes 5 or 1, stays 10, or becomes 30.
+    The earlier reading of r-txn-1b/implicit-unique-first-failonerror and r-txn-1/stmt-unique-middle-fail-d0 (final
+    hashes only), that the group inside `Execute` goes with a *consumed* AutoNumber, is wrong: an explicit value
+    equal to the counter consumes none and still writes it.
+    - **Records:** `evidence/r-q29-stmt-rollback-counters/`, 20 questions, 15 of them asked twice and equal byte for byte
+      in the kept pages. `noan-dup-row1-uk-existing`, `noan-dup-row2-uk-existing`, `noan-req-3314-existing`,
+      `noan-fk-3201-existing`, `noan-val-3316-existing`, `noan-dup-row2-mdb-existing`; `noan-dup-row2-newpage`,
+      `noan-dup-twopages`, `noan-req-3314-newpage`, `noan-fk-3201-newpage`, `noan-val-3316-newpage`,
+      `noan-dup-row2-mdb-newpage`; `exp-sel-below-dup2-existing`, `exp-sel-below-pk-dup2-existing`,
+      `exp-sel-eq-dup2-existing`, `exp-sel-eq-uk-dup1-existing`, `exp-sel-above-dup2-existing`.
+    - **Discriminators:** the three `*-live` questions (`noan-dup-row2-existing-live`, `noan-dup-row2-newpage-live`,
+      `exp-sel-eq-dup2-live`) separate the groups. `exp-sel-eq-*` separates "AutoNumber column" from "consumed
+      AutoNumber".
+    - **Open:** explicit values on a new page, in MDB, inside `BeginTrans` or under another increment; MDB 3314, 3201
+      and 3316 without an AutoNumber column; MDB with a generated AutoNumber on an existing page; 3464 without an
+      AutoNumber column; a first-row 3314 or 3316 on an empty table. These were asked without ETW, which `etw-check`
+      refuses from a worktree.
   - *Memo AllowZeroLength.* A Memo made by DAO `CreateField` reads `AllowZeroLength` False when it is not set; '' into it
     fails 3315 under `dbFailOnError` and consumes the AutoNumber (+1; memo-zerolength-unset-fail,
     memo-zerolength-false-fail a1 and a2). With True it stores '' (memo-zerolength-true-fail).
