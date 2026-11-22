@@ -988,6 +988,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
     }
 
+    /// <summary>A CommitTrans of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets.</summary>
+    public void Committed(Isam.Transactions.ExplicitFrame level, bool outermost, bool hadOverlay)
+    {
+        foreach (IDatabaseRecordset r in _recordsets.ToArray())
+        {
+            r.Committed(level, outermost, hadOverlay);
+        }
+    }
+
     /// <summary>Close: every recordset of this Database closes, the file is released, the Workspace forgets it.</summary>
     private CallResult Close()
     {

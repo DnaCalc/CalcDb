@@ -404,11 +404,26 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// </summary>
     public CallResult CommitTrans(nint options)
     {
+        ExplicitFrame? level = Transactions.Depth > 0 ? Transactions.Frames[^1] : null;
         AcceptedRowChange[]? outermost = Transactions.Depth == 1 ? [.. Transactions.Frames[0].AcceptedChanges] : null;
+        DatabaseObject[]? databasesWithOverlay = level is not null
+            ? [.. _databases.Where(d => !d.Closed && Transactions.OverlayOf(d.Cache) is not null)]
+            : null;
         ResolutionOutcome outcome = Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0);
-        if (outermost is not null && outcome.Succeeded)
+        if (outcome.Succeeded)
         {
-            Engine.Changes.MarkPublished(outermost);
+            if (outermost is not null)
+            {
+                Engine.Changes.MarkPublished(outermost);
+            }
+            if (level is not null)
+            {
+                foreach (DatabaseObject d in _databases.ToArray())
+                {
+                    bool hadOverlay = databasesWithOverlay is not null && Array.IndexOf(databasesWithOverlay, d) >= 0;
+                    d.Committed(level, outermost: level.Level == 1, hadOverlay);
+                }
+            }
         }
         return EditPublication.Of(outcome);
     }
