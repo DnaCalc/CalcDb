@@ -1,5 +1,7 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using CalcDb.Evidence;
+using CalcDb.Format;
 
 namespace CalcDb.Corpus.Tests;
 
@@ -554,5 +556,236 @@ public sealed class ClockNormalizationTests
         byte[] page44 = KeptPage(l30.Capture!, 44 * 4096);
         ClockFieldMap page44Map = AceClockFields.FindInSlice(44 * 4096, page44, ctx, out string? refusal) ?? throw new InvalidOperationException(refusal);
         Assert.Empty(page44Map.Fields);
+    }
+
+    [Fact]
+    public void Malformed_deleted_row_trailer_is_rejected_and_not_masked()
+    {
+        // evidence/r-q28-schema-write-open/pair-dao-Aa-aA: intact deleted MSysObjects row at [2234, 2364) (130 bytes, C=17).
+        EvidenceRecord record = LoadRecord(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json");
+        PageClockContext ctx = BuildContextFromRecord(record);
+        byte[] page17 = KeptPage(record.Capture!, 17 * 4096);
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        const int deletedStart = 2234;
+        const int deletedEnd = 2364;
+        ReadOnlySpan<byte> body = page17.AsSpan(deletedStart, deletedEnd - deletedStart);
+        Assert.True(RowEnvelope.TryOpen(body, d, out RowEnvelope row, out _));
+        Assert.Equal(ctx.MSysObjects.MaxColumns, row.ColumnCount);
+        int maskStart = deletedStart + row.MaskStart;
+        int fixedEnd = ctx.MSysObjects.KnownFixedEnd(row.ColumnCount, d);
+        int v = ctx.MSysObjects.VariableColumns;
+
+        // Locate a null variable column index j0 >= 1 so RowEnvelope.ReadField skips its trailer entry while
+        // TryOpenDeletedRowEndingAt's trailer loop must still validate it.
+        ColumnDescriptor? nullVar = null;
+        foreach (ColumnDescriptor col in ctx.MSysObjects.Columns)
+        {
+            if (!col.IsFixed && !col.IsMaskBoolean && col.VariableIndex >= 1 && !row.MaskBit(col.PhysicalNumber))
+            {
+                nullVar = col;
+                break;
+            }
+        }
+        Assert.NotNull(nullVar);
+        int nullJ = nullVar.VariableIndex;
+        int nullStartPos = maskStart - 4 - (2 * nullJ);
+        ushort nullStartVal = BinaryPrimitives.ReadUInt16LittleEndian(page17.AsSpan(nullStartPos));
+
+        // (a) start[0] != fixedEnd (shift start[0] up by 2 while keeping start[0] == end[0] <= eod; fails start[0] == fixedEnd).
+        byte[] badStart0 = (byte[])page17.Clone();
+        int start0Pos = maskStart - 4;
+        BinaryPrimitives.WriteUInt16LittleEndian(badStart0.AsSpan(start0Pos), (ushort)(fixedEnd + 2));
+        ClockFieldMap mapA = AceClockFields.FindInSlice(17 * 4096, badStart0, ctx, out _) ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(mapA.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+
+        // (b) Non-monotonic trailer on a null column: start[nullJ] > end[nullJ] (bump start[nullJ] by 1).
+        byte[] badNonMono = (byte[])page17.Clone();
+        BinaryPrimitives.WriteUInt16LittleEndian(badNonMono.AsSpan(nullStartPos), (ushort)(nullStartVal + 1));
+        ClockFieldMap mapB = AceClockFields.FindInSlice(17 * 4096, badNonMono, ctx, out _) ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(mapB.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+
+        // (c) Null column with start[j] != end[j] while every trailer entry remains monotonic and every non-null field
+        // (Name, Owner, LvProp at var[8]) remains valid: var[9] is null with start[9] == end[9] == 101 after var[8] [36, 101);
+        // pulling start[9] down to 99 gives var[8]=[36,99), var[9]=[99,101) (monotonic, but null var[9] is non-empty).
+        ColumnDescriptor var9 = ctx.MSysObjects.Columns.Single(c => !c.IsFixed && !c.IsMaskBoolean && c.VariableIndex == 9);
+        Assert.False(row.MaskBit(var9.PhysicalNumber));
+        byte[] badNullNonEmpty = (byte[])page17.Clone();
+        int start9Pos = maskStart - 4 - (2 * 9);
+        ushort start9Val = BinaryPrimitives.ReadUInt16LittleEndian(badNullNonEmpty.AsSpan(start9Pos));
+        Assert.True(start9Val >= fixedEnd + 4);
+        BinaryPrimitives.WriteUInt16LittleEndian(badNullNonEmpty.AsSpan(start9Pos), (ushort)(start9Val - 2));
+        ClockFieldMap mapC = AceClockFields.FindInSlice(17 * 4096, badNullNonEmpty, ctx, out _) ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(mapC.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+        Assert.True(v > 9);
+    }
+
+    [Fact]
+    public void Two_deleted_MSysObjects_rows_of_different_lengths_are_both_normalized_and_other_bytes_still_differ()
+    {
+        // Build a valid MSysObjects data page from r-cat-1-accdb-empty page 17 by appending two real ACE MSysObjects
+        // rows of different lengths (130 bytes from pair-dao-Aa-aA and 77 bytes from dao-fields-7) and deleting both.
+        EvidenceRecord pairRec = LoadRecord(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json");
+        EvidenceRecord f7Rec = LoadRecord(@"evidence\r-q28-schema-write-open\dao-fields-7\r-q28-schema-write-open.dao-fields-7.71d1d89bf5.a1.json");
+        PageClockContext ctx = BuildContextFromRecord(pairRec);
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+
+        byte[] rowA = KeptPage(pairRec.Capture!, 17 * 4096).AsSpan(2234, 130).ToArray(); // 130-byte deleted row
+        byte[] f7Page17 = KeptPage(f7Rec.Capture!, 17 * 4096);
+        SlotView f7Slot18 = DataPages.CheckedSlot(f7Page17, 18, d, out string? sf) ?? throw new InvalidOperationException(sf);
+        byte[] rowB = f7Page17.AsSpan(f7Slot18.Start, f7Slot18.Length).ToArray();         // 77-byte live row
+        Assert.NotEqual(rowA.Length, rowB.Length);
+
+        byte[] page17 = Bytes(CatEmpty).AsSpan(17 * 4096, 4096).ToArray();
+        Assert.True(DataPages.TryAppendRow(page17, rowA, d, out byte slotA, out string? f1), f1);
+        Assert.True(DataPages.TryAppendRow(page17, rowB, d, out byte slotB, out string? f2), f2);
+        Assert.True(DataPages.TryDeleteSlot(page17, slotB, d, out string? f3), f3);
+        Assert.True(DataPages.TryDeleteSlot(page17, slotA, d, out string? f4), f4);
+
+        // rowA lies at [2234, 2364) (DateCreate 2246, DateUpdate 2254); rowB lies at [2157, 2234) (DateCreate 2169, DateUpdate 2177).
+        int rowAStart = 2364 - rowA.Length;
+        int rowBStart = rowAStart - rowB.Length;
+        ClockFieldMap map = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        long[] deletedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("deleted row", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([rowBStart + 12L, rowBStart + 20L, rowAStart + 12L, rowAStart + 20L], deletedDates);
+
+        // Positive: mutating all 32 clock bytes across both deleted rows matches.
+        byte[] clockChanged = (byte[])page17.Clone();
+        for (int i = rowBStart + 12; i < rowBStart + 28; i++) clockChanged[i] ^= 0x11;
+        for (int i = rowAStart + 12; i < rowAStart + 28; i++) clockChanged[i] ^= 0x22;
+        Assert.True(FileImageComparison.CompareSlice(17 * 4096, page17, clockChanged, ctx, ctx).EqualOutsideClock);
+
+        // Rejecting control: mutating a non-clock byte in either deleted row still mismatches.
+        foreach (int off in (int[])[rowBStart, rowBStart + 32, rowAStart - 1, rowAStart, rowAStart + 32, 2363])
+        {
+            byte[] bad = (byte[])page17.Clone();
+            bad[off] ^= 0x01;
+            Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, bad, ctx, ctx).EqualOutsideClock, $"non-clock byte {off} was unexpectedly masked");
+        }
+    }
+
+    [Fact]
+    public void Reconstruction_via_otherFullFile_succeeds_when_unkept_modified_page_matches_and_fails_strictly_when_it_differs()
+    {
+        // evidence/r-q15-ddl-open/lv-dao-name-8: final file (184320 bytes) is not retained; page 6 is modified by ACE
+        // (offsets 0xCCE and 0xD13 change 0x00 -> 0x10) and is NOT in the kept nativeRead slices, so overlaying the
+        // kept reads onto the earliest retained input cannot match ACE's SHA-256 and reconstruction must go through
+        // otherFullFile.
+        EvidenceRecord record = LoadRecord(@"evidence\r-q15-ddl-open\lv-dao-name-8\r-q15-ddl-open.lv-dao-name-8.a5444e31a8.a1.json");
+        Capture oracle = record.Capture!;
+        FilesEvent lastFiles = oracle.Events.OfType<FilesEvent>().Last();
+        string oracleFinalSha = lastFiles.Files[0].Sha256!;
+
+        // Confirm earliest-input + kept reads alone does NOT reproduce oracleFinalSha (page 6 is unkept and modified).
+        (_, byte[] fromInputOnly) = MakeCandidateFromRecord(record, _ => { });
+        Assert.NotEqual(oracleFinalSha, Sha(fromInputOnly), StringComparer.OrdinalIgnoreCase);
+
+        // (a) Candidate has ACE's exact unkept page 6 bytes (0xCCE=0x10, 0xD13=0x10) and differs only in live slot 18
+        // clock bytes on page 17 (0x8FB..0x90A) -> otherFullFile reconstructs ACE's exact file (SHA-256 verified) and matches.
+        (Capture candidateMatch, byte[] fullMatch) = MakeCandidateFromRecord(record,
+            p17 =>
+            {
+                for (int i = 0x8FB; i < 0x90B; i++) p17[i] ^= 0x15;
+            },
+            full =>
+            {
+                full[6 * 4096 + 0xCCE] = 0x10;
+                full[6 * 4096 + 0xD13] = 0x10;
+            });
+        string matchSha = Sha(fullMatch);
+        ComparisonRecord matched = CallTraceComparison.Compare("r-q15-ddl-open/lv-dao-name-8",
+            record.RecordId, oracle, candidateMatch.AttemptId, candidateMatch, "CalcDb.dll",
+            oracleFiles: StoreLookup,
+            candidateFiles: sha => sha == matchSha ? fullMatch : StoreLookup(sha));
+        Assert.Equal(ComparisonStatus.Matched, matched.Status);
+        Assert.Empty(matched.Differences);
+        Assert.Contains(matched.Notes, n => n.Contains("files[0]", StringComparison.Ordinal) && n.Contains("CatalogDate", StringComparison.Ordinal));
+
+        // (b) Flip one bit of unkept page 6 in the candidate -> neither earliest nor otherFullFile matches ACE's SHA-256,
+        // so $.files[0].sha256 mismatches with the "compared by SHA-256" note.
+        (Capture candidateBadPage6, byte[] fullBadPage6) = MakeCandidateFromRecord(record,
+            p17 =>
+            {
+                for (int i = 0x8FB; i < 0x90B; i++) p17[i] ^= 0x15;
+            },
+            full =>
+            {
+                full[6 * 4096 + 0xCCE] = 0x10;
+                full[6 * 4096 + 0xD13] = 0x11; // 1 bit flipped on unkept page 6
+            });
+        string badSha = Sha(fullBadPage6);
+        ComparisonRecord mismatched = CallTraceComparison.Compare("r-q15-ddl-open/lv-dao-name-8",
+            record.RecordId, oracle, candidateBadPage6.AttemptId, candidateBadPage6, "CalcDb.dll",
+            oracleFiles: StoreLookup,
+            candidateFiles: sha => sha == badSha ? fullBadPage6 : StoreLookup(sha));
+        Assert.Equal(ComparisonStatus.Mismatched, mismatched.Status);
+        Assert.Equal($"{lastFiles.ProgramPath} $.files[0].sha256", mismatched.FirstDifference!.Path);
+        Assert.Contains(mismatched.Notes, n => n.Contains("are not available; compared by SHA-256", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json", "deleted row")]
+    [InlineData(@"evidence\r-q28-schema-write-open\dao-fields-7\r-q28-schema-write-open.dao-fields-7.71d1d89bf5.a1.json", "vacated copy")]
+    public void FindInSlice_uses_slice_page0_sidKeystream_for_deleted_and_vacated_Owner_across_different_creation_dates(string recordPath, string expectedWhere)
+    {
+        // Two real ACE page 0s with different creation dates and distinct derived SID keystreams (CatEmpty vs FmtEmpty).
+        byte[] catEmpty = Bytes(CatEmpty);
+        byte[] fmtEmpty = Bytes(FmtEmpty);
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        Span<byte> ksA = stackalloc byte[2];
+        Span<byte> ksB = stackalloc byte[2];
+        DatabaseHeaderEncoder.DeriveSidKeystream(HeaderMask.Decode(catEmpty.AsSpan(0, 4096), d), ksA);
+        DatabaseHeaderEncoder.DeriveSidKeystream(HeaderMask.Decode(fmtEmpty.AsSpan(0, 4096), d), ksB);
+        Assert.False(ksA.SequenceEqual(ksB));
+
+        EvidenceRecord record = LoadRecord(recordPath);
+        PageClockContext ctxA = BuildContextFromRecord(record);
+        byte[] page17 = KeptPage(record.Capture!, 17 * 4096);
+
+        // Build an 18-page slice (pages 0..17) with CatEmpty's page 0 and the record's page 17.
+        byte[] sliceA = catEmpty.AsSpan(0, 18 * 4096).ToArray();
+        page17.CopyTo(sliceA.AsSpan(17 * 4096, 4096));
+
+        ClockFieldMap mapA = AceClockFields.FindInSlice(0, sliceA, ctxA, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        ClockField targetOwner = Assert.Single(mapA.Fields, f => f.Kind == ClockFieldKind.MaskedSid && f.Where.Contains(expectedWhere, StringComparison.Ordinal));
+
+        // Side B uses FmtEmpty's page 0 (different creation date -> ksB) and re-masks every page-17 MSysObjects.Owner
+        // (all live rows plus the deleted row or vacated copy) with ksA ^ ksB so every decoded SID equals ACE's.
+        byte[] sliceB = (byte[])sliceA.Clone();
+        fmtEmpty.AsSpan(0, 4096).CopyTo(sliceB.AsSpan(0, 4096));
+        byte xor0 = (byte)(ksA[0] ^ ksB[0]);
+        byte xor1 = (byte)(ksA[1] ^ ksB[1]);
+        foreach (ClockField sid in mapA.Fields.Where(f => f.Kind == ClockFieldKind.MaskedSid))
+        {
+            sliceB[sid.Offset] ^= xor0;
+            sliceB[sid.Offset + 1] ^= xor1;
+        }
+
+        // Deliberately pass ctxA (which carries ksA, NOT ksB) for both sides: side B can only unmask with ksB when
+        // FindInSlice takes sidKeystream from page 0 inside the slice.
+        FileImageVerdict match = FileImageComparison.CompareSlice(0, sliceA, sliceB, ctxA, ctxA);
+        Assert.True(match.EqualOutsideClock, $"{match.Difference}: {match.Expected} / {match.Actual}");
+        Assert.Contains(match.Notes, n => n.StartsWith("CreationDate (set aside)", StringComparison.Ordinal));
+        Assert.Contains(match.Notes, n => n.StartsWith("MaskedSid (compared with the clock removed)", StringComparison.Ordinal));
+
+        // Flip 1 bit of the deleted/vacated Owner on side B so its decoded SID differs from ACE's -> must fail.
+        // For a vacated copy, MatchesVacatedPrefix also requires Owner to match its live anchor row, so flipping the
+        // vacated copy alone fails (vacated copy rejected) and flipping both vacated copy and its live anchor fails
+        // specifically at the vacated copy's unmasked Owner offset.
+        byte[] badOwner = (byte[])sliceB.Clone();
+        badOwner[targetOwner.Offset] ^= 0x01;
+        FileImageVerdict singleFlip = FileImageComparison.CompareSlice(0, sliceA, badOwner, ctxA, ctxA);
+        Assert.False(singleFlip.EqualOutsideClock);
+        if (expectedWhere == "vacated copy")
+        {
+            ClockField anchorOwner = Assert.Single(mapA.Fields, f => f.Kind == ClockFieldKind.MaskedSid && f.Where.Contains("slot 18", StringComparison.Ordinal));
+            badOwner[anchorOwner.Offset] ^= 0x01;
+            FileImageVerdict pairedFlip = FileImageComparison.CompareSlice(0, sliceA, badOwner, ctxA, ctxA);
+            Assert.False(pairedFlip.EqualOutsideClock);
+            Assert.StartsWith(targetOwner.Location(4096) + " (outside ACE clock fields)", pairedFlip.Difference, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.StartsWith(targetOwner.Location(4096) + " (outside ACE clock fields)", singleFlip.Difference, StringComparison.Ordinal);
+        }
     }
 }

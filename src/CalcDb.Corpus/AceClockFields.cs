@@ -283,10 +283,15 @@ public static class AceClockFields
         ReadOnlySpan<byte> bytes = slice.Span;
         byte[] normalized = bytes.ToArray();
         var fields = new List<ClockField>();
-        ReadOnlySpan<byte> sidKeystream = context.SidKeystream is { Length: 2 } ks ? ks : ReadOnlySpan<byte>.Empty;
+        Span<byte> sidBuf = stackalloc byte[2];
+        bool hasSid = false;
+        if (context.SidKeystream is { Length: 2 } ks)
+        {
+            ks.CopyTo(sidBuf);
+            hasSid = true;
+        }
         int pageCount = slice.Length / pageSize;
         uint? unusedAcesPage = null;
-        Span<byte> page0Sid = stackalloc byte[2];
         for (int k = 0; k < pageCount; k++)
         {
             int localOffset = k * pageSize;
@@ -302,14 +307,16 @@ public static class AceClockFields
                     refusal = pr != ProfileRefusal.None ? $"profile refused ({pr})" : $"no ACE repeat is recorded for the {profile?.Format} profile";
                     return null;
                 }
-                if (!NormalizePage0(page, normPage, d, fields, page0Sid, out refusal))
+                if (!NormalizePage0(page, normPage, d, fields, sidBuf, out refusal))
                 {
                     return null;
                 }
+                hasSid = true;
                 continue;
             }
             if (page[d.DataPage.Kind.Offset] == 0x01 && !DataPages.IsLvalPage(page, d) && d.DataPage.Owner.Read(page) == MSysObjectsPage)
             {
+                ReadOnlySpan<byte> sidKeystream = hasSid ? sidBuf : ReadOnlySpan<byte>.Empty;
                 if (!NormalizeMSysObjectsDataPage(pageNumber, pageFileOffset, page, normPage, context.MSysObjects, cols, sidKeystream, d, fields, ref unusedAcesPage, out refusal))
                 {
                     return null;
@@ -535,11 +542,37 @@ public static class AceClockFields
         {
             return false;
         }
+        // Validate every variable trailer entry against the RowEncoder invariants:
+        // start[0] == fixedEnd; fixedEnd <= start[j] <= end[j] <= eod monotonically; start[j] == end[j] when null.
+        int t = row.MaskStart;
+        for (int j = 0; j < v; j++)
+        {
+            int sj = BinaryPrimitives.ReadUInt16LittleEndian(body[(t - 4 - (2 * j))..]);
+            int ej = BinaryPrimitives.ReadUInt16LittleEndian(body[(t - 6 - (2 * j))..]);
+            if ((j == 0 && sj != fixedEnd) || sj < fixedEnd || sj > ej || ej > eod)
+            {
+                return false;
+            }
+        }
         foreach (ColumnDescriptor col in objects.Columns)
         {
             if (row.ReadField(col, fixedEnd).Outcome == FieldOutcome.Malformed)
             {
                 return false;
+            }
+            if (!col.IsFixed && !col.IsMaskBoolean && !row.MaskBit(col.PhysicalNumber))
+            {
+                int j = col.VariableIndex;
+                if (j < 0 || j >= v)
+                {
+                    return false;
+                }
+                int sj = BinaryPrimitives.ReadUInt16LittleEndian(body[(t - 4 - (2 * j))..]);
+                int ej = BinaryPrimitives.ReadUInt16LittleEndian(body[(t - 6 - (2 * j))..]);
+                if (sj != ej)
+                {
+                    return false;
+                }
             }
         }
         if (row.ReadField(cols.Id, fixedEnd) is not { Outcome: FieldOutcome.Bytes } idField || idField.End - idField.Start != 4

@@ -238,6 +238,52 @@ public sealed class CompareSetTests
     }
 
     [Fact]
+    public void Diff_separates_verdict_flips_when_comparison_rule_changes()
+    {
+        var before = new CompareSet.Run("znk8-1", "calls.trace@9", "abc", "913a7de460",
+            new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero),
+            [
+                E("f/now-matched", "Mismatched", "18 $.files[0].sha256 [files]: expected \"aa\" actual \"bb\"", 2),
+                E("f/now-mismatched", "Matched"),
+                E("f/moved", "Mismatched", "8 a", 1),
+                E("f/unchanged", "Matched"),
+                E("f/status", "Missing"),
+            ]);
+        var after = new CompareSet.Run("4t24-core", "calls.trace@10", "abc", "e53592285f",
+            new DateTimeOffset(2026, 11, 22, 18, 0, 0, TimeSpan.Zero),
+            [
+                E("f/now-matched", "Matched"),
+                E("f/now-mismatched", "Mismatched", "9 c", 1),
+                E("f/moved", "Mismatched", "10 d", 1),
+                E("f/unchanged", "Matched"),
+                E("f/status", "Mismatched", "11 e", 1),
+            ]);
+
+        IReadOnlyList<CompareSet.Change> changes = CompareSet.Diff(before, after);
+        var byId = changes.ToDictionary(c => c.CaseId);
+        Assert.Equal(CompareSet.ChangeKind.RuleChange, byId["f/now-matched"].Kind);
+        Assert.Equal("calls.trace@9 -> calls.trace@10", byId["f/now-matched"].Reason);
+        Assert.Equal(CompareSet.ChangeKind.RuleChange, byId["f/now-mismatched"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Moved, byId["f/moved"].Kind);
+        Assert.Equal(CompareSet.ChangeKind.Status, byId["f/status"].Kind);
+        Assert.DoesNotContain(changes, c => c.Kind is CompareSet.ChangeKind.Gained or CompareSet.ChangeKind.Lost);
+
+        string text = CompareSet.RenderDiff(before, after, changes);
+        Assert.Contains("against znk8-1 (913a7de460, calls.trace@9)\nrule changed: calls.trace@9 -> calls.trace@10\n", text, StringComparison.Ordinal);
+        Assert.Contains("  TOTAL                      2/5   ->   2/5   (matched or accepted / questions)\n", text, StringComparison.Ordinal);
+        Assert.Contains("RuleChange (2; +1/-1, counted in TOTAL, not in gained/lost):\n", text, StringComparison.Ordinal);
+        Assert.Contains("  f/now-matched: Mismatched -> Matched\n", text, StringComparison.Ordinal);
+        Assert.Contains("  f/now-mismatched: Matched -> Mismatched 9 c\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Gained (", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Lost (", text, StringComparison.Ordinal);
+
+        // Candidate crash during a rule change still reports as Lost, never hidden under RuleChange.
+        var crashAfter = after with { Entries = [.. after.Entries.Select(e => e.CaseId == "f/unchanged" ? E("f/unchanged", CompareSet.CandidateIncomplete, "candidate attempt Aborted") : e)] };
+        IReadOnlyList<CompareSet.Change> crashChanges = CompareSet.Diff(before, crashAfter);
+        Assert.Equal(CompareSet.ChangeKind.Lost, crashChanges.Single(c => c.CaseId == "f/unchanged").Kind);
+    }
+
+    [Fact]
     public void Compare_set_json_parses_declared_timing_boundaries()
     {
         string repo = RepoRoot();

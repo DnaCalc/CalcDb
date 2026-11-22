@@ -188,6 +188,9 @@ Questions explicitly listed under `timingBoundaries` in [probes/compare-set.json
 with its reason) stay counted at their actual verdict in `TOTAL` and per-folder counts, while a verdict flip between
 `Matched`/`AcceptedDifference` and `Mismatched` is reported on its own line (`timing boundary (counted in TOTAL, not in
 gained/lost): N`) with its reason instead of `Gained`/`Lost`.
+When the two runs used different comparison rules (`before.Rule != after.Rule`), the diff prints
+`rule changed: <before> -> <after>`, keeps both sides' `TOTAL` as they are, and lists verdict flips in their own
+`RuleChange` section (`not in gained/lost`) rather than under `Gained` or `Lost`.
 Questions explicitly listed under `notComparable` in a set file (in the core set
 [probes/compare-set.json](../../probes/compare-set.json), the 11 `killParticipant` questions of `r-q2-cat-txn-lock`; in
 the wide set [probes/compare-set-wide.json](../../probes/compare-set-wide.json), 31 questions across its 96 folders: 22 `killParticipant` questions in `r-q2-cat-txn-lock`, `r-q-cat-txn-lock` and `r-fmt-2b`
@@ -262,9 +265,10 @@ the attempt, as for the plain `show`.
 
 A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
 file-I/O recorder on ACE attempts: every create, read, write and flush on the attempt's files, with offsets and sizes,
-becomes the artifact `etw:file-io`. Because `calls.trace@9` does not compare `etw:file-io`, candidate runs
-(`windows-x64-calcdb-local`) skip the ETW recorder, write `skipped on candidate run (calls.trace@9 does not compare etw:file-io)`
-to `artifacts/etw-status.txt`, record the omission by name on `manifest.OmittedChannels` (and as artifact `etw:status`),
+becomes the artifact `etw:file-io`. Because `calls.trace@10` does not compare `etw:file-io`, candidate runs
+(`windows-x64-calcdb-local`) skip the ETW recorder, write `Sealer.CandidateEtwSkippedStatus`
+(`skipped on candidate run (calls.trace@9 does not compare etw:file-io)`, kept verbatim for compatibility with sealed
+attempts) to `artifacts/etw-status.txt`, record the omission by name on `manifest.OmittedChannels` (and as artifact `etw:status`),
 and seal complete; ACE attempts still require the ETW trace. The recorder needs an elevated token, so it runs through a
 scheduled task installed once by the owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check`
 tests it. Without it, an ACE attempt seals Incomplete with the reason. If the recorder fails before becoming ready and
