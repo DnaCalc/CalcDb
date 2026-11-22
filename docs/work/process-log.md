@@ -988,3 +988,58 @@ question has an explicit ws.Rollback and no Close). The reviewer read the questi
 declined because qualified.md R-CURSOR-1 CUR-POP covers them, which the reviewer, checking only records, did not count.
 Lesson for briefs: a task written from a trace states its record's calls from the question file, not from memory. Both
 landings passed their check on the first run after the fixes; compares qhs8-1 and qhs8-2 lost nothing.
+
+**The later stretches.** 2tkf (Catalog, Sql, Com; about 1,130 lines at review): the reviewer found 9 the organizer had
+not. Two were honesty-rule faults: tests asserting that a failed SQL or ADO CREATE TABLE left the file unchanged (the
+records show pages 0, 2 and 3 written), and seven catalog pages skipped instead of compared. 8 were applied, 1 became task
+4t24. fq9f (Isam; 1,146 lines): 9 findings, among them an MSysObjects reader with no caller, and rules for cases no record
+showed. The writer narrowed to the records while a prober asked ACE the refused cases (r-q30, 49 questions, landed within
+the hour), and then lifted them on the same branch. 4t24 (the comparison rule, 1,204 lines): the reviewer confirmed the
+rule (the Owner SID has been decoded and compared since c4rv; every rebuilt file is hashed against its own side), and
+found 5, the main one a @10 run against a @9 baseline counting the revision's flips as gains. shmk (tooling, 106 lines,
+no ACE rule) had the organizer's review alone. The probe round k64d corrected a qualified.md sentence the organizer had
+written for qhs8: the group inside Execute goes with an AutoNumber column or a page taken, not with a consumed
+AutoNumber. qhs8's code was right for its records and refused the rest, so no rule was wrong. Keep: a separate reviewer
+for every stretch with ACE rules, and a prober started at once for the cases a writer must refuse.
+
+## 2026-11-22 - Handover: organizer 9 (01a20342) to organizer 10
+
+Session 01a20342 (Claude Opus 5.5, 12:37 to about 17:15 UTC, about 175 tool calls, about $19) landed kn3b (probe
+round r-q28), qhs8, znk8 and zdh5, k64d (probe round r-q29), shmk (ETW from a worktree through `--store`; the owner had
+offered a setup change, which was not needed), 2tkf and the probe round r-q30. Core baseline znk8-1, 438 of 1360. 2tkf-1
+lost two-deletes-300ms-apart while another compare ran; a rerun of the folder on the same snapshot matched it
+(trace-q8-2tkf, task mhzd), so 2tkf-1 was not recorded. Indicators (`tools/process-indicators.ps1`, window since
+2026-11-21 18:59; the session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 92% (96,744 of 104,912) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 84,691 / 12,053 / 566 / 1,343 / 6,259 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 60; 75% (this session: 7 of 8; 2tkf's first run failed one timing test, EtwBridgeTests.WaitForReady_..., under load, and passed on the rerun) | below 70% |
+| Landing check duration (median of 86 runs) | **237 s** | above 3 min: **crossed** |
+| Compare baselines | core qhs8-2 435, znk8-1 438 of 1360 (2tkf-1 not recorded, mhzd); wide wide-dqtr-1 643 of 3158, not run since | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 175 calls for 8 landings and 5 probe or tooling briefs (about 22); 1 handover | above about 15: **crossed** |
+| Reviewer findings per 1,000 lines | qhs8 about 14, znk8+zdh5 about 41 (at 265 lines), 2tkf about 8, fq9f about 8, 4t24 about 4 | above about 3: **crossed**, falling |
+| Rules found wrong after landing | 0 (one qualified.md sentence corrected by k64d; no code) | more than one a day |
+| Children stopped waiting for a record | 0 (writers refused by name; probers asked at once) | more than one per stretch |
+| Merge minutes per landing | under 1 | above 5 min |
+| Book contradictions found | 0 | rising |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 9 (Opus) | about 280 | about 175 |
+| qhs8 writer / reviewer | 110 / 31 | 189 / 133 |
+| znk8+zdh5 writer / reviewer | 119 / 27 | 328 / 165 |
+| 2tkf writer / reviewer | 183 / 31 | 611 / 145 |
+| fq9f writer (running) / reviewer | 111+ / 23 | 319+ / 140 |
+| 4t24 writer (running) / reviewer | 48+ / 14 | 206+ / 58 |
+| kn3b, k64d, r-q30 probers | 51, 40, 51 | 197, 118, 182 |
+| shmk writer | 12 | 49 |
+
+Two load-sensitive tests failed once each and passed on rerun: SelectAllocationTests.Scan_through_where_allocates_
+nothing_per_row (an allocation budget, as 58sc was) and EtwBridgeTests.WaitForReady_waits_while_done_is_locked_then_
+reads_and_cleans_it_up (timing). Three indicators crossed: the landing check's duration (every probe or evidence
+landing runs all test projects, and checks ran beside compares and probers), the organizer's calls per landing (each
+reviewed landing costs a review brief, a findings decision and a re-check), and reviewer findings (falling from 14 and
+41 to 8, 8 and 4). Organizer 10 runs the triggered review. Organizer 9 finishes only the forwarding of the fq9f and 4t24
+writers' answers and stops.
