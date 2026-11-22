@@ -86,15 +86,16 @@ scope or design, the book wins.
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
-- Navigate C# with ripgrep (`rg -n -w`) for names, text and string literals, and edit with your own file tools; a rename
-  is ripgrep plus edits, checked by `dotnet build` of the area filter. Use roscli on its warm daemon only for what text
-  cannot answer, in a session that asks it several times: implementers (`nav.find_implementations`), the uses of an
-  overloaded or same-named member or of a method group (`nav.find_invocations`, `nav.find_references`), and the compile
-  errors of one project at a time (`diag.get_workspace_snapshot <project dir>`, never `.`). It finds no `new` sites of a
-  class, and its `edit.*` and `repair.*` commands are not used yet (measured 2026-11-21: a rename changed one file;
-  RoslynSkills tasks). Setup: `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 75 s, up to 950 MB),
-  then `ROSCLI_DAEMON=required` with `--workspace-path CalcDb.slnx` on each call in a worktree; `roscli daemon.stop`
-  before you end.
+- Navigate C# with ripgrep (`rg -n -w`) for names, text and string literals, and make single-file and small edits with
+  your own file tools. In a session that refactors or asks semantic questions, use roscli on its warm daemon:
+  implementers (`nav.find_implementations`), the uses of an overloaded or same-named member or of a method group
+  (`nav.find_invocations`, `nav.find_references`), the compile errors of one project (`diag.get_workspace_snapshot
+  <project dir>`, never `.`), a rename across files (`edit.rename_symbol`), a signature change (`edit.change_signature`),
+  and a new `.cs` file while the daemon runs (`edit.create_file`; a file your own tool creates stays invisible to it
+  until a reload). It finds no `new` sites of a class; do not use `repair.*` or `edit.apply_code_fix` (they propose TODO
+  stubs). Build the area filter after every edit, roscli's included (measured on 0.1.6-preview.22, 2026-11-22). Setup:
+  `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx` (about 45 s, up to 700 MB), then
+  `ROSCLI_DAEMON=required`; `roscli daemon.stop` and delete `.roslynskills/` before you end.
 - roscli is our tool (owner, 2026-11-21): a wrong, slow or missing roscli answer is fixed in RoslynSkills
   (`C:\Work\RoslynSkills`, CodeAlta project `roslynskills`: a task, a writer in its worktree, landed on its main and
   released), never worked around in CalcDb.

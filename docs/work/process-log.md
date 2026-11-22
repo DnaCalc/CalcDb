@@ -794,3 +794,19 @@ files, the daemon did not see a created file, and repair proposed TODO stubs. Th
 (roscli for renames and signature changes) was wrong and is corrected: The Plan §4 and AGENTS.md keep roscli for the
 semantic queries above, ripgrep and the harness's file tools for the rest. The editing and navigation gaps are RoslynSkills
 tasks; the edit tasks are measured again when they land.
+
+**roscli edits adopted (Neon trial 01a20085, roscli 0.1.6-preview.22, 2026-11-22).** After RoslynSkills 9s8n (2d4fa8b,
+released on GitHub as v0.1.6-preview.22), the six edit tasks again, both ways, each checked by a build:
+
+| Task | By hand | roscli on the warm daemon |
+| --- | --- | --- |
+| Rename BeginStatement across the solution | 12 calls, about 4 s of tool time; correct | 1 call, 3.4 s; 11 files, 55 sites, 3 crefs, prose comments kept, 0 diagnostics; correct |
+| Add a parameter, pass it at one caller | 3 calls; correct | 2 calls, 1.8 s; formatting and LF kept; correct |
+| Replace a statement in one member | 2 calls; correct | 1 call, 0.8 s; correct |
+| Two exact edits in two files | 2 calls, under 1 s; correct | batch_exact 1.1 s, transaction 1.2 s; LF kept; correct |
+| Create a file | under 1 s, but the daemon cannot see it | 0.7 s, joins its project, seen by the next query |
+| Fix a missing using | 1 call; correct | repair proposes TODO stubs; apply_code_fix refuses CS0103 |
+
+Setup 3 s restore and 43 s load; 320 to 690 MB; no `--workspace-path` needed in a worktree; navigation unchanged (51 of 51
+callers, 5 of 5 implementers). AGENTS.md and The Plan §4 now name the rename, the signature change and file creation
+for roscli; single-file and small edits stay with the harness's tools; repair stays out (RoslynSkills 25j6).
