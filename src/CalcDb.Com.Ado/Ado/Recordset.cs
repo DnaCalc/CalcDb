@@ -2506,7 +2506,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (cmdType is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified
             && ActionParser.IsAction(_source))
         {
-            return NotImplemented("Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoRecordsetOpenAction",
+                "Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)"));
         }
 
         bool isClient = effectiveLoc == 3;

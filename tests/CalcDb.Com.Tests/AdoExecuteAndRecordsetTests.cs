@@ -565,8 +565,10 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             // 3. Recordset.Open refuses action SQL before executing (only the failing case is recorded in r-ado-1b/errors-by-route #49-50).
             nint ro = New(OwnRecordset);
             Outcome dup = Call(ro, "Open", "INSERT INTO K (Code, T, N) VALUES ('a1', 'dup', 99)", new Dispatch(cn), 0, 1, 1);
-            Assert.Equal(HResults.E_NOTIMPL, dup.Failure!.Value.Scode);
-            Assert.Contains("only the failing case is recorded", dup.Failure!.Value.Description);
+            AssertError(
+                dup,
+                HResults.E_NOTIMPL,
+                expectedDescription: "NotModelled.AdoRecordsetOpenAction: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
             Assert.Equal(0, Get(ro, "State"));
             Release(ro);
 

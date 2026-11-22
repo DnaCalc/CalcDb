@@ -696,7 +696,7 @@ public sealed unsafe class AdoImmediateEditTests
             AssertError(
                 Call(ro, "Open", "INSERT INTO T (Code) VALUES ('a1')", new Dispatch(cn), 0, 1, 1),
                 HResults.E_NOTIMPL,
-                expectedDescription: "NotModelled.Ado: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
+                expectedDescription: "NotModelled.AdoRecordsetOpenAction: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
             Assert.Equal(0, Get(ro, "State"));
             Release(ro);
 
@@ -1107,7 +1107,7 @@ public sealed unsafe class AdoImmediateEditTests
             AssertError(
                 Call(rsIns, "Open", "INSERT INTO W (Code, V, S) VALUES ('nope', 1, 'x')", new Dispatch(cn), 0, 1, 1),
                 HResults.E_NOTIMPL,
-                expectedDescription: "NotModelled.Ado: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
+                expectedDescription: "NotModelled.AdoRecordsetOpenAction: Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)");
             Assert.Equal(0, Get(rsIns, "State"));
             Release(rsIns);
             nint rsVerify = (nint)Call(cn, "Execute", "SELECT COUNT(*) FROM W WHERE Code = 'nope'", Missing, 1).Value!;
