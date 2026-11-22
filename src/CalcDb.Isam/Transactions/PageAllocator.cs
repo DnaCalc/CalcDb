@@ -184,6 +184,9 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     /// <summary>Number of pages allocated by this allocator so far.</summary>
     public int AllocatedCount => _handedOut.Count;
 
+    /// <summary>Pages allocated by this allocator so far.</summary>
+    public IReadOnlyCollection<uint> AllocatedPages => _handedOut;
+
     /// <summary>
     /// Reserve the unused tail of the session's 4-byte (32-page) global-map extent during an UPDATE that frees a chained
     /// long value, returning those reserved pages in <paramref name="reservedPages"/> so Database.Close restores their free
@@ -275,6 +278,112 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
         {
             edits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
         }
+        failure = null;
+        return true;
+    }
+
+    /// <summary>
+    /// The three page-1 steps of a rolled-back statement that took one or more new pages
+    /// (<c>evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live</c>, <c>noan-dup-twopages</c>,
+    /// <c>noan-dup-row2-mdb-newpage</c>): Group 1 clears the 4-byte (32-page) extent in page 1
+    /// (<see cref="ReserveEdits"/>), Group 2 frees the rolled-back allocated page bit(s)
+    /// (<see cref="FreeAllocatedEdits"/>), and Close returns the remaining unused extent pages
+    /// (<see cref="UnusedExtentPages"/>).
+    /// </summary>
+    internal sealed record RollbackExtentPlan(
+        List<PageEdit> ReserveEdits,
+        List<PageEdit> FreeAllocatedEdits,
+        List<uint> UnusedExtentPages);
+
+    /// <summary>
+    /// Plan the three page-1 steps for a rolled-back statement that allocated <paramref name="allocatedPages"/> from
+    /// the committed global map (<c>evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live</c>: page 50
+    /// allocated from <c>fc ff ff ff</c> at offset 4038; Group 1 clears 50..79 to <c>00 00 00 00</c>; Group 2 frees
+    /// page 50 to <c>04 00 00 00</c>; Close returns 51..79 to <c>fc ff ff ff</c>). Refuses by name when free pages
+    /// lie inside <see cref="ExtentPages"/>, when an allocated page spills past <c>firstFreeBefore / 8</c>, or when a
+    /// page past <see cref="ExtentPages"/> in the 4-byte block is already cleared.
+    /// </summary>
+    internal bool TryPlanRollbackExtent(IReadOnlyCollection<uint> allocatedPages, out RollbackExtentPlan? plan, out string? failure)
+    {
+        plan = null;
+        if (allocatedPages.Count == 0)
+        {
+            failure = "the rolled-back statement has no recorded global-map page numbers";
+            return false;
+        }
+        if (!TryCaptureGlobalFreeMap(seen: null, out uint firstFreeBefore, out byte[] globalMapBefore, out failure))
+        {
+            return false;
+        }
+        HashSet<uint> allocatedSet = [.. allocatedPages];
+        uint maxAllocated = 0;
+        foreach (uint page in allocatedSet)
+        {
+            if (page < firstFreeBefore)
+            {
+                failure = $"allocated page {page} precedes first free page {firstFreeBefore} in page 1";
+                return false;
+            }
+            if (page > maxAllocated)
+            {
+                maxAllocated = page;
+            }
+        }
+        if (maxAllocated / 8 != firstFreeBefore / 8)
+        {
+            failure = $"allocated page {maxAllocated} spills past first free page {firstFreeBefore}'s global-map byte ({firstFreeBefore / 8}): page-1 extent reservation across map bytes is not recorded";
+            return false;
+        }
+
+        MapRules m = d.Map;
+        uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+        SortedDictionary<int, byte> reserveClearByOffset = [];
+        SortedDictionary<int, byte> freeAllocatedSetByOffset = [];
+        List<uint> unusedExtentPages = [];
+        for (uint page = firstFreeBefore; page < blockEnd; page++)
+        {
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, d, out int offset, out byte mask, out failure))
+            {
+                failure = "the global map reservation: " + failure;
+                return false;
+            }
+            bool wasFree = (globalMapBefore[offset] & mask) != 0;
+            if (!wasFree)
+            {
+                if (page >= ExtentPages)
+                {
+                    failure = $"page {page} past file extent {ExtentPages} is already cleared in page 1: a page-1 extent reservation is already active";
+                    return false;
+                }
+                continue;
+            }
+            reserveClearByOffset[offset] = (byte)(reserveClearByOffset.GetValueOrDefault(offset) | mask);
+            if (allocatedSet.Contains(page))
+            {
+                freeAllocatedSetByOffset[offset] = (byte)(freeAllocatedSetByOffset.GetValueOrDefault(offset) | mask);
+            }
+            else
+            {
+                unusedExtentPages.Add(page);
+            }
+        }
+        if (freeAllocatedSetByOffset.Count == 0)
+        {
+            failure = "none of the rolled-back allocated pages were free in the committed global map";
+            return false;
+        }
+
+        List<PageEdit> reserveEdits = [];
+        foreach ((int offset, byte clearMask) in reserveClearByOffset)
+        {
+            reserveEdits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
+        }
+        List<PageEdit> freeAllocatedEdits = [];
+        foreach ((int offset, byte setMask) in freeAllocatedSetByOffset)
+        {
+            freeAllocatedEdits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, setMask, 0), PageRole.Map));
+        }
+        plan = new RollbackExtentPlan(reserveEdits, freeAllocatedEdits, unusedExtentPages);
         failure = null;
         return true;
     }

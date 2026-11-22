@@ -42,6 +42,16 @@ public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits
     public bool HasReservedExtent { get; init; }
 
     /// <summary>
+    /// Global-map page numbers allocated by this change (from <see cref="PageAllocator"/>), so a rolled-back statement
+    /// can reserve the 4-byte extent in Group 1, free its allocated bit(s) in Group 2, and return the unused extent at
+    /// Close (<c>evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live</c>, <c>noan-dup-twopages</c>).
+    /// </summary>
+    public IReadOnlyList<uint> AllocatedGlobalMapPages { get; init; } = [];
+
+    /// <summary>The file's committed extent in pages when this change compiled its global-map allocations.</summary>
+    public ulong BaseExtentPages { get; init; }
+
+    /// <summary>
     /// For a recordset's Delete, the physical indexes whose bulk-built entry counter the TableDef lowers, written with the
     /// row count at the recordset's Close (<see cref="EditFrame.Dispose"/>; evidence/r-q17-growth/retire-rs-delete-au1);
     /// null when the change writes the TableDef itself.
@@ -933,7 +943,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
         AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
-        return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root), null);
+        return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root)
+        {
+            AllocatedGlobalMapPages = allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
+            BaseExtentPages = allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
+        }, null);
     }
 
     /// <summary>

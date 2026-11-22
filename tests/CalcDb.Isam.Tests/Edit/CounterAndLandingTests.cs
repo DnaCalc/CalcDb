@@ -1674,13 +1674,20 @@ public sealed class CounterAndLandingTests
             Assert.Equal(5, storedRows);
         }
 
-        // 3. Unrecorded: table with no AutoNumber column taking a new data page before 3022 at depth 0 refuses by name.
+        // 3. Recorded (evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage, noan-dup-row2-newpage-live): table
+        //    with no AutoNumber column taking a new data page before 3022 at depth 0 writes Group 1 (page-1 extent
+        //    reservation, TableDef untouched) inside Rollback, Group 2 (freed allocated page bit + reached TableDef
+        //    counters) at statement end, and Close (unused extent returned, page 1 restored): +3 on page 0.
         using (var rig = new Rig(Txn1bMainFixture))
         {
             (TableDefinition t, _) = rig.Table("T");
             (EditFrame frame, _) = rig.OpenTable("T");
             ShrinkFirstFreePage(rig, t, 4);
             byte[] start = rig.File.Image.Snapshot();
+            byte p0Before = start[D.Header.CommitCounter.Offset];
+            uint rowsBefore = t.RowCount;
+            uint pkBefore = t.PhysicalOf(t.FindIndex("PK_T")!)!.UniqueEntryCount;
+            uint ukBefore = t.PhysicalOf(t.FindIndex("UX_K")!)!.UniqueEntryCount;
 
             using StatementScope stmt = rig.A.BeginStatement();
             Assert.Null(rig.A.BeginTrans());
@@ -1700,22 +1707,43 @@ public sealed class CounterAndLandingTests
             Assert.True(frame.CancelUpdate().Succeeded);
 
             Assert.True(rig.A.Rollback().Succeeded);
+            // Group 1 (inside Execute): +1 on page 0, TableDef untouched.
+            byte[] afterGroup1 = rig.File.Image.Snapshot();
+            Assert.Single(rig.A.Publications);
+            Assert.Equal(p0Before + 1, afterGroup1[D.Header.CommitCounter.Offset]);
+            Assert.Equal(rowsBefore, DecodeTableDef(afterGroup1, t.FirstPage).RowCount);
+
+            // Group 2 (at statement end): +2 on page 0, TableDef counters reached (+1 row, +2 PK, +1 UK).
             ResolutionOutcome end = stmt.Complete();
-            Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("new data page on a table with no AutoNumber column", end.Detail, StringComparison.Ordinal);
-            Assert.Empty(rig.A.Publications);
-            Assert.Equal(start, rig.File.Image.Snapshot());
+            Assert.True(end.Succeeded, end.ToString());
+            Assert.Equal(2, rig.A.Publications.Count);
+            byte[] afterGroup2 = rig.File.Image.Snapshot();
+            TableDefinition tAfter = DecodeTableDef(afterGroup2, t.FirstPage);
+            Assert.Equal(p0Before + 2, afterGroup2[D.Header.CommitCounter.Offset]);
+            Assert.Equal(rowsBefore + 1u, tAfter.RowCount);
+            Assert.Equal(pkBefore + 2u, tAfter.PhysicalOf(tAfter.FindIndex("PK_T")!)!.UniqueEntryCount);
+            Assert.Equal(ukBefore + 1u, tAfter.PhysicalOf(tAfter.FindIndex("UX_K")!)!.UniqueEntryCount);
+
+            // Close: +3 on page 0, page 1 restored byte-for-byte.
+            Assert.True(rig.A.NeedsCloseCommit(rig.File.Cache));
+            Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(rig.File.Cache).Open);
+            byte[] afterClose = rig.File.Image.Snapshot();
+            Assert.Equal(p0Before + 3, afterClose[D.Header.CommitCounter.Offset]);
+            Assert.Equal(start.AsSpan(D.PageSize, D.PageSize).ToArray(), afterClose.AsSpan(D.PageSize, D.PageSize).ToArray());
         }
 
-        // 4. No kept-page or isolated-counter record decides page 0 and the TableDef words for non-AutoNumber 3314
-        //    (Required) statement rollbacks (evidence/r-sql-2-3/act-fail-insert-required on an existing page, and
-        //    evidence/r-q-expr-sql/fail-late-candidate and evidence/r-fix-expr-sql/fail-insert-required-cross-table on
-        //    a new page, keep only the final file hash), so depth-0 3314 after an earlier row refuses by name.
+        // 4. Recorded (evidence/r-q29-stmt-rollback-counters/noan-req-3314-existing): non-AutoNumber 3314 (Required) on
+        //    an existing page after an earlier accepted row writes only Group 2 (+1 on page 0, no Close commit) and
+        //    counts no index entry for the refused row.
         using (var rig = new Rig(Err1bBaseFixture))
         {
             (TableDefinition p, _) = rig.Table("P");
             (EditFrame frame, _) = rig.OpenTable("P");
             byte[] start = rig.File.Image.Snapshot();
+            byte p0Before = start[D.Header.CommitCounter.Offset];
+            uint rowsBefore = p.RowCount;
+            uint[] idxBefore = [.. p.PhysicalIndexes.Select(pi => pi.UniqueEntryCount)];
+            Assert.NotEmpty(idxBefore);
 
             using StatementScope stmt = rig.A.BeginStatement();
             Assert.Null(rig.A.BeginTrans());
@@ -1734,11 +1762,16 @@ public sealed class CounterAndLandingTests
             Assert.True(frame.CancelUpdate().Succeeded);
 
             Assert.True(rig.A.Rollback().Succeeded);
-            ResolutionOutcome end = stmt.Complete();
-            Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("refusal 3314", end.Detail, StringComparison.Ordinal);
             Assert.Empty(rig.A.Publications);
-            Assert.Equal(start, rig.File.Image.Snapshot());
+            ResolutionOutcome end = stmt.Complete();
+            Assert.True(end.Succeeded, end.ToString());
+            Assert.Single(rig.A.Publications);
+            Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+            byte[] after = rig.File.Image.Snapshot();
+            TableDefinition pAfter = DecodeTableDef(after, p.FirstPage);
+            Assert.Equal(p0Before + 1, after[D.Header.CommitCounter.Offset]);
+            Assert.Equal(rowsBefore + 1u, pAfter.RowCount);
+            Assert.Equal(idxBefore.Select(c => c + 1u).ToArray(), pAfter.PhysicalIndexes.Select(pi => pi.UniqueEntryCount).ToArray());
         }
 
         // 5. Explicit-value subcase through EditFrame: AutoNumber table G (EditFixture, same shape as ins-dup-fail /
