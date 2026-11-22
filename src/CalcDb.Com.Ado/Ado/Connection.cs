@@ -416,6 +416,18 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         }
     }
 
+    public bool HasActiveChunkState()
+    {
+        foreach (RecordsetObject rs in _openRecordsets)
+        {
+            if (rs.HasActiveChunkState)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public bool IsTableInUse(string tableName) => _shared.IsTableHeldByAnyServerCursor(tableName);
 
     public bool IsTableHeldByServerCursor(string tableName)
@@ -1455,6 +1467,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (_attributes == (131072 | 262144) && tx.Depth > 1)
         {
             return NotImplemented("Connection.RollbackTrans with Attributes=393216 at nested depth > 1 (not recorded)");
+        }
+        if (_session.HasActiveChunkState())
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkNavigation",
+                "Connection.RollbackTrans while an open Recordset has active Field.GetChunk state is not recorded"));
         }
         ResolutionOutcome res = tx.Rollback();
         if (res.Error is { } mutErr)

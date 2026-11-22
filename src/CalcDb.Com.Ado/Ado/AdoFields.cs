@@ -750,10 +750,10 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             return "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)";
         }
         NativeVariant* cell = Args.Cell(parameters->Args);
-        VarType vt = (VarType)cell->Vt & ~VarType.ByRef;
+        VarType vt = (VarType)cell->Vt;
         return vt == VarType.I4
             ? null
-            : $"Field.GetChunk with non-I4 argument (vt={(ushort)vt}) is not recorded";
+            : $"Field.GetChunk with argument vt=0x{(ushort)vt:X4} (only by-value VT_I4 is recorded)";
     }
 
     private static readonly OperationTable Operations = new OperationTable(Decl)
@@ -833,11 +833,11 @@ internal sealed unsafe class AdoFieldObject : AdoObject
                 "NotModelled.AdoGetChunkClosed",
                 "Field.GetChunk on a closed Recordset or invalidated Field wrapper is not recorded"));
         }
-        if (lengthArg == 0 || ((VarType)Args.Cell(lengthArg)->Vt & ~VarType.ByRef) != VarType.I4)
+        if (lengthArg == 0 || (VarType)Args.Cell(lengthArg)->Vt != VarType.I4)
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.AdoGetChunkArg",
-                "Field.GetChunk requires a single I4 Length argument (not recorded)"));
+                "Field.GetChunk requires a single by-value VT_I4 Length argument (not recorded)"));
         }
         int length = (int)Args.Cell(lengthArg)->Int64;
         return _fields.Recordset.ReadFieldGetChunk(_ordinal, length, this);

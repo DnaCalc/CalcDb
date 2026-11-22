@@ -96,7 +96,7 @@ internal sealed unsafe class AdoFilterExpression
         return new AdoFilterExpression(raw);
     }
 
-    public bool MatchesRowSource(IAdoRowSource rows, out Failure? failure)
+    public bool MatchesRowSource(RecordsetObject rs, out Failure? failure)
     {
         failure = null;
         foreach (List<AdoFilterPredicate> andClause in _orBranches)
@@ -104,7 +104,7 @@ internal sealed unsafe class AdoFilterExpression
             bool branchMatch = true;
             foreach (AdoFilterPredicate pred in andClause)
             {
-                OwnedVariant? cell = rows.ReadValue(pred.ColumnOrdinal, isClientCursor: false, out failure);
+                OwnedVariant? cell = rs.ReadCurrentRowCell(pred.ColumnOrdinal, out failure);
                 if (cell is null)
                 {
                     return false;
@@ -130,7 +130,7 @@ internal sealed unsafe class AdoFilterExpression
         return false;
     }
 
-    public bool MatchesSnapshotRow(OwnedVariant[] row, out Failure? failure)
+    public bool MatchesSnapshotRow(RecordsetObject rs, MemoryRowSource mem, int rowIndex, out Failure? failure)
     {
         failure = null;
         foreach (List<AdoFilterPredicate> andClause in _orBranches)
@@ -138,14 +138,22 @@ internal sealed unsafe class AdoFilterExpression
             bool branchMatch = true;
             foreach (AdoFilterPredicate pred in andClause)
             {
-                if (!EvaluatePredicate(row[pred.ColumnOrdinal], pred, out failure))
+                OwnedVariant? cell = rs.ReadSnapshotRowCell(mem, rowIndex, pred.ColumnOrdinal, out failure);
+                if (cell is null)
                 {
-                    if (failure is not null)
+                    return false;
+                }
+                using (cell)
+                {
+                    if (!EvaluatePredicate(cell, pred, out failure))
                     {
-                        return false;
+                        if (failure is not null)
+                        {
+                            return false;
+                        }
+                        branchMatch = false;
+                        break;
                     }
-                    branchMatch = false;
-                    break;
                 }
             }
             if (branchMatch)
@@ -1008,16 +1016,22 @@ internal sealed unsafe class AdoSortSpec
         return new AdoSortSpec(resolved);
     }
 
-    public bool SortIndices(List<int> indices, IReadOnlyList<OwnedVariant[]> rows, out Failure? failure)
+    public bool SortIndices(List<int> indices, IReadOnlyList<MemoryCell[]> rows, out Failure? failure)
     {
         failure = null;
-        // Validate every non-null cell VarType up front so an unmodelled VarType is refused deterministically even on 1-row cursors.
+        // Validate every non-null cell VarType up front so an unmodelled VarType or per-cell refusal sentinel is refused deterministically even on 1-row cursors.
         foreach (int rowIdx in indices)
         {
-            OwnedVariant[] row = rows[rowIdx];
+            MemoryCell[] row = rows[rowIdx];
             foreach (AdoSortKey key in Keys)
             {
-                VarType vt = (VarType)row[key.ColumnOrdinal].Pointer->Vt;
+                MemoryCell cell = row[key.ColumnOrdinal];
+                if (cell.Refusal is { } refusal)
+                {
+                    failure = refusal;
+                    return false;
+                }
+                VarType vt = (VarType)cell.Value!.Pointer->Vt;
                 if (!IsSupportedSortVarType(vt))
                 {
                     failure = Failure.NotImplemented($"Recordset.Sort comparison of VarType {vt} (not recorded)");
@@ -1039,11 +1053,11 @@ internal sealed unsafe class AdoSortSpec
         VarType.Null or VarType.Empty or VarType.Bstr or VarType.Bool or VarType.Date or VarType.R8 or VarType.R4 or
         VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8 or VarType.Currency or VarType.Decimal;
 
-    public int CompareRows(int indexA, OwnedVariant[] rowA, int indexB, OwnedVariant[] rowB, ref Failure? failure)
+    public int CompareRows(int indexA, MemoryCell[] rowA, int indexB, MemoryCell[] rowB, ref Failure? failure)
     {
         foreach (AdoSortKey key in Keys)
         {
-            int cmp = CompareCells(rowA[key.ColumnOrdinal], rowB[key.ColumnOrdinal], ref failure);
+            int cmp = CompareCells(rowA[key.ColumnOrdinal].Value!, rowB[key.ColumnOrdinal].Value!, ref failure);
             if (failure is not null)
             {
                 return 0;

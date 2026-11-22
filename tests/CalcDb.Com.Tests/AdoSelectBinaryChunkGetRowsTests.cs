@@ -49,8 +49,8 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
 
                 StreamGetChunk_ServerAndClient(oledbPath);
                 SqlSelectBinaryAndOle_RecordedRoutesFormatsAndCursors(oledbPath, mdbPath, ado4Path);
-                GetRows_BinaryAndOle_ClientStatic(wireDaoPath);
-                NamedRefusals_UnrecordedCursorsFormatsRoutesAndGetChunkArguments(oledbPath, mdbPath, mdbBinPath, ado4Path);
+                GetRows_BinaryAndOle_ClientStatic(wireDaoPath, oledbPath);
+                NamedRefusals_UnrecordedCursorsFormatsRoutesAndGetChunkArguments(oledbPath, mdbPath, mdbBinPath, ado4Path, tempDir);
 
                 Assert.False(IsLoaded("msado15.dll"));
                 Assert.False(IsLoaded("ACEOLEDB.DLL"));
@@ -114,13 +114,6 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                         expectedDescription: "Catastrophic failure",
                         expectedHelpContext: 5000000,
                         expectedInfoGuid: IidRowset);
-                    AssertConnectionError0(
-                        cn,
-                        unchecked((int)0x8000FFFF),
-                        expectedSqlState: "",
-                        expectedNativeError: 0,
-                        expectedSource: "Microsoft Access Database Engine",
-                        expectedDescription: "Catastrophic failure");
 
                     // Row 2: Null OLE -> ActualSize 0, GetChunk(3) -> Null, Value -> Null (not consumed).
                     Assert.Null(Call(sf, "MoveNext").Failure);
@@ -152,11 +145,10 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                         Assert.Equal(firstM, (string)Call(sfm, "GetChunk", 5000).Value!);
                     }
 
-                    // GetChunk(0) and GetChunk(-1) on OLE fail 0x800A0BB9 (ADODB.Field, helpContext 1240641) and clear Connection.Errors.
+                    // GetChunk(0) and GetChunk(-1) on OLE fail 0x800A0BB9 (ADODB.Field, helpContext 1240641) without altering chunk state.
+                    // evidence/r-oledb-odbc/stream-getchunk #44-45 does not inspect Connection.Errors here.
                     AssertError(Call(sfb, "GetChunk", 0), unchecked((int)0x800A0BB9), expectedSource: "ADODB.Field", expectedHelpContext: 1240641, expectedInfoGuid: IidField);
-                    Assert.Equal(0, GetErrorsCount(cn));
                     AssertError(Call(sfb, "GetChunk", -1), unchecked((int)0x800A0BB9), expectedSource: "ADODB.Field", expectedHelpContext: 1240641, expectedInfoGuid: IidField);
-                    Assert.Equal(0, GetErrorsCount(cn));
 
                     // GetChunk(65536) after switching back from M returns all 12000 bytes from offset 0.
                     byte[] fullB = (byte[])Call(sfb, "GetChunk", 65536).Value!;
@@ -167,11 +159,18 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertError(TryGet(sfb, "Value"), unchecked((int)0x8000FFFF), expectedSource: "Microsoft Access Database Engine", expectedDescription: "Catastrophic failure", expectedHelpContext: 5000000, expectedInfoGuid: IidRowset);
                     AssertError(TryGet(sfm, "Value"), unchecked((int)0x8000FFFF), expectedSource: "Microsoft Access Database Engine", expectedDescription: "Catastrophic failure", expectedHelpContext: 5000000, expectedInfoGuid: IidRowset);
 
-                    // Row 5: MoveNext, GetChunk(3) -> Null, ActualSize -> 0 do NOT clear Connection.Errors (Count stays 1).
+                    // Row 5: MoveNext, GetChunk(3) -> Null, ActualSize -> 0 leave Connection.Errors intact (stream-getchunk #52-61).
                     Assert.Null(Call(sf, "MoveNext").Failure);
                     Assert.Same(DBNull.Value, Call(sfb, "GetChunk", 3).Value);
                     Assert.Equal(0, Get(sfb, "ActualSize"));
                     Assert.Equal(1, GetErrorsCount(cn));
+                    AssertConnectionError0(
+                        cn,
+                        unchecked((int)0x8000FFFF),
+                        expectedSqlState: "",
+                        expectedNativeError: 0,
+                        expectedSource: "Microsoft Access Database Engine",
+                        expectedDescription: "Catastrophic failure");
                 }
                 finally
                 {
@@ -271,7 +270,10 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
     /// evidence/r-q-wire/str-odd-bstr-into-binary, evidence/r-str-ado-act/ado-persist,
     /// evidence/r-str-ado-act/ado-rs-cursors, and evidence/r-ado-1b/fields-meta-mdb.
     /// </summary>
-    private static void SqlSelectBinaryAndOle_RecordedRoutesFormatsAndCursors(string oledbPath, string mdbPath, string ado4Path)
+    private static void SqlSelectBinaryAndOle_RecordedRoutesFormatsAndCursors(
+        string oledbPath,
+        string mdbPath,
+        string ado4Path)
     {
         // 1) ACCDB Connection.Execute (2, 0, 1) Binary + OLE: evidence/r-oledb-odbc/buffer-typed-server.
         nint cn = OpenAceConnection(oledbPath, mode: 1);
@@ -358,27 +360,44 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             }
 
             // 3) ACCDB Recordset.Open Server Static ReadOnly (2, 3, 1) Binary + OLE Value:
-            //    evidence/r-q-wire/str-odd-bstr-into-binary, evidence/r-str-ado-act/ado-rs-cursors.
+            //    evidence/r-q-wire/str-odd-bstr-into-binary (#211-309: non-null rows only),
+            //    evidence/r-str-ado-act/ado-rs-cursors (c4: opens over Null OLE without reading Value).
+            //    Finding 9: Open() succeeds, non-null Row 1 reads Value, Null Row 2 and 0-byte Row 3 refuse by name while ID remains readable.
             nint srvStatic = New(OwnRecordset);
             try
             {
                 Assert.Null(Put(srvStatic, "CursorLocation", 2).Failure);
                 Assert.Null(Call(srvStatic, "Open", "SELECT ID, B, Bin FROM Items ORDER BY ID", new Dispatch(cn), 3, 1, 1).Failure);
+                Assert.Equal(5, Get(srvStatic, "RecordCount"));
                 nint flds = (nint)Get(srvStatic, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
                 nint fb = (nint)Get(flds, "Item", "B")!;
                 nint fbin = (nint)Get(flds, "Item", "Bin")!;
                 try
                 {
+                    Assert.Equal(1, Get(fid, "Value"));
                     Assert.Equal(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }, (byte[])Get(fb, "Value")!);
                     Assert.Equal(16, ((byte[])Get(fbin, "Value")!).Length);
                     // ActualSize on (2, 3, 1) SQL Binary/OLE is unrecorded -> refused by name.
                     AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
                     AssertNotModelled(TryGet(fbin, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+
+                    // Row 2 (Null) and Row 3 (0-byte empty): ID readable, Binary/OLE Value refused by name.
+                    Assert.Null(Call(srvStatic, "MoveNext").Failure);
+                    Assert.Equal(2, Get(fid, "Value"));
+                    AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryNullOnServerStatic");
+                    AssertNotModelled(TryGet(fbin, "Value"), "NotModelled.AdoSqlBinaryNullOnServerStatic");
+
+                    Assert.Null(Call(srvStatic, "MoveNext").Failure);
+                    Assert.Equal(3, Get(fid, "Value"));
+                    AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryNullOnServerStatic");
+                    AssertNotModelled(TryGet(fbin, "Value"), "NotModelled.AdoSqlBinaryNullOnServerStatic");
                 }
                 finally
                 {
                     Release(fbin);
                     Release(fb);
+                    Release(fid);
                     Release(flds);
                 }
                 Assert.Null(Call(srvStatic, "Close").Failure);
@@ -396,6 +415,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
 
         // 4) ACCDB Recordset.Open Client Static BatchOptimistic (3, 3, 4) OLE open/materialization:
         //    evidence/r-str-ado-act/ado-persist, evidence/r-str-ado-act/ado-rs-cursors (c5).
+        //    Finding 4 & 5: Open() succeeds and non-binary columns stay readable; Value, ActualSize, GetString, Filter, and Find refuse by name.
         nint ado4Cn = OpenAceConnection(ado4Path, mode: 1);
         try
         {
@@ -406,16 +426,21 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Assert.Null(Call(batchRs, "Open", "SELECT * FROM K ORDER BY ID", new Dispatch(ado4Cn), 3, 4, 1).Failure);
                 Assert.Equal(4, Get(batchRs, "RecordCount"));
                 nint flds = (nint)Get(batchRs, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
                 nint fb = (nint)Get(flds, "Item", "B")!;
                 try
                 {
-                    // Reading Field.Value or ActualSize of OLE directly on (3, 3, 4) is unrecorded -> refused by name.
+                    Assert.Equal(1, Get(fid, "Value"));
+                    Assert.Equal(205, Get(fb, "Type"));
                     AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryCursor");
                     AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                    AssertNotModelled(Put(batchRs, "Filter", "B = NULL"), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Call(batchRs, "Find", "B = NULL"), "NotModelled.AdoSqlBinaryCursor");
                 }
                 finally
                 {
                     Release(fb);
+                    Release(fid);
                     Release(flds);
                 }
                 Assert.Null(Call(batchRs, "Close").Failure);
@@ -423,6 +448,20 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             finally
             {
                 Release(batchRs);
+            }
+
+            // GetString on (3, 3, 4) over SELECT ID, B FROM K ORDER BY ID formats ID (I4) then refuses B by name.
+            nint batchStrRs = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(batchStrRs, "CursorLocation", 3).Failure);
+                Assert.Null(Call(batchStrRs, "Open", "SELECT ID, B FROM K ORDER BY ID", new Dispatch(ado4Cn), 3, 4, 1).Failure);
+                AssertNotModelled(Call(batchStrRs, "GetString"), "NotModelled.AdoSqlBinaryCursor");
+                Assert.Null(Call(batchStrRs, "Close").Failure);
+            }
+            finally
+            {
+                Release(batchStrRs);
             }
         }
         finally
@@ -473,9 +512,10 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
     }
 
     /// <summary>
-    /// Replays Binary and OLE GetRows(-1) on Client Static ReadOnly (3, 3, 1) from evidence/r-wire/ado-getrows-tags.
+    /// Replays Binary and OLE GetRows(-1) on Client Static ReadOnly (3, 3, 1) from evidence/r-wire/ado-getrows-tags,
+    /// and verifies Finding 3 refusals for non-SQL table routes and non-1-arg GetRows(-1) argument shapes.
     /// </summary>
-    private static void GetRows_BinaryAndOle_ClientStatic(string wireDaoPath)
+    private static void GetRows_BinaryAndOle_ClientStatic(string wireDaoPath, string oledbPath)
     {
         nint cn = OpenAceConnection(wireDaoPath, mode: 1);
         try
@@ -486,6 +526,12 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             {
                 Assert.Null(Put(rBin, "CursorLocation", 3).Failure);
                 Assert.Null(Call(rBin, "Open", "SELECT ID, FBin FROM W WHERE ID BETWEEN 1000 AND 1099 ORDER BY ID", new Dispatch(cn), 3, 1, 1).Failure);
+                // Finding 3: non-1-arg GetRows(-1) argument shapes over Binary refuse NotModelled.AdoGetRowsBinaryArgs.
+                AssertNotModelled(Call(rBin, "GetRows"), "NotModelled.AdoGetRowsBinaryArgs");
+                AssertNotModelled(Call(rBin, "GetRows", 1), "NotModelled.AdoGetRowsBinaryArgs");
+                AssertNotModelled(Call(rBin, "GetRows", -1, 1), "NotModelled.AdoGetRowsBinaryArgs");
+                AssertNotModelled(Call(rBin, "GetRows", -1, Missing, "FBin"), "NotModelled.AdoGetRowsBinaryArgs");
+
                 object?[,] binGrid = CallGetRows(rBin, -1);
                 Assert.Equal(2, binGrid.GetLength(0));
                 Assert.Equal(8, binGrid.GetLength(1));
@@ -549,11 +595,35 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             {
                 Release(rOle);
             }
+
         }
         finally
         {
             Assert.Null(Call(cn, "Close").Failure);
             Release(cn);
+        }
+
+        // Finding 3: adCmdTable (2) over a table with Binary/OLE columns refuses GetRows(-1) with NotModelled.AdoGetRowsBinaryCursor.
+        nint tblCn = OpenAceConnection(oledbPath, mode: 1);
+        try
+        {
+            nint rTable = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(rTable, "CursorLocation", 3).Failure);
+                Assert.Null(Call(rTable, "Open", "Items", new Dispatch(tblCn), 3, 1, 2).Failure);
+                AssertNotModelled(Call(rTable, "GetRows", -1), "NotModelled.AdoGetRowsBinaryCursor");
+                Assert.Null(Call(rTable, "Close").Failure);
+            }
+            finally
+            {
+                Release(rTable);
+            }
+        }
+        finally
+        {
+            Assert.Null(Call(tblCn, "Close").Failure);
+            Release(tblCn);
         }
     }
 
@@ -565,27 +635,31 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
         string oledbPath,
         string mdbPath,
         string mdbBinPath,
-        string ado4Path)
+        string ado4Path,
+        string tempDir)
     {
         // --- ACCDB refusals ---
         nint cn = OpenAceConnection(oledbPath, mode: 1);
         try
         {
-            // Recordset.Open (2, 0, 1) on Binary (204) is unrecorded -> NotModelled.AdoSqlBinaryCursor.
+            // Recordset.Open (2, 0, 1) on Binary (204) is unrecorded -> Open succeeds, ID readable, Bin.Value refuses NotModelled.AdoSqlBinaryCursor.
             nint rsSrvBin = New(OwnRecordset);
             try
             {
                 Assert.Null(Put(rsSrvBin, "CursorLocation", 2).Failure);
                 Assert.Null(Call(rsSrvBin, "Open", "SELECT ID, Bin FROM Items ORDER BY ID", new Dispatch(cn), 0, 1, 1).Failure);
                 nint flds = (nint)Get(rsSrvBin, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
                 nint fbin = (nint)Get(flds, "Item", "Bin")!;
                 try
                 {
+                    Assert.Equal(1, Get(fid, "Value"));
                     AssertNotModelled(TryGet(fbin, "Value"), "NotModelled.AdoSqlBinaryCursor");
                 }
                 finally
                 {
                     Release(fbin);
+                    Release(fid);
                     Release(flds);
                 }
                 Assert.Null(Call(rsSrvBin, "Close").Failure);
@@ -595,28 +669,73 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Release(rsSrvBin);
             }
 
-            // Recordset.Open (3, 3, 4) selecting Binary (204) refuses at Open materialization -> NotModelled.AdoSqlBinaryCursor.
+            // Finding 5 (block 1): Recordset.Open (3, 3, 4) selecting Binary (204) succeeds at Open (metadata, RecordCount, ID readable);
+            // reading the unrecorded Binary cell refuses by name.
             nint rsBatchBin = New(OwnRecordset);
             try
             {
                 Assert.Null(Put(rsBatchBin, "CursorLocation", 3).Failure);
-                AssertNotModelled(
-                    Call(rsBatchBin, "Open", "SELECT ID, Bin FROM Items ORDER BY ID", new Dispatch(cn), 3, 4, 1),
-                    "NotModelled.AdoSqlBinaryCursor");
+                Assert.Null(Call(rsBatchBin, "Open", "SELECT ID, Bin FROM Items ORDER BY ID", new Dispatch(cn), 3, 4, 1).Failure);
+                Assert.Equal(5, Get(rsBatchBin, "RecordCount"));
+                nint flds = (nint)Get(rsBatchBin, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
+                nint fbin = (nint)Get(flds, "Item", "Bin")!;
+                try
+                {
+                    Assert.Equal(1, Get(fid, "Value"));
+                    Assert.Equal(204, Get(fbin, "Type"));
+                    AssertNotModelled(TryGet(fbin, "Value"), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(TryGet(fbin, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                    AssertNotModelled(Call(rsBatchBin, "GetString"), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Call(rsBatchBin, "GetRows", -1), "NotModelled.AdoGetRowsBinaryCursor");
+                }
+                finally
+                {
+                    Release(fbin);
+                    Release(fid);
+                    Release(flds);
+                }
+                Assert.Null(Call(rsBatchBin, "Close").Failure);
             }
             finally
             {
                 Release(rsBatchBin);
             }
 
-            // Connection.Execute on a Client cursor (3, 3, 1) selecting Binary/OLE refuses at materialization -> NotModelled.AdoSqlBinaryCursor.
+            // Finding 5 (block 2): Connection.Execute on a Client cursor (3, 3, 1) selecting OLE succeeds at Execute
+            // (metadata, RecordCount, ID readable); reading the unrecorded OLE cell refuses by name.
             nint clientExecCn = OpenAceConnection(oledbPath, mode: 1);
             try
             {
                 Assert.Null(Put(clientExecCn, "CursorLocation", 3).Failure);
-                AssertNotModelled(
-                    Call(clientExecCn, "Execute", "SELECT ID, B FROM Items ORDER BY ID", Missing, 1),
-                    "NotModelled.AdoSqlBinaryCursor");
+                Outcome execOut = Call(clientExecCn, "Execute", "SELECT ID, B FROM Items ORDER BY ID", Missing, 1);
+                Assert.Null(execOut.Failure);
+                nint clientExecRs = (nint)execOut.Value!;
+                try
+                {
+                    Assert.Equal(5, Get(clientExecRs, "RecordCount"));
+                    nint flds = (nint)Get(clientExecRs, "Fields")!;
+                    nint fid = (nint)Get(flds, "Item", "ID")!;
+                    nint fb = (nint)Get(flds, "Item", "B")!;
+                    try
+                    {
+                        Assert.Equal(1, Get(fid, "Value"));
+                        Assert.Equal(205, Get(fb, "Type"));
+                        AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryCursor");
+                        AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                    }
+                    finally
+                    {
+                        Release(fb);
+                        Release(fid);
+                        Release(flds);
+                    }
+                    Assert.Null(Call(clientExecRs, "Close").Failure);
+                }
+                finally
+                {
+                    Release(clientExecRs);
+                }
             }
             finally
             {
@@ -647,8 +766,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Release(execRs);
             }
 
-            // Server ForwardOnly (2, 0, 1): GetRows with OLE, GetChunk after Value, ActualSize after GetChunk,
-            // GetChunk at EOF, and GetChunk on closed/invalidated Field.
+            // Server ForwardOnly (2, 0, 1): Findings 1, 4, 6, 7, 8 refusals.
             nint sf = New(OwnRecordset);
             try
             {
@@ -666,7 +784,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fid, "GetChunk", 3), "NotModelled.AdoGetChunkFieldType");
                     AssertNotModelled(Call(ftxt, "GetChunk", 3), "NotModelled.AdoGetChunkFieldType");
 
-                    // Raw argument count / type refusals.
+                    // Raw argument count / type refusals (including Finding 8: VT_BYREF | VT_I4 refused).
                     AssertNotModelled(Call(fb, "GetChunk"), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", 3, 4), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", Missing), "NotModelled.AdoGetChunkArg");
@@ -674,27 +792,46 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fb, "GetChunk", 3.0), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", (short)3), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", DBNull.Value), "NotModelled.AdoGetChunkArg");
+                    AssertGetChunkByRefRefused(fb, 3);
 
-                    // Row 1: read Value first -> GetChunk after Value on server ForwardOnly refused.
-                    Assert.Equal(10, ((byte[])Get(fb, "Value")!).Length);
-                    AssertNotModelled(Call(fb, "GetChunk", 3), "NotModelled.AdoGetChunkAfterValue");
+                    // Finding 1 & 4: on ACCDB Recordset.Open (2, 0, 1), unconsumed non-null OLE Value, GetString, and Filter refuse NotModelled.AdoSqlBinaryCursor.
+                    AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Call(sf, "GetString"), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Put(sf, "Filter", "B = NULL"), "NotModelled.AdoSqlBinaryCursor");
 
-                    // Row 2 (Null Memo) and Row 3 (empty Memo) -> Memo Null/empty GetChunk refused.
+                    // Finding 4 & 6: after OLE GetChunk on server (2, 0, 1), GetString refuses AdoGetStringAfterGetChunk and
+                    // unrecorded navigation/view mutations (including failed ForwardOnly MoveLast) refuse AdoGetChunkNavigation.
+                    Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
+                    AssertNotModelled(Call(sf, "GetString"), "NotModelled.AdoGetStringAfterGetChunk");
+                    AssertNotModelled(Call(sf, "MoveLast"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(sf, "MoveFirst"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(sf, "MovePrevious"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(sf, "Move", 0), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(sf, "Move", 1), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Put(sf, "Filter", "ID = 1"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(sf, "GetRows", -1), "NotModelled.AdoGetChunkNavigation");
+
+                    // Row 2 (Null Memo) and Row 3 (empty Memo): MoveNext resets chunk state; Memo Null/empty GetChunk refused.
                     Assert.Null(Call(sf, "MoveNext").Failure);
                     AssertNotModelled(Call(fm, "GetChunk", 10), "NotModelled.AdoGetChunkMemoNullOrEmpty");
                     Assert.Null(Call(sf, "MoveNext").Failure);
                     AssertNotModelled(Call(fm, "GetChunk", 10), "NotModelled.AdoGetChunkMemoNullOrEmpty");
 
-                    // Row 4: Memo non-positive length, Memo continuation, and ActualSize after non-null GetChunk.
+                    // Row 4 (Finding 7): Memo non-positive length, Memo first-on-row refusal, Memo full/overread refusal,
+                    // partial Memo after OLE GetChunk (stream-getchunk #37), Memo continuation refusal, and ActualSize after GetChunk.
                     Assert.Null(Call(sf, "MoveNext").Failure);
                     AssertNotModelled(Call(fm, "GetChunk", 0), "NotModelled.AdoGetChunkMemoNonPositiveLength");
                     AssertNotModelled(Call(fm, "GetChunk", -1), "NotModelled.AdoGetChunkMemoNonPositiveLength");
-                    Assert.Equal(5000, ((string)Call(fm, "GetChunk", 5000).Value!).Length);
-                    AssertNotModelled(Call(fm, "GetChunk", 5000), "NotModelled.AdoGetChunkMemoContinuation");
-                    AssertNotModelled(TryGet(fm, "ActualSize"), "NotModelled.AdoActualSizeAfterGetChunk");
+                    AssertNotModelled(Call(fm, "GetChunk", 5000), "NotModelled.AdoGetChunkMemoFirstOnRow");
 
                     Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
                     AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeAfterGetChunk");
+                    AssertNotModelled(Call(fm, "GetChunk", 12000), "NotModelled.AdoGetChunkMemoFullOrOverread");
+                    AssertNotModelled(Call(fm, "GetChunk", 65536), "NotModelled.AdoGetChunkMemoFullOrOverread");
+
+                    Assert.Equal(5000, ((string)Call(fm, "GetChunk", 5000).Value!).Length);
+                    AssertNotModelled(Call(fm, "GetChunk", 5000), "NotModelled.AdoGetChunkMemoContinuation");
+                    AssertNotModelled(TryGet(fm, "ActualSize"), "NotModelled.AdoActualSizeAfterGetChunk");
 
                     // Advance to EOF -> GetChunk at EOF refused.
                     Assert.Null(Call(sf, "MoveNext").Failure); // Row 5
@@ -720,7 +857,35 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Release(sf);
             }
 
-            // Client Static (3, 3, 1): GetChunk on Binary (204) and ActualSize after GetChunk refused.
+            // Server ForwardOnly (2, 0, 1): Memo GetChunk after Memo Value on same row -> NotModelled.AdoGetChunkAfterValue.
+            nint sfMemoVal = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(sfMemoVal, "CursorLocation", 2).Failure);
+                Assert.Null(Call(sfMemoVal, "Open", "SELECT ID, B, M FROM Items WHERE ID = 4", new Dispatch(cn), 0, 1, 1).Failure);
+                nint flds = (nint)Get(sfMemoVal, "Fields")!;
+                nint fb = (nint)Get(flds, "Item", "B")!;
+                nint fm = (nint)Get(flds, "Item", "M")!;
+                try
+                {
+                    Assert.Equal(12000, ((string)Get(fm, "Value")!).Length);
+                    Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
+                    AssertNotModelled(Call(fm, "GetChunk", 5000), "NotModelled.AdoGetChunkAfterValue");
+                }
+                finally
+                {
+                    Release(fm);
+                    Release(fb);
+                    Release(flds);
+                }
+                Assert.Null(Call(sfMemoVal, "Close").Failure);
+            }
+            finally
+            {
+                Release(sfMemoVal);
+            }
+
+            // Client Static (3, 3, 1): GetChunk on Binary (204), ActualSize after GetChunk, and Finding 6 navigation/view refusals.
             nint cf = New(OwnRecordset);
             try
             {
@@ -734,6 +899,24 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fbin, "GetChunk", 3), "NotModelled.AdoGetChunkFieldType");
                     Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
                     AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeAfterGetChunk");
+
+                    // Finding 6: active chunk state on client (3, 3, 1) refuses every navigation/view/bulk call except MoveNext.
+                    AssertNotModelled(Call(cf, "MoveFirst"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "MoveLast"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "MovePrevious"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "Move", 0), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "Move", 1), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Put(cf, "AbsolutePosition", 1), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Put(cf, "AbsolutePage", 1), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Put(cf, "Filter", "ID = 1"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Put(cf, "Sort", "ID DESC"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "Find", "ID = 2"), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "GetRows", -1), "NotModelled.AdoGetChunkNavigation");
+                    AssertNotModelled(Call(cf, "GetString"), "NotModelled.AdoGetChunkNavigation");
+
+                    // MoveNext clears chunk state and allows subsequent navigation.
+                    Assert.Null(Call(cf, "MoveNext").Failure);
+                    Assert.Null(Call(cf, "MoveFirst").Failure);
                 }
                 finally
                 {
@@ -782,11 +965,78 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             Release(cn);
         }
 
-        // --- Recordset.Open(Command) Binary/OLE route refusal ---
+        // --- Writable copy: Finding 6 (RollbackTrans with active chunk state) & Finding 7 (non-ASCII Memo GetChunk) ---
+        string writableAdo4 = Path.Combine(tempDir, "writable-ado4.accdb");
+        File.Copy(ado4Path, writableAdo4, overwrite: true);
+        nint rwCn = OpenAceConnection(writableAdo4, mode: 3);
+        try
+        {
+            // Finding 7: non-ASCII Memo after OLE GetChunk refuses NotModelled.AdoGetChunkMemoNonAscii.
+            Assert.Null(Call(rwCn, "Execute", "UPDATE K SET M = '\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9' WHERE ID = 1", Missing, 1).Failure);
+            nint nonAsciiRs = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(nonAsciiRs, "CursorLocation", 3).Failure);
+                Assert.Null(Call(nonAsciiRs, "Open", "SELECT ID, B, M FROM K WHERE ID = 1", new Dispatch(rwCn), 3, 1, 1).Failure);
+                nint flds = (nint)Get(nonAsciiRs, "Fields")!;
+                nint fb = (nint)Get(flds, "Item", "B")!;
+                nint fm = (nint)Get(flds, "Item", "M")!;
+                try
+                {
+                    Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
+                    AssertNotModelled(Call(fm, "GetChunk", 5), "NotModelled.AdoGetChunkMemoNonAscii");
+                }
+                finally
+                {
+                    Release(fm);
+                    Release(fb);
+                    Release(flds);
+                }
+                Assert.Null(Call(nonAsciiRs, "Close").Failure);
+            }
+            finally
+            {
+                Release(nonAsciiRs);
+            }
+
+            // Finding 6: RollbackTrans while an open Recordset has active chunk state refuses NotModelled.AdoGetChunkNavigation.
+            Assert.Null(Call(rwCn, "BeginTrans").Failure);
+            nint txRs = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(txRs, "CursorLocation", 2).Failure);
+                Assert.Null(Call(txRs, "Open", "SELECT ID, B FROM K ORDER BY ID", new Dispatch(rwCn), 0, 1, 1).Failure);
+                nint flds = (nint)Get(txRs, "Fields")!;
+                nint fb = (nint)Get(flds, "Item", "B")!;
+                try
+                {
+                    Assert.Equal(3, ((byte[])Call(fb, "GetChunk", 3).Value!).Length);
+                    AssertNotModelled(Call(rwCn, "RollbackTrans"), "NotModelled.AdoGetChunkNavigation");
+                }
+                finally
+                {
+                    Release(fb);
+                    Release(flds);
+                }
+                Assert.Null(Call(txRs, "Close").Failure);
+                Assert.Null(Call(rwCn, "RollbackTrans").Failure);
+            }
+            finally
+            {
+                Release(txRs);
+            }
+        }
+        finally
+        {
+            Assert.Null(Call(rwCn, "Close").Failure);
+            Release(rwCn);
+        }
+
+        // --- Finding 5 (block 3): Recordset.Open(Command) Binary/OLE route refusal ---
         nint sqCn = OpenAceConnection(ado4Path, mode: 1);
         try
         {
-            // Recordset.Open(Command) selecting OLE -> NotModelled.AdoSqlBinaryRoute.
+            // Open(Command) selecting OLE succeeds (RecordCount, metadata, ID readable); Field.Value refuses NotModelled.AdoSqlBinaryRoute.
             nint cmd = New(OwnCommand);
             nint cmdRs = New(OwnRecordset);
             try
@@ -795,9 +1045,25 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Assert.Null(Put(cmd, "CommandText", "SELECT ID, B FROM K ORDER BY ID").Failure);
                 Assert.Null(Put(cmd, "CommandType", 1).Failure);
                 Assert.Null(Put(cmdRs, "CursorLocation", 3).Failure);
-                AssertNotModelled(
-                    Call(cmdRs, "Open", new Dispatch(cmd), Missing, 3, 1),
-                    "NotModelled.AdoSqlBinaryRoute");
+                Assert.Null(Call(cmdRs, "Open", new Dispatch(cmd), Missing, 3, 1).Failure);
+                Assert.Equal(4, Get(cmdRs, "RecordCount"));
+                nint flds = (nint)Get(cmdRs, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
+                nint fb = (nint)Get(flds, "Item", "B")!;
+                try
+                {
+                    Assert.Equal(1, Get(fid, "Value"));
+                    Assert.Equal(205, Get(fb, "Type"));
+                    AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryRoute");
+                    AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                }
+                finally
+                {
+                    Release(fb);
+                    Release(fid);
+                    Release(flds);
+                }
+                Assert.Null(Call(cmdRs, "Close").Failure);
             }
             finally
             {
@@ -815,19 +1081,22 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
         nint mdbCn = OpenAceConnection(mdbPath, mode: 1);
         try
         {
-            // MDB Connection.Execute OLE -> NotModelled.AdoSqlBinaryMdb.
+            // MDB Connection.Execute OLE -> Open succeeds, B.Value refuses NotModelled.AdoSqlBinaryMdb.
             nint mExec = (nint)Call(mdbCn, "Execute", "SELECT ID, B FROM T ORDER BY ID", Missing, 1).Value!;
             try
             {
                 nint flds = (nint)Get(mExec, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
                 nint fb = (nint)Get(flds, "Item", "B")!;
                 try
                 {
+                    Assert.Equal(1, Get(fid, "Value"));
                     AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryMdb");
                 }
                 finally
                 {
                     Release(fb);
+                    Release(fid);
                     Release(flds);
                 }
                 Assert.Null(Call(mExec, "Close").Failure);
@@ -837,14 +1106,31 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Release(mExec);
             }
 
-            // MDB Server Static (2, 3, 1) OLE materializes at Open -> NotModelled.AdoSqlBinaryMdb.
+            // Finding 5 (block 4): MDB Server Static (2, 3, 1) OLE succeeds at Open (RecordCount, metadata, ID readable);
+            // B.Value refuses NotModelled.AdoSqlBinaryMdb.
             nint mStatic = New(OwnRecordset);
             try
             {
                 Assert.Null(Put(mStatic, "CursorLocation", 2).Failure);
-                AssertNotModelled(
-                    Call(mStatic, "Open", "SELECT ID, B FROM T ORDER BY ID", new Dispatch(mdbCn), 3, 1, 1),
-                    "NotModelled.AdoSqlBinaryMdb");
+                Assert.Null(Call(mStatic, "Open", "SELECT ID, B FROM T ORDER BY ID", new Dispatch(mdbCn), 3, 1, 1).Failure);
+                Assert.Equal(7, Get(mStatic, "RecordCount"));
+                nint flds = (nint)Get(mStatic, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
+                nint fb = (nint)Get(flds, "Item", "B")!;
+                try
+                {
+                    Assert.Equal(1, Get(fid, "Value"));
+                    Assert.Equal(205, Get(fb, "Type"));
+                    AssertNotModelled(TryGet(fb, "Value"), "NotModelled.AdoSqlBinaryMdb");
+                    AssertNotModelled(TryGet(fb, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                }
+                finally
+                {
+                    Release(fb);
+                    Release(fid);
+                    Release(flds);
+                }
+                Assert.Null(Call(mStatic, "Close").Failure);
             }
             finally
             {
@@ -882,7 +1168,8 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             Release(mdbCn);
         }
 
-        // MDB Binary (204) even on (3, 3, 1) -> NotModelled.AdoSqlBinaryMdb.
+        // Finding 5 (block 5): MDB Binary (204) on (3, 3, 1) succeeds at Open (RecordCount, metadata, ID readable);
+        // Bin.Value / GetString refuse NotModelled.AdoSqlBinaryMdb, ActualSize refuses AdoActualSizeBinaryCursor, GetRows refuses AdoGetRowsBinaryMdb.
         nint mdbBinCn = OpenAceConnection(mdbBinPath, mode: 1);
         try
         {
@@ -890,9 +1177,27 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             try
             {
                 Assert.Null(Put(rs, "CursorLocation", 3).Failure);
-                AssertNotModelled(
-                    Call(rs, "Open", "SELECT ID, Bin FROM Items ORDER BY ID", new Dispatch(mdbBinCn), 3, 1, 1),
-                    "NotModelled.AdoSqlBinaryMdb");
+                Assert.Null(Call(rs, "Open", "SELECT ID, Bin FROM Items ORDER BY ID", new Dispatch(mdbBinCn), 3, 1, 1).Failure);
+                Assert.Equal(5, Get(rs, "RecordCount"));
+                nint flds = (nint)Get(rs, "Fields")!;
+                nint fid = (nint)Get(flds, "Item", "ID")!;
+                nint fbin = (nint)Get(flds, "Item", "Bin")!;
+                try
+                {
+                    Assert.Equal(1, Get(fid, "Value"));
+                    Assert.Equal(204, Get(fbin, "Type"));
+                    AssertNotModelled(TryGet(fbin, "Value"), "NotModelled.AdoSqlBinaryMdb");
+                    AssertNotModelled(TryGet(fbin, "ActualSize"), "NotModelled.AdoActualSizeBinaryCursor");
+                    AssertNotModelled(Call(rs, "GetString"), "NotModelled.AdoSqlBinaryMdb");
+                    AssertNotModelled(Call(rs, "GetRows", -1), "NotModelled.AdoGetRowsBinaryMdb");
+                }
+                finally
+                {
+                    Release(fbin);
+                    Release(fid);
+                    Release(flds);
+                }
+                Assert.Null(Call(rs, "Close").Failure);
             }
             finally
             {
@@ -903,6 +1208,46 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
         {
             Assert.Null(Call(mdbBinCn, "Close").Failure);
             Release(mdbBinCn);
+        }
+    }
+
+    private static void AssertGetChunkByRefRefused(nint field, int value)
+    {
+        int dispId = GetDispId(field, "GetChunk");
+        int local = value;
+        NativeVariant arg = default;
+        arg.Vt = (ushort)(VarType.ByRef | VarType.I4);
+        arg.Pointer = (nint)(&local);
+        DispParams dp = new() { Args = (nint)(&arg), ArgCount = 1 };
+        NativeVariant result = default;
+        ExcepInfo ex = default;
+        uint argErr;
+        nint* vt = *(nint**)field;
+        Guid iidNull = Guid.Empty;
+        int hr = ((delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)vt[6])(
+            field, dispId, &iidNull, 1033, 1, &dp, &result, &ex, &argErr);
+        try
+        {
+            Assert.Equal(unchecked((int)0x80020009), hr);
+            Assert.Equal(HResults.E_NOTIMPL, ex.Scode);
+            string? desc = ex.Description != 0 ? Marshal.PtrToStringBSTR(ex.Description) : null;
+            Assert.NotNull(desc);
+            Assert.Contains("NotModelled.AdoGetChunkArg", desc!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (ex.Source != 0)
+            {
+                Marshal.FreeBSTR(ex.Source);
+            }
+            if (ex.Description != 0)
+            {
+                Marshal.FreeBSTR(ex.Description);
+            }
+            if (ex.HelpFile != 0)
+            {
+                Marshal.FreeBSTR(ex.HelpFile);
+            }
         }
     }
 

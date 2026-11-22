@@ -833,7 +833,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
         }
 
         // 4) Additional GetRows type coverage: VT_DECIMAL + VT_NULL (r-fix-wire-ado-ado5.accdb) and
-        //    VT_ARRAY|VT_UI1 + VT_NULL via TableRowSource (r-ado-1b-main.accdb T.B), plus GetString non-I4/BSTR refusal.
+        //    VT_ARRAY|VT_UI1 + VT_NULL via recorded SQL SELECT (3, 3, 1) 1-arg GetRows(-1) (evidence/r-wire/ado-getrows-tags),
+        //    plus adCmdTable OLE GetRows refusal and GetString non-I4/BSTR refusal.
         nint decCn = OpenAceConnection(decPath, mode: 1);
         try
         {
@@ -857,8 +858,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
         {
             nint binRs = New(OwnRecordset);
             Assert.Null(Put(binRs, "CursorLocation", 3).Failure);
-            Assert.Null(Call(binRs, "Open", "T", new Dispatch(aCn), 3, 1, 2).Failure);
-            object[,] bGrid = (object[,])Call(binRs, "GetRows", -1, 1, "B").Value!;
+            Assert.Null(Call(binRs, "Open", "SELECT B FROM T ORDER BY ID", new Dispatch(aCn), 3, 1, 1).Failure);
+            object[,] bGrid = (object[,])Call(binRs, "GetRows", -1).Value!;
             Assert.Equal(1, bGrid.GetLength(0));
             bool sawBytes = false;
             bool sawNull = false;
@@ -878,6 +879,17 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.True(sawNull);
             Assert.Null(Call(binRs, "Close").Failure);
             Release(binRs);
+
+            // adCmdTable GetRows over Binary/OLE is unrecorded -> refused by name (Finding 3).
+            nint tblBinRs = New(OwnRecordset);
+            Assert.Null(Put(tblBinRs, "CursorLocation", 3).Failure);
+            Assert.Null(Call(tblBinRs, "Open", "T", new Dispatch(aCn), 3, 1, 2).Failure);
+            Outcome tblGetRows = Call(tblBinRs, "GetRows", -1, 1, "B");
+            Assert.NotNull(tblGetRows.Failure);
+            Assert.Equal(HResults.E_NOTIMPL, tblGetRows.Failure!.Value.Scode);
+            Assert.Contains("NotModelled.AdoGetRowsBinaryCursor", tblGetRows.Failure!.Value.Description!, StringComparison.Ordinal);
+            Assert.Null(Call(tblBinRs, "Close").Failure);
+            Release(tblBinRs);
 
             nint dRs = New(OwnRecordset);
             Assert.Null(Call(dRs, "Open", "SELECT D FROM T WHERE D IS NOT NULL", new Dispatch(aCn), 0, 1, 1).Failure);
