@@ -1,0 +1,59 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q32-dao-select-lv/q1-val-bin-mdb-snapshot",
+  "bookRefs": ["R-STRING-1", "R-ORACLE-1", "OR-WIRE", "W-08"],
+  "description": "Field.Value and metadata (Name, Type, Size, Attributes) of Binary(16) FBin on a Jet 4 MDB SELECT snapshot (type 4) across Null, empty, 5-byte and 16-byte rows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q32-mdb.mdb",
+      "sha256": "cbce097e8ef4b8b84f6244a661c7e386a2469aab64057be068e5a169a2e3b1f2",
+      "length": 102400,
+      "provenance": "r-q32-dao-select-lv.create-mdb.6b9dd67621.a1 qk1-6b9dd676210d825527177830f382b3d4360c262b38ce1e3652ee161111fd99db output:r-q32-mdb.mdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db",
+      "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }]
+    },
+    {
+      "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rs",
+      "args": [{ "type": "bstr", "text": "SELECT ID, FBin FROM T ORDER BY ID" }, { "type": "i4", "value": 4 }]
+    },
+    { "op": "invoke", "target": "rs", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fl" },
+    {
+      "op": "forEachItem", "target": "fl", "bind": "fd", "maxItems": 8,
+      "body": [
+        { "op": "invoke", "target": "fd", "member": "Name", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "fd", "member": "Type", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "fd", "member": "Size", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "fd", "member": "Attributes", "kind": "propertyGet", "args": [] }
+      ]
+    },
+    { "op": "invoke", "target": "fl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "ID" }], "bind": "fId" },
+    { "op": "invoke", "target": "fl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "FBin" }], "bind": "fBin" },
+    {
+      "op": "loopUntil", "target": "rs", "member": "EOF", "maxIterations": 16,
+      "body": [
+        { "op": "invoke", "target": "fId", "member": "Value", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "fBin", "member": "Value", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "rs", "member": "MoveNext", "kind": "method", "args": [] }
+      ]
+    },
+    { "op": "release", "target": "fBin" },
+    { "op": "release", "target": "fId" },
+    { "op": "release", "target": "fl" },
+    { "op": "invoke", "target": "rs", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
