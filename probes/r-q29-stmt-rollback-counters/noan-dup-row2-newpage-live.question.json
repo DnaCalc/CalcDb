@@ -1,0 +1,82 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-STMT",
+    "R-SQL-2",
+    "SQL-ACT-FAIL",
+    "R-CRASH-1",
+    "CRASH-ORDER",
+    "W-05"
+  ],
+  "description": "Same as noan-dup-row2-newpage (empty ACCDB table T with no AutoNumber column, row 1 accepted taking a new page, row 2 refused 3022 by UK under dbFailOnError), with live read-only page snapshots beside ACE's open handle right after Execute, after the 1500 ms pause before Close, and after Close. Separates the +3 page-0 steps into Execute, deferred, and Close write groups without ETW.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-1-accdb-empty.accdb",
+      "sha256": "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559",
+      "length": 172032,
+      "provenance": "r-fmt-1.create-accdb-empty.235fff714c.a1 qk1-235fff714c64fbca74c5694474e7c31525644f5b4449e80ca7aaba339839b5e2 output:r-fmt-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE UNIQUE INDEX UK ON T (K)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE Src (N LONG CONSTRAINT PKS PRIMARY KEY, ID LONG, K LONG, S TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO Src VALUES (1, 10, 11, 'g1')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO Src VALUES (2, 11, 11, 'g2-dup')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO Src VALUES (3, 12, 12, 'g3')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-setup", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-setup", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-setup" },
+    { "op": "pause", "ms": 1000 },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO T (ID, K, S) SELECT ID, K, S FROM Src ORDER BY N" }, { "type": "i4", "value": 128 }] },
+    { "op": "observeFiles", "label": "after-execute-live", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-exec", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-exec", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-exec", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-exec" },
+    { "op": "invoke", "target": "db", "member": "RecordsAffected", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "errs" },
+    { "op": "forEachItem", "target": "errs", "bind": "e", "maxItems": 16, "body": [
+      { "op": "invoke", "target": "e", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Source", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "errs" },
+    { "op": "pause", "ms": 1500 },
+    { "op": "observeFiles", "label": "after-pause-live", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-pause", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-pause", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-pause", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-pause" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-statement", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-stmt", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-stmt" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
