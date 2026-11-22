@@ -1,0 +1,101 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q31-sql-check-2/lit-text-trail-val",
+  "bookRefs": [
+    "II-07",
+    "II-11",
+    "R-CAT-1",
+    "R-OLEDB-1",
+    "W-05"
+  ],
+  "description": "ACCDB table Tbl (ID LONG PK, T TEXT(20)) with CK_T CHECK (T <> 'x') added via ADO in setup session. Statement session runs ADO Connection.Execute \"INSERT INTO Tbl (ID, T) VALUES (1, 'x ')\" (trailing space on inserted value), reads ByRef RecordsAffected and Connection.Errors, keeps pages 0-1 and 42+, and reads stored rows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-1-accdb-empty.accdb",
+      "sha256": "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559",
+      "length": 172032,
+      "provenance": "r-fmt-1.create-accdb-empty.235fff714c.a1 qk1-235fff714c64fbca74c5694474e7c31525644f5b4449e80ca7aaba339839b5e2 output:r-fmt-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn0" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "cn0", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn0", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "p0" },
+    { "op": "invoke", "target": "p0", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds0" },
+    { "op": "invoke", "target": "ds0", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "ds0" },
+    { "op": "release", "target": "p0" },
+    { "op": "invoke", "target": "cn0", "member": "Open", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "cn0", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE Tbl (ID LONG CONSTRAINT PK PRIMARY KEY, T TEXT(20))" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn0", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "ALTER TABLE Tbl ADD CONSTRAINT CK_T CHECK (T <> 'x')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn0" },
+    { "op": "observeFiles", "label": "after-setup", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-setup", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-setup" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "p1" },
+    { "op": "invoke", "target": "p1", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds1" },
+    { "op": "invoke", "target": "ds1", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "ds1" },
+    { "op": "release", "target": "p1" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO Tbl (ID, T) VALUES (1, 'x ')" }, { "type": "byref", "inner": { "type": "i4", "value": -1 }, "typed": true }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "cnErrs" },
+    { "op": "invoke", "target": "cnErrs", "member": "Count", "kind": "propertyGet", "args": [] },
+    { "op": "forEachItem", "target": "cnErrs", "bind": "cnErr", "maxItems": 16, "body": [
+      { "op": "invoke", "target": "cnErr", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "SQLState", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "NativeError", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "HelpFile", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "cnErr", "member": "HelpContext", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "cnErrs" },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-statement", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg-stmt", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 8192, "keep": true },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeClose", "handle": "pg-stmt" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Tbl" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "RecordCount", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "td" },
+    { "op": "release", "target": "tds" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "SELECT ID, T FROM Tbl ORDER BY ID" }, { "type": "i4", "value": 4 }], "bind": "rs" },
+    { "op": "loopUntil", "target": "rs", "member": "EOF", "maxIterations": 16, "body": [
+      { "op": "invoke", "target": "rs", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "flds" },
+      { "op": "forEachItem", "target": "flds", "bind": "f", "maxItems": 4, "body": [
+        { "op": "invoke", "target": "f", "member": "Value", "kind": "propertyGet", "args": [] }
+      ] },
+      { "op": "release", "target": "flds" },
+      { "op": "invoke", "target": "rs", "member": "MoveNext", "kind": "method", "args": [] }
+    ] },
+    { "op": "invoke", "target": "rs", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
