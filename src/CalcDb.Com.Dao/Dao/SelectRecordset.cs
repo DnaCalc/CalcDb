@@ -177,9 +177,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// reads an overlay created after open (r-txn-1b/temp-querydef-recordset-rollback) or already present at open
     /// (r-txn-1b/rs-types-after-rollback kd, r-def-cursor-dao/edit-under-commit ro,
     /// r-fix-cursor-dao/edit-under-commit-second-workspace ro).</item>
-    /// <item>Allowed — single-table ORDER BY SELECT snapshot (type 4) opened before writes: keeps a registered
-    /// <see cref="ReadView"/> of open-time committed pages across later publishes as well as own Workspace's uncommitted
-    /// overlay and Rollback (r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
+    /// <item>Allowed — single-table ORDER BY ACCDB SELECT snapshot (type 4) opened at depth 0 with no Memo or OLE
+    /// projected columns: keeps a registered <see cref="ReadView"/> of open-time committed pages across later publishes
+    /// as well as own Workspace's uncommitted overlay and Rollback (docs/work/qualified.md R-CURSOR-1 CUR-POP;
+    /// r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
     /// r-q2-cursor-dao/pop-snapshot-orderby-small, r-txn-1b/rs-types-after-rollback bs,
     /// r-def-cursor-dao/delete-by-other-cursor-current-row rs, r-txn-1b/ws2-reader-after-other-rollback rss).</item>
     /// <item>Allowed — SELECT snapshot (type 4) opened inside a depth-1 level over an existing overlay: reads that
@@ -190,8 +191,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// <c>NotModelled.Edit.ResolvedOverlay</c>); dynaset reading an overlay at nested depth &gt;= 2
     /// (<c>NotModelled.Edit.NestedSelectOverlay</c>); non-single-table dynaset across an overlay
     /// (<c>NotModelled.Edit.ComplexSelectOverlay</c>); snapshot over a mutated overlay
-    /// (<c>NotModelled.Edit.SnapshotOverlayMutated</c>); unordered or non-single-table row-backed snapshot after a
-    /// committed write to the Database (<c>NotModelled.Edit.SnapshotAfterPublish</c>;
+    /// (<c>NotModelled.Edit.SnapshotOverlayMutated</c>); unordered, MDB, Memo/OLE-projecting or non-single-table
+    /// row-backed snapshot after a committed write to the Database (<c>NotModelled.Edit.SnapshotAfterPublish</c>;
     /// r-q2-cursor-dao/pop-snapshot-select-noorder-big); unpublished changes outside this Database's PageCache
     /// (<c>NotModelled.Edit.UnpublishedRows</c>).</item>
     /// </list>

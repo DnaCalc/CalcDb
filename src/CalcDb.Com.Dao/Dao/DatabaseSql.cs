@@ -128,54 +128,113 @@ internal static class SelectRoute
         {
             return Published(database, failure!);
         }
-        ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
-        bool singleTableRowSelect = IsSingleTableRowSelect(plan);
-        // Single-table row-backed SELECT dynasets read through the Workspace's live overlay while active and committed
-        // pages before the first write and after the level ends (task dqtr; r-txn-1b/rs-position-after-rollback,
-        // r-txn-1b/rs-types-after-rollback, r-txn-1b/temp-querydef-recordset-rollback, r-def-cursor-dao/edit-under-commit,
-        // r-fix-cursor-dao/edit-under-commit-second-workspace, r-txn-1/local-visibility,
-        // r-txn-1b/ws2-reader-own-level-before-other-commit). Single-table ORDER BY snapshots opened without an active
-        // overlay register a PageCache ReadView so they keep open-time row values across later publishes (task zdh5;
-        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
-        // r-q2-cursor-dao/pop-snapshot-orderby-small; r-txn-1b/rs-types-after-rollback bs). Unordered SELECT snapshots
-        // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), overlay-backed snapshots (r-txn-1b/rs-types-after-rollback ks),
-        // forward-only and complex shapes keep database.Sql and refuse unrecorded transitions by name.
         ReadView? snapshotView = null;
         PrivateOverlay? snapshotOverlay = null;
-        ISqlDatabase scanDatabase;
-        if (recordsetType == 2 && singleTableRowSelect)
+        SelectCursor? cursor = null;
+        bool adopted = false;
+        try
         {
-            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
-        }
-        else if (recordsetType == 4 && singleTableRowSelect && hasOrderBy && database.Workspace.Transactions.OverlayOf(database.Cache) is null)
-        {
-            ViewResult registered = database.Cache.RegisterView();
-            if (!registered.Succeeded)
+            ResultKind kind = recordsetType switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly };
+            bool singleTableRowSelect = IsSingleTableRowSelect(plan);
+            // Single-table row-backed SELECT dynasets read through the Workspace's live overlay while active and committed
+            // pages before the first write and after the level ends (task dqtr; r-txn-1b/rs-position-after-rollback,
+            // r-txn-1b/rs-types-after-rollback, r-txn-1b/temp-querydef-recordset-rollback, r-def-cursor-dao/edit-under-commit,
+            // r-fix-cursor-dao/edit-under-commit-second-workspace, r-txn-1/local-visibility,
+            // r-txn-1b/ws2-reader-own-level-before-other-commit). Single-table ORDER BY ACCDB snapshots opened at
+            // transaction depth 0 with no Memo or OLE projected columns register a PageCache ReadView so they keep
+            // open-time row values across later publishes (task zdh5; docs/work/qualified.md R-CURSOR-1 CUR-POP;
+            // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
+            // r-q2-cursor-dao/pop-snapshot-orderby-small; r-txn-1b/rs-types-after-rollback bs). Unordered SELECT snapshots
+            // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), MDB snapshots, snapshots projecting Memo or OLE columns,
+            // snapshots opened inside a transaction (r-txn-1b/rs-types-after-rollback ks), forward-only and complex
+            // shapes keep database.Sql and refuse unrecorded transitions by name.
+            ISqlDatabase scanDatabase;
+            if (recordsetType == 2 && singleTableRowSelect)
             {
-                plan.Dispose();
-                return CallResult.Fail(Failure.NotImplemented("OpenRecordset snapshot view registration failed: " + (registered.Detail ?? registered.Failure.ToString())));
+                scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
             }
-            snapshotView = registered.View!;
-            snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), snapshotView);
-            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
+            else if (recordsetType == 4
+                && singleTableRowSelect
+                && hasOrderBy
+                && database.Profile.IsAce
+                && database.Workspace.Transactions.Depth == 0
+                && !ProjectsMemoOrOle(plan))
+            {
+                ViewResult registered = database.Cache.RegisterView();
+                if (!registered.Succeeded)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.Edit.SnapshotReadView",
+                        "OpenRecordset snapshot ReadView registration failed: " + (registered.Detail ?? registered.Failure.ToString())));
+                }
+                snapshotView = registered.View!;
+                snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), snapshotView);
+                scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
+            }
+            else
+            {
+                scanDatabase = database.Sql;
+            }
+            cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
+            if (cursor is null)
+            {
+                return Published(database, failure!);
+            }
+            if (recordsetType == 4)
+            {
+                database.Workspace.Transactions.EndLazyBurst(database.Cache);
+            }
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, snapshotView, snapshotOverlay);
+            adopted = true;
+            return database.Adopt(recordset);
         }
-        else
+        finally
         {
-            scanDatabase = database.Sql;
+            if (!adopted)
+            {
+                cursor?.Dispose();
+                plan.Dispose();
+                snapshotOverlay?.Dispose();
+                snapshotView?.Dispose();
+            }
         }
-        SelectCursor? cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
-        if (cursor is null)
+    }
+
+    /// <summary>
+    /// True when any projected column of <paramref name="plan"/> is Memo or OLE (or has an unmodelled expression type on
+    /// a table containing Memo or OLE columns): long values may be fetched later and no retained record shows them in a
+    /// post-publish SELECT snapshot (task zdh5).
+    /// </summary>
+    private static bool ProjectsMemoOrOle(BoundSelect plan)
+    {
+        bool tableHasLong = false;
+        if (plan.Sources.Count == 1 && plan.Sources[0].Table is { } table)
         {
-            plan.Dispose();
-            snapshotOverlay?.Dispose();
-            snapshotView?.Dispose();
-            return Published(database, failure!);
+            foreach (ColumnDescriptor c in table.Columns)
+            {
+                if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+                {
+                    tableHasLong = true;
+                    break;
+                }
+            }
         }
-        if (recordsetType == 4)
+        foreach (ResultColumn col in plan.Columns)
         {
-            database.Workspace.Transactions.EndLazyBurst(database.Cache);
+            if (col.SourceColumn?.Column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+            {
+                return true;
+            }
+            if (col.FieldType is NativeTypes.Memo or NativeTypes.Ole)
+            {
+                return true;
+            }
+            if (tableHasLong && col.FieldType is null)
+            {
+                return true;
+            }
         }
-        return database.Adopt(new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, snapshotView, snapshotOverlay));
+        return false;
     }
 
     /// <summary>

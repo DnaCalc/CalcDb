@@ -49,6 +49,10 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
             {
                 Marshal.FreeBSTR(v->Pointer);
             }
+            else if ((VarType)v->Vt == (VarType.Array | VarType.UI1) && v->Pointer != 0)
+            {
+                OwnedVariant.TakeArray(v->Pointer, VarType.UI1).Dispose();
+            }
             NativeMemory.Free((void*)cell);
         }
         foreach (string file in _files)
@@ -489,9 +493,10 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
     [Fact]
     public void Clone_edit_update_rollback_allows_MoveFirst_and_row_0_Fields_read_while_refusing_unrecorded_members()
     {
-        // r-fix-cat-txn/clone-close-update-only (task znk8): dynaset rs and clone rc opened before BeginTrans;
-        // rc edits and updates row 0; ws.Rollback() reverts the change; rs.MoveFirst() then rs.Fields -> Count/Item/Value
-        // read the reverted row-0 values while pre-MoveFirst reads and unrecorded post-MoveFirst members stay refused by name.
+        // r-fix-cat-txn/clone-close-update-only (task znk8): ACCDB dynaset rs and clone rc opened before BeginTrans;
+        // rc edits and updates row 0; ws.Rollback() reverts the change; rs.MoveFirst() then a fresh rs.Fields ->
+        // Count/Item(ordinal)/Value reads reverted row-0 values while the editor rc, pre-rollback Fields/Field handles,
+        // Item by name, pre-MoveFirst reads and unrecorded post-MoveFirst members stay refused by name.
         const string Txn1aAccdb = "f7231a9c03dc37d275873d9e37b12b27b272064cb4e81c5bd82f05b3d64faa0b"; // r-txn-1-a-accdb.accdb
         DatabaseObject db = Open(Txn1aAccdb, ".accdb");
         WorkspaceObject ws = _engine.DefaultWorkspace;
@@ -507,32 +512,300 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
         Ok(Method(rc, "Update"));
 
         Ok(Method(rs, "MoveFirst"));
-        FieldObject rsVBefore = Field(rs, "V");
+        FieldsObject fieldsBefore = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
+        FieldObject rsVBefore = Recover<FieldObject>(Ok(Get(fieldsBefore, "Item", "V")));
         Assert.Equal(777, Int32Value(Ok(Get(rsVBefore, "Value"))));
 
         Ok(Method(ws, "Rollback"));
 
-        // Pre-MoveFirst members are not recorded and stay refused by name.
+        // Editor rc itself is not recorded after Rollback: MoveFirst, Fields and Value all refuse by name; Close succeeds.
+        AssertNotModelled(Method(rc, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rc, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rcV, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+
+        // Pre-MoveFirst members on rs are not recorded and stay refused by name.
+        AssertNotModelled(Get(fieldsBefore, "Count"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(fieldsBefore, "Item", 1), "NotModelled.Txn.RecordsetAfterRollback");
         AssertNotModelled(Get(rsVBefore, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
         AssertNotModelled(Get(rs, "Fields"), "NotModelled.Txn.RecordsetAfterRollback");
         AssertNotModelled(Get(rs, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
 
-        // MoveFirst -> Fields -> Count / Item / Value reads reverted row 0 (1, 10, "a", 1).
+        // MoveFirst -> fresh Fields -> Count / Item(ordinal) / Value reads reverted row 0 (1, 10, "a", 1).
         Ok(Method(rs, "MoveFirst"));
-        FieldsObject fields = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
-        Assert.Equal(4, Int16Value(Ok(Get(fields, "Count"))));
-        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 0))), "Value"))));
-        Assert.Equal(10, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 1))), "Value"))));
-        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fields, "Item", 3))), "Value"))));
+        // Pre-rollback Fields and Field handles stay refused even after MoveFirst and after taking fresh Fields.
+        AssertNotModelled(Get(fieldsBefore, "Count"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(fieldsBefore, "Item", 1), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rsVBefore, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+
+        FieldsObject fieldsAfter = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
+        Assert.Equal(4, Int16Value(Ok(Get(fieldsAfter, "Count"))));
+        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fieldsAfter, "Item", 0))), "Value"))));
+        Assert.Equal(10, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fieldsAfter, "Item", 1))), "Value"))));
+        Assert.Equal(1, Int32Value(Ok(Get(Recover<FieldObject>(Ok(Get(fieldsAfter, "Item", 3))), "Value"))));
+
+        // Item by name and pre-rollback handles stay refused after taking fresh Fields.
+        AssertNotModelled(Get(fieldsAfter, "Item", "V"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(fieldsBefore, "Count"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(fieldsBefore, "Item", 1), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(rsVBefore, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
 
         // Unrecorded post-MoveFirst members stay refused by name.
         AssertNotModelled(Get(rs, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
         AssertNotModelled(Method(rs, "MoveNext"), "NotModelled.Txn.RecordsetAfterRollback");
         AssertNotModelled(Method(rs, "Edit"), "NotModelled.Txn.RecordsetAfterRollback");
-        AssertNotModelled(Method(fields, "Refresh"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Method(fieldsAfter, "Refresh"), "NotModelled.Txn.RecordsetAfterRollback");
 
         Ok(Method(rc, "Close"));
         Ok(Method(rs, "Close"));
+    }
+
+    [Fact]
+    public void Clone_edit_update_rollback_refuses_unrecorded_shapes_by_name()
+    {
+        // Task znk8 findings 1-6: every Edit+Update Rollback shape outside r-fix-cat-txn/clone-close-update-only
+        // enters NotRecorded (NotModelled.Txn.RecordsetAfterRollback) on MoveFirst.
+        const string Txn1aAccdb = "f7231a9c03dc37d275873d9e37b12b27b272064cb4e81c5bd82f05b3d64faa0b"; // r-txn-1-a-accdb.accdb
+
+        // 1. Lone dynaset (no clone) on record-shape table T.
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rs, "MoveFirst"));
+            Ok(Method(rs, "Edit"));
+            Ok(Put(Field(rs, "V"), "Value", 777));
+            Ok(Method(rs, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rs, "Close"));
+        }
+
+        // 2. Jet 4 MDB (same T(ID, V, K, N) record shape): non-editing original refuses MoveFirst.
+        {
+            DatabaseObject db = Open(Txn1bMdb, ".mdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "MoveFirst"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(rc, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 3. Rollback by clone-close abort (AbortTransactionsForCloneClose) triggered by a second clone family.
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            RecordsetObject rsAbort = OpenRecordset(db, "T", 2);
+            RecordsetObject rcAbort = Recover<RecordsetObject>(Ok(Method(rsAbort, "Clone")));
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "MoveFirst"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+
+            AssertDaoError(Method(rcAbort, "Close"), 3246, "DAO.Recordset", errorInfo: false);
+            ReleaseObject(rcAbort);
+
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(rc, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rsAbort, "Close"));
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 4. Several edits in the same level (two Edit+Update calls on distinct rows, without moving after edit).
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(rs, "MoveNext"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(rs, "Edit"));
+            Ok(Put(Field(rs, "V"), "Value", 888));
+            Ok(Method(rs, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(rc, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 5. Edit on another row (row 1 instead of row 0; pre-populated so RollbackKind is NoChange).
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            Ok(Method(rs, "MoveLast"));
+            Ok(Method(rs, "MoveFirst"));
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "MoveNext"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 6. Move after edit (pre-populated so RollbackKind is NoChange: editor MoveNext/MoveFirst, non-editor MoveNext/Move(0)).
+        foreach (string moveCase in new[] { "editor-next", "editor-first", "noneditor-next", "noneditor-move0" })
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            Ok(Method(rs, "MoveLast"));
+            Ok(Method(rs, "MoveFirst"));
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            switch (moveCase)
+            {
+                case "editor-next":
+                    Ok(Method(rc, "MoveNext"));
+                    break;
+                case "editor-first":
+                    Ok(Method(rc, "MoveFirst"));
+                    break;
+                case "noneditor-next":
+                    Ok(Method(rs, "MoveNext"));
+                    break;
+                case "noneditor-move0":
+                    Ok(Method(rs, "Move", 0));
+                    break;
+            }
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 7. Nested levels: (a) edit at depth 2 + inner Rollback; (b) edit at depth 2 + inner CommitTrans + outer Rollback.
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(ws, "Rollback"));
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "CommitTrans"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 8. 3-member family (original + two clones).
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc1 = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            RecordsetObject rc2 = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc1, "Edit"));
+            Ok(Put(Field(rc1, "V"), "Value", 777));
+            Ok(Method(rc1, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(rc2, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc2, "Close"));
+            Ok(Method(rc1, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+
+        // 9. Non-editing member's cursor is Deleted, DeletedBySibling, or BookmarkInvalid at Rollback.
+        // (a) Deleted
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(rs, "MoveLast"));
+            Ok(Method(rs, "Delete"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "MoveFirst"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+        // (b) DeletedBySibling
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            Ok(Method(rs, "MoveLast"));
+            Ok(Method(rc, "MoveLast"));
+            Ok(Method(rc, "Delete"));
+            Ok(Method(rc, "MoveFirst"));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
+        // (c) BookmarkInvalid
+        {
+            DatabaseObject db = Open(Txn1aAccdb, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject rs = OpenRecordset(db, "T", 2);
+            RecordsetObject rc = Recover<RecordsetObject>(Ok(Method(rs, "Clone")));
+            AssertDaoError(Put(rs, "Bookmark", new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }), 3159, "DAO.Recordset", errorInfo: false);
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(rc, "Edit"));
+            Ok(Put(Field(rc, "V"), "Value", 777));
+            Ok(Method(rc, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Method(rs, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(rc, "Close"));
+            Ok(Method(rs, "Close"));
+        }
     }
 
     private static short Int16Value(CallResult result)
@@ -595,6 +868,17 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
                 cell->Vt = (ushort)VarType.Bstr;
                 cell->Pointer = Marshal.StringToBSTR(s);
                 break;
+            case byte[] bytes:
+            {
+                nint psa = SafeArrays.Create(VarType.UI1, (0, bytes.Length));
+                if (bytes.Length > 0)
+                {
+                    bytes.CopyTo(new Span<byte>(SafeArrays.ElementPointer(psa, 0), bytes.Length));
+                }
+                cell->Vt = (ushort)(VarType.Array | VarType.UI1);
+                cell->Pointer = psa;
+                break;
+            }
             default:
                 throw new NotSupportedException($"Test argument type {value.GetType()}");
         }

@@ -457,6 +457,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>True when <paramref name="recordset"/> is the surviving clone family during a clone-release transaction abort.</summary>
     public bool SkipsRollback(IDatabaseRecordset recordset) => ReferenceEquals(_skipRollbackFor, recordset);
 
+    /// <summary>True while a rollback notification comes from <see cref="AbortTransactionsForCloneClose"/> rather than an explicit <see cref="Rollback"/>.</summary>
+    public bool IsCloneCloseAbort => _skipRollbackFor is not null;
+
     /// <summary>
     /// Abort all open transaction levels when a member of a depth-0 cloned dynaset family is finally released inside a
     /// transaction after Close failed 3246 (r-txn-1/clone-close-in-transaction, r-fix-cat-txn/clone-close-read-between,
