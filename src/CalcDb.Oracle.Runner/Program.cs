@@ -57,22 +57,18 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|file-compare|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|file-compare|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce|etw-check [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
         {
             return DesktopRun.Run(args);
         }
-        if (args[0] == "etw-check" && OperatingSystem.IsWindows())
-        {
-            return EtwCheck(RepositoryRoot());
-        }
         var options = Options.Parse(args.Skip(1));
         string repo = RepositoryRoot();
         string evidenceDir = Path.Combine(repo, "evidence");
         string artifactsDir = Path.Combine(evidenceDir, "artifacts");
-        string storeRoot = Path.GetFullPath(options.Get("store") ?? Path.Combine(repo, ".oracle-runs"));
+        string storeRoot = ResolveStoreRoot(repo, options);
         var store = new JobStore(storeRoot, [new ArtifactStore(artifactsDir, Path.Combine(storeRoot, "cas"))]);
         try
         {
@@ -94,6 +90,7 @@ internal static partial class Program
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
                 "prune" => Prune(store, options),
+                "etw-check" => OperatingSystem.IsWindows() ? EtwCheck(store) : throw new InvalidOperationException("The ETW recorder runs only on a Windows oracle host."),
                 "reduce" => ReduceCommand.Run(store, options, evidenceDir, (token, environment, question) =>
                 {
                     store.SubmitOrQuery(token, question, environment);
@@ -680,7 +677,7 @@ internal static partial class Program
     internal static string RecordPath(string evidenceDir, Question question, string attemptId) =>
         Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
 
-    private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir, string? recordPath = null)
+    internal static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir, string? recordPath = null)
     {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
         string attemptDir = store.AttemptDirectory(attemptId);
@@ -737,17 +734,25 @@ internal static partial class Program
         return path;
     }
 
+    internal static string ResolveStoreRoot(string repo, Options options) =>
+        Path.GetFullPath(options.Get("store") ?? Path.Combine(repo, ".oracle-runs"));
+
+    /// <summary>The scratch directory <c>etw-check</c> watches under the store's attempts root (task shmk).</summary>
+    internal static string EtwCheckDirectory(JobStore store, DateTime utcNow) =>
+        store.AttemptDirectory("etw-check-" + utcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+
     /// <summary>
-    /// <c>calcdb-oracle etw-check</c>: record two known file writes in a scratch directory under the attempts root
-    /// through the ETW recorder, and print what it saw (tools/etw-setup). probe.bin is written through and flushed: its
-    /// paging write is issued on this thread. lazy.bin is written into the cache and closed with no flush, and the check
-    /// waits 15 s: a paging write of lazy.bin from another process (the system's lazy writer) shows that the recorder
-    /// names the writes nobody asked for, so their absence in an ACE trace is an observation (2b3c, R-CRASH-1 CRASH-ORDER).
+    /// <c>calcdb-oracle etw-check [--store DIR]</c>: record two known file writes in a scratch directory under the
+    /// store's attempts root through the ETW recorder, and print what it saw (tools/etw-setup). probe.bin is written
+    /// through and flushed: its paging write is issued on this thread. lazy.bin is written into the cache and closed
+    /// with no flush, and the check waits 15 s: a paging write of lazy.bin from another process (the system's lazy
+    /// writer) shows that the recorder names the writes nobody asked for, so their absence in an ACE trace is an
+    /// observation (2b3c, R-CRASH-1 CRASH-ORDER).
     /// </summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static int EtwCheck(string repo)
+    private static int EtwCheck(JobStore store)
     {
-        string dir = Path.Combine(repo, ".oracle-runs", "attempts", "etw-check-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        string dir = EtwCheckDirectory(store, DateTime.UtcNow);
         Directory.CreateDirectory(dir);
         EtwBridge etw = EtwBridge.Start(dir, 60);
         string probe = Path.Combine(dir, "probe.bin");

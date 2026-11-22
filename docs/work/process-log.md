@@ -978,3 +978,13 @@ statement Rollback keyed on "no AutoNumber consumed" where both records are tabl
 narrowed it and refuses the other case by name. znk8 and zdh5 (Com.Dao, 265 lines): the organizer's review found the
 new post-Rollback state reached by an explicit ws.Rollback as well as by the clone-close abort; r-cursor-1/
 edit-rollback-opened-before supports that neighbour. kn3b (probe round, 54 questions, 61 records) landed without code.
+
+**Measured on the first two code landings.** qhs8 (Isam, 3 commits, 347 lines added): the organizer found 1
+generalization; the reviewer then found 3 (explicit AutoNumber values still took the two-group path; three records the
+comments called missing; one wrong refusal text), all applied, so about 11 per 1,000 lines. znk8 and zdh5 (Com.Dao,
+905 lines added after the fixes, 265 at review): the organizer found 1 and missed 6 the reviewer found, because the task
+text described the record wrongly (organizer 8 wrote "the original closed inside the level" from a compare trace; the
+question has an explicit ws.Rollback and no Close). The reviewer read the question file. 11 findings, 8 applied; 3
+declined because qualified.md R-CURSOR-1 CUR-POP covers them, which the reviewer, checking only records, did not count.
+Lesson for briefs: a task written from a trace states its record's calls from the question file, not from memory. Both
+landings passed their check on the first run after the fixes; compares qhs8-1 and qhs8-2 lost nothing.

@@ -1071,7 +1071,17 @@ is summarised in [qualification-report.md](qualification-report.md).
 ### R-CAT-1 II-11: CHECK, VIEW, PROCEDURE, OWNERACCESS through the ACE OLE DB provider
 - **Claim**: ADO (ANSI-92) accepts `ALTER TABLE ADD CONSTRAINT .. CHECK (..)` (DAO refuses CHECK with 3289); the rule is enforced for ADO and DAO inserts (error names the rule `CK_V`; DAO 3317), is not checked against existing rows (`CHECK (V < 20)` over a row V = 25 is accepted), and is not visible as DAO `ValidationRule` of the table or field. A column-level `CHECK` in `CREATE TABLE` is refused (3292, no table). `CREATE VIEW` creates a saved select QueryDef (Type 0); `CREATE PROCEDURE` with a select creates a Type 0 query, with a parameter and an UPDATE a Type 48 query with a `PARAMETERS` line; DAO lists them by name; `EXEC P2 1` runs the update; `WITH OWNERACCESS OPTION` survives in the saved SQL of a view; `DROP VIEW`/`DROP PROCEDURE` remove them.
 - **Records**: q1/ii11-ado-check-constraint/ (satisfied, violated-by-existing-row, enforced, column-level), q1/ii11-ado-view-procedure-owneraccess/; evidence/r-sql-2-3/act-ddl-objects (DAO refusals, per the summary).
-- **Open**: SQL CHECK on updates/subqueries, native persistence of the constraint (W-04); secured-workgroup cases are excluded.
+- **Open**: subqueries in a CHECK; secured-workgroup cases are excluded. Updates and the stored form: the next note.
+
+### R-CAT-1 II-07, R-OLEDB-1: a SQL CHECK constraint on every write route, its errors, Null, order and AutoNumber (task fq9f)
+- **Claim**: A CHECK added by `ALTER TABLE .. ADD CONSTRAINT .. CHECK (..)` is enforced on INSERT and UPDATE through ADO `Connection.Execute`, the ADO recordset, DAO `Execute` and the DAO dynaset, the same on ACCDB and Jet 4 MDB (MDB asked through ADO `Execute`). A row for which the expression is true is written: the boundary passes (`V = 0` under `V >= 0`, `-3` under `V >= -3`, `0` under `0 <= V`). Null passes when the column is not required, on INSERT and UPDATE. An update of another column of a satisfying row is written. The operators `=`, `<>`, `<=`, `>=`, `>` and `<`, a negative literal and the column on the right all behave as written. A Text `<>` compares without case (`'X'` fails `T <> 'x'`).
+  - *DAO, a violation*: `Execute` with `dbFailOnError` and the dynaset's `Update` fail 3317 (`0x800A0CF5`, `DAO.Database` or `DAO.Recordset`, "One or more values are prohibited by the validation rule '<name>' set for '<table>'. Enter a value that the expression for this field can accept.", `jeterr40.chm` 5003317, no IErrorInfo, one `Errors` entry). The dynaset stays in EditMode 2 or 1 until `CancelUpdate`. `Execute` without `dbFailOnError` returns S_OK and skips the violating rows with no error: `RecordsAffected` 0 for one row, 2 for three rows with one bad.
+  - *ADO, a violation*: `Connection.Execute` fails `0x80004005` (Microsoft Access Database Engine, the same text, help context 5003000, IErrorInfo `IID_ICommand`, `RecordsAffected` unchanged, `Errors[0]` Number -2147467259, SQLState `3316`, NativeError -541462135). The recordset's `Update` fails `0x80040E21` (IErrorInfo `IID_IRowsetUpdate`, Status 131072, Number -2147217887, the same SQLState and NativeError). The provider gives a CHECK (3317) and a field validation rule (3316) the same SQLState and NativeError; only the text differs.
+  - *Order*: Required (3314) and a field validation rule (3316) are reported before the CHECK, whatever the column order. Of two failing CHECKs, the one added first is reported, not the first by name or by expression.
+  - *File*: a violating write changes no page, except on a table with an AutoNumber key: the AutoNumber is consumed (page 0 and the TableDef's word at 20, `00` to `01`, row count unchanged) through ADO `Execute`, DAO `Execute` and the DAO dynaset, and the next row gets ID 2.
+- **Conditions**: ACCDB copies of `r-fmt-1-accdb-empty`, Jet 4 MDB of `r-cat-1-mdb-empty`; the constraint added through ADO in a setup session, the write in a statement session; pages kept.
+- **Records**: `evidence/r-q30-sql-check/`, 49 questions, 26 asked twice and equal outside the clock fields: `sat-*`, `viol-dao-*`, `upd-viol-*`, `upd-other-col-*`, `null-*`, `op-*`, `ord-*`, `autonum-viol-*`, `mdb-*`. Discriminators: `viol-dao-exec-nofail-multi` (the bad row is skipped, the good ones written); `op-text-ne-upper` (case); `ord-check-before-req` and `ord-valrule-after-check-dao` (column order); `ord-two-checks-za` and `ord-two-checks-rev` (the order added, not the name or expression).
+- **Open**: a CHECK over several columns, compound expressions, functions and subqueries; a TableDef validation rule against a CHECK; 3022 against a CHECK; an update of another column of a row that already violates a later CHECK; a multi-row UPDATE without `dbFailOnError`; inside `BeginTrans`; the ADO recordset's AddNew on an AutoNumber table.
 
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
@@ -1121,15 +1131,37 @@ is summarised in [qualification-report.md](qualification-report.md).
     at row 6 of rows that fill three data pages when accepted (ins-clean-two-pages) writes no data or index page and
     takes none: pages 0 and the TableDef change, +3 (ins-dup-fail-two-pages). Jet 4 MDB writes the same counters on its
     TableDef page (ins-dup-fail-mdb; its repeat differs only in an MSysObjects date).
-  - *No AutoNumber column.* On a table with no AutoNumber column, a 3022 under `dbFailOnError` on an existing page
-    writes no group inside `Execute`. Only the deferred group writes the counters reached, +1: the primary key's
-    count after a first-row refusal by a second unique index (`evidence/r-txn-1b/implicit-unique-first-failonerror`),
-    and row count +1, primary key +2, unique +1 after one accepted row (`evidence/r-txn-1/stmt-unique-middle-fail-d0`).
-    The group inside `Execute` therefore goes with the consumed AutoNumber. These two records keep the final file
-    hash only, not the pages. An AutoNumber table whose rows give explicit values, a new page, 3314 and MDB are not
-    decided without an AutoNumber column (task qhs8). `r-sql-2-3/act-fail-insert-required`,
-    `r-q-expr-sql/fail-late-candidate` and `r-fix-expr-sql/fail-insert-required-cross-table` record 3314 by final
-    hash only.
+  - *The group inside `Execute` comes with an AutoNumber column or a page taken.* At external depth 0 under
+    `dbFailOnError` (tasks qhs8 and k64d):
+    - **No AutoNumber column, existing page: +1.** 3022, 3314, 3201 and 3316 write no group inside `Execute` and
+      nothing at `Close`; only the deferred group writes the counters reached. ACCDB and Jet 4 MDB (TableDef page 19).
+      A first-row 3022 by a second unique index raises only the primary key's count; one accepted row then 3022 gives
+      row count +1, primary key +2, unique +1.
+    - **No AutoNumber column, a new page: +3.** Rows on one or several new pages give the same, ACCDB and MDB, with
+      page 1 unchanged after `Close`. Pages read beside ACE's open handle split it. Inside `Execute`: +1, the 32-page
+      extent reserved in page 1 at 4038, the TableDef untouched. Deferred: +1, the rolled-back page's bit freed and
+      the TableDef counters written. At `Close`: +1, the unused extent returned.
+    - **The refused row's own index entries.** 3022 by the primary key, 3314 and 3316 count no index entry for the
+      refused row. 3022 by a second unique index and 3201 count its primary key (+1).
+    - **AutoNumber table, explicit values, existing ACCDB page: +2.** As for generated values: inside `Execute`, then
+      deferred, nothing at `Close`. This holds for values below the counter, equal to it (the word stays) and above
+      it. The AutoNumber word takes the refused row's explicit value: 10 becomes 5 or 1, stays 10, or becomes 30.
+    The earlier reading of r-txn-1b/implicit-unique-first-failonerror and r-txn-1/stmt-unique-middle-fail-d0 (final
+    hashes only), that the group inside `Execute` goes with a *consumed* AutoNumber, is wrong: an explicit value
+    equal to the counter consumes none and still writes it.
+    - **Records:** `evidence/r-q29-stmt-rollback-counters/`, 20 questions, 15 of them asked twice and equal byte for byte
+      in the kept pages. `noan-dup-row1-uk-existing`, `noan-dup-row2-uk-existing`, `noan-req-3314-existing`,
+      `noan-fk-3201-existing`, `noan-val-3316-existing`, `noan-dup-row2-mdb-existing`; `noan-dup-row2-newpage`,
+      `noan-dup-twopages`, `noan-req-3314-newpage`, `noan-fk-3201-newpage`, `noan-val-3316-newpage`,
+      `noan-dup-row2-mdb-newpage`; `exp-sel-below-dup2-existing`, `exp-sel-below-pk-dup2-existing`,
+      `exp-sel-eq-dup2-existing`, `exp-sel-eq-uk-dup1-existing`, `exp-sel-above-dup2-existing`.
+    - **Discriminators:** the three `*-live` questions (`noan-dup-row2-existing-live`, `noan-dup-row2-newpage-live`,
+      `exp-sel-eq-dup2-live`) separate the groups. `exp-sel-eq-*` separates "AutoNumber column" from "consumed
+      AutoNumber".
+    - **Open:** explicit values on a new page, in MDB, inside `BeginTrans` or under another increment; MDB 3314, 3201
+      and 3316 without an AutoNumber column; MDB with a generated AutoNumber on an existing page; 3464 without an
+      AutoNumber column; a first-row 3314 or 3316 on an empty table. These were asked without ETW, which `etw-check`
+      refuses from a worktree.
   - *Memo AllowZeroLength.* A Memo made by DAO `CreateField` reads `AllowZeroLength` False when it is not set; '' into it
     fails 3315 under `dbFailOnError` and consumes the AutoNumber (+1; memo-zerolength-unset-fail,
     memo-zerolength-false-fail a1 and a2). With True it stores '' (memo-zerolength-true-fail).

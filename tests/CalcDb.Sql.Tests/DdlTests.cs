@@ -681,10 +681,9 @@ public sealed class DdlTests
         // r-q15-ddl-open/lv-sql-notnull-1: NOT NULL writes LvProp blob -> refused by name.
         AssertNotModelled(db, "CREATE TABLE Nn (a LONG NOT NULL)", "NotModelled.DdlColumnNotNull");
 
-        // Field pairs no record decides (SchemaWriter.FieldNameClashOf): non-ASCII case and NFC/NFD are refused by name;
-        // 3380 is recorded for exact and ASCII-case pairs only (r-def-expr-sql/ddl-column-clauses Cc20, Cc21).
-        AssertNotModelled(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", "NotModelled.DdlFieldNamePair");
-        AssertNotModelled(db, "CREATE TABLE Fe2 ([Fé] LONG, [Fé] LONG)", "NotModelled.DdlFieldNamePair");
+        // r-q28-schema-write-open/pair-sql-fe-FE, pair-sql-nfc-nfd: non-ASCII case and NFC/NFD collide under General (3380).
+        AssertAceError(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", 3380);
+        AssertAceError(db, "CREATE TABLE Fe2 ([Fé] LONG, [Fe\u0301] LONG)", 3380);
 
         // Other named NotModelled.Ddl* refusals for valid DDL shapes outside SchemaWriter's current scope.
         AssertNotModelled(db, "CREATE TABLE Tz (s TEXT(0))", "NotModelled.DdlTextZeroSize");
@@ -744,6 +743,114 @@ public sealed class DdlTests
         AssertNotModelled(locked, "ALTER TABLE T ALTER COLUMN a COUNTER(1, 1)", "NotModelled.DdlTableInUsePrecedence");
     }
 
+    [Fact]
+    public void R_q28_field_name_pairs_follow_general_sort_order()
+    {
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+
+        // Colliding pairs under General 1033/0 (evidence/r-q28-schema-write-open/pair-sql-*): fail 3380 naming the
+        // second column, increment MSysObjects/MSysACEs UniqueEntryCount and write 2 page-0 commits (matching every
+        // after-close pageHash and the full file SHA-256).
+        (string Question, string First, string Second)[] colliding =
+        [
+            ("pair-sql-Aa-aA", "Aa", "aA"),
+            ("pair-sql-fe-FE", "F\u00e9", "F\u00c9"),
+            ("pair-sql-nfc-nfd", "F\u00e9", "Fe\u0301"),
+            ("pair-sql-ae-lig", "\u00e6", "ae"),
+            ("pair-sql-sz-ss", "\u00df", "ss"),
+        ];
+        foreach ((string question, string first, string second) in colliding)
+        {
+            Kept kept = Kept.Of(question, "r-q28-schema-write-open", requireReads: false);
+            using var db = new WritableSqlFixture((byte[])fixture.Clone());
+            ActionOutcome outcome = ActionExecutor.Execute($"CREATE TABLE T ([{first}] LONG, [{second}] LONG)", db);
+            Assert.False(outcome.Succeeded, $"{question}: expected 3380");
+            Assert.NotNull(outcome.Failure);
+            Assert.False(outcome.Failure!.IsNotModelled);
+            Assert.Equal(3380, outcome.Failure.Number);
+            Assert.Equal($"Field '{second}' already exists in table 'T'.", outcome.Failure.Message);
+            Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+            byte[] ours = db.Image.Snapshot();
+            AssertAsAce(kept, fixture, ours);
+            Assert.Equal(kept.FileSha256, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(ours)));
+        }
+
+        // Distinct pairs under General 1033/0 (evidence/r-q28-schema-write-open/pair-sql-e-eacute, pair-sql-ta-te,
+        // pair-sql-o-oslash): succeed and match ACE's kept pages byte-for-byte and every unkept page's pageHash.
+        (string Question, string First, string Second)[] distinct =
+        [
+            ("pair-sql-e-eacute", "e", "\u00e9"),
+            ("pair-sql-ta-te", "T\u00e4", "T\u00e9"),
+            ("pair-sql-o-oslash", "o", "\u00f8"),
+        ];
+        foreach ((string question, string first, string second) in distinct)
+        {
+            Kept kept = Kept.Of(question, "r-q28-schema-write-open");
+            (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), "T");
+            var timestamps = new Queue<ulong>([created, updated]);
+            using var db = new WritableSqlFixture((byte[])fixture.Clone()) { DateBitsProvider = () => timestamps.Dequeue() };
+            ActionOutcome outcome = ActionExecutor.Execute($"CREATE TABLE T ([{first}] LONG, [{second}] LONG)", db);
+            Assert.True(outcome.Succeeded, $"{question}: {outcome.Failure}");
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            AssertAsAce(kept, fixture, db.Image.Snapshot());
+        }
+
+        // Unrecorded pairs stay refused by name (NotModelled.DdlFieldNamePair) without throwing:
+        // full/half-width, hiragana/katakana, trailing-space differences, OrdinalIgnoreCase-vs-General disagreements
+        // (ƒ/Ƒ, µ/Μ), two distinct diacritics on one base (ä/á), non-Latin-1 same-length (d/đ), General-ignored
+        // code points (U+0218), surrogates, and sort orders other than 1033/0 (including 1033/1).
+        using (var db = new WritableSqlFixture((byte[])fixture.Clone()))
+        {
+            AssertNotModelled(db, "CREATE TABLE W ([A] LONG, [\uFF21] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE K ([\u3042] LONG, [\u30A2] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE S ([a] LONG, [a ] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE F1 ([\u0192] LONG, [\u0191] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE F2 ([\u00B5] LONG, [\u039C] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE D1 ([\u00e4] LONG, [\u00e1] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE D2 ([d] LONG, [\u0111] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE I1 ([a] LONG, [a\u0218] LONG)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE S1 ([a] LONG, [\uD83D\uDE00] LONG)", "NotModelled.DdlFieldNamePair");
+
+            // Constraint, CREATE INDEX, and ALTER TABLE column lookups refuse where FormC+OrdinalIgnoreCase and
+            // General 1033/0 disagree (e.g. æ vs ae).
+            AssertNotModelled(db, "CREATE TABLE P1 ([\u00e6] LONG, CONSTRAINT PK_P1 PRIMARY KEY (ae))", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE U1 ([\u00e6] LONG, CONSTRAINT UQ_U1 UNIQUE (ae))", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "CREATE TABLE FkS ([\u00e6] LONG CONSTRAINT PK_FkS PRIMARY KEY, b LONG, CONSTRAINT FK_S FOREIGN KEY (b) REFERENCES FkS (ae))", "NotModelled.DdlFieldNamePair");
+            Assert.True(ActionExecutor.Execute("CREATE TABLE Ae ([\u00e6] LONG)", db).Succeeded);
+            AssertNotModelled(db, "CREATE INDEX IX_Ae ON Ae (ae)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "ALTER TABLE Ae ADD COLUMN ae LONG", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "ALTER TABLE Ae ADD CONSTRAINT UQ_Ae UNIQUE (ae)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "ALTER TABLE Ae ALTER COLUMN ae TEXT(10)", "NotModelled.DdlFieldNamePair");
+            AssertNotModelled(db, "ALTER TABLE Ae DROP COLUMN ae", "NotModelled.DdlFieldNamePair");
+
+            var nonGeneral = new AlternateSortDatabase(db, 1036u, null);
+            Assert.Null(DdlBinder.Prepare("CREATE TABLE Same ([a] LONG, [a] LONG)", nonGeneral, out SqlFailure? sameFail));
+            Assert.Equal(3380, sameFail?.Number);
+            AssertNotModelled(nonGeneral, "CREATE TABLE Diff ([a] LONG, [b] LONG)", "NotModelled.DdlFieldNamePair");
+
+            CalcDb.Values.Scalar.TextCollation? generalV1 = CalcDb.Expressions.DatabaseCollation.For(new TextSortOrder(TextSortOrder.GeneralIdentifier, 0, 1));
+            Assert.NotNull(generalV1);
+            var v1Db = new AlternateSortDatabase(db, 1033u, generalV1);
+            Assert.Null(DdlBinder.Prepare("CREATE TABLE SameV1 ([a] LONG, [a] LONG)", v1Db, out SqlFailure? sameV1Fail));
+            Assert.Equal(3380, sameV1Fail?.Number);
+            AssertNotModelled(v1Db, "CREATE TABLE DiffV1 ([a] LONG, [b] LONG)", "NotModelled.DdlFieldNamePair");
+        }
+    }
+
+    private sealed class AlternateSortDatabase(WritableSqlFixture inner, uint lcid, CalcDb.Values.Scalar.TextCollation? databaseOrder) : ISqlActionDatabase
+    {
+        public CalcDb.Values.Scalar.ExpressionContext Context { get; } =
+            new(lcid, CalcDb.Values.Scalar.TextCompareMode.Database, databaseOrder, CalcDb.Values.Scalar.ExpressionUse.Query, inner.Context.TextOrder);
+        public bool ReadOnly => inner.ReadOnly;
+        public CalcDb.Isam.Transactions.TransactionCoordinator Workspace => inner.Workspace;
+        public TableDefinition? Table(string name) => inner.Table(name);
+        public bool IsQuery(string name) => inner.IsQuery(name);
+        public CalcDb.Isam.RowReader? OpenRows(TableDefinition table, out string? failure) => inner.OpenRows(table, out failure);
+        public CalcDb.Isam.IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure) => inner.OpenIndex(table, index, out failure);
+        public CalcDb.Isam.Edit.TableEditContext? EditContext(string tableName, out string? failure) => inner.EditContext(tableName, out failure);
+        public CalcDb.Isam.TableCursor? OpenCursor(TableDefinition table, out string? failure) => inner.OpenCursor(table, out failure);
+    }
+
     private static void AssertAceError(ISqlActionDatabase db, string sql, int expectedNumber)
     {
         ActionOutcome outcome = ActionExecutor.Execute(sql, db);
@@ -762,21 +869,23 @@ public sealed class DdlTests
         Assert.Equal(expectedName, outcome.Failure.NotModelled);
     }
 
-    private sealed record Kept(IReadOnlyList<(long Offset, byte[] Bytes)> Reads, long Length)
+    private sealed record Kept(IReadOnlyList<(long Offset, byte[] Bytes)> Reads, long Length, string[]? PageHashes, string? FileSha256)
     {
-        public static Kept Of(string question, string card = "r-q11-ddl-closure")
+        public static Kept Of(string question, string card = "r-q11-ddl-closure", bool requireReads = true)
         {
             string folder = Path.Combine(SqlFixture.Root(), "evidence", card, question);
             string record = Directory.GetFiles(folder, "*.a1.json").Single();
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
             List<(long, byte[])> reads = [];
             long length = -1;
-            Walk(doc.RootElement, reads, ref length);
-            Assert.True(length > 0 && reads.Count > 0, $"{card}/{question}: the record keeps no pages");
-            return new Kept(reads, length);
+            string[]? pageHashes = null;
+            string? fileSha256 = null;
+            Walk(doc.RootElement, reads, ref length, ref pageHashes, ref fileSha256);
+            Assert.True(length > 0 && (!requireReads || reads.Count > 0), $"{card}/{question}: the record keeps no pages");
+            return new Kept(reads, length, pageHashes, fileSha256);
         }
 
-        private static void Walk(JsonElement e, List<(long, byte[])> reads, ref long length)
+        private static void Walk(JsonElement e, List<(long, byte[])> reads, ref long length, ref string[]? pageHashes, ref string? fileSha256)
         {
             if (e.ValueKind == JsonValueKind.Object)
             {
@@ -791,18 +900,27 @@ public sealed class DdlTests
                 }
                 if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
                 {
-                    length = files[0].GetProperty("length").GetInt64();
+                    JsonElement f0 = files[0];
+                    length = f0.GetProperty("length").GetInt64();
+                    if (f0.TryGetProperty("sha256", out JsonElement sha) && sha.ValueKind == JsonValueKind.String)
+                    {
+                        fileSha256 = sha.GetString();
+                    }
+                    if (f0.TryGetProperty("pageHashes", out JsonElement ph) && ph.ValueKind == JsonValueKind.Array)
+                    {
+                        pageHashes = [.. ph.EnumerateArray().Select(h => h.GetString()!)];
+                    }
                 }
                 foreach (JsonProperty p in e.EnumerateObject())
                 {
-                    Walk(p.Value, reads, ref length);
+                    Walk(p.Value, reads, ref length, ref pageHashes, ref fileSha256);
                 }
             }
             else if (e.ValueKind == JsonValueKind.Array)
             {
                 foreach (JsonElement x in e.EnumerateArray())
                 {
-                    Walk(x, reads, ref length);
+                    Walk(x, reads, ref length, ref pageHashes, ref fileSha256);
                 }
             }
         }
@@ -850,9 +968,17 @@ public sealed class DdlTests
                     }
                 }
             }
+            else if (kept.PageHashes is not null && page < kept.PageHashes.Length)
+            {
+                string actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(mine))[..8];
+                if (!string.Equals(actual, kept.PageHashes[page], StringComparison.OrdinalIgnoreCase))
+                {
+                    differences.Add($"page {page} (unkept) sha256: ours {actual}, ACE {kept.PageHashes[page]}");
+                }
+            }
             else if (page * D.PageSize < fixture.Length && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
             {
-                differences.Add($"page {page} changed, and ACE's record does not keep it");
+                differences.Add($"page {page} changed, and ACE's record keeps neither its bytes nor its hash");
             }
         }
         Assert.True(differences.Count == 0, $"{differences.Count} differences:\n" + string.Join("\n", differences.Take(40)));

@@ -829,16 +829,23 @@ internal sealed unsafe class DatabaseObject : DaoObject
         SchemaOutcome outcome = writer.CreateTable(workspace, request, SchemaWriter.DateBits(draft.Created), SchemaWriter.DateBits(DateTime.Now));
         if (outcome.Refused is { } refused)
         {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
             return refused.Error switch
             {
                 3010 => tableDefs.Fail(3010, DaoErrors.TableExists(request.Name)),
                 // An invalid table name is 3125 from DAO.TableDefs (r-cat-1/names, err-invalid-names); an empty one is not recorded.
                 3125 when request.Name.Length > 0 => tableDefs.Fail(3125, DaoErrors.InvalidName(request.Name)),
+                // Draft TableDefs.Append with a duplicate field fails 3191 from DAO.TableDef after writing and
+                // dropping the first field (evidence/r-q28-schema-write-open/pair-dao-*).
+                3191 => CallResult.Fail(Failure.Dao(3191, "DAO.TableDef", "Cannot define field more than once.")),
                 _ => CallResult.Fail(Failure.NotImplemented("TableDefs.Append: " + refused.NotWritten)),
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.Succeeded && SchemaPublished(outcome.ExtentPages) is { } stale)
+        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
         {
             return CallResult.Fail(Failure.NotImplemented(stale));
         }

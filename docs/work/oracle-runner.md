@@ -273,6 +273,11 @@ issued it. Writes are marked cached (WriteFile into the system cache) or paging 
 FileKey, so paging writes are attributed, the system lazy writer's (pid 4) included. `etw-check` checks this with an
 unflushed cached write; events with no attempt file are only counted in the recorder's status line.
 
+In a CodeAlta worktree, pass `--store C:\Work\DnaCalc\CalcDb\.oracle-runs` to `etw-check`, `submit`, `run`, `batch`,
+`show` and `retain` so ACE attempts lie under the installed recorder's allowed root
+(`C:\Work\DnaCalc\CalcDb\.oracle-runs\attempts`). Attempts live in that store, while `retain` (and `batch --retain`)
+still writes retained records and their `evidence/artifacts/` copies into the worktree's `evidence/` (task shmk).
+
 **An owned out-of-process server (OR-OWN).** COM starts a local server such as Access.Application outside the
 runner's job. The operation `claimProcess` asks the bound object for a window handle (`hWndAccessApp`), takes the
 window's process, and claims it only when it runs the named image and started after the attempt was prepared. The

@@ -125,4 +125,86 @@ public sealed class EtwBridgeTests : IDisposable
         EtwBridge.RecordCandidateSkipped(Path.Combine(_root, "attempt"));
         Assert.Equal(Sealer.CandidateEtwSkippedStatus, Status());
     }
+
+    [Fact]
+    public void EtwCheck_directory_uses_store_root_from_store_option_not_worktree_repository()
+    {
+        string worktree = Path.Combine(_root, "worktree");
+        string sharedStore = Path.Combine(_root, "main-checkout", ".oracle-runs");
+        var stamp = new DateTime(2026, 11, 22, 15, 30, 45, DateTimeKind.Utc);
+
+        string resolvedExplicit = Program.ResolveStoreRoot(worktree, Options.Parse(["--store", sharedStore]));
+        Assert.Equal(Path.GetFullPath(sharedStore), resolvedExplicit);
+        var explicitStore = new JobStore(resolvedExplicit);
+        Assert.Equal(
+            Path.Combine(Path.GetFullPath(sharedStore), "attempts", "etw-check-20261122-153045"),
+            Program.EtwCheckDirectory(explicitStore, stamp));
+
+        string resolvedDefault = Program.ResolveStoreRoot(worktree, Options.Parse([]));
+        Assert.Equal(Path.Combine(Path.GetFullPath(worktree), ".oracle-runs"), resolvedDefault);
+        var defaultStore = new JobStore(resolvedDefault);
+        Assert.Equal(
+            Path.Combine(Path.GetFullPath(worktree), ".oracle-runs", "attempts", "etw-check-20261122-153045"),
+            Program.EtwCheckDirectory(defaultStore, stamp));
+    }
+
+    [Fact]
+    public void Retain_with_external_store_writes_record_and_etw_artifact_into_worktree_evidence()
+    {
+        string sharedStoreRoot = Path.Combine(_root, "main-checkout", ".oracle-runs");
+        string worktreeEvidence = Path.Combine(_root, "worktree", "evidence");
+        string worktreeArtifacts = Path.Combine(worktreeEvidence, "artifacts");
+        var store = new JobStore(sharedStoreRoot, [new ArtifactStore(worktreeArtifacts, Path.Combine(sharedStoreRoot, "cas"))]);
+
+        var question = new Question
+        {
+            Probe = "r-crash-1/worktree-etw-check",
+            BookRefs = ["R-CRASH-1"],
+            Description = "synthetic shmk retain test",
+            CallerSurface = "native-idispatch/x64",
+            InvokeLcid = 0x0409,
+            ObservationRecipe = ["excepinfo", EtwBridge.Channel],
+            Program = [new CreateObject("DAO.DBEngine.120", "eng")],
+        };
+        store.SubmitOrQuery("shmk-retain", question, "windows-x64-ace-local");
+        AttemptRecord attempt = store.PrepareAttempt("shmk-retain", "rev", "book");
+        string attemptDir = store.AttemptDirectory(attempt.AttemptId);
+        EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", "started.json"), new StartedReceipt(attempt.AttemptId, attempt.WorkerGeneration, 1, DateTimeOffset.UtcNow));
+
+        string etwLine = "{\"ms\":1.0,\"pid\":1,\"tid\":1,\"event\":\"Write\",\"file\":\"inputs\\\\a.accdb\"}\n";
+        string etwPath = Path.Combine(attemptDir, "artifacts", EtwBridge.TraceFile);
+        File.WriteAllText(etwPath, etwLine);
+        File.WriteAllText(Path.Combine(attemptDir, "artifacts", EtwBridge.StatusFile), "recorder: ok 1 events (0 unnamed)");
+        string etwSha = Hashing.Sha256File(etwPath);
+
+        var capture = new Capture
+        {
+            AttemptId = attempt.AttemptId,
+            WorkerGeneration = attempt.WorkerGeneration,
+            QuestionKey = attempt.QuestionKey,
+            Environment = SealerTests.TestEnvironment(),
+            Events =
+            [
+                new ModulesEvent { Seq = 1, ProgramPath = "0", Label = "m", Complete = true, BytesNeeded = 8, BytesProvided = 8, ModulePaths = ["x"], Identities = [] },
+                new ModulesEvent { Seq = 2, ProgramPath = "end", Label = "deliberate-truncation", Deliberate = true, Complete = false, BytesNeeded = 80, BytesProvided = 8, ModulePaths = ["x"], Identities = [] },
+            ],
+            Artifacts = [],
+            Execution = Execution.ReturnedSuccess,
+            CaptureErrors = [],
+        };
+        string capturePath = Path.Combine(attemptDir, "capture.json");
+        File.WriteAllText(capturePath, EvidenceJson.Serialize(capture));
+        byte[] captureBytes = File.ReadAllBytes(capturePath);
+        EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", "returned.json"),
+            new ReturnedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Hashing.Sha256Hex(captureBytes), captureBytes.LongLength, DateTimeOffset.UtcNow));
+
+        CaptureManifest manifest = store.Seal(attempt, new OwnerReport { Participant = "a", Launched = true, ProcessId = 1, Ownership = "test", ExitCode = 0, ExitObserved = true });
+        Assert.True(manifest.IsComplete, string.Join("; ", manifest.Problems));
+
+        string retainedPath = Program.RetainAttempt(store, attempt.AttemptId, "shmk test", worktreeEvidence, worktreeArtifacts);
+        Assert.StartsWith(Path.GetFullPath(worktreeEvidence) + Path.DirectorySeparatorChar, Path.GetFullPath(retainedPath), StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(retainedPath));
+        Assert.True(File.Exists(Path.Combine(worktreeArtifacts, etwSha + ".gz")));
+        Assert.False(Directory.Exists(Path.Combine(_root, "main-checkout", "evidence")));
+    }
 }

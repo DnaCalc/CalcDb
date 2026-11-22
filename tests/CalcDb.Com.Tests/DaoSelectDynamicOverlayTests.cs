@@ -330,20 +330,30 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_snapshot_refuses_after_same_database_publish_and_after_overlay_mutation()
+    public void Select_snapshot_preserves_orderby_after_publish_while_unordered_and_mutated_overlay_refuse()
     {
-        // Row-backed SELECT snapshots do not copy base-table columns at open; reading after a committed publish or
-        // after an in-place overlay mutation is unrecorded and must stay refused by name.
+        // Task zdh5: single-table ACCDB ORDER BY SELECT snapshots opened at depth 0 with no Memo/OLE projections
+        // register a PageCache ReadView at open and keep open-time row values across later publishes
+        // (docs/work/qualified.md R-CURSOR-1 CUR-POP: "a snapshot over SELECT ... ORDER BY reports the full count at
+        // open and its values are fixed at open", which supplies the expected value across CommitTrans publish here;
+        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
+        // r-q2-cursor-dao/pop-snapshot-orderby-small). Unordered SELECT snapshots still refuse
+        // NotModelled.Edit.SnapshotAfterPublish (r-q2-cursor-dao/pop-snapshot-select-noorder-big), and snapshots over
+        // an active overlay still refuse NotModelled.Edit.SnapshotOverlayMutated when the overlay is mutated.
         DatabaseObject db = Open(Txn1bAccdb);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
-        SelectRecordsetObject snapBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+        SelectRecordsetObject orderByBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+        SelectRecordsetObject unorderedBeforeCommit = OpenSelect(db, "SELECT ID, V FROM R", 4);
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "UPDATE R SET V = 111 WHERE ID = 1", 128));
-        Assert.Equal(10, IntValue(Ok(FieldValue(snapBeforeCommit, "V"))));
+        Assert.Equal(10, IntValue(Ok(FieldValue(orderByBeforeCommit, "V"))));
         Ok(Method(ws, "CommitTrans"));
-        AssertNotModelled(FieldValue(snapBeforeCommit, "V"), "NotModelled.Edit.SnapshotAfterPublish");
-        Ok(Method(snapBeforeCommit, "Close"));
+        // Expected value (10) per docs/work/qualified.md R-CURSOR-1 CUR-POP ("its values are fixed at open").
+        Assert.Equal(10, IntValue(Ok(FieldValue(orderByBeforeCommit, "V"))));
+        AssertNotModelled(FieldValue(unorderedBeforeCommit, "V"), "NotModelled.Edit.SnapshotAfterPublish");
+        Ok(Method(orderByBeforeCommit, "Close"));
+        Ok(Method(unorderedBeforeCommit, "Close"));
 
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "UPDATE R SET V = 222 WHERE ID = 2", 128));
@@ -355,6 +365,116 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         AssertNotModelled(FieldValue(snapOnOverlay, "V"), "NotModelled.Edit.SnapshotOverlayMutated");
         Ok(Method(ws, "Rollback"));
         Ok(Method(snapOnOverlay, "Close"));
+    }
+
+    [Fact]
+    public void OrderBy_select_snapshot_refuses_after_publish_for_MDB_Memo_OLE_and_inside_transaction()
+    {
+        // Task zdh5 findings 8 (part) and 10: ReadView is registered only for ACCDB, depth 0, and non-Memo/OLE
+        // projections; Jet 4 MDB, Memo/OLE projections, and snapshots opened inside a transaction keep their refusals.
+        const string Txn1bMdb = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75"; // r-txn-1b-main-mdb.mdb
+        const string Dao1bRich = "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95"; // r-dao-1b-rich.accdb
+
+        // 1. Jet 4 MDB ORDER BY snapshot refuses SnapshotAfterPublish.
+        {
+            DatabaseObject db = Open(Txn1bMdb, ".mdb");
+            SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+            Assert.Equal(10, IntValue(Ok(FieldValue(rs, "V"))));
+            Ok(Method(db, "Execute", "UPDATE R SET V = 111 WHERE ID = 1", 128));
+            AssertNotModelled(FieldValue(rs, "V"), "NotModelled.Edit.SnapshotAfterPublish");
+            Ok(Method(rs, "Close"));
+        }
+
+        // 2. ACCDB ORDER BY snapshot projecting a Memo column refuses SnapshotAfterPublish, while non-Memo projection stays fixed.
+        {
+            DatabaseObject db = Open(DefCursorMain);
+            SelectRecordsetObject withMemo = OpenSelect(db, "SELECT ID, N, Mm FROM T ORDER BY ID", 4);
+            SelectRecordsetObject withoutMemo = OpenSelect(db, "SELECT ID, N FROM T ORDER BY ID", 4);
+            int originalN = IntValue(Ok(FieldValue(withoutMemo, "N")));
+            Ok(Method(db, "Execute", "UPDATE T SET N = 999 WHERE ID = 1", 128));
+            AssertNotModelled(FieldValue(withMemo, "N"), "NotModelled.Edit.SnapshotAfterPublish");
+            Assert.Equal(originalN, IntValue(Ok(FieldValue(withoutMemo, "N"))));
+            Ok(Method(withMemo, "Close"));
+            Ok(Method(withoutMemo, "Close"));
+        }
+
+        // 3. ACCDB ORDER BY snapshot projecting an OLE column refuses SnapshotAfterPublish.
+        {
+            DatabaseObject db = Open(Dao1bRich);
+            SelectRecordsetObject withOle = OpenSelect(db, "SELECT K, TLong, TOle FROM Typed ORDER BY K", 4);
+            Ok(Method(db, "Execute", "UPDATE Typed SET TLong = 999 WHERE K = 1", 128));
+            AssertNotModelled(FieldValue(withOle, "TLong"), "NotModelled.Edit.SnapshotAfterPublish");
+            Ok(Method(withOle, "Close"));
+        }
+
+        // 4. ACCDB ORDER BY snapshot opened at depth 1 (even before any overlay exists) refuses after CommitTrans.
+        {
+            DatabaseObject db = Open(Txn1bAccdb);
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            Ok(Method(ws, "BeginTrans"));
+            SelectRecordsetObject emptyLevelSnap = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+            Ok(Method(ws, "CommitTrans"));
+            AssertNotModelled(FieldValue(emptyLevelSnap, "V"), "NotModelled.Txn.SelectAfterCommit");
+            Ok(Method(emptyLevelSnap, "Close"));
+
+            Ok(Method(ws, "BeginTrans"));
+            SelectRecordsetObject beforeWriteSnap = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
+            Ok(Method(db, "Execute", "UPDATE R SET V = 222 WHERE ID = 1", 128));
+            Ok(Method(ws, "CommitTrans"));
+            AssertNotModelled(FieldValue(beforeWriteSnap, "V"), "NotModelled.Edit.ResolvedOverlay");
+            Ok(Method(beforeWriteSnap, "Close"));
+        }
+    }
+
+    [Fact]
+    public void OrderBy_select_snapshot_on_Big_keeps_open_time_values_after_open_movelast_and_first_move()
+    {
+        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move;
+        // unordered SELECT stays refused per r-q2-cursor-dao/pop-snapshot-select-noorder-big.
+        const string QMain = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"; // r-q-cursor-dao-main.accdb
+        foreach (string variant in new[] { "after-open", "after-movelast", "after-first-move" })
+        {
+            DatabaseObject db = Open(QMain);
+            SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, V FROM Big ORDER BY ID", 4);
+            SelectRecordsetObject unordered = OpenSelect(db, "SELECT ID, V FROM Big", 4);
+
+            string originalV = TextValue(Ok(FieldValue(rs, "V")));
+            Assert.StartsWith("vvvv", originalV);
+
+            if (variant == "after-movelast")
+            {
+                Ok(Method(rs, "MoveLast"));
+                Ok(Method(rs, "MoveFirst"));
+            }
+            else if (variant == "after-first-move")
+            {
+                Ok(Method(rs, "MoveNext"));
+                Assert.Equal(2, IntValue(Ok(FieldValue(rs, "ID"))));
+                Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+            }
+
+            Ok(Method(db, "Execute", "UPDATE Big SET V = 'chg' WHERE ID IN (2, 1000, 2000)", 128));
+
+            Ok(Method(rs, "MoveFirst"));
+            Assert.Equal(1, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 1));
+            Assert.Equal(2, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 998));
+            Assert.Equal(1000, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            Ok(Method(rs, "Move", 1000));
+            Assert.Equal(2000, IntValue(Ok(FieldValue(rs, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
+
+            AssertNotModelled(Method(unordered, "MoveFirst"), "NotModelled.Edit.SnapshotAfterPublish");
+            Ok(Method(unordered, "Close"));
+            Ok(Method(rs, "Close"));
+        }
     }
 
     [Fact]
@@ -426,15 +546,15 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(rs2, "Close"));
     }
 
-    private string CopyFixture(string fixture)
+    private string CopyFixture(string fixture, string extension = ".accdb")
     {
-        string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-select-overlay-{Guid.NewGuid():N}.accdb");
+        string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-select-overlay-{Guid.NewGuid():N}{extension}");
         File.WriteAllBytes(path, CalcDb.Evidence.ArtifactStore.ForRepository(DeclarationGenerationTests.Root()).ReadAll(fixture));
         _files.Add(path);
         return path;
     }
 
-    private DatabaseObject Open(string fixture) => OpenPath(CopyFixture(fixture));
+    private DatabaseObject Open(string fixture, string extension = ".accdb") => OpenPath(CopyFixture(fixture, extension));
 
     private DatabaseObject OpenPath(string path)
     {
