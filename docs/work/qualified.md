@@ -164,6 +164,38 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records.** `r-q-wire/str-memo-fieldsize-by-recordset-type/`; `r-fix-wire-ado/str-memo-fieldsize/`, `r-str-ado-act/str-memo-chunks/`.
 - **Open.** Values near 8,000 and 1 GB; the native storage forms behind them (W-04).
 
+### R-STRING-1 STR-LV, R-ORACLE-1 OR-WIRE: DAO SELECT recordsets read Binary, OLE and Decimal(38) alike on every cursor, format and route; FieldSize, GetChunk and GetRows errors by state (task 63z8)
+- **Claim.** One answer holds on ACCDB and Jet 4 MDB, on the dynaset, the snapshot and forward-only, and through `OpenRecordset("SELECT ...")`, a saved select query opened by name and `QueryDef.OpenRecordset`: every member below gives the same value or error on all three routes.
+  - *Binary(16)* (Type 9, Size 16, Attributes 1): `Field.Value` and `Collect` give `VT_NULL` for Null and for a 0-byte value. Otherwise they give a 16-byte `VT_ARRAY|VT_UI1`, zero-padded on the right (5 bytes written read as 5 bytes and 11 zeros). *OLE* (Type 11, Size 0, Attributes 2): `VT_NULL` for Null and 0 bytes, otherwise the exact bytes.
+  - *Decimal(38)* (Type 20, Size 20, Attributes 1): Null reads `VT_NULL`. A non-Null `Field.Value` fails 3000 ("Reserved error (-1038); there is no message for this error.", 5003000) from `DAO.Field`, with IErrorInfo. `Collect` fails the same 3000 from `DAO.Recordset`, without IErrorInfo. Both leave one `Errors` entry.
+  - *FieldSize* (a property get) gives twice the character count for a Memo and the byte count for OLE, 0 for Null and empty. *GetChunk(offset, bytes)*:
+    - On a Memo it gives a `VT_BSTR` slice, `""` for `bytes = 0` or `offset >= len`.
+    - On OLE it gives a `VT_ARRAY|VT_UI1` slice. For `bytes = 0`, `offset = len` and `offset > len` it gives a `VT_ARRAY|VT_UI1` with a null SAFEARRAY.
+    - Null gives `VT_NULL` on both.
+  - *Errors by state* (FieldSize and GetChunk; all from `DAO.Field`, no IErrorInfo, one `Errors` entry):
+    - After `Close`: 3267 on every field type, not 3420. It wins over 3259.
+    - On a non-long-value field (Binary, Long, Text, Double, Decimal): 3259 "Invalid field data type." It wins over 3021 at BOF, EOF or on an empty recordset, and over a deleted row.
+    - At BOF, EOF and on an empty recordset: 3021.
+    - On a row deleted through the recordset: 3021. On a row deleted by another statement: 3167.
+  - *GetChunk arguments*:
+    - A wrong argument count (0, 1 or 3), `Missing` in either place, or a Double beyond the Long range fails 3001. A non-numeric String or Null fails 3421. Both come with IErrorInfo, ahead of the 3267 and 3259 checks.
+    - Doubles and numeric Strings convert to Long rounding half to even: (0.5, 2.5) reads as (0, 2), ("2.5", "3.5") as (2, 4). Empty is 0 and True is -1.
+    - A negative converted offset or size fails 3001 without IErrorInfo, also on a Null row.
+  - *GetRows* (all errors from `DAO.Recordset`, no IErrorInfo, one `Errors` entry):
+    - *NumRows*: omitted or `Missing` reads one row; 0, -1, Empty and True fail 3001; "2" and 2.5 read two rows; a non-numeric String and Null fail 3421.
+    - *States*: BOF, EOF and an empty recordset fail 3021. After `Close` it fails 3420.
+    - *Large NumRows*: `GetRows(1000000)` succeeds. 3035 ("System resource exceeded.", 5003035) starts at these observed pairs of (projected columns, NumRows): (1, 178,956,971), (2, 89,478,486), (3, 59,652,324), (4, 44,739,243). One less succeeds in each pair. The pairs fit `cols * NumRows * 24 > 2^32 - 1`; that is a fit, not an observed mechanism. On 3035 the cursor stays where it was, and 3035 comes before an empty recordset's 3021.
+    - *Unshrunk array*: on a 4-row snapshot, (1 column, 89,478,489) returns 4 rows, but (1, 89,478,490) returns an array of all 89,478,490 elements; with 2 columns the step is between 44,739,246 and 44,739,247. Both steps fit `(NumRows - actualRows) * cols * 24 >= 2^31` (a fit).
+    - *Row 0*: a non-Null Decimal(38) at row 0, or a row 0 deleted through the recordset or by another statement, returns S_OK with an array of zero rows, `[0+0, 0+cols]`. It leaves BOF and EOF false, the cursor on row 0, and `Errors` empty. A deleted later row is skipped.
+- **Conditions.** Fixtures `r-q32-accdb` and `r-q32-mdb`: table T (ID, Binary(16), OLE, Memo, Long, Text(32), Double, Decimal(38,0)), four rows (all Null; empty; short values; full values), saved queries QAll, QDec, QSimple, QEmpty. Raw IDispatch, x64.
+- **Records.** `evidence/r-q32-dao-select-lv/`, 40 questions, 17 asked twice and equal: `q1-val-*`, `q1-collect-*`, `q2-dec38-*`, `q3-lv-cursors-*`, `q3-lv-nonlv-*`, `q3-lv-states-*`, `q3-lv-deleted-*`, `q3-lv-getchunk-args-*`, `q4-getrows-*`, `q5-route-saved-*`, `q5-route-querydef-*`. Discriminators:
+  - `q3-lv-deleted-*`: self-deleted against externally deleted.
+  - `q3-lv-states-*`: 3267 after Close against 3420.
+  - `q1-collect-*` against `q2-dec38-*`: IErrorInfo on Field.Value and not on Collect.
+  - `q4-getrows-ceiling-cols-accdb`: the 3035 pairs per column count.
+  - `q5-route-*`: the routes.
+- **Open.** The contents of the unshrunk array beyond the rows read (not captured element by element); column counts above 4 and the 32-bit lanes; GetChunk on Binary of other sizes; ADO is out of this round.
+
 ### R-STRING-1 STR-EDIT: NUL in Text and Memo survives Update and Requery() in MDB and ACCDB
 - **Claim.** On a dynaset, T = `x` NUL `y` NUL and M = 6000 `e` plus NUL, put, `Update`, `Requery()` with no argument and `MoveFirst`, read back unchanged; a fresh snapshot gives `Len(T)` 4, `Len(M)` 6001, `InStr(T, Chr(0))` 2. A 256-unit T assignment fails
   `0x800A0C5B`; `CancelUpdate` after Update fails `0x800A0BCC` (ACCDB).
@@ -1081,7 +1113,40 @@ is summarised in [qualification-report.md](qualification-report.md).
   - *File*: a violating write changes no page, except on a table with an AutoNumber key: the AutoNumber is consumed (page 0 and the TableDef's word at 20, `00` to `01`, row count unchanged) through ADO `Execute`, DAO `Execute` and the DAO dynaset, and the next row gets ID 2.
 - **Conditions**: ACCDB copies of `r-fmt-1-accdb-empty`, Jet 4 MDB of `r-cat-1-mdb-empty`; the constraint added through ADO in a setup session, the write in a statement session; pages kept.
 - **Records**: `evidence/r-q30-sql-check/`, 49 questions, 26 asked twice and equal outside the clock fields: `sat-*`, `viol-dao-*`, `upd-viol-*`, `upd-other-col-*`, `null-*`, `op-*`, `ord-*`, `autonum-viol-*`, `mdb-*`. Discriminators: `viol-dao-exec-nofail-multi` (the bad row is skipped, the good ones written); `op-text-ne-upper` (case); `ord-check-before-req` and `ord-valrule-after-check-dao` (column order); `ord-two-checks-za` and `ord-two-checks-rev` (the order added, not the name or expression).
-- **Open**: a CHECK over several columns, compound expressions, functions and subqueries; a TableDef validation rule against a CHECK; 3022 against a CHECK; an update of another column of a row that already violates a later CHECK; a multi-row UPDATE without `dbFailOnError`; inside `BeginTrans`; the ADO recordset's AddNew on an AutoNumber table.
+- **Open**: a CHECK over several columns, compound expressions, functions and subqueries; a TableDef validation rule against a CHECK; 3022 against a CHECK; an update of another column of a row that already violates a later CHECK; the ADO recordset's AddNew on an AutoNumber table. (A multi-row UPDATE without `dbFailOnError` and a refused AddNew inside `BeginTrans`: the note below.)
+
+### R-CAT-1 II-07, R-OLEDB-1: multi-row CHECK statements, AutoNumber with a CHECK, Jet 4 MDB routes, literal forms, recordset Edit (task b9zq)
+- **Claim**: the errors of each route are those of the note above. Beyond it, on ACCDB unless named:
+  - *Multi-row INSERT ... SELECT, row 2 violates* (DAO `dbFailOnError` 3317, ADO `Execute` `0x80004005` with SQLState `3316`): no row is kept and the PK index stays empty, but the TableDef's row count (page 42 offset 16) and PK entry count (offset 67) are written as 1. `TableDef.RecordCount` reads 1.
+  - *Multi-row UPDATE, row 2 violates*:
+    - Without `dbFailOnError`: S_OK with no error. Row 2 is skipped and row 3 updated (`RecordsAffected` 1 of 2 rows, 2 of 3).
+    - With `dbFailOnError` (3317, `RecordsAffected` 0) and through ADO `Execute`: row 1's update stays on its page and row 3 is not reached.
+  - *AutoNumber with a CHECK*:
+    - A violating DAO `Execute` without `dbFailOnError` is skipped with S_OK. It consumes the AutoNumber (TableDef word at 20, `00` to `01`), and `SELECT @@IDENTITY` on the same Database then returns 1.
+    - A violating explicit AutoNumber value under `dbFailOnError` fails 3317 and moves the word by one, whatever the explicit value: from 0 with explicit 10 to 1, next ID 2; from 10 with explicit 5 to 11, next ID 12. The refused row's explicit value is never written as the counter, which differs from the statement-scope refusals of TXN-STMT (r-q29).
+    - A dynaset AddNew refused 3317 inside `BeginTrans`, then `CancelUpdate` and `Rollback`, keeps the consumed AutoNumber (word `00` to `01`, next ID 2).
+  - *Jet 4 MDB* gives the ACCDB answers on every route asked: Null passes through ADO `Execute`; of two failing CHECKs the first added is reported; Required (3314) and a field validation rule (3316) come before the CHECK; Text `T <> 'x'` is enforced; DAO `Execute` with and without `dbFailOnError` and the DAO dynaset AddNew behave as on ACCDB. No violation changes a page.
+  - *Literals* (ADO `Execute`):
+    - A constant on the left with `=`, `<>`, `<`, `>`, `>=` and a negative `<=`, and a negative constant on the right with `=`, `<>`, `<`, `<=`, `>`, behave as written; each boundary was asked on both sides.
+    - Text `<>` ignores trailing spaces on both sides: `T <> ''` rejects `' '`, `T <> 'x'` rejects `'x '`, and `T <> 'x '` rejects `'x'`.
+    - A doubled quote is one quote (`T <> 'a''b'` rejects `a'b`).
+    - A non-ASCII letter compares without case (`T <> 'ä'` rejects `'Ä'` and accepts `'a'`).
+  - *Recordset Edit* of the checked column to a satisfying value, and of another column, succeeds on the DAO dynaset and the ADO recordset. It writes the field in place and the page-0 counter, nothing else.
+  - *Null beside a Text column*: ADO `UPDATE T SET V = NULL` on `(ID, V LONG, S TEXT(20))` succeeds. It changes only the row's null-mask byte (page 45 offset 4095, `07` to `05`) and the page-0 counter.
+- **Conditions**: as the note above (`r-fmt-1-accdb-empty` copies, `r-cat-1-mdb-empty`, the CHECK added through ADO in a setup session, pages kept).
+- **Records**: `evidence/r-q31-sql-check-2/`, 62 questions, 30 asked twice and equal outside the clock fields: `multi-ins-*`, `multi-upd-*`, `multi-upd-3row-*`, `autonum-*`, `mdb-*` (11), `lit-*` (33), `rs-edit-*`, `null-upd-text-table-ado`. Discriminators:
+  - `multi-upd-3row-dao-nofail` against `multi-upd-3row-dao-fail`: continue against stop at row 2.
+  - `autonum-explicit-below-viol-dao` against `autonum-explicit-viol-dao`: plus one, whichever side of the counter the explicit value lies.
+  - `lit-text-empty-space`, `lit-text-trail-val`, `lit-text-trail-lit`: trailing spaces on either side.
+  - `lit-text-nonascii-upper`: case beyond ASCII.
+- **Open**:
+  - INSERT ... SELECT failing at row 2 into a table that already has rows or a data page.
+  - A multi-row UPDATE inside `BeginTrans`.
+  - Jet 4 MDB multi-row statements and AutoNumber with a CHECK.
+  - An explicit AutoNumber value violating through ADO.
+  - Leading and non-ASCII spaces, and Text operators other than `<>`.
+  - Several-column, compound, function and subquery CHECKs.
+  - A TableDef validation rule or a 3022 against a CHECK.
 
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
