@@ -964,3 +964,17 @@ that cover recorded cases (all three wrong-after-landing rules were refusals of 
 For organizer 9: keep the review layer; the organizer's own review of a stretch under 1,000 lines missed one (dqtr), so
 run the core and wide compares on every landing as now and treat a question that moves its first difference earlier as
 a finding; then try one narrower change, for example a reviewer pass for every stretch whatever its size.
+
+## 2026-11-22 - Organizer 9 (01a20342): a reviewer pass for every stretch
+
+**Change tried (from the triggered review).** Every landing gets a read-only Neon reviewer in a session of its own,
+whatever its size; the organizer reviews first and the reviewer checks every rule against a record of the very case,
+the callers with roscli, and the lifetimes the change opens. Briefs keep the rule "a case no record shows keeps or gets
+a named refusal". Measured on the next landings: findings per 1,000 lines from the reviewer after the organizer's own
+review, and rules found wrong after landing.
+
+**First stretches.** qhs8 (Isam, 380 lines): the organizer's review found one generalization (the group-2-only
+statement Rollback keyed on "no AutoNumber consumed" where both records are tables with no AutoNumber column); the writer
+narrowed it and refuses the other case by name. znk8 and zdh5 (Com.Dao, 265 lines): the organizer's review found the
+new post-Rollback state reached by an explicit ws.Rollback as well as by the clone-close abort; r-cursor-1/
+edit-rollback-opened-before supports that neighbour. kn3b (probe round, 54 questions, 61 records) landed without code.
