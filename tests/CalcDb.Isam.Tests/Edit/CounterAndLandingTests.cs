@@ -1809,29 +1809,37 @@ public sealed class CounterAndLandingTests
         }
 
         // 6. PK-reseed subcase through EditFrame: AutoNumber table G at depth 0 where a refused 3022 insert supplies
-        //    an explicit AutoNumber colliding with PK_G (ID = 1, recording a PK-reseed mark) refuses by name and writes nothing.
+        //    an explicit AutoNumber colliding with PK_G (ID = 1, recording a PK-reseed mark) refuses by name, writes
+        //    nothing, and leaves the in-memory AutoNumber counter unchanged (Finding 9).
         using (var rig = new Rig(EditFixture))
         {
-            (TableDefinition g, _) = rig.Table("G");
+            (TableDefinition g, TableEditContext ctx) = rig.Table("G");
             (EditFrame frame, _) = rig.OpenTable("G");
+            long counterBefore = ctx.Counter!.Last;
             byte[] start = rig.File.Image.Snapshot();
 
-            using StatementScope stmt = rig.A.BeginStatement();
-            Assert.Null(rig.A.BeginTrans());
+            using (StatementScope stmt = rig.A.BeginStatement())
+            {
+                Assert.Null(rig.A.BeginTrans());
 
-            Assert.True(frame.AddNew().Succeeded);
-            Assert.True(frame.Assign(Col(g, "ID"), I4(1)).Succeeded);
-            AssignText(frame, Col(g, "T"), "dup");
-            AssignText(frame, Col(g, "U"), "u-dup");
-            Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
-            Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(g, "ID"), I4(1)).Succeeded);
+                AssignText(frame, Col(g, "T"), "dup");
+                AssignText(frame, Col(g, "U"), "u-dup");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
 
-            Assert.True(rig.A.Rollback().Succeeded);
-            ResolutionOutcome end = stmt.Complete();
-            Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("explicit or reseeded AutoNumber", end.Detail, StringComparison.Ordinal);
+                Assert.True(rig.A.Rollback().Succeeded);
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationOpen.CounterWrite, end.Open);
+                Assert.Contains("explicit or reseeded AutoNumber", end.Detail, StringComparison.Ordinal);
+            }
             Assert.Empty(rig.A.Publications);
             Assert.Equal(start, rig.File.Image.Snapshot());
+            Assert.Equal(counterBefore, ctx.Counter.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(counterBefore + 1, frame.Read(Col(g, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
         }
     }
 

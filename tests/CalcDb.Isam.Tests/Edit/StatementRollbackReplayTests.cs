@@ -555,7 +555,7 @@ public sealed partial class StatementRollbackReplayTests
             Assert.Equal(start, session.Image.Snapshot());
         }
 
-        // 5. First-row 3314 and first-row 3316 on an empty table (both without and with an AutoNumber column).
+        // 5. First-row 3314 and first-row 3316 (both without and with an AutoNumber column, regardless of table row count).
         {
             // 5a. Empty non-AutoNumber table, first-row 3314.
             RecordPlan reqPlan = LoadPlan("noan-req-3314-newpage", FirstRecord("noan-req-3314-newpage"));
@@ -573,7 +573,7 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(frame.Assign(Col(t, "K"), I4(11)).Succeeded);
                 UpdateOutcome r1 = frame.Update();
                 Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3314 on empty table", r1.Detail, StringComparison.Ordinal);
+                Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
@@ -597,7 +597,7 @@ public sealed partial class StatementRollbackReplayTests
                 AssignText(frame, Col(t, "S"), "bad");
                 UpdateOutcome r1 = frame.Update();
                 Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3316 on empty table", r1.Detail, StringComparison.Ordinal);
+                Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
@@ -619,7 +619,7 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(frame.Assign(Col(an, "K"), I4(11)).Succeeded);
                 UpdateOutcome r1 = frame.Update();
                 Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3314 on empty table", r1.Detail, StringComparison.Ordinal);
+                Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
@@ -642,12 +642,737 @@ public sealed partial class StatementRollbackReplayTests
                 AssignText(frame, Col(an, "S"), "bad");
                 UpdateOutcome r1 = frame.Update();
                 Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3316 on empty table", r1.Detail, StringComparison.Ordinal);
+                Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
                 Assert.Equal(start, session.Image.Snapshot());
             }
+        }
+    }
+
+    [Fact]
+    public void Rollback_extent_survives_Group2_and_Abort_failures_and_marks_unresolved_on_Close_failure()
+    {
+        // Finding 1: once Group 1 puts the 32-page reservation on disk (page 1 offset 4038..4041 = 00 00 00 00),
+        // _allocatedGlobalMap, _reservedExtent, _rollbackExtentPending, and the full extent in _releaseAtClose are
+        // tracked immediately so failures in RecordStatementSideEffect, EndStatement's Publish, or AbortStatement
+        // still let Close return all 30 pages (50..79 -> fc ff ff ff), and a Close failure marks the file unresolved
+        // without dropping tracking.
+        RecordPlan plan = LoadPlan("noan-dup-row2-newpage-live", FirstRecord("noan-dup-row2-newpage-live"));
+        int p1ExtentOff = D.PageSize + 4038;
+        byte[] allFree = [0xFC, 0xFF, 0xFF, 0xFF];
+        byte[] allReserved = [0x00, 0x00, 0x00, 0x00];
+        byte[] p50Freed = [0x04, 0x00, 0x00, 0x00];
+
+        static void StageFailingNewPageInsert(KeptSetupSession session, out TableDefinition t)
+        {
+            List<Dictionary<string, NativeValue>> srcRows = ReadSrcRows(session);
+            (t, TableEditContext targetCtx) = session.Table("T");
+            using TableCursor cursor = session.OpenCursor(t);
+            using var frame = new EditFrame(targetCtx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+            Assert.Null(session.Workspace.BeginTrans());
+            int? observed = null;
+            foreach (Dictionary<string, NativeValue> row in srcRows)
+            {
+                Assert.True(frame.AddNew().Succeeded);
+                AssignValue(frame, t, "ID", row["ID"]);
+                AssignValue(frame, t, "K", row["K"]);
+                AssignValue(frame, t, "S", row["S"]);
+                UpdateOutcome outcome = frame.Update();
+                if (!outcome.Succeeded)
+                {
+                    observed = outcome.Error!.Value.Number;
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                    break;
+                }
+            }
+            Assert.Equal(MutationError.Duplicate, observed);
+        }
+
+        // 1a. RecordStatementSideEffect fails after Group 1 (another Workspace locks TableDef during Group 1, after
+        //     Rollback released the transaction locks: Group 1 locks only page 1 for a non-AutoNumber table so it
+        //     succeeds, and Group 2's RecordStatementSideEffect then hits 3188 on TableDef).
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+            using var locker = new TransactionCoordinator(new LockerId(2)) { Publisher = session };
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out TableDefinition t);
+                bool lockedDuringGroup1 = false;
+                session.FailWritable = (_, _) =>
+                {
+                    if (!lockedDuringGroup1)
+                    {
+                        lockedDuringGroup1 = true;
+                        LockAcquisition held = locker.Lock(session.Cache, [new LockResource(t.FirstPage, LockPurpose.TableDef)], LockLifetime.Transaction);
+                        Assert.Null(held.Conflict);
+                    }
+                    return null;
+                };
+
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(lockedDuringGroup1);
+                Assert.Equal(allReserved, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+                Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationError.LockedBySession, end.Error?.Number);
+            }
+
+            locker.Close();
+            Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+            Assert.False(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.False(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+        }
+
+        // 1b. EndStatement's Publish fails for Group 2 after Group 1 is on disk.
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            int writableCalls = 0;
+            session.FailWritable = (_, _) => ++writableCalls == 2 ? "simulated group 2 failure" : null;
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.Equal(allReserved, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationOpen.Publication, end.Open);
+                Assert.Contains("simulated group 2 failure", end.Detail, StringComparison.Ordinal);
+            }
+
+            Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            session.FailWritable = null;
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+            Assert.False(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+        }
+
+        // 1c. AbortStatement runs after Group 1 instead of Complete().
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.Equal(allReserved, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+                stmt.Abort();
+            }
+
+            Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.None, closeOpen);
+            Assert.Null(closeDetail);
+            Assert.False(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+        }
+
+        // 1d. PublishCloseCommit fails -> file is marked unresolved and extent tracking is never dropped silently.
+        using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
+        {
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                StageFailingNewPageInsert(session, out _);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            Assert.Equal(p50Freed, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+
+            session.FailWritable = (_, _) => "simulated close failure";
+            (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+            Assert.Equal(MutationOpen.Publication, closeOpen);
+            Assert.Contains("simulated close failure", closeDetail, StringComparison.Ordinal);
+            Assert.True(session.Workspace.IsUnresolved(session.Cache));
+            Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+            Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+            Assert.Equal(p50Freed, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
+
+            // Another Workspace must still see the pending rollback extent on PageCache and refuse page allocation.
+            var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
+            Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFailure));
+            Assert.Contains("pending rollback extent", allocFailure, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Explicit_AutoNumber_downward_reseed_commit_and_later_new_page_refuse_by_name()
+    {
+        // Finding 2a: committing a multi-row INSERT ... SELECT with explicit AutoNumber values below the counter has no
+        // record, so CommitTrans refuses with MutationOpen.AutoNumberReseed, writes nothing, and restores the counter.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-below-dup2-existing", FirstRecord("exp-sel-below-dup2-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            long counterBefore = ctx.Counter!.Last;
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(4)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(40)).Succeeded);
+                AssignText(frame, Col(an, "S"), "below-1");
+                Assert.True(frame.Update().Succeeded);
+
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(5)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(50)).Succeeded);
+                AssignText(frame, Col(an, "S"), "below-2");
+                Assert.True(frame.Update().Succeeded);
+
+                ResolutionOutcome commit = session.Workspace.CommitTrans();
+                Assert.Equal(MutationOpen.AutoNumberReseed, commit.Open);
+                Assert.Contains("below the counter", commit.Detail, StringComparison.Ordinal);
+                Assert.Equal(0, session.Workspace.Depth);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+
+            Assert.Equal(start, session.Image.Snapshot());
+            Assert.Equal(counterBefore, ctx.Counter.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(counterBefore + 1, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // Finding 2b: downward explicit AutoNumber reseed on row 1 (existing page) followed by a later row taking a new
+        // data page refuses with MutationOpen.AutoNumberReseed, writes nothing, and restores the in-memory counter.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-below-dup2-existing", FirstRecord("exp-sel-below-dup2-existing"));
+            byte[] image = (byte[])plan.SetupImage.Clone();
+            ShrinkTableFirstDataPage(image, tableDefPage: 42, freeBytes: 40);
+            using var session = new KeptSetupSession(image, "exp-sel-below-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            long counterBefore = ctx.Counter!.Last;
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+
+                // Row 1: downward reseed ID=4, short text fits in the shrunk existing page.
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(4)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(40)).Succeeded);
+                AssignText(frame, Col(an, "S"), "a");
+                Assert.True(frame.Update().Succeeded);
+
+                // Row 2: explicit ID=15 (above counter), wider text forces a new data page -> refused.
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(15)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(50)).Succeeded);
+                AssignText(frame, Col(an, "S"), new string('x', 16));
+                UpdateOutcome r2 = frame.Update();
+                Assert.Equal(MutationOpen.AutoNumberReseed, r2.Open);
+                Assert.Contains("new data page", r2.Detail, StringComparison.Ordinal);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                ResolutionOutcome end = stmt.Complete();
+                Assert.True(end.Succeeded || end.Open == MutationOpen.CounterWrite, end.ToString());
+            }
+
+            Assert.Equal(start, session.Image.Snapshot());
+            Assert.Equal(counterBefore, ctx.Counter.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(counterBefore + 1, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+    }
+
+    [Fact]
+    public void Jet4_mdb_newpage_rollback_leaves_page1_unchanged_and_refuses_second_write_before_Close()
+    {
+        // Finding 3: Jet 4 MDB new-page statement rollback does not plan the ACCDB 32-page extent on page 1; page 1
+        // stays unchanged before Close, a second write statement or BeginTrans before Close refuses by name, and Close
+        // produces the recorded closed file (+3 on page 0, page 1 unchanged).
+        RecordPlan plan = LoadPlan("noan-dup-row2-mdb-newpage", FirstRecord("noan-dup-row2-mdb-newpage"));
+        using var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-mdb-newpage");
+        byte[] setupPage1 = plan.SetupImage.AsSpan(D.PageSize, D.PageSize).ToArray();
+        List<Dictionary<string, NativeValue>> srcRows = ReadSrcRows(session);
+        (TableDefinition t, TableEditContext targetCtx) = session.Table("T");
+        using TableCursor cursor = session.OpenCursor(t);
+        using var frame = new EditFrame(targetCtx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+        using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+        {
+            Assert.Null(session.Workspace.BeginTrans());
+            int? observed = null;
+            foreach (Dictionary<string, NativeValue> row in srcRows)
+            {
+                Assert.True(frame.AddNew().Succeeded);
+                AssignValue(frame, t, "ID", row["ID"]);
+                AssignValue(frame, t, "K", row["K"]);
+                AssignValue(frame, t, "S", row["S"]);
+                UpdateOutcome outcome = frame.Update();
+                if (!outcome.Succeeded)
+                {
+                    observed = outcome.Error!.Value.Number;
+                    Assert.True(frame.CancelUpdate().Succeeded);
+                    break;
+                }
+            }
+            Assert.Equal(MutationError.Duplicate, observed);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+        }
+
+        // Before Close: page 1 is completely unchanged, and second write / BeginTrans refuse by name.
+        byte[] beforeClose = session.Image.Snapshot();
+        Assert.Equal(setupPage1, beforeClose.AsSpan(D.PageSize, D.PageSize).ToArray());
+        Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+        Assert.True(session.Workspace.HasPendingRollbackExtent(session.Cache));
+
+        EditOutcome secondAdd = frame.AddNew();
+        Assert.Equal(MutationOpen.Publication, secondAdd.Open);
+        ResolutionOutcome secondTxn = session.Workspace.TryBeginTrans();
+        Assert.Equal(MutationOpen.Publication, secondTxn.Open);
+        Assert.Equal(0, session.Workspace.Depth);
+        Assert.Equal(beforeClose, session.Image.Snapshot());
+
+        // After Close: matches the recorded closed file (+3 on page 0, page 1 unchanged).
+        (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+        Assert.Equal(MutationOpen.None, closeOpen);
+        Assert.Null(closeDetail);
+        Assert.False(session.Workspace.HasPendingRollbackExtent(session.Cache));
+        AssertMatchesCheckpoint("noan-dup-row2-mdb-newpage", plan.RecordFileName, "after-statement", plan.AfterStatement, session.Image.Snapshot());
+    }
+
+    [Fact]
+    public void Pending_rollback_extent_blocks_same_and_other_workspace_until_Close()
+    {
+        // Finding 4: while a rollback extent reservation is pending before Close, the same Workspace refuses a second
+        // write statement (AddNew, Edit, Delete, DeleteEveryRow) and BeginTrans, and a second Workspace sharing the
+        // PageCache refuses page allocation or touching page 1; after Close both work again.
+        RecordPlan plan = LoadPlan("noan-dup-row2-newpage-live", FirstRecord("noan-dup-row2-newpage-live"));
+        using var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live");
+        List<Dictionary<string, NativeValue>> srcRows = ReadSrcRows(session);
+        (TableDefinition t, TableEditContext targetCtx) = session.Table("T");
+        (TableDefinition src, TableEditContext srcCtx) = session.Table("Src");
+        using TableCursor tCursor = session.OpenCursor(t);
+        using var tFrame = new EditFrame(targetCtx, tCursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+        using TableCursor srcCursor = session.OpenCursor(src);
+        using var srcFrame = new EditFrame(srcCtx, srcCursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+        using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+        {
+            Assert.Null(session.Workspace.BeginTrans());
+            foreach (Dictionary<string, NativeValue> row in srcRows)
+            {
+                Assert.True(tFrame.AddNew().Succeeded);
+                AssignValue(tFrame, t, "ID", row["ID"]);
+                AssignValue(tFrame, t, "K", row["K"]);
+                AssignValue(tFrame, t, "S", row["S"]);
+                if (!tFrame.Update().Succeeded)
+                {
+                    Assert.True(tFrame.CancelUpdate().Succeeded);
+                    break;
+                }
+            }
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+        }
+
+        byte[] pendingSnapshot = session.Image.Snapshot();
+
+        // Same Workspace: writes refuse by name.
+        Assert.Equal(MutationOpen.Publication, tFrame.AddNew().Open);
+        srcCursor.MoveFirst();
+        Assert.Equal(MutationOpen.Publication, srcFrame.Edit().Open);
+        Assert.Equal(MutationOpen.Publication, srcFrame.Delete().Open);
+        Assert.Equal(MutationOpen.Publication, srcFrame.DeleteEveryRow(out _).Open);
+
+        // Same Workspace: TryBeginTrans refuses immediately; BeginTrans + CommitTrans/Rollback refuse cleanly.
+        Assert.Equal(MutationOpen.Publication, session.Workspace.TryBeginTrans().Open);
+        Assert.Equal(0, session.Workspace.Depth);
+        Assert.Null(session.Workspace.BeginTrans());
+        Assert.Equal(MutationOpen.Publication, session.Workspace.CommitTrans().Open);
+        Assert.Equal(0, session.Workspace.Depth);
+        Assert.Null(session.Workspace.BeginTrans());
+        Assert.Equal(MutationOpen.Publication, session.Workspace.Rollback().Open);
+        Assert.Equal(0, session.Workspace.Depth);
+        Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
+
+        // Second Workspace on the same PageCache: allocating a page or touching page 1 refuses by name.
+        using (var other = new TransactionCoordinator(new LockerId(2)) { Publisher = session })
+        {
+            var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
+            Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFail));
+            Assert.Contains("pending rollback extent", allocFail, StringComparison.Ordinal);
+
+            using TableCursor otherCursor = session.OpenCursor(t, other);
+            using var otherFrame = new EditFrame(targetCtx, otherCursor, other) { ConflictSource = MutationErrorSource.Database };
+            Assert.True(otherFrame.AddNew().Succeeded);
+            Assert.True(otherFrame.Assign(Col(t, "ID"), I4(100)).Succeeded);
+            Assert.True(otherFrame.Assign(Col(t, "K"), I4(100)).Succeeded);
+            AssignText(otherFrame, Col(t, "S"), "other-ws");
+            UpdateOutcome otherIns = otherFrame.Update();
+            Assert.Equal(MutationOpen.Publication, otherIns.Open);
+            Assert.True(otherFrame.CancelUpdate().Succeeded);
+
+            (MutationOpen mapOpen, _) = other.PublishNonTransactional(
+                session.Cache,
+                [new PageEdit(D.Map.GlobalMapPage, NoOpPageDelta.Instance, PageRole.Map)],
+                [new LockResource(D.Map.GlobalMapPage, LockPurpose.Map)],
+                CommitMode.Immediate,
+                MutationErrorSource.Database,
+                out _);
+            Assert.Equal(MutationOpen.Publication, mapOpen);
+        }
+
+        Assert.Equal(pendingSnapshot, session.Image.Snapshot());
+
+        // After Close: extent is returned and both Workspaces can begin transactions and write again.
+        (MutationOpen closeOpen, string? closeDetail) = session.Workspace.PublishCloseCommit(session.Cache);
+        Assert.Equal(MutationOpen.None, closeOpen);
+        Assert.Null(closeDetail);
+
+        Assert.True(session.Workspace.TryBeginTrans().Succeeded);
+        Assert.True(session.Workspace.Rollback().Succeeded);
+
+        using (var other2 = new TransactionCoordinator(new LockerId(3)) { Publisher = session })
+        {
+            using TableCursor otherCursor2 = session.OpenCursor(t, other2);
+            using var otherFrame2 = new EditFrame(targetCtx, otherCursor2, other2) { ConflictSource = MutationErrorSource.Database };
+            Assert.True(otherFrame2.AddNew().Succeeded);
+            Assert.True(otherFrame2.Assign(Col(t, "ID"), I4(100)).Succeeded);
+            Assert.True(otherFrame2.Assign(Col(t, "K"), I4(100)).Succeeded);
+            AssignText(otherFrame2, Col(t, "S"), "other-ws-after-close");
+            Assert.True(otherFrame2.Update().Succeeded);
+        }
+    }
+
+    [Fact]
+    public void ForeignKey_3201_refuses_first_row_and_nonstandard_index_layouts()
+    {
+        // Finding 5a: first-row 3201 FK refusal has no record and refuses with MutationOpen.CounterWrite writing nothing.
+        {
+            RecordPlan plan = LoadPlan("noan-fk-3201-existing", FirstRecord("noan-fk-3201-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "noan-fk-3201-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition t, TableEditContext ctx) = session.Table("T");
+            using TableCursor cursor = session.OpenCursor(t);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "K"), I4(999)).Succeeded);
+                AssignText(frame, Col(t, "S"), "first-row-3201");
+                UpdateOutcome r1 = frame.Update();
+                Assert.Equal(MutationOpen.CounterWrite, r1.Open);
+                Assert.Contains("first-row 3201", r1.Detail, StringComparison.Ordinal);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+
+        // Finding 5b: 3201 on a table whose physical indexes are not (PK at 0, single child FK at 1, two indexes in all)
+        // refuses with MutationOpen.CounterWrite writing nothing. Here T has PK at 0 and a unique index (not FK) at 1.
+        {
+            RecordPlan plan = LoadPlan("noan-dup-row2-uk-existing", FirstRecord("noan-dup-row2-uk-existing"));
+            using var session = new KeptSetupSession(
+                plan.SetupImage,
+                "noan-dup-row2-uk-existing",
+                extraRelationships: [new Relationship("FK_T_Src", "Src", "T", 0, [new RelationshipColumn("N", "K", 0)])]);
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition t, TableEditContext ctx) = session.Table("T");
+            using TableCursor cursor = session.OpenCursor(t);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+
+                // Row 1 accepted (K=1 matches Src.N=1).
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "K"), I4(1)).Succeeded);
+                AssignText(frame, Col(t, "S"), "ok");
+                Assert.True(frame.Update().Succeeded);
+
+                // Row 2 fails 3201 (K=999 has no parent in Src) -> refused because physical index 1 is not a child FK.
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(t, "ID"), I4(11)).Succeeded);
+                Assert.True(frame.Assign(Col(t, "K"), I4(999)).Succeeded);
+                AssignText(frame, Col(t, "S"), "fk-bad");
+                UpdateOutcome r2 = frame.Update();
+                Assert.Equal(MutationOpen.CounterWrite, r2.Open);
+                Assert.Contains("two indexes with the primary key at physical 0 and one child foreign-key index at physical 1", r2.Detail, StringComparison.Ordinal);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationOpen.CounterWrite, end.Open);
+            }
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+    }
+
+    [Fact]
+    public void First_row_3314_and_3316_refuse_on_nonempty_tables()
+    {
+        // Finding 6: first-row 3314 and 3316 inside a multi-row statement refuse with MutationOpen.CounterWrite
+        // whatever the table's row count (both without and with an AutoNumber column on non-empty tables).
+
+        // 6a. Non-empty non-AutoNumber table, first-row 3314.
+        {
+            RecordPlan reqPlan = LoadPlan("noan-req-3314-existing", FirstRecord("noan-req-3314-existing"));
+            using var session = new KeptSetupSession(reqPlan.SetupImage, "noan-req-3314-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition t, TableEditContext ctx) = session.Table("T");
+            Assert.True(t.RowCount > 0);
+            using TableCursor cursor = session.OpenCursor(t);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
+            Assert.True(frame.Assign(Col(t, "K"), I4(11)).Succeeded);
+            UpdateOutcome r1 = frame.Update();
+            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
+            Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.True(frame.CancelUpdate().Succeeded);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+
+        // 6b. Non-empty non-AutoNumber table, first-row 3316.
+        {
+            RecordPlan valPlan = LoadPlan("noan-val-3316-existing", FirstRecord("noan-val-3316-existing"));
+            using var session = new KeptSetupSession(valPlan.SetupImage, "noan-val-3316-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition t, TableEditContext ctx) = session.Table("T");
+            Assert.True(t.RowCount > 0);
+            using TableCursor cursor = session.OpenCursor(t);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
+            Assert.True(frame.Assign(Col(t, "K"), I4(150)).Succeeded);
+            AssignText(frame, Col(t, "S"), "bad");
+            UpdateOutcome r1 = frame.Update();
+            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
+            Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.True(frame.CancelUpdate().Succeeded);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+
+        // 6c. Non-empty AutoNumber table, first-row 3314.
+        {
+            RecordPlan autoReqPlan = LoadPlanFromRound("r-q27-autonumber-txn", "ins-req-3314-fail");
+            byte[] seeded;
+            using (var seed = new KeptSetupSession(autoReqPlan.SetupImage, "ins-req-3314-fail"))
+            {
+                (TableDefinition an, TableEditContext ctx) = seed.Table("An");
+                using TableCursor cursor = seed.OpenCursor(an);
+                using var frame = new EditFrame(ctx, cursor, seed.Workspace) { ConflictSource = MutationErrorSource.Database };
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(50)).Succeeded);
+                AssignText(frame, Col(an, "S"), "seed");
+                Assert.True(frame.Update().Succeeded);
+                seeded = seed.Image.Snapshot();
+            }
+            using var session = new KeptSetupSession(seeded, "ins-req-3314-fail");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an2, TableEditContext ctx2) = session.Table("An");
+            Assert.True(an2.RowCount > 0);
+            using TableCursor cursor2 = session.OpenCursor(an2);
+            using var frame2 = new EditFrame(ctx2, cursor2, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.True(frame2.AddNew().Succeeded);
+            Assert.True(frame2.Assign(Col(an2, "K"), I4(51)).Succeeded);
+            UpdateOutcome r1 = frame2.Update();
+            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
+            Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.True(frame2.CancelUpdate().Succeeded);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+
+        // 6d. Non-empty AutoNumber table, first-row 3316.
+        {
+            RecordPlan autoValPlan = LoadPlanFromRound("r-q27-autonumber-txn", "ins-val-3316-fail");
+            byte[] seeded;
+            using (var seed = new KeptSetupSession(autoValPlan.SetupImage, "ins-val-3316-fail"))
+            {
+                (TableDefinition an, TableEditContext ctx) = seed.Table("An");
+                using TableCursor cursor = seed.OpenCursor(an);
+                using var frame = new EditFrame(ctx, cursor, seed.Workspace) { ConflictSource = MutationErrorSource.Database };
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(50)).Succeeded);
+                AssignText(frame, Col(an, "S"), "seed");
+                Assert.True(frame.Update().Succeeded);
+                seeded = seed.Image.Snapshot();
+            }
+            using var session = new KeptSetupSession(seeded, "ins-val-3316-fail");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an2, TableEditContext ctx2) = session.Table("An");
+            Assert.True(an2.RowCount > 0);
+            using TableCursor cursor2 = session.OpenCursor(an2);
+            using var frame2 = new EditFrame(ctx2, cursor2, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.True(frame2.AddNew().Succeeded);
+            Assert.True(frame2.Assign(Col(an2, "K"), I4(150)).Succeeded);
+            AssignText(frame2, Col(an2, "S"), "bad");
+            UpdateOutcome r1 = frame2.Update();
+            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
+            Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.True(frame2.CancelUpdate().Succeeded);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+    }
+
+    [Fact]
+    public void InMemory_AutoNumber_counter_matches_disk_on_admitted_and_refused_explicit_rollbacks()
+    {
+        // Finding 9: Open-list explicit AutoNumber statement rollbacks (new page, inside BeginTrans) must not mutate
+        // _table.Counter in memory, whereas admitted explicit AutoNumber rollbacks apply the deferred Reseed so the
+        // in-memory counter matches TableDef offset 20 on disk.
+
+        // 9a. Admitted exp-sel-below-pk-dup2-existing: counter reseeds from 10 -> 1 on disk and in memory.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-below-pk-dup2-existing", FirstRecord("exp-sel-below-pk-dup2-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-pk-dup2-existing");
+            List<Dictionary<string, NativeValue>> srcRows = ReadSrcRows(session);
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            Assert.Equal(10L, ctx.Counter!.Last);
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                foreach (Dictionary<string, NativeValue> row in srcRows)
+                {
+                    Assert.True(frame.AddNew().Succeeded);
+                    AssignValue(frame, an, "ID", row["ID"]);
+                    AssignValue(frame, an, "K", row["K"]);
+                    AssignValue(frame, an, "S", row["S"]);
+                    if (!frame.Update().Succeeded)
+                    {
+                        Assert.True(frame.CancelUpdate().Succeeded);
+                        break;
+                    }
+                }
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+
+            Assert.Equal(1L, ctx.Counter.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(2L, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // 9b. Refused explicit above counter + new page + PK dup ID=1 -> counter keeps row 1's Observe (20) and is NOT
+        //     reseeded to 1; next AddNew yields 21.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
+            byte[] image = (byte[])plan.SetupImage.Clone();
+            ShrinkTableFirstDataPage(image, tableDefPage: 42, freeBytes: 4);
+            using var session = new KeptSetupSession(image, "exp-sel-above-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
+                AssignText(frame, Col(an, "S"), "above-newpage");
+                Assert.True(frame.Update().Succeeded);
+
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                AssignText(frame, Col(an, "S"), "pkdup");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.Equal(MutationOpen.CounterWrite, stmt.Complete().Open);
+            }
+
+            Assert.Equal(start, session.Image.Snapshot());
+            Assert.Equal(20L, ctx.Counter!.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(21L, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
+        }
+
+        // 9c. Refused explicit inside BeginTrans + PK dup ID=1 -> counter keeps row 1's Observe (20) and is NOT
+        //     reseeded to 1; next AddNew yields 21.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-above-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            Assert.Null(session.Workspace.BeginTrans());
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
+                AssignText(frame, Col(an, "S"), "above-txn");
+                Assert.True(frame.Update().Succeeded);
+
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                AssignText(frame, Col(an, "S"), "pkdup");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.Equal(MutationOpen.CounterWrite, stmt.Complete().Open);
+            }
+            Assert.True(session.Workspace.Rollback().Succeeded);
+
+            Assert.Equal(start, session.Image.Snapshot());
+            Assert.Equal(20L, ctx.Counter!.Last);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.Equal(21L, frame.Read(Col(an, "ID")).Value.Integer);
+            Assert.True(frame.CancelUpdate().Succeeded);
         }
     }
 
@@ -946,7 +1671,7 @@ public sealed partial class StatementRollbackReplayTests
             for (int i = 0; i < expectedBytes.Length; i++)
             {
                 long abs = offset + i;
-                if (ignoreMdbCommitCounter && abs >= commitCounterOff && abs < commitCounterOff + 2)
+                if (ignoreMdbCommitCounter && abs == commitCounterOff)
                 {
                     continue;
                 }
@@ -1082,8 +1807,15 @@ public sealed partial class StatementRollbackReplayTests
 
         private ulong PageCount => Math.Max(_image.PageCount, _cache.KnownExtentPages);
 
+        public Func<PageCache, IReadOnlyCollection<ulong>, string?>? FailWritable { get; set; }
+
         public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
         {
+            if (FailWritable?.Invoke(cache, pages) is { } injected)
+            {
+                failure = injected;
+                return null;
+            }
             failure = ReferenceEquals(cache, _cache) ? null : "another file's cache";
             return failure is null ? _image : null;
         }
@@ -1109,8 +1841,8 @@ public sealed partial class StatementRollbackReplayTests
             return (td, ctx);
         }
 
-        public TableCursor OpenCursor(TableDefinition table) =>
-            TableCursor.Open(new PageSource(_cache, Workspace.OverlayOf(_cache)), D, table, PageCount, 0, out _)!;
+        public TableCursor OpenCursor(TableDefinition table, TransactionCoordinator? workspace = null) =>
+            TableCursor.Open(new PageSource(_cache, (workspace ?? Workspace).OverlayOf(_cache)), D, table, PageCount, 0, out _)!;
 
         public void Dispose()
         {

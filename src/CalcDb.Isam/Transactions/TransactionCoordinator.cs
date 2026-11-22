@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 using CalcDb.Format;
@@ -117,6 +118,41 @@ public sealed class ExplicitFrame
     internal bool HasGeneratedAutoNumber { get; set; }
 
     internal HashSet<PageCache>? RolledBackGlobalMapAllocations { get; set; }
+
+    internal bool RefusedByRollbackExtent { get; set; }
+
+    internal Dictionary<AutoNumberCounter, long>? InitialExplicitCounters { get; private set; }
+
+    internal (AutoNumberCounter Counter, long Value)? PendingCounterReseed { get; set; }
+
+    internal void SaveExplicitCounterBefore(AutoNumberCounter counter, long? valueBefore = null)
+    {
+        InitialExplicitCounters ??= new Dictionary<AutoNumberCounter, long>(ReferenceEqualityComparer.Instance);
+        InitialExplicitCounters.TryAdd(counter, valueBefore ?? counter.Last);
+    }
+
+    internal void RestoreExplicitCounters()
+    {
+        PendingCounterReseed = null;
+        if (InitialExplicitCounters is not { Count: > 0 } saved)
+        {
+            return;
+        }
+        foreach ((AutoNumberCounter counter, long originalLast) in saved)
+        {
+            counter.Reseed(originalLast);
+        }
+        saved.Clear();
+    }
+
+    internal void ApplyPendingCounterReseed()
+    {
+        if (PendingCounterReseed is { } pending)
+        {
+            PendingCounterReseed = null;
+            pending.Counter.Reseed(pending.Value);
+        }
+    }
 
     /// <summary>
     /// Join <paramref name="mark"/> to the level's mark of its table: the furthest value in the increment's direction (a
@@ -321,6 +357,74 @@ public sealed class StatementScope : IDisposable
 }
 
 /// <summary>
+/// Tracks active rolled-back-statement page-1 extent reservations per <see cref="PageCache"/> so another Workspace
+/// sharing the cache refuses page-1 allocation or page-1 writes by name until Close returns the reservation
+/// (qualified.md R-TXN-1 TXN-STMT Open).
+/// </summary>
+internal static class RollbackExtentTracker
+{
+    private sealed class Entry
+    {
+        public readonly Lock Gate = new();
+        public readonly HashSet<TransactionCoordinator> Owners = new(ReferenceEqualityComparer.Instance);
+    }
+
+    private static readonly ConditionalWeakTable<PageCache, Entry> Entries = new();
+
+    public static void Register(PageCache cache, TransactionCoordinator owner)
+    {
+        Entry entry = Entries.GetOrCreateValue(cache);
+        lock (entry.Gate)
+        {
+            entry.Owners.Add(owner);
+        }
+    }
+
+    public static void Unregister(PageCache cache, TransactionCoordinator owner)
+    {
+        if (!Entries.TryGetValue(cache, out Entry? entry))
+        {
+            return;
+        }
+        lock (entry.Gate)
+        {
+            entry.Owners.Remove(owner);
+        }
+    }
+
+    public static bool HasAnyOwner(PageCache cache)
+    {
+        if (!Entries.TryGetValue(cache, out Entry? entry))
+        {
+            return false;
+        }
+        lock (entry.Gate)
+        {
+            return entry.Owners.Count > 0;
+        }
+    }
+
+    public static bool HasOtherOwner(PageCache cache, TransactionCoordinator self)
+    {
+        if (!Entries.TryGetValue(cache, out Entry? entry))
+        {
+            return false;
+        }
+        lock (entry.Gate)
+        {
+            foreach (TransactionCoordinator owner in entry.Owners)
+            {
+                if (!ReferenceEquals(owner, self))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}
+
+/// <summary>
 /// The logical transaction owner of one Workspace (II-08 §1 <c>WorkspaceCoordinator</c>, D-TXN-1; W-05/edit-frames,
 /// R-TXN-1 TXN-NEST, TXN-STMT, TXN-TEMP). It keeps the contiguous stack of explicit frames, the files it writes and their
 /// private overlays (W-03's <see cref="PrivateOverlay"/>, one per locker and file), and the edit frames of its recordsets.
@@ -341,6 +445,15 @@ public sealed class StatementScope : IDisposable
 /// </summary>
 public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 {
+    internal const string PendingRollbackExtentWriteDetail =
+        "writing while a rolled-back statement's page-1 extent reservation is pending before Close is not recorded (qualified.md R-TXN-1 TXN-STMT Open)";
+
+    internal const string PendingRollbackExtentBeginTransDetail =
+        "BeginTrans while a rolled-back statement's page-1 extent reservation is pending before Close is not recorded (qualified.md R-TXN-1 TXN-STMT Open)";
+
+    internal const string OtherWorkspaceRollbackExtentDetail =
+        "another Workspace holds a pending rollback extent reservation on page 1 before Close (qualified.md R-TXN-1 TXN-STMT Open)";
+
     /// <summary>
     /// Seven BeginTrans levels; the eighth fails 3003 and starts nothing (qualified.md R-TXN-1 TXN-NEST, also on a second
     /// Workspace independently).
@@ -389,11 +502,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
     private readonly HashSet<PageCache> _allocatedGlobalMap = [];
     private readonly HashSet<PageCache> _reservedExtent = [];
+    private readonly HashSet<PageCache> _rollbackExtentPending = [];
+    private readonly Dictionary<PageCache, List<uint>> _pendingGroup2AllocatedPages = [];
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
     private readonly HashSet<PageCache> _pendingCloseCommit = [];
-    private readonly Dictionary<PageCache, List<uint>> _pendingReleaseAtClose = [];
-    private readonly HashSet<PageCache> _pendingReservedExtent = [];
     private readonly HashSet<PageCache> _jet4MdbCloseCommit = [];
+    private PageCache? _statementRollbackGroup2File;
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
@@ -419,6 +533,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     internal bool InExplicitTransaction => _statement is not null ? _statementExternalDepth > 0 : _frames.Count > 0;
 
     /// <summary>
+    /// Whether the active SQL action statement opened its own <c>dbFailOnError</c> level (either at external depth 0 or
+    /// nested inside an explicit <c>BeginTrans</c>), which rolls back through <see cref="RollbackStatementFrame"/>.
+    /// </summary>
+    internal bool InStatementOwnLevel => _statement is not null && _statementHasOwnLevel && _frames.Count > _statementExternalDepth;
+
+    /// <summary>
     /// Whether the active SQL action statement started outside any explicit transaction (<c>Depth == 0</c>) and opened
     /// its own <c>dbFailOnError</c> statement level (<c>Depth == 1</c>).
     /// </summary>
@@ -429,6 +549,37 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>Whether the active statement's current transaction level already accepted at least one row change.</summary>
     internal bool HasStatementAcceptedChanges => _frames.Count > 0 && _frames[^1].Changes.Count > 0;
+
+    /// <summary>Whether the active statement's current transaction level already accepted a downward explicit AutoNumber reseed.</summary>
+    internal bool HasStatementDownwardReseed => _frames.Count > 0 && _frames[^1].ConsumedAutoNumbers?.Values.Any(m => m.Reseed) == true;
+
+    /// <summary>
+    /// Whether <paramref name="cache"/> holds a rolled-back statement's pending page-1 extent reservation before Close
+    /// (excluding the same statement's own Group 2 publication).
+    /// </summary>
+    internal bool HasPendingRollbackExtent(PageCache cache) =>
+        _rollbackExtentPending.Contains(cache) && !ReferenceEquals(_statementRollbackGroup2File, cache);
+
+    /// <summary>Whether <paramref name="cache"/> stopped after a native effect and requires resolution.</summary>
+    internal bool IsUnresolved(PageCache cache) => _unresolved.Contains(cache);
+
+    internal void SaveExplicitCounterBefore(AutoNumberCounter counter, long? valueBefore = null)
+    {
+        if (_frames.Count > 0)
+        {
+            _frames[^1].SaveExplicitCounterBefore(counter, valueBefore);
+        }
+    }
+
+    internal void RecordPendingCounterReseed(AutoNumberCounter counter, long value, long? valueBefore = null)
+    {
+        if (_frames.Count > 0)
+        {
+            ExplicitFrame top = _frames[^1];
+            top.SaveExplicitCounterBefore(counter, valueBefore);
+            top.PendingCounterReseed = (counter, value);
+        }
+    }
 
     /// <summary>
     /// Whether published changes of this Workspace released data pages, dropped-table pages, or reserved page-1 extent
@@ -459,20 +610,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _allocatedGlobalMap.Contains(cache)
         || _releaseAtClose.ContainsKey(cache)
         || _reservedExtent.Contains(cache)
+        || _rollbackExtentPending.Contains(cache)
         || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
 
     private bool HasActiveExtentReservation(PageCache cache) =>
         _reservedExtent.Contains(cache)
+        || _rollbackExtentPending.Contains(cache)
         || (_unpublishedReservedExtent.TryGetValue(cache, out int count) && count > 0);
 
-    private static bool HasGlobalMapActivity(PhysicalChange physical)
+    private static bool TouchesGlobalMapPage(IReadOnlyList<PageEdit> edits)
     {
-        if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
-        {
-            return true;
-        }
         uint globalMapPage = FormatDescriptor.Jet4Family.Map.GlobalMapPage;
-        IReadOnlyList<PageEdit> edits = physical.Edits;
         for (int i = 0; i < edits.Count; i++)
         {
             if (edits[i].Page == globalMapPage)
@@ -481,6 +629,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
         return false;
+    }
+
+    private static bool HasGlobalMapActivity(PhysicalChange physical)
+    {
+        if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
+        {
+            return true;
+        }
+        return TouchesGlobalMapPage(physical.Edits);
     }
 
     private static bool AllocatesGlobalMapPage(PhysicalChange physical)
@@ -567,6 +724,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     public IReadOnlyCollection<FileParticipant> Participants => _participants.Values;
 
+    /// <summary>
+    /// BeginTrans returning a <see cref="ResolutionOutcome"/> so callers that can report named Open refusals receive
+    /// <see cref="MutationOpen.Publication"/> immediately without opening a level while a rolled-back statement's
+    /// page-1 extent reservation is pending before Close (qualified.md R-TXN-1 TXN-STMT Open).
+    /// </summary>
+    public ResolutionOutcome TryBeginTrans()
+    {
+        if (_rollbackExtentPending.Count > 0)
+        {
+            return new ResolutionOutcome(null, MutationOpen.Publication, PendingRollbackExtentBeginTransDetail);
+        }
+        return BeginTrans() is { } err ? new ResolutionOutcome(err) : default;
+    }
+
     /// <summary>BeginTrans (II-08 §1: a level with no mutation reserves one frame entry and copies nothing).</summary>
     public MutationError? BeginTrans()
     {
@@ -579,7 +750,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new MutationError(MutationError.TooManyTransactions, MutationErrorSource.Workspace);
         }
-        ExplicitFrame frame = new(_frames.Count + 1);
+        ExplicitFrame frame = new(_frames.Count + 1)
+        {
+            RefusedByRollbackExtent = _rollbackExtentPending.Count > 0,
+        };
         _frames.Add(frame);
         if (_statement is not null)
         {
@@ -599,6 +773,41 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return null;
     }
 
+    private ResolutionOutcome DiscardRefusedFrame(ExplicitFrame top, MutationOpen open, string detail)
+    {
+        _frames.RemoveAt(_frames.Count - 1);
+        top.RestoreExplicitCounters();
+        Consume(top.Changes);
+        UnindexChanges(top.Changes);
+        if (_statement is not null && _statementHasOwnLevel && _frames.Count == _statementExternalDepth)
+        {
+            _statementHasOwnLevel = false;
+        }
+        if (_frames.Count > 0)
+        {
+            foreach (FileParticipant p in _participants.Values)
+            {
+                p.Overlay.RollbackScope();
+            }
+        }
+        else
+        {
+            foreach (EditFrame e in _edits.ToArray())
+            {
+                e.DropForRollback();
+            }
+            ReleaseLocks(LockLifetime.Transaction);
+            ReleaseParticipants();
+            _sideEffectRoles.Clear();
+            _pendingCloseCommit.Clear();
+        }
+        foreach (PopulationFamily pop in _populations)
+        {
+            pop.OnTransactionRollback(top);
+        }
+        return new ResolutionOutcome(null, open, detail);
+    }
+
     /// <summary>
     /// CommitTrans of the current level. <paramref name="options"/> is the adapter's coerced argument: 0 or dbForceOSFlush
     /// (1); anything else is 3001 and leaves the level open (TXN-NEST: 0, Missing, Empty, I2 1, UI1 1, R8 1.0 and "1" are
@@ -615,6 +824,22 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(new MutationError(MutationError.NoTransaction, MutationErrorSource.Workspace));
         }
         ExplicitFrame top = _frames[^1];
+        if (top.RefusedByRollbackExtent)
+        {
+            return DiscardRefusedFrame(top, MutationOpen.Publication, PendingRollbackExtentBeginTransDetail);
+        }
+        if (_frames.Count == 1
+            && _statement is not null
+            && _statementHasOwnLevel
+            && top.ConsumedAutoNumbers?.Values.Any(m => m.Reseed) == true)
+        {
+            // No record observes a committed multi-row INSERT ... SELECT with explicit AutoNumber values below the
+            // counter (r-q27 exp-gap-5/10 are single-row INSERT VALUES; r-q29 exp-sel-below-* all roll back on 3022).
+            return DiscardRefusedFrame(
+                top,
+                MutationOpen.AutoNumberReseed,
+                "committing a multi-row INSERT ... SELECT with explicit AutoNumber values below the counter is not recorded (qualified.md R-FMT-2 / R-TXN-1 TXN-STMT Open)");
+        }
         List<(PageCache Cache, uint TableDefPage, uint Value)>? lostAutoNumbers = null;
         if (_frames.Count == 1)
         {
@@ -700,8 +925,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             _sideEffectRoles.Clear();
             _pendingCloseCommit.Clear();
-            _pendingReleaseAtClose.Clear();
-            _pendingReservedExtent.Clear();
             ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
             foreach (PopulationFamily pop in _populations)
@@ -857,7 +1080,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         CommitMode mode,
         MutationErrorSource conflictSource,
         out MutationError? error,
-        bool allowJet4Mdb = false)
+        bool allowJet4Mdb = false,
+        bool allowDuringRollbackExtent = false)
     {
         error = null;
         if (Publisher is not { } publisher)
@@ -867,6 +1091,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_unresolved.Contains(cache))
         {
             return (MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+        }
+        if (!allowDuringRollbackExtent && HasPendingRollbackExtent(cache))
+        {
+            return (MutationOpen.Publication, PendingRollbackExtentWriteDetail);
+        }
+        if (TouchesGlobalMapPage(edits) && RollbackExtentTracker.HasOtherOwner(cache, this))
+        {
+            return (MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
         }
         (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out bool trackLazyBurst, allowJet4Mdb);
         if (counterOpen != MutationOpen.None)
@@ -1070,7 +1302,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         MutationErrorSource conflictSource,
         out MutationError? error,
         bool allowJet4Mdb = false,
-        bool targetHasAutoNumber = false)
+        bool targetHasAutoNumber = false,
+        bool allowDuringRollbackExtent = false)
     {
         error = null;
         if (Publisher is null)
@@ -1080,6 +1313,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_unresolved.Contains(cache))
         {
             return (MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+        }
+        if (!allowDuringRollbackExtent && HasPendingRollbackExtent(cache))
+        {
+            return (MutationOpen.Publication, PendingRollbackExtentWriteDetail);
+        }
+        if (TouchesGlobalMapPage(edits) && RollbackExtentTracker.HasOtherOwner(cache, this))
+        {
+            return (MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
         }
         if (edits.Count == 0)
         {
@@ -1322,29 +1563,23 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             _pendingCloseCommit.Clear();
         }
-        if (_pendingReleaseAtClose.Count > 0)
+        if (_pendingGroup2AllocatedPages.Count > 0)
         {
-            foreach ((PageCache releaseCache, List<uint> releasePages) in _pendingReleaseAtClose)
+            foreach ((PageCache g2Cache, List<uint> allocPages) in _pendingGroup2AllocatedPages)
             {
-                if (!_releaseAtClose.TryGetValue(releaseCache, out List<uint>? existing))
+                if (_releaseAtClose.TryGetValue(g2Cache, out List<uint>? closePages))
                 {
-                    _releaseAtClose[releaseCache] = existing = [];
-                }
-                for (int ri = 0; ri < releasePages.Count; ri++)
-                {
-                    uint page = releasePages[ri];
-                    if (!existing.Contains(page))
+                    for (int ai = 0; ai < allocPages.Count; ai++)
                     {
-                        existing.Add(page);
+                        closePages.Remove(allocPages[ai]);
+                    }
+                    if (closePages.Count == 0)
+                    {
+                        _releaseAtClose.Remove(g2Cache);
                     }
                 }
             }
-            _pendingReleaseAtClose.Clear();
-        }
-        if (_pendingReservedExtent.Count > 0)
-        {
-            _reservedExtent.UnionWith(_pendingReservedExtent);
-            _pendingReservedExtent.Clear();
+            _pendingGroup2AllocatedPages.Clear();
         }
         _pending.Clear();
         _sideEffectRoles.Clear();
@@ -1390,6 +1625,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(null, MutationOpen.PendingEditAtInnerRollback, "an edit is pending at an inner Rollback");
         }
         ExplicitFrame top = _frames[^1];
+        if (top.RefusedByRollbackExtent)
+        {
+            return DiscardRefusedFrame(top, MutationOpen.Publication, PendingRollbackExtentBeginTransDetail);
+        }
         if (_statement is not null)
         {
             _frames.RemoveAt(_frames.Count - 1);
@@ -1476,8 +1715,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
-        _pendingReleaseAtClose.Clear();
-        _pendingReservedExtent.Clear();
         return write is { } words ? WriteRolledBackAutoNumbers(words, top.Changes.Count) : new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
     }
 
@@ -1761,10 +1998,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             if (limitation is not null)
             {
+                top.RestoreExplicitCounters();
                 _statementFailure = limitation;
                 return new ResolutionOutcome(ResolvedChanges: resolved);
             }
-            if (counters is not null)
+            if (counters is null)
+            {
+                top.RestoreExplicitCounters();
+                return new ResolutionOutcome(ResolvedChanges: resolved);
+            }
             {
                 FileParticipant parent = EnsureParticipant(counters.File);
                 foreach ((uint tdefPage, TableDefCounterSnapshotDelta snap) in counters.Snapshots)
@@ -1772,6 +2014,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     EditResult edited = parent.Edit(tdefPage, snap);
                     if (!edited.Succeeded)
                     {
+                        top.RestoreExplicitCounters();
                         _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage} could not take the counters the statement reached: {edited.Failure} {edited.Detail}");
                         return new ResolutionOutcome(ResolvedChanges: resolved);
                     }
@@ -1785,6 +2028,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         EditResult mapEdit = parent.Edit(globalMapPage, NoOpPageDelta.Instance);
                         if (!mapEdit.Succeeded)
                         {
+                            top.RestoreExplicitCounters();
                             _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"page {globalMapPage} could not join the counters' commit: {mapEdit.Failure} {mapEdit.Detail}");
                             return new ResolutionOutcome(ResolvedChanges: resolved);
                         }
@@ -1793,6 +2037,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     _frames[^1].RolledBackGlobalMapAllocations ??= [];
                     _frames[^1].RolledBackGlobalMapAllocations!.Add(counters.File);
                 }
+                top.ApplyPendingCounterReseed();
             }
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
@@ -1800,11 +2045,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         // Outside a transaction: drop every data, index and map edit.
         // Group 1 (inside Execute) runs whenever the target has an AutoNumber column or the statement took a new page
         // (evidence/r-q29-stmt-rollback-counters/noan-dup-row2-existing-live, noan-dup-row2-newpage-live,
-        // exp-sel-eq-dup2-live): it reserves the 32-page extent in page 1 (when a page was taken) and writes the
-        // AutoNumber word on TableDef (when the target has an AutoNumber column), leaving RowCount and UniqueEntryCount
-        // for Group 2. Group 2 (staged for statement end) frees the rolled-back allocated page bit(s) in page 1 and
-        // writes the reached TableDef counter snapshot. Close returns the remaining unused extent bits (+1 existing
-        // no-AutoNumber, +2 existing AutoNumber, +3 new page).
+        // exp-sel-eq-dup2-live): on ACCDB it reserves the 32-page extent in page 1 (when a page was taken) and writes
+        // the AutoNumber word on TableDef (when the target has an AutoNumber column), leaving RowCount and
+        // UniqueEntryCount for Group 2; on Jet 4 MDB (no live record) page 1 stays unchanged. Group 2 (staged for
+        // statement end) frees the rolled-back allocated page bit(s) in page 1 (ACCDB) and writes the reached TableDef
+        // counter snapshot. Close returns the remaining unused extent bits (+1 existing no-AutoNumber, +2 existing
+        // AutoNumber, +3 new page).
         foreach (EditFrame e in _edits.ToArray())
         {
             e.DropForRollback();
@@ -1813,14 +2059,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         ReleaseParticipants();
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
-        _pendingReleaseAtClose.Clear();
-        _pendingReservedExtent.Clear();
         if (limitation is not null)
         {
+            top.RestoreExplicitCounters();
             _statementFailure = limitation;
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
-        if (counters is not null)
+        if (counters is null)
+        {
+            top.RestoreExplicitCounters();
+            return new ResolutionOutcome(ResolvedChanges: resolved);
+        }
         {
             bool isJet4Mdb = Jet4MdbHeader(counters.File);
             bool page1 = counters.TookPage && (AccdbHeader(counters.File) is true || isJet4Mdb);
@@ -1858,25 +2107,66 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 (MutationOpen open1, string? detail1) = PublishNonTransactional(counters.File, group1Edits, group1Footprint, CommitMode.Immediate, MutationErrorSource.Database, out MutationError? err1, allowJet4Mdb: isJet4Mdb);
                 if (err1 is not null || open1 != MutationOpen.None)
                 {
+                    top.RestoreExplicitCounters();
                     _statementFailure = new ResolutionOutcome(err1, open1, detail1);
                     return new ResolutionOutcome(ResolvedChanges: resolved);
                 }
             }
-            _statementAllowJet4MdbCommitCounter = isJet4Mdb;
-            (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, group2Edits, group2Footprint, MutationErrorSource.Database, out MutationError? err2, allowJet4Mdb: isJet4Mdb);
-            if (err2 is not null || open2 != MutationOpen.None)
-            {
-                _statementFailure = new ResolutionOutcome(err2, open2, detail2);
-                return new ResolutionOutcome(ResolvedChanges: resolved);
-            }
+            top.ApplyPendingCounterReseed();
             if (page1)
             {
-                _pendingCloseCommit.Add(counters.File);
-                if (counters.ExtentPlan is { UnusedExtentPages.Count: > 0 } ext)
+                // Once Group 1 is on disk, track its page-1 reservation and Close obligation immediately so that even if
+                // RecordStatementSideEffect fails, EndStatement's Publish fails, or AbortStatement runs, Close still
+                // returns the full extent and no subsequent write or Workspace can allocate into it silently.
+                _allocatedGlobalMap.Add(counters.File);
+                _rollbackExtentPending.Add(counters.File);
+                RollbackExtentTracker.Register(counters.File, this);
+                if (isJet4Mdb)
                 {
-                    _pendingReleaseAtClose[counters.File] = [.. ext.UnusedExtentPages];
-                    _pendingReservedExtent.Add(counters.File);
+                    _jet4MdbCloseCommit.Add(counters.File);
                 }
+                if (counters.ExtentPlan is { } ext)
+                {
+                    _reservedExtent.Add(counters.File);
+                    if (!_releaseAtClose.TryGetValue(counters.File, out List<uint>? closePages))
+                    {
+                        _releaseAtClose[counters.File] = closePages = [];
+                    }
+                    for (int ai = 0; ai < ext.AllocatedPages.Count; ai++)
+                    {
+                        uint page = ext.AllocatedPages[ai];
+                        if (!closePages.Contains(page))
+                        {
+                            closePages.Add(page);
+                        }
+                    }
+                    for (int ui = 0; ui < ext.UnusedExtentPages.Count; ui++)
+                    {
+                        uint page = ext.UnusedExtentPages[ui];
+                        if (!closePages.Contains(page))
+                        {
+                            closePages.Add(page);
+                        }
+                    }
+                    _pendingGroup2AllocatedPages[counters.File] = [.. ext.AllocatedPages];
+                }
+                _statementRollbackGroup2File = counters.File;
+            }
+            _statementAllowJet4MdbCommitCounter = isJet4Mdb;
+            (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, group2Edits, group2Footprint, MutationErrorSource.Database, out MutationError? err2, allowJet4Mdb: isJet4Mdb, allowDuringRollbackExtent: page1);
+            if (err2 is not null || open2 != MutationOpen.None)
+            {
+                if (page1)
+                {
+                    _pendingGroup2AllocatedPages.Remove(counters.File);
+                    _statementRollbackGroup2File = null;
+                }
+                ReleaseParticipants();
+                ReleaseLocks(LockLifetime.UntilPublished);
+                _sideEffectRoles.Clear();
+                _statementHasSideEffect = false;
+                _statementFailure = new ResolutionOutcome(err2, open2, detail2);
+                return new ResolutionOutcome(ResolvedChanges: resolved);
             }
         }
         return new ResolutionOutcome(ResolvedChanges: resolved);
@@ -2078,7 +2368,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         FormatDescriptor d = FormatDescriptor.Jet4Family;
         PageAllocator.RollbackExtentPlan? extentPlan = null;
-        if (!inExplicitTxn && tookPage && (AccdbHeader(file!) is true || isJet4Mdb))
+        if (!inExplicitTxn && tookPage && AccdbHeader(file!) is true)
         {
             ulong extentBase = Math.Max(baseExtentPages, file!.KnownExtentPages);
             var allocator = new PageAllocator(file!, d, extentBase);
@@ -2111,6 +2401,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             ExplicitFrame top = _frames[^1];
             _frames.RemoveAt(_frames.Count - 1);
+            top.RestoreExplicitCounters();
             rolledBack!.Add(top);
             Consume(top.Changes);
             UnindexChanges(top.Changes);
@@ -2122,9 +2413,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _lazyBursts.Clear();
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
-        _pendingReleaseAtClose.Clear();
-        _pendingReservedExtent.Clear();
-        _jet4MdbCloseCommit.Clear();
+        _pendingGroup2AllocatedPages.Clear();
+        _statementRollbackGroup2File = null;
         _statementHasSideEffect = false;
         _statementAllowJet4MdbCommitCounter = false;
         _statementExternalDepth = 0;
@@ -2220,8 +2510,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementFailure = null;
         _statementRefusal = null;
         _statementPendingStart = 0;
+        PageCache? group2File = _statementRollbackGroup2File;
+        _statementRollbackGroup2File = null;
         if (stmtFailure is { } failed)
         {
+            _pendingGroup2AllocatedPages.Clear();
             return failed with { ResolvedChanges = changes };
         }
         if (_frames.Count > 0 || Publisher is null || _unwrittenPendingCount > 0)
@@ -2231,6 +2524,25 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_pending.Count > 0 || (hasSideEffect && _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0)))
         {
             (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, allowJet4Mdb);
+            if (open != MutationOpen.None && group2File is not null)
+            {
+                // Group 2 did not publish, so the full Group 1 extent (allocated + unused pages) remains in
+                // _releaseAtClose for Close to return. If Publish stopped before any native effect, release the staged
+                // Group 2 overlay and locks so PublishCloseCommit is not blocked by _participants.
+                _pendingGroup2AllocatedPages.Remove(group2File);
+                if (!_unresolved.Contains(group2File))
+                {
+                    if (_participants.Remove(group2File, out FileParticipant? staged))
+                    {
+                        staged.Dispose();
+                    }
+                    ReleasePublished(group2File);
+                    foreach ((PageCache Cache, ulong Page) key in _sideEffectRoles.Keys.Where(k => ReferenceEquals(k.Cache, group2File)).ToArray())
+                    {
+                        _sideEffectRoles.Remove(key);
+                    }
+                }
+            }
             return new ResolutionOutcome(null, open, detail, changes);
         }
         return new ResolutionOutcome(ResolvedChanges: changes);
@@ -2246,6 +2558,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementHasOwnLevel = false;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementRollbackGroup2File = null;
+        _pendingGroup2AllocatedPages.Clear();
         int pendingStart = _statementPendingStart;
         _statementPendingStart = 0;
         if (_frames.Count > 0)
@@ -2257,8 +2571,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _pending.Clear();
             _sideEffectRoles.Clear();
             _pendingCloseCommit.Clear();
-            _pendingReleaseAtClose.Clear();
-            _pendingReservedExtent.Clear();
             ClearAcceptedIndex();
             ReleaseParticipants();
             ReleaseLocks(LockLifetime.UntilPublished);
@@ -2318,6 +2630,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 if (_unresolved.Contains(physical.File))
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
+                }
+                if (HasPendingRollbackExtent(physical.File))
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, PendingRollbackExtentWriteDetail);
+                }
+                if (TouchesGlobalMapPage(physical.Edits) && RollbackExtentTracker.HasOtherOwner(physical.File, this))
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
                 }
                 if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
                 {
@@ -2489,6 +2809,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(false, null, MutationOpen.Publication, "the file's last publication of this Workspace needs resolution (W-05/resolution-live-rollback)");
         }
+        if (HasPendingRollbackExtent(file))
+        {
+            return new AcceptOutcome(false, null, MutationOpen.Publication, PendingRollbackExtentWriteDetail);
+        }
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
         {
@@ -2499,6 +2823,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             op.Abandon();
             return new AcceptOutcome(false, null, MutationOpen.Publication, compiled.NotWritten);
+        }
+        if (TouchesGlobalMapPage(physical.Edits) && RollbackExtentTracker.HasOtherOwner(file, this))
+        {
+            op.Abandon();
+            return new AcceptOutcome(false, null, MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
         }
         if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(file))
         {
@@ -2545,21 +2874,38 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and extent
     /// reservation state. Mid-session commits (catalog changes such as DAO <c>TableDefs.Append</c>'s per-field commits,
     /// and <see cref="PublishCounterCommit"/>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
+    /// If Close cannot return a pending rollback extent reservation, <paramref name="cache"/> is marked unresolved and
+    /// the tracking state is never dropped silently.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
     {
+        void MarkUnresolvedIfRollbackExtentPending()
+        {
+            if (_rollbackExtentPending.Contains(cache) || _reservedExtent.Contains(cache))
+            {
+                _unresolved.Add(cache);
+            }
+        }
+
         if (_participants.ContainsKey(cache))
         {
+            MarkUnresolvedIfRollbackExtentPending();
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a closing commit would publish beside them");
+        }
+        if (RollbackExtentTracker.HasOtherOwner(cache, this))
+        {
+            MarkUnresolvedIfRollbackExtentPending();
+            return (MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
         }
         List<PageEdit> frees = [];
         if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
         {
-            var allocator = new PageAllocator(cache, FormatDescriptor.Jet4Family, cache.KnownExtentPages);
+            var allocator = new PageAllocator(cache, FormatDescriptor.Jet4Family, cache.KnownExtentPages, allowPendingRollbackExtent: true);
             foreach (uint page in released)
             {
                 if (allocator.Free(null, page, out string? failure) is not { } free)
                 {
+                    MarkUnresolvedIfRollbackExtentPending();
                     return (MutationOpen.Publication, $"the closing commit cannot free released page {page}: {failure}");
                 }
                 frees.Add(free);
@@ -2567,13 +2913,28 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         LockResource[] footprint = frees.Count > 0 ? [new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map)] : [];
         bool allowJet4Mdb = _jet4MdbCloseCommit.Contains(cache);
-        (MutationOpen open, string? detail) = PublishNonTransactional(cache, frees, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error, allowJet4Mdb: allowJet4Mdb);
+        (MutationOpen open, string? detail) = PublishNonTransactional(
+            cache,
+            frees,
+            footprint,
+            CommitMode.Immediate,
+            MutationErrorSource.Workspace,
+            out MutationError? error,
+            allowJet4Mdb: allowJet4Mdb,
+            allowDuringRollbackExtent: true);
         if (open == MutationOpen.None && error is null)
         {
             _releaseAtClose.Remove(cache);
             _allocatedGlobalMap.Remove(cache);
             _jet4MdbCloseCommit.Remove(cache);
             _reservedExtent.Remove(cache);
+            _rollbackExtentPending.Remove(cache);
+            _pendingGroup2AllocatedPages.Remove(cache);
+            RollbackExtentTracker.Unregister(cache, this);
+        }
+        else
+        {
+            MarkUnresolvedIfRollbackExtentPending();
         }
         return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
     }
