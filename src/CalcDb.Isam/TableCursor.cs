@@ -891,6 +891,34 @@ internal static class StoragePercentLanding
     }
 }
 
+/// <summary>How a dynaset's population store responded to a Rollback of an explicit transaction level.</summary>
+public enum PopulationRollbackKind : byte
+{
+    /// <summary>No rows were populated or added inside the rolled-back level.</summary>
+    NoChange,
+
+    /// <summary>
+    /// Depth-1 ACCDB AddNew+Update completed the store and Rollback truncated rows populated inside the level
+    /// (r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail,
+    /// r-def-cat-txn/txn-close-original-recordset-while-clone-holds-level).
+    /// </summary>
+    Truncated,
+
+    /// <summary>
+    /// Depth-1 ACCDB pure-navigation population without AddNew: store was not truncated; only the recorded
+    /// r-cursor-1/edit-rollback-opened-before transition (3021 until MoveFirst onto row 0) is known, while the
+    /// keyset frontier itself is unrecorded.
+    /// </summary>
+    PureNavigation,
+
+    /// <summary>
+    /// Unrecorded case (opened or requeried inside the rolled-back level, nested BeginTrans, Jet 4 MDB at any size,
+    /// empty pre-transaction table, incomplete store, or member in Deleted/DeletedBySibling/BookmarkInvalid across
+    /// truncation): store was not truncated and subsequent reads refuse by name.
+    /// </summary>
+    Unrecorded,
+}
+
 /// <summary>
 /// Shared population state of a <see cref="PopulationCursor"/> and every clone derived from it (R-CURSOR-1 CUR-LIFE,
 /// W-04, II-07 §11): the scan source, occurrence store, snapshot read views, bookmark base and live member list. Owned
@@ -899,7 +927,13 @@ internal static class StoragePercentLanding
 /// </summary>
 internal sealed class PopulationFamily : IDisposable
 {
-    private readonly record struct PopulationSavepoint(ExplicitFrame Frame, int ObservedCount);
+    private sealed class PopulationSavepoint(ExplicitFrame frame, int observedCount)
+    {
+        public ExplicitFrame Frame { get; } = frame;
+        public int ObservedCount { get; } = observedCount;
+        public bool HadAddNew { get; set; }
+        public bool HadNestedCommit { get; set; }
+    }
 
     private PageSource _pages;
     private readonly FormatDescriptor _d;
@@ -915,10 +949,14 @@ internal sealed class PopulationFamily : IDisposable
     private SnapshotValues? _snapshot;
     private readonly List<PopulationCursor> _members = [];
     private readonly List<PopulationSavepoint> _savepoints = [];
+    private ExplicitFrame[] _openFrames = [];
+    private ExplicitFrame[] _requeriedInFrames = [];
     private TransactionCoordinator? _coordinator;
     private ExplicitFrame? _lastRollbackFrame;
-    private bool _lastRollbackTruncated;
-    private int _lastRollbackBeforeCount;
+    private PopulationRollbackKind _lastRollbackKind;
+    private string? _lastRollbackDetail;
+    private string? _unrecordedRollback;
+    private bool _pureNavigationRollback;
     private PopulationCursor? _root;
     private bool _disposed;
 
@@ -939,6 +977,7 @@ internal sealed class PopulationFamily : IDisposable
         if (!snapshot && !forwardOnly && pages.Coordinator is { } coordinator)
         {
             _coordinator = coordinator;
+            _openFrames = [.. coordinator.Frames];
             coordinator.Register(this);
         }
     }
@@ -965,14 +1004,25 @@ internal sealed class PopulationFamily : IDisposable
 
     public bool RootAlive => _root is not null && _members.Contains(_root);
 
-    public bool TruncatedInRollback(ExplicitFrame frame) => ReferenceEquals(_lastRollbackFrame, frame) && _lastRollbackTruncated;
+    public string? UnrecordedRollback => _unrecordedRollback;
 
-    public int RollbackBeforeCount(ExplicitFrame frame) => ReferenceEquals(_lastRollbackFrame, frame) ? _lastRollbackBeforeCount : 0;
+    public bool PureNavigationRollback => _pureNavigationRollback;
 
+    public bool WasRequeriedIn(ExplicitFrame frame) => Array.IndexOf(_requeriedInFrames, frame) >= 0;
+
+    public PopulationRollbackKind RollbackKind(ExplicitFrame frame) =>
+        ReferenceEquals(_lastRollbackFrame, frame) ? _lastRollbackKind : PopulationRollbackKind.NoChange;
+
+    public string? RollbackDetail(ExplicitFrame frame) =>
+        ReferenceEquals(_lastRollbackFrame, frame) ? _lastRollbackDetail : null;
+
+    /// <summary>True when page 0 positively selects the Jet 4 MDB profile (false for ACCDB or any rejected page 0).</summary>
     public bool IsMdbFile()
     {
         using PagePin? page0 = _pages.Cache.Pin(0).Pin;
-        return page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d);
+        return page0 is not null
+            && ProfileSelector.Select(page0.Bytes, out FileProfile? profile, _d) == ProfileRefusal.None
+            && profile!.Format == FileFormat.Jet4;
     }
 
     public void Attach(PopulationCursor member, bool isRoot)
@@ -1008,6 +1058,15 @@ internal sealed class PopulationFamily : IDisposable
         _snapshot = null;
     }
 
+    /// <summary>Record that AddNew+Update registered a row in the innermost active explicit transaction level.</summary>
+    internal void MarkAddNewInCurrentLevel()
+    {
+        if (_savepoints.Count > 0)
+        {
+            _savepoints[^1].HadAddNew = true;
+        }
+    }
+
     /// <summary>
     /// Snapshot the current keyset population frontier when an explicit transaction level begins
     /// (R-CURSOR-1 CUR-POP; r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail).
@@ -1025,37 +1084,126 @@ internal sealed class PopulationFamily : IDisposable
     {
         if (_savepoints.Count > 0 && ReferenceEquals(_savepoints[^1].Frame, frame))
         {
+            PopulationSavepoint popped = _savepoints[^1];
             _savepoints.RemoveAt(_savepoints.Count - 1);
+            if (_savepoints.Count > 0 && (popped.HadAddNew || popped.HadNestedCommit || _store.ObservedCount > popped.ObservedCount))
+            {
+                _savepoints[^1].HadNestedCommit = true;
+            }
         }
     }
 
     /// <summary>
-    /// Revert occurrences populated inside <paramref name="frame"/> on Rollback and update live family members:
-    /// a member on an ordinal at or past the saved frontier loses its current record (<see cref="PositionTag.RolledBackNoCurrent"/>:
-    /// q5-dyn-big-addnew-begintrans-after-open, r-cursor-1/edit-rollback-opened-before), while a member on an earlier
-    /// pre-transaction ordinal stays current with its row binding cleared so subsequent reads fetch committed pages
-    /// (r2-q5-dyn-big-begintrans-rollback-detail, r-txn-1b/rs-types-after-rollback, rs-position-after-rollback).
+    /// Revert occurrences populated inside <paramref name="frame"/> on Rollback only for the recorded case: depth-1
+    /// AddNew+Update on a non-empty ACCDB dynaset whose store became complete, with no member in Deleted,
+    /// DeletedBySibling or BookmarkInvalid (r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open,
+    /// r2-q5-dyn-big-begintrans-rollback-detail, r-def-cat-txn/txn-close-original-recordset-while-clone-holds-level).
+    /// Every other case (opened/requeried inside the level, nested BeginTrans, Jet 4 MDB at any size, empty
+    /// pre-transaction table, pure navigation without AddNew, incomplete store, or Deleted/BookmarkInvalid members)
+    /// leaves the store untruncated and records its refusal detail so callers refuse by name instead of guessing.
     /// </summary>
     internal void OnTransactionRollback(ExplicitFrame frame)
     {
-        if (_disposed || _savepoints.Count == 0 || !ReferenceEquals(_savepoints[^1].Frame, frame))
+        if (_disposed)
         {
             return;
         }
-        int savedCount = _savepoints[^1].ObservedCount;
-        _savepoints.RemoveAt(_savepoints.Count - 1);
-        int beforeCount = _store.ObservedCount;
-        bool truncated = beforeCount > savedCount;
-        _lastRollbackFrame = frame;
-        _lastRollbackTruncated = truncated;
-        _lastRollbackBeforeCount = beforeCount;
-        if (truncated)
+        foreach (PopulationCursor member in _members)
         {
-            _store.TruncateTo(savedCount);
+            member.UnbindRow();
+        }
+        if (Array.IndexOf(_openFrames, frame) >= 0)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "a dynaset opened inside a rolled-back transaction (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (Array.IndexOf(_requeriedInFrames, frame) >= 0)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "a dynaset requeried inside a rolled-back transaction (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (_savepoints.Count == 0 || !ReferenceEquals(_savepoints[^1].Frame, frame))
+        {
+            return;
+        }
+        PopulationSavepoint sp = _savepoints[^1];
+        _savepoints.RemoveAt(_savepoints.Count - 1);
+        int savedCount = sp.ObservedCount;
+        int beforeCount = _store.ObservedCount;
+        bool populatedInLevel = beforeCount > savedCount;
+        if (!populatedInLevel && !sp.HadAddNew && !sp.HadNestedCommit)
+        {
+            SetRollback(frame, PopulationRollbackKind.NoChange, null);
+            return;
+        }
+        if (frame.Level > 1)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, $"keyset population rollback at nested transaction level {frame.Level} (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (sp.HadNestedCommit)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "keyset population rollback after an inner CommitTrans (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (IsMdbFile())
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "keyset rollback on a Jet 4 MDB dynaset (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (savedCount == 0)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "keyset rollback on a dynaset over an empty pre-transaction table (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
+        }
+        if (!sp.HadAddNew)
+        {
+            // Pure navigation without AddNew: do not truncate. Still transition members sitting on an ordinal
+            // populated inside the level so r-cursor-1/edit-rollback-opened-before can answer 3021 until MoveFirst
+            // while refusing any frontier-exposing operation by name.
+            SetRollback(frame, PopulationRollbackKind.PureNavigation, "keyset population by navigation without AddNew across Rollback (not recorded; R-CURSOR-1 CUR-POP Open)");
+            foreach (PopulationCursor member in _members)
+            {
+                member.MarkRolledBackIfPast(savedCount);
+            }
+            return;
+        }
+        if (!_store.Complete)
+        {
+            SetRollback(frame, PopulationRollbackKind.Unrecorded, "keyset rollback on an incomplete dynaset store (not recorded; R-CURSOR-1 CUR-POP Open)");
+            return;
         }
         foreach (PopulationCursor member in _members)
         {
-            member.OnTransactionRollback(savedCount);
+            if (member.PositionTag is PositionTag.Deleted or PositionTag.DeletedBySibling or PositionTag.BookmarkInvalid)
+            {
+                SetRollback(frame, PopulationRollbackKind.Unrecorded, $"keyset truncation rollback with a cursor in {member.PositionTag} (not recorded; R-CURSOR-1 CUR-POP Open)");
+                return;
+            }
+        }
+        if (populatedInLevel)
+        {
+            _store.TruncateTo(savedCount);
+        }
+        SetRollback(frame, PopulationRollbackKind.Truncated, null);
+        foreach (PopulationCursor member in _members)
+        {
+            member.MarkRolledBackIfPast(savedCount);
+        }
+    }
+
+    private void SetRollback(ExplicitFrame frame, PopulationRollbackKind kind, string? detail)
+    {
+        _lastRollbackFrame = frame;
+        _lastRollbackKind = kind;
+        _lastRollbackDetail = detail;
+        if (kind == PopulationRollbackKind.Unrecorded && detail is not null)
+        {
+            _unrecordedRollback = detail;
+        }
+        else if (kind == PopulationRollbackKind.PureNavigation)
+        {
+            _pureNavigationRollback = true;
         }
     }
 
@@ -1146,9 +1294,12 @@ internal sealed class PopulationFamily : IDisposable
         _source = newScanSource;
         _store = newStore;
         _savepoints.Clear();
+        _requeriedInFrames = _coordinator is { Depth: > 0 } c ? [.. c.Frames] : [];
         _lastRollbackFrame = null;
-        _lastRollbackTruncated = false;
-        _lastRollbackBeforeCount = 0;
+        _lastRollbackKind = PopulationRollbackKind.NoChange;
+        _lastRollbackDetail = null;
+        _unrecordedRollback = null;
+        _pureNavigationRollback = false;
         _bookmarksInvalidatedByDelete = false;
         if (_isSnapshot)
         {
@@ -1292,19 +1443,22 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// <summary>True when this cursor was in BookmarkInvalid and a sibling deleted the remembered anchor row.</summary>
     public bool IsBookmarkInvalidAnchorDeleted => _bookmarkInvalidAnchorDeleted && _position.Tag == PositionTag.BookmarkInvalid;
 
-    /// <summary>True when the family's occurrence store has reached the end of its underlying scan.</summary>
-    public bool IsStoreComplete => _family.Store.Complete;
-
     /// <summary>True when the family has populated past the initial 1-row frontier without completing the scan (e.g. RecordCount 501).</summary>
     public bool IsPartiallyPopulated => !_family.Store.Complete && _family.Store.ObservedCount > 1;
 
-    /// <summary>True when rolling back <paramref name="frame"/> truncated rows populated inside that transaction.</summary>
-    public bool TruncatedInRollback(ExplicitFrame frame) => _family.TruncatedInRollback(frame);
+    /// <summary>Non-null refusal detail when a Rollback left this family in an unrecorded state.</summary>
+    public string? UnrecordedRollback => _family.UnrecordedRollback;
 
-    /// <summary>The populated occurrence count immediately before <paramref name="frame"/> was rolled back, or 0 if not rolled back.</summary>
-    public int RollbackBeforeCount(ExplicitFrame frame) => _family.RollbackBeforeCount(frame);
+    /// <summary>Outcome of rolling back <paramref name="frame"/> on this family's keyset population.</summary>
+    public PopulationRollbackKind RollbackKind(ExplicitFrame frame) => _family.RollbackKind(frame);
 
-    /// <summary>True when this cursor reads from a Jet 4 MDB file rather than an ACCDB or synthetic cache.</summary>
+    /// <summary>Named refusal detail when rolling back <paramref name="frame"/> entered an unrecorded or pure-navigation state.</summary>
+    public string? RollbackDetail(ExplicitFrame frame) => _family.RollbackDetail(frame);
+
+    /// <summary>True when Requery ran on this family while <paramref name="frame"/> was open.</summary>
+    public bool WasRequeriedIn(ExplicitFrame frame) => _family.WasRequeriedIn(frame);
+
+    /// <summary>True when page 0 positively selects the Jet 4 MDB profile (false for ACCDB or any rejected page 0).</summary>
     public bool IsMdbFile => _family.IsMdbFile();
 
     public bool Bof => _position.Bof;
@@ -1386,21 +1540,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     internal void RebindRow(PageSource pages) => _row.Rebind(pages);
 
-    internal void OnTransactionRollback(int savedCount)
+    internal void UnbindRow() => _row.Unbind();
+
+    internal void MarkRolledBackIfPast(int savedCount)
     {
-        _row.Unbind();
         if (_position.Tag == PositionTag.At && _position.Current is int ord && ord >= savedCount)
         {
             _bookmarkInvalidAnchorDeleted = false;
-            _position.MarkRolledBackNoCurrent();
-        }
-        else if (_position.Tag == PositionTag.BookmarkInvalid && _position.BookmarkInvalidAnchor is int inv && inv >= savedCount)
-        {
-            _position.ClearBookmarkInvalidAnchor();
-            _bookmarkInvalidAnchorDeleted = false;
-        }
-        else if (_position.Tag is PositionTag.Deleted or PositionTag.DeletedBySibling && _position.DeletedBySiblingAnchor is int del && del >= savedCount)
-        {
             _position.MarkRolledBackNoCurrent();
         }
     }
@@ -1439,6 +1585,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
                 {
                     if (i == count - 1)
                     {
+                        _family.MarkAddNewInCurrentLevel();
                         return i;
                     }
                     _family.Store.RemoveAt(i);
@@ -1446,7 +1593,12 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
                 }
             }
         }
-        return _family.Store.AppendIfComplete(row);
+        int? appended = _family.Store.AppendIfComplete(row);
+        if (appended is not null)
+        {
+            _family.MarkAddNewInCurrentLevel();
+        }
+        return appended;
     }
 
     /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base or after a delete.</summary>
@@ -1463,6 +1615,11 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public float? PercentPosition(out CursorFailure? failure)
     {
+        if (_family.UnrecordedRollback is not null || _family.PureNavigationRollback)
+        {
+            failure = CursorFailure.NotObserved;
+            return null;
+        }
         failure = _position.Current is null ? CursorFailure.NoCurrentRecord : null;
         return _position.Current is int ordinal ? (float)(100.0 * ordinal / _family.Store.ObservedCount) : null;
     }
@@ -1476,6 +1633,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public CursorFailure? SetPercentPosition(float percent)
     {
+        if (_family.UnrecordedRollback is not null || _family.PureNavigationRollback)
+        {
+            return CursorFailure.NotObserved;
+        }
         if (_position.Current is null)
         {
             return CursorFailure.NoCurrentRecord;
@@ -1491,15 +1652,15 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         return _position.Seek((int)Math.Min((long)target, count - 1)) ? null : CursorFailure.OutOfRange;
     }
 
-    public MoveOutcome MoveFirst() => Moved(_position.MoveFirst());
+    public MoveOutcome MoveFirst() => _family.UnrecordedRollback is not null ? MoveOutcome.NotModelled : Moved(_position.MoveFirst());
 
-    public MoveOutcome MoveLast() => Moved(_position.MoveLast());
+    public MoveOutcome MoveLast() => _family.UnrecordedRollback is not null || _family.PureNavigationRollback ? MoveOutcome.NotModelled : Moved(_position.MoveLast());
 
-    public MoveOutcome MoveNext() => Moved(_position.MoveNext());
+    public MoveOutcome MoveNext() => _family.UnrecordedRollback is not null || _family.PureNavigationRollback ? MoveOutcome.NotModelled : Moved(_position.MoveNext());
 
-    public MoveOutcome MovePrevious() => Moved(_position.MovePrevious());
+    public MoveOutcome MovePrevious() => _family.UnrecordedRollback is not null || _family.PureNavigationRollback ? MoveOutcome.NotModelled : Moved(_position.MovePrevious());
 
-    public MoveOutcome Move(long rows) => Moved(_position.Move(rows));
+    public MoveOutcome Move(long rows) => _family.UnrecordedRollback is not null || _family.PureNavigationRollback ? MoveOutcome.NotModelled : Moved(_position.Move(rows));
 
     private MoveOutcome Moved(MoveOutcome outcome)
     {
@@ -1518,6 +1679,11 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public byte[]? GetBookmark(out CursorFailure? failure)
     {
+        if (_family.UnrecordedRollback is not null)
+        {
+            failure = CursorFailure.NotObserved;
+            return null;
+        }
         if (_position.Current is not int ordinal)
         {
             failure = CursorFailure.NoCurrentRecord;
@@ -1545,6 +1711,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// </summary>
     public CursorFailure? SetBookmark(ReadOnlySpan<byte> bookmark)
     {
+        if (_family.UnrecordedRollback is not null || _family.PureNavigationRollback)
+        {
+            return CursorFailure.NotObserved;
+        }
         if (bookmark.IsEmpty)
         {
             return null;
@@ -1566,6 +1736,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     public FieldResult Read(ColumnDescriptor column)
     {
+        if (_family.UnrecordedRollback is { } unrecorded)
+        {
+            return new FieldResult(default, CursorFailure.NotObserved, unrecorded);
+        }
         if (_position.Tag == PositionTag.DeletedBySibling)
         {
             return new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted");
@@ -1580,6 +1754,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     public TextFieldRead ReadText(ColumnDescriptor column)
     {
+        if (_family.UnrecordedRollback is { } unrecorded)
+        {
+            return new TextFieldRead(new FieldResult(default, CursorFailure.NotObserved, unrecorded));
+        }
         if (_position.Tag == PositionTag.DeletedBySibling)
         {
             return new TextFieldRead(new FieldResult(default, CursorFailure.DeletedRecord, "the current record was deleted"));
@@ -1624,6 +1802,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     private FindResult Search(FindDirection direction, IRowPredicate predicate)
     {
+        if (_family.UnrecordedRollback is not null || _family.PureNavigationRollback)
+        {
+            return new FindResult(FindOutcome.NotModelled);
+        }
         OccurrenceStore<RowId> store = _family.Store;
         PositionTag tag = _position.Tag;
         int? current = _position.Current;

@@ -507,6 +507,26 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         return page0 is null || DatabaseHeader.IsAccdb(page0.Bytes, _d);
     }
 
+    /// <summary>Whether the file header at page 0 positively selects the Jet 4 MDB profile (not an ACCDB or rejected page 0).</summary>
+    public bool IsJet4Mdb(PrivateOverlay? seen = null)
+    {
+        using PagePin? page0 = Seen(seen).Pin(0).Pin;
+        return page0 is not null
+            && ProfileSelector.Select(page0.Bytes, out FileProfile? profile, _d) == ProfileRefusal.None
+            && profile!.Format == FileFormat.Jet4;
+    }
+
+    /// <summary>The live TableDef RowCount on this table's first page as seen through <paramref name="seen"/>.</summary>
+    public uint LiveRowCount(PrivateOverlay? seen = null)
+    {
+        using PagePin? tdef = Seen(seen).Pin(_table.FirstPage).Pin;
+        if (tdef is not null && tdef.Bytes.Length == _d.PageSize && tdef.Bytes[_d.DataPage.Kind.Offset] == 0x02)
+        {
+            return (uint)_d.TableDef.RowCount.Read(tdef.Bytes);
+        }
+        return _table.RowCount;
+    }
+
     /// <summary>
     /// Compile the modification of <paramref name="root"/> to <paramref name="values"/> (every column, in order). The row,
     /// its index entries and its leaves are read as <paramref name="seen"/>, the Workspace's overlay, shows them: an

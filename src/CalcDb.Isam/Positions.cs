@@ -558,17 +558,20 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
     }
 
     /// <summary>
-    /// Discard occurrences populated at or past <paramref name="count"/> when an explicit transaction level rolls back
-    /// (R-CURSOR-1 CUR-POP; r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail).
-    /// <see cref="Complete"/> is kept as it was: once an in-transaction AddNew or scan exhausted the source, a later
-    /// MoveNext or MoveLast does not repopulate past the reverted frontier until Requery.
+    /// Discard occurrences populated at or past <paramref name="count"/> when an outermost transaction rolls back a
+    /// complete store populated by in-transaction AddNew+Update (R-CURSOR-1 CUR-POP;
+    /// r-q24-bookmarks/q5-dyn-big-addnew-begintrans-after-open, r2-q5-dyn-big-begintrans-rollback-detail).
+    /// Requires <see cref="Complete"/> to be true and keeps it true so a later MoveNext hits EOF and MoveLast stays
+    /// at the reverted frontier until Requery; returns false without modifying an incomplete store.
     /// </summary>
-    public void TruncateTo(int count)
+    public bool TruncateTo(int count)
     {
-        if (count >= 0 && count < _occurrences.Count)
+        if (!_complete || count < 0 || count >= _occurrences.Count)
         {
-            _occurrences.RemoveRange(count, _occurrences.Count - count);
+            return false;
         }
+        _occurrences.RemoveRange(count, _occurrences.Count - count);
+        return true;
     }
 
     /// <summary>Append a newly inserted occurrence when this store is already complete; returns its ordinal if appended.</summary>

@@ -519,9 +519,13 @@ public sealed class EditFrame : IDisposable
             {
                 return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, $"AddNew+Update on a partially populated dynaset (RecordCount {pop.RecordCount}, incomplete) is not recorded (R-CURSOR-1 CUR-POP Open)");
             }
-            if (_table.Writer is { } formatWriter && !formatWriter.IsAccdb(_workspace.OverlayOf(formatWriter.File)) && (s.Table.RowCount > 500 || pop.RecordCount > 500))
+            if (_table.Writer is { } formatWriter)
             {
-                return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, "AddNew+Update on an MDB dynaset over 500 rows is not recorded (R-CURSOR-1 CUR-POP Open)");
+                PrivateOverlay? overlay = _workspace.OverlayOf(formatWriter.File);
+                if (formatWriter.IsJet4Mdb(overlay) && (formatWriter.LiveRowCount(overlay) > 500 || pop.RecordCount > 500))
+                {
+                    return new UpdateOutcome(null, MutationOpen.DynasetKeysetPopulation, "AddNew+Update on an MDB dynaset over 500 rows is not recorded (R-CURSOR-1 CUR-POP Open)");
+                }
             }
         }
 

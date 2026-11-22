@@ -142,6 +142,8 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
         Ok(Method(ws, "Rollback"));
         Assert.Equal(1, Int32Value(Ok(Get(d, "RecordCount"))));
         Assert.Equal(-1, Int32Value(Ok(Get(d, "AbsolutePosition"))));
+        AssertNotModelled(Get(d, "BOF"), "NotModelled.Txn.RecordsetAfterRollback");
+        AssertNotModelled(Get(d, "EOF"), "NotModelled.Txn.RecordsetAfterRollback");
         AssertDaoError(Get(d, "Bookmark"), 3021, "DAO.Recordset", errorInfo: false);
         AssertDaoError(Get(fId, "Value"), 3021, "DAO.Field", errorInfo: true);
 
@@ -289,6 +291,201 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Committed_AddNew_does_not_poison_a_later_empty_inner_Rollback()
+    {
+        // Finding 1: AddedInFrame from an earlier finished transaction must not poison a later inner Rollback.
+        DatabaseObject db = Open(QMain, ".accdb");
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+        RecordsetObject d = OpenRecordset(db, "Big", 2);
+        FieldObject fId = Field(d, "ID");
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(d, "AddNew"));
+        Ok(Put(fId, "Value", 9001));
+        Ok(Method(d, "Update"));
+        Ok(Method(ws, "CommitTrans"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d, "RecordCount"))));
+
+        // Start a later nested transaction with no changes and roll back the inner level: dynaset must stay Valid.
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(ws, "Rollback"));
+        Assert.Equal(2049, Int32Value(Ok(Get(d, "RecordCount"))));
+        Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+        Ok(Method(ws, "Rollback"));
+        Ok(Method(d, "Close"));
+    }
+
+    [Fact]
+    public void Clone_close_abort_keeps_surviving_clone_coherent_with_ISAM_and_refuses_in_transaction_row()
+    {
+        // Finding 2:
+        // (a) Surviving clone on row 0 after depth-1 AddNew stays Valid with reverted RecordCount 1
+        //     (r-def-cat-txn/txn-close-original-recordset-while-clone-holds-level).
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            RecordsetObject cl = Recover<RecordsetObject>(Ok(Method(d, "Clone")));
+            FieldObject clId = Field(cl, "ID");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(cl, "AddNew"));
+            Ok(Put(clId, "Value", 9001));
+            Ok(Method(cl, "Update"));
+            Assert.Equal(2049, Int32Value(Ok(Get(cl, "RecordCount"))));
+
+            AssertDaoError(Method(d, "Close"), 3246, "DAO.Recordset", errorInfo: false);
+            ReleaseObject(d);
+
+            Assert.Equal(1, Int32Value(Ok(Get(cl, "RecordCount"))));
+            Assert.Equal(0, BoolValue(Ok(Get(cl, "EOF"))));
+            Assert.Equal(1, Int32Value(Ok(Get(clId, "Value"))));
+            Ok(Method(cl, "Close"));
+        }
+
+        // (b) Surviving clone sitting on an in-transaction row refuses by name instead of staying Valid.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            RecordsetObject cl = Recover<RecordsetObject>(Ok(Method(d, "Clone")));
+            FieldObject clId = Field(cl, "ID");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(cl, "AddNew"));
+            Ok(Put(clId, "Value", 9001));
+            Ok(Method(cl, "Update"));
+            Ok(Method(cl, "MoveLast"));
+            Assert.Equal(2048, Int32Value(Ok(Get(cl, "AbsolutePosition"))));
+
+            AssertDaoError(Method(d, "Close"), 3246, "DAO.Recordset", errorInfo: false);
+            ReleaseObject(d);
+
+            AssertNotModelled(Get(cl, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Get(clId, "Value"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(cl, "Close"));
+        }
+    }
+
+    [Fact]
+    public void Unrecorded_Requery_Deleted_BookmarkInvalid_empty_table_small_MDB_and_pure_nav_Rollbacks_refuse_by_name()
+    {
+        // Finding 3: Requery inside BeginTrans followed by Rollback refuses by name.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "Requery"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // Finding 4: Deleted and BookmarkInvalid across truncating Rollback refuse by name.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            FieldObject fId = Field(d, "ID");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "AddNew"));
+            Ok(Put(fId, "Value", 9001));
+            Ok(Method(d, "Update"));
+            Ok(Method(d, "Delete"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // Finding 5: Empty pre-transaction table after AddNew+Rollback refuses by name.
+        {
+            DatabaseObject db = Open(EditFixture, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject prep = OpenRecordset(db, "G", 2);
+            Ok(Method(prep, "Delete"));
+            Ok(Method(prep, "MoveFirst"));
+            Ok(Method(prep, "Delete"));
+            Ok(Method(prep, "Close"));
+
+            RecordsetObject d = OpenRecordset(db, "G", 2);
+            FieldObject u = Field(d, "U");
+            FieldObject t = Field(d, "T");
+            Assert.Equal(0, Int32Value(Ok(Get(d, "RecordCount"))));
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "AddNew"));
+            Ok(Put(u, "Value", "new1"));
+            Ok(Put(t, "Value", "t1"));
+            Ok(Method(d, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(d, "MoveFirst"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // Finding 6: MDB dynaset <= 500 rows (Lv, 24 rows) AddNew+Rollback refuses by name.
+        {
+            DatabaseObject db = Open(Txn1bMdb, ".mdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Lv", 2);
+            FieldObject fId = Field(d, "ID");
+            FieldObject fV = Field(d, "V");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "AddNew"));
+            Ok(Put(fId, "Value", 999));
+            Ok(Put(fV, "Value", 1));
+            Ok(Method(d, "Update"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // Finding 7: Pure navigation without AddNew across Rollback does not truncate and refuses frontier-exposing members.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+            FieldObject fId = Field(d, "ID");
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "MoveNext"));
+            Assert.Equal(501, Int32Value(Ok(Get(d, "RecordCount"))));
+            Ok(Method(ws, "Rollback"));
+
+            AssertDaoError(Get(fId, "Value"), 3021, "DAO.Field", errorInfo: true);
+            AssertDaoError(Method(d, "Move", 0), 3021, "DAO.Recordset", errorInfo: false);
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Get(d, "AbsolutePosition"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(d, "MoveLast"), "NotModelled.Txn.RecordsetAfterRollback");
+
+            Ok(Method(d, "MoveFirst"));
+            Assert.Equal(1, Int32Value(Ok(Get(fId, "Value"))));
+            Assert.Equal("00020000", Hex(BytesValue(Ok(Get(d, "Bookmark")))));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(d, "MoveNext"), "NotModelled.Txn.RecordsetAfterRollback");
+            AssertNotModelled(Method(d, "MoveLast"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+
+        // Finding 7 (b): Pure navigation moving forward then back to row 0 before Rollback refuses by name immediately.
+        {
+            DatabaseObject db = Open(QMain, ".accdb");
+            WorkspaceObject ws = _engine.DefaultWorkspace;
+            RecordsetObject d = OpenRecordset(db, "Big", 2);
+
+            Ok(Method(ws, "BeginTrans"));
+            Ok(Method(d, "MoveNext"));
+            Ok(Method(d, "MoveFirst"));
+            Ok(Method(ws, "Rollback"));
+            AssertNotModelled(Get(d, "RecordCount"), "NotModelled.Txn.RecordsetAfterRollback");
+            Ok(Method(d, "Close"));
+        }
+    }
+
     private DatabaseObject Open(string fixtureSha, string extension)
     {
         string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-dyn-rollback-{Guid.NewGuid():N}{extension}");
@@ -362,6 +559,15 @@ public sealed unsafe class DaoDynasetRollbackTests : IDisposable
         T obj = ComObject.Recover<T>(result.Scalar.Pointer);
         _held.Add((obj, result.Scalar.Pointer));
         return obj;
+    }
+
+    private void ReleaseObject(ComObject obj)
+    {
+        int index = _held.FindLastIndex(e => ReferenceEquals(e.Obj, obj));
+        Assert.True(index >= 0, "Object was not tracked in _held");
+        nint ptr = _held[index].Ptr;
+        _held.RemoveAt(index);
+        Marshal.Release(ptr);
     }
 
     private static int Int32Value(CallResult result)

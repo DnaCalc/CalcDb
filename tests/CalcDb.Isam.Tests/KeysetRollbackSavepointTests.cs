@@ -71,19 +71,23 @@ public sealed class KeysetRollbackSavepointTests
     }
 
     [Fact]
-    public void OccurrenceStore_TruncateTo_drops_tail_while_keeping_Complete_flag()
+    public void OccurrenceStore_TruncateTo_requires_complete_store_and_keeps_Complete_flag()
     {
-        // Matches r2-q5-dyn-big-begintrans-rollback-detail d1: once ProduceAll exhausted the source, truncating back to 1
-        // keeps Complete true so Next(0) returns null (EOF) and Previous(null) returns 0.
+        // Incomplete store: TruncateTo refuses (returns false) and leaves the frontier untouched (Finding 7).
         var store = new OccurrenceStore<int>(new RangeSource(10), firstMoveChunk: 500);
         Assert.Equal(1, store.ObservedCount);
         Assert.False(store.Complete);
+        Assert.False(store.TruncateTo(0));
+        Assert.Equal(1, store.ObservedCount);
+        Assert.False(store.Complete);
 
+        // Matches r2-q5-dyn-big-begintrans-rollback-detail d1: once ProduceAll exhausted the source, truncating back to 1
+        // returns true and keeps Complete true so Next(0) returns null (EOF) and Previous(null) returns 0.
         store.ProduceAll();
         Assert.Equal(10, store.ObservedCount);
         Assert.True(store.Complete);
 
-        store.TruncateTo(1);
+        Assert.True(store.TruncateTo(1));
         Assert.Equal(1, store.ObservedCount);
         Assert.True(store.Complete);
         Assert.Null(store.Next(0));
@@ -158,8 +162,6 @@ public sealed class KeysetRollbackSavepointTests
         Assert.True(rolled.Succeeded, rolled.ToString());
         Assert.Equal(1, rs.RecordCount);
         Assert.Equal(PositionTag.RolledBackNoCurrent, rs.PositionTag);
-        Assert.False(rs.Bof);
-        Assert.False(rs.Eof);
         Assert.Null(rs.Ordinal);
         Assert.Null(rs.GetBookmark(out CursorFailure? bmkFail));
         Assert.Equal(CursorFailure.NoCurrentRecord, bmkFail);
@@ -229,30 +231,151 @@ public sealed class KeysetRollbackSavepointTests
     }
 
     [Fact]
-    public void Per_level_savepoints_revert_inner_level_independently_and_merge_on_inner_commit()
+    public void Unrecorded_rollback_cases_do_not_truncate_and_refuse_by_name()
     {
-        using var rig = new DynasetRig(QMain);
-        (_, PopulationCursor rs, _) = rig.OpenDynaset("Big");
-        Assert.Equal(1, rs.RecordCount);
+        // 1. Pure navigation without AddNew at depth 1: does not truncate, records PureNavigation, refuses frontier moves (Finding 7).
+        using (var rig = new DynasetRig(QMain))
+        {
+            (_, PopulationCursor rs, _) = rig.OpenDynaset("Big");
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f1 = rig.Ws.Frames[^1];
+            Assert.Equal(MoveOutcome.Moved, rs.MoveNext());
+            Assert.Equal(501, rs.RecordCount);
 
-        // Outer BeginTrans saves 1; MoveNext populates 501.
-        Assert.Null(rig.Ws.BeginTrans());
-        Assert.Equal(MoveOutcome.Moved, rs.MoveNext());
-        Assert.Equal(501, rs.RecordCount);
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.PureNavigation, rs.RollbackKind(f1));
+            Assert.Equal(501, rs.RecordCount);
+            Assert.Equal(PositionTag.RolledBackNoCurrent, rs.PositionTag);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveNext());
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveLast());
+            Assert.Equal(MoveOutcome.Moved, rs.MoveFirst());
+            Assert.Equal((0, 1L), (rs.Ordinal!.Value, ReadId(rs)));
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveNext());
+        }
 
-        // Inner BeginTrans saves 501; MoveLast populates 2048; inner Rollback returns to 501 and loses current row (2047 >= 501).
-        Assert.Null(rig.Ws.BeginTrans());
-        Assert.Equal(MoveOutcome.Moved, rs.MoveLast());
-        Assert.Equal(2048, rs.RecordCount);
-        Assert.True(rig.Ws.Rollback().Succeeded);
-        Assert.Equal(501, rs.RecordCount);
-        Assert.Equal(PositionTag.RolledBackNoCurrent, rs.PositionTag);
+        // 2. Nested BeginTrans (depth 2) rollback: does not truncate, marks Unrecorded, refuses moves/reads (Findings 7 & 9).
+        using (var rig = new DynasetRig(QMain))
+        {
+            (_, PopulationCursor rs, TableDefinition big) = rig.OpenDynaset("Big");
+            Assert.Null(rig.Ws.BeginTrans());
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f2 = rig.Ws.Frames[^1];
+            Assert.Equal(MoveOutcome.Moved, rs.MoveLast());
+            Assert.Equal(2048, rs.RecordCount);
 
-        // Outer Rollback returns from 501 back to 1.
-        Assert.True(rig.Ws.Rollback().Succeeded);
-        Assert.Equal(1, rs.RecordCount);
-        Assert.Equal(MoveOutcome.Moved, rs.MoveFirst());
-        Assert.Equal((0, 1L), (rs.Ordinal!.Value, ReadId(rs)));
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.Unrecorded, rs.RollbackKind(f2));
+            Assert.NotNull(rs.UnrecordedRollback);
+            Assert.Equal(2048, rs.RecordCount);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveFirst());
+            Assert.Equal(CursorFailure.NotObserved, rs.Read(big.Columns.Single(c => c.Name == "ID")).Failure);
+            Assert.True(rig.Ws.Rollback().Succeeded);
+        }
+
+        // 3. Requery inside BeginTrans followed by Rollback: marks Unrecorded and refuses moves/reads (Finding 3).
+        using (var rig = new DynasetRig(QMain))
+        {
+            (_, PopulationCursor rs, TableDefinition big) = rig.OpenDynaset("Big");
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f1 = rig.Ws.Frames[^1];
+            Assert.True(rs.Requery(out _));
+            Assert.True(rs.WasRequeriedIn(f1));
+
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.Unrecorded, rs.RollbackKind(f1));
+            Assert.NotNull(rs.UnrecordedRollback);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveFirst());
+            Assert.Equal(CursorFailure.NotObserved, rs.Read(big.Columns.Single(c => c.Name == "ID")).Failure);
+        }
+
+        // 4. Opened inside BeginTrans followed by Rollback: marks Unrecorded and refuses direct ISAM reads (Finding 3).
+        using (var rig = new DynasetRig(QMain))
+        {
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f1 = rig.Ws.Frames[^1];
+            (_, PopulationCursor rs, TableDefinition big) = rig.OpenDynaset("Big");
+
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.Unrecorded, rs.RollbackKind(f1));
+            Assert.NotNull(rs.UnrecordedRollback);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveFirst());
+            Assert.Equal(CursorFailure.NotObserved, rs.Read(big.Columns.Single(c => c.Name == "ID")).Failure);
+        }
+
+        // 5. Deleted / BookmarkInvalid across truncating Rollback: does not truncate, marks Unrecorded (Finding 4).
+        using (var rig = new DynasetRig(QMain))
+        {
+            (EditFrame frame, PopulationCursor rs, TableDefinition big) = rig.OpenDynaset("Big");
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f1 = rig.Ws.Frames[^1];
+            Assert.True(InsertId(frame, big, 9001).Succeeded);
+            Assert.Equal(CursorFailure.InvalidBookmark, rs.SetBookmark(KeysetBookmark.Encode(KeysetBookmark.FirstBase, 99999)));
+            Assert.Equal(PositionTag.BookmarkInvalid, rs.PositionTag);
+
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.Unrecorded, rs.RollbackKind(f1));
+            Assert.Equal(2049, rs.RecordCount);
+            Assert.NotNull(rs.UnrecordedRollback);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveFirst());
+        }
+
+        // 6. Jet 4 MDB dynaset <= 500 rows (Lv, 24 rows) AddNew + Rollback: does not truncate, marks Unrecorded (Finding 6).
+        using (var rig = new DynasetRig(Txn1bMdb))
+        {
+            (EditFrame frame, PopulationCursor rs, TableDefinition lv) = rig.OpenDynaset("Lv");
+            Assert.True(rs.IsMdbFile);
+            Assert.True(lv.RowCount <= 500);
+            Assert.Null(rig.Ws.BeginTrans());
+            ExplicitFrame f1 = rig.Ws.Frames[^1];
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(lv.Columns.Single(c => c.Name == "ID"), I4(999)).Succeeded);
+            Assert.True(frame.Assign(lv.Columns.Single(c => c.Name == "V"), I4(1)).Succeeded);
+            Assert.True(frame.Update().Succeeded);
+            long afterInsert = rs.RecordCount;
+            Assert.True(afterInsert > 1);
+
+            Assert.True(rig.Ws.Rollback().Succeeded);
+            Assert.Equal(PopulationRollbackKind.Unrecorded, rs.RollbackKind(f1));
+            Assert.Equal(afterInsert, rs.RecordCount);
+            Assert.NotNull(rs.UnrecordedRollback);
+            Assert.Equal(MoveOutcome.NotModelled, rs.MoveFirst());
+        }
+    }
+
+    [Fact]
+    public void IsMdbFile_tests_positively_for_Jet4_and_LiveRowCount_tracks_inserts_beyond_open_count()
+    {
+        // Finding 8: IsMdbFile is true for Jet 4 MDB, false for ACCDB, and false when page 0 is rejected by ProfileSelector.
+        using (var accdb = new DynasetRig(QMain))
+        {
+            (_, PopulationCursor rs, _) = accdb.OpenDynaset("Big");
+            Assert.False(rs.IsMdbFile);
+
+            // Corrupt page 0 so ProfileSelector rejects it: IsMdbFile must stay false (not !IsAccdb).
+            accdb.File.Image.WriteAt(0, new byte[D.PageSize]);
+            accdb.File.Cache.PublishReuse(0);
+            Assert.False(rs.IsMdbFile);
+        }
+
+        // Finding 6 & 8: Jet 4 MDB IsMdbFile is true and SameWidthWriter.LiveRowCount reflects post-open inserts.
+        using (var mdb = new DynasetRig(Txn1bMdb))
+        {
+            (TableDefinition lv, TableEditContext ctx) = mdb.File.Table("Lv")!.Value;
+            long countAtOpen = lv.RowCount;
+            Assert.True(ctx.Writer!.IsJet4Mdb());
+            Assert.Equal(countAtOpen, ctx.Writer.LiveRowCount());
+
+            (_, PopulationCursor rs, _) = mdb.OpenDynaset("Lv");
+            Assert.True(rs.IsMdbFile);
+            using var frame = new EditFrame(ctx, rs, mdb.Ws);
+            Assert.True(frame.AddNew().Succeeded);
+            Assert.True(frame.Assign(lv.Columns.Single(c => c.Name == "ID"), I4(999)).Succeeded);
+            Assert.True(frame.Assign(lv.Columns.Single(c => c.Name == "V"), I4(1)).Succeeded);
+            Assert.True(frame.Update().Succeeded);
+
+            Assert.Equal(countAtOpen, lv.RowCount); // TableDefinition snapshot stays stale
+            Assert.Equal(countAtOpen + 1, ctx.Writer.LiveRowCount()); // live count advances
+        }
     }
 
     [Fact]
