@@ -333,6 +333,10 @@ public static unsafe class ActionExecutor
                                 return ActionOutcome.Fail(readFail);
                             }
                             SqlFailure mapped = MapSelectReadFailure(readFail);
+                            if (mapped.IsNotModelled)
+                            {
+                                return ActionOutcome.Fail(mapped);
+                            }
                             if (!failOnError)
                             {
                                 return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertExpressionErrorWithoutFailOnError", $"INSERT SELECT read error without dbFailOnError: {mapped}"));
@@ -349,7 +353,9 @@ public static unsafe class ActionExecutor
                 }
                 if (source.FetchFailure is { } fetchFail)
                 {
-                    return ActionOutcome.Fail(fetchFail);
+                    return ActionOutcome.Fail(fetchFail.Number == 3167
+                        ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while scanning INSERT SELECT source (not recorded)")
+                        : fetchFail);
                 }
             }
 
@@ -943,7 +949,9 @@ public static unsafe class ActionExecutor
                         ExpressionFailure wf = plan.Where.LastFailure!;
                         failure = wf.IsNotModelled
                             ? SqlFailure.Open(SqlPhase.Execute, wf.NotModelled!, wf.Message)
-                            : SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionWhereError", $"WHERE expression failed during {plan.Kind}: {wf}");
+                            : wf.Number == 3167
+                                ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while evaluating action WHERE (not recorded)")
+                                : SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionWhereError", $"WHERE expression failed during {plan.Kind}: {wf}");
                         return null;
                 }
             }
@@ -1222,11 +1230,16 @@ public static unsafe class ActionExecutor
         };
     }
 
-    private static SqlFailure MapExpressionFailure(ExpressionFailure f, string source, Fragment fragment)
+    internal static SqlFailure MapExpressionFailure(ExpressionFailure f, string source, Fragment fragment)
     {
         if (f.IsNotModelled)
         {
             return SqlFailure.Open(SqlPhase.Execute, f.NotModelled!, f.Message);
+        }
+        // A deleted row met during an action statement is unrecorded and stays refused by name.
+        if (f.Number == 3167)
+        {
+            return SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while evaluating action expression (not recorded)");
         }
         // r-q-expr-sql/fail-late-candidate: CLng('x') in UPDATE SET fails 3464 ("Data type mismatch in criteria expression.").
         if (f.Number is AceError.TypeMismatch or 13)
@@ -1245,8 +1258,12 @@ public static unsafe class ActionExecutor
         return SqlFailure.Of(f, SqlPhase.Execute, source, fragment.Start, fragment.End);
     }
 
-    private static SqlFailure MapSelectReadFailure(SqlFailure readFail)
+    internal static SqlFailure MapSelectReadFailure(SqlFailure readFail)
     {
+        if (readFail.Number == 3167)
+        {
+            return SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while reading INSERT SELECT source (not recorded)");
+        }
         if (readFail.Number is AceError.TypeMismatch or 13)
         {
             return SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);

@@ -681,8 +681,14 @@ internal sealed unsafe class AdoFieldObject : AdoObject
         .Get("Attributes", (self, args) => Meta(self, d => Int32(d.Attributes)))
         .Get("ActualSize", (self, args) => Live(self, f => f.ActualSize()))
         .Get("Value", (self, args) => Live(self, f => f.GetValue()))
-        .Put("Value", (self, args) => Live(self, f => f.PutValue()))
-        .Get("Status", (self, args) => Live(self, _ => NotImplemented("Field.Status (not recorded)")))
+        .Put("Value", (self, args) =>
+        {
+            nint val = args[0];
+            return Live(self, f => f.PutValue(val));
+        })
+        .Get("OriginalValue", (self, args) => Live(self, f => f.GetOriginalValue()))
+        .Get("UnderlyingValue", (self, args) => Live(self, f => f.GetUnderlyingValue()))
+        .Get("Status", (self, args) => Live(self, f => f.GetStatus()))
         .Get("Properties", (self, args) => Live(self, _ => NotImplemented("Field.Properties (not recorded for ADO)")));
 
     private readonly AdoFieldsObject _fields;
@@ -727,7 +733,34 @@ internal sealed unsafe class AdoFieldObject : AdoObject
         return _fields.Recordset.ReadFieldValue(_ordinal, this);
     }
 
-    private CallResult PutValue()
+    private CallResult GetOriginalValue()
+    {
+        if (!_fields.Recordset.IsOpen)
+        {
+            return NotImplemented("Field.OriginalValue on a closed Recordset (not recorded)");
+        }
+        return _fields.Recordset.ReadFieldOriginalValue(_ordinal, this);
+    }
+
+    private CallResult GetUnderlyingValue()
+    {
+        if (!_fields.Recordset.IsOpen)
+        {
+            return NotImplemented("Field.UnderlyingValue on a closed Recordset (not recorded)");
+        }
+        return _fields.Recordset.ReadFieldUnderlyingValue(_ordinal, this);
+    }
+
+    private CallResult GetStatus()
+    {
+        if (!_fields.Recordset.IsOpen)
+        {
+            return NotImplemented("Field.Status on a closed Recordset (not recorded)");
+        }
+        return _fields.Recordset.ReadFieldStatus(_ordinal, this);
+    }
+
+    private CallResult PutValue(nint arg)
     {
         if (!_fields.Recordset.IsOpen)
         {
@@ -735,17 +768,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             _fields.Recordset.ClearConnectionErrors();
             return Fail(AdoErrors.ObjectClosed);
         }
-        if (_fields.Recordset.IsAtBofOrEof)
-        {
-            return NotImplemented("Field.Value put at BOF/EOF (not recorded)");
-        }
-        if (_fields.Recordset.IsReadOnlyLock)
-        {
-            // evidence/r-ado-1b/rs-readonly-mode-edit: Field.Value put on a read-only open Recordset fails 0x800A0CB3.
-            _fields.Recordset.ClearConnectionErrors();
-            return Fail(AdoErrors.UpdatingNotSupported);
-        }
-        return NotImplemented("Field.Value put (editing through ADO belongs to a later stretch)");
+        return _fields.Recordset.WriteFieldValue(_ordinal, arg, this);
     }
 
     private CallResult ActualSize()

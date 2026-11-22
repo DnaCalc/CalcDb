@@ -47,6 +47,12 @@ internal static class AdoErrors
     /// <summary>0x800A0CB3 (Recordset.Sort on a server cursor; r-ado-1b/view-sort-server).</summary>
     public static readonly AdoError SortOrFilterNotSupported = BookmarksNotSupported.WithText("Current provider does not support the necessary interfaces for sorting or filtering.");
 
+    /// <summary>0x800A0CB3 (Field.UnderlyingValue on updatable server keyset, Recordset.Resync on recorded server cursors; r-fix-wire-ado/ado-edit-fresh #90/#102, r-ado-1b/values-keyset-conflict #30/#69, r-ado-1b/rs-cache-same-connection #469/#556).</summary>
+    public static readonly AdoError RefreshingUnderlyingNotSupported = BookmarksNotSupported.WithText("Current provider does not support refreshing underlying values.");
+
+    /// <summary>0x800A0CAE (Connection.Close while inside an open transaction; r-oledb-odbc/txn-held-rows #248).</summary>
+    public static readonly AdoError CannotCloseInTransaction = new(0x0CAE, 1240647, "Connection object cannot be explicitly closed while in a transaction.");
+
     /// <summary>0x800A0CC1 (an Errors, Properties, Parameters or Fields index that names nothing).</summary>
     public static readonly AdoError ItemNotFound = new(0x0CC1, 1240649, "Item cannot be found in the collection corresponding to the requested name or ordinal.");
 
@@ -89,11 +95,23 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>OLE DB ICommandText IID reported by ACE SQL syntax errors (3129, 3131, 3141, 3142, 3732; r-ado-1b/rs-source-kinds, errors-by-route).</summary>
     public static readonly Guid IidCommandText = new("0C733A26-2A1C-11CE-ADE5-00AA0044773D");
 
-    /// <summary>OLE DB ICommand IID reported by ACE bind/execution/DDL/constraint/empty-command failures (3078, 3010, 3376, 3022, 3200, 3061, 3073, 0x80040E0C; r-ado-1b/errors-by-route, rs-open-by-properties).</summary>
+    /// <summary>OLE DB ICommand IID reported by ACE bind/execution/DDL/constraint/empty-command failures (3078, 3010, 3376, 3022, 3200, 3061, 3073, 3218, 0x80040E0C; r-ado-1b/errors-by-route, errors-lock-timeout, rs-open-by-properties).</summary>
     public static readonly Guid IidCommand = new("0C733A63-2A1C-11CE-ADE5-00AA0044773D");
 
-    /// <summary>OLE DB IRowset IID reported by ACE rowset navigation failures such as backward fetch on forward-only (0x80040E24; r-str-ado-act/ado-rs-cursors, r-oledb-odbc/fetch-moves).</summary>
+    /// <summary>OLE DB IRowset IID reported by ACE rowset navigation, deleted-row, and field-level edit failures (0x80040E24, 3167, 3163, 3164, self-deleted 0x80040E23; r-str-ado-act/ado-rs-cursors, r-ado-1b/rs-cache-same-connection, fields-assign-conversion, r-oledb-odbc/update-errors #62-75, r-oledb-odbc/rowlife-clone-delete-requery #26).</summary>
     public static readonly Guid IidRowset = new("0C733A7C-2A1C-11CE-ADE5-00AA0044773D");
+
+    /// <summary>
+    /// OLE DB <c>IID_IRowsetUpdate</c> (<c>{0C733A6D-2A1C-11CE-ADE5-00AA0044773D}</c>, Microsoft Windows SDK <c>oledb.h</c>;
+    /// distinct from <c>IID_IRowsetChange</c> = <c>{0C733A05-2A1C-11CE-ADE5-00AA0044773D}</c>, whose derived interface
+    /// <c>IRowsetUpdate : IRowsetChange</c> exposes <c>Update()</c>) reported by ACE rowset Update failures
+    /// (3022, 3197, 3218; r-ado-1b/errors-by-route #72/#90, r-ado-1b/values-keyset-conflict #46,
+    /// r-q-ado-misc/values-witness-keyset #65, r-ado-1b/errors-lock-timeout #66, r-oledb-odbc/update-errors #86/#236).
+    /// </summary>
+    public static readonly Guid IidRowsetUpdate = new("0C733A6D-2A1C-11CE-ADE5-00AA0044773D");
+
+    /// <summary>OLE DB ITransactionLocal IID reported by ACE transaction failures (0x8004D00E 3034, 0x8004D008; r-str-ado-act/ado-txn, r-ado-1b/txn-nesting-three).</summary>
+    public static readonly Guid IidTransactionLocal = new("0C733A5F-2A1C-11CE-ADE5-00AA0044773D");
 
     /// <summary>OLE DB IColumnsInfo IID reported by ACE when reading Fields after a 3078 Open failure (r-str-ado-act/ado-rs-read-close #16, #18).</summary>
     public static readonly Guid IidColumnsInfo = new("0C733A11-2A1C-11CE-ADE5-00AA0044773D");
@@ -137,11 +155,20 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>0x80040E60 (Sort order cannot be applied on Memo or Binary column; r-ado-1b/view-sort-grammar #77, #81).</summary>
     public const int HResultCannotSort = unchecked((int)0x80040E60);
 
+    /// <summary>XACT_E_ISOLATIONLEVEL / 0x8004D008 (BeginTrans with unsupported IsolationLevel such as 1048576; r-str-ado-act/ado-txn #54).</summary>
+    public const int HResultUnsupportedIsolation = unchecked((int)0x8004D008);
+
+    /// <summary>XACT_E_NOTRANSACTION / 0x8004D00E (CommitTrans or RollbackTrans without active transaction; r-str-ado-act/ado-txn #40, r-ado-1b/txn-nesting-three #244).</summary>
+    public const int HResultNoTransaction = unchecked((int)0x8004D00E);
+
     /// <summary>E_FAIL / 0x80004005.</summary>
     public const int HResultFail = unchecked((int)0x80004005);
 
     /// <summary>DISP_E_TYPEMISMATCH / 0x80020005.</summary>
     public const int HResultTypeMismatch = unchecked((int)0x80020005);
+
+    /// <summary>DISP_E_OVERFLOW / 0x8002000A (Out of present range; r-ado-1b/fields-assign-conversion #164, #179).</summary>
+    public const int HResultOutOfRange = unchecked((int)0x8002000A);
 
     public const string MultipleStepDescription = "Multiple-step OLE DB operation generated errors. Check each OLE DB status value, if available. No work was done.";
 

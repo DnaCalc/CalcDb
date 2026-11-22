@@ -6,6 +6,7 @@ using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Isam.Transactions;
 using CalcDb.Sql;
+using CalcDb.Storage;
 using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
@@ -57,30 +58,48 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.CollectObjectIndex", "Collect with an object index (not recorded)"));
         }
-        return ordinal is int i ? SelectFieldObject.ReadValue(this, i) : CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+        return ordinal is int i ? SelectFieldObject.ReadValue(this, i, fromCollect: true) : CallResult.Fail(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
     }
 
     private SelectFieldsObject? _fields;
     private CollectionNames? _fieldNames;
     private Dictionary<string, (PropertyBlob? Blob, string? Failure)>? _tableBlobs;
     private readonly ExplicitFrame[] _openLevels;
+    private readonly PrivateOverlay? _openOverlay;
+    private readonly (ulong Page, ImageId Image)[]? _openOverlaySnapshot;
+    private readonly ulong _openPublishedSerial;
+    private readonly bool _isSingleTableRowSelect;
+    private readonly bool _dynamicOverlay;
+    private readonly bool _isMaterializedSnapshot;
+    private string? _resolvedOverlayAfterCommit;
+    private string? _committedOpenLevel;
+    private string? _forwardOnlyResolved;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
-    public SelectRecordsetObject(DatabaseObject database, BoundSelect plan, SelectCursor cursor, int recordsetType) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    public SelectRecordsetObject(DatabaseObject database, BoundSelect plan, SelectCursor cursor, int recordsetType, bool singleTableRowSelect) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
         _openLevels = [.. database.Workspace.Transactions.Frames];
-        _overlay = database.Workspace.Transactions.OverlayOf(database.Cache);
+        _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
+        _openPublishedSerial = database.Cache.PublishedSerial;
+        _isSingleTableRowSelect = singleTableRowSelect;
+        _dynamicOverlay = recordsetType == 2 && singleTableRowSelect;
+        _isMaterializedSnapshot = recordsetType == 4 && IsMaterializedPlan(plan);
+        if (recordsetType == 4 && _openOverlay is { } openOverlay)
+        {
+            _openOverlaySnapshot = CaptureOverlayPages(openOverlay);
+        }
         database.AddRef(); // a recordset keeps its Database object alive
     }
 
     /// <summary>
     /// Set when a Rollback ended a level this recordset was opened inside: no record shows a query recordset there
     /// (TXN-CLOSE records table-type and dynaset recordsets of a table), so every member but Close is named. A Rollback of
-    /// a level begun after the open is not recorded either; the recordset keeps answering as before.
+    /// a level begun after the open is recorded for single-table SELECT dynasets and snapshots
+    /// (r-txn-1b/rs-position-after-rollback, r-txn-1b/rs-types-after-rollback): both stay valid and read committed pages.
     /// </summary>
     public string? NotRecordedAfterRollback { get; private set; }
 
@@ -94,26 +113,187 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     public void RolledBack(ExplicitFrame level, bool outermost)
     {
-        if (!Closed && Array.IndexOf(_openLevels, level) >= 0)
+        if (Closed)
+        {
+            return;
+        }
+        if (Array.IndexOf(_openLevels, level) >= 0)
         {
             NotRecordedAfterRollback ??= $"a query recordset opened inside a level ({level.Level}) that was rolled back, not recorded (TXN-CLOSE)";
         }
+        else if (RecordsetType == 8)
+        {
+            _forwardOnlyResolved ??= $"a forward-only SELECT recordset across a rolled-back level ({level.Level}) (not recorded)";
+        }
     }
 
-    protected override Operation? Find(MemberDecl member) => (NotRecordedAfterRollback ?? OverlayGone) is { } why && member.Name != "Close"
-        ? (self, args) => CallResult.Fail(Failure.NotModelled(OverlayGone is null ? "NotModelled.Txn.RecordsetAfterRollback" : "NotModelled.Edit.ResolvedOverlay", $"Recordset.{member.Name}: {why}"))
+    public void Committed(ExplicitFrame level, bool outermost, bool hadOverlay)
+    {
+        if (Closed)
+        {
+            return;
+        }
+        if (Array.IndexOf(_openLevels, level) >= 0)
+        {
+            if (_openOverlay is not null || hadOverlay)
+            {
+                _resolvedOverlayAfterCommit ??= $"a SELECT recordset opened inside a level ({level.Level}) whose overlay was committed (not recorded)";
+            }
+            else
+            {
+                _committedOpenLevel ??= $"a SELECT recordset opened inside a level ({level.Level}) that was committed (not recorded)";
+            }
+        }
+        else if (RecordsetType == 8 && hadOverlay)
+        {
+            _forwardOnlyResolved ??= $"a forward-only SELECT recordset across a committed level ({level.Level}) with an overlay (not recorded)";
+        }
+    }
+
+    protected override Operation? Find(MemberDecl member) => !Closed && member.Name != "Close" && TransactionRefusal($"Recordset.{member.Name}") is { } refused
+        ? (self, args) => refused
         : base.Find(member);
 
-    /// <summary>The Workspace's overlay of the file when the statement opened (DatabaseSql.Source reads through it), or null.</summary>
-    private readonly Storage.PrivateOverlay? _overlay;
+    /// <summary>
+    /// Named refusal for any transaction or overlay state not backed by a retained record (task dqtr).
+    /// <list type="bullet">
+    /// <item>Allowed — single-table SELECT dynaset (type 2) opened at depth 0: reads own Workspace's overlay during a
+    /// depth-1 level (r-txn-1b/rs-position-after-rollback, r-txn-1b/rs-types-after-rollback, r-def-cursor-dao/edit-under-commit)
+    /// and committed pages after Rollback (r-txn-1b/rs-position-after-rollback, r-txn-1b/rs-types-after-rollback) or
+    /// CommitTrans (r-def-cursor-dao/edit-under-commit, r-fix-cursor-dao/edit-under-commit-second-workspace,
+    /// r-txn-1/local-visibility, r-txn-1b/ws2-reader-own-level-before-other-commit).</item>
+    /// <item>Allowed — single-table SELECT dynaset (type 2) opened inside a depth-1 level while that level stays active:
+    /// reads an overlay created after open (r-txn-1b/temp-querydef-recordset-rollback) or already present at open
+    /// (r-txn-1b/rs-types-after-rollback kd, r-def-cursor-dao/edit-under-commit ro,
+    /// r-fix-cursor-dao/edit-under-commit-second-workspace ro).</item>
+    /// <item>Allowed — SELECT snapshot (type 4) opened before writes: reads committed pages only, ignoring its own
+    /// Workspace's uncommitted overlay and after Rollback (r-txn-1b/rs-types-after-rollback bs,
+    /// r-def-cursor-dao/delete-by-other-cursor-current-row rs, r-txn-1b/ws2-reader-after-other-rollback rss).</item>
+    /// <item>Allowed — SELECT snapshot (type 4) opened inside a depth-1 level over an existing overlay: reads that
+    /// overlay while unchanged (r-txn-1b/rs-types-after-rollback ks).</item>
+    /// <item>Refused by name — opened inside a rolled-back level (<c>NotModelled.Txn.RecordsetAfterRollback</c>); opened
+    /// inside a committed level (<c>NotModelled.Edit.ResolvedOverlay</c> / <c>NotModelled.Txn.SelectAfterCommit</c>);
+    /// forward-only across any overlay or transaction resolution (<c>NotModelled.Edit.ForwardOnlySelectOverlay</c> /
+    /// <c>NotModelled.Edit.ResolvedOverlay</c>); dynaset reading an overlay at nested depth &gt;= 2
+    /// (<c>NotModelled.Edit.NestedSelectOverlay</c>); non-single-table dynaset across an overlay
+    /// (<c>NotModelled.Edit.ComplexSelectOverlay</c>); snapshot over a mutated overlay
+    /// (<c>NotModelled.Edit.SnapshotOverlayMutated</c>); row-backed snapshot after a committed write to the Database
+    /// (<c>NotModelled.Edit.SnapshotAfterPublish</c>); unpublished changes outside this Database's PageCache
+    /// (<c>NotModelled.Edit.UnpublishedRows</c>).</item>
+    /// </list>
+    /// </summary>
+    internal CallResult? TransactionRefusal(string member)
+    {
+        if (NotRecordedAfterRollback is { } rollbackWhy)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", $"{member}: {rollbackWhy}"));
+        }
+        if (_resolvedOverlayAfterCommit is { } commitOverlayWhy)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: {commitOverlayWhy}"));
+        }
+        if (_committedOpenLevel is { } commitLevelWhy)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.SelectAfterCommit", $"{member}: {commitLevelWhy}"));
+        }
+        PrivateOverlay? currentOverlay = Database.Workspace.Transactions.OverlayOf(Database.Cache);
+        if (RecordsetType == 8)
+        {
+            if (_openOverlay is not null && !ReferenceEquals(_openOverlay, currentOverlay))
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: a forward-only SELECT recordset opened over its Workspace's overlay of a level that has ended (not recorded)"));
+            }
+            if (_forwardOnlyResolved is { } foWhy)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ForwardOnlySelectOverlay", $"{member}: {foWhy}"));
+            }
+            if (currentOverlay is not null && !ReferenceEquals(_openOverlay, currentOverlay))
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ForwardOnlySelectOverlay", $"{member}: a forward-only SELECT recordset while its Workspace has an active overlay (not recorded)"));
+            }
+            if (Database.Cache.PublishedSerial != _openPublishedSerial)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ForwardOnlySelectOverlay", $"{member}: a forward-only SELECT recordset after a committed write to its Database (not recorded)"));
+            }
+        }
+        if (!_dynamicOverlay && _openOverlay is not null && !ReferenceEquals(_openOverlay, currentOverlay))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: the query recordset was opened over its Workspace's overlay of a level that has ended"));
+        }
+        if (_dynamicOverlay && currentOverlay is not null && (Database.Workspace.Transactions.Depth >= 2 || _openLevels.Length >= 2))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.NestedSelectOverlay", $"{member}: a SELECT dynaset reading an overlay at nested transaction depth {Database.Workspace.Transactions.Depth} (not recorded)"));
+        }
+        if (RecordsetType == 2 && !_isSingleTableRowSelect && currentOverlay is not null && !ReferenceEquals(_openOverlay, currentOverlay))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ComplexSelectOverlay", $"{member}: a multi-table, grouped, distinct, top, derived or union SELECT dynaset while its Workspace has an overlay created after open (not recorded)"));
+        }
+        if (RecordsetType == 4)
+        {
+            if (_openOverlay is not null && OverlayMutatedSinceOpen())
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotOverlayMutated", $"{member}: a SELECT snapshot opened over an overlay that was modified after open (not recorded)"));
+            }
+            if (!_isMaterializedSnapshot && Database.Cache.PublishedSerial != _openPublishedSerial)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotAfterPublish", $"{member}: a row-backed SELECT snapshot after a write was published to its Database (not recorded)"));
+            }
+        }
+        foreach (SourceSlot source in Plan.Sources)
+        {
+            if (source.TableName.Length > 0
+                && Database.Engine.Changes.Visible(Database.Workspace.Transactions, Database.Name, source.TableName, own: null, readsOverlayOf: Database.Cache))
+            {
+                return EditPublication.Unpublished(source.TableName, member);
+            }
+        }
+        return null;
+    }
+
+    private bool OverlayMutatedSinceOpen()
+    {
+        if (_openOverlay is not { } overlay || _openOverlaySnapshot is not { } snapshot)
+        {
+            return false;
+        }
+        if (overlay.ChangedPages.Count != snapshot.Length)
+        {
+            return true;
+        }
+        for (int i = 0; i < snapshot.Length; i++)
+        {
+            if (overlay.PrivateImage(snapshot[i].Page) != snapshot[i].Image)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static (ulong Page, ImageId Image)[] CaptureOverlayPages(PrivateOverlay overlay)
+    {
+        IReadOnlyCollection<ulong> pages = overlay.ChangedPages;
+        var snapshot = new (ulong Page, ImageId Image)[pages.Count];
+        int i = 0;
+        foreach (ulong page in pages)
+        {
+            snapshot[i++] = (page, overlay.PrivateImage(page)!.Value);
+        }
+        return snapshot;
+    }
 
     /// <summary>
-    /// Why the cursor cannot read any more: it reads through an overlay its Workspace no longer has (the level was
-    /// resolved or published; a reader's PageSource is fixed at open, task rf2n); null while it can.
+    /// True when <see cref="SelectCursor"/> materialized all column values into slots at open (UNION, DISTINCT, GROUP BY
+    /// or aggregate), so subsequent reads do not touch base-table pages.
     /// </summary>
-    public string? OverlayGone => _overlay is { } overlay && !ReferenceEquals(overlay, Database.Workspace.Transactions.OverlayOf(Database.Cache))
-        ? "the query recordset was opened over its Workspace's overlay of a level that has ended (a reader's PageSource is fixed at open)"
-        : null;
+    private static bool IsMaterializedPlan(BoundSelect plan) =>
+        plan.IsUnion
+        || plan.Predicate == SelectPredicate.Distinct
+        || plan.Columns.Any(static c => c.Origin is ColumnOrigin.GroupKey or ColumnOrigin.Aggregate)
+        || (plan.Sources.Count == 1
+            && plan.Sources[0].Table is not null
+            && plan.TryUpdatable(ResultKind.Dynaset, out string? open) is false or null
+            && open != "NotModelled.QueryUpdatable.NoBaseColumn");
 
     /// <summary>
     /// Updatable (R-CURSOR-1 CUR-PROV, R-SQL-3 SQL-DR-01..05): False on a read-only database
@@ -304,8 +484,7 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
     {
         var f = (SelectFieldsObject)self;
         return f.Recordset.Closed ? f.Recordset.Fail(3420, DaoErrors.ObjectInvalid)
-            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Fields: " + why))
-            : f.Recordset.OverlayGone is { } gone ? CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Fields: " + gone)) : op(f);
+            : f.Recordset.TransactionRefusal("Fields") ?? op(f);
     }
 
     private CallResult Item(nint index)
@@ -383,9 +562,15 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
-            return failure!.IsNotModelled
-                ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
-                : Fail(failure.Number, failure.Message);
+            if (failure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            if (failure.Number == 3167)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDeletedRow", $"Field.FieldSize of {Column.Name} on a deleted row (not recorded)"));
+            }
+            return Fail(failure.Number, failure.Message);
         }
         return (VarType)value.Vt switch
         {
@@ -418,8 +603,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     {
         var f = (SelectFieldObject)self;
         return f.Recordset.Closed ? f.Fail(3420, DaoErrors.ObjectInvalid)
-            : f.Recordset.NotRecordedAfterRollback is { } why ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field: " + why))
-            : f.Recordset.OverlayGone is { } gone ? CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Field: " + gone)) : op(f);
+            : f.Recordset.TransactionRefusal("Field") ?? op(f);
     }
 
     private CallResult FieldType() => Recordset.Cursor.FieldType(_ordinal, out string? open) is int type
@@ -723,21 +907,39 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
 
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect).</summary>
-    public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal)
+    public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal, bool fromCollect = false)
     {
-        if (recordset.OverlayGone is { } gone)
+        if (recordset.TransactionRefusal("Field.Value") is { } refused)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", "Field.Value: " + gone));
-        }
-        if (recordset.NotRecordedAfterRollback is { } why)
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "Field.Value: " + why));
+            return refused;
         }
         if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
         {
-            return failure!.IsNotModelled
-                ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
-                : CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
+            if (failure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            if (failure.Number == 3167)
+            {
+                // r-txn-1b/rs-types-after-rollback (calls 41[0..2]) and r-def-cursor-dao/delete-by-other-cursor-current-row
+                // (calls 56, 63) record Field.Value failing 3167 ("Record is deleted.", DAO.Field, with IErrorInfo) on a
+                // base column of a SELECT dynaset whose current row was deleted. Collect, non-dynaset SELECTs, and
+                // non-base columns on a deleted row are unrecorded neighbouring cases and stay refused by name.
+                if (fromCollect)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDeletedRow", "Recordset.Collect on a deleted row of a SELECT recordset (not recorded)"));
+                }
+                if (recordset.RecordsetType != 2)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.SelectDeletedRowCursorType", $"Field.Value on a deleted row of a type {recordset.RecordsetType} SELECT recordset (not recorded)"));
+                }
+                ResultColumn column = recordset.Cursor.Columns[ordinal];
+                if (column.Origin != ColumnOrigin.BaseColumn)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.SelectDeletedRowExpression", $"Field.Value of {column.Origin} column {column.Name} on a deleted row (not recorded)"));
+                }
+            }
+            return CallResult.Fail(Failure.Dao(failure.Number, "DAO.Field", failure.Message) with { PublishesErrorInfo = true });
         }
         return SqlResults.Of(value, "Field.Value");
     }

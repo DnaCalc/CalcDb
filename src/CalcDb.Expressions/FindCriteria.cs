@@ -22,8 +22,10 @@ public sealed class FindCriteria : IRowPredicate, IDisposable
     /// <summary>The criteria text it was bound from.</summary>
     public string Text { get; }
 
-    /// <summary>The failure of the last row test.</summary>
-    public ExpressionFailure? LastFailure => _expression.LastFailure;
+    /// <summary>The failure of the last row test; a deleted row seen during Find is unrecorded and stays named.</summary>
+    public ExpressionFailure? LastFailure => _expression.LastFailure is { IsNotModelled: false, Number: 3167 }
+        ? ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.FindDeletedRecord", "Find criteria encountered a deleted row (not recorded)")
+        : _expression.LastFailure;
 
     /// <summary>Parse, bind and admit a criteria; null with ACE's error (3077, 3070, 3072, 3001) or a named case.</summary>
     public static FindCriteria? Bind(string text, ExpressionSchema schema, ExpressionContext context, out ExpressionFailure? failure)

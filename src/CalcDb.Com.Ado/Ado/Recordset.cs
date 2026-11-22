@@ -236,12 +236,6 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         {
             if (sqlFail!.IsNotModelled)
             {
-                if (sqlFail.NotModelled == "NotModelled.FieldRead"
-                    && sqlFail.Message.Contains("DeletedRecord", StringComparison.Ordinal))
-                {
-                    failure = AdoSqlErrors.RecordIsDeleted().ComFailure;
-                    return null;
-                }
                 failure = Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message);
                 return null;
             }
@@ -428,12 +422,14 @@ internal sealed class MemoryRowSource : IAdoRowSource
 {
     private readonly AdoFieldDescriptor[] _columns;
     private readonly List<OwnedVariant[]> _rows;
+    private readonly IReadOnlyList<string> _heldTables;
     private int _current = -1;
 
-    private MemoryRowSource(AdoFieldDescriptor[] columns, List<OwnedVariant[]> rows)
+    private MemoryRowSource(AdoFieldDescriptor[] columns, List<OwnedVariant[]> rows, IReadOnlyList<string>? heldTables = null)
     {
         _columns = columns;
         _rows = rows;
+        _heldTables = heldTables ?? [];
         if (rows.Count > 0)
         {
             _current = 0;
@@ -443,7 +439,11 @@ internal sealed class MemoryRowSource : IAdoRowSource
     public static MemoryRowSource SingleInt32(AdoFieldDescriptor column, int value) =>
         new([column], [[OwnedVariant.FromInt32(value)]]);
 
-    public static MemoryRowSource? Materialize(IAdoRowSource inner, bool isClientCursor, out Failure? failure)
+    public static MemoryRowSource? Materialize(
+        IAdoRowSource inner,
+        bool isClientCursor,
+        out Failure? failure,
+        IReadOnlyList<string>? heldTables = null)
     {
         failure = null;
         var rows = new List<OwnedVariant[]>();
@@ -478,7 +478,7 @@ internal sealed class MemoryRowSource : IAdoRowSource
                 }
                 rows.Add(cells);
             }
-            return new MemoryRowSource(inner.Columns, rows);
+            return new MemoryRowSource(inner.Columns, rows, heldTables);
         }
         catch
         {
@@ -491,7 +491,7 @@ internal sealed class MemoryRowSource : IAdoRowSource
 
     internal IReadOnlyList<OwnedVariant[]> SnapshotRows => _rows;
 
-    public IReadOnlyList<string> HeldTables => [];
+    public IReadOnlyList<string> HeldTables => _heldTables;
 
     public int KnownCount => _rows.Count;
 
@@ -748,16 +748,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
         .Method("MovePrevious", (self, args) => ((RecordsetObject)self).MovePrevious())
         .Method("Move", (self, args) => ((RecordsetObject)self).Move(args[0], args.Length > 1 ? args[1] : 0))
         .Method("NextRecordset", (self, args) => ((RecordsetObject)self).NextRecordset())
-        // Read-only lock refuses AddNew/Update/Delete with 0x800A0CB3 and accepts CancelUpdate (r-ado-1b/rs-readonly-mode-edit);
-        // writable cursors stay refused by name (editing through ADO belongs to a later stretch).
-        .Method("AddNew", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.AddNew"))
-        .Method("Update", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.Update"))
-        .Method("Delete", (self, args) => ((RecordsetObject)self).EditRefusal("Recordset.Delete"))
+        // Server keyset immediate editing (W-09/immediate-edit; R-ADO-1 ADO-EDIT, ADO-VALUES);
+        // batch/client editing and array arguments remain refused by name.
+        .Method("AddNew", (self, args) => ((RecordsetObject)self).AddNew(args))
+        .Method("Update", (self, args) => ((RecordsetObject)self).Update(args))
+        .Method("Delete", (self, args) => ((RecordsetObject)self).Delete(args))
         .Method("CancelUpdate", (self, args) => ((RecordsetObject)self).CancelUpdate())
-        .Method("UpdateBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.UpdateBatch (editing through ADO belongs to a later stretch)"))
-        .Method("CancelBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.CancelBatch (editing through ADO belongs to a later stretch)"))
-        .Method("Resync", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Resync (belongs to a later stretch)"))
-        .Method("_xResync", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Resync (belongs to a later stretch)"))
+        .Method("UpdateBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.UpdateBatch (batch editing belongs to a later stretch)"))
+        .Method("CancelBatch", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.CancelBatch (batch editing belongs to a later stretch)"))
+        .Method("Resync", (self, args) => ((RecordsetObject)self).Resync(args))
+        .Method("_xResync", (self, args) => ((RecordsetObject)self).Resync(args))
         .Method("Requery", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Requery (belongs to a later stretch)"))
         .Method("Seek", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Seek (belongs to a later stretch)"))
         .Get("Index", (self, args) => ((RecordsetObject)self).OpenOrRefuse("Recordset.Index get (belongs to a later stretch)"))
@@ -794,6 +794,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int _effectiveCursorType;
     private int _effectiveLockType = 1;
     private int _effectiveCursorLocation = 2;
+    private int _openedCommandType = AdoSqlText.AdCmdUnspecified;
     private bool _hasBookmarks;
     private int _supportedOptions;
     private bool _bof;
@@ -801,6 +802,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private bool _bothBofEofAfterForwardMove;
     private bool _suspendedAfterForwardMoveLast;
     private int _position; // 0-based index into current view when !_bof && !_eof
+    private int _posBeforeAddNew;
+    private bool _bofBeforeAddNew;
+    private bool _eofBeforeAddNew;
     private AdoFieldsObject? _fields;
     private PropertiesObject? _properties;
     private string? _filterText;
@@ -822,6 +826,27 @@ internal sealed unsafe class RecordsetObject : AdoObject
     public bool IsClientCursor => _effectiveCursorLocation == 3;
 
     internal bool IsReadOnlyLock => _effectiveLockType == 1;
+
+    /// <summary>
+    /// True only for server cursors on a Mode=1 read-only connection downgraded to (0, 1)
+    /// (r-ado-1b/rs-readonly-mode-edit). Other read-only cursors are not recorded for edit calls.
+    /// </summary>
+    private bool IsRecordedReadOnlyModeCursor =>
+        !IsClientCursor && _effectiveCursorType == 0 && _effectiveLockType == 1
+        && _activeConnection?.OpenSession?.ReadOnly == true;
+
+    /// <summary>
+    /// True only on a live, non-deleted existing row of an updatable (1, 3) server keyset
+    /// (r-fix-wire-ado/ado-edit-fresh, r-ado-1b/values-keyset-conflict, r-q-ado-misc/values-witness-keyset).
+    /// </summary>
+    private bool IsLiveUpdatableKeysetRow =>
+        IsOpen && !IsClientCursor && _effectiveCursorType == 1 && _effectiveLockType == 3
+        && _rows is KeysetRowSource { IsUpdatable: true, IsDeletedCurrent: false, EditModeValue: not 2 }
+        && !_bof && !_eof && !_suspendedAfterForwardMoveLast;
+
+    private bool IsEditing => _rows is KeysetRowSource { EditModeValue: not 0 };
+
+    private bool IsEditingNew => _rows is KeysetRowSource { EditModeValue: 2 };
 
     internal AdoFieldDescriptor[] ColumnDescriptors => _rows!.Columns;
 
@@ -960,6 +985,37 @@ internal sealed unsafe class RecordsetObject : AdoObject
         SetActiveConnectionInternal(null);
     }
 
+    public void OnTransactionCommitted(int newDepth)
+    {
+        if (_rows is KeysetRowSource ks)
+        {
+            ks.OnTransactionCommitted(newDepth);
+        }
+    }
+
+    public void OnTransactionRolledBack(int newDepth)
+    {
+        if (_rows is not KeysetRowSource ks)
+        {
+            return;
+        }
+        if (ks.OnTransactionRolledBack(newDepth, out int clampedCount))
+        {
+            if (clampedCount == 0)
+            {
+                _bof = true;
+                _eof = true;
+                _position = 0;
+            }
+            else if (_position >= clampedCount)
+            {
+                _position = clampedCount - 1;
+                _bof = false;
+                _eof = false;
+            }
+        }
+    }
+
     public void ClearConnectionErrors() => _activeConnection?.ClearErrors();
 
     public void ReportProviderError(MappedProviderError err) => _activeConnection?.SetProviderError(err.ErrorEntry);
@@ -1044,15 +1100,312 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private CallResult OpenOrRefuse(string what) => IsOpen ? NotImplemented(what) : FailAdo(AdoErrors.ObjectClosed);
 
-    private CallResult EditRefusal(string member)
+    // ---- Immediate server-keyset editing (W-09/immediate-edit; R-ADO-1 ADO-EDIT, ADO-VALUES; R-CURSOR-1 CUR-EDIT) ----
+
+    private static bool IsArrayArg(nint arg) =>
+        arg != 0 && ((VarType)Args.Cell(arg)->Vt & VarType.Array) != 0;
+
+    private bool TryResolveFieldOrdinal(nint arg, bool allowEmptyAsItemNotFound, out int ordinal, out Failure? refusal)
     {
+        ordinal = -1;
+        refusal = null;
+        if (arg == 0)
+        {
+            refusal = Failure.NotModelled("NotModelled.AdoFieldArgType", "Omitted/null field argument in AddNew/Update is not recorded");
+            return false;
+        }
+        if (AdoArgs.IsObject(arg))
+        {
+            refusal = Failure.NotModelled("NotModelled.AdoFieldArgType", "Object field argument in AddNew/Update is not recorded");
+            return false;
+        }
+        NativeVariant* cell = Args.Cell(arg);
+        VarType vt = (VarType)cell->Vt & ~VarType.ByRef;
+        if (vt == VarType.Empty)
+        {
+            if (allowEmptyAsItemNotFound)
+            {
+                // r-ado-1b/edit-update-args #173: Update(Empty, value) fails 0x800A0CC1.
+                return false;
+            }
+            refusal = Failure.NotModelled("NotModelled.AdoFieldArgType", "VT_EMPTY field argument in AddNew is not recorded");
+            return false;
+        }
+        if (vt != VarType.Bstr)
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoFieldArgType",
+                $"Non-BSTR field argument (vt={(ushort)vt}) in AddNew/Update is not recorded");
+            return false;
+        }
+        string? name = Args.Text(arg);
+        if (name is null)
+        {
+            refusal = Failure.NotModelled("NotModelled.AdoFieldArgType", "Null BSTR field argument in AddNew/Update is not recorded");
+            return false;
+        }
+        AdoFieldDescriptor[] cols = _rows!.Columns;
+        bool caseVariant = false;
+        for (int i = 0; i < cols.Length; i++)
+        {
+            if (string.Equals(cols[i].Name, name, StringComparison.Ordinal))
+            {
+                ordinal = i;
+                return true;
+            }
+            if (string.Equals(cols[i].Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                caseVariant = true;
+            }
+        }
+        if (caseVariant)
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoFieldCaseLookup",
+                $"Case-insensitive field lookup '{name}' in AddNew/Update is not recorded");
+        }
+        return false;
+    }
+
+    private CallResult? ValidateEditableKeyset(string member, out KeysetRowSource? ks)
+    {
+        ks = null;
         if (!IsOpen)
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        return IsReadOnlyLock
-            ? FailAdo(AdoErrors.UpdatingNotSupported)
-            : NotImplemented($"{member} (editing through ADO belongs to a later stretch)");
+        if (IsClientCursor)
+        {
+            return NotImplemented($"{member} on a client cursor (client/batch editing belongs to a later stretch)");
+        }
+        if (IsRecordedReadOnlyModeCursor)
+        {
+            // r-ado-1b/rs-readonly-mode-edit: Mode=1 server cursors downgraded to (0, 1) refuse AddNew/Update/Delete with 0x800A0CB3.
+            return FailAdo(AdoErrors.UpdatingNotSupported);
+        }
+        if (IsReadOnlyLock)
+        {
+            return NotImplemented($"{member} on a read-only server cursor ({_effectiveCursorType}, {_effectiveLockType}) (not recorded)");
+        }
+        if (_effectiveLockType == 4)
+        {
+            return NotImplemented($"{member} with adLockBatchOptimistic (batch editing belongs to a later stretch)");
+        }
+        if (_filterExpr is not null || _sortSpec is not null)
+        {
+            return NotImplemented($"{member} on a filtered or sorted Recordset (not recorded)");
+        }
+        if (_rows is not KeysetRowSource keyset || !keyset.IsUpdatable)
+        {
+            return NotImplemented($"{member} on a non-updatable cursor");
+        }
+        ks = keyset;
+        return null;
+    }
+
+    /// <summary>
+    /// Implicitly posts a pending Edit or AddNew before MoveNext (r-fix-wire-ado/ado-edit-fresh #103-113).
+    /// Returns a failure CallResult if the implicit Update fails.
+    /// </summary>
+    private CallResult? FlushPendingEdit()
+    {
+        if (_rows is not KeysetRowSource ks || ks.EditModeValue == 0)
+        {
+            return null;
+        }
+        if (!ks.TryUpdate(out int? newPos, out MappedProviderError? pe, out Failure? refFail))
+        {
+            if (pe is { } provErr)
+            {
+                ReportProviderError(provErr);
+                return CallResult.Fail(provErr.ComFailure);
+            }
+            return CallResult.Fail(refFail!);
+        }
+        if (newPos is int p)
+        {
+            _position = p;
+            _bof = false;
+            _eof = false;
+            _bothBofEofAfterForwardMove = false;
+            _suspendedAfterForwardMoveLast = false;
+        }
+        ClearConnectionErrors();
+        return null;
+    }
+
+    private CallResult AddNew(ReadOnlySpan<nint> args)
+    {
+        if (ValidateEditableKeyset("Recordset.AddNew", out KeysetRowSource? ks) is { } err)
+        {
+            return err;
+        }
+
+        nint fieldArg = args.Length > 0 ? args[0] : 0;
+        nint valueArg = args.Length > 1 ? args[1] : 0;
+        bool fieldMissing = fieldArg == 0 || TypedCall.IsMissing(Args.Cell(fieldArg));
+        bool valueMissing = valueArg == 0 || TypedCall.IsMissing(Args.Cell(valueArg));
+        if (fieldMissing != valueMissing)
+        {
+            return NotImplemented("Recordset.AddNew with one missing argument (not recorded)");
+        }
+        if (!fieldMissing && (IsArrayArg(fieldArg) || IsArrayArg(valueArg)))
+        {
+            return NotImplemented("Recordset.AddNew with array FieldList/Values arguments (belongs to a later stretch)");
+        }
+
+        int targetOrdinal = -1;
+        if (!fieldMissing && !TryResolveFieldOrdinal(fieldArg, allowEmptyAsItemNotFound: false, out targetOrdinal, out Failure? fieldRefusal))
+        {
+            if (fieldRefusal is not null)
+            {
+                return CallResult.Fail(fieldRefusal);
+            }
+            // r-ado-1b/edit-update-args #191: unknown field name fails 0x800A0CC1 without entering AddNew.
+            return FailAdo(AdoErrors.ItemNotFound);
+        }
+
+        if (IsEditing)
+        {
+            return NotImplemented($"Recordset.AddNew while EditMode={ks!.EditModeValue} (implicit Update on AddNew is not recorded)");
+        }
+
+        _posBeforeAddNew = _position;
+        _bofBeforeAddNew = _bof;
+        _eofBeforeAddNew = _eof;
+
+        if (!ks!.TryAddNew(out MappedProviderError? pe, out Failure? refFail))
+        {
+            if (pe is { } provErr)
+            {
+                ReportProviderError(provErr);
+                return CallResult.Fail(provErr.ComFailure);
+            }
+            return CallResult.Fail(refFail!);
+        }
+
+        _bof = false;
+        _eof = false;
+        _bothBofEofAfterForwardMove = false;
+        _suspendedAfterForwardMoveLast = false;
+
+        if (fieldMissing)
+        {
+            return CallResult.Nothing;
+        }
+
+        // Scalar AddNew(field, value): stage and immediately post (r-ado-1b/edit-update-args #54-58).
+        if (!ks.TryWriteValue(targetOrdinal, valueArg, Decl.Iid, out _, out Failure? writeRefusal))
+        {
+            ks.CancelUpdate();
+            RestorePreAddNewPosition();
+            if (writeRefusal is not null)
+            {
+                return CallResult.Fail(writeRefusal);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoAddNewArgsFailure",
+                "Failed value assignment inside Recordset.AddNew(field, value) is not recorded"));
+        }
+        if (!ks.TryUpdate(out int? newPos, out _, out Failure? updateRefusal))
+        {
+            ks.CancelUpdate();
+            RestorePreAddNewPosition();
+            if (updateRefusal is not null)
+            {
+                return CallResult.Fail(updateRefusal);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoAddNewArgsFailure",
+                "Failed post inside Recordset.AddNew(field, value) is not recorded"));
+        }
+        if (newPos is int p)
+        {
+            _position = p;
+        }
+        ClearConnectionErrors();
+        return CallResult.Nothing;
+    }
+
+    private CallResult Update(ReadOnlySpan<nint> args)
+    {
+        if (ValidateEditableKeyset("Recordset.Update", out KeysetRowSource? ks) is { } err)
+        {
+            return err;
+        }
+
+        nint fieldArg = args.Length > 0 ? args[0] : 0;
+        nint valueArg = args.Length > 1 ? args[1] : 0;
+        bool fieldMissing = fieldArg == 0 || TypedCall.IsMissing(Args.Cell(fieldArg));
+        bool valueMissing = valueArg == 0 || TypedCall.IsMissing(Args.Cell(valueArg));
+        if (fieldMissing != valueMissing)
+        {
+            // r-ado-1b/edit-update-args #112, #155: one missing argument fails 0x800A0BB9.
+            return FailAdo(AdoErrors.ArgumentsWrongType);
+        }
+        if (!fieldMissing && (IsArrayArg(fieldArg) || IsArrayArg(valueArg)))
+        {
+            return NotImplemented("Recordset.Update with array Fields/Values arguments (belongs to a later stretch)");
+        }
+
+        if (!fieldMissing)
+        {
+            if (!TryResolveFieldOrdinal(fieldArg, allowEmptyAsItemNotFound: true, out int ordinal, out Failure? fieldRefusal))
+            {
+                if (fieldRefusal is not null)
+                {
+                    return CallResult.Fail(fieldRefusal);
+                }
+                // r-ado-1b/edit-update-args #94, #173: unknown field or Empty fails 0x800A0CC1.
+                return FailAdo(AdoErrors.ItemNotFound);
+            }
+            if (ks!.EditModeValue == 0)
+            {
+                if (_bof || _eof || _suspendedAfterForwardMoveLast)
+                {
+                    return FailAdo(AdoErrors.NoCurrentRecord);
+                }
+                if (!TrySeekView(_position, out Failure? seekFail))
+                {
+                    return seekFail is not null ? CallResult.Fail(seekFail) : FailAdo(AdoErrors.NoCurrentRecord);
+                }
+            }
+            if (!ks.TryWriteValue(ordinal, valueArg, Decl.Iid, out MappedProviderError? assignErr, out Failure? assignRefusal))
+            {
+                if (assignErr is { } aErr)
+                {
+                    ReportProviderError(aErr);
+                    return CallResult.Fail(aErr.ComFailure);
+                }
+                return CallResult.Fail(assignRefusal!);
+            }
+        }
+
+        if (fieldMissing && ks!.EditModeValue == 0)
+        {
+            // r-oledb-odbc/update-errors #18-23, #40-45, #62-67: no-op Update() when EditMode==0 succeeds without clearing Connection.Errors.
+            return CallResult.Nothing;
+        }
+
+        if (!ks!.TryUpdate(out int? newPos, out MappedProviderError? pe, out Failure? refFail))
+        {
+            if (pe is { } provErr)
+            {
+                ReportProviderError(provErr);
+                return CallResult.Fail(provErr.ComFailure);
+            }
+            return CallResult.Fail(refFail!);
+        }
+        if (newPos is int p)
+        {
+            _position = p;
+            _bof = false;
+            _eof = false;
+            _bothBofEofAfterForwardMove = false;
+            _suspendedAfterForwardMoveLast = false;
+        }
+        ClearConnectionErrors();
+        return CallResult.Nothing;
     }
 
     private CallResult CancelUpdate()
@@ -1061,9 +1414,120 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        return IsReadOnlyLock
-            ? CallResult.Nothing
-            : NotImplemented("Recordset.CancelUpdate (editing through ADO belongs to a later stretch)");
+        if (IsClientCursor)
+        {
+            return NotImplemented("Recordset.CancelUpdate on a client cursor (client/batch editing belongs to a later stretch)");
+        }
+        if (IsRecordedReadOnlyModeCursor)
+        {
+            // r-ado-1b/rs-readonly-mode-edit: CancelUpdate on a Mode=1 server cursor downgraded to (0, 1) succeeds without error.
+            return CallResult.Nothing;
+        }
+        if (IsReadOnlyLock)
+        {
+            return NotImplemented($"Recordset.CancelUpdate on a read-only server cursor ({_effectiveCursorType}, {_effectiveLockType}) (not recorded)");
+        }
+        if (_effectiveLockType == 4)
+        {
+            return NotImplemented("Recordset.CancelUpdate with adLockBatchOptimistic (batch editing belongs to a later stretch)");
+        }
+        if (_rows is KeysetRowSource ks)
+        {
+            bool wasAddNew = ks.EditModeValue == 2;
+            ks.CancelUpdate();
+            if (wasAddNew)
+            {
+                RestorePreAddNewPosition();
+            }
+            // Note: CancelUpdate intentionally does NOT clear Connection.Errors (r-ado-1b/fields-assign-conversion #199-215).
+            return CallResult.Nothing;
+        }
+        return NotImplemented("Recordset.CancelUpdate on a non-updatable cursor");
+    }
+
+    private CallResult Delete(ReadOnlySpan<nint> args)
+    {
+        if (ValidateEditableKeyset("Recordset.Delete", out KeysetRowSource? ks) is { } err)
+        {
+            return err;
+        }
+        if (args.Length > 0 && args[0] != 0 && !TypedCall.IsMissing(Args.Cell(args[0])))
+        {
+            int? affect = AdoArgs.Int32(args[0]);
+            if (affect is not 1)
+            {
+                return NotImplemented($"Recordset.Delete(AffectRecords={affect?.ToString() ?? "non-int"}) (only adAffectCurrent=1 is supported)");
+            }
+        }
+        if (ks!.EditModeValue == 2)
+        {
+            return NotImplemented("Recordset.Delete while EditMode=adEditAdd (not recorded)");
+        }
+        if (_bof || _eof || _suspendedAfterForwardMoveLast)
+        {
+            return FailAdo(AdoErrors.NoCurrentRecord);
+        }
+        if (!TrySeekView(_position, out Failure? seekFail))
+        {
+            return seekFail is not null ? CallResult.Fail(seekFail) : FailAdo(AdoErrors.NoCurrentRecord);
+        }
+        if (!ks.TryDelete(out MappedProviderError? pe, out Failure? refFail))
+        {
+            if (pe is { } provErr)
+            {
+                ReportProviderError(provErr);
+                return CallResult.Fail(provErr.ComFailure);
+            }
+            return CallResult.Fail(refFail!);
+        }
+        ClearConnectionErrors();
+        return CallResult.Nothing;
+    }
+
+    private CallResult Resync(ReadOnlySpan<nint> args)
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        bool affectMissing = args.Length == 0 || args[0] == 0 || TypedCall.IsMissing(Args.Cell(args[0]));
+        bool resyncMissing = args.Length < 2 || args[1] == 0 || TypedCall.IsMissing(Args.Cell(args[1]));
+        if (affectMissing || resyncMissing)
+        {
+            return NotImplemented("Recordset.Resync with omitted AffectRecords or ResyncValues arguments (not recorded)");
+        }
+        int? affect = AdoArgs.Int32(args[0]);
+        int? resync = AdoArgs.Int32(args[1]);
+        if (!IsClientCursor && _openedCommandType != AdoSqlText.AdCmdTableDirect)
+        {
+            // r-ado-1b/values-keyset-conflict #69: Resync(1, 1) on updatable server keyset (1, 3) -> 0x800A0CB3.
+            if (affect == 1 && resync == 1
+                && _effectiveCursorType == 1 && _effectiveLockType == 3
+                && _rows is KeysetRowSource { IsUpdatable: true })
+            {
+                return FailAdo(AdoErrors.RefreshingUnderlyingNotSupported);
+            }
+            // r-oledb-odbc/rowlife-clone-delete-requery #39 (1, 3), r-ado-1b/rs-cache-same-connection #469 (1, 1) & #556 (3, 1):
+            // Resync(3, 2) on recorded server keyset/static cursors -> 0x800A0CB3.
+            if (affect == 3 && resync == 2
+                && ((_effectiveCursorType == 1 && _effectiveLockType is 1 or 3)
+                    || (_effectiveCursorType == 3 && _effectiveLockType == 1)))
+            {
+                return FailAdo(AdoErrors.RefreshingUnderlyingNotSupported);
+            }
+        }
+        return NotImplemented($"Recordset.Resync(AffectRecords={affect?.ToString() ?? "non-int"}, ResyncValues={resync?.ToString() ?? "non-int"}) on this cursor (not recorded)");
+    }
+
+    private void RestorePreAddNewPosition()
+    {
+        _position = _posBeforeAddNew;
+        _bof = _bofBeforeAddNew;
+        _eof = _eofBeforeAddNew;
+        if (!_bof && !_eof)
+        {
+            TrySeekView(_position, out _);
+        }
     }
 
     /// <summary>
@@ -1631,6 +2095,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.AbsolutePage put while editing (implicit Update on AbsolutePage is not recorded)");
+        }
+        ConsumeDeletedCurrent();
         int count = ViewKnownCount;
         if (!_hasBookmarks || count < 0)
         {
@@ -1772,6 +2241,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.AbsolutePosition put while editing (implicit Update on AbsolutePosition is not recorded)");
+        }
+        ConsumeDeletedCurrent();
         int count = ViewKnownCount;
         if (!_hasBookmarks || count < 0)
         {
@@ -1805,7 +2279,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ? FailAdo(AdoErrors.BookmarksNotSupported)
             : NotImplemented("Recordset.Bookmark put on a bookmark-capable cursor");
 
-    private CallResult GetEditMode() => IsOpen ? Int32(0) : FailAdo(AdoErrors.ObjectClosed);
+    private CallResult GetEditMode() => !IsOpen
+        ? FailAdo(AdoErrors.ObjectClosed)
+        : Int32(_rows is KeysetRowSource ks ? ks.EditModeValue : 0);
 
     private CallResult GetStatus()
     {
@@ -1813,9 +2289,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (_bof || _eof || _suspendedAfterForwardMoveLast)
+        if (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast))
         {
             return NotImplemented("Recordset.Status at BOF/EOF (not recorded)");
+        }
+        if (_rows is KeysetRowSource ks)
+        {
+            return Int32(ks.RecordStatus);
         }
         return Int32(IsClientCursor ? 8 : 0);
     }
@@ -2013,33 +2493,23 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
         }
 
-        // Action SQL passed to Recordset.Open executes via CalcDb.Sql and leaves the Recordset closed
-        // (r-ado-1b/errors-by-route #49-58: INSERT duplicate key fails 3022 with State=0 and cn.Errors.Count=1).
+        // Action SQL passed to Recordset.Open: only the failing adCmdText INSERT case is recorded
+        // (r-ado-1b/errors-by-route #49-50); refuse every action statement before executing so a
+        // rolled-back INSERT cannot advance AutoNumber counters (r-q27-autonumber-txn/ins-one-existing-txn-rb)
+        // or nest inside a caller transaction.
         if (cmdType is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified
             && ActionParser.IsAction(_source))
         {
-            ActionOutcome act = ActionExecutor.Execute(_source, session.Sql, 128, null, ActionErrorSource.Database);
-            if (act.Failure is { } sqlFailure)
-            {
-                MappedProviderError? actErr = AdoSqlErrors.TryMap(sqlFailure, isSavedQuery: false, out Failure? actRefusal, _source);
-                if (actErr is { } pe)
-                {
-                    FieldsCollection.RecordFailedOpen(null);
-                    ReportProviderError(pe);
-                    return CallResult.Fail(pe.ComFailure);
-                }
-                return CallResult.Fail(actRefusal!);
-            }
-            if (act.LastIdentity is long id)
-            {
-                session.LastIdentity = (int)id;
-            }
-            _activeConnection.ClearErrors();
-            return CallResult.Nothing;
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoRecordsetOpenAction",
+                "Action SQL in Recordset.Open (only the failing case is recorded in r-ado-1b/errors-by-route #49-50)"));
         }
 
         bool isClient = effectiveLoc == 3;
         bool countAllAtOpen = hasBookmarks && !isClient;
+        bool preferKeyset = !isClient && effCursor == 1;
+        bool updatableKeyset = preferKeyset && effLock is 2 or 3;
+        bool lockPessimistic = effLock == 2;
 
         IAdoRowSource? rowSource = OpenRowSource(
             session,
@@ -2049,7 +2519,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             countAllAtOpen,
             out MappedProviderError? providerError,
             out Failure? refusal,
-            out bool recordPrepareErrorOnFields);
+            out bool recordPrepareErrorOnFields,
+            preferKeyset,
+            updatableKeyset,
+            lockPessimistic);
 
         if (rowSource is null)
         {
@@ -2068,9 +2541,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(refusal!);
         }
 
-        if (isClient && rowSource is not MemoryRowSource)
+        if ((isClient || effCursor == 3) && rowSource is not MemoryRowSource)
         {
-            MemoryRowSource? snapshot = MemoryRowSource.Materialize(rowSource, isClientCursor: true, out Failure? matFailure);
+            IReadOnlyList<string>? heldTables = isClient ? null : rowSource.HeldTables;
+            MemoryRowSource? snapshot = MemoryRowSource.Materialize(rowSource, isClientCursor: isClient, out Failure? matFailure, heldTables);
             rowSource.Dispose();
             if (snapshot is null)
             {
@@ -2080,7 +2554,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         _activeConnection.ClearErrors();
-        InstallOpenRows(rowSource, effCursor, effLock, effectiveLoc, hasBookmarks, supported);
+        InstallOpenRows(rowSource, effCursor, effLock, effectiveLoc, hasBookmarks, supported, cmdType);
         return CallResult.Nothing;
     }
 
@@ -2093,7 +2567,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         bool countAllAtOpen,
         out MappedProviderError? providerError,
         out Failure? refusal,
-        out bool recordPrepareErrorOnFields)
+        out bool recordPrepareErrorOnFields,
+        bool preferKeyset = false,
+        bool updatableKeyset = false,
+        bool lockPessimistic = false)
     {
         providerError = null;
         refusal = null;
@@ -2101,7 +2578,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         if (cmdType == AdoSqlText.AdCmdTableDirect)
         {
-            return TableRowSource.Open(session, originalSource, countAllAtOpen, out providerError, out refusal);
+            return preferKeyset
+                ? KeysetRowSource.TryOpenTable(session, originalSource, updatableKeyset, lockPessimistic, out providerError, out refusal)
+                : TableRowSource.Open(session, originalSource, countAllAtOpen, out providerError, out refusal);
         }
 
         if ((cmdType == AdoSqlText.AdCmdStoredProc && AdoSqlText.TryParseExec(effectiveSource, out string procArg))
@@ -2114,7 +2593,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 recordPrepareErrorOnFields = true;
                 return null;
             }
-            return OpenSavedQuery(session, queryName, countAllAtOpen, out providerError, out refusal);
+            return OpenSavedQuery(session, queryName, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
         }
 
         if (cmdType == AdoSqlText.AdCmdTable)
@@ -2122,13 +2601,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
             // r-ado-1b/rs-source-kinds #31, #111: adCmdTable rewrites Source to "select * from <name>"; works on tables and saved queries.
             if (session.FindSavedQuery(originalSource) is { } savedFromTable)
             {
-                return OpenSavedQueryDirect(session, savedFromTable, countAllAtOpen, out providerError, out refusal);
+                return OpenSavedQueryDirect(session, savedFromTable, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
             }
             if (session.Sql.Table(originalSource) is not null)
             {
-                return TableRowSource.Open(session, originalSource, countAllAtOpen, out providerError, out refusal);
+                return preferKeyset
+                    ? KeysetRowSource.TryOpenTable(session, originalSource, updatableKeyset, lockPessimistic, out providerError, out refusal)
+                    : TableRowSource.Open(session, originalSource, countAllAtOpen, out providerError, out refusal);
             }
-            IAdoRowSource? tableSel = SelectRowSource.Open(session, effectiveSource, isSavedQuery: false, countAllAtOpen, out providerError, out refusal);
+            IAdoRowSource? tableSel = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
             if (tableSel is null && providerError is { ErrorEntry.HelpContext: 5003131 })
             {
                 recordPrepareErrorOnFields = true;
@@ -2144,14 +2625,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         if (cmdType is AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified && !AdoSqlText.IsSelect(effectiveSource))
         {
-            // r-ado-1b/rs-source-kinds #15: bare local table opens directly via TableCursor (preserving OLE/binary columns).
+            // r-ado-1b/rs-source-kinds #15: bare local table opens directly via TableCursor/KeysetRowSource (preserving OLE/binary columns).
             if (session.Sql.Table(effectiveSource) is not null)
             {
-                return TableRowSource.Open(session, effectiveSource, countAllAtOpen, out providerError, out refusal);
+                return preferKeyset
+                    ? KeysetRowSource.TryOpenTable(session, effectiveSource, updatableKeyset, lockPessimistic, out providerError, out refusal)
+                    : TableRowSource.Open(session, effectiveSource, countAllAtOpen, out providerError, out refusal);
             }
             if (session.FindSavedQuery(effectiveSource) is { } saved)
             {
-                IAdoRowSource? savedRows = OpenSavedQueryDirect(session, saved, countAllAtOpen, out providerError, out refusal);
+                IAdoRowSource? savedRows = OpenSavedQueryDirect(session, saved, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
                 // r-ado-1b/rs-source-kinds #143: parameterized saved query opened under adCmdUnknown fails 3129 (not 3061).
                 if (savedRows is null && providerError is { ComFailure.Scode: AdoObject.HResultParamNotOptional })
                 {
@@ -2184,7 +2667,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return null;
         }
 
-        IAdoRowSource? rs = SelectRowSource.Open(session, effectiveSource, isSavedQuery: false, countAllAtOpen, out providerError, out refusal);
+        IAdoRowSource? rs = OpenSelectOrKeyset(session, effectiveSource, isSavedQuery: false, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
         if (rs is null && providerError is { ErrorEntry.HelpContext: 5003129 or 5003131 or 5003141 or 5003142 })
         {
             recordPrepareErrorOnFields = true;
@@ -2192,10 +2675,36 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return rs;
     }
 
+    private static IAdoRowSource? OpenSelectOrKeyset(
+        AdoOpenSession session,
+        string sql,
+        bool isSavedQuery,
+        bool countAllAtOpen,
+        bool preferKeyset,
+        bool updatableKeyset,
+        bool lockPessimistic,
+        out MappedProviderError? providerError,
+        out Failure? refusal)
+    {
+        if (preferKeyset)
+        {
+            KeysetRowSource? ks = KeysetRowSource.TryOpenSelect(
+                session, sql, isSavedQuery, updatableKeyset, lockPessimistic, out providerError, out refusal, out bool ineligible);
+            if (ks is not null || !ineligible)
+            {
+                return ks;
+            }
+        }
+        return SelectRowSource.Open(session, sql, isSavedQuery, countAllAtOpen, out providerError, out refusal);
+    }
+
     private static IAdoRowSource? OpenSavedQuery(
         AdoOpenSession session,
         string queryName,
         bool countAllAtOpen,
+        bool preferKeyset,
+        bool updatableKeyset,
+        bool lockPessimistic,
         out MappedProviderError? providerError,
         out Failure? refusal)
     {
@@ -2212,13 +2721,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
             providerError = AdoSqlErrors.TableOrQueryNotFound(queryName);
             return null;
         }
-        return OpenSavedQueryDirect(session, saved, countAllAtOpen, out providerError, out refusal);
+        return OpenSavedQueryDirect(session, saved, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
     }
 
     private static IAdoRowSource? OpenSavedQueryDirect(
         AdoOpenSession session,
         SavedQuery saved,
         bool countAllAtOpen,
+        bool preferKeyset,
+        bool updatableKeyset,
+        bool lockPessimistic,
         out MappedProviderError? providerError,
         out Failure? refusal)
     {
@@ -2235,7 +2747,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             refusal = Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{saved.Name}': {rendered.NotModelled}");
             return null;
         }
-        return SelectRowSource.Open(session, sql, isSavedQuery: true, countAllAtOpen, out providerError, out refusal);
+        return OpenSelectOrKeyset(session, sql, isSavedQuery: true, countAllAtOpen, preferKeyset, updatableKeyset, lockPessimistic, out providerError, out refusal);
     }
 
     /// <summary>
@@ -2381,7 +2893,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         int effectiveLockType,
         int effectiveCursorLocation,
         bool hasBookmarks,
-        int supportedOptions)
+        int supportedOptions,
+        int openedCommandType = AdoSqlText.AdCmdUnspecified)
     {
         _wasEverOpened = true;
         _closedAfterOpen = false;
@@ -2389,6 +2902,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _effectiveCursorType = effectiveCursorType;
         _effectiveLockType = effectiveLockType;
         _effectiveCursorLocation = effectiveCursorLocation;
+        _openedCommandType = openedCommandType;
         _hasBookmarks = hasBookmarks;
         _supportedOptions = supportedOptions;
         _bothBofEofAfterForwardMove = false;
@@ -2415,6 +2929,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing || (_rows is KeysetRowSource ks && ks.HasPendingFailedDelete))
+        {
+            // r-ado-1b/errors-by-route #174 (pending edit), r-oledb-odbc/update-errors #175 (pending failed Delete):
+            // server keyset Close while a pending row change has not been canceled fails 0x800A0C93.
+            return FailAdo(AdoErrors.NotAllowedInContext);
+        }
         DisposeOpenRows();
         // Keep column descriptors in Fields while Connection stays open, invalidating Field wrappers (r-str-ado-act/ado-rs-read-close #279-288).
         _fields?.OnRecordsetClosed();
@@ -2431,6 +2951,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _rows.Dispose();
         _rows = null;
         _closedAfterOpen = true;
+        _openedCommandType = AdoSqlText.AdCmdUnspecified;
         _viewMap = null;
         _filterExpr = null;
         _filterText = null;
@@ -2448,6 +2969,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _supportedOptions = 0;
     }
 
+    private bool ConsumeDeletedCurrent() => _rows is KeysetRowSource ks && ks.ConsumeDeletedCurrent();
+
     // ---- Navigation (r-oledb-odbc/fetch-moves, r-str-ado-act/ado-rs-cursors, r-ado-1b/book-raw-forms, r-fix-wire-ado/book-position-readback) ----
 
     private CallResult MoveFirst()
@@ -2456,6 +2979,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MoveFirst while editing (implicit Update on MoveFirst is not recorded)");
+        }
+        ConsumeDeletedCurrent();
         if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
@@ -2478,6 +3006,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MoveLast while editing (implicit Update on MoveLast is not recorded)");
+        }
+        ConsumeDeletedCurrent();
         if (_effectiveCursorType == 0)
         {
             // r-str-ado-act/ado-rs-cursors #36, r-oledb-odbc/fetch-moves #58, r-fix-wire-ado/book-position-readback #54-73:
@@ -2515,7 +3048,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (ViewIsEmpty)
+        if (FlushPendingEdit() is { } flushFail)
+        {
+            return flushFail;
+        }
+        bool removedCurrent = ConsumeDeletedCurrent();
+        if (!removedCurrent && ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -2559,14 +3097,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
-        int target = _bof ? 0 : _position + 1;
+        // When the current row was self-deleted and just removed from the keyset, the next live row shifted into _position.
+        int target = removedCurrent ? _position : (_bof ? 0 : _position + 1);
         if (!TrySeekView(target, out Failure? fail))
         {
             if (fail is not null)
             {
                 return CallResult.Fail(fail);
             }
-            _bof = false;
+            _bof = ViewIsEmpty;
             _eof = true;
             _position = target;
             return CallResult.Nothing;
@@ -2583,11 +3122,16 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MovePrevious while editing (implicit Update on MovePrevious is not recorded)");
+        }
         if (_effectiveCursorType == 0)
         {
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
-        if (ViewIsEmpty || _bof)
+        bool removedCurrent = ConsumeDeletedCurrent();
+        if ((!removedCurrent && ViewIsEmpty) || _bof)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
@@ -2604,7 +3148,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (target < 0)
         {
             _bof = true;
-            _eof = false;
+            _eof = ViewIsEmpty;
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
             return CallResult.Nothing;
@@ -2627,6 +3171,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.Move while editing (implicit Update on Move is not recorded)");
+        }
         if (startArg != 0 && Args.TypeOf(startArg) != VarType.Empty)
         {
             return NotImplemented("Recordset.Move with a Start bookmark argument");
@@ -2647,6 +3195,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ReportProviderError(err);
             return CallResult.Fail(err.ComFailure);
         }
+        bool removedCurrent = delta != 0 && ConsumeDeletedCurrent();
         if (ViewIsEmpty)
         {
             _bof = true;
@@ -2668,7 +3217,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         int known = ViewKnownCount;
         int current = _bof ? -1 : _eof ? (known >= 0 ? known : ScanToLast() + 1) : _position;
-        int target = current + delta;
+        int target = removedCurrent && delta > 0 ? current + delta - 1 : current + delta;
         if (target < 0)
         {
             _bof = true;
@@ -2728,30 +3277,133 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return last;
     }
 
-    // ---- Field value & ActualSize reads (called by AdoFieldObject) ----
+    // ---- Field value, OriginalValue, UnderlyingValue, Status, ActualSize & PutValue (called by AdoFieldObject) ----
+
+    private MappedProviderError DeletedRowError() =>
+        _rows is KeysetRowSource { IsDeletedCurrent: true }
+            ? AdoSqlErrors.SelfDeletedRow()
+            : AdoSqlErrors.RecordIsDeleted();
 
     public CallResult ReadFieldValue(int ordinal, AdoFieldObject field)
     {
-        if (!IsOpen || _bof || _eof || _suspendedAfterForwardMoveLast)
+        if (!IsOpen || (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast)))
         {
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
         }
-        if (!TrySeekView(_position, out Failure? seekFail))
+        if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
         OwnedVariant? val = _rows!.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
         if (val is null)
         {
+            if (readFail is { Scode: HResultDeletedRecord })
+            {
+                ReportProviderError(DeletedRowError());
+            }
             return CallResult.Fail(readFail!);
         }
         return CallResult.Of(val);
     }
 
+    public CallResult ReadFieldOriginalValue(int ordinal, AdoFieldObject field)
+    {
+        if (!IsLiveUpdatableKeysetRow)
+        {
+            return NotImplemented("Field.OriginalValue (only recorded on live existing rows of updatable (1, 3) server keysets)");
+        }
+        KeysetRowSource ks = (KeysetRowSource)_rows!;
+        if (!TrySeekView(_position, out Failure? seekFail))
+        {
+            return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        OwnedVariant? val = ks.ReadOriginalValue(ordinal, IsClientCursor, out Failure? readFail);
+        if (val is null)
+        {
+            if (readFail is { Scode: HResultDeletedRecord })
+            {
+                ReportProviderError(DeletedRowError());
+            }
+            return CallResult.Fail(readFail!);
+        }
+        return CallResult.Of(val);
+    }
+
+    public CallResult ReadFieldUnderlyingValue(int ordinal, AdoFieldObject field)
+    {
+        if (!IsLiveUpdatableKeysetRow)
+        {
+            return NotImplemented("Field.UnderlyingValue (only recorded on live existing rows of updatable (1, 3) server keysets)");
+        }
+        // r-fix-wire-ado/ado-edit-fresh #90/#102, r-ado-1b/values-keyset-conflict #30/#38/#45/#60/#69:
+        // ACE updatable server keysets refuse Field.UnderlyingValue with 0x800A0CB3.
+        ClearConnectionErrors();
+        return field.Fail(AdoErrors.RefreshingUnderlyingNotSupported);
+    }
+
+    public CallResult ReadFieldStatus(int ordinal, AdoFieldObject field)
+    {
+        if (!IsLiveUpdatableKeysetRow)
+        {
+            return NotImplemented("Field.Status (only recorded on live existing rows of updatable (1, 3) server keysets)");
+        }
+        // r-q-ado-misc/values-witness-keyset #56, #76: Field.Status on a live row of an updatable (1, 3) server keyset is 0 (adFieldOK).
+        return Int32(0);
+    }
+
+    public CallResult WriteFieldValue(int ordinal, nint arg, AdoFieldObject field)
+    {
+        if (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast))
+        {
+            return NotImplemented("Field.Value put at BOF/EOF (not recorded)");
+        }
+        if (IsClientCursor)
+        {
+            return NotImplemented("Field.Value put on a client cursor (client/batch editing belongs to a later stretch)");
+        }
+        if (IsRecordedReadOnlyModeCursor)
+        {
+            // r-ado-1b/rs-readonly-mode-edit: Field.Value put on a Mode=1 server cursor downgraded to (0, 1) fails 0x800A0CB3.
+            ClearConnectionErrors();
+            return field.Fail(AdoErrors.UpdatingNotSupported);
+        }
+        if (IsReadOnlyLock)
+        {
+            return NotImplemented($"Field.Value put on a read-only server cursor ({_effectiveCursorType}, {_effectiveLockType}) (not recorded)");
+        }
+        if (_effectiveLockType == 4)
+        {
+            return NotImplemented("Field.Value put with adLockBatchOptimistic (batch editing belongs to a later stretch)");
+        }
+        if (_filterExpr is not null || _sortSpec is not null)
+        {
+            return NotImplemented("Field.Value put on a filtered or sorted Recordset (not recorded)");
+        }
+        if (_rows is not KeysetRowSource ks || !ks.IsUpdatable)
+        {
+            return NotImplemented("Field.Value put on a non-updatable cursor");
+        }
+        if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
+        {
+            return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        if (!ks.TryWriteValue(ordinal, arg, AdoTypes.Field.Iid, out MappedProviderError? pe, out Failure? refFail))
+        {
+            if (pe is { } provErr)
+            {
+                ReportProviderError(provErr);
+                return CallResult.Fail(provErr.ComFailure);
+            }
+            return CallResult.Fail(refFail!);
+        }
+        // Note: successful Field.Value assignment intentionally does NOT clear Connection.Errors (r-ado-1b/fields-assign-conversion #199-215).
+        return CallResult.Nothing;
+    }
+
     public CallResult ReadFieldActualSize(int ordinal, AdoFieldObject field)
     {
-        if (!IsOpen || _bof || _eof || _suspendedAfterForwardMoveLast)
+        if (!IsOpen || (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast)))
         {
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
@@ -2761,13 +3413,17 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return CallResult.Fail(metaRefusal);
         }
-        if (!TrySeekView(_position, out Failure? seekFail))
+        if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
         OwnedVariant? val = _rows.ReadValue(ordinal, IsClientCursor, out Failure? readFail);
         if (val is null)
         {
+            if (readFail is { Scode: HResultDeletedRecord })
+            {
+                ReportProviderError(DeletedRowError());
+            }
             return CallResult.Fail(readFail!);
         }
         using (val)

@@ -87,6 +87,9 @@ public static class ExpressionMessages
     /// <summary>3070 for a name that is not a field (err-badcol-findfirst, find-expression-forms "F.N").</summary>
     public static string UnknownName(string name) => $"The Microsoft Access database engine does not recognize '{name}' as a valid field name or expression.";
 
+    /// <summary>3167 for reading a field of a deleted row through an expression (r-txn-1b/rs-types-after-rollback calls 41[0..2], r-def-cursor-dao/delete-by-other-cursor-current-row calls 56, 63).</summary>
+    public const string RecordDeleted = "Record is deleted.";
+
     /// <summary>The message of a kernel failure number.</summary>
     public static string Kernel(int number) => AceError.Describe(number);
 }
