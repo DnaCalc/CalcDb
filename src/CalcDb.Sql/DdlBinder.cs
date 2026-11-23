@@ -357,13 +357,15 @@ public static class DdlBinder
 
         // Preserve declaration order (r-q15-ddl-open/columns-z-a proved ACE writes columns in declaration order).
         var fields = new List<NewField>(stmt.Columns.Count);
-        foreach (DdlColumnDef col in stmt.Columns)
+        int firstLvalIdx = -1;
+        for (int i = 0; i < stmt.Columns.Count; i++)
         {
+            DdlColumnDef col = stmt.Columns[i];
             bool required = col.Nullability == DdlNullability.NotNull;
             if (required && col.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text or DdlTypeKind.Memo))
             {
                 // evidence/r-q34-ddl-sweep/nn-* records NOT NULL on LONG, TEXT, and MEMO only.
-                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on {col.DataType.Kind} column '{col.Name}' is not recorded (evidence/r-q34-ddl-sweep/nn-* records LONG, TEXT, MEMO)"), out failure);
+                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on {col.DataType.Kind} column '{col.Name}' is not recorded (evidence/r-q34-ddl-sweep/nn-long-accdb-dao, nn-text-accdb-dao, nn-memo-accdb-dao)"), out failure);
             }
             switch (col.DataType.Kind)
             {
@@ -447,9 +449,17 @@ public static class DdlBinder
                     break;
                 }
                 case DdlTypeKind.Memo:
+                    if (firstLvalIdx < 0)
+                    {
+                        firstLvalIdx = i;
+                    }
                     fields.Add(new NewField(col.Name, NewFieldType.Memo, Required: required));
                     break;
                 case DdlTypeKind.LongBinary:
+                    if (firstLvalIdx < 0)
+                    {
+                        firstLvalIdx = i;
+                    }
                     fields.Add(new NewField(col.Name, NewFieldType.Ole));
                     break;
                 case DdlTypeKind.Guid:
@@ -491,6 +501,7 @@ public static class DdlBinder
                 return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
             }
             indexes = [new NewIndex(pkName, [pkCol.Name], PrimaryKey: true)];
+            int lastIndexedIdx = pkIdx;
 
             if (uniqueConstraints.Count > 0)
             {
@@ -518,11 +529,27 @@ public static class DdlBinder
                 {
                     return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
                 }
-                if (SchemaWriter.FieldNameLookupClashOf(pkName, uqName, sortOrder, out _) != FieldNameClash.None)
+                switch (SchemaWriter.FieldNameLookupClashOf(pkName, uqName, sortOrder, out string? clashUndecided))
                 {
-                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE constraint '{uqName}' clashes with PRIMARY KEY '{pkName}' (duplicate constraint names in CREATE TABLE are not recorded)"), out failure);
+                    case FieldNameClash.Duplicate:
+                        return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE constraint '{uqName}' clashes with PRIMARY KEY '{pkName}' (duplicate constraint names in CREATE TABLE are not recorded)"), out failure);
+                    case FieldNameClash.Undecided:
+                        return Fail(BindOpen("NotModelled.DdlFieldNamePair", clashUndecided!), out failure);
                 }
                 indexes.Add(new NewIndex(uqName, [uqCol.Name], PrimaryKey: false, Unique: true));
+                lastIndexedIdx = uqIdx;
+            }
+
+            if (firstLvalIdx >= 0)
+            {
+                if (!pkIsInline)
+                {
+                    return Fail(BindOpen("NotModelled.DdlLvalWithInlineConstraint", "table-level PRIMARY KEY alongside Memo/LongBinary columns is not recorded (evidence/r-q34-ddl-sweep/lval-pk-memo-accdb-dao records inline constraints only)"), out failure);
+                }
+                if (firstLvalIdx <= lastIndexedIdx)
+                {
+                    return Fail(BindOpen("NotModelled.DdlLvalWithInlineConstraint", "Memo/LongBinary column declared before an inline PRIMARY KEY or UNIQUE column is not recorded (evidence/r-q34-ddl-sweep/lval-pk-memo-accdb-dao and lval-pk-uq-alltypes-accdb-dao declare every LVAL column after every indexed column)"), out failure);
+                }
             }
         }
         else if (uniqueConstraints.Count > 0)

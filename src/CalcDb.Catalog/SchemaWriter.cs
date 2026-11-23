@@ -227,7 +227,7 @@ public sealed class SchemaWriter
     /// </summary>
     public SchemaRefusal? Check(CreateTableRequest request)
     {
-        if (FileRefusal(allowJet4Mdb: request.Route is SchemaRoute.Sql or SchemaRoute.Ado) is { } file)
+        if (FileRefusal(allowJet4Mdb: request.Route is SchemaRoute.Sql or SchemaRoute.Ado, out bool isJet4Mdb) is { } file)
         {
             return file;
         }
@@ -265,10 +265,12 @@ public sealed class SchemaWriter
         }
         int counterCount = 0;
         int lvalCount = 0;
+        int firstLvalIdx = -1;
         int fixedBytes = 0;
         List<NewField> requiredFields = [];
-        foreach (NewField f in request.Fields)
+        for (int i = 0; i < request.Fields.Count; i++)
         {
+            NewField f = request.Fields[i];
             if (request.Route == SchemaRoute.Dao && f.Type != NewFieldType.Long)
             {
                 return new SchemaRefusal(null, f.Type == NewFieldType.Text
@@ -297,6 +299,10 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Binary:
                 case NewFieldType.VarBinary:
+                    if (isJet4Mdb && f.Type == NewFieldType.VarBinary)
+                    {
+                        return new SchemaRefusal(null, $"VarBinary field {f.Name} in a Jet 4 MDB is not recorded (evidence/r-q34-ddl-sweep/lval-pk-ole-memo-mdb-dao records fixed Binary only)");
+                    }
                     if (f.Size is < 1 or > 510)
                     {
                         return new SchemaRefusal(null, $"{f.Type} field {f.Name} of size {f.Size} (bounds outside 1..510 are not probed in r-q21-ddl-types)");
@@ -311,6 +317,10 @@ public sealed class SchemaWriter
                     if (counterCount > 1)
                     {
                         return new SchemaRefusal(null, "multiple Counter fields in one table");
+                    }
+                    if (isJet4Mdb && (f.Seed is not null || f.Increment is not null))
+                    {
+                        return new SchemaRefusal(null, $"COUNTER({f.Seed}, {f.Increment}) on field {f.Name} in a Jet 4 MDB is not recorded (evidence/r-q34-ddl-sweep/pk-counter-mdb-dao records default COUNTER only)");
                     }
                     if ((f.Seed is null) != (f.Increment is null))
                     {
@@ -331,6 +341,10 @@ public sealed class SchemaWriter
                     fixedBytes += 4;
                     break;
                 case NewFieldType.Decimal:
+                    if (isJet4Mdb)
+                    {
+                        return new SchemaRefusal(null, $"Decimal field {f.Name} in a Jet 4 MDB is not recorded (r-q21-ddl-types col-decimal-ado* records ACCDB only)");
+                    }
                     if (request.Route != SchemaRoute.Ado)
                     {
                         return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao)");
@@ -343,6 +357,10 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Memo:
                 case NewFieldType.Ole:
+                    if (firstLvalIdx < 0)
+                    {
+                        firstLvalIdx = i;
+                    }
                     lvalCount++;
                     break;
                 case NewFieldType.YesNo:
@@ -402,13 +420,14 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, $"NOT NULL on primary key column {request.Fields[pkIdx].Name} is not recorded (evidence/r-q34-ddl-sweep)");
             }
+            int lastIndexedIdx = pkIdx;
             if (request.AllIndexes.Count == 2)
             {
                 NewIndex uq = request.AllIndexes[1];
                 if (uq.PrimaryKey || !uq.Unique || uq.DisallowNull || uq.IgnoreNull
                     || uq.Fields.Count != 1 || (uq.Descending is not null && uq.Descending.Any(d => d)))
                 {
-                    return new SchemaRefusal(null, "CREATE TABLE with a second index other than one inline UNIQUE constraint on one ascending Text column after PRIMARY KEY is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-*)");
+                    return new SchemaRefusal(null, "CREATE TABLE with a second index other than one inline UNIQUE constraint on one ascending Text column after PRIMARY KEY is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao)");
                 }
                 if (IndexRefusal(uq, fieldTypes, allowText: true) is { } uqRefused)
                 {
@@ -420,7 +439,7 @@ public sealed class SchemaWriter
                 }
                 if (request.Fields[uqIdx].Type != NewFieldType.Text || uqIdx <= pkIdx)
                 {
-                    return new SchemaRefusal(null, $"CREATE TABLE inline UNIQUE index {uq.Name} on {request.Fields[uqIdx].Type} field {request.Fields[uqIdx].Name}: only a Text column declared after PRIMARY KEY is recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-*)");
+                    return new SchemaRefusal(null, $"CREATE TABLE inline UNIQUE index {uq.Name} on {request.Fields[uqIdx].Type} field {request.Fields[uqIdx].Name}: only a Text column declared after PRIMARY KEY is recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao)");
                 }
                 if (request.Fields[uqIdx].Required)
                 {
@@ -433,16 +452,21 @@ public sealed class SchemaWriter
                     case FieldNameClash.Undecided:
                         return new SchemaRefusal(null, idxNameUndecided);
                 }
+                lastIndexedIdx = uqIdx;
+            }
+            if (firstLvalIdx >= 0 && firstLvalIdx <= lastIndexedIdx)
+            {
+                return new SchemaRefusal(null, "CREATE TABLE with a Memo/Ole column declared before an indexed column is not recorded (evidence/r-q34-ddl-sweep/lval-pk-memo-accdb-dao and lval-pk-uq-alltypes-accdb-dao declare every LVAL column after every indexed column)");
             }
         }
         if (request.Route == SchemaRoute.Dao
-            && CheckLvPropPlan(request, request.Fields, DaoFieldRequired, allowMultiLvalPage: true) is { } daoLvRefusal)
+            && CheckLvPropPlan(request, request.Fields, DaoFieldRequired, allowMultiLvalWrite: true) is { } daoLvRefusal)
         {
             return daoLvRefusal;
         }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado
             && requiredFields.Count > 0
-            && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalPage: false) is { } sqlLvRefusal)
+            && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalWrite: false) is { } sqlLvRefusal)
         {
             return sqlLvRefusal;
         }
@@ -455,8 +479,10 @@ public sealed class SchemaWriter
     /// published and then refused: simulates every step <c>1..M</c> before writing and refuses by name:
     /// <list type="bullet">
     /// <item>a blob exceeding <see cref="LongValuePlan.SingleRowPayloadMax"/> (3,816 bytes; chained LvProp),</item>
-    /// <item>multiple LVAL pages when <paramref name="allowMultiLvalPage"/> is false (SQL/ADO single-commit LVAL page
-    /// retirement is not recorded),</item>
+    /// <item>multiple LVAL pages or a second LVAL slot compaction when <paramref name="allowMultiLvalWrite"/> is false
+    /// (only a single external <c>LvProp</c> LVAL write inside one SQL/ADO commit is recorded),</item>
+    /// <item>spilling <c>MSysObjects.LvProp</c> to an LVAL page alongside CREATE TABLE indexes (relative page-allocation
+    /// order between index leaf pages and the <c>LvProp</c> LVAL page is not recorded),</item>
     /// <item>a non-empty <c>MSysObjects.LvProp</c> free map (another table already uses an LvProp LVAL page),</item>
     /// <item>an LVAL page whose remaining free space after a step falls in <c>179..263</c> (the band <c>RowWriter</c>
     /// refuses) or <c>&lt;= 178</c> (leaving <c>MSysObjects.LvProp</c>'s free map is not recorded), and</item>
@@ -467,7 +493,7 @@ public sealed class SchemaWriter
         CreateTableRequest request,
         IReadOnlyList<NewField> propFields,
         StoredProperty property,
-        bool allowMultiLvalPage)
+        bool allowMultiLvalWrite)
     {
         PropertyMap[] allMaps = [.. propFields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [property]))];
         int pageDataCapacity = _d.PageSize - _d.DataPage.SlotBase;
@@ -496,7 +522,7 @@ public sealed class SchemaWriter
             if (!hasLval || lvalFree < needed || lvalSlots >= _d.DataPage.WriterSlotLimit)
             {
                 lvalPagesNeeded++;
-                if (!allowMultiLvalPage && lvalPagesNeeded > 1)
+                if (!allowMultiLvalWrite && lvalPagesNeeded > 1)
                 {
                     return new SchemaRefusal(null, $"{routeLabel} would require more than one MSysObjects.LvProp LVAL page (retiring a newly allocated LVAL page inside one SQL/ADO commit is not recorded)");
                 }
@@ -509,6 +535,10 @@ public sealed class SchemaWriter
                 // Appending slot lvalSlots and deleting the prior live slot compacts the one live row to the top of the
                 // page while keeping all lvalSlots directory entries (DataPages.TryAppendRow + TryDeleteSlot).
                 lvalSlots++;
+                if (!allowMultiLvalWrite && lvalSlots > 1)
+                {
+                    return new SchemaRefusal(null, $"{routeLabel} after field {k} ({propFields[k - 1].Name}) would write a second MSysObjects.LvProp LVAL slot inside one commit (in-page LVAL compaction inside one SQL/ADO commit is not recorded)");
+                }
                 lvalFree = pageDataCapacity - (lvalSlots * _d.DataPage.SlotEntryBytes) - blobBytes;
             }
             if (lvalFree <= LvalFreeMapLeavesAtOrBelow)
@@ -524,6 +554,10 @@ public sealed class SchemaWriter
         if (lvalPagesNeeded == 0)
         {
             return null;
+        }
+        if (request.AllIndexes.Count > 0)
+        {
+            return new SchemaRefusal(null, $"{routeLabel} spilling MSysObjects.LvProp to an LVAL page alongside {request.AllIndexes.Count} index(es) is not recorded (page-allocation order between index leaf pages and the LvProp LVAL page is undecided)");
         }
 
         TableDefinition objects = _catalog.ObjectTable;
@@ -1738,10 +1772,13 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// ACCDB is admitted for all recorded catalog changes; Jet 4 MDB is admitted only when <paramref name="allowJet4Mdb"/>
-    /// is true (SQL/ADO CREATE TABLE: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/*-mdb-*).
+    /// is true (SQL/ADO CREATE TABLE: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/create-one-long-mdb-dao).
     /// </summary>
-    private SchemaRefusal? FileRefusal(bool allowJet4Mdb = false)
+    private SchemaRefusal? FileRefusal(bool allowJet4Mdb = false) => FileRefusal(allowJet4Mdb, out _);
+
+    private SchemaRefusal? FileRefusal(bool allowJet4Mdb, out bool isJet4Mdb)
     {
+        isJet4Mdb = false;
         if (_catalog.TablesContainer is null)
         {
             return new SchemaRefusal(null, "the catalog has no Tables container");
@@ -1751,11 +1788,14 @@ public sealed class SchemaWriter
         {
             return null;
         }
-        if (allowJet4Mdb && IsJet4Mdb(page0))
+        if (IsJet4Mdb(page0))
         {
-            return null;
+            isJet4Mdb = true;
+            return allowJet4Mdb
+                ? null
+                : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE is recorded: evidence/r-q11-ddl-closure/mdb-create-one-long)");
         }
-        return new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE is recorded: evidence/r-q34-ddl-sweep/*-mdb-*)");
+        return new SchemaRefusal(null, "a catalog change in a non-ACCDB file (only ACCDB and Jet 4 MDB SQL/ADO CREATE TABLE are recorded)");
     }
 
     private bool IsJet4Mdb(ReadOnlySpan<byte> page0) =>

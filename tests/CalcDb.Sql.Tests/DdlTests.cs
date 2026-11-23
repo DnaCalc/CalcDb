@@ -679,9 +679,13 @@ public sealed class DdlTests
             Assert.Equal(0x409u, c.TypeInfo);
         });
 
-        // r-q34-ddl-sweep/nn-*: NOT NULL is admitted on LONG, TEXT, MEMO (not on PK/UNIQUE or unrecorded types).
+        // r-q34-ddl-sweep/nn-*: NOT NULL is admitted on LONG, TEXT, MEMO (not on PK/UNIQUE or unrecorded types,
+        // and not when a second LvProp LVAL slot or an index + spilling LvProp would be written in one commit).
         AssertNotModelled(db, "CREATE TABLE NnDbl (a DOUBLE NOT NULL)", "NotModelled.DdlColumnNotNull");
         AssertNotModelled(db, "CREATE TABLE NnPk (a LONG NOT NULL CONSTRAINT PK_NnPk PRIMARY KEY)", "NotModelled.DdlColumnNotNull");
+        AssertNotModelled(db, "CREATE TABLE NnSpill2 (aaaaaaaa LONG NOT NULL, b LONG NOT NULL)", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "CREATE TABLE NnThree (a LONG NOT NULL, b LONG NOT NULL, c LONG NOT NULL)", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "CREATE TABLE NnPkSpill (ID LONG CONSTRAINT PK_NnS PRIMARY KEY, SSSSSSSS TEXT(50) NOT NULL)", "NotModelled.SchemaWriter");
 
         // r-q28-schema-write-open/pair-sql-fe-FE, pair-sql-nfc-nfd: non-ASCII case and NFC/NFD collide under General (3380).
         AssertAceError(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", 3380);
@@ -703,6 +707,10 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE UqTblPk (id LONG, s TEXT(10) CONSTRAINT UX_UqTP UNIQUE, CONSTRAINT PK_UqTP PRIMARY KEY (id))", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE UqUnnamed (id LONG CONSTRAINT PK_UqU PRIMARY KEY, s TEXT(10) UNIQUE)", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE UqDupName (id LONG CONSTRAINT PK_Same PRIMARY KEY, s TEXT(10) CONSTRAINT PK_Same UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqUndecided (id LONG CONSTRAINT [ae] PRIMARY KEY, s TEXT(10) CONSTRAINT [\u00e6] UNIQUE)", "NotModelled.DdlFieldNamePair");
+        AssertNotModelled(db, "CREATE TABLE LvalTblPk (id LONG, m MEMO, CONSTRAINT PK_Ltp PRIMARY KEY (id))", "NotModelled.DdlLvalWithInlineConstraint");
+        AssertNotModelled(db, "CREATE TABLE LvalBeforePk (m MEMO, id LONG CONSTRAINT PK_Lbp PRIMARY KEY)", "NotModelled.DdlLvalWithInlineConstraint");
+        AssertNotModelled(db, "CREATE TABLE LvalBetween (id LONG CONSTRAINT PK_Lb PRIMARY KEY, m MEMO, s TEXT(10) CONSTRAINT UX_Lb UNIQUE)", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE PkText (s TEXT(10) CONSTRAINT PK_Txt PRIMARY KEY)", "NotModelled.DdlPrimaryKeyShape");
         AssertNotModelled(db, "CREATE TABLE PkMulti (a LONG, b LONG, CONSTRAINT PK_M PRIMARY KEY (a, b))", "NotModelled.DdlPrimaryKeyShape");
         AssertNotModelled(db, "CREATE TABLE PkU (a LONG PRIMARY KEY)", "NotModelled.DdlUnnamedPrimaryKey");
@@ -927,8 +935,9 @@ public sealed class DdlTests
         Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         byte[] ours = db.Image.Snapshot();
 
-        // When 2+ NOT NULL columns spill MSysObjects.LvProp from step 1's inline blob to step 2's LVAL page,
-        // ACE's vacated inline prefix on the MSysObjects data page holds step 1's 8-byte DateUpdate reading.
+        // When 2 NOT NULL columns spill MSysObjects.LvProp from step 1's inline blob to step 2's LVAL page,
+        // ACE's vacated inline prefix on the MSysObjects data page holds an 8-byte ghost DateUpdate field
+        // (deterministically live DateUpdate + 1 ULP across the retained nn-two-cols-* records).
         List<(long Page, int Start, int Length)>? clockSpans = null;
         if (question.StartsWith("nn-two-cols-", StringComparison.Ordinal))
         {

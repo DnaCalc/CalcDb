@@ -1330,6 +1330,10 @@ public sealed class SchemaWriterTests
             SchemaWriter w = session.Writer();
             // DAO route on MDB stays refused by name.
             Assert.NotNull(w.Check(new("T", [Long("n")], SchemaRoute.Dao))?.NotWritten);
+            // Unrecorded Jet 4 MDB column types (COUNTER(seed, inc), VARBINARY, DECIMAL) stay refused by name.
+            Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("ID", NewFieldType.Counter, Seed: 100, Increment: 5)], SchemaRoute.Sql))?.NotWritten);
+            Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("B", NewFieldType.VarBinary, Size: 16)], SchemaRoute.Sql))?.NotWritten);
+            Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("D", NewFieldType.Decimal, Precision: 10, Scale: 2)], SchemaRoute.Ado))?.NotWritten);
             // Duplicate-field 3380 rollback on MDB stays refused by name (no writes).
             SchemaOutcome dup = w.CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Sql), 1, 1);
             Assert.False(dup.Succeeded);
@@ -1350,14 +1354,45 @@ public sealed class SchemaWriterTests
             Assert.NotNull(w2.DropTable(session.Workspace, new("T", SchemaRoute.Sql)).Refused?.NotWritten);
         }
 
-        // SQL NOT NULL requiring > 1 MSysObjects.LvProp LVAL page (26 30-char NOT NULL columns) stays refused before writing.
         using (var accdb = new Session(Fixture()))
         {
-            NewField[] manyRequired = [.. Enumerable.Range(1, 26).Select(i => new NewField($"f{i:D2}_xxxxxxxxxxxxxxxxxxxxxxxxxx", NewFieldType.Long, Required: true))];
-            SchemaRefusal? refused = accdb.Writer().Check(new("T", manyRequired, SchemaRoute.Sql));
-            Assert.NotNull(refused);
-            Assert.Null(refused.Value.Error);
-            Assert.Contains("more than one", refused.Value.NotWritten);
+            SchemaWriter w = accdb.Writer();
+
+            // SQL/ADO NOT NULL requiring a second MSysObjects.LvProp LVAL slot (in-page compaction) inside one commit
+            // stays refused before writing: both spilling-first 2-col and 3-col shapes.
+            SchemaRefusal? spillFirstTwo = w.Check(new("T", [new("aaaaaaaa", NewFieldType.Long, Required: true), new("b", NewFieldType.Long, Required: true)], SchemaRoute.Sql));
+            Assert.NotNull(spillFirstTwo);
+            Assert.Null(spillFirstTwo.Value.Error);
+            Assert.Contains("second MSysObjects.LvProp LVAL slot", spillFirstTwo.Value.NotWritten);
+
+            SchemaRefusal? threeCols = w.Check(new("T", [new("a", NewFieldType.Long, Required: true), new("b", NewFieldType.Long, Required: true), new("c", NewFieldType.Long, Required: true)], SchemaRoute.Sql));
+            Assert.NotNull(threeCols);
+            Assert.Null(threeCols.Value.Error);
+            Assert.Contains("second MSysObjects.LvProp LVAL slot", threeCols.Value.NotWritten);
+
+            // Spilling MSysObjects.LvProp to an LVAL page alongside CREATE TABLE indexes stays refused by name.
+            NewIndex[] pk = [new("PK_T", ["ID"], PrimaryKey: true)];
+            SchemaRefusal? pkSpillOne = w.Check(new("T", [Long("ID"), new("SSSSSSSS", NewFieldType.Text, Size: 50, Required: true)], SchemaRoute.Sql, pk));
+            Assert.NotNull(pkSpillOne);
+            Assert.Null(pkSpillOne.Value.Error);
+            Assert.Contains("alongside 1 index", pkSpillOne.Value.NotWritten);
+
+            SchemaRefusal? pkSpillTwo = w.Check(new("T", [Long("ID"), new("A", NewFieldType.Long, Required: true), new("B", NewFieldType.Text, Size: 50, Required: true)], SchemaRoute.Sql, pk));
+            Assert.NotNull(pkSpillTwo);
+            Assert.Null(pkSpillTwo.Value.Error);
+            Assert.Contains("alongside 1 index", pkSpillTwo.Value.NotWritten);
+
+            // LVAL column declared before PK or between PK and UNIQUE stays refused by name.
+            SchemaRefusal? lvalBeforePk = w.Check(new("T", [new("M", NewFieldType.Memo), Long("ID")], SchemaRoute.Sql, pk));
+            Assert.NotNull(lvalBeforePk);
+            Assert.Null(lvalBeforePk.Value.Error);
+            Assert.Contains("Memo/Ole column declared before an indexed column", lvalBeforePk.Value.NotWritten);
+
+            NewIndex[] pkUq = [new("PK_T", ["ID"], PrimaryKey: true), new("UX_T", ["Code"], PrimaryKey: false, Unique: true)];
+            SchemaRefusal? lvalBetween = w.Check(new("T", [Long("ID"), new("M", NewFieldType.Memo), Text("Code", 10)], SchemaRoute.Sql, pkUq));
+            Assert.NotNull(lvalBetween);
+            Assert.Null(lvalBetween.Value.Error);
+            Assert.Contains("Memo/Ole column declared before an indexed column", lvalBetween.Value.NotWritten);
         }
     }
 }
