@@ -144,32 +144,35 @@ tooling revision and the candidate module's hash once, so all its attempts answe
 their own pipe and log handles (launches are serialized), and records and cached content are created by a rename that
 never replaces.
 
-**The comparison rule (`calls.trace@10`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
+**The comparison rule (`calls.trace@11`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
 relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
-is an accepted difference, counted apart. `calls.trace@10` compares the call trace and file observations and does not
-compare `etw:file-io`. Revision 8 adds `ace-clock-fields` (task c4rv), and revision 10 extends it (task 4t24). ACE
-writes its clock into every file it creates or changes, so two ACE runs of one question give different files. Where the
-SHA-256 of a file observation differs and both files' bytes can be found (ACE's from the retained content store, or
-reconstructed from an adjacent kept `nativeRead` block overlaid onto the earlier retained input or the other side's
-verified file and accepted only when its SHA-256 equals the recorded file hash; CalcDb's from its own attempt, each
-checked against its hash), the files are compared byte for byte outside the clock fields each file's own structure
-locates ([AceClockFields](../../src/CalcDb.Corpus/AceClockFields.cs), ACE 2007 profile). The same rule applies to kept
+is an accepted difference, counted apart. `calls.trace@11` compares the call trace and file observations and does not
+compare `etw:file-io`. Revision 8 adds `ace-clock-fields` (task c4rv), revision 10 extends it to deleted/vacated rows and
+kept `nativeRead` pages (task 4t24), and revision 11 extends it to the Jet 4 MDB profile (task 6qw5). ACE writes its
+clock into every file it creates or changes, so two ACE runs of one question give different files. Where the SHA-256 of a
+file observation differs and both files' bytes can be found (ACE's from the retained content store, or reconstructed from
+an adjacent kept `nativeRead` block overlaid onto the earlier retained input or the other side's verified file and
+accepted only when its SHA-256 equals the recorded file hash; CalcDb's from its own attempt, each checked against its
+hash), the files are compared byte for byte outside the clock fields each file's own structure locates
+([AceClockFields](../../src/CalcDb.Corpus/AceClockFields.cs), ACE 2007 and Jet 4 profiles). The same rule applies to kept
 page-aligned `nativeRead` slices (`HandleEvent` reads), using either the verified full-file maps or a per-capture
 `PageClockContext` built from that capture's own kept pages and retained input (for example
-`r-q28-schema-write-open/dao-long30-26`). Set aside: the page-0 creation DATE, MSysObjects `DateCreate` and `DateUpdate`
-in live rows, intact deleted rows ending at the lowest slot (`r-q28-schema-write-open/pair-dao-Aa-aA`), and vacated
-prefix copies left below the anchor row by a later shrink (`r-q28-schema-write-open/dao-fields-7`), and a chained long
+`r-q28-schema-write-open/dao-long30-26`). Per profile, only fields decided by ACE repeats are normalized: for both ACE
+2007 and Jet 4, set aside are the page-0 creation DATE and MSysObjects `DateCreate` and `DateUpdate` in live rows and in
+vacated prefix copies left below the anchor row by a later shrink (`r-q28-schema-write-open/dao-fields-7`;
+`r-q34-ddl-sweep/nn-two-cols-mdb-dao`), and compared with the clock removed are the page-0 password (XOR the creation
+day) and the 2-byte SIDs of `MSysObjects.Owner` (in the same live and vacated rows) and `MSysACEs.SID` (XOR the RC4
+keystream of the DATE); for ACE 2007 only (where repeats decide them), set aside are intact deleted MSysObjects rows
+ending at the lowest slot (`r-q28-schema-write-open/pair-dao-Aa-aA`, plus their unmasked `Owner`) and a chained long
 value's millisecond tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not
-zero). Compared with the clock removed: the page-0 password (XOR the creation day) and the 2-byte SIDs of
-`MSysObjects.Owner` (in the same live, deleted, and vacated rows) and `MSysACEs.SID` (XOR the RC4 keystream of the
-DATE). Each kind of field that differed is a note on a Matched comparison; this is ACE's nondeterminism, not an
-accepted difference. Any other byte (including non-clock bytes in deleted or vacated rows, free-gap bytes, unkept pages
-whose difference breaks SHA-256 reconstruction, sub-page `nativeRead` slices, or non-MSysObjects pages), another
-profile, or a file whose bytes cannot be found or reconstructed still differs, the last with a note. `calcdb-oracle
-file-compare (--expected F --actual F | --attempts A,B | --repeats [--match REGEX])` shows the rule on two files, two
-attempts, or each native attempt in the store against the one before: on 2026-11-21 all 33 created or changed files of
-ACE repeats there matched, and only r-q8-header-counter two-deletes-500ms-apart still differs (two pairs), at the page-0
-commit counter (a timing boundary, not a clock field).
+zero). Each kind of field that differed is a note on a Matched comparison; this is ACE's nondeterminism, not an
+accepted difference. Profiles without deciding ACE repeats (ACE 2010 code 3, ACE 2016 code 5, ACE 2019 code 6) stay
+strict and name the refused profile in the comparison note. Any other byte (including non-clock bytes in deleted or
+vacated rows, deleted MSysObjects rows or chained long-value stamps on Jet 4, free-gap bytes, unkept pages whose
+difference breaks SHA-256 reconstruction, sub-page `nativeRead` slices, or non-MSysObjects pages), or a file whose bytes
+cannot be found or reconstructed still differs, the last with a note. `calcdb-oracle file-compare (--expected F --actual F
+| --attempts A,B | --repeats [--match REGEX])` shows the rule on two files, two attempts, or each native attempt in the
+store against the one before.
 
 **The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch once over the questions
 of every folder of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset; `--parallel N` as

@@ -11,10 +11,10 @@ public sealed record FileImageVerdict(bool EqualOutsideClock, string? Difference
 
 /// <summary>
 /// Compares two database images (or kept page slices) byte for byte except ACE's own clock (W-01/corpus-comparison,
-/// tasks c4rv and 4t24; calls.trace revisions 8 and 10): the clock fields of each side are derived from its own
-/// structure (<see cref="AceClockFields"/>), the two field lists must be the same, and the clock-normalized bytes must
-/// be equal. Where a side's fields cannot be derived, the bytes are compared strictly. This normalizes ACE's
-/// nondeterminism; it is not an accepted difference.
+/// tasks c4rv, 4t24 and 6qw5; calls.trace revisions 8, 10 and 11): the clock fields of each side are derived from its
+/// own structure (<see cref="AceClockFields"/>), both sides must share the same profile and field list, and the
+/// clock-normalized bytes must be equal. Where a side's fields cannot be derived or profiles disagree, the bytes are
+/// compared strictly. This normalizes ACE's nondeterminism; it is not an accepted difference.
 /// </summary>
 public static class FileImageComparison
 {
@@ -32,14 +32,21 @@ public static class FileImageComparison
         if (e is null || a is null)
         {
             string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
-            return First(0, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+            string note = $"compared strictly ({why})";
+            return First(0, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
+        }
+        if (e.Format != a.Format)
+        {
+            string note = $"compared strictly (profile mismatch: expected {e.Format}, actual {a.Format})";
+            return First(0, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
         return CompareMaps(0, expected.Span, actual.Span, e.PageSize, e.Fields, e.Normalized, a.PageSize, a.Fields, a.Normalized);
     }
 
     /// <summary>
     /// Compares two page-aligned kept slices starting at <paramref name="fileOffset"/> outside ACE's clock fields using
-    /// each side's own <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24).
+    /// each side's own <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24; Jet 4 extended in revision
+    /// 11, task 6qw5).
     /// </summary>
     public static FileImageVerdict CompareSlice(long fileOffset, ReadOnlyMemory<byte> expected, ReadOnlyMemory<byte> actual,
         PageClockContext? expectedContext, PageClockContext? actualContext)
@@ -50,15 +57,22 @@ public static class FileImageComparison
         }
         if (expectedContext is null || actualContext is null)
         {
-            string why = expectedContext is null ? "expected: no ACE 2007 page context" : "actual: no ACE 2007 page context";
-            return First(fileOffset, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+            string why = expectedContext is null ? "expected: no ACE clock page context" : "actual: no ACE clock page context";
+            string note = $"compared strictly ({why})";
+            return First(fileOffset, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
+        }
+        if (expectedContext.Format != actualContext.Format)
+        {
+            string note = $"compared strictly (profile mismatch: expected {expectedContext.Format}, actual {actualContext.Format})";
+            return First(fileOffset, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
         ClockFieldMap? e = AceClockFields.FindInSlice(fileOffset, expected, expectedContext, out string? expectedRefusal);
         ClockFieldMap? a = AceClockFields.FindInSlice(fileOffset, actual, actualContext, out string? actualRefusal);
         if (e is null || a is null)
         {
             string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
-            return First(fileOffset, expected.Span, actual.Span, 4096, $"compared strictly ({why})") ?? new(true, null, "", "", []);
+            string note = $"compared strictly ({why})";
+            return First(fileOffset, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
         return CompareMaps(fileOffset, expected.Span, actual.Span, e.PageSize, e.Fields, e.Normalized, a.PageSize, a.Fields, a.Normalized);
     }
@@ -73,6 +87,11 @@ public static class FileImageComparison
         if (expectedSlice.Length != actualSlice.Length)
         {
             return new(false, "length", expectedSlice.Length.ToString(CultureInfo.InvariantCulture), actualSlice.Length.ToString(CultureInfo.InvariantCulture), []);
+        }
+        if (expectedMap.Format != actualMap.Format)
+        {
+            string note = $"compared strictly (profile mismatch: expected {expectedMap.Format}, actual {actualMap.Format})";
+            return First(fileOffset, expectedSlice, actualSlice, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
         long end = fileOffset + expectedSlice.Length;
         ClockField[] eFields = [.. expectedMap.Fields.Where(f => f.Offset >= fileOffset && f.Offset + f.Length <= end)];
@@ -134,7 +153,7 @@ public static class FileImageComparison
         return n;
     }
 
-    private static FileImageVerdict? First(long fileOffset, ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, int pageSize, string context)
+    private static FileImageVerdict? First(long fileOffset, ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, int pageSize, string context, IReadOnlyList<string>? notes = null)
     {
         int at = x.CommonPrefixLength(y);
         if (at == x.Length && x.Length == y.Length)
@@ -144,6 +163,6 @@ public static class FileImageComparison
         int end = Math.Min(Math.Min(x.Length, y.Length), at + 8);
         long pos = fileOffset + at;
         string where = string.Create(CultureInfo.InvariantCulture, $"page {pos / pageSize} offset 0x{pos % pageSize:X} ({context})");
-        return new(false, where, Convert.ToHexString(x[at..end]), Convert.ToHexString(y[at..end]), []);
+        return new(false, where, Convert.ToHexString(x[at..end]), Convert.ToHexString(y[at..end]), notes ?? []);
     }
 }
