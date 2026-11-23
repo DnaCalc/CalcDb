@@ -53,6 +53,43 @@ internal readonly record struct AdoSelectContext(
     int CursorType,
     int LockType);
 
+/// <summary>
+/// SQL shape classification for ADO <c>Recordset.RecordCount</c> against retained ACE records
+/// (r-q2-expr-sql/demand-ado-events-shapes, r-str-ado-act/ado-rs-cursors, r-fix-wire-ado/ado-rs-cursors-writable,
+/// r-ado-1b/rs-source-kinds, r-ado-1b/rs-lock-matrix, r-ado-1b/conn-cursorlocation-inherit, r-ado-1b/view-sort-server,
+/// r-q-ado-misc/cursor-external-visibility).
+/// </summary>
+internal enum AdoSelectShape : byte
+{
+    PlainSingleTable,
+    GroupByUnordered,
+    DistinctUnordered,
+    TopOrdered,
+    Union,
+    Subquery,
+    NoFrom,
+    Join,
+    UngroupedAggregate,
+    GroupByHaving,
+    GroupByOrderBy,
+    GroupByCombined,
+    DistinctOrderBy,
+    DistinctCombined,
+    DistinctRow,
+    TopPercent,
+    TopWithoutOrderBy,
+    Other,
+}
+
+/// <summary>Backing source kind that opened a <see cref="RecordsetObject"/> (before any static/client materialization).</summary>
+internal enum AdoRecordCountSource : byte
+{
+    Keyset,
+    Select,
+    Table,
+    Identity,
+}
+
 /// <summary>Server-side row source over <see cref="SelectCursor"/> (shared through <see cref="CalcDb.Sql"/>).</summary>
 internal sealed unsafe class SelectRowSource : IAdoRowSource
 {
@@ -61,21 +98,32 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
     private readonly AdoFieldDescriptor[] _columns;
     private readonly string[] _heldTables;
     private readonly AdoSelectContext _context;
+    private readonly AdoSelectShape _shape;
     private int _cursorIndex;
     private int _knownCount;
 
-    private SelectRowSource(BoundSelect plan, SelectCursor cursor, AdoFieldDescriptor[] columns, string[] heldTables, int knownCount, AdoSelectContext context)
+    private SelectRowSource(
+        BoundSelect plan,
+        SelectCursor cursor,
+        AdoFieldDescriptor[] columns,
+        string[] heldTables,
+        int knownCount,
+        AdoSelectContext context,
+        AdoSelectShape shape)
     {
         _plan = plan;
         _cursor = cursor;
         _columns = columns;
         _heldTables = heldTables;
         _context = context;
+        _shape = shape;
         _knownCount = knownCount;
         _cursorIndex = cursor.Eof ? -1 : 0;
     }
 
     public AdoSelectContext Context => _context;
+
+    public AdoSelectShape Shape => _shape;
 
     public static SelectRowSource? Open(
         AdoOpenSession session,
@@ -105,31 +153,23 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
 
         int colCount = cursor.Columns.Count;
         var columns = new AdoFieldDescriptor[colCount];
-        SelectSyntax? parsedSelect = null;
-        bool checkedParsedSelect = false;
+        SelectSyntax? parsedSelect = SqlParser.Parse(sql, out _);
+        AdoSelectShape shape;
         try
         {
+            shape = ClassifySelectShape(plan, parsedSelect);
+            bool canIndexItems = parsedSelect is not null
+                && !parsedSelect.IsUnion
+                && parsedSelect.Items.Count == colCount
+                && parsedSelect.Items.All(static it => !it.Star);
             for (int i = 0; i < colCount; i++)
             {
                 int? daoType = cursor.FieldType(i, out string? typeOpen);
-                SyntaxNode? exprRoot = null;
-                if (daoType is null && cursor.Columns[i].Origin == ColumnOrigin.Expression)
-                {
-                    if (!checkedParsedSelect)
-                    {
-                        checkedParsedSelect = true;
-                        SelectSyntax? s = SqlParser.Parse(sql, out _);
-                        if (s is not null && !s.IsUnion && s.Items.Count == colCount && s.Items.All(it => !it.Star))
-                        {
-                            parsedSelect = s;
-                        }
-                        else
-                        {
-                            s?.Dispose();
-                        }
-                    }
-                    exprRoot = parsedSelect?.Items[i].Expression?.Syntax.Root;
-                }
+                SyntaxNode? exprRoot = daoType is null
+                    && cursor.Columns[i].Origin == ColumnOrigin.Expression
+                    && canIndexItems
+                    ? parsedSelect!.Items[i].Expression?.Syntax.Root
+                    : null;
                 columns[i] = AdoFieldDescriptor.FromSelectColumn(cursor.Columns[i], daoType, typeOpen, exprRoot, plan.Sources);
             }
         }
@@ -155,12 +195,184 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
                 providerError = AdoSqlErrors.TryMap(fetch, isSavedQuery, out refusal);
                 return null;
             }
-            knownCount = (int)cursor.RecordCount;
+            if (!cursor.TryRecordCount(out long cursorCount, out string? openName, out string? openDetail))
+            {
+                cursor.Dispose();
+                plan.Dispose();
+                refusal = Failure.NotModelled(
+                    openName ?? "NotModelled.QueryRecordCount",
+                    openDetail ?? "RecordCount on this SELECT shape is not recorded");
+                return null;
+            }
+            knownCount = (int)cursorCount;
             cursor.MoveFirst();
         }
 
-        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context);
+        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape);
     }
+
+    internal static AdoSelectShape ClassifySelectShape(BoundSelect plan, SelectSyntax? syntax)
+    {
+        if (plan.IsUnion || syntax is { IsUnion: true })
+        {
+            return AdoSelectShape.Union;
+        }
+        if (syntax is null)
+        {
+            return AdoSelectShape.Other;
+        }
+        if (syntax.From.Count == 0)
+        {
+            return AdoSelectShape.NoFrom;
+        }
+        if (HasSubquerySource(syntax.From))
+        {
+            return AdoSelectShape.Subquery;
+        }
+        if (syntax.From.Count > 1 || syntax.From[0] is JoinSource)
+        {
+            return AdoSelectShape.Join;
+        }
+        if (plan.Sources.Count != 1 || plan.Sources[0].TableName.Length == 0)
+        {
+            return AdoSelectShape.Subquery;
+        }
+        if (plan.Predicate == SelectPredicate.DistinctRow)
+        {
+            return AdoSelectShape.DistinctRow;
+        }
+        if (syntax.GroupBy.Count > 0)
+        {
+            if (plan.Predicate != SelectPredicate.All || plan.Top is not null)
+            {
+                return AdoSelectShape.GroupByCombined;
+            }
+            if (syntax.Having is not null)
+            {
+                return AdoSelectShape.GroupByHaving;
+            }
+            if (syntax.OrderBy.Count > 0)
+            {
+                return AdoSelectShape.GroupByOrderBy;
+            }
+            return AdoSelectShape.GroupByUnordered;
+        }
+        if (HasUngroupedAggregate(plan, syntax))
+        {
+            return AdoSelectShape.UngroupedAggregate;
+        }
+        if (plan.Predicate == SelectPredicate.Distinct)
+        {
+            if (plan.Top is not null)
+            {
+                return AdoSelectShape.DistinctCombined;
+            }
+            if (syntax.OrderBy.Count > 0)
+            {
+                return AdoSelectShape.DistinctOrderBy;
+            }
+            return AdoSelectShape.DistinctUnordered;
+        }
+        if (plan.Top is { } top)
+        {
+            if (top.Percent)
+            {
+                return AdoSelectShape.TopPercent;
+            }
+            if (syntax.OrderBy.Count == 0)
+            {
+                return AdoSelectShape.TopWithoutOrderBy;
+            }
+            return AdoSelectShape.TopOrdered;
+        }
+        return AdoSelectShape.PlainSingleTable;
+    }
+
+    private static bool HasSubquerySource(IReadOnlyList<SourceSyntax> sources)
+    {
+        foreach (SourceSyntax src in sources)
+        {
+            if (IsOrContainsSubquery(src))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsOrContainsSubquery(SourceSyntax source) => source switch
+    {
+        SubquerySource => true,
+        JoinSource join => IsOrContainsSubquery(join.Left) || IsOrContainsSubquery(join.Right),
+        _ => false,
+    };
+
+    private static bool HasUngroupedAggregate(BoundSelect plan, SelectSyntax syntax)
+    {
+        if (syntax.Having is not null)
+        {
+            return true;
+        }
+        foreach (ResultColumn col in plan.Columns)
+        {
+            if (col.Aggregate != ResultAggregateKind.None)
+            {
+                return true;
+            }
+        }
+        foreach (SelectItem item in syntax.Items)
+        {
+            if (ContainsAggregateCall(item.Expression?.Syntax.Root))
+            {
+                return true;
+            }
+        }
+        foreach (OrderItem order in syntax.OrderBy)
+        {
+            if (ContainsAggregateCall(order.Expression.Syntax.Root))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool ContainsAggregateCall(SyntaxNode? node)
+    {
+        if (node is null)
+        {
+            return false;
+        }
+        if (node.Kind == SyntaxKind.Call && node.Text is { } name && IsSqlAggregateName(name))
+        {
+            return true;
+        }
+        if (ContainsAggregateCall(node.Left) || ContainsAggregateCall(node.Right))
+        {
+            return true;
+        }
+        foreach (SyntaxNode child in node.Items)
+        {
+            if (ContainsAggregateCall(child))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsSqlAggregateName(string name) =>
+        name.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("SUM", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("AVG", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("MIN", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("MAX", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("FIRST", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("LAST", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("STDEV", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("STDEVP", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("VAR", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("VARP", StringComparison.OrdinalIgnoreCase);
 
     public AdoFieldDescriptor[] Columns => _columns;
 
@@ -208,7 +420,20 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         {
             if (_knownCount < 0)
             {
-                _knownCount = (int)_cursor.RecordCount;
+                if (_cursor.TryRecordCount(out long cursorCount, out string? openName, out string? openDetail))
+                {
+                    _knownCount = (int)cursorCount;
+                }
+                else if (string.Equals(openName, "NotModelled.QueryRecordCount.FetchFailure", StringComparison.Ordinal))
+                {
+                    _cursorIndex = -1;
+                    failure = Failure.NotModelled(openName!, openDetail!);
+                    return false;
+                }
+                else if (_cursor.Eof && _cursorIndex >= 0 && index == _cursorIndex + 1)
+                {
+                    _knownCount = _cursorIndex + 1;
+                }
             }
             _cursorIndex = -1;
             return false;
@@ -972,6 +1197,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private int _openedCommandType = AdoSqlText.AdCmdUnspecified;
     private bool _isMdb;
     private AdoSelectContext? _openedSelectContext;
+    private Failure? _recordCountRefusal;
     private bool _openedFromExecute;
     private bool _openedFromSavedQuery;
     private bool _hasBookmarks;
@@ -1146,6 +1372,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         int loc = connection.CursorLocationValue;
         bool isClient = loc == 3;
         AdoSelectContext? openedSelect = rowSource is SelectRowSource srs ? srs.Context : null;
+        AdoRecordCountSource rcSource = ClassifyRecordCountSource(rowSource);
+        AdoSelectShape selectShape = rowSource is SelectRowSource srsShape ? srsShape.Shape : AdoSelectShape.PlainSingleTable;
         IAdoRowSource activeRows = rowSource;
         if (isClient && rowSource is not MemoryRowSource)
         {
@@ -1176,7 +1404,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             isMdb: selectContext.IsMdb,
             openedSelectContext: openedSelect,
             openedFromExecute: true,
-            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery });
+            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery },
+            recordCountSource: rcSource,
+            selectShape: selectShape);
         return rs;
     }
 
@@ -2555,9 +2785,206 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private CallResult GetEof() => IsOpen ? Bool(_eof) : FailAdo(AdoErrors.ObjectClosed);
 
-    private CallResult GetRecordCount() => !IsOpen
-        ? FailAdo(AdoErrors.ObjectClosed)
-        : Int32(_hasBookmarks && ViewKnownCount >= 0 ? ViewKnownCount : -1);
+    private CallResult GetRecordCount()
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        if (_recordCountRefusal is { } refusal)
+        {
+            return CallResult.Fail(refusal);
+        }
+        return Int32(_hasBookmarks && ViewKnownCount >= 0 ? ViewKnownCount : -1);
+    }
+
+    private static AdoRecordCountSource ClassifyRecordCountSource(IAdoRowSource rowSource) => rowSource switch
+    {
+        KeysetRowSource => AdoRecordCountSource.Keyset,
+        SelectRowSource => AdoRecordCountSource.Select,
+        TableRowSource => AdoRecordCountSource.Table,
+        _ => AdoRecordCountSource.Identity,
+    };
+
+    /// <summary>
+    /// Classify whether <c>Recordset.RecordCount</c> is decided by retained ACE records for this
+    /// (format, cursor location, effective cursor type, effective lock type, bookmark capability, source kind, SQL shape)
+    /// tuple. Returns <c>null</c> when recorded, or a named <c>NotModelled.AdoRecordCount.*</c> refusal otherwise.
+    /// </summary>
+    internal static Failure? ClassifyRecordCountRefusal(
+        bool isMdb,
+        int effectiveCursorLocation,
+        int effectiveCursorType,
+        int effectiveLockType,
+        bool hasBookmarks,
+        AdoRecordCountSource sourceKind,
+        AdoSelectShape selectShape)
+    {
+        // Zero retained ACE records call ADODB.Recordset.RecordCount on an MDB database across any cursor or SQL shape.
+        if (isMdb)
+        {
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.Mdb",
+                $"ADO Recordset.RecordCount on an MDB database ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+        }
+
+        // Zero retained ACE records call ADODB.Recordset.RecordCount on SELECT @@IDENTITY.
+        if (sourceKind == AdoRecordCountSource.Identity)
+        {
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.SelectIdentity",
+                $"ADO Recordset.RecordCount on SELECT @@IDENTITY ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+        }
+
+        // TableRowSource (bare table / adCmdTable / adCmdTableDirect on non-keyset cursors):
+        // only server keyset (2, 1, 1) opens via KeysetRowSource and is recorded (r-ado-1b/rs-source-kinds #15-53,
+        // r-str-ado-act/ado-rs-cursors c7/c8, r-fix-wire-ado/ado-rs-cursors-writable c7/c8).
+        if (sourceKind == AdoRecordCountSource.Table)
+        {
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.TableSourceCursor",
+                $"ADO Recordset.RecordCount on a table source with cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+        }
+
+        if (sourceKind == AdoRecordCountSource.Keyset)
+        {
+            if (effectiveCursorLocation == 2 && effectiveCursorType == 1)
+            {
+                if (hasBookmarks && effectiveLockType is 1 or 2 or 3 or 4)
+                {
+                    // r-ado-1b/rs-source-kinds, r-ado-1b/rs-lock-matrix, r-ado-1b/rs-paging, r-ado-1b/rs-cache-same-connection,
+                    // r-ado-1b/view-sort-server, r-str-ado-act/ado-rs-cursors, r-fix-wire-ado/ado-rs-cursors-writable,
+                    // r-fix-wire-ado/book-position-readback, r-oledb-odbc/fetch-batches, r-oledb-odbc/rowlife-clone-delete-requery,
+                    // r-oledb-odbc/update-others-visible, r-q-ado-misc/cursor-external-visibility, r-q2-ado-misc/ado-named-arguments.
+                    return null;
+                }
+                if (!hasBookmarks && effectiveLockType is 1 or 2 or 3)
+                {
+                    // Dynamic downgraded to Keyset without bookmarks -> RecordCount = -1:
+                    // r-ado-1b/view-sort-server v4 (2, 1), r-fix-wire-ado/ado-rs-cursors-writable c3 (2, 2),
+                    // r-q-ado-misc/cursor-external-visibility #376-378 (2, 3).
+                    return null;
+                }
+            }
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.CursorLock",
+                $"ADO Recordset.RecordCount on keyset cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}, bookmarks={hasBookmarks}) is not recorded");
+        }
+
+        // SelectRowSource (SQL SELECT / saved query not backed by KeysetRowSource):
+        if (!hasBookmarks)
+        {
+            if (effectiveCursorLocation == 2
+                && ((effectiveCursorType == 0 && effectiveLockType == 1)
+                    || (effectiveCursorType == 1 && effectiveLockType is 1 or 2 or 3)))
+            {
+                if (selectShape == AdoSelectShape.PlainSingleTable)
+                {
+                    // Server ForwardOnly (2, 0, 1) (including Mode=Read downgrades and Connection.Execute) and
+                    // Dynamic-without-bookmarks -> RecordCount = -1:
+                    // r-str-ado-act/ado-rs-cursors, r-fix-wire-ado/ado-rs-cursors-writable, r-ado-1b/view-sort-server,
+                    // r-ado-1b/conn-cursorlocation-inherit, r-fix-wire-ado/book-position-readback, r-oledb-odbc/fetch-batches,
+                    // r-str-ado-act/ado-execute-results, r-fix-wire-ado/ado-execute-results-rows,
+                    // r-oledb-odbc/update-others-visible, r-q-ado-misc/cursor-external-visibility.
+                    return null;
+                }
+                return selectShape switch
+                {
+                    AdoSelectShape.GroupByUnordered => Failure.NotModelled(
+                        "NotModelled.AdoRecordCount.NonBookmarkGroupBy",
+                        $"ADO Recordset.RecordCount on GROUP BY with non-bookmark cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                    AdoSelectShape.DistinctUnordered => Failure.NotModelled(
+                        "NotModelled.AdoRecordCount.NonBookmarkDistinct",
+                        $"ADO Recordset.RecordCount on DISTINCT with non-bookmark cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                    AdoSelectShape.TopOrdered => Failure.NotModelled(
+                        "NotModelled.AdoRecordCount.NonBookmarkTop",
+                        $"ADO Recordset.RecordCount on TOP ... ORDER BY with non-bookmark cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                    _ => RefuseUnrecordedSelectShape(selectShape, effectiveCursorLocation, effectiveCursorType, effectiveLockType),
+                };
+            }
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.CursorLock",
+                $"ADO Recordset.RecordCount on non-bookmark cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+        }
+
+        // Server Keyset with bookmarks that fell back to SelectRowSource (keyset-ineligible SELECT):
+        // zero retained ACE records exist for any ineligible keyset SELECT.
+        if (effectiveCursorLocation == 2 && effectiveCursorType == 1)
+        {
+            return Failure.NotModelled(
+                "NotModelled.AdoRecordCount.ServerKeysetIneligibleSelect",
+                $"ADO Recordset.RecordCount on a keyset-ineligible SELECT ({selectShape}) with server keyset cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+        }
+
+        // Server Static ReadOnly (2, 3, 1):
+        // r-q2-expr-sql/demand-ado-events-shapes (#16-17 unordered plain, #38-39 ORDER BY plain, #60-61 GROUP BY without HAVING/ORDER BY,
+        // #82-83 DISTINCT without ORDER BY, #104-105 TOP n ORDER BY), r-str-ado-act/ado-rs-cursors, r-fix-wire-ado/ado-rs-cursors-writable,
+        // r-ado-1b/view-sort-server, r-ado-1b/rs-cache-same-connection, r-fix-wire-ado/book-position-readback,
+        // r-oledb-odbc/update-others-visible, r-q-ado-misc/cursor-external-visibility.
+        if (effectiveCursorLocation == 2 && effectiveCursorType == 3 && effectiveLockType == 1)
+        {
+            if (selectShape is AdoSelectShape.PlainSingleTable
+                or AdoSelectShape.GroupByUnordered
+                or AdoSelectShape.DistinctUnordered
+                or AdoSelectShape.TopOrdered)
+            {
+                return null;
+            }
+            return RefuseUnrecordedSelectShape(selectShape, effectiveCursorLocation, effectiveCursorType, effectiveLockType);
+        }
+
+        // Client Static (3, 3, 1/3/4):
+        // r-str-ado-act/ado-rs-cursors, r-str-ado-act/ado-view, r-ado-1b/rs-lock-matrix, r-ado-1b/conn-cursorlocation-inherit,
+        // r-ado-1b/view-filter-operators, r-ado-1b/view-sort-grammar, r-oledb-odbc/buffer-typed-client, r-oledb-odbc/act-services-variants,
+        // r-oledb-odbc/txn-held-rows, r-oledb-odbc/update-others-visible, r-fix-wire-ado/ado-rs-cursors-writable,
+        // r-q-ado-misc/view-like-percent-sort-clear.
+        if (effectiveCursorLocation == 3 && effectiveCursorType == 3 && effectiveLockType is 1 or 3 or 4)
+        {
+            if (selectShape == AdoSelectShape.PlainSingleTable)
+            {
+                return null;
+            }
+            return selectShape switch
+            {
+                AdoSelectShape.GroupByUnordered => Failure.NotModelled(
+                    "NotModelled.AdoRecordCount.ClientGroupBy",
+                    $"ADO Recordset.RecordCount on GROUP BY with client cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                AdoSelectShape.DistinctUnordered => Failure.NotModelled(
+                    "NotModelled.AdoRecordCount.ClientDistinct",
+                    $"ADO Recordset.RecordCount on DISTINCT with client cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                AdoSelectShape.TopOrdered => Failure.NotModelled(
+                    "NotModelled.AdoRecordCount.ClientTop",
+                    $"ADO Recordset.RecordCount on TOP ... ORDER BY with client cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded"),
+                _ => RefuseUnrecordedSelectShape(selectShape, effectiveCursorLocation, effectiveCursorType, effectiveLockType),
+            };
+        }
+
+        return Failure.NotModelled(
+            "NotModelled.AdoRecordCount.CursorLock",
+            $"ADO Recordset.RecordCount on cursor ({effectiveCursorLocation}, {effectiveCursorType}, {effectiveLockType}) is not recorded");
+    }
+
+    private static Failure RefuseUnrecordedSelectShape(AdoSelectShape shape, int loc, int cur, int lck)
+    {
+        (string name, string label) = shape switch
+        {
+            AdoSelectShape.Union => ("NotModelled.AdoRecordCount.Union", "UNION SELECT"),
+            AdoSelectShape.Subquery => ("NotModelled.AdoRecordCount.Subquery", "derived-table / subquery SELECT"),
+            AdoSelectShape.NoFrom => ("NotModelled.AdoRecordCount.NoFrom", "FROM-less SELECT"),
+            AdoSelectShape.Join => ("NotModelled.AdoRecordCount.Join", "joined SELECT"),
+            AdoSelectShape.UngroupedAggregate => ("NotModelled.AdoRecordCount.UngroupedAggregate", "ungrouped aggregate SELECT"),
+            AdoSelectShape.GroupByHaving => ("NotModelled.AdoRecordCount.GroupByHaving", "GROUP BY ... HAVING SELECT"),
+            AdoSelectShape.GroupByOrderBy => ("NotModelled.AdoRecordCount.GroupByOrderBy", "GROUP BY ... ORDER BY SELECT"),
+            AdoSelectShape.GroupByCombined => ("NotModelled.AdoRecordCount.GroupByCombined", "GROUP BY with DISTINCT/TOP SELECT"),
+            AdoSelectShape.DistinctOrderBy => ("NotModelled.AdoRecordCount.DistinctOrderBy", "SELECT DISTINCT ... ORDER BY"),
+            AdoSelectShape.DistinctCombined => ("NotModelled.AdoRecordCount.DistinctCombined", "SELECT DISTINCT with TOP"),
+            AdoSelectShape.DistinctRow => ("NotModelled.AdoRecordCount.DistinctRow", "SELECT DISTINCTROW"),
+            AdoSelectShape.TopPercent => ("NotModelled.AdoRecordCount.TopPercent", "SELECT TOP PERCENT"),
+            AdoSelectShape.TopWithoutOrderBy => ("NotModelled.AdoRecordCount.TopWithoutOrderBy", "SELECT TOP without ORDER BY"),
+            _ => ("NotModelled.AdoRecordCount.SelectShape", $"SELECT shape {shape}"),
+        };
+        return Failure.NotModelled(name, $"ADO Recordset.RecordCount on {label} with cursor ({loc}, {cur}, {lck}) is not recorded");
+    }
 
     private CallResult GetAbsolutePosition()
     {
@@ -2858,7 +3285,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         bool isClient = effectiveLoc == 3;
-        bool countAllAtOpen = hasBookmarks && !isClient;
+        // Static and client cursors materialize all rows into MemoryRowSource below; eligible server keysets
+        // scan their own RowIds in KeysetRowSource; ineligible server keyset fallbacks and non-bookmark cursors
+        // must not eagerly call MoveLast() at Open.
+        bool countAllAtOpen = false;
         bool preferKeyset = !isClient && effCursor == 1;
         bool updatableKeyset = preferKeyset && effLock is 2 or 3;
         bool lockPessimistic = effLock == 2;
@@ -2902,6 +3332,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
 
         AdoSelectContext? openedSelect = rowSource is SelectRowSource srs ? srs.Context : null;
+        AdoRecordCountSource rcSource = ClassifyRecordCountSource(rowSource);
+        AdoSelectShape selectShape = rowSource is SelectRowSource srsShape ? srsShape.Shape : AdoSelectShape.PlainSingleTable;
 
         if ((isClient || effCursor == 3) && rowSource is not MemoryRowSource)
         {
@@ -2927,7 +3359,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             isMdb,
             openedSelect,
             openedFromExecute: false,
-            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery });
+            openedFromSavedQuery: openedSelect is { Route: AdoSelectRoute.SavedQuery },
+            recordCountSource: rcSource,
+            selectShape: selectShape);
         return CallResult.Nothing;
     }
 
@@ -3276,7 +3710,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         bool isMdb = false,
         AdoSelectContext? openedSelectContext = null,
         bool openedFromExecute = false,
-        bool openedFromSavedQuery = false)
+        bool openedFromSavedQuery = false,
+        AdoRecordCountSource recordCountSource = AdoRecordCountSource.Select,
+        AdoSelectShape selectShape = AdoSelectShape.PlainSingleTable)
     {
         _wasEverOpened = true;
         _closedAfterOpen = false;
@@ -3287,6 +3723,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _openedCommandType = openedCommandType;
         _isMdb = isMdb;
         _openedSelectContext = openedSelectContext;
+        _recordCountRefusal = ClassifyRecordCountRefusal(
+            isMdb,
+            effectiveCursorLocation,
+            effectiveCursorType,
+            effectiveLockType,
+            hasBookmarks,
+            recordCountSource,
+            selectShape);
         _openedFromExecute = openedFromExecute;
         _openedFromSavedQuery = openedFromSavedQuery;
         _hasBookmarks = hasBookmarks;
@@ -3341,6 +3785,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _openedCommandType = AdoSqlText.AdCmdUnspecified;
         _isMdb = false;
         _openedSelectContext = null;
+        _recordCountRefusal = null;
         _openedFromExecute = false;
         _openedFromSavedQuery = false;
         ResetChunkState();
