@@ -1667,7 +1667,6 @@ internal sealed unsafe class ConnectionObject : AdoObject
             originalText,
             effectiveText,
             cmdType,
-            countAllAtOpen: false,
             selectContext,
             out MappedProviderError? providerError,
             out Failure? refusal,
@@ -1791,6 +1790,16 @@ internal sealed unsafe class ConnectionObject : AdoObject
     }
 
     /// <summary>
+    /// True only for format/action-kind pairs with retained ACE 3317 SQL CHECK records:
+    /// ACCDB INSERT ... VALUES / INSERT ... SELECT / UPDATE and MDB INSERT ... VALUES
+    /// (r-oledb-odbc/error-record-channels #142-152, r-q30-sql-check/mdb-viol-ado-exec #28-39,
+    /// r-q30-sql-check/upd-viol-ado-exec #29-40, r-q31-sql-check-2/multi-ins-ado-exec #32-43).
+    /// </summary>
+    internal static bool IsRecordedAdoCheckActionKind(bool isMdb, ActionKind kind) => isMdb
+        ? kind == ActionKind.InsertValues
+        : kind is ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update;
+
+    /// <summary>
     /// True only when an ACE 3317 failure came from ad-hoc <c>Connection.Execute</c> violating a SQL <c>CHECK</c>
     /// constraint on a recorded format/action tuple (ACCDB INSERT/UPDATE, MDB INSERT ... VALUES):
     /// r-oledb-odbc/error-record-channels #142-152, r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22,
@@ -1815,10 +1824,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return false;
         }
         bool isMdb = session.Profile.Format == FileFormat.Jet4;
-        bool recordedActionKind = isMdb
-            ? action.Kind == ActionKind.InsertValues
-            : action.Kind is ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update;
-        if (!recordedActionKind)
+        if (!IsRecordedAdoCheckActionKind(isMdb, action.Kind))
         {
             return false;
         }

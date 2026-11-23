@@ -703,7 +703,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
             }
 
             // Finding 5 (block 2): Connection.Execute on a Client cursor (3, 3, 1) selecting OLE succeeds at Execute
-            // (metadata, RecordCount, ID readable); reading the unrecorded OLE cell refuses by name.
+            // (metadata, ID readable); RecordCount refuses NotModelled.AdoRecordCount.ClientExecute and the unrecorded OLE cell refuses by name.
             nint clientExecCn = OpenAceConnection(oledbPath, mode: 1);
             try
             {
@@ -713,7 +713,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 nint clientExecRs = (nint)execOut.Value!;
                 try
                 {
-                    Assert.Equal(5, Get(clientExecRs, "RecordCount"));
+                    AssertNotModelled(TryGet(clientExecRs, "RecordCount"), "NotModelled.AdoRecordCount.ClientExecute");
                     nint flds = (nint)Get(clientExecRs, "Fields")!;
                     nint fid = (nint)Get(flds, "Item", "ID")!;
                     nint fb = (nint)Get(flds, "Item", "B")!;
@@ -1036,7 +1036,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
         nint sqCn = OpenAceConnection(ado4Path, mode: 1);
         try
         {
-            // Open(Command) selecting OLE succeeds (RecordCount, metadata, ID readable); Field.Value refuses NotModelled.AdoSqlBinaryRoute.
+            // Open(Command) selecting OLE succeeds (metadata, ID readable); RecordCount refuses NotModelled.AdoRecordCount.CommandRoute and Field.Value refuses NotModelled.AdoSqlBinaryRoute.
             nint cmd = New(OwnCommand);
             nint cmdRs = New(OwnRecordset);
             try
@@ -1046,7 +1046,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                 Assert.Null(Put(cmd, "CommandType", 1).Failure);
                 Assert.Null(Put(cmdRs, "CursorLocation", 3).Failure);
                 Assert.Null(Call(cmdRs, "Open", new Dispatch(cmd), Missing, 3, 1).Failure);
-                Assert.Equal(4, Get(cmdRs, "RecordCount"));
+                AssertNotModelled(TryGet(cmdRs, "RecordCount"), "NotModelled.AdoRecordCount.CommandRoute");
                 nint flds = (nint)Get(cmdRs, "Fields")!;
                 nint fid = (nint)Get(flds, "Item", "ID")!;
                 nint fb = (nint)Get(flds, "Item", "B")!;

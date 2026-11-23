@@ -46,6 +46,7 @@ public sealed unsafe class AdoSelectRecordCountTests
                 AccdbNonBookmarkCursors(accdbPath);
                 AccdbServerKeysetEligibleAndIneligible(accdbPath);
                 AccdbClientStaticRecordedAndRefusals(accdbPath);
+                AccdbRoutesAndLazyKeysetNavigation(accdbPath, ado1bPath);
                 MdbAllCursorsRefuseRecordCount(mdbPath);
 
                 Assert.False(IsLoaded("msado15.dll"));
@@ -80,7 +81,7 @@ public sealed unsafe class AdoSelectRecordCountTests
     {
         // Defensive fallback arms for cursor/lock combinations not reachable via current TryNegotiateCursor.
         Failure? fKeysetBadLock = RecordsetObject.ClassifyRecordCountRefusal(
-            isMdb: false, 2, 1, 9, hasBookmarks: true, AdoRecordCountSource.Keyset, AdoSelectShape.PlainSingleTable);
+            isMdb: false, 2, 1, 9, hasBookmarks: true, AdoRecordCountSource.KeysetSelect, AdoSelectShape.PlainSingleTable);
         Assert.NotNull(fKeysetBadLock);
         Assert.Equal(FailureKind.NotModelled, fKeysetBadLock!.Kind);
         Assert.StartsWith("NotModelled.AdoRecordCount.CursorLock", fKeysetBadLock.Description, StringComparison.Ordinal);
@@ -248,6 +249,167 @@ public sealed unsafe class AdoSelectRecordCountTests
         {
             Assert.Null(Call(cn, "Close").Failure);
             Release(cn);
+        }
+    }
+
+    private static void AccdbRoutesAndLazyKeysetNavigation(string accdbPath, string ado1bPath)
+    {
+        nint cn = OpenAceConnection(accdbPath);
+        try
+        {
+            // Table sources: recorded ONLY on Server Keyset ReadOnly (2, 1, 1); other keyset locks and dynamic refuse TableSourceCursor.
+            AssertRecordedCount(cn, loc: 2, cur: 1, lck: 1, opt: 2, "Nm", expectedCount: 256);
+            AssertRecordCountRefusal(cn, 2, 1, 3, 2, "Nm", "NotModelled.AdoRecordCount.TableSourceCursor");
+            AssertRecordCountRefusal(cn, 2, 2, 3, 2, "Nm", "NotModelled.AdoRecordCount.TableSourceCursor");
+
+            // Keyset-ineligible computed SELECT on Dynamic (2, 2, 3) refuses DynamicIneligibleSelect (never silently returns -1).
+            AssertRecordCountRefusal(cn, 2, 2, 3, 1, "SELECT n + 1 AS p FROM Nm ORDER BY n", "NotModelled.AdoRecordCount.DynamicIneligibleSelect");
+
+            // Keyset-ineligible Server Keyset (2, 1, 1) refuses RecordCount, while paging, AbsolutePosition,
+            // and post-EOF MoveLast()/MovePrevious() remain intact via lazy on-demand scan.
+            nint lazyRs = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(lazyRs, "CursorLocation", 2).Failure);
+                Assert.Null(Call(lazyRs, "Open", "SELECT DISTINCT n Mod 7 AS k FROM Nm", new Dispatch(cn), 1, 1, 1).Failure);
+                AssertNotModelled(TryGet(lazyRs, "RecordCount"), "NotModelled.AdoRecordCount.ServerKeysetIneligibleSelect");
+
+                Assert.Null(Put(lazyRs, "PageSize", 3).Failure);
+                Assert.Equal(3, Get(lazyRs, "PageCount"));
+                Assert.Equal(1, Get(lazyRs, "AbsolutePage"));
+                Assert.Null(Put(lazyRs, "AbsolutePage", 2).Failure);
+                Assert.Equal(4, Get(lazyRs, "AbsolutePosition"));
+                Assert.Null(Put(lazyRs, "AbsolutePosition", 2).Failure);
+                Assert.Equal(2, Get(lazyRs, "AbsolutePosition"));
+
+                Assert.Null(Call(lazyRs, "Move", 1000).Failure);
+                Assert.Equal(true, Get(lazyRs, "EOF"));
+                Assert.Null(Call(lazyRs, "MoveLast").Failure);
+                Assert.Equal(false, Get(lazyRs, "EOF"));
+                Assert.Equal(7, Get(lazyRs, "AbsolutePosition"));
+
+                Assert.Null(Call(lazyRs, "Move", 1000).Failure);
+                Assert.Equal(true, Get(lazyRs, "EOF"));
+                Assert.Null(Call(lazyRs, "MovePrevious").Failure);
+                Assert.Equal(false, Get(lazyRs, "EOF"));
+                Assert.Equal(7, Get(lazyRs, "AbsolutePosition"));
+
+                Assert.Null(Call(lazyRs, "Close").Failure);
+            }
+            finally
+            {
+                Release(lazyRs);
+            }
+
+            // Exercise post-EOF MoveLast() and MovePrevious() before KnownCount is populated (fresh Recordset):
+            nint lazyPostEof1 = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(lazyPostEof1, "CursorLocation", 2).Failure);
+                Assert.Null(Call(lazyPostEof1, "Open", "SELECT DISTINCT n Mod 7 AS k FROM Nm", new Dispatch(cn), 1, 1, 1).Failure);
+                Assert.Null(Call(lazyPostEof1, "Move", 1000).Failure);
+                Assert.Equal(true, Get(lazyPostEof1, "EOF"));
+                Assert.Null(Call(lazyPostEof1, "MoveLast").Failure);
+                Assert.Equal(false, Get(lazyPostEof1, "EOF"));
+                Assert.Equal(7, Get(lazyPostEof1, "AbsolutePosition"));
+                Assert.Null(Call(lazyPostEof1, "Close").Failure);
+            }
+            finally
+            {
+                Release(lazyPostEof1);
+            }
+
+            nint lazyPostEof2 = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(lazyPostEof2, "CursorLocation", 2).Failure);
+                Assert.Null(Call(lazyPostEof2, "Open", "SELECT DISTINCT n Mod 7 AS k FROM Nm", new Dispatch(cn), 1, 1, 1).Failure);
+                Assert.Null(Call(lazyPostEof2, "Move", 1000).Failure);
+                Assert.Equal(true, Get(lazyPostEof2, "EOF"));
+                Assert.Null(Call(lazyPostEof2, "MovePrevious").Failure);
+                Assert.Equal(false, Get(lazyPostEof2, "EOF"));
+                Assert.Equal(7, Get(lazyPostEof2, "AbsolutePosition"));
+                Assert.Null(Call(lazyPostEof2, "Close").Failure);
+            }
+            finally
+            {
+                Release(lazyPostEof2);
+            }
+
+            // Client Connection.Execute refuses ClientExecute (r-ado-1b/conn-cursorlocation-inherit #56-62 never reads RecordCount).
+            nint clientExecCn = OpenAceConnection(accdbPath, mode: 1);
+            try
+            {
+                Assert.Null(Put(clientExecCn, "CursorLocation", 3).Failure);
+                Outcome execOut = Call(clientExecCn, "Execute", "SELECT n FROM Nm ORDER BY n", Missing, 1);
+                Assert.Null(execOut.Failure);
+                nint execRs = (nint)execOut.Value!;
+                try
+                {
+                    AssertNotModelled(TryGet(execRs, "RecordCount"), "NotModelled.AdoRecordCount.ClientExecute");
+                    Assert.Null(Call(execRs, "Close").Failure);
+                }
+                finally
+                {
+                    Release(execRs);
+                }
+            }
+            finally
+            {
+                Assert.Null(Call(clientExecCn, "Close").Failure);
+                Release(clientExecCn);
+            }
+        }
+        finally
+        {
+            Assert.Null(Call(cn, "Close").Failure);
+            Release(cn);
+        }
+
+        // Saved queries and Command route on r-ado-1b-main.accdb (QAll returns 7 rows):
+        // RecordCount is recorded ONLY on Server Keyset ReadOnly (2, 1, 1) opened via Recordset.Open (r-ado-1b/rs-source-kinds #85/#101/#117/#213).
+        nint cnSq = OpenAceConnection(ado1bPath);
+        try
+        {
+            AssertRecordedCount(cnSq, loc: 2, cur: 1, lck: 1, opt: 4, "QAll", expectedCount: 7);
+            AssertRecordCountRefusal(cnSq, 2, 3, 1, 4, "QAll", "NotModelled.AdoRecordCount.SavedQueryCursor");
+            AssertRecordCountRefusal(cnSq, 3, 3, 1, 4, "QAll", "NotModelled.AdoRecordCount.SavedQueryCursor");
+            AssertRecordCountRefusal(cnSq, 2, 0, 1, 4, "QAll", "NotModelled.AdoRecordCount.SavedQueryCursor");
+
+            Outcome execSq = Call(cnSq, "Execute", "QAll", Missing, 4);
+            Assert.Null(execSq.Failure);
+            nint execSqRs = (nint)execSq.Value!;
+            try
+            {
+                AssertNotModelled(TryGet(execSqRs, "RecordCount"), "NotModelled.AdoRecordCount.SavedQueryCursor");
+                Assert.Null(Call(execSqRs, "Close").Failure);
+            }
+            finally
+            {
+                Release(execSqRs);
+            }
+
+            nint cmd = New(OwnCommand);
+            nint cmdRs = New(OwnRecordset);
+            try
+            {
+                Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cnSq)).Failure);
+                Assert.Null(Put(cmd, "CommandText", "SELECT ID FROM T ORDER BY ID").Failure);
+                Assert.Null(Put(cmd, "CommandType", 1).Failure);
+                Assert.Null(Call(cmdRs, "Open", new Dispatch(cmd), Missing, 1, 1).Failure);
+                AssertNotModelled(TryGet(cmdRs, "RecordCount"), "NotModelled.AdoRecordCount.CommandRoute");
+                Assert.Null(Call(cmdRs, "Close").Failure);
+            }
+            finally
+            {
+                Release(cmdRs);
+                Release(cmd);
+            }
+        }
+        finally
+        {
+            Assert.Null(Call(cnSq, "Close").Failure);
+            Release(cnSq);
         }
     }
 

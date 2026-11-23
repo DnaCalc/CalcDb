@@ -685,6 +685,29 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         Assert.Equal(FailureKind.NotModelled, unmodelled3289!.Kind);
         Assert.Contains("NotModelled.AdoProviderError", unmodelled3289.Description);
 
+        // MDB 3317 format/action branch (writable MDB Connection.Open is not yet implemented, so exercise the gate directly):
+        // MDB admits INSERT ... VALUES (r-q30-sql-check/mdb-viol-ado-exec #28-39) and refuses MDB UPDATE / INSERT ... SELECT.
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.InsertValues));
+        Assert.False(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.Update));
+        Assert.False(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.InsertSelect));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.InsertValues));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.Update));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.InsertSelect));
+        // MDB INSERT ... VALUES with allowAdoCheckViolation=true maps to the exact 3317 wire tuple; MDB UPDATE (allow=false) refuses.
+        var mdb3317 = new CalcDb.Sql.SqlFailure(
+            CalcDb.Sql.SqlPhase.Execute,
+            3317,
+            "One or more values are prohibited by the validation rule 'CK_T_X' set for 'T'. Enter a value that the expression for this field can accept.");
+        CalcDb.Com.Ado.MappedProviderError? mdbMapped = CalcDb.Com.Ado.AdoSqlErrors.TryMap(mdb3317, isSavedQuery: false, out Failure? mdbOpen, allowAdoCheckViolation: true);
+        Assert.NotNull(mdbMapped);
+        Assert.Null(mdbOpen);
+        Assert.Equal(unchecked((int)0x80004005), mdbMapped!.Value.ComFailure.Scode);
+        Assert.Equal("3316", mdbMapped.Value.ErrorEntry.SqlState);
+        Assert.Equal(-541462135, mdbMapped.Value.ErrorEntry.NativeError);
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(mdb3317, isSavedQuery: false, out Failure? mdbUpdateOpen, allowAdoCheckViolation: false));
+        Assert.NotNull(mdbUpdateOpen);
+        Assert.Contains("NotModelled.AdoProviderError", mdbUpdateOpen!.Description);
+
         Exception? failure = null;
         var thread = new Thread(() =>
         {

@@ -1068,7 +1068,11 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.Null(Call(rc1, "Open", new Dispatch(cmd), Missing, 1, 1).Failure);
             Assert.Equal(1, Get(rc1, "State"));
             Assert.Equal("exec QAll", Get(rc1, "Source"));
-            Assert.True((int)Get(rc1, "RecordCount")! >= 1);
+            Assert.Equal(false, Get(rc1, "EOF"));
+            Outcome rc1Count = TryGet(rc1, "RecordCount");
+            Assert.NotNull(rc1Count.Failure);
+            Assert.Equal(HResults.E_NOTIMPL, rc1Count.Failure!.Value.Scode);
+            Assert.StartsWith("NotModelled.AdoRecordCount.CommandRoute", rc1Count.Failure.Value.Description, StringComparison.Ordinal);
             Assert.Null(Call(rc1, "Close").Failure);
             Release(rc1);
 
