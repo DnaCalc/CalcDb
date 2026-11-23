@@ -28,7 +28,8 @@ param(
     [string] $Solution = "CalcDb.slnx",             # with -InPlace, an area's filter (CalcDb.Sql.slnf ...) builds only that area
     [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
     [switch] $Land,                                 # with -Branch: after a pass, fast-forward master to the checked commit and push
-    [switch] $Compare)                              # with -Land and -Snapshot: then run the core compare from the snapshot
+    [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
+    [int] $LockWaitMinutes = 90)                    # how long a run waits for another run's lock before it gives up
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
 $Files = @($Files | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
@@ -54,13 +55,25 @@ if ($InPlace) {
     $repo = ((git -C $here worktree list --porcelain | Select-Object -First 1) -replace '^worktree ', '').Trim() -replace '/', '\'
     if (-not $CheckTree) { $CheckTree = Join-Path (Split-Path $repo) ((Split-Path $repo -Leaf) + "-check") }
     $work = $CheckTree
-    $base = (git -C $repo rev-parse master).Trim()
 }
 
-# One run at a time per worktree: two runs would check out and build over each other.
+# One run at a time per worktree: two runs would check out and build over each other. A run that finds the lock held
+# waits its turn (up to -LockWaitMinutes), so landings started together form a queue; master is read only once the
+# lock is held, so each landing is checked on top of the master it lands on.
 $lockPath = "$work.landing-lock"
-try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
-catch { throw "another landing check is running in $work ($lockPath is held)" }
+$lockDeadline = [DateTime]::UtcNow.AddMinutes($LockWaitMinutes)
+$lock = $null
+$waited = $false
+while (-not $lock) {
+    try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
+    catch {
+        if ([DateTime]::UtcNow -ge $lockDeadline) { throw "another landing check still holds $lockPath after $LockWaitMinutes min" }
+        if (-not $waited) { Step "waiting for the landing check running in $work ($lockPath)"; $waited = $true }
+        Start-Sleep -Seconds 15
+    }
+}
+if ($waited) { Step "lock taken" }
+if (-not $InPlace) { $base = (git -C $repo rev-parse master).Trim() }
 try {
     if (-not $InPlace) {
         if (-not (Test-Path $work)) {

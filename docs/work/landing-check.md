@@ -68,8 +68,9 @@ It checks out master as committed and then:
 - keeps the logs of the 40 newest runs in `%TEMP%\calcdb-land-out`, and appends one line per run to
   `%LOCALAPPDATA%\CalcDb\landing-runs.tsv` for [tools/process-indicators.ps1](../../tools/process-indicators.ps1).
 
-Its exit code is the number of failed steps. One check runs at a time in a worktree (a lock file beside it); the
-landings form a queue, and each one is checked on top of the master it lands on. `-Filter` is for iterating and is
+Its exit code is the number of failed steps. One check runs at a time in a worktree (a lock file beside it): a run that
+finds the lock held waits for it (up to `-LockWaitMinutes`, 90 by default), so landings started together form a queue,
+and each reads master only once it holds the lock, so it is checked on top of the master it lands on. `-Filter` is for iterating and is
 refused with `-Snapshot`: the run that lands is unfiltered.
 
 **After a passing check.** For a branch, the script prints the landing: `git merge --ff-only <checked commit>` in the
