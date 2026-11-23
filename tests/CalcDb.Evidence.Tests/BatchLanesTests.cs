@@ -135,7 +135,8 @@ public sealed class BatchLanesTests
             for (int round = 0; round < 20; round++)
             {
                 string path = Path.Combine(dir, $"q{round}.json");
-                string text = new('x', 200_000);
+                string payload = new('x', 200_000);
+                string text = EvidenceJson.Serialize(payload);
                 int created = 0, partial = 0;
                 Parallel.For(0, 8, _ =>
                 {
@@ -143,7 +144,10 @@ public sealed class BatchLanesTests
                     {
                         _ = Interlocked.Increment(ref created);
                     }
-                    if (File.ReadAllText(path).Length != text.Length)
+                    // Read through EvidenceJson.Read (FileShare.ReadWrite | FileShare.Delete), as every store reader does:
+                    // raw File.ReadAllText opens with FileShare.Read only and hits sharing violations against a racing
+                    // File.Move's DELETE handle on Windows (task bdwv: 9/1600 with File.ReadAllText vs 0/1600 with EvidenceJson.Read).
+                    if (EvidenceJson.Read<string>(path).Length != payload.Length)
                     {
                         _ = Interlocked.Increment(ref partial);
                     }
