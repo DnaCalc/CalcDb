@@ -20,6 +20,7 @@ namespace CalcDb.Sql.Tests;
 public sealed class DdlTests
 {
     private const string EmptyAccdbSha = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
+    private const string EmptyMdbSha = "99da59149c57559b5658a9a08625236a936808d2be0ead100da977bd3716bdb4";
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
 
     [Theory]
@@ -678,8 +679,13 @@ public sealed class DdlTests
             Assert.Equal(0x409u, c.TypeInfo);
         });
 
-        // r-q15-ddl-open/lv-sql-notnull-1: NOT NULL writes LvProp blob -> refused by name.
-        AssertNotModelled(db, "CREATE TABLE Nn (a LONG NOT NULL)", "NotModelled.DdlColumnNotNull");
+        // r-q34-ddl-sweep/nn-*: NOT NULL is admitted on LONG, TEXT, MEMO (not on PK/UNIQUE or unrecorded types,
+        // and not when a second LvProp LVAL slot or an index + spilling LvProp would be written in one commit).
+        AssertNotModelled(db, "CREATE TABLE NnDbl (a DOUBLE NOT NULL)", "NotModelled.DdlColumnNotNull");
+        AssertNotModelled(db, "CREATE TABLE NnPk (a LONG NOT NULL CONSTRAINT PK_NnPk PRIMARY KEY)", "NotModelled.DdlColumnNotNull");
+        AssertNotModelled(db, "CREATE TABLE NnSpill2 (aaaaaaaa LONG NOT NULL, b LONG NOT NULL)", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "CREATE TABLE NnThree (a LONG NOT NULL, b LONG NOT NULL, c LONG NOT NULL)", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "CREATE TABLE NnPkSpill (ID LONG CONSTRAINT PK_NnS PRIMARY KEY, SSSSSSSS TEXT(50) NOT NULL)", "NotModelled.SchemaWriter");
 
         // r-q28-schema-write-open/pair-sql-fe-FE, pair-sql-nfc-nfd: non-ASCII case and NFC/NFD collide under General (3380).
         AssertAceError(db, "CREATE TABLE Fe1 ([Fé] LONG, [FÉ] LONG)", 3380);
@@ -693,9 +699,20 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE B511 (b BINARY(511))", "NotModelled.DdlBinarySize");
         AssertNotModelled(db, "CREATE TABLE Vb0 (b VARBINARY(0))", "NotModelled.DdlBinarySize");
         AssertNotModelled(db, "CREATE TABLE Cs1 (a COUNTER(1))", "NotModelled.DdlCounterSingleArg");
-        AssertNotModelled(db, "CREATE TABLE LvalPk (a MEMO, b LONG CONSTRAINT PK_Lval PRIMARY KEY)", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE Bi (x BIGINT)", "NotModelled.DdlBigIntOrDateTime2");
         AssertNotModelled(db, "CREATE TABLE Un (a LONG UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqLong (id LONG CONSTRAINT PK_UqL PRIMARY KEY, a LONG CONSTRAINT UX_UqL UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqBefore (s TEXT(10) CONSTRAINT UX_UqB UNIQUE, id LONG CONSTRAINT PK_UqB PRIMARY KEY)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqTbl (id LONG CONSTRAINT PK_UqT PRIMARY KEY, s TEXT(10), CONSTRAINT UX_UqT UNIQUE (s))", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqTblPk (id LONG, s TEXT(10) CONSTRAINT UX_UqTP UNIQUE, CONSTRAINT PK_UqTP PRIMARY KEY (id))", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqUnnamed (id LONG CONSTRAINT PK_UqU PRIMARY KEY, s TEXT(10) UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqDupName (id LONG CONSTRAINT PK_Same PRIMARY KEY, s TEXT(10) CONSTRAINT PK_Same UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqUndecided (id LONG CONSTRAINT [ae] PRIMARY KEY, s TEXT(10) CONSTRAINT [\u00e6] UNIQUE)", "NotModelled.DdlFieldNamePair");
+        AssertNotModelled(db, "CREATE TABLE LvalTblPk (id LONG, m MEMO, CONSTRAINT PK_Ltp PRIMARY KEY (id))", "NotModelled.DdlLvalWithInlineConstraint");
+        AssertNotModelled(db, "CREATE TABLE LvalBeforePk (m MEMO, id LONG CONSTRAINT PK_Lbp PRIMARY KEY)", "NotModelled.DdlLvalWithInlineConstraint");
+        AssertNotModelled(db, "CREATE TABLE LvalBetween (id LONG CONSTRAINT PK_Lb PRIMARY KEY, m MEMO, s TEXT(10) CONSTRAINT UX_Lb UNIQUE)", "NotModelled.DdlLvalWithInlineConstraint");
+        AssertNotModelled(db, "CREATE TABLE PkText (s TEXT(10) CONSTRAINT PK_Txt PRIMARY KEY)", "NotModelled.DdlPrimaryKeyShape");
+        AssertNotModelled(db, "CREATE TABLE PkMulti (a LONG, b LONG, CONSTRAINT PK_M PRIMARY KEY (a, b))", "NotModelled.DdlPrimaryKeyShape");
         AssertNotModelled(db, "CREATE TABLE PkU (a LONG PRIMARY KEY)", "NotModelled.DdlUnnamedPrimaryKey");
 
         Assert.True(ActionExecutor.Execute("CREATE TABLE P (a LONG CONSTRAINT PK_P PRIMARY KEY)", db).Succeeded);
@@ -837,6 +854,110 @@ public sealed class DdlTests
         }
     }
 
+    /// <summary>
+    /// All 33 in-scope CREATE TABLE records of <c>evidence/r-q34-ddl-sweep</c> executed through
+    /// <see cref="ActionExecutor.Execute"/> (SQL/DAO and ADO routes, ACCDB and Jet 4 MDB).
+    /// </summary>
+    public static TheoryData<string, bool, bool, string> RQ34CreateTableSqlCases() => new()
+    {
+        // Jet 4 MDB baseline (2)
+        { "create-one-long-mdb-ado", true, true, "CREATE TABLE T (n LONG)" },
+        { "create-one-long-mdb-dao", true, false, "CREATE TABLE T (n LONG)" },
+        // LVAL + inline constraint (8)
+        { "lval-pk-memo-accdb-ado", false, true, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10), M MEMO)" },
+        { "lval-pk-memo-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10), M MEMO)" },
+        { "lval-pk-memo-mdb-dao", true, false, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10), M MEMO)" },
+        { "lval-pk-ole-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, B LONGBINARY)" },
+        { "lval-pk-ole-memo-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, FBin BINARY(16), FOle LONGBINARY, FMemo MEMO, FLong LONG, FText TEXT(32), FDouble DOUBLE)" },
+        { "lval-pk-ole-memo-mdb-dao", true, false, "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, FBin BINARY(16), FOle LONGBINARY, FMemo MEMO, FLong LONG, FText TEXT(32), FDouble DOUBLE)" },
+        { "lval-pk-uq-alltypes-accdb-dao", false, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, Code TEXT(10) CONSTRAINT UX_T_Code UNIQUE, L LONG, D DOUBLE, C CURRENCY, Dt DATETIME, S TEXT(50), M MEMO, B LONGBINARY, Y YESNO, Sh SHORT, Bt BYTE, Sg SINGLE, G GUID)" },
+        { "lval-pk-uq-alltypes-mdb-dao", true, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, Code TEXT(10) CONSTRAINT UX_T_Code UNIQUE, L LONG, D DOUBLE, C CURRENCY, Dt DATETIME, S TEXT(50), M MEMO, B LONGBINARY, Y YESNO, Sh SHORT, Bt BYTE, Sg SINGLE, G GUID)" },
+        // NOT NULL (15)
+        { "nn-long-accdb-ado", false, true, "CREATE TABLE T (n LONG NOT NULL)" },
+        { "nn-long-accdb-dao", false, false, "CREATE TABLE T (n LONG NOT NULL)" },
+        { "nn-long-mdb-ado", true, true, "CREATE TABLE T (n LONG NOT NULL)" },
+        { "nn-long-mdb-dao", true, false, "CREATE TABLE T (n LONG NOT NULL)" },
+        { "nn-memo-accdb-ado", false, true, "CREATE TABLE T (M MEMO NOT NULL)" },
+        { "nn-memo-accdb-dao", false, false, "CREATE TABLE T (M MEMO NOT NULL)" },
+        { "nn-memo-mdb-dao", true, false, "CREATE TABLE T (M MEMO NOT NULL)" },
+        { "nn-pk-text-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50) NOT NULL)" },
+        { "nn-pk-text-mdb-dao", true, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50) NOT NULL)" },
+        { "nn-text-accdb-ado", false, true, "CREATE TABLE T (S TEXT(50) NOT NULL)" },
+        { "nn-text-accdb-dao", false, false, "CREATE TABLE T (S TEXT(50) NOT NULL)" },
+        { "nn-text-mdb-dao", true, false, "CREATE TABLE T (S TEXT(50) NOT NULL)" },
+        { "nn-two-cols-accdb-ado", false, true, "CREATE TABLE T (A LONG NOT NULL, B TEXT(50) NOT NULL)" },
+        { "nn-two-cols-accdb-dao", false, false, "CREATE TABLE T (A LONG NOT NULL, B TEXT(50) NOT NULL)" },
+        { "nn-two-cols-mdb-dao", true, false, "CREATE TABLE T (A LONG NOT NULL, B TEXT(50) NOT NULL)" },
+        // COUNTER PK + MDB LONG PK (8)
+        { "pk-counter-accdb-ado", false, true, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY)" },
+        { "pk-counter-accdb-dao", false, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY)" },
+        { "pk-counter-cols-accdb-ado", false, true, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), D DOUBLE)" },
+        { "pk-counter-cols-accdb-dao", false, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), D DOUBLE)" },
+        { "pk-counter-cols-mdb-dao", true, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), D DOUBLE)" },
+        { "pk-counter-mdb-ado", true, true, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY)" },
+        { "pk-counter-mdb-dao", true, false, "CREATE TABLE T (ID COUNTER CONSTRAINT PK PRIMARY KEY)" },
+        { "pk-long-mdb-dao", true, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50))" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableSqlCases))]
+    public void R_q34_ddl_sweep_create_table_executes_byte_exact(string question, bool isMdb, bool isAdo, string sql) =>
+        AssertSqlCreateTableMatchesAce("r-q34-ddl-sweep", question, isMdb ? EmptyMdbSha : EmptyAccdbSha, sql, isAdo ? ActionErrorSource.Ado : ActionErrorSource.Database);
+
+    [Theory]
+    [InlineData("lv-sql-notnull-1", 1)]
+    [InlineData("lv-sql-notnull-4", 4)]
+    [InlineData("lv-sql-notnull-8", 8)]
+    [InlineData("lv-sql-notnull-16", 16)]
+    [InlineData("lv-sql-notnull-64", 64)]
+    public void R_q15_lv_sql_notnull_executes_byte_exact(string question, int nameLength) =>
+        AssertSqlCreateTableMatchesAce("r-q15-ddl-open", question, EmptyAccdbSha, $"CREATE TABLE T ({new string('n', nameLength)} LONG NOT NULL)", ActionErrorSource.Database);
+
+    [Fact]
+    public void R_q11_mdb_create_one_long_executes_byte_exact() =>
+        AssertSqlCreateTableMatchesAce("r-q11-ddl-closure", "mdb-create-one-long", EmptyMdbSha, "CREATE TABLE T (n LONG)", ActionErrorSource.Database);
+
+    private static void AssertSqlCreateTableMatchesAce(string card, string question, string fixtureSha, string sql, ActionErrorSource source)
+    {
+        Kept kept = Kept.Of(question, card);
+        byte[] fixture = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(fixtureSha);
+        byte[] ace = kept.AceImage(fixture);
+        (ulong created, ulong updated) = AceDates(ace, "T");
+
+        var timestamps = new Queue<ulong>([created, updated]);
+        using var db = new WritableSqlFixture(fixture);
+        db.DateBitsProvider = () => timestamps.Dequeue();
+
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: source);
+        Assert.Null(outcome.Failure);
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(0, outcome.RecordsAffected);
+        Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        byte[] ours = db.Image.Snapshot();
+
+        // When 2 NOT NULL columns spill MSysObjects.LvProp from step 1's inline blob to step 2's LVAL page,
+        // ACE's vacated inline prefix on the MSysObjects data page holds an 8-byte ghost DateUpdate field
+        // (deterministically live DateUpdate + 1 ULP across the retained nn-two-cols-* records).
+        List<(long Page, int Start, int Length)>? clockSpans = null;
+        if (question.StartsWith("nn-two-cols-", StringComparison.Ordinal))
+        {
+            PropertyMap firstMap = new(PropertySectionKind.ColumnValues, "A", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [0x01])]);
+            byte[] firstBlob = PropertyBlob.Encode([firstMap]);
+            CatalogSnapshot catalog = CatalogBootstrap.Open(db.Cache, D, db.PageCount, out _)!;
+            CatalogEntry entry = catalog.Entries.Single(e => e.Name == "T" && e.ParentId == catalog.TablesContainer);
+            using PagePin objPin = db.Cache.Pin(entry.Root.Page).Pin!;
+            SlotView liveSlot = DataPages.CheckedSlot(objPin.Bytes, entry.Root.Row, D, out _)!.Value;
+            int ghostStart = liveSlot.Start - firstBlob.Length;
+            int dateUpdateOff = ghostStart + D.Row.FixedBase + catalog.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+            ulong aceGhostDateUpdate = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + dateUpdateOff);
+            TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceGhostDateUpdate)) - DateTime.FromOADate(BitConverter.UInt64BitsToDouble(updated));
+            Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"{card}/{question}: ghost DateUpdate differed from live DateUpdate by {delta}");
+            clockSpans = [(entry.Root.Page, dateUpdateOff, 8)];
+        }
+
+        AssertAsAce(kept, fixture, ours, clockSpans);
+    }
+
     private sealed class AlternateSortDatabase(WritableSqlFixture inner, uint lcid, CalcDb.Values.Scalar.TextCollation? databaseOrder) : ISqlActionDatabase
     {
         public CalcDb.Values.Scalar.ExpressionContext Context { get; } =
@@ -898,7 +1019,7 @@ public sealed class DdlTests
                         reads.Add((offset.GetInt64(), data));
                     }
                 }
-                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() == "after-close" && e.TryGetProperty("files", out JsonElement files))
+                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() is "after-close" or "after-ddl" && e.TryGetProperty("files", out JsonElement files))
                 {
                     JsonElement f0 = files[0];
                     length = f0.GetProperty("length").GetInt64();
@@ -948,12 +1069,32 @@ public sealed class DdlTests
         return (entry.DateCreateBits!.Value, entry.DateUpdateBits!.Value);
     }
 
-    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours)
+    private static void AssertAsAce(Kept kept, byte[] fixture, byte[] ours, IReadOnlyList<(long Page, int Start, int Length)>? ignoreSpans = null)
     {
         byte[] ace = kept.AceImage(fixture);
         Assert.Equal(kept.Length, ours.Length);
         HashSet<long> keptPages = [.. kept.Pages];
         List<string> differences = [];
+        bool wholeFileVerified = false;
+        if (kept.PageHashes is null && kept.FileSha256 is not null)
+        {
+            byte[] normalized = ours;
+            if (ignoreSpans is not null && ignoreSpans.Count > 0)
+            {
+                normalized = [.. ours];
+                foreach ((long p, int start, int length) in ignoreSpans)
+                {
+                    Assert.True(keptPages.Contains(p), $"clock span on unkept page {p} cannot be substituted when pageHashes are absent");
+                    ace.AsSpan((int)(p * D.PageSize) + start, length).CopyTo(normalized.AsSpan((int)(p * D.PageSize) + start, length));
+                }
+            }
+            string actualFileSha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(normalized));
+            wholeFileVerified = string.Equals(actualFileSha, kept.FileSha256, StringComparison.OrdinalIgnoreCase);
+            if (!wholeFileVerified)
+            {
+                differences.Add($"after-close file sha256: ours {actualFileSha}, ACE {kept.FileSha256}");
+            }
+        }
         for (long page = 0; page < ours.Length / D.PageSize; page++)
         {
             ReadOnlySpan<byte> mine = ours.AsSpan((int)(page * D.PageSize), D.PageSize);
@@ -962,7 +1103,7 @@ public sealed class DdlTests
                 ReadOnlySpan<byte> theirs = ace.AsSpan((int)(page * D.PageSize), D.PageSize);
                 for (int i = 0; i < D.PageSize; i++)
                 {
-                    if (mine[i] != theirs[i])
+                    if (mine[i] != theirs[i] && !Ignored(ignoreSpans, page, i))
                     {
                         differences.Add($"page {page} +{i}: ours {mine[i]:X2}, ACE {theirs[i]:X2}");
                     }
@@ -970,18 +1111,40 @@ public sealed class DdlTests
             }
             else if (kept.PageHashes is not null && page < kept.PageHashes.Length)
             {
+                if (ignoreSpans is not null && ignoreSpans.Any(s => s.Page == page && s.Start == 0 && s.Length == D.PageSize))
+                {
+                    continue;
+                }
                 string actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(mine))[..8];
                 if (!string.Equals(actual, kept.PageHashes[page], StringComparison.OrdinalIgnoreCase))
                 {
                     differences.Add($"page {page} (unkept) sha256: ours {actual}, ACE {kept.PageHashes[page]}");
                 }
             }
-            else if (page * D.PageSize < fixture.Length && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
+            else if (!wholeFileVerified
+                && page * D.PageSize < fixture.Length
+                && !mine.SequenceEqual(fixture.AsSpan((int)(page * D.PageSize), D.PageSize)))
             {
                 differences.Add($"page {page} changed, and ACE's record keeps neither its bytes nor its hash");
             }
         }
         Assert.True(differences.Count == 0, $"{differences.Count} differences:\n" + string.Join("\n", differences.Take(40)));
+    }
+
+    private static bool Ignored(IReadOnlyList<(long Page, int Start, int Length)>? spans, long page, int offset)
+    {
+        if (spans is null)
+        {
+            return false;
+        }
+        foreach ((long p, int start, int length) in spans)
+        {
+            if (p == page && offset >= start && offset < start + length)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private sealed class LockedTableDatabase(WritableSqlFixture inner, string lockedTable) : ISqlSchemaDatabase

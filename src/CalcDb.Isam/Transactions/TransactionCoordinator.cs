@@ -1468,6 +1468,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 if (e.Page == globalMapPage && e.Delta is BitDelta { Clear: not 0 })
                 {
                     _allocatedGlobalMap.Add(physical.File);
+                    if (allowJet4Mdb && Jet4MdbHeader(physical.File))
+                    {
+                        _jet4MdbCloseCommit.Add(physical.File);
+                    }
                     break;
                 }
             }
@@ -2756,10 +2760,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// ones (two rows of one table, a page and the map that allocates it), and returns the whole change for its roles
     /// and lock closure; <paramref name="catalogTable"/> is the catalog table it changes (MSysObjects). A change that
     /// cannot be compiled abandons the frame and accepts nothing. Inside a level the change joins it; outside every level
-    /// the statement publishes at its end as an immediate commit (+1 on the ACCDB page-0 counter per DDL statement:
-    /// evidence/r-q11-ddl-closure two-tables, then-index, then-drop each add one per statement).
+    /// the statement publishes at its end as an immediate commit (+1 on the ACCDB or opted-in Jet 4 MDB page-0 counter per
+    /// DDL statement: evidence/r-q11-ddl-closure, evidence/r-q34-ddl-sweep/*-mdb-*).
     /// </summary>
-    public AcceptOutcome AcceptSchemaChange(PageCache file, MutationSemantics catalogTable, Func<FileParticipant, CompiledChange> compile)
+    public AcceptOutcome AcceptSchemaChange(
+        PageCache file,
+        MutationSemantics catalogTable,
+        Func<FileParticipant, CompiledChange> compile,
+        bool allowJet4Mdb = false)
     {
         if (_unresolved.Contains(file))
         {
@@ -2805,7 +2813,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(true);
         }
-        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, allowJet4Mdb);
         return new AcceptOutcome(true, null, open, detail);
     }
 
