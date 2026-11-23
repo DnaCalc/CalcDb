@@ -32,6 +32,8 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     private readonly AdoKeysetCursor _cursor;
     private readonly EditFrame? _frame;
     private readonly bool _lockPessimistic;
+    private readonly bool _fromTable;
+    private readonly bool _fromSavedQuery;
     private RowReader? _reader;
     private PrivateOverlay? _readerOverlay;
     private int _currentIndex;
@@ -54,7 +56,9 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         RowReader reader,
         PrivateOverlay? readerOverlay,
         TableEditContext? editContext,
-        bool lockPessimistic)
+        bool lockPessimistic,
+        bool fromTable,
+        bool fromSavedQuery)
     {
         _session = session;
         _table = table;
@@ -71,6 +75,8 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         _readerOverlay = readerOverlay;
         _currentIndex = rowIds.Count > 0 ? 0 : -1;
         _lockPessimistic = lockPessimistic;
+        _fromTable = fromTable;
+        _fromSavedQuery = fromSavedQuery;
         _cursor = new AdoKeysetCursor(this);
         if (editContext is not null)
         {
@@ -140,7 +146,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
 
         AdoFieldDescriptor[] columns = [.. table.Columns.Select(c => AdoFieldDescriptor.FromTableColumn(c))];
         ColumnDescriptor[] columnMap = [.. table.Columns];
-        return new KeysetRowSource(session, tableName, table, columns, columnMap, rowIds, reader, overlay, editContext, lockPessimistic);
+        return new KeysetRowSource(session, tableName, table, columns, columnMap, rowIds, reader, overlay, editContext, lockPessimistic, fromTable: true, fromSavedQuery: false);
     }
 
     /// <summary>
@@ -270,7 +276,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
                 }
             }
 
-            return new KeysetRowSource(session, tableName, table, columns, columnMap, rowIds, reader, overlay, editContext, lockPessimistic);
+            return new KeysetRowSource(session, tableName, table, columns, columnMap, rowIds, reader, overlay, editContext, lockPessimistic, fromTable: false, fromSavedQuery: isSavedQuery);
         }
         finally
         {
@@ -287,6 +293,10 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     public bool IsEmpty => _rowIds.Count == 0;
 
     public bool IsUpdatable => _frame is not null;
+
+    public bool IsTableSource => _fromTable;
+
+    public bool IsSavedQuery => _fromSavedQuery;
 
     public int EditModeValue => _frame is null ? 0 : (int)_frame.Mode;
 

@@ -246,7 +246,12 @@ internal static class AdoSqlErrors
     /// Map a <see cref="SqlFailure"/> to an exact recorded provider error, or null with <paramref name="unmodelled"/>
     /// when the failure is a named refusal or an ACE error number with no retained ADO record.
     /// </summary>
-    public static MappedProviderError? TryMap(SqlFailure failure, bool isSavedQuery, out Failure? unmodelled, string? sql = null)
+    public static MappedProviderError? TryMap(
+        SqlFailure failure,
+        bool isSavedQuery,
+        out Failure? unmodelled,
+        string? sql = null,
+        bool allowAdoCheckViolation = false)
     {
         if (failure.IsNotModelled)
         {
@@ -305,6 +310,22 @@ internal static class AdoSqlErrors
             3188 or 3218 => CurrentlyLockedOnCommand(),
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route (FK delete violation)
             3200 => Make(AdoObject.HResultFail, failure.Message, 5003000, "3200", -534971980, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #142-152, r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22,
+            // r-q30-sql-check/mdb-viol-ado-exec #28-39, r-q30-sql-check/upd-viol-ado-exec #29-40,
+            // r-q31-sql-check-2/multi-ins-ado-exec #32-43, r-q31-sql-check-2/multi-upd-ado-exec #30-41:
+            // ad-hoc Connection.Execute violating a SQL CHECK constraint (ACCDB INSERT/UPDATE, MDB INSERT ... VALUES)
+            // fails 0x80004005 (E_FAIL), helpContext 5003000, SQLState "3316", NativeError -541462135, IID_ICommand.
+            // Command.Execute, saved action queries, textless field/table ValidationRule, and MDB UPDATE have no ADO record.
+            3317 when !isSavedQuery && allowAdoCheckViolation => Make(
+                AdoObject.HResultFail,
+                failure.Message,
+                5003000,
+                "3316",
+                -541462135,
+                AdoObject.IidCommand),
+            3317 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3317 on this route or rule kind is not recorded (only ad-hoc Connection.Execute SQL CHECK violations are recorded in r-oledb-odbc/error-record-channels, r-q-cat-txn-lock/ii11-ado-check-constraint, r-q30-sql-check/mdb-viol-ado-exec, r-q30-sql-check/upd-viol-ado-exec, r-q31-sql-check-2/multi-ins-ado-exec, and r-q31-sql-check-2/multi-upd-ado-exec)",
+                out unmodelled),
             // r-str-ado-act/ado-execute-results #125-134, r-ado-1b/rs-readonly-mode-edit #117-126
             3073 => Make(AdoObject.HResultFail, failure.Message, 5003073, "3073", -198839259, AdoObject.IidCommand),
             // r-ado-1b/rs-cache-same-connection #264, #267

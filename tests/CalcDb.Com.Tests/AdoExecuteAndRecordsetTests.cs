@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using CalcDb.Com.Com;
+using CalcDb.Evidence;
 using CalcDb.Foundation;
 using CalcDb.Values;
 using static CalcDb.Com.Tests.AdoTestHarness;
@@ -634,6 +635,213 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         finally
         {
             Marshal.FreeBSTR(raw[2].Pointer);
+        }
+    }
+
+    /// <summary>
+    /// W-09 (gkpc): AdoSqlErrors.TryMap maps ACE 3317 (SQL CHECK constraint violated) on recorded ad-hoc
+    /// Connection.Execute routes (r-oledb-odbc/error-record-channels #142-152,
+    /// r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22, r-q30-sql-check/mdb-viol-ado-exec #28-39,
+    /// r-q30-sql-check/upd-viol-ado-exec #29-40, r-q31-sql-check-2/multi-ins-ado-exec #32-43) and refuses
+    /// Command.Execute, saved queries, textless field ValidationRule, and 3289 CHECK DDL by name.
+    /// </summary>
+    [Fact]
+    public void CalcDb_ADO_Connection_Execute_maps_ACE_3317_check_constraint_violations_and_refuses_unrecorded_neighbours()
+    {
+        Assert.True(File.Exists(PublishedModule), $"publish first: dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native ({PublishedModule} is missing)");
+
+        const string AceSource = "Microsoft Access Database Engine";
+        const string OledbV2AccdbFixture = "3616122cce29bd4b057713e17102cbcde53bad9f8f4f28fb479849313e87615e";  // r-oledb-odbc-v2-accdb.accdb
+
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string tempDir = Path.Combine(Path.GetTempPath(), $"calcdb-ado-3317-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        string dbReq = CopyFixture(store, OledbV2AccdbFixture, tempDir, "r-oledb-odbc-check.accdb");
+
+        // Direct AdoSqlErrors.TryMap unit checks: unrecorded 3317 routes/rule kinds (textless ValidationRule)
+        // and 3289 (DAO-only CHECK DDL syntax error) must refuse with NotModelled.AdoProviderError.
+        var textless3317 = new CalcDb.Sql.SqlFailure(
+            CalcDb.Sql.SqlPhase.Execute,
+            3317,
+            "One or more values are prohibited by the validation rule '> 0' set for 'Vr.V'. Enter a value that the expression for this field can accept.");
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(textless3317, isSavedQuery: false, out Failure? unmodelled3317, allowAdoCheckViolation: false));
+        Assert.NotNull(unmodelled3317);
+        Assert.Equal(FailureKind.NotModelled, unmodelled3317!.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmodelled3317.Description);
+
+        var saved3317 = new CalcDb.Sql.SqlFailure(
+            CalcDb.Sql.SqlPhase.Execute,
+            3317,
+            "One or more values are prohibited by the validation rule 'CK_Req_V' set for 'Req'. Enter a value that the expression for this field can accept.");
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(saved3317, isSavedQuery: true, out Failure? unmodelledSaved3317, allowAdoCheckViolation: true));
+        Assert.NotNull(unmodelledSaved3317);
+        Assert.Equal(FailureKind.NotModelled, unmodelledSaved3317!.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmodelledSaved3317.Description);
+
+        var ddl3289 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Parse, 3289, "Syntax error in CONSTRAINT clause.");
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(ddl3289, isSavedQuery: false, out Failure? unmodelled3289, allowAdoCheckViolation: true));
+        Assert.NotNull(unmodelled3289);
+        Assert.Equal(FailureKind.NotModelled, unmodelled3289!.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmodelled3289.Description);
+
+        // MDB 3317 format/action branch (writable MDB Connection.Open is not yet implemented, so exercise the gate directly):
+        // MDB admits INSERT ... VALUES (r-q30-sql-check/mdb-viol-ado-exec #28-39) and refuses MDB UPDATE / INSERT ... SELECT.
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.InsertValues));
+        Assert.False(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.Update));
+        Assert.False(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: true, CalcDb.Sql.ActionKind.InsertSelect));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.InsertValues));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.Update));
+        Assert.True(CalcDb.Com.Ado.ConnectionObject.IsRecordedAdoCheckActionKind(isMdb: false, CalcDb.Sql.ActionKind.InsertSelect));
+        // MDB INSERT ... VALUES with allowAdoCheckViolation=true maps to the exact 3317 wire tuple; MDB UPDATE (allow=false) refuses.
+        var mdb3317 = new CalcDb.Sql.SqlFailure(
+            CalcDb.Sql.SqlPhase.Execute,
+            3317,
+            "One or more values are prohibited by the validation rule 'CK_T_X' set for 'T'. Enter a value that the expression for this field can accept.");
+        CalcDb.Com.Ado.MappedProviderError? mdbMapped = CalcDb.Com.Ado.AdoSqlErrors.TryMap(mdb3317, isSavedQuery: false, out Failure? mdbOpen, allowAdoCheckViolation: true);
+        Assert.NotNull(mdbMapped);
+        Assert.Null(mdbOpen);
+        Assert.Equal(unchecked((int)0x80004005), mdbMapped!.Value.ComFailure.Scode);
+        Assert.Equal("3316", mdbMapped.Value.ErrorEntry.SqlState);
+        Assert.Equal(-541462135, mdbMapped.Value.ErrorEntry.NativeError);
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(mdb3317, isSavedQuery: false, out Failure? mdbUpdateOpen, allowAdoCheckViolation: false));
+        Assert.NotNull(mdbUpdateOpen);
+        Assert.Contains("NotModelled.AdoProviderError", mdbUpdateOpen!.Description);
+
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var scope = new Scope(Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Own.manifest"));
+
+                static void AssertCheck3317(nint cn, Outcome outcome, string constraintName, string tableName)
+                {
+                    string expectedDesc =
+                        $"One or more values are prohibited by the validation rule '{constraintName}' set for '{tableName}'. Enter a value that the expression for this field can accept.";
+                    AssertError(
+                        outcome,
+                        unchecked((int)0x80004005),
+                        AceSource,
+                        expectedDesc,
+                        5003000u,
+                        IidCommand);
+
+                    nint errs = (nint)Get(cn, "Errors")!;
+                    try
+                    {
+                        Assert.Equal(1, Get(errs, "Count"));
+                        nint err0 = (nint)Get(errs, "Item", 0)!;
+                        try
+                        {
+                            Assert.Equal(unchecked((int)0x80004005), Get(err0, "Number"));
+                            Assert.Equal(AceSource, Get(err0, "Source"));
+                            Assert.Equal(expectedDesc, Get(err0, "Description"));
+                            Assert.Equal("3316", Get(err0, "SQLState"));
+                            Assert.Equal(-541462135, Get(err0, "NativeError"));
+                            Assert.Null(Get(err0, "HelpFile"));
+                            Assert.Equal(5003000, Get(err0, "HelpContext"));
+                        }
+                        finally
+                        {
+                            Release(err0);
+                        }
+                    }
+                    finally
+                    {
+                        Release(errs);
+                    }
+                }
+
+                // r-oledb-odbc/error-record-channels #142-152 (INSERT, Options=1),
+                // r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22 (omitted Options),
+                // ByRef RecordsAffected preserved on failure,
+                // r-q30-sql-check/upd-viol-ado-exec #29-40 (UPDATE),
+                // r-q31-sql-check-2/multi-ins-ado-exec #32-43 (INSERT ... SELECT),
+                // plus Command.Execute and 3289 DDL refusals.
+                nint cnReq = OpenAceConnection(dbReq);
+                try
+                {
+                    AssertCheck3317(
+                        cnReq,
+                        Call(cnReq, "Execute", "INSERT INTO Req (ID, R, V) VALUES (8, 'r', -5)", Missing, 1),
+                        "CK_Req_V",
+                        "Req");
+
+                    AssertCheck3317(
+                        cnReq,
+                        Call(cnReq, "Execute", "INSERT INTO Req (ID, R, V) VALUES (9, 'r', -1)"),
+                        "CK_Req_V",
+                        "Req");
+
+                    int affected = -1;
+                    AssertCheck3317(
+                        cnReq,
+                        ExecuteWithByRefI4(cnReq, "INSERT INTO Req (ID, R, V) VALUES (10, 'r', -2)", &affected),
+                        "CK_Req_V",
+                        "Req");
+                    Assert.Equal(-1, affected);
+
+                    AssertCheck3317(
+                        cnReq,
+                        Call(cnReq, "Execute", "UPDATE Req SET V = -5 WHERE ID = 1", Missing, 1),
+                        "CK_Req_V",
+                        "Req");
+
+                    AssertCheck3317(
+                        cnReq,
+                        Call(cnReq, "Execute", "INSERT INTO Req (ID, R, V) SELECT 11, 'r', -3 FROM Req WHERE ID = 1", Missing, 1),
+                        "CK_Req_V",
+                        "Req");
+
+                    // Command.Execute hitting 3317 has no retained ADO record -> NotModelled.AdoProviderError.
+                    nint cmd = New(OwnCommand);
+                    try
+                    {
+                        Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cnReq)).Failure);
+                        Assert.Null(Put(cmd, "CommandType", 1).Failure);
+                        Assert.Null(Put(cmd, "CommandText", "INSERT INTO Req (ID, R, V) VALUES (8, 'r', -5)").Failure);
+                        Outcome cmdOut = Call(cmd, "Execute", Missing, Missing, 129);
+                        Assert.NotNull(cmdOut.Failure);
+                        Assert.Equal(HResults.E_NOTIMPL, cmdOut.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoProviderError", cmdOut.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Release(cmd);
+                    }
+
+                    // 3289 (CHECK DDL through DAO-style engine error) has no ADO error record -> stays refused, never mapped.
+                    Outcome ddlOut = Call(cnReq, "Execute", "ALTER TABLE Req ADD CONSTRAINT CK_Extra CHECK (V < 100)", Missing, 1);
+                    Assert.NotNull(ddlOut.Failure);
+                    Assert.Equal(HResults.E_NOTIMPL, ddlOut.Failure!.Value.Scode);
+                }
+                finally
+                {
+                    Assert.Null(Call(cnReq, "Close").Failure);
+                    Release(cnReq);
+                }
+            }
+            catch (Exception e)
+            {
+                failure = e;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        try
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+        catch
+        {
+        }
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
         }
     }
 }
