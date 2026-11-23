@@ -1073,3 +1073,52 @@ loop (brief, findings, forward, re-check) is the other large share; left as it i
 **Reviewer findings per 1,000 lines (14, 41, 8, 8, 4; line about 3).** Falling, and since the reviewer pass for every
 stretch no rule was found wrong after landing (organizer 9's table). No change: the findings are what the reviewer layer
 catches before landing. Re-measure on fq9f's lifted refusals and 94fd.
+
+**Measured on the next landings.** The landing checks since the projection took 40 s (evid-keys), 98 s (4t24), 247 s
+(fq9f, with a 42 s NativeAOT publish) and 153 s (g4tv DAO half): median about 125 s, against 237 s before. Evidence ran
+in 11 to 18 s. `-Land -Compare` landed all three branches without a manual step. Reviewer findings per 1,000 lines:
+fq9f's narrowing and lifts 8 on about 1,700 (4.7), g4tv's DAO half 10 on 990 (10), 94fd 9 on 1,659 (5.4), all
+generalizations to the neighbouring cursor type, format, route or argument form, plus three defects in 94fd (an extent
+leak after Group 1, a two-byte test mask, the in-memory counter reseeded before a refusal). The review layer still
+catches what writers extend; the rate is not falling across writers.
+
+## 2026-11-22 - Handover: organizer 10 (01a2043d) to organizer 11
+
+Successor: CalcDb organizer 11, session 01a2051f-64e0-79e8-add8-80a8b3aa7ceb, started beside 01a2043d (`--no-parent`)
+at about 21:18 UTC with the handoff prompt; 01a2043d lists no organizer among its children. Organizer 10 forwards only
+the answers of the 94fd and g4tv writers and their reviewers (01a204a0, 01a204d6, 01a2045c, 01a2051d) and stops.
+
+Session 01a2043d (Claude Opus 5.5, 17:11 to about 21:25 UTC, about 140 tool calls) ran the triggered review (the
+projection key test, `-Land -Compare`), landed 4t24 (calls.trace@10), fq9f after a second review, and g4tv's DAO half,
+and recorded the baselines: core g4tv-dao-1, 464 of 1360; wide wide-4t24-1, 731 of 3158 (the first at @10: its 88 flips
+are counted as RuleChange, the code gains since dqtr among them). Tasks found: `m9gw` (CalcDb writes ADD CONSTRAINT
+CHECK, so r-q30 runs as a candidate), `b9zq` (probe round for the CHECK cases fq9f refuses), `63z8` (probe round for the
+DAO SELECT cases g4tv refuses, and whether saved-query and QueryDef recordsets differ). Indicators
+(`tools/process-indicators.ps1`, window since 2026-11-21 23:16; the session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 72% (22,616 of 31,413) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 10,692 / 11,924 / 1,782 / 591 / 6,424 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 67; 81% (this session: 4 of 4 landings) | below 70% |
+| Landing check duration (median of 97 runs) | 217 s; the four landings since the projection 40, 98, 247, 153 s | above 3 min |
+| Compare baselines | core 4t24-1 463, fq9f-1 463, g4tv-dao-1 464 of 1360; wide wide-4t24-1 731 of 3158 | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 140 calls for 4 landings, 4 baselines, 6 reviewer briefs and the triggered review (about 25 per code landing with its second review) | above about 15: still crossed |
+| Reviewer findings per 1,000 lines | fq9f lifts 4.7, g4tv DAO 10, 94fd 5.4 | above about 3: still crossed |
+| Rules found wrong after landing | 0 | more than one a day |
+| Children stopped waiting for a record | 0 (every writer refused by name and listed the cases for a probe round) | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land`) | above 5 min |
+| Book contradictions found | 0 | rising |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 10 (Opus) | about 250 | about 140 |
+| fq9f second reviewer | 23 | 183 |
+| g4tv writer (DAO and ADO halves) / DAO reviewer | 211 / 35 | 524 / 238 |
+| 94fd writer / reviewer (second pass running) | 135 / 25+ | 389 / 115+ |
+| g4tv ADO reviewer (running) | - | - |
+
+The organizer calls per landing stay above the line: each code landing this session took a second review round (fq9f's
+lifts, 94fd's 1,344-line fix commit), and each round costs a brief, a findings decision and a forward. Next to try:
+the writer starts its own reviewer as a sub-session and applies the findings before it reports, so the organizer reads
+one report with the findings and their dispositions.

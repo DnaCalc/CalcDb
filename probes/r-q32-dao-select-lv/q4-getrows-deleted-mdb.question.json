@@ -1,0 +1,60 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q32-dao-select-lv/q4-getrows-deleted-mdb",
+  "bookRefs": ["R-STRING-1", "R-ORACLE-1", "OR-WIRE", "W-08"],
+  "description": "Isolated Recordset.GetRows on self-deleted row 0, externally-deleted row 0, and externally-deleted row 1 on Jet 4 MDB SELECT dynaset (2), with BOF, EOF and DBEngine.Errors.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q32-mdb.mdb",
+      "sha256": "cbce097e8ef4b8b84f6244a661c7e386a2469aab64057be068e5a169a2e3b1f2",
+      "length": 102400,
+      "provenance": "r-q32-dao-select-lv.create-mdb.6b9dd67621.a1 qk1-6b9dd676210d825527177830f382b3d4360c262b38ce1e3652ee161111fd99db output:r-q32-mdb.mdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db",
+      "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }]
+    },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rd1", "args": [{ "type": "bstr", "text": "SELECT ID, FLong FROM T ORDER BY ID" }, { "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "rd1", "member": "Delete", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rd1", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "rd1", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd1", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e1" },
+    { "op": "invoke", "target": "e1", "member": "Count", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "e1" },
+    { "op": "invoke", "target": "rd1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rd1" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rd2", "args": [{ "type": "bstr", "text": "SELECT ID, FLong FROM T ORDER BY ID" }, { "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "DELETE FROM T WHERE ID = 2" }] },
+    { "op": "invoke", "target": "rd2", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "rd2", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd2", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e2" },
+    { "op": "invoke", "target": "e2", "member": "Count", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "e2" },
+    { "op": "invoke", "target": "rd2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rd2" },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rd3", "args": [{ "type": "bstr", "text": "SELECT ID, FLong FROM T ORDER BY ID" }, { "type": "i4", "value": 2 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "DELETE FROM T WHERE ID = 4" }] },
+    { "op": "invoke", "target": "rd3", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "rd3", "member": "BOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rd3", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e3" },
+    { "op": "invoke", "target": "e3", "member": "Count", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "e3" },
+    { "op": "invoke", "target": "rd3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rd3" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
