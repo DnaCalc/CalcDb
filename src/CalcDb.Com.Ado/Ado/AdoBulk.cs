@@ -19,6 +19,10 @@ internal static unsafe class AdoBulk
         {
             return rs.FailClosed();
         }
+        if (rs.HasActiveChunkState)
+        {
+            return rs.FailChunkNavigation("GetRows");
+        }
 
         nint rowsArg = args.Length > 0 ? args[0] : 0;
         nint startArg = args.Length > 1 ? args[1] : 0;
@@ -48,7 +52,37 @@ internal static unsafe class AdoBulk
             return fieldsFailure!.Value;
         }
 
-        int colCount = colOrdinals!.Length;
+        // Base-table Binary (204) and OLE (205) GetRows is recorded only on ACCDB SQL Recordset.Open Client Static ReadOnly (3, 3, 1)
+        // with 1-argument GetRows(-1) and omitted Start and Fields
+        // (evidence/r-wire/ado-getrows-tags #270/#296, evidence/r-fix-wire-ado/ado-write-values-text-binary #1378/#1404).
+        AdoFieldDescriptor[] allCols = rs.ColumnDescriptors;
+        for (int i = 0; i < colOrdinals!.Length; i++)
+        {
+            AdoFieldDescriptor colDesc = allCols[colOrdinals[i]];
+            if (colDesc.IsBaseTableColumn && colDesc.AdoType is 204 or 205)
+            {
+                if (rs.IsMdb)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetRowsBinaryMdb",
+                        $"Recordset.GetRows over MDB field '{colDesc.Name}' (type {colDesc.AdoType}) is not recorded"));
+                }
+                if (rs.OpenedSelectContext is not { Route: AdoSelectRoute.RecordsetOpenSql, IsMdb: false, CursorLocation: 3, CursorType: 3, LockType: 1 })
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetRowsBinaryCursor",
+                        $"Recordset.GetRows over field '{colDesc.Name}' (type {colDesc.AdoType}) is recorded only on ACCDB SQL Recordset.Open Client Static ReadOnly (3, 3, 1)"));
+                }
+                if (!rs.IsRecordedGetRowsBinaryArgShape)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoGetRowsBinaryArgs",
+                        $"Recordset.GetRows over field '{colDesc.Name}' (type {colDesc.AdoType}) is recorded only with 1-arg GetRows(-1) and omitted Start and Fields"));
+                }
+            }
+        }
+
+        int colCount = colOrdinals.Length;
         int limit = maxRows == -1 ? int.MaxValue : maxRows;
 
         // Direct SAFEARRAY fill when the remaining view row count is known upfront (zero intermediate buffer allocations).
@@ -219,6 +253,10 @@ internal static unsafe class AdoBulk
         {
             return CallResult.Fail(Failure.NotImplemented("Recordset.GetString at BOF/EOF (not recorded)"));
         }
+        if (rs.IsClientCursor && rs.HasActiveChunkState)
+        {
+            return rs.FailChunkNavigation("GetString");
+        }
 
         int startIndex = rs.CurrentViewPosition;
         int limit = numRows == -1 ? int.MaxValue : numRows;
@@ -262,6 +300,10 @@ internal static unsafe class AdoBulk
             count++;
         }
 
+        if (rs.HasActiveChunkState)
+        {
+            return rs.FailChunkNavigation("GetString");
+        }
         rs.AdvancePositionAfterBulk(current);
         rs.ClearConnectionErrors();
 

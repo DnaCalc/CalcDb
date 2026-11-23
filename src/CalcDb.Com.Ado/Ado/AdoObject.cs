@@ -164,6 +164,9 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>E_FAIL / 0x80004005.</summary>
     public const int HResultFail = unchecked((int)0x80004005);
 
+    /// <summary>E_UNEXPECTED / 0x8000FFFF (Catastrophic failure reading Field.Value after GetChunk on a server ForwardOnly cursor; r-oledb-odbc/stream-getchunk #24, #47, #48).</summary>
+    public const int HResultUnexpected = unchecked((int)0x8000FFFF);
+
     /// <summary>DISP_E_TYPEMISMATCH / 0x80020005.</summary>
     public const int HResultTypeMismatch = unchecked((int)0x80020005);
 

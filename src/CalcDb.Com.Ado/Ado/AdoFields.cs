@@ -378,6 +378,37 @@ internal static unsafe class AdoFieldValues
                 return v.Pointer == 0 ? OwnedVariant.FromText("") : OwnedVariant.FromText(Bstrs.Chars(v.Pointer));
             case VarType.Decimal:
                 return OwnedVariant.Adopt(v);
+            case VarType.Array | VarType.UI1:
+            {
+                if (desc.AdoType is not (204 or 205))
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoSqlBinaryFieldType",
+                        $"ADO Field.Value of SQL VT_ARRAY|VT_UI1 for ADO field type {desc.AdoType} ('{desc.Name}') is not recorded");
+                    return null;
+                }
+                nint psa = v.Pointer;
+                if (psa == 0)
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoSqlBinaryNullArray",
+                        $"ADO Field.Value of null SQL VT_ARRAY|VT_UI1 SAFEARRAY for '{desc.Name}' is not recorded");
+                    return null;
+                }
+                (int Lower, int Count)[] shape = SafeArrays.Shape(psa);
+                if (shape.Length != 1 || shape[0].Lower != 0 || shape[0].Count <= 0)
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoSqlBinaryArrayShape",
+                        $"ADO Field.Value of SQL VT_ARRAY|VT_UI1 with shape dims={shape.Length}, lower={(shape.Length > 0 ? shape[0].Lower : 0)}, count={(shape.Length > 0 ? shape[0].Count : 0)} for '{desc.Name}' is not recorded");
+                    return null;
+                }
+                int count = shape[0].Count;
+                nint copy = SafeArrays.Create(VarType.UI1, (0, count));
+                new ReadOnlySpan<byte>(SafeArrays.ElementPointer(psa, 0), count)
+                    .CopyTo(new Span<byte>(SafeArrays.ElementPointer(copy, 0), count));
+                return OwnedVariant.TakeArray(copy, VarType.UI1);
+            }
             default:
                 refusal = Failure.NotImplemented($"ADO Field.Value of SQL variant type {(VarType)v.Vt}");
                 return null;
@@ -671,7 +702,60 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
 internal sealed unsafe class AdoFieldObject : AdoObject
 {
     private static readonly InterfaceDecl Decl = AdoTypes.Field;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int> _baseInvoke;
+    private static readonly nint Vtable = BuildVtable();
+
+    private static nint BuildVtable()
+    {
+        nint* table = (nint*)DualEntries.Build(Decl);
+        _baseInvoke = (delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)table[6];
+        table[6] = (nint)(delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)&InvokeField;
+        return (nint)table;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int InvokeField(
+        nint self,
+        int dispId,
+        Guid* iid,
+        uint lcid,
+        ushort flags,
+        DispParams* parameters,
+        NativeVariant* result,
+        ExcepInfo* info,
+        uint* argError)
+    {
+        // Inspect raw GetChunk(Length) argument BEFORE DispatchObject coerces non-I4 values to I4
+        // (evidence/r-oledb-odbc/stream-getchunk records only 1 positional VT_I4 argument).
+        if (dispId == 1108 && (flags & 1) != 0)
+        {
+            AdoFieldObject field = Recover<AdoFieldObject>(self);
+            field._getChunkBadArgReason = CheckGetChunkRawArg(parameters);
+            try
+            {
+                return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+            }
+            finally
+            {
+                field._getChunkBadArgReason = null;
+            }
+        }
+        return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+    }
+
+    private static string? CheckGetChunkRawArg(DispParams* parameters)
+    {
+        if (parameters is null || parameters->ArgCount != 1 || parameters->NamedArgCount != 0 || parameters->Args == 0)
+        {
+            return "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)";
+        }
+        NativeVariant* cell = Args.Cell(parameters->Args);
+        VarType vt = (VarType)cell->Vt;
+        return vt == VarType.I4
+            ? null
+            : $"Field.GetChunk with argument vt=0x{(ushort)vt:X4} (only by-value VT_I4 is recorded)";
+    }
+
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, f => Text(f.Desc.Name)))
         .Get("Type", (self, args) => Meta(self, d => Int32(d.AdoType)))
@@ -686,6 +770,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             nint val = args[0];
             return Live(self, f => f.PutValue(val));
         })
+        .Method("GetChunk", (self, args) => ((AdoFieldObject)self).GetChunk(args[0]))
         .Get("OriginalValue", (self, args) => Live(self, f => f.GetOriginalValue()))
         .Get("UnderlyingValue", (self, args) => Live(self, f => f.GetUnderlyingValue()))
         .Get("Status", (self, args) => Live(self, f => f.GetStatus()))
@@ -694,6 +779,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     private readonly AdoFieldsObject _fields;
     private readonly int _ordinal;
     private readonly int _generation;
+    private string? _getChunkBadArgReason;
 
     public AdoFieldObject(AdoFieldsObject fields, int ordinal, int generation) : base(Decl, Vtable, "ADODB.Field")
     {
@@ -704,6 +790,18 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     }
 
     protected override OperationTable Table => Operations;
+
+    protected override Failure? ArgumentCountFailure(MemberDecl member) =>
+        member.Name == "GetChunk"
+            ? Failure.NotModelled("NotModelled.AdoGetChunkArg", "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)")
+            : null;
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
+        member.Name == "GetChunk"
+            ? Failure.NotModelled(
+                "NotModelled.AdoGetChunkArg",
+                missing ? "Field.GetChunk with Missing argument is not recorded" : "Field.GetChunk with non-I4 argument is not recorded")
+            : null;
 
     private AdoFieldDescriptor Desc => _fields.Descriptor(_ordinal);
 
@@ -722,6 +820,28 @@ internal sealed unsafe class AdoFieldObject : AdoObject
 
     private static CallResult Meta(ComObject self, Func<AdoFieldDescriptor, CallResult> op) =>
         Live(self, f => f.Desc.MetadataRefusal is { } refusal ? CallResult.Fail(refusal) : op(f.Desc));
+
+    private CallResult GetChunk(nint lengthArg)
+    {
+        if (_getChunkBadArgReason is { } badArg)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.AdoGetChunkArg", badArg));
+        }
+        if (!IsValid || !_fields.Recordset.IsOpen)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkClosed",
+                "Field.GetChunk on a closed Recordset or invalidated Field wrapper is not recorded"));
+        }
+        if (lengthArg == 0 || (VarType)Args.Cell(lengthArg)->Vt != VarType.I4)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoGetChunkArg",
+                "Field.GetChunk requires a single by-value VT_I4 Length argument (not recorded)"));
+        }
+        int length = (int)Args.Cell(lengthArg)->Int64;
+        return _fields.Recordset.ReadFieldGetChunk(_ordinal, length, this);
+    }
 
     private CallResult GetValue()
     {

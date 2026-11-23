@@ -35,6 +35,15 @@ internal static class AdoSqlErrors
         0,
         AdoObject.IidRowset);
 
+    /// <summary>Reading Field.Value on a server ForwardOnly cursor after non-null GetChunk on the same row (r-oledb-odbc/stream-getchunk #24, #47, #48, #53-61).</summary>
+    public static MappedProviderError CatastrophicFailure() => Make(
+        AdoObject.HResultUnexpected,
+        "Catastrophic failure",
+        5000000,
+        "",
+        0,
+        AdoObject.IidRowset);
+
     /// <summary>Invalid SQL statement (3129; r-ado-1b/rs-source-kinds #63/#223/#239, r-ado-1b/errors-by-route).</summary>
     public static MappedProviderError InvalidSqlStatement() => Make(
         AdoObject.HResultErrorsInCommand,
