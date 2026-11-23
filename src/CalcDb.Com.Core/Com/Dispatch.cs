@@ -90,6 +90,42 @@ public struct DispParams
     public uint NamedArgCount;
 }
 
+/// <summary>Why a declared scalar argument failed dispatch binding or coercion.</summary>
+public enum ArgumentConversionReason
+{
+    /// <summary>A required scalar parameter was passed as Missing (VT_ERROR DISP_E_PARAMNOTFOUND).</summary>
+    Missing,
+
+    /// <summary>VariantChangeTypeEx failed with DISP_E_TYPEMISMATCH (0x80020005).</summary>
+    TypeMismatch,
+
+    /// <summary>VariantChangeTypeEx failed with DISP_E_OVERFLOW (0x8002000A).</summary>
+    Overflow,
+
+    /// <summary>VariantChangeTypeEx failed with another HRESULT.</summary>
+    Other,
+}
+
+/// <summary>Context of a failed scalar-argument conversion in <see cref="DispatchObject.Invoke"/>.</summary>
+public readonly record struct ArgumentConversion(int Parameter, VarType SourceType, ArgumentConversionReason Reason, int HResult)
+{
+    public bool Missing => Reason == ArgumentConversionReason.Missing;
+
+    public static ArgumentConversion FromHResult(int parameter, VarType sourceType, int hresult) => new(
+        parameter,
+        sourceType,
+        hresult switch
+        {
+            HResults.DISP_E_TYPEMISMATCH => ArgumentConversionReason.TypeMismatch,
+            HResults.DISP_E_OVERFLOW => ArgumentConversionReason.Overflow,
+            _ => ArgumentConversionReason.Other,
+        },
+        hresult);
+
+    public static ArgumentConversion ForMissing(int parameter) =>
+        new(parameter, VarType.Error, ArgumentConversionReason.Missing, HResults.DISP_E_PARAMNOTFOUND);
+}
+
 /// <summary>
 /// A wrapper with a dual interface: its declaration, and the operations it implements by member. The dispatch adapter
 /// binds and coerces arguments, the typed adapter (<see cref="TypedCall"/>) converts native arguments; both reach the
@@ -116,12 +152,20 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
     protected virtual Failure? ArgumentCountFailure(MemberDecl member) => null;
 
     /// <summary>
-    /// The failure an Invoke publishes when a declared scalar argument does not coerce, or null for the standard HRESULT
-    /// of VariantChangeType (DISP_E_TYPEMISMATCH). <paramref name="missing"/> is a Missing argument for a required scalar
-    /// parameter, which without a failure here reaches the operation as omitted. A DAO Recordset answers 3421, and 3001
-    /// for Missing.
+    /// A named refusal for a passed, non-Missing declared scalar argument inspected with its original
+    /// <paramref name="sourceType"/> (including ByRef flags) before VariantChangeTypeEx runs, or null to proceed.
+    /// Members whose records cover only a subset of source VarTypes use this to refuse unrecorded VarTypes by name
+    /// instead of letting dispatch coerce them silently.
     /// </summary>
-    protected virtual Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => null;
+    protected virtual Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => null;
+
+    /// <summary>
+    /// The failure an Invoke publishes when a declared scalar argument does not coerce, or null for the standard HRESULT
+    /// of VariantChangeType (DISP_E_TYPEMISMATCH, DISP_E_OVERFLOW). <see cref="ArgumentConversion.Missing"/> is a Missing
+    /// argument for a required scalar parameter, which without a failure here reaches the operation as omitted. A DAO
+    /// Recordset answers 3421, and 3001 for Missing; DAO Field.GetChunk also answers 3001 for DISP_E_OVERFLOW.
+    /// </summary>
+    protected virtual Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => null;
 
     /// <summary>
     /// Whether an argument-conversion failure published through EXCEPINFO (<see cref="ArgumentConversionFailure"/>) also
@@ -358,7 +402,7 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
                     // Missing for a required scalar parameter does not coerce: DAO answers 3001 with the argument's
                     // position (r-cursor-1b/move-argument-forms Move(Missing), seek-operator-spelling Seek(Missing, 4)).
                     if (passed && !member.Parameters[k].Optional && TypedCall.ScalarType(member.Parameters[k].Type) is not null
-                        && ArgumentConversionFailure(member, missing: true) is { } missingFailure)
+                        && ArgumentConversionFailure(member, ArgumentConversion.ForMissing(k)) is { } missingFailure)
                     {
                         return PublishConversionFailure(missingFailure, positions[k], info, argError);
                     }
@@ -369,24 +413,33 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
                     }
                     continue;
                 }
-                // Declared scalar parameters are coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's).
-                if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt && ((NativeVariant*)args[k])->Vt != (ushort)vt)
+                // Declared scalar parameters are inspected before coercion and coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's).
+                if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt)
                 {
-                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
-                    if (c is null)
+                    VarType sourceType = (VarType)((NativeVariant*)args[k])->Vt;
+                    if (ScalarArgumentRefusal(member, k, sourceType) is { } refused)
                     {
-                        if (ArgumentConversionFailure(member, missing: false) is { } conversion)
-                        {
-                            return PublishConversionFailure(conversion, positions[k], info, argError);
-                        }
-                        if (argError is not null)
-                        {
-                            *argError = positions[k];
-                        }
-                        return hr;
+                        OnFailure(refused);
+                        return ErrorPublication.ToExcepInfo(refused, info);
                     }
-                    (coerced ??= []).Add(c);
-                    args[k] = (nint)c.Pointer;
+                    if (sourceType != vt)
+                    {
+                        OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
+                        if (c is null)
+                        {
+                            if (ArgumentConversionFailure(member, ArgumentConversion.FromHResult(k, sourceType, hr)) is { } conversion)
+                            {
+                                return PublishConversionFailure(conversion, positions[k], info, argError);
+                            }
+                            if (argError is not null)
+                            {
+                                *argError = positions[k];
+                            }
+                            return hr;
+                        }
+                        (coerced ??= []).Add(c);
+                        args[k] = (nint)c.Pointer;
+                    }
                 }
             }
             CallResult outcome = Run(member, args);

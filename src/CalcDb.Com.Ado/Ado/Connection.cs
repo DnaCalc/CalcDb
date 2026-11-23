@@ -588,9 +588,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
     /// r-ado-1b/conn-open-args of): compose the pre-open ConnectionString, populate Errors with Provider Type mismatch,
     /// and fail with 0x80020005.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing)
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
     {
-        if (missing || member.Name != "Open" || IsOpen)
+        if (conversion.Missing || member.Name != "Open" || IsOpen)
         {
             return null;
         }

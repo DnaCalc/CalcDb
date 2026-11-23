@@ -270,8 +270,10 @@ public static class HResults
     public const int DISP_E_UNKNOWNINTERFACE = unchecked((int)0x80020001);
     public const int DISP_E_MEMBERNOTFOUND = unchecked((int)0x80020003);
     public const int DISP_E_PARAMNOTFOUND = unchecked((int)0x80020004);
+    public const int DISP_E_TYPEMISMATCH = unchecked((int)0x80020005);
     public const int DISP_E_UNKNOWNNAME = unchecked((int)0x80020006);
     public const int DISP_E_EXCEPTION = unchecked((int)0x80020009);
+    public const int DISP_E_OVERFLOW = unchecked((int)0x8002000A);
     public const int DISP_E_BADPARAMCOUNT = unchecked((int)0x8002000E);
     public const int DISP_E_PARAMNOTOPTIONAL = unchecked((int)0x8002000F);
     public const int TYPE_E_ELEMENTNOTFOUND = unchecked((int)0x8002802B);

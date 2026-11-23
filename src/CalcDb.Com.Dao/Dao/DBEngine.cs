@@ -194,10 +194,19 @@ internal sealed unsafe class DBEngineObject : DaoObject
         _ => null,
     };
 
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => member.Name switch
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
+    {
+        ("CreateDatabase", 0) when sourceType != VarType.Bstr =>
+            Failure.NotModelled("NotModelled.CreateDatabaseArgumentType", $"DBEngine.CreateDatabase Name with {sourceType} argument (only BSTR is recorded)"),
+        ("CreateDatabase", 1) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null) =>
+            Failure.NotModelled("NotModelled.CreateDatabaseArgumentType", $"DBEngine.CreateDatabase Connect with {sourceType} argument (only BSTR, Empty and Null are recorded)"),
+        _ => null,
+    };
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => member.Name switch
     {
         "CommitTrans" => Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)"),
-        "CreateDatabase" => missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        "CreateDatabase" => conversion.Missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
         _ => null,
     };
 
@@ -389,9 +398,26 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// </summary>
     protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback" ? InvalidArgumentCount() : null;
 
-    /// <summary>CommitTrans(Null) is 3421 from DAO.Workspace with an IErrorInfo (r-txn-1b/commit-option-vartypes).</summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
-        member.Name == "CommitTrans" && !missing ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true } : null;
+    /// <summary>
+    /// CommitTrans(Options): only the source VarTypes recorded in r-txn-1b/commit-option-vartypes are admitted;
+    /// unrecorded VarTypes (VT_R4, VT_CY, VT_DATE, VT_DECIMAL, VT_I8, ByRef, ...) are refused by name before
+    /// VariantChangeType runs.
+    /// </summary>
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
+        member.Name == "CommitTrans" && parameter == 0 && sourceType is not (
+            VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or
+            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr)
+            ? Failure.NotModelled(
+                "NotModelled.CommitTransArgumentType",
+                $"Workspace.CommitTrans Options vt=0x{(ushort)sourceType:X4} (only Empty, Null, I2, I4, R8, Bstr, Bool and UI1 are recorded)")
+            : null;
+
+    /// <summary>
+    /// CommitTrans(Null) is 3421 from DAO.Workspace with an IErrorInfo (r-txn-1b/commit-option-vartypes).
+    /// Coercion overflow on CommitTrans is not recorded; only non-missing type-conversion failure keeps 3421.
+    /// </summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
+        member.Name == "CommitTrans" && !conversion.Missing ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true } : null;
 
     private static CallResult Live(ComObject self, Func<WorkspaceObject, CallResult> op)
     {

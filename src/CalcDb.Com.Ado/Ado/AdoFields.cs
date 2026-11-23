@@ -796,11 +796,16 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             ? Failure.NotModelled("NotModelled.AdoGetChunkArg", "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)")
             : null;
 
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
+        member.Name == "GetChunk" && sourceType != VarType.I4
+            ? Failure.NotModelled("NotModelled.AdoGetChunkArg", $"Field.GetChunk with argument vt=0x{(ushort)sourceType:X4} (only by-value VT_I4 is recorded)")
+            : null;
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
         member.Name == "GetChunk"
             ? Failure.NotModelled(
                 "NotModelled.AdoGetChunkArg",
-                missing ? "Field.GetChunk with Missing argument is not recorded" : "Field.GetChunk with non-I4 argument is not recorded")
+                conversion.Missing ? "Field.GetChunk with Missing argument is not recorded" : "Field.GetChunk with non-I4 argument is not recorded")
             : null;
 
     private AdoFieldDescriptor Desc => _fields.Descriptor(_ordinal);
