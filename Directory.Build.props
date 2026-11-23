@@ -14,11 +14,12 @@
   </PropertyGroup>
 
   <!-- The source state a binary was built from (commit, plus "+dirty" when tooling paths had changes or new files,
-       which are compiled too), embedded
-       as assembly metadata "CalcDbSource". Evidence records name the binaries that ran, not the tree at run time.
+       which are compiled too), embedded as assembly metadata "CalcDbSource". Only the binaries that read it
+       (CalcDb.Oracle.Runner and CalcDb.Perf) opt in via EmbedCalcDbSource=true; stamping all 33 assemblies forced
+       full solution rebuilds and NativeAOT relinks on every commit or clean/dirty transition (x38g).
        Every build runs in a git worktree (the integration checkout, the check worktree or a child's); a tree
        without git says "unknown". -->
-  <Target Name="CalcDbSourceState" BeforeTargets="GetAssemblyAttributes" Condition="'$(DesignTimeBuild)' != 'true'">
+  <Target Name="CalcDbSourceState" BeforeTargets="GetAssemblyAttributes" Condition="'$(DesignTimeBuild)' != 'true' And '$(EmbedCalcDbSource)' == 'true'">
     <Exec Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitHead" />
       <Output TaskParameter="ExitCode" PropertyName="CalcDbGitExit" />
