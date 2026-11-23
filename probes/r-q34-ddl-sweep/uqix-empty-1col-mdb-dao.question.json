@@ -1,0 +1,205 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q34-ddl-sweep/uqix-empty-1col-mdb-dao",
+  "bookRefs": [
+    "W-07",
+    "II-11",
+    "R-CAT-1",
+    "R-FMT-2",
+    "zw4d"
+  ],
+  "description": "Jet 4 MDB DAO: CREATE UNIQUE INDEX UK ON T (K) on empty table with existing PK. Keeps full file after setup and after DDL.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-mdb-empty.mdb",
+      "sha256": "99da59149c57559b5658a9a08625236a936808d2be0ead100da977bd3716bdb4",
+      "length": 77824,
+      "provenance": "r-cat-1.create-mdb-empty.cfd08f7225.a1 qk1-cfd08f72252d515b07316a6bd39ffcd763b2a381963ec089596450dc48b1dec3 output:r-cat-1-mdb-empty.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng0"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng0",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db0"
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db0"
+    },
+    {
+      "op": "release",
+      "target": "eng0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-setup",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg0",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg0",
+      "offset": 0,
+      "count": 196608,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg0"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng1",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db1"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UK ON T (K)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db1"
+    },
+    {
+      "op": "release",
+      "target": "eng1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 196608,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    }
+  ]
+}
