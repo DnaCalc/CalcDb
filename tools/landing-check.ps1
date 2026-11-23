@@ -60,19 +60,22 @@ if ($InPlace) {
 # One run at a time per worktree: two runs would check out and build over each other. A run that finds the lock held
 # waits its turn (up to -LockWaitMinutes), so landings started together form a queue; master is read only once the
 # lock is held, so each landing is checked on top of the master it lands on.
-$lockPath = "$work.landing-lock"
-$lockDeadline = [DateTime]::UtcNow.AddMinutes($LockWaitMinutes)
-$lock = $null
-$waited = $false
-while (-not $lock) {
-    try { $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
-    catch {
-        if ([DateTime]::UtcNow -ge $lockDeadline) { throw "another landing check still holds $lockPath after $LockWaitMinutes min" }
-        if (-not $waited) { Step "waiting for the landing check running in $work ($lockPath)"; $waited = $true }
-        Start-Sleep -Seconds 15
+function Wait-Lock([string] $path, [string] $what) {
+    $deadline = [DateTime]::UtcNow.AddMinutes($LockWaitMinutes)
+    $waited = $false
+    while ($true) {
+        try { $held = [IO.File]::Open($path, 'OpenOrCreate', 'ReadWrite', 'None'); break }
+        catch {
+            if ([DateTime]::UtcNow -ge $deadline) { throw "another $what still holds $path after $LockWaitMinutes min" }
+            if (-not $waited) { Step "waiting for the $what that holds $path" | Out-Host; $waited = $true }
+            Start-Sleep -Seconds 15
+        }
     }
+    if ($waited) { Step "lock taken: $path" | Out-Host }
+    $held
 }
-if ($waited) { Step "lock taken" }
+$lockPath = "$work.landing-lock"
+$lock = Wait-Lock $lockPath "landing check"
 if (-not $InPlace) { $base = (git -C $repo rev-parse master).Trim() }
 try {
     if (-not $InPlace) {
@@ -361,7 +364,11 @@ try {
     if (-not ($Compare -and $failed -eq 0)) { exit $failed }
 } finally { $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue }
 
-# The core compare of what landed, from the snapshot, with the check worktree already free for the next landing.
+# The core compare of what landed, from the snapshot, with the check worktree already free for the next landing. Compares
+# share one store, and two at once collide on an attempt the other runner owns (g4tv-ado-2 beside vpfd, 2026-11-23):
+# they queue on a lock of their own.
+$compareLockPath = "$env:LOCALAPPDATA\CalcDb\compare-store.compare-lock"
+$compareLock = Wait-Lock $compareLockPath "core compare"
 Push-Location $repo
 try {
     Step "core compare $Name-1 from $snap"
@@ -370,4 +377,4 @@ try {
     $code = $LASTEXITCODE
     Step "core compare $Name-1 (exit $code): $env:LOCALAPPDATA\CalcDb\compare-store\compare-sets\$Name-1.tsv"
     exit $(if ($code) { 1 } else { 0 })
-} finally { Pop-Location }
+} finally { Pop-Location; $compareLock.Dispose(); Remove-Item $compareLockPath -Force -ErrorAction SilentlyContinue }

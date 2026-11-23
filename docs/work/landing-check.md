@@ -98,7 +98,9 @@ the task, and the bookkeeping lines of the child's report.
   <snapshot>\compare-set-wide.json` and `--against` the previous wide run. A loss in a folder outside the core set is
   traced with `--dirs <folder>` against the snapshots of the landings since the last wide run.
 
-The compare job blocks nothing: children build, the next child starts and probes run while it runs. A later landing
+The compare job blocks nothing: children build, the next child starts and probes run while it runs. Two core compares
+share the compare store and collide on an attempt the other runner owns, so `-Compare` takes a lock of its own
+(`compare-store.compare-lock`) and the compares of landings made together run one after the other. A later landing
 waits only for the earlier run's result before it records its own baseline.
 
 ## Why it is built this way (measured)
