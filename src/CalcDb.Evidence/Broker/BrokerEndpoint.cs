@@ -18,7 +18,7 @@ public sealed class BrokerEndpoint : IDisposable
     private readonly string _pipe;
     private readonly CancellationTokenSource _stop = new();
     private readonly ManualResetEventSlim _shutdown = new();
-    private Task? _accept;
+    private Thread? _accept;
 
     public BrokerEndpoint(OracleBroker broker, string pipe)
     {
@@ -42,7 +42,9 @@ public sealed class BrokerEndpoint : IDisposable
         {
             throw new IOException($"a broker already listens on pipe '{_pipe}'", ex);
         }
-        _accept = Task.Run(() => AcceptLoop(first));
+        // The accept loop lives for the endpoint's lifetime; keep it off the shared thread pool (task x4mw).
+        _accept = new Thread(() => AcceptLoop(first)) { IsBackground = true, Name = "broker accept" };
+        _accept.Start();
     }
 
     /// <summary>Raise <see cref="ShutdownRequested"/> as a shutdown frame would (Ctrl+C at the broker's console).</summary>
@@ -58,23 +60,23 @@ public sealed class BrokerEndpoint : IDisposable
         return new NamedPipeServerStream(_pipe, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options);
     }
 
-    private async Task AcceptLoop(NamedPipeServerStream server)
+    private void AcceptLoop(NamedPipeServerStream server)
     {
         while (true)
         {
             try
             {
-                await server.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                server.WaitForConnectionAsync(_stop.Token).GetAwaiter().GetResult();
             }
             catch (OperationCanceledException)
             {
-                await server.DisposeAsync().ConfigureAwait(false);
+                server.Dispose();
                 return;
             }
             catch (IOException)
             {
                 // A client that connected and vanished at once: listen again.
-                await server.DisposeAsync().ConfigureAwait(false);
+                server.Dispose();
                 server = Create(first: false);
                 continue;
             }
@@ -161,14 +163,7 @@ public sealed class BrokerEndpoint : IDisposable
     public void Dispose()
     {
         _stop.Cancel();
-        try
-        {
-            _accept?.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (AggregateException)
-        {
-            // The accept loop ended with the cancellation.
-        }
+        _accept?.Join(TimeSpan.FromSeconds(5));
         _stop.Dispose();
         _shutdown.Dispose();
     }

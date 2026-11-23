@@ -104,9 +104,27 @@ public class BrokerAdmissionTests
 }
 
 /// <summary>
+/// Named-pipe broker tests run alone in the test process (task x4mw, as tasks 58sc and 4th6). Full-duplex Windows
+/// named pipes require <see cref="System.IO.Pipes.PipeOptions.Asynchronous"/> (a synchronous handle serializes
+/// concurrent <c>Read</c> and <c>Write</c> and deadlocks the full-duplex protocol), and .NET completes overlapped
+/// pipe I/O through the shared worker thread pool. When parallel xUnit collections (<c>QuestionKeyTests</c> PLINQ,
+/// <c>ArtifactStoreConcurrencyTests</c>, <c>BatchLanesTests</c>) saturate the 16-thread pool (<c>pending = 1..21</c>),
+/// <see cref="BrokerClient.Connect"/> stalled 5,963–9,687 ms in <c>Send(Hello)</c> (10 of 12 load rounds) and up to
+/// 10,866 ms in <c>Expect(Hello)</c>, tripping its 10 s timeout (1 of 12 rounds in task 4th6), on top of 12–515 ms
+/// from <c>BrokerEndpoint.Start</c>'s former <c>Task.Run</c> (now a dedicated accept thread). A standalone broker
+/// process does not saturate its own pool; the test host's parallel collections did.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class NamedPipeBroker
+{
+    public const string Name = "Named-pipe broker";
+}
+
+/// <summary>
 /// The broker (oracle service step 2; D-ORACLE-1, R-ORACLE-1 OR-JOB, OR-REUSE, T-EVID-02) against scripted workers and a
 /// scripted tier 2: queue and batches, the (id, seq) rule, the answer cache, restarts, put and get, logs, the endpoint.
 /// </summary>
+[Collection(NamedPipeBroker.Name)]
 public sealed class BrokerTests : IDisposable
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(20);
