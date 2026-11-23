@@ -285,7 +285,7 @@ public sealed class AutonumberTxnReplayTests
             Assert.False(explicitConv.Succeeded);
             Assert.True(explicitConv.Failure!.IsNotModelled, explicitConv.Failure.ToString());
             Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", explicitConv.Failure.NotModelled);
-            Assert.Equal(102, ctx.Counter!.Last); // rows 1..2 observed explicit IDs 101..102; row 3 did not consume a generated ticket (103)
+            Assert.Equal(0, ctx.Counter!.Last); // statement refused by name writes nothing and leaves the in-memory counter where it stood before the statement (so row 3 also consumed no generated ticket)
         }
         using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
         {
