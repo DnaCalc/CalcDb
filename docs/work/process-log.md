@@ -1228,10 +1228,10 @@ machine; builds run at MSBuild's default 16 nodes with node reuse; each extra te
 - Task `6qw5`: the compare set ACE's clock fields aside only for ACE 2007 files, so Jet 4 and code 3, 5 and 6 files
   compared strictly (12 r-q34 MDB questions differed only in page-17 dates).
 
-**Proposed to the owner, not adopted.** Two persistent writer worktrees (`CalcDb-w1`, `CalcDb-w2`) beside
+**Adopted on the owner's word (616845fa).** Two persistent writer worktrees (`CalcDb-w1`, `CalcDb-w2`) beside
 `CalcDb-check`, reused by each new code writer through `alta session create --worktree-path`, so a writer starts with
-warm `bin`, `obj` and `artifacts` instead of a cold build and NativeAOT publish. Creating them needs the owner's word
-(their CLAUDE.md); measure the cold start after `x38g` first.
+warm `bin`, `obj` and `artifacts` instead of a cold build and NativeAOT publish (AGENTS.md, Repository). The first
+writers in them start cold once; measure the second start in a slot against a fresh worktree after `x38g`.
 
 **Not changed, for CodeAlta.** Interim answer updates still wake the organizer at every turn a child ends while it waits
 on a job (about 40 this session), though every brief asks for none.
