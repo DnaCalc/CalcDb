@@ -1122,3 +1122,35 @@ The organizer calls per landing stay above the line: each code landing this sess
 lifts, 94fd's 1,344-line fix commit), and each round costs a brief, a findings decision and a forward. Next to try:
 the writer starts its own reviewer as a sub-session and applies the findings before it reports, so the organizer reads
 one report with the findings and their dispositions.
+
+## 2026-11-23 - Organizer 11 (01a2051f): the writer-run review trial, two locks, and the owner's call for a DDL sweep
+
+**Writer-run review (trial on vpfd, adopted).** The vpfd writer (Neon, 1,289 lines) started its own read-only Neon
+reviewer (01a20567, 23 min, 141 tool calls) once its self-check passed, applied all 6 findings (4 major: a sticky fetch
+failure, GROUP BY with HAVING, an unordered dynaset after a move, a Requery reopen error source) in 7c9f23f6, and
+reported each with its disposition. Findings per 1,000 lines: 4.7, as before. The organizer spent about 6 calls on the
+landing (brief, two status reads, the report, the landing, the bookkeeping) against about 25 when the organizer briefs
+the reviewer, decides the findings and forwards them. Adopted in AGENTS.md (Sub-sessions) and landing-check.md (gate 4,
+the report's Review part); writers are created with sub-sessions.
+
+**Two locks in landing-check.ps1.** A landing started beside another failed at once on the check worktree's lock
+(vpfd), although landing-check.md said landings queue; a run now waits for the lock and reads master once it holds it
+(dc1dd084). Two core compares in one store then collided on an attempt the other runner owned (g4tv-ado-2 beside vpfd);
+compares now wait on a lock of their own (d8a96706). Both waits ran live in the x4mw landing (check 248 s, then the
+compare queued behind 94fd's). A bookkeeping push by the organizer during g4tv-ado's check made its fast-forward refuse
+and cost a 20-minute rerun: AGENTS.md now says not to push master during a `-Land` check, and task `fhqk` lets `-Land`
+merge over a master that moved only in `docs/work/`.
+
+**Other changes from this session's landings.** A writing question keeps its page bytes, and a round registers the
+fixtures it creates (AGENTS.md, Sub-sessions; 94fd met a record without pages, 63z8 left its fixtures in the local
+store). The child's report gives its rules as a domain table (rule, record, admitted tuple, refused neighbours), as the
+g4tv writer did, because most findings are a rule reaching its neighbouring cursor, format or route.
+
+**Not changed, for CodeAlta.** Every turn a child ends while it waits on a job sends the parent an answer update: about
+25 such updates reached the organizer this session, some late and some twice, each a turn of the scarce model. An option
+to forward only final answers to a parent would save more organizer cost than any change above; it is a request for
+CodeAlta, not a CalcDb task.
+
+**Owner's call (2026-11-23).** The DDL sweep goes next: the r-q29, r-q30 and r-q31 folders (131 questions) stop in their
+setup DDL as candidates, so the compare cannot see the rules they decide (`zw4d`, `m9gw`, `3s5d`, UNIQUE and REFERENCES).
+It starts with a count of the refusal at each question's first stop over the wide set.

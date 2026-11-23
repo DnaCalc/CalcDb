@@ -52,20 +52,27 @@ scope or design, the book wins.
   writers. A child that still meets a byte no record decides, or a record that contradicts a note, stops and reports.
   The organizer then probes: a single discriminator itself, a larger round through a prober child that writes only
   cards, probes and evidence, and gives its qualified.md note in its report (process log, change 6, 2026-11-21).
+  A question that writes keeps the page bytes after each statement (`nativeRead` with `keep: true`), so a later writer
+  can read where ACE put what (94fd met a record without them); a fixture a round creates is registered with
+  `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
+  the repository (63z8).
 - Set the model and reasoning of every child. Neon (`antigravity-acp:gemini-4-neon@high`) is the workhorse:
   implementation, fixes, probe rounds, reviews and tooling, a Neon reviewer in a session other than the writer's. The
   organizer stays on Opus. A Claude child (`claude-code:sonnet@high`, or Opus) only where it clearly adds value: a
   second review of a large stretch whose Neon review missed a case a record decides, the design of probes on
   concurrency, locking, crashes and write ordering, or when the owner asks (owner, 2026-11-21: Claude usage is the
   scarce one). Keep Neon stretches to one deliverable each.
-- A child ends with the fixed report of landing-check.md: change, rules with their records, tests, bookkeeping lines,
-  open branches.
+- A child ends with the fixed report of landing-check.md: change, rules as a domain table (rule, the record that shows
+  its case, the tuple it admits, the neighbours it refuses by name), tests, review, bookkeeping lines, open branches.
 - One review layer per landing: check every rule the child wrote against a record that shows the very case the rule
   names, not a neighbouring one, and every test assertion a child changed against its record. Expect one
-  generalization beyond the records in a larger task; a Neon stretch of about 3,400 lines had eleven. For a stretch of
-  more than about 1,000 lines a read-only reviewer child does this check and the organizer checks that its findings
-  were applied, the scope, the landing check and the compare; for a smaller stretch the organizer's review is the only
-  one (process log, 2026-11-21, organizer 01a1fc2f).
+  generalization beyond the records in a larger task; a Neon stretch of about 3,400 lines had eleven. A code writer
+  starts this reviewer itself, as a read-only Neon sub-session, once its self-check passes; it applies the findings it
+  agrees with, declines the others with a reason, and reports each with its disposition. A fix commit of more than
+  about 1,000 lines gets a second pass from the same reviewer. Writers are therefore created with sub-sessions. The
+  organizer checks the dispositions, the scope, the landing check and the compare (vpfd trial, 2026-11-23: about 6
+  organizer calls for the landing against about 25 when the organizer ran the review round; process log). A stretch
+  under about 300 lines, a probe round or a bookkeeping change has the organizer's review only.
 - A note that matters to a running child now is steered (`alta session send` without `--queue-if-busy`); a queued
   prompt waits for the end of its turn and then starts a new one. Check `alta session queued` before a child ends.
 - An organizer hands over to a fresh session at about 300 tool calls or 5 hours, at a quiet point: no writer
@@ -81,6 +88,9 @@ scope or design, the book wins.
 ## Tool practice
 
 - Edit files with the editing tools, not with ad-hoc scripts. Python is not project tooling.
+- Never push master while a `-Land` landing check runs: its fast-forward then refuses and the whole check runs again
+  (g4tv-ado, 2026-11-23). Commit bookkeeping between landings; queued checks wait for the lock and read master only
+  once they hold it.
 - Never put junctions or links to the repository into the check worktree or a child's worktree: a recursive delete
   would follow them into `evidence/` and `probes/` (process log, 2026-11-21).
 - Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.

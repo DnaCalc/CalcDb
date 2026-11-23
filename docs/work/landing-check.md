@@ -16,10 +16,12 @@ persistent check worktree and gave code writers worktrees of their own.
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
    `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
 4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
-   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). The reviewer traces the
-   callers of every changed member with roscli (`nav.find_invocations`, `nav.call_hierarchy`), so a rule that reaches
-   further than the brief shows. A stretch over about 1,000 lines gets a read-only reviewer child; the organizer then
-   checks that its findings were applied. A smaller stretch has the organizer's review only.
+   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). The writer starts the
+   reviewer itself as a read-only sub-session once its self-check passes, applies or declines each finding, and
+   reports the dispositions; the organizer checks them. The reviewer traces the callers of every changed member with
+   roscli (`nav.find_invocations` on the member's position for its callers, `nav.find_implementations` for an
+   interface, `nav.call_hierarchy` kept shallow), so a rule that reaches further than the brief shows, and lists each
+   roscli call with what it decided. A stretch under about 300 lines has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
 6. **Compare.** The core compare set in the background after the landing; the wide set once a day.
 
@@ -28,8 +30,11 @@ persistent check worktree and gave code writers worktrees of their own.
 A child ends with these parts and nothing else:
 
 - **Change:** its branch (or, in the integration checkout, the exact file list).
-- **Rules:** each rule it implemented, with the record that shows its case.
+- **Rules:** a domain table, one row per rule: the rule, the record (and calls or pages) that shows its case, the
+  tuple it admits (format, route, cursor, type, argument form), and the neighbours it refuses by name.
 - **Tests:** the tests that cite those records, and the result of its last self-check.
+- **Review:** the reviewer's session, its minutes and tool calls, and each finding with its disposition (applied in
+  commit X, or declined because Y).
 - **Bookkeeping:** the register row text, qualified.md note or process-log lines it would add. Only the organizer edits
   those files.
 - **Open:** the branches of the slice it did not do, and every byte it met that no record decides.
