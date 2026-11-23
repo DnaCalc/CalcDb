@@ -730,8 +730,10 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE INDEX IX_D ON T (d)", "NotModelled.DdlIndexKeyType");
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (a)", db).Succeeded);
         AssertNotModelled(db, "DROP INDEX IX_T ON T", "NotModelled.DdlDropIndex");
-        // Second index on a table that already has one is refused by SchemaWriter (r-q21 Open).
-        AssertNotModelled(db, "CREATE UNIQUE INDEX UX_T ON T (b)", "NotModelled.SchemaWriter");
+        // Second index on a table that already has one is now admitted (evidence/r-q34-ddl-sweep/ix-cat1b-*, uqix-*).
+        Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UX_T ON T (b)", db).Succeeded);
+        // FMT1-INDEX-ENUM Open: non-[A-Za-z0-9_] logical index name when 2+ indexes exist stays refused by name.
+        AssertNotModelled(db, "CREATE INDEX [IX-Dash] ON T (c)", "NotModelled.SchemaWriter");
         // B11: multi-name DROP TABLE refuses by name even when one table is missing.
         AssertNotModelled(db, "DROP TABLE T, NoSuchTable", "NotModelled.DdlMultiDropTable");
         // B10: invalid index name against missing table refuses by name instead of assuming 3125 vs 3371 precedence.
@@ -958,6 +960,195 @@ public sealed class DdlTests
         AssertAsAce(kept, fixture, ours, clockSpans);
     }
 
+    private static readonly string[] Cat1bIndexSql =
+    [
+        "CREATE UNIQUE INDEX ixPK ON TI (ID) WITH PRIMARY",
+        "CREATE UNIQUE INDEX ixU ON TI (A)",
+        "CREATE INDEX ixDesc ON TI (B DESC)",
+        "CREATE INDEX ixMulti ON TI (A, B DESC)",
+        "CREATE INDEX ixIgn ON TI (C) WITH IGNORE NULL",
+        "CREATE INDEX ixDis ON TI (D) WITH DISALLOW NULL",
+    ];
+
+    private static readonly string[] Cat1bRowInserts =
+    [
+        "INSERT INTO TI (ID, A, B, C, D) VALUES (1, 'alpha', 10, 'x', 100)",
+        "INSERT INTO TI (ID, A, B, C, D) VALUES (2, 'beta', 10, NULL, 200)",
+        "INSERT INTO TI (ID, A, B, C, D) VALUES (3, 'gamma', 20, 'z', 300)",
+    ];
+
+    private static readonly string[] NonUqRowInserts =
+    [
+        "INSERT INTO T (ID, K, S) VALUES (1, 10, 'a')",
+        "INSERT INTO T (ID, K, S) VALUES (2, 10, 'b')",
+        "INSERT INTO T (ID, K, S) VALUES (3, 20, 'c')",
+    ];
+
+    private static readonly string[] UqRowInserts =
+    [
+        "INSERT INTO T (ID, K, S) VALUES (1, 20, 'beta')",
+        "INSERT INTO T (ID, K, S) VALUES (2, 10, 'alpha')",
+        "INSERT INTO T (ID, K, S) VALUES (3, 30, 'gamma')",
+    ];
+
+    /// <summary>
+    /// All 20 CREATE INDEX / CREATE UNIQUE INDEX records of evidence/r-q34-ddl-sweep (13 ACCDB + 7 Jet 4 MDB)
+    /// executed end-to-end through ActionExecutor.Execute.
+    /// ACCDB (empty and populated, two-session and same-session) and empty MDB run from the empty database fixture;
+    /// populated MDB starts from ACE's after-setup image because MDB DML INSERT page-0 commit counters are outside ddl2.
+    /// </summary>
+    public static TheoryData<string, bool, bool, bool, string, string[]?, string[]> RQ34CreateIndexSqlCases()
+    {
+        const string tiCreate = "CREATE TABLE TI (ID LONG, A TEXT(20), B LONG, C TEXT(10), D LONG)";
+        const string tNoPk = "CREATE TABLE T (ID LONG, K LONG, S TEXT(20))";
+        const string tWithPk20 = "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(20))";
+        const string tWithPk50 = "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50))";
+
+        return new()
+        {
+            // Six-index chain (4)
+            { "ix-cat1b-chain-accdb-dao", false, false, false, "TI", [tiCreate], Cat1bIndexSql },
+            { "ix-cat1b-chain-mdb-dao", true, false, false, "TI", [tiCreate], Cat1bIndexSql },
+            { "ix-cat1b-rows-chain-accdb-dao", false, false, false, "TI", [tiCreate, .. Cat1bRowInserts], Cat1bIndexSql },
+            { "ix-cat1b-samesess-accdb-dao", false, false, true, "TI", [tiCreate], Cat1bIndexSql },
+            // Non-unique index on populated tables (5)
+            { "ix-nonuq-rows-nopk-accdb-ado", false, true, false, "T", [tNoPk, .. NonUqRowInserts], ["CREATE INDEX IX_K ON T (K)"] },
+            { "ix-nonuq-rows-nopk-accdb-dao", false, false, false, "T", [tNoPk, .. NonUqRowInserts], ["CREATE INDEX IX_K ON T (K)"] },
+            { "ix-nonuq-rows-nopk-mdb-dao", true, false, false, "T", null, ["CREATE INDEX IX_K ON T (K)"] },
+            { "ix-nonuq-rows-withpk-accdb-dao", false, false, false, "T", [tWithPk20, .. NonUqRowInserts], ["CREATE INDEX IX_K ON T (K)"] },
+            { "ix-nonuq-rows-withpk-mdb-dao", true, false, false, "T", null, ["CREATE INDEX IX_K ON T (K)"] },
+            // Unique index on empty tables (6)
+            { "uqix-empty-1col-accdb-ado", false, true, false, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-empty-1col-accdb-dao", false, false, false, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-empty-1col-mdb-dao", true, false, false, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-empty-2col-accdb-dao", false, false, false, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K, S)"] },
+            { "uqix-empty-2col-mdb-dao", true, false, false, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K, S)"] },
+            { "uqix-empty-samesess-accdb-dao", false, false, true, "T", [tWithPk50], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            // Unique index on populated tables (5)
+            { "uqix-rows-1col-accdb-ado", false, true, false, "T", [tWithPk50, .. UqRowInserts], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-rows-1col-accdb-dao", false, false, false, "T", [tWithPk50, .. UqRowInserts], ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-rows-1col-mdb-dao", true, false, false, "T", null, ["CREATE UNIQUE INDEX UK ON T (K)"] },
+            { "uqix-rows-2col-accdb-dao", false, false, false, "T", [tWithPk50, .. UqRowInserts], ["CREATE UNIQUE INDEX UK ON T (K, S)"] },
+            { "uqix-rows-2col-mdb-dao", true, false, false, "T", null, ["CREATE UNIQUE INDEX UK ON T (K, S)"] },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateIndexSqlCases))]
+    public void R_q34_ddl_sweep_create_index_executes_byte_exact(
+        string question,
+        bool isMdb,
+        bool isAdo,
+        bool sameSession,
+        string tableName,
+        string[]? setupSql,
+        string[] indexSql)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = setupSql is null
+            ? Kept.AfterSetupImage(question)
+            : ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(isMdb ? EmptyMdbSha : EmptyAccdbSha);
+        byte[] ace = kept.AceImage(startImage);
+        (ulong created, ulong updated) = AceDates(ace, tableName);
+        ActionErrorSource source = isAdo ? ActionErrorSource.Ado : ActionErrorSource.Database;
+
+        byte[] ours;
+        if (setupSql is null)
+        {
+            using var db = new WritableSqlFixture((byte[])startImage.Clone()) { DateBitsProvider = () => updated };
+            foreach (string sql in indexSql)
+            {
+                ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: source);
+                Assert.True(outcome.Succeeded, $"{question} ({sql}): {outcome.Failure}");
+                Assert.Equal(0, outcome.RecordsAffected);
+            }
+            if (db.Workspace.NeedsCloseCommit(db.Cache))
+            {
+                Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            }
+            ours = db.Image.Snapshot();
+        }
+        else if (sameSession)
+        {
+            var timestamps = new Queue<ulong>([created, created]);
+            using var db = new WritableSqlFixture((byte[])startImage.Clone())
+            {
+                DateBitsProvider = () => timestamps.Count > 0 ? timestamps.Dequeue() : updated,
+            };
+            foreach (string sql in setupSql)
+            {
+                ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: source);
+                Assert.True(outcome.Succeeded, $"{question} setup ({sql}): {outcome.Failure}");
+            }
+            foreach (string sql in indexSql)
+            {
+                ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: source);
+                Assert.True(outcome.Succeeded, $"{question} ({sql}): {outcome.Failure}");
+                Assert.Equal(0, outcome.RecordsAffected);
+            }
+            if (db.Workspace.NeedsCloseCommit(db.Cache))
+            {
+                Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            }
+            ours = db.Image.Snapshot();
+        }
+        else
+        {
+            byte[] afterSetup;
+            using (var setupDb = new WritableSqlFixture((byte[])startImage.Clone()) { DateBitsProvider = () => created })
+            {
+                foreach (string sql in setupSql)
+                {
+                    ActionOutcome outcome = ActionExecutor.Execute(sql, setupDb, source: source);
+                    Assert.True(outcome.Succeeded, $"{question} setup ({sql}): {outcome.Failure}");
+                }
+                if (setupDb.Workspace.NeedsCloseCommit(setupDb.Cache))
+                {
+                    Assert.Equal(MutationOpen.None, setupDb.Workspace.PublishCloseCommit(setupDb.Cache).Open);
+                }
+                afterSetup = setupDb.Image.Snapshot();
+            }
+            using var ddlDb = new WritableSqlFixture(afterSetup) { DateBitsProvider = () => updated };
+            foreach (string sql in indexSql)
+            {
+                ActionOutcome outcome = ActionExecutor.Execute(sql, ddlDb, source: source);
+                Assert.True(outcome.Succeeded, $"{question} ({sql}): {outcome.Failure}");
+                Assert.Equal(0, outcome.RecordsAffected);
+            }
+            if (ddlDb.Workspace.NeedsCloseCommit(ddlDb.Cache))
+            {
+                Assert.Equal(MutationOpen.None, ddlDb.Workspace.PublishCloseCommit(ddlDb.Cache).Open);
+            }
+            ours = ddlDb.Image.Snapshot();
+        }
+
+        AssertAsAce(kept, startImage, ours);
+    }
+
+    [Fact]
+    public void CreateIndex_sql_leaf_overflow_and_out_of_scope_ddl_refuse_by_name_without_writing()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (id LONG CONSTRAINT PK_T PRIMARY KEY, s TEXT(200))", db).Succeeded);
+        // 30 distinct 184-char Text entries exceed one uncompressed 4096-byte index leaf page while staying well under the 255-commit counter limit.
+        string pad = new('x', 180);
+        for (int i = 1; i <= 30; i++)
+        {
+            ActionOutcome ins = ActionExecutor.Execute($"INSERT INTO T (id, s) VALUES ({i}, '{i:D4}{pad}')", db);
+            Assert.True(ins.Succeeded, $"insert {i}: {ins.Failure}");
+        }
+
+        byte[] before = db.Image.Snapshot();
+        AssertNotModelled(db, "CREATE INDEX IX_S ON T (s)", "NotModelled.SchemaAccept.Publication");
+        Assert.Equal(before, db.Image.Snapshot());
+
+        // Out-of-scope DDL forms stay refused by name (or ACE 3289 for DAO CHECK) without writing.
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT UX_S UNIQUE (s)", "NotModelled.DdlAlterTable");
+        AssertAceError(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", 3289);
+        AssertNotModelled(db, "CREATE TABLE Fk (n LONG, CONSTRAINT FK_N FOREIGN KEY (n) REFERENCES T (id))", "NotModelled.DdlForeignKey");
+        Assert.Equal(before, db.Image.Snapshot());
+    }
+
     private sealed class AlternateSortDatabase(WritableSqlFixture inner, uint lcid, CalcDb.Values.Scalar.TextCollation? databaseOrder) : ISqlActionDatabase
     {
         public CalcDb.Values.Scalar.ExpressionContext Context { get; } =
@@ -1057,6 +1248,23 @@ public sealed class DdlTests
                 bytes.CopyTo(image.AsSpan((int)offset));
             }
             return image;
+        }
+
+        public static byte[] AfterSetupImage(string question, string card = "r-q34-ddl-sweep")
+        {
+            string folder = Path.Combine(SqlFixture.Root(), "evidence", card, question);
+            string record = Directory.GetFiles(folder, "*.a1.json").Single();
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
+            foreach (JsonElement ev in doc.RootElement.GetProperty("capture").GetProperty("events").EnumerateArray())
+            {
+                if (ev.TryGetProperty("op", out JsonElement op) && op.ValueKind == JsonValueKind.String && op.GetString() == "read"
+                    && ev.TryGetProperty("handle", out JsonElement handle) && handle.ValueKind == JsonValueKind.String && handle.GetString() == "pg0"
+                    && ev.TryGetProperty("bytes", out JsonElement bytes))
+                {
+                    return Convert.FromHexString(bytes.GetString()!);
+                }
+            }
+            throw new InvalidOperationException($"{card}/{question}: no pg0 after-setup read in record");
         }
     }
 

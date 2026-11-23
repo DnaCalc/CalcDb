@@ -452,6 +452,10 @@ public sealed class SchemaWriter
                     case FieldNameClash.Undecided:
                         return new SchemaRefusal(null, idxNameUndecided);
                 }
+                if (!IsAsciiIndexSortName(pk.Name) || !IsAsciiIndexSortName(uq.Name))
+                {
+                    return new SchemaRefusal(null, $"CREATE TABLE indexes '{pk.Name}', '{uq.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
+                }
                 lastIndexedIdx = uqIdx;
             }
             if (firstLvalIdx >= 0 && firstLvalIdx <= lastIndexedIdx)
@@ -820,20 +824,29 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// CREATE INDEX on an existing empty table (evidence/r-q11-ddl-closure/create-then-index, evidence/r-q21-ddl-types/ix-*):
-    /// allocate the index leaf, add the index's map to the table's map page (its next row, after the table's owned/free
-    /// maps and any LVAL column maps), rewrite the TableDef with the index (keeping any trailing LVAL map entries before
-    /// FF FF), initialize the empty leaf, and set the table's MSysObjects DateUpdate to <paramref name="dateUpdateBits"/>.
+    /// CREATE [UNIQUE] INDEX on an existing table, empty or populated, with or without existing indexes
+    /// (evidence/r-q11-ddl-closure/create-then-index, evidence/r-q21-ddl-types/ix-*,
+    /// evidence/r-q34-ddl-sweep/ix-cat1b-*, ix-nonuq-rows-*, uqix-*): allocate the index leaf, add the index's map to
+    /// the table's map page (its next row, after the table's owned/free maps, any existing index maps, and any LVAL
+    /// column maps), populate the single uncompressed leaf over existing rows through the one ISAM index writer
+    /// (<see cref="IndexEntryInsert"/>), rewrite the TableDef keeping physical indexes and 12-byte stats blocks in
+    /// creation order (with stats <c>(entries, distinct, 0)</c> for a bulk-built index) and inserting the logical index
+    /// in General Legacy (<c>1033/0</c>) name order while keeping its creation-order <c>LogicalNumber</c>, and set the
+    /// table's MSysObjects <c>DateUpdate</c> to <paramref name="dateUpdateBits"/>.
     /// </summary>
     public SchemaOutcome CreateIndex(TransactionCoordinator workspace, CreateIndexRequest request, ulong dateUpdateBits)
     {
-        if (FileRefusal() is { } file)
+        if (FileRefusal(allowJet4Mdb: true, out bool isJet4Mdb) is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
         }
-        if (request.Route != SchemaRoute.Sql)
+        if (isJet4Mdb && workspace.Depth > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX on {request.Route} route (only SQL CREATE INDEX is recorded: r-q11, r-q21-ddl-types)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a Jet 4 MDB inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/*-mdb-*)"), default, _pageCount);
+        }
+        if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX on {request.Route} route (only SQL and ADO CREATE INDEX are recorded: r-q11, r-q21-ddl-types, r-q34-ddl-sweep)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } entry)
         {
@@ -847,14 +860,20 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(invalid, default, _pageCount);
         }
-        if (table.PhysicalIndexes.Count > 0 || table.LogicalIndexes.Count > 0 || table.RowCount > 0)
+        if (ExistingIndexesRefusal(table, request.Index) is { } existingRefusal)
         {
-            return new SchemaRefusal(null, "CREATE INDEX on a table with existing indexes or with rows (r-q11/r-q21 record the first index on an empty table)") is var r
-                ? new SchemaOutcome(r, default, _pageCount)
-                : default;
+            return new SchemaOutcome(existingRefusal, default, _pageCount);
+        }
+        if (table.RowCount > 0 && workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a populated table inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep)"), default, _pageCount);
         }
         ulong extent = _pageCount;
-        AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent));
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent),
+            allowJet4Mdb: isJet4Mdb);
         return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 
@@ -1415,34 +1434,58 @@ public sealed class SchemaWriter
         {
             return NotWritten($"{entry.Name} has {lvalColumns} LVAL columns but {table.LongValueMaps.Count} decoded LVAL map entries");
         }
-        int expectedMapRows = 2 + (table.LongValueMaps.Count * 2);
-        bool lvalMapsSequential = true;
-        for (int i = 0; i < table.LongValueMaps.Count; i++)
+        int expectedMapRows = 2 + table.PhysicalIndexes.Count + (table.LongValueMaps.Count * 2);
+        ulong mapRowCount = _d.DataPage.RowCount.Read(mapPage);
+        bool mapsValid = table.OwnedMap.Row == 0 && table.FreeMap.Row == 1
+            && expectedMapRows < MaxSinglePageMaps
+            && mapRowCount == (ulong)expectedMapRows;
+        if (mapsValid && expectedMapRows > 2)
         {
-            LvalColumnMapSpec lval = table.LongValueMaps[i];
-            if (lval.OwnedMap.Page != table.OwnedMap.Page || lval.FreeMap.Page != table.OwnedMap.Page
-                || lval.OwnedMap.Row != 2 + (i * 2) || lval.FreeMap.Row != 3 + (i * 2))
+            bool[] used = new bool[expectedMapRows];
+            used[0] = true;
+            used[1] = true;
+            static bool Claim(RowLocator loc, uint mapPageNum, bool[] usedSlots) =>
+                loc.Page == mapPageNum && loc.Row < usedSlots.Length && !usedSlots[loc.Row] && (usedSlots[loc.Row] = true);
+            foreach (PhysicalIndex phys in table.PhysicalIndexes)
             {
-                lvalMapsSequential = false;
-                break;
+                mapsValid &= Claim(phys.OwnedMap, table.OwnedMap.Page, used);
+            }
+            foreach (LvalColumnMapSpec lval in table.LongValueMaps)
+            {
+                mapsValid &= Claim(lval.OwnedMap, table.OwnedMap.Page, used)
+                    && Claim(lval.FreeMap, table.OwnedMap.Page, used);
             }
         }
-        byte mapSlot = (byte)_d.DataPage.RowCount.Read(mapPage);
-        if (mapSlot != expectedMapRows || table.OwnedMap.Row != 0 || table.FreeMap.Row != 1 || !lvalMapsSequential)
+        if (!mapsValid)
         {
-            return NotWritten($"{entry.Name}'s map page holds {mapSlot} maps (expected {expectedMapRows} for {table.LongValueMaps.Count} LVAL columns: r-q11 create-then-index, r-q21 ix-on-table-with-memo)");
+            return NotWritten($"{entry.Name}'s map page holds {mapRowCount} maps (expected {expectedMapRows} covering table owned/free, {table.PhysicalIndexes.Count} index(es) and {table.LongValueMaps.Count} LVAL column(s), below {MaxSinglePageMaps}: r-q11, r-q21, r-q34-ddl-sweep)");
+        }
+        byte mapSlot = (byte)expectedMapRows;
+        if (!BuildIndexLeaf(table, index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out string? buildFailure))
+        {
+            return NotWritten(buildFailure);
+        }
+        TableDefSpec sizedSpec = WithIndex(spec, index, new RowLocator(table.OwnedMap.Page, mapSlot), 0, entryCount, uniqueEntryCount);
+        int encodedLen = EncodedTableDefLength(sizedSpec);
+        if (encodedLen > _d.PageSize)
+        {
+            return NotWritten($"{entry.Name}'s TableDef with index {index.Name} needs {encodedLen} bytes, exceeding one {_d.PageSize}-byte page (multi-page TableDef is not recorded)");
         }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
         if (work.Allocate(allocator) is not { } leaf)
         {
             return work.NotWritten();
         }
+        if (leaf >= 512)
+        {
+            return NotWritten($"allocated index leaf page {leaf} exceeds single-page inline map range (< 512)");
+        }
         extent = allocator.ExtentPages;
         byte[] tdef = new byte[_d.PageSize];
-        TableDefEncoder.Encode(tdef, WithIndex(spec, index, new RowLocator(table.OwnedMap.Page, mapSlot), leaf), _d);
+        TableDefEncoder.Encode(tdef, WithIndex(spec, index, new RowLocator(table.OwnedMap.Page, mapSlot), leaf, entryCount, uniqueEntryCount), _d);
         if (!work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageAppendDelta(MapDeclaration.EncodeInline(0, [leaf], _d), mapSlot, _d), PageRole.Map))
             || !work.Apply(new PageEdit(table.FirstPage, new WholePage(tdef), PageRole.Catalog))
-            || !work.Apply(new PageEdit(leaf, new WholePage(EmptyLeaf(table.FirstPage)), PageRole.Index)))
+            || !work.Apply(new PageEdit(leaf, new WholePage(leafBytes), PageRole.Index)))
         {
             return work.NotWritten();
         }
@@ -1451,6 +1494,143 @@ public sealed class SchemaWriter
             return work.NotWritten();
         }
         return work.Change(_cache);
+    }
+
+    /// <summary>
+    /// Build the new index's single uncompressed leaf page over <paramref name="table"/>'s committed rows through the
+    /// one ISAM index key/leaf writer (<see cref="IndexEntryInsert"/>; evidence/r-q34-ddl-sweep/ix-nonuq-rows-*,
+    /// uqix-rows-*, ix-cat1b-rows-chain-accdb-dao). Returns <c>(entries, distinctKeys)</c> for the new physical index's
+    /// 12-byte stats block.
+    /// </summary>
+    private bool BuildIndexLeaf(
+        TableDefinition table,
+        NewIndex index,
+        out byte[] leafBytes,
+        out uint entryCount,
+        out uint uniqueEntryCount,
+        out string? failure)
+    {
+        leafBytes = EmptyLeaf(table.FirstPage);
+        entryCount = 0;
+        uniqueEntryCount = 0;
+        failure = null;
+        if (table.RowCount == 0)
+        {
+            return true;
+        }
+        string[] colNames = [.. table.Columns.Select(c => c.Name)];
+        var keyCols = new ColumnDescriptor[index.Fields.Count];
+        var keySpecs = new IndexColumn[index.Fields.Count];
+        for (int i = 0; i < index.Fields.Count; i++)
+        {
+            if (!TryMatchFieldName(index.Fields[i], colNames, out int colIdx, out string? undecided) || colIdx < 0)
+            {
+                failure = undecided ?? $"index {index.Name} field {index.Fields[i]} not found";
+                return false;
+            }
+            ColumnDescriptor col = table.Columns[colIdx];
+            bool desc = index.Descending is not null && index.Descending[i];
+            keyCols[i] = col;
+            keySpecs[i] = new IndexColumn((ushort)col.PhysicalNumber, !desc, desc ? DescendingColumnFlags : AscendingColumnFlags);
+        }
+
+        List<TraversalFailure> scanFailures = [];
+        HashSet<byte[]> seenKeys = new(ByteArrayEqualityComparer.Instance);
+        var keyValues = new NativeValue[keyCols.Length];
+        uint scannedRows = 0;
+        foreach (RowView row in RowResolver.Scan(_cache, _d, table, _pageCount, scanFailures))
+        {
+            using (row)
+            {
+                scannedRows++;
+                bool allNull = true;
+                bool anyNull = false;
+                for (int i = 0; i < keyCols.Length; i++)
+                {
+                    NativeValue v = FieldDecoder.Read(row, table, keyCols[i], _cache, _d);
+                    if (v.Kind == NativeKind.Failed)
+                    {
+                        failure = $"row {row.Root} column {keyCols[i].Name}: {v.Failure}";
+                        return false;
+                    }
+                    keyValues[i] = v;
+                    bool isNull = v.Kind == NativeKind.Null;
+                    allNull &= isNull;
+                    anyNull |= isNull;
+                }
+                if (index.IgnoreNull)
+                {
+                    if (allNull)
+                    {
+                        continue;
+                    }
+                    if (anyNull)
+                    {
+                        failure = $"{index.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is not established)";
+                        return false;
+                    }
+                }
+                else if (anyNull)
+                {
+                    failure = index.PrimaryKey || index.DisallowNull
+                        ? $"{index.Name}: existing Null row in {(index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index (3058): post-failure file bytes are not recorded"
+                        : $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for Null keys is not recorded in r-q34-ddl-sweep";
+                    return false;
+                }
+                byte[]? key = IndexEntryInsert.EncodeKey(keyCols, keySpecs, keyValues, out string? keyFailure);
+                if (key is null)
+                {
+                    failure = $"{index.Name}: {keyFailure}";
+                    return false;
+                }
+                bool isNewKey = seenKeys.Add(key);
+                if ((index.PrimaryKey || index.Unique) && !isNewKey)
+                {
+                    failure = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022): post-failure file bytes are not recorded";
+                    return false;
+                }
+                byte[] entryBytes = IndexEntryInsert.EncodeEntry(key, row.Root);
+                if (!IndexEntryInsert.TryApply(leafBytes, entryBytes, _d, out string? leafFailure, allowRecompress: false))
+                {
+                    failure = $"{index.Name}: existing rows exceed one uncompressed index leaf page (recompression or multi-leaf CREATE INDEX is not recorded): {leafFailure}";
+                    return false;
+                }
+                entryCount++;
+            }
+        }
+        if (scanFailures.Count > 0)
+        {
+            failure = $"table scan: {string.Join("; ", scanFailures.Select(f => $"{f.At}: {f.Predicate}"))}";
+            return false;
+        }
+        if (scannedRows != table.RowCount)
+        {
+            failure = $"table scan read {scannedRows} live rows but TableDef.RowCount is {table.RowCount}";
+            return false;
+        }
+        uniqueEntryCount = (uint)seenKeys.Count;
+        return true;
+    }
+
+    private int EncodedTableDefLength(TableDefSpec spec)
+    {
+        TableDefRules t = _d.TableDef;
+        int pos = t.RealIndexRecordsOffset
+            + (spec.PhysicalIndexes.Count * t.RealIndexRecordBytes)
+            + (spec.Columns.Count * _d.Column.BlockBytes)
+            + (spec.PhysicalIndexes.Count * _d.IndexDescriptor.PhysicalBlockBytes)
+            + (spec.LogicalIndexes.Count * _d.IndexDescriptor.LogicalBlockBytes)
+            + (spec.LvalColumnMaps.Count * 10)
+            + 2;
+        foreach (ColumnSpec col in spec.Columns)
+        {
+            pos += t.NameLengthBytes + System.Text.Encoding.Unicode.GetByteCount(col.Name);
+        }
+        foreach (LogicalIndexSpec log in spec.LogicalIndexes)
+        {
+            pos += t.NameLengthBytes + System.Text.Encoding.Unicode.GetByteCount(log.Name);
+        }
+        return pos;
     }
 
     private CompiledChange CompileDropTable(FileParticipant p, CatalogEntry entry, TableDefinition table)
@@ -1650,11 +1830,19 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// A TableDef spec with one more index (r-q11 create-primary-key and create-then-index; r-q21-ddl-types ix-*;
-    /// r-q34-ddl-sweep/lval-pk-uq-alltypes-*): sequential logical and physical numbers, no entries, its map and its
-    /// leaf; per-column slot flags 0x01 ascending / 0x00 descending; physical flags 0x89 for primary key (logical type 1)
-    /// or 0x80 | Unique(0x01) | IgnoreNull(0x02) | DisallowNull(0x08) (logical type 0).
+    /// r-q34-ddl-sweep/lval-pk-uq-alltypes-*, ix-cat1b-*, ix-nonuq-rows-*, uqix-*): physical indexes and their 12-byte
+    /// stats blocks stay in creation order; logical indexes keep their creation-order <c>LogicalNumber</c> while the
+    /// logical array and names are sorted in General Legacy (<c>1033/0</c>) name order (FMT1-INDEX-ENUM); per-column
+    /// slot flags 0x01 ascending / 0x00 descending; physical flags 0x89 for primary key (logical type 1) or
+    /// 0x80 | Unique(0x01) | IgnoreNull(0x02) | DisallowNull(0x08) (logical type 0).
     /// </summary>
-    private TableDefSpec WithIndex(TableDefSpec spec, NewIndex index, RowLocator map, uint leaf)
+    private TableDefSpec WithIndex(
+        TableDefSpec spec,
+        NewIndex index,
+        RowLocator map,
+        uint leaf,
+        uint entryCount = 0,
+        uint uniqueEntryCount = 0)
     {
         string[] specNames = [.. spec.Columns.Select(c => c.Name)];
         List<IndexColumn> keyCols = [];
@@ -1674,13 +1862,140 @@ public sealed class SchemaWriter
                 | (index.Unique ? UniqueIndexFlag : 0)
                 | (index.IgnoreNull ? IgnoreNullIndexFlag : 0)
                 | (index.DisallowNull ? DisallowNullIndexFlag : 0));
-        var physical = new PhysicalIndexSpec(keyCols, map, leaf, flags);
+        var physical = new PhysicalIndexSpec(keyCols, map, leaf, flags, entryCount, uniqueEntryCount);
         var logical = new LogicalIndexSpec(
             index.Name,
             (uint)spec.LogicalIndexes.Count,
             (uint)spec.PhysicalIndexes.Count,
             index.PrimaryKey ? _d.IndexDescriptor.PrimaryKeyType : (byte)0);
-        return spec with { PhysicalIndexes = [.. spec.PhysicalIndexes, physical], LogicalIndexes = [.. spec.LogicalIndexes, logical] };
+        List<LogicalIndexSpec> logicals = [.. spec.LogicalIndexes];
+        if (logicals.Count == 0)
+        {
+            logicals.Add(logical);
+        }
+        else
+        {
+            SortDescriptor sort = GeneralLegacySort()
+                ?? throw new InvalidOperationException($"Unchecked sort order {_sortOrder} when sorting logical indexes.");
+            int at = logicals.FindIndex(existing => TextOrder.Compare(sort, logical.Name, existing.Name) < 0);
+            logicals.Insert(at < 0 ? logicals.Count : at, logical);
+        }
+        return spec with { PhysicalIndexes = [.. spec.PhysicalIndexes, physical], LogicalIndexes = logicals };
+    }
+
+    /// <summary>
+    /// Validate adding <paramref name="newIndex"/> beside <paramref name="table"/>'s existing indexes
+    /// (evidence/r-q34-ddl-sweep/ix-cat1b-*, ix-nonuq-rows-withpk-*, uqix-*; FMT1-INDEX-ENUM
+    /// evidence/r-q-fmt-sort/index-enum-order-accdb): non-relationship 1-to-1 indexes, &lt; 32 total, no duplicate
+    /// name or second primary key, and General Legacy (<c>1033/0</c>) with ASCII <c>[A-Za-z0-9_]</c> names when 2+
+    /// logical indexes must be ordered.
+    /// </summary>
+    private SchemaRefusal? ExistingIndexesRefusal(TableDefinition table, NewIndex newIndex)
+    {
+        if (table.LogicalIndexes.Count != table.PhysicalIndexes.Count)
+        {
+            return new SchemaRefusal(null, "CREATE INDEX on a table with relationship or aliased logical indexes is not recorded (DDL-SWEEP-2)");
+        }
+        if (table.LogicalIndexes.Count >= 32)
+        {
+            return new SchemaRefusal(null, $"CREATE INDEX {newIndex.Name}: table already has {table.LogicalIndexes.Count} indexes (ACE limit 32)");
+        }
+        if (table.LogicalIndexes.Count == 0)
+        {
+            return null;
+        }
+        SortDescriptor? sort = GeneralLegacySort();
+        if (sort is null)
+        {
+            return new SchemaRefusal(null, $"CREATE INDEX {newIndex.Name} on a table with existing indexes under sort order {_sortOrder}: logical index name sort order is recorded only for General Legacy (1033/0) (FMT1-INDEX-ENUM)");
+        }
+        int count = table.LogicalIndexes.Count;
+        bool[] seenLogical = new bool[count];
+        bool[] seenPhysical = new bool[count];
+        string[] existingNames = new string[count];
+        for (int i = 0; i < count; i++)
+        {
+            LogicalIndex li = table.LogicalIndexes[i];
+            if ((li.IndexType != 0 && li.IndexType != _d.IndexDescriptor.PrimaryKeyType)
+                || li.RelatedTable != 0 || li.RelatedTableType != 0 || li.RelatedIndex != 0xFFFFFFFFu)
+            {
+                return new SchemaRefusal(null, $"CREATE INDEX on a table with relationship logical index '{li.Name}' (type 0x{li.IndexType:X2}) is not recorded (DDL-SWEEP-2)");
+            }
+            if (li.Number < 0 || li.Number >= count || seenLogical[li.Number]
+                || li.PhysicalNumber < 0 || li.PhysicalNumber >= count || seenPhysical[li.PhysicalNumber])
+            {
+                return new SchemaRefusal(null, $"CREATE INDEX on a table with non-contiguous logical/physical index numbering (e.g. after DROP INDEX) is not recorded");
+            }
+            seenLogical[li.Number] = true;
+            seenPhysical[li.PhysicalNumber] = true;
+            if (!IsAsciiIndexSortName(li.Name))
+            {
+                return new SchemaRefusal(null, $"logical index name '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
+            }
+            if (i > 0 && TextOrder.Compare(sort, table.LogicalIndexes[i - 1].Name, li.Name) >= 0)
+            {
+                return new SchemaRefusal(null, $"existing logical indexes '{table.LogicalIndexes[i - 1].Name}' and '{li.Name}' are not in General Legacy (1033/0) name order");
+            }
+            existingNames[i] = li.Name;
+        }
+        if (!TryMatchFieldName(newIndex.Name, existingNames, out int dupIdx, out string? dupUndecided))
+        {
+            return new SchemaRefusal(null, dupUndecided);
+        }
+        if (dupIdx >= 0)
+        {
+            return new SchemaRefusal(null, $"index {newIndex.Name} already exists on the table");
+        }
+        if (!IsAsciiIndexSortName(newIndex.Name))
+        {
+            return new SchemaRefusal(null, $"logical index name '{newIndex.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
+        }
+        if (newIndex.PrimaryKey && table.LogicalIndexes.Any(li => li.IndexType == _d.IndexDescriptor.PrimaryKeyType))
+        {
+            return new SchemaRefusal(null, $"index {newIndex.Name}: table already has a primary key");
+        }
+        return null;
+    }
+
+    private SortDescriptor? GeneralLegacySort() =>
+        _sortOrder is { Identifier: TextSortOrder.GeneralIdentifier, Reserved: 0, Version: 0 }
+            ? SortDescriptors.For(_sortOrder, out _)
+            : null;
+
+    /// <summary>
+    /// ASCII letters, digits, and underscore: the recorded name-sort domain of <c>FMT1-INDEX-ENUM</c>
+    /// (<c>evidence/r-q-fmt-sort/index-enum-order-accdb</c>: <c>_first &lt; 0_ix &lt; a_ix &lt; B_ix &lt; M_ix &lt; PK_T &lt; Z_ix</c>;
+    /// other punctuation and non-ASCII letters are Open).
+    /// </summary>
+    private static bool IsAsciiIndexSortName(string name)
+    {
+        if (name.Length == 0)
+        {
+            return false;
+        }
+        foreach (char c in name)
+        {
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
+    {
+        public static readonly ByteArrayEqualityComparer Instance = new();
+
+        public bool Equals(byte[]? x, byte[]? y) =>
+            ReferenceEquals(x, y) || (x is not null && y is not null && x.AsSpan().SequenceEqual(y));
+
+        public int GetHashCode(byte[] obj)
+        {
+            var hash = new HashCode();
+            hash.AddBytes(obj);
+            return hash.ToHashCode();
+        }
     }
 
     /// <summary>
@@ -1772,7 +2087,8 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// ACCDB is admitted for all recorded catalog changes; Jet 4 MDB is admitted only when <paramref name="allowJet4Mdb"/>
-    /// is true (SQL/ADO CREATE TABLE: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/create-one-long-mdb-dao).
+    /// is true (SQL/ADO CREATE TABLE and CREATE INDEX: evidence/r-q11-ddl-closure/mdb-create-one-long,
+    /// evidence/r-q34-ddl-sweep/*-mdb-*).
     /// </summary>
     private SchemaRefusal? FileRefusal(bool allowJet4Mdb = false) => FileRefusal(allowJet4Mdb, out _);
 
@@ -1793,9 +2109,9 @@ public sealed class SchemaWriter
             isJet4Mdb = true;
             return allowJet4Mdb
                 ? null
-                : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE is recorded: evidence/r-q11-ddl-closure/mdb-create-one-long)");
+                : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE and CREATE INDEX are recorded: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/*-mdb-*)");
         }
-        return new SchemaRefusal(null, "a catalog change in a non-ACCDB file (only ACCDB and Jet 4 MDB SQL/ADO CREATE TABLE are recorded)");
+        return new SchemaRefusal(null, "a catalog change in a non-ACCDB file (only ACCDB and Jet 4 MDB SQL/ADO CREATE TABLE and CREATE INDEX are recorded)");
     }
 
     private bool IsJet4Mdb(ReadOnlySpan<byte> page0) =>
