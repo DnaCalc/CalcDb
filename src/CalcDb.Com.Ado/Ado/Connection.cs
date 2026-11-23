@@ -1751,7 +1751,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 return CallResult.Fail(Failure.NotModelled(sqlFailure.NotModelled!, sqlFailure.Message));
             }
-            MappedProviderError? mapped = AdoSqlErrors.TryMap(sqlFailure, isSavedQuery, out Failure? unmodelled, sql);
+            bool allowAdoCheckViolation = sqlFailure.Number == 3317
+                && IsRecordedAdoCheckViolation(session, sql, sqlFailure.Message, isSavedQuery, allowAdoConnectionExecute);
+            MappedProviderError? mapped = AdoSqlErrors.TryMap(
+                sqlFailure,
+                isSavedQuery,
+                out Failure? unmodelled,
+                sql,
+                allowAdoCheckViolation);
             if (mapped is { } err)
             {
                 SetProviderError(err.ErrorEntry);
@@ -1781,6 +1788,55 @@ internal sealed unsafe class ConnectionObject : AdoObject
         CallResult result = Object(closed);
         closed.Release();
         return result;
+    }
+
+    /// <summary>
+    /// True only when an ACE 3317 failure came from ad-hoc <c>Connection.Execute</c> violating a SQL <c>CHECK</c>
+    /// constraint on a recorded format/action tuple (ACCDB INSERT/UPDATE, MDB INSERT ... VALUES):
+    /// r-oledb-odbc/error-record-channels #142-152, r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22,
+    /// r-q30-sql-check/mdb-viol-ado-exec #28-39, r-q30-sql-check/upd-viol-ado-exec #29-40,
+    /// r-q31-sql-check-2/multi-ins-ado-exec #32-43, r-q31-sql-check-2/multi-upd-ado-exec #30-41.
+    /// Excludes Command.Execute, saved queries, textless field/table ValidationRule, and MDB UPDATE.
+    /// </summary>
+    private static bool IsRecordedAdoCheckViolation(
+        AdoOpenSession session,
+        string sql,
+        string message,
+        bool isSavedQuery,
+        bool allowAdoConnectionExecute)
+    {
+        if (isSavedQuery || !allowAdoConnectionExecute)
+        {
+            return false;
+        }
+        using ActionSyntax? action = ActionParser.Parse(sql, out _);
+        if (action is null)
+        {
+            return false;
+        }
+        bool isMdb = session.Profile.Format == FileFormat.Jet4;
+        bool recordedActionKind = isMdb
+            ? action.Kind == ActionKind.InsertValues
+            : action.Kind is ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update;
+        if (!recordedActionKind)
+        {
+            return false;
+        }
+        TableEditContext? editContext = session.Sql.EditContext(action.TargetName, out _);
+        if (editContext is null || editContext.Semantics.CheckConstraints.Count == 0)
+        {
+            return false;
+        }
+        string tableName = editContext.Semantics.TableName;
+        foreach (BoundCheckConstraint check in editContext.Semantics.CheckConstraints)
+        {
+            string expected = $"One or more values are prohibited by the validation rule '{check.Name}' set for '{tableName}'. Enter a value that the expression for this field can accept.";
+            if (string.Equals(message, expected, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
