@@ -110,6 +110,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private readonly List<NativeVariant> _derivedSlots;
     private readonly int _derivedWidth;
     private readonly Ambiguity? _ambiguity;
+    private readonly PopulationMode _populationMode;
+    private readonly string? _populationOpenName;
+    private readonly string? _populationOpenDetail;
+    private SqlFailure? _stickyFetchFailure;
+    private bool _moved;
+    private bool _reachedEnd;
     private int _group = -1;
     private int _derivedRow = -1;
 
@@ -130,7 +136,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         _derivedSlots = prepared.DerivedSlots;
         _derivedWidth = prepared.DerivedWidth;
         _ambiguity = prepared.Ambiguity;
-        RecordCountOpen = prepared.RecordCountOpen;
+        _populationMode = prepared.PopulationMode;
+        _populationOpenName = prepared.PopulationOpenName;
+        _populationOpenDetail = prepared.PopulationOpenDetail;
         Updatable = plan.TryUpdatable(kind, out string? updatableOpen);
         UpdatableOpen = updatableOpen;
         bool forwardOnly = kind == ResultKind.ForwardOnly;
@@ -138,11 +146,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             : prepared.StreamIndex is { } nav ? new FilteredIndexScan(this, nav)
             : new FilteredScan(this);
         _store = new OccurrenceStore<ResultRow>(_producer, firstMoveChunk: forwardOnly ? 1 : 500);
-        if (prepared.Rows is not null)
+        if (_populationMode == PopulationMode.CompleteAtOpen)
         {
-            // CUR-POP: only an ORDER BY snapshot is complete at open; a materialized result is complete when it opens.
+            // CUR-POP: only recorded complete-at-open shapes (ORDER BY snapshot, GROUP BY ... ORDER BY without HAVING,
+            // two-table LEFT JOIN ... ORDER BY without WHERE, two-arm distinct UNION without ORDER BY) populate whole at open.
             _store.ProduceAll();
         }
+        _reachedEnd = _store.Complete && _stickyFetchFailure is null;
         _position = new PositionState<int>(_store, forwardOnly);
     }
 
@@ -162,10 +172,49 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     public long RecordCount => _store.ObservedCount;
 
     /// <summary>
-    /// Why <see cref="RecordCount"/> is not ACE's at open, or null: a join or union without ORDER BY is read whole at open
-    /// here, and how ACE populates one is not recorded (CUR-POP asked single tables).
+    /// Why <see cref="RecordCount"/> is not decided by retained ACE records in the current state, or null when allowed
+    /// (<see cref="TryRecordCount"/>).
     /// </summary>
-    public string? RecordCountOpen { get; }
+    public string? RecordCountOpen => TryRecordCount(out _, out _, out string? detail) ? null : detail;
+
+    /// <summary>
+    /// Read <see cref="RecordCount"/> when the current population state is backed by a retained ACE record (CUR-POP),
+    /// or return false with a <c>NotModelled.QueryRecordCount.*</c> name and reason when unrecorded.
+    /// </summary>
+    public bool TryRecordCount(out long count, out string? openName, out string? openDetail)
+    {
+        if (_stickyFetchFailure is { } fetch)
+        {
+            count = 0;
+            openName = "NotModelled.QueryRecordCount.FetchFailure";
+            openDetail = "RecordCount after a fetch failure during streaming is not modelled: " + fetch.Message;
+            return false;
+        }
+        switch (_populationMode)
+        {
+            case PopulationMode.LazyChunk500:
+            case PopulationMode.CompleteAtOpen:
+                count = _store.ObservedCount;
+                openName = null;
+                openDetail = null;
+                return true;
+            case PopulationMode.LazyOpenOnly when !_moved:
+                count = _store.ObservedCount;
+                openName = null;
+                openDetail = null;
+                return true;
+            case PopulationMode.LazyOpenAndComplete when !_moved || _reachedEnd:
+                count = _store.ObservedCount;
+                openName = null;
+                openDetail = null;
+                return true;
+            default:
+                count = 0;
+                openName = _populationOpenName ?? "NotModelled.QueryRecordCount";
+                openDetail = _populationOpenDetail ?? "RecordCount on this SELECT shape is not recorded";
+                return false;
+        }
+    }
 
     /// <summary>
     /// Whether this SELECT cursor is updatable by query shape and cursor kind (CUR-PROV, SQL-DR-01..05), or null when
@@ -274,34 +323,85 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         }
     }
 
+    private void RecordFetchFailure(SqlFailure failure)
+    {
+        FetchFailure = failure;
+        _stickyFetchFailure ??= failure;
+    }
+
     public MoveOutcome MoveFirst()
     {
+        if (_stickyFetchFailure is { } sticky)
+        {
+            FetchFailure = sticky;
+            return MoveOutcome.NotSupported;
+        }
         FetchFailure = null;
+        _moved = true;
         return _position.MoveFirst();
     }
 
     public MoveOutcome MoveLast()
     {
+        if (_stickyFetchFailure is { } sticky)
+        {
+            FetchFailure = sticky;
+            return MoveOutcome.NotSupported;
+        }
         FetchFailure = null;
-        return _position.MoveLast();
+        _moved = true;
+        MoveOutcome outcome = _position.MoveLast();
+        if (outcome == MoveOutcome.Moved && FetchFailure is null)
+        {
+            _reachedEnd = true;
+        }
+        return outcome;
     }
 
     public MoveOutcome MoveNext()
     {
+        if (_stickyFetchFailure is { } sticky)
+        {
+            FetchFailure = sticky;
+            return MoveOutcome.NotSupported;
+        }
         FetchFailure = null;
-        return _position.MoveNext();
+        _moved = true;
+        MoveOutcome outcome = _position.MoveNext();
+        if (_position.Eof && FetchFailure is null)
+        {
+            _reachedEnd = true;
+        }
+        return outcome;
     }
 
     public MoveOutcome MovePrevious()
     {
+        if (_stickyFetchFailure is { } sticky)
+        {
+            FetchFailure = sticky;
+            return MoveOutcome.NotSupported;
+        }
         FetchFailure = null;
+        _moved = true;
         return _position.MovePrevious();
     }
 
     public MoveOutcome Move(long rows)
     {
+        if (_stickyFetchFailure is { } sticky)
+        {
+            FetchFailure = sticky;
+            return MoveOutcome.NotSupported;
+        }
         FetchFailure = null;
-        return _position.Move(rows);
+        _moved = true;
+        MoveOutcome outcome = _position.Move(rows);
+        if (_position.Eof && FetchFailure is null)
+        {
+            _reachedEnd = true;
+        }
+        return outcome;
     }
 
     /// <summary>
@@ -417,6 +517,27 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         slots.Clear();
     }
 
+    /// <summary>
+    /// How <see cref="TryRecordCount"/> models ACE's SELECT population for a bound query and cursor kind (CUR-POP).
+    /// </summary>
+    private enum PopulationMode : byte
+    {
+        /// <summary>1 at open (0 if empty), +500 on first forward move, full at MoveLast/EOF.</summary>
+        LazyChunk500,
+
+        /// <summary>1 at open (0 if empty); post-move RecordCount is unrecorded and refused.</summary>
+        LazyOpenOnly,
+
+        /// <summary>1 at open (0 if empty), full after MoveLast/EOF; partial mid-stream moves and BOF are unrecorded and refused.</summary>
+        LazyOpenAndComplete,
+
+        /// <summary>Populated whole at open (ORDER BY snapshot, GROUP BY ... ORDER BY without HAVING, two-table LEFT JOIN ... ORDER BY without WHERE, two-arm distinct UNION without ORDER BY).</summary>
+        CompleteAtOpen,
+
+        /// <summary>No retained ACE record decides RecordCount on this shape/kind; refused by name.</summary>
+        Unrecorded,
+    }
+
     /// <summary>What an open computed: constant values and types, and the materialized rows with their group slots.</summary>
     private sealed class Prepared
     {
@@ -446,7 +567,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         public Ambiguity? Ambiguity { get; init; }
 
-        public string? RecordCountOpen { get; init; }
+        public PopulationMode PopulationMode { get; init; }
+
+        public string? PopulationOpenName { get; init; }
+
+        public string? PopulationOpenDetail { get; init; }
 
         /// <summary>An opened index navigator for a streamed single-table unordered dynaset (CUR-POP / PAR-ORDER).</summary>
         public IndexNavigator? StreamIndex { get; init; }
@@ -483,13 +608,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     case RowTest.Failed:
                         // EXPR-STAGE: a failing WHERE term makes MoveNext fail at the bad row; where the cursor then
                         // stands and how population continues are not identified.
-                        owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString());
+                        owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
                         return null;
                 }
             }
             if (reader.Scan.LastFailure is { } storage)
             {
-                owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.Storage", storage.Predicate);
+                owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.Storage", storage.Predicate));
             }
             return null;
         }
@@ -521,13 +646,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         _last = p;
                         return new ResultRow(p.Row, -1, -1);
                     case RowTest.Failed:
-                        owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString());
+                        owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
                         return null;
                 }
             }
             if (navigator.LastFailure is { } storage)
             {
-                owner.FetchFailure = SqlFailure.Open(SqlPhase.Fetch, "NotModelled.Storage", storage.Predicate);
+                owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.Storage", storage.Predicate));
             }
             return null;
         }
@@ -675,15 +800,160 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             ClearSlots(_keys);
-            string? population = (plan.IsUnion || plan.Tree is not null) && plan.Order.Count == 0
-                ? "how ACE populates a join or union result without ORDER BY at open is not recorded (CUR-POP asked single tables)"
-                : null;
+            (PopulationMode popMode, string? popOpenName, string? popOpenDetail) = ClassifyPopulation(plan, kind, hasSubquery);
             return new Prepared
             {
                 Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
                 DerivedSlots = _derivedSlots, DerivedWidth = _derivedWidth, Tuples = _tuples, Parameters = parameters, Ambiguity = ambiguity,
-                RecordCountOpen = population, StreamIndex = streamIndex,
+                PopulationMode = popMode, PopulationOpenName = popOpenName, PopulationOpenDetail = popOpenDetail, StreamIndex = streamIndex,
             };
+        }
+
+        /// <summary>
+        /// Classify DAO SELECT population behavior for <see cref="TryRecordCount"/> against retained ACE records
+        /// (docs/work/qualified.md R-CURSOR-1 CUR-POP). Every shape or cursor kind without an exact retained record is
+        /// returned as <see cref="PopulationMode.Unrecorded"/> with a named <c>NotModelled.QueryRecordCount.*</c> code.
+        /// </summary>
+        private static (PopulationMode Mode, string? OpenName, string? OpenDetail) ClassifyPopulation(BoundSelect plan, ResultKind kind, bool hasDerivedTable)
+        {
+            if (kind == ResultKind.ForwardOnly)
+            {
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.ForwardOnly", "forward-only SELECT RecordCount is not recorded (CUR-POP)");
+            }
+            if (kind is not (ResultKind.Dynaset or ResultKind.Snapshot))
+            {
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.ResultKind", $"SELECT RecordCount on cursor kind {kind} is not recorded");
+            }
+            if (plan.IsUnion)
+            {
+                // r-def-cursor-dao/pos-query-union, r-fix-cursor-dao/pos-query-sources-rw, r-dao-1b/recordset-members-query-snapshot:
+                // two-arm distinct UNION of plain single-table arms without ORDER BY is complete at open for dynaset and snapshot.
+                if (plan.ArmAll.Any(static all => all))
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.UnionAll", "UNION ALL RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Order.Count > 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.UnionOrderBy", "UNION with ORDER BY RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Arms is null || plan.Arms.Count != 2)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.UnionArity", "UNION RecordCount is only recorded for two-arm UNION (CUR-POP)");
+                }
+                if (!plan.Arms.All(static a =>
+                    a.Sources.Count == 1
+                    && a.Sources[0].Subquery is null
+                    && a.Tree is null
+                    && !a.Grouped
+                    && a.Predicate == SelectPredicate.All
+                    && a.Top is null))
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.UnionCombined", "UNION with non-plain arm RecordCount is not recorded (CUR-POP)");
+                }
+                return (PopulationMode.CompleteAtOpen, null, null);
+            }
+            if (hasDerivedTable)
+            {
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.Subquery", "derived-table SELECT RecordCount is not recorded (CUR-POP)");
+            }
+            if (plan.Sources.Count == 0)
+            {
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.NoFrom", "FROM-less SELECT RecordCount is not recorded (CUR-POP)");
+            }
+            if (plan.Tree is not null)
+            {
+                // r-def-cursor-dao/pos-query-left-join, r-fix-cursor-dao/pos-query-sources-rw:
+                // two-table LEFT JOIN ... ORDER BY without WHERE is complete at open for dynaset and snapshot.
+                if (plan.Grouped || plan.Predicate != SelectPredicate.All || plan.Top is not null)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.JoinCombined", "joined SELECT with GROUP BY, DISTINCT or TOP RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Order.Count == 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.JoinWithoutOrderBy", "join SELECT without ORDER BY RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Where is not null)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.JoinWhere", "joined SELECT with WHERE RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Sources.Count == 2 && plan.Tree is JoinNode { Kind: JoinKind.Left, Left: TableNode, Right: TableNode })
+                {
+                    return (PopulationMode.CompleteAtOpen, null, null);
+                }
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.JoinKind", "join SELECT RecordCount is only recorded for two-table LEFT JOIN ... ORDER BY (CUR-POP)");
+            }
+            if (plan.Grouped)
+            {
+                // r-def-cursor-dao/pos-query-distinct-groupby, r-fix-cursor-dao/pos-query-sources-rw:
+                // single-table GROUP BY ... ORDER BY without HAVING is complete at open for dynaset and snapshot.
+                if (plan.Predicate != SelectPredicate.All || plan.Top is not null)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.GroupByCombined", "GROUP BY with DISTINCT or TOP RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Having is not null)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.GroupByHaving", "GROUP BY with HAVING RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Keys.Count == 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.UngroupedAggregate", "ungrouped aggregate SELECT RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Order.Count == 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.GroupByWithoutOrderBy", "GROUP BY without ORDER BY RecordCount is not recorded (CUR-POP)");
+                }
+                return (PopulationMode.CompleteAtOpen, null, null);
+            }
+            if (plan.Predicate == SelectPredicate.DistinctRow)
+            {
+                return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.DistinctRow", "DISTINCTROW SELECT RecordCount is not recorded (CUR-POP)");
+            }
+            if (plan.Predicate == SelectPredicate.Distinct)
+            {
+                // r-def-cursor-dao/pos-query-distinct-groupby, r-fix-cursor-dao/pos-query-sources-rw:
+                // single-table SELECT DISTINCT ... ORDER BY is 1 at open and full after MoveLast for dynaset and snapshot.
+                if (plan.Top is not null)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.DistinctCombined", "DISTINCT with TOP RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Order.Count == 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.DistinctWithoutOrderBy", "DISTINCT without ORDER BY RecordCount is not recorded (CUR-POP)");
+                }
+                return (PopulationMode.LazyOpenAndComplete, "NotModelled.QueryRecordCount.DistinctPartialMove", "RecordCount after a partial move before MoveLast/EOF on SELECT DISTINCT is not recorded (CUR-POP)");
+            }
+            if (plan.Top is { } top)
+            {
+                // r-def-cursor-dao/pos-query-top, r-fix-cursor-dao/pos-query-sources-rw, r-q-expr-sql/demand-saved-querydefs:
+                // single-table SELECT TOP n ... ORDER BY (non-PERCENT) is 1 at open and full after MoveLast/EOF.
+                if (top.Percent)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.TopPercent", "TOP PERCENT SELECT RecordCount is not recorded (CUR-POP)");
+                }
+                if (plan.Order.Count == 0)
+                {
+                    return (PopulationMode.Unrecorded, "NotModelled.QueryRecordCount.TopWithoutOrderBy", "TOP without ORDER BY RecordCount is not recorded (CUR-POP)");
+                }
+                return (PopulationMode.LazyOpenAndComplete, "NotModelled.QueryRecordCount.TopPartialMove", "RecordCount after a partial move before MoveLast/EOF on SELECT TOP is not recorded (CUR-POP)");
+            }
+            // Plain single-table SELECT:
+            // - Snapshot with ORDER BY: complete at open (r-q-cursor-dao/pop-frontier-snapshot-big,
+            //   r-q2-cursor-dao/pop-snapshot-orderby-small, r-txn-1b/rs-types-after-rollback bs,
+            //   r-def-cursor-dao/querydef-maxrecords-effect, delete-by-other-cursor-current-row).
+            // - Dynaset with ORDER BY and Snapshot without ORDER BY: 1 at open, +500 on first move, jump-to-row beyond
+            //   frontier, full at MoveLast (r-q-cursor-dao/pop-frontier-dynaset-big,
+            //   r-q2-cursor-dao/pop-snapshot-select-noorder-big, r-txn-1b/rs-position-after-rollback).
+            // - Dynaset without ORDER BY: recorded at open (1) only (r-cursor-1b/open-argument-shapes,
+            //   r-fix-cursor-dao/open-argument-shapes-rw); post-move RecordCount is unrecorded and refused by name.
+            if (kind == ResultKind.Snapshot)
+            {
+                return plan.Order.Count > 0
+                    ? (PopulationMode.CompleteAtOpen, null, null)
+                    : (PopulationMode.LazyChunk500, null, null);
+            }
+            return plan.Order.Count > 0
+                ? (PopulationMode.LazyChunk500, null, null)
+                : (PopulationMode.LazyOpenOnly, "NotModelled.QueryRecordCount.UnorderedDynasetMove", "RecordCount after moving an unordered SELECT dynaset is not recorded (CUR-POP)");
         }
 
         /// <summary>
