@@ -139,7 +139,8 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
 
         // Base column via Field.Value gives recorded 3167 (r-txn-1b/rs-types-after-rollback calls 41[0..2]).
         AssertDaoError(FieldValue(rs, "ID"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: true);
-        // Memo FieldSize on externally deleted row gives recorded 3167 without IErrorInfo (r-q32-dao-select-lv/q3-lv-deleted-accdb).
+        // Memo FieldSize inside the BeginTrans overlay delegates through Cursor.Read (same single-table dynaset overlay
+        // path as Field.Value) and gives recorded 3167 without IErrorInfo (r-q32-dao-select-lv/q3-lv-deleted-accdb).
         AssertDaoError(Get(GetField(rs, "Mm"), "FieldSize"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: false);
 
         // Neighbouring unrecorded cases stay refused by name.

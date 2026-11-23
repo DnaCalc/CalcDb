@@ -27,12 +27,15 @@ namespace CalcDb.Com.Tests;
 /// 3021, external dynaset delete 3167, Memo slices, and OLE slices including <c>Bytes == 0</c> / <c>Offset &gt;= len</c>
 /// null SAFEARRAY (<c>r-q32-dao-select-lv/q3-lv-*</c>, <c>q5-route-*</c>).</item>
 /// <item><see cref="SelectRecordsetObject.GetRows"/> across ACCDB and MDB cursors 2, 4, and 8, Closed 3420,
-/// <c>NumRows</c> forms, x64 1..4-column 3035 threshold ahead of empty 3021, Decimal(38) 3000 row-0 and later,
-/// external dynaset delete row-0 <c>[0+0, 0+cols]</c> and later-row skip, and saved-query / QueryDef routes
-/// (<c>r-q32-dao-select-lv/q4-getrows-*</c>, <c>q5-route-*</c>).</item>
+/// <c>NumRows</c> forms, x64 3035 threshold ahead of empty 3021 (2 columns across cursors 2/4/8 and 1/3/4 columns on
+/// ACCDB snapshot), Decimal(38) 3000 row-0 and later, external dynaset delete row-0 <c>[0+0, 0+cols]</c> and
+/// later-row skip, and saved-query / QueryDef routes (<c>r-q32-dao-select-lv/q4-getrows-*</c>,
+/// <c>q5-route-*</c>).</item>
 /// <item>Named refusals (<c>NotModelled.*</c>) for every still-unrecorded neighbour (unshrunk <c>GetRows</c> array
-/// above the 2^31 shrink step, column counts &gt; 4, unrecorded non-LV types outside {4, 7, 9, 10, 20}, unrecorded
-/// <c>GetChunk</c> argument VarTypes, non-base byte arrays).</item>
+/// beyond the recorded shrink boundary, unrecorded column/format/cursor count ceilings, deleted dynaset rows with
+/// expression columns, unrecorded non-LV types outside {4, 7, 9, 10, 20}, unrecorded <c>FieldSize</c>/<c>GetChunk</c>
+/// column origins, negative <c>GetChunk</c> args on BOF/EOF/empty/deleted states, unrecorded <c>GetChunk</c> argument
+/// VarTypes, non-base byte arrays).</item>
 /// </list>
 /// </summary>
 public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
@@ -728,19 +731,72 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
             AssertNullByteArray(Ok(Method(fOle, "GetChunk", 16, 4)));
             AssertNullByteArray(Ok(Method(fOle, "GetChunk", 99, 4)));
 
-            // Move to EOF -> 3021, Close -> 3267
+            // Move to EOF -> 3021 (non-negative), negative -> NotModelled.GetChunkNegativeState, Close -> 3267
             Ok(Method(rs, "MoveNext")); // Row 4
             Ok(Method(rs, "MoveNext")); // EOF
             AssertDaoError(Get(fMemo, "FieldSize"), 3021, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Get(fOle, "FieldSize"), 3021, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(fMemo, "GetChunk", 0, 4), 3021, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(fOle, "GetChunk", 0, 4), 3021, "DAO.Field", publishesErrorInfo: false);
+            AssertNotModelled(Method(fMemo, "GetChunk", -1, 4), "NotModelled.GetChunkNegativeState");
+            AssertNotModelled(Method(fOle, "GetChunk", 0, -1), "NotModelled.GetChunkNegativeState");
             Ok(Method(rs, "Close"));
             AssertDaoError(Get(fMemo, "FieldSize"), 3267, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Get(fOle, "FieldSize"), 3267, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(fMemo, "GetChunk", 0, 4), 3267, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(fOle, "GetChunk", 0, 4), 3267, "DAO.Field", publishesErrorInfo: false);
         }
+
+        // COM IDispatch::Invoke path for GetChunk: exercises ArgumentCountFailure, ArgumentConversionFailure,
+        // *puArgErr, IErrorInfo presence, and numeric/string coercion through DispatchObject.Invoke
+        // (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb, q3-lv-getchunk-args-mdb).
+        SelectRecordsetObject dispRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FMemo FROM T ORDER BY ID", 4)));
+        Ok(Method(dispRs, "MoveNext"));
+        Ok(Method(dispRs, "MoveNext")); // Row 3 ("abcdefghij")
+        SelectFieldObject dispMemo = Object<SelectFieldObject>(Object<SelectFieldsObject>(dispRs, "Fields"), "Item", "FMemo");
+        Assert.Equal("cdef", InvokeMethodText(dispMemo, "GetChunk", "2.5", "3.5"));
+        Assert.Equal("ab", InvokeMethodText(dispMemo, "GetChunk", 0.5, 2.5));
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: null);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: null, 0);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: null, 0, 4, 0);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, System.Reflection.Missing.Value, 4);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 0u, 0, System.Reflection.Missing.Value);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "abc", 4);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "", 4);
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, DBNull.Value, 4);
+        Ok(Method(dispRs, "Close"));
+
+        // Empty recordset: non-negative -> 3021, negative -> NotModelled.GetChunkNegativeState.
+        SelectRecordsetObject emptyLvRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FMemo FROM T WHERE 1 = 0", 4)));
+        SelectFieldObject emptyMemo = Object<SelectFieldObject>(Object<SelectFieldsObject>(emptyLvRs, "Fields"), "Item", "FMemo");
+        AssertDaoError(Method(emptyMemo, "GetChunk", 0, 4), 3021, "DAO.Field", publishesErrorInfo: false);
+        AssertNotModelled(Method(emptyMemo, "GetChunk", -1, 4), "NotModelled.GetChunkNegativeState");
+        Ok(Method(emptyLvRs, "Close"));
+
+        // Column-origin gating: GetChunk refuses expression columns; FieldSize refuses unrecorded expression origins
+        // (only ACCDB dynaset Long expression 3259 is recorded).
+        SelectRecordsetObject exprSnap = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FLong + 1 AS X FROM T ORDER BY ID", 4)));
+        SelectFieldObject exprSnapX = Object<SelectFieldObject>(Object<SelectFieldsObject>(exprSnap, "Fields"), "Item", "X");
+        AssertNotModelled(Get(exprSnapX, "FieldSize"), "NotModelled.FieldSizeColumnOrigin");
+        AssertNotModelled(Method(exprSnapX, "GetChunk", 0, 4), "NotModelled.GetChunkColumnOrigin");
+        Ok(Method(exprSnap, "Close"));
+
+        SelectRecordsetObject exprDyn = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+            "SELECT ID, FLong + 1 AS X FROM T ORDER BY ID", 2)));
+        SelectFieldObject exprDynX = Object<SelectFieldObject>(Object<SelectFieldsObject>(exprDyn, "Fields"), "Item", "X");
+        AssertNotModelled(Method(exprDynX, "GetChunk", 0, 4), "NotModelled.GetChunkColumnOrigin");
+        if (ext == ".accdb")
+        {
+            AssertDaoError(Get(exprDynX, "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
+        }
+        else
+        {
+            AssertNotModelled(Get(exprDynX, "FieldSize"), "NotModelled.FieldSizeColumnOrigin");
+        }
+        Ok(Method(exprDyn, "Close"));
 
         // Non-LV 3259 wins over BOF/EOF 3021; Closed 3267 wins over non-LV 3259; arg errors win over Closed & non-LV.
         SelectRecordsetObject stateRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
@@ -751,10 +807,12 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         SelectFieldObject sText = Object<SelectFieldObject>(sfl, "Item", "FText");
         SelectFieldObject sDbl = Object<SelectFieldObject>(sfl, "Item", "FDouble");
         SelectFieldObject sDec = Object<SelectFieldObject>(sfl, "Item", "FDec");
+        SelectFieldObject sMemo = Object<SelectFieldObject>(sfl, "Item", "FMemo");
 
-        AssertDaoError(Method(sLong, "GetChunk"), 3001, "DAO.Field", publishesErrorInfo: true);
-        AssertDaoError(Method(sLong, "GetChunk", DBNull.Value, 4), 3421, "DAO.Field", publishesErrorInfo: true);
+        AssertInvokeDaoError(sLong, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: null);
+        AssertInvokeDaoError(sLong, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, DBNull.Value, 4);
         Ok(Method(stateRs, "MovePrevious")); // BOF
+        AssertNotModelled(Method(sMemo, "GetChunk", -1, 4), "NotModelled.GetChunkNegativeState");
         foreach (SelectFieldObject nf in new[] { sBin, sLong, sText, sDbl, sDec })
         {
             AssertDaoError(Get(nf, "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
@@ -762,11 +820,13 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         }
         Ok(Method(stateRs, "Close"));
         AssertDaoError(Get(sBin, "FieldSize"), 3267, "DAO.Field", publishesErrorInfo: false);
-        AssertDaoError(Method(sBin, "GetChunk", 0, 4), 3267, "DAO.Field", publishesErrorInfo: false);
+        AssertInvokeDaoError(sBin, "GetChunk", 3267, "DAO.Field", publishesErrorInfo: false, expectedArgErr: null, 0, 4);
+        AssertInvokeDaoError(sBin, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: null);
+        AssertInvokeDaoError(sBin, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "abc", 4);
 
-        // External DELETE on dynaset: LV FieldSize/GetChunk -> 3167 (no IErrorInfo); non-LV -> 3259 wins over 3167.
-        // Delete ID = 1 (whose FMemo and FOle are Null) on both ACCDB and MDB so MDB avoids the unrecorded LV-removal
-        // storage refusal; additionally delete populated-LV row ID = 3 on ACCDB.
+        // External DELETE on dynaset: LV FieldSize/GetChunk -> 3167 (no IErrorInfo); negative GetChunk -> NotModelled;
+        // non-LV -> 3259 wins over 3167. Delete ID = 1 (whose FMemo and FOle are Null) on both ACCDB and MDB so MDB
+        // avoids the unrecorded LV-removal storage refusal; additionally delete populated-LV row ID = 3 on ACCDB.
         DatabaseObject rwDb = Open(fixture, ext, readOnly: false);
         SelectRecordsetObject delRs = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset",
             "SELECT ID, FMemo, FOle, FBin, FLong FROM T ORDER BY ID", 2)));
@@ -781,6 +841,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertDaoError(Get(dOle, "FieldSize"), 3167, "DAO.Field", publishesErrorInfo: false);
         AssertDaoError(Method(dMemo, "GetChunk", 0, 4), 3167, "DAO.Field", publishesErrorInfo: false);
         AssertDaoError(Method(dOle, "GetChunk", 0, 4), 3167, "DAO.Field", publishesErrorInfo: false);
+        AssertNotModelled(Method(dMemo, "GetChunk", -1, 4), "NotModelled.GetChunkNegativeState");
         AssertDaoError(Get(dBin, "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
         AssertDaoError(Method(dLong, "GetChunk", 0, 4), 3259, "DAO.Field", publishesErrorInfo: false);
         if (ext == ".accdb")
@@ -792,6 +853,7 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
             AssertDaoError(Get(dOle, "FieldSize"), 3167, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(dMemo, "GetChunk", 0, 4), 3167, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(dOle, "GetChunk", 0, 4), 3167, "DAO.Field", publishesErrorInfo: false);
+            AssertNotModelled(Method(dMemo, "GetChunk", 0, -1), "NotModelled.GetChunkNegativeState");
             AssertDaoError(Get(dBin, "FieldSize"), 3259, "DAO.Field", publishesErrorInfo: false);
             AssertDaoError(Method(dLong, "GetChunk", 0, 4), 3259, "DAO.Field", publishesErrorInfo: false);
         }
@@ -806,27 +868,75 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         // r-q32-dao-select-lv/q4-getrows-ceiling-*, q4-getrows-ceiling-cols-accdb, q4-getrows-dec38-*, q4-getrows-deleted-*
         DatabaseObject db = Open(fixture, ext);
 
-        // Exact x64 3035 boundary pairs for 1..4 columns: (cols, failAt) and unshrunk refusal above 2^31 shrink step.
-        (string Sql, int Cols, int SafeMaxFor4Rows, int UnshrunkMinFor4Rows, int Threshold3035)[] bounds =
-        [
-            ("SELECT ID FROM T ORDER BY ID", 1, 89_478_489, 89_478_490, 178_956_971),
-            ("SELECT ID, FLong FROM T ORDER BY ID", 2, 44_739_246, 44_739_247, 89_478_486),
-            ("SELECT ID, FLong, FDouble FROM T ORDER BY ID", 3, 29_826_165, 29_826_166, 59_652_324),
-            ("SELECT ID, FLong, FDouble, FText FROM T ORDER BY ID", 4, 22_369_625, 22_369_626, 44_739_243),
-        ];
-        foreach (var b in bounds)
+        // 2-column x64 3035 boundary (89_478_486) across ACCDB and MDB cursors 2, 4, 8 (q4-getrows-ceiling-accdb, -mdb).
+        foreach (int rsType in new[] { 2, 4, 8 })
         {
-            SelectRecordsetObject rs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", b.Sql, 4)));
-            AssertDaoError(Method(rs, "GetRows", b.Threshold3035), 3035, "DAO.Recordset", publishesErrorInfo: false);
-            Assert.False(BoolValue(Ok(Get(rs, "EOF"))));
-            Assert.Equal(1, Int32Value(Ok(Get(rs, "Collect", "ID")))); // cursor unchanged after 3035
-            AssertNotModelled(Method(rs, "GetRows", b.UnshrunkMinFor4Rows), "NotModelled.GetRowsUnshrunkArray");
-            Ok(Method(rs, "MoveFirst"));
-            using (OwnedVariant okGrid = TakeArray(Ok(Method(rs, "GetRows", b.SafeMaxFor4Rows))))
+            SelectRecordsetObject rs2 = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+                "SELECT ID, FLong FROM T ORDER BY ID", rsType)));
+            AssertDaoError(Method(rs2, "GetRows", 89_478_486), 3035, "DAO.Recordset", publishesErrorInfo: false);
+            Assert.False(BoolValue(Ok(Get(rs2, "EOF"))));
+            Assert.Equal(1, Int32Value(Ok(Get(rs2, "Collect", "ID")))); // cursor unchanged after 3035
+            if (ext == ".accdb" && rsType == 4)
             {
-                Assert.Equal([(0, b.Cols), (0, 4)], SafeArrays.Shape(okGrid.Pointer->Pointer));
+                AssertNotModelled(Method(rs2, "GetRows", 44_739_247), "NotModelled.GetRowsUnshrunkArray");
+                Ok(Method(rs2, "MoveFirst"));
+                using OwnedVariant okSnap = TakeArray(Ok(Method(rs2, "GetRows", 44_739_246)));
+                Assert.Equal([(0, 2), (0, 4)], SafeArrays.Shape(okSnap.Pointer->Pointer));
             }
-            Ok(Method(rs, "Close"));
+            else
+            {
+                AssertNotModelled(Method(rs2, "GetRows", 89_478_485), "NotModelled.GetRowsUnshrunkArray");
+                Ok(Method(rs2, "Close"));
+                rs2 = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+                    "SELECT ID, FLong FROM T ORDER BY ID", rsType)));
+                AssertNotModelled(Method(rs2, "GetRows", 1_000_001), "NotModelled.GetRowsUnshrunkArray");
+                Ok(Method(rs2, "Close"));
+                rs2 = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+                    "SELECT ID, FLong FROM T ORDER BY ID", rsType)));
+                using OwnedVariant okMillion = TakeArray(Ok(Method(rs2, "GetRows", 1_000_000)));
+                Assert.Equal([(0, 2), (0, 4)], SafeArrays.Shape(okMillion.Pointer->Pointer));
+            }
+            Ok(Method(rs2, "Close"));
+        }
+
+        // 1, 3, 4-column x64 3035 thresholds are only recorded on ACCDB snapshot (q4-getrows-ceiling-cols-accdb);
+        // other formats/cursors refuse large counts with NotModelled.GetRowsCountCeiling.
+        if (ext == ".accdb")
+        {
+            (string Sql, int Cols, int SafeMax, int RefuseAt, int Threshold3035)[] colBounds =
+            [
+                ("SELECT ID FROM T ORDER BY ID", 1, 89_478_489, 89_478_490, 178_956_971),
+                ("SELECT ID, FLong, FDouble FROM T ORDER BY ID", 3, 5000, 5001, 59_652_324),
+                ("SELECT ID, FLong, FDouble, FText FROM T ORDER BY ID", 4, 5000, 5001, 44_739_243),
+            ];
+            foreach (var b in colBounds)
+            {
+                SelectRecordsetObject rs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", b.Sql, 4)));
+                AssertDaoError(Method(rs, "GetRows", b.Threshold3035), 3035, "DAO.Recordset", publishesErrorInfo: false);
+                Assert.False(BoolValue(Ok(Get(rs, "EOF"))));
+                Assert.Equal(1, Int32Value(Ok(Get(rs, "Collect", "ID"))));
+                AssertNotModelled(Method(rs, "GetRows", b.RefuseAt), "NotModelled.GetRowsUnshrunkArray");
+                Ok(Method(rs, "MoveFirst"));
+                using (OwnedVariant okGrid = TakeArray(Ok(Method(rs, "GetRows", b.SafeMax))))
+                {
+                    Assert.Equal([(0, b.Cols), (0, 4)], SafeArrays.Shape(okGrid.Pointer->Pointer));
+                }
+                Ok(Method(rs, "Close"));
+            }
+
+            // Unrecorded 1-col dynaset large count refuses by name.
+            SelectRecordsetObject dyn1 = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+                "SELECT ID FROM T ORDER BY ID", 2)));
+            AssertNotModelled(Method(dyn1, "GetRows", 178_956_971), "NotModelled.GetRowsCountCeiling");
+            Ok(Method(dyn1, "Close"));
+        }
+        else
+        {
+            // Unrecorded MDB 1-col snapshot large count refuses by name.
+            SelectRecordsetObject mdb1 = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset",
+                "SELECT ID FROM T ORDER BY ID", 4)));
+            AssertNotModelled(Method(mdb1, "GetRows", 178_956_971), "NotModelled.GetRowsCountCeiling");
+            Ok(Method(mdb1, "Close"));
         }
 
         // 3035 precedes empty-recordset 3021.
@@ -854,14 +964,19 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
             Ok(Method(decRs, "Close"));
         }
 
-        // External DELETE on dynaset: row 0 deleted -> [0+0, 0+2] with BOF/EOF False; later row deleted -> skipped & EOF True.
+        // External DELETE on dynaset: row 0 deleted -> [0+0, 0+2] with BOF/EOF False; later row deleted -> skipped & EOF True;
+        // deleted row with a projected expression refuses regardless of column order.
         // Delete ID = 1 (Null LV columns) so both ACCDB and MDB work; test row-0 delete on ASC and later-row skip on DESC,
-        // plus middle-row skip (ID = 2) on ACCDB.
+        // plus middle-row skip (ID = 3) on ACCDB.
         DatabaseObject rwDb = Open(fixture, ext, readOnly: false);
         SelectRecordsetObject rdRow0 = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset",
             "SELECT ID, FLong FROM T ORDER BY ID", 2)));
         SelectRecordsetObject rdLater = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset",
             "SELECT ID, FLong FROM T ORDER BY ID DESC", 2)));
+        SelectRecordsetObject rdExprSecond = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset",
+            "SELECT ID, FLong + 1 AS X FROM T ORDER BY ID", 2)));
+        SelectRecordsetObject rdExprFirst = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset",
+            "SELECT FLong + 1 AS X, ID FROM T ORDER BY ID", 2)));
         Ok(Method(rwDb, "Execute", "DELETE FROM T WHERE ID = 1", 128));
 
         using (OwnedVariant delRow0 = TakeArray(Ok(Method(rdRow0, "GetRows", 10))))
@@ -870,6 +985,9 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         }
         Assert.False(BoolValue(Ok(Get(rdRow0, "BOF"))));
         Assert.False(BoolValue(Ok(Get(rdRow0, "EOF"))));
+
+        AssertNotModelled(Method(rdExprSecond, "GetRows", 10), "NotModelled.GetRowsDeletedRowExpression");
+        AssertNotModelled(Method(rdExprFirst, "GetRows", 10), "NotModelled.GetRowsCell");
 
         using (OwnedVariant skipped = TakeArray(Ok(Method(rdLater, "GetRows", 10))))
         {
@@ -881,6 +999,8 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         Assert.True(BoolValue(Ok(Get(rdLater, "EOF"))));
         Ok(Method(rdRow0, "Close"));
         Ok(Method(rdLater, "Close"));
+        Ok(Method(rdExprSecond, "Close"));
+        Ok(Method(rdExprFirst, "Close"));
 
         if (ext == ".accdb")
         {
@@ -956,6 +1076,94 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertDaoError(Method(emptyRs, "GetRows", 2), 3021, "DAO.Recordset", publishesErrorInfo: false);
         AssertNotModelled(Method(emptyRs, "GetRows", 89_478_486), "NotModelled.GetRowsCountCeiling");
         Ok(Method(emptyRs, "Close"));
+    }
+
+    private string InvokeMethodText(DispatchObject target, string member, params object?[] args)
+    {
+        NativeVariant* reversed = args.Length == 0 ? null : (NativeVariant*)NativeMemory.Alloc((nuint)(args.Length * sizeof(NativeVariant)));
+        try
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                reversed[args.Length - 1 - i] = *(NativeVariant*)Arg(args[i]);
+            }
+            DispParams dp = new() { Args = (nint)reversed, ArgCount = (uint)args.Length };
+            NativeVariant result = default;
+            ExcepInfo excep = default;
+            uint argError = 0;
+            int hr = target.Invoke(target.Declaration.Member(member, InvokeKind.Method).MemberId, (ushort)InvokeKind.Method, &dp, &result, &excep, &argError);
+            Assert.Equal(0, hr);
+            Assert.Equal(VarType.Bstr, (VarType)result.Vt);
+            string text = Marshal.PtrToStringBSTR(result.Pointer);
+            Marshal.FreeBSTR(result.Pointer);
+            return text;
+        }
+        finally
+        {
+            if (reversed is not null)
+            {
+                NativeMemory.Free(reversed);
+            }
+        }
+    }
+
+    private void AssertInvokeDaoError(DispatchObject target, string member, int number, string source, bool publishesErrorInfo, uint? expectedArgErr, params object?[] args)
+    {
+        if (NativeRoute.GetErrorInfo(0, out nint stale) == 0 && stale != 0)
+        {
+            Marshal.Release(stale);
+        }
+        NativeVariant* reversed = args.Length == 0 ? null : (NativeVariant*)NativeMemory.Alloc((nuint)(args.Length * sizeof(NativeVariant)));
+        try
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                reversed[args.Length - 1 - i] = *(NativeVariant*)Arg(args[i]);
+            }
+            DispParams dp = new() { Args = (nint)reversed, ArgCount = (uint)args.Length };
+            NativeVariant result = default;
+            ExcepInfo excep = default;
+            uint argError = uint.MaxValue;
+            int hr = target.Invoke(target.Declaration.Member(member, InvokeKind.Method).MemberId, (ushort)InvokeKind.Method, &dp, &result, &excep, &argError);
+            try
+            {
+                Assert.Equal(HResults.DISP_E_EXCEPTION, hr);
+                Assert.Equal(unchecked((int)(0x800A0000u | (uint)number)), excep.Scode);
+                Assert.Equal(source, Marshal.PtrToStringBSTR(excep.Source));
+                if (expectedArgErr is uint expected)
+                {
+                    Assert.Equal(expected, argError);
+                }
+                bool hasErrorInfo = NativeRoute.GetErrorInfo(0, out nint errorInfo) == 0 && errorInfo != 0;
+                if (hasErrorInfo)
+                {
+                    Marshal.Release(errorInfo);
+                }
+                Assert.Equal(publishesErrorInfo, hasErrorInfo);
+            }
+            finally
+            {
+                if (excep.Source != 0)
+                {
+                    Marshal.FreeBSTR(excep.Source);
+                }
+                if (excep.Description != 0)
+                {
+                    Marshal.FreeBSTR(excep.Description);
+                }
+                if (excep.HelpFile != 0)
+                {
+                    Marshal.FreeBSTR(excep.HelpFile);
+                }
+            }
+        }
+        finally
+        {
+            if (reversed is not null)
+            {
+                NativeMemory.Free(reversed);
+            }
+        }
     }
 
     private static void AssertNotModelled(CallResult result, string expectedName)

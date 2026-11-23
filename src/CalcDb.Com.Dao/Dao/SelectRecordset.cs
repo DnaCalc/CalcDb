@@ -448,18 +448,22 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// <item>NumRows: omitted or Missing is 1; scalar conversion uses SessionLocale.Lcid (Null and non-numeric BSTR fail
     /// 3421; &lt;= 0, Empty, 0.5, True and Int32.MinValue fail 3001; all from DAO.Recordset without IErrorInfo:
     /// r-wire/getrows-numrows-args, q4-getrows-numrows-accdb, q4-getrows-numrows-mdb).</item>
-    /// <item>3035 ("System resource exceeded.", no IErrorInfo): on x64 for 1..4 projected columns, fails before BOF/EOF
-    /// 3021 and leaves the cursor unchanged when <c>cols * NumRows * 24 &gt; uint.MaxValue</c> (q4-getrows-ceiling-accdb,
-    /// q4-getrows-ceiling-mdb, q4-getrows-ceiling-cols-accdb: pairs (1, 178956971), (2, 89478486), (3, 59652324),
-    /// (4, 44739243)). Column counts above 4 and non-x64 keep the small recorded ceilings and refuse above them by name.</item>
+    /// <item>3035 ("System resource exceeded.", no IErrorInfo): on x64 for 2 projected columns across ACCDB and MDB
+    /// cursors 2, 4, 8 (q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb) and for 1, 3, or 4 projected columns on
+    /// ACCDB snapshot (4) (q4-getrows-ceiling-cols-accdb), fails before BOF/EOF 3021 and leaves the cursor unchanged
+    /// when <c>cols * NumRows * 24 &gt; uint.MaxValue</c>: pairs (1, 178956971), (2, 89478486), (3, 59652324),
+    /// (4, 44739243). Other column/format/cursor combinations keep the small recorded ceilings and refuse above them
+    /// by name.</item>
     /// <item>BOF, EOF and empty recordsets: 3021 from DAO.Recordset without IErrorInfo (q4-getrows-states-*, q5-route-*).</item>
     /// <item>Row errors: non-Null Decimal(38) 3000 across ACCDB and MDB (2, 4, 8), ACCDB projected-expression errors
-    /// (2, 4, 8), and externally deleted row 0 on dynaset (3167) return S_OK stopping before the failing row with
-    /// [0+0, 0+cols] on row 0 and Errors untouched; a deleted later row on dynaset is skipped (q4-getrows-dec38-*,
-    /// q4-getrows-deleted-*, q5-route-*, r-par-1/err-getrows-chunks).</item>
-    /// <item>Unshrunk array: when <c>(NumRows - actualRows) * cols * 24 &gt;= 2^31</c> on x64 (1..4 columns), ACE returns
-    /// an unshrunk array whose tail elements are not captured element-wise (q4-getrows-ceiling-*,
-    /// q4-getrows-ceiling-cols-accdb), so it is refused by name (<c>NotModelled.GetRowsUnshrunkArray</c>).</item>
+    /// (2, 4, 8), and externally deleted base-column row 0 on dynaset (3167) return S_OK stopping before the failing
+    /// row with [0+0, 0+cols] on row 0 and Errors untouched; a deleted base-column later row on dynaset is skipped
+    /// (q4-getrows-dec38-*, q4-getrows-deleted-*, q5-route-*, r-par-1/err-getrows-chunks).</item>
+    /// <item>Unshrunk array: on x64 ACCDB snapshot (1 or 2 columns), refuses <c>NotModelled.GetRowsUnshrunkArray</c>
+    /// when <c>(NumRows - actualRows) * cols * 24 &gt;= 2^31</c> (q4-getrows-ceiling-cols-accdb: 1 col 89478489/89478490,
+    /// 2 cols 44739246/44739247). For 2 columns on MDB or non-snapshot cursors (where 1000000 is shrunk and 89478485
+    /// unshrunk: q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb) refuses above 1000000; for 3 or 4 columns on ACCDB
+    /// snapshot (where no large shrunk count was probed) refuses above 5000.</item>
     /// </list>
     /// </summary>
     private CallResult GetRows(nint countArg)
@@ -501,9 +505,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             }
         }
         int colCount = Cursor.Columns.Count;
-        if (IntPtr.Size == 8 && colCount is >= 1 and <= 4)
+        bool isAccdbSnapshot = !IsMdb && RecordsetType == 4;
+        bool hasExact3035Threshold = IntPtr.Size == 8 && (colCount == 2 || (isAccdbSnapshot && colCount is 1 or 3 or 4));
+        if (hasExact3035Threshold)
         {
-            // q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb, q4-getrows-ceiling-cols-accdb (x64):
+            // q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb (2 cols across 2, 4, 8),
+            // q4-getrows-ceiling-cols-accdb (1..4 cols on ACCDB snapshot 4):
             // 3035 starts at (1, 178956971), (2, 89478486), (3, 59652324), (4, 44739243) — fitting
             // cols * NumRows * 24 > uint.MaxValue — and precedes empty-recordset 3021 while leaving the cursor unchanged.
             if ((long)colCount * count * 24 > uint.MaxValue)
@@ -513,7 +520,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         else
         {
-            if (count == int.MaxValue && !IsMdb && RecordsetType == 4)
+            if (count == int.MaxValue && isAccdbSnapshot)
             {
                 return Fail(3035, DaoErrors.SystemResourceExceeded);
             }
@@ -528,7 +535,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 return CallResult.Fail(Failure.NotModelled(
                     "NotModelled.GetRowsCountCeiling",
-                    $"GetRows({count}) with {colCount} columns on {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT (3035 threshold is only recorded for 1..4 columns on x64)"));
+                    $"GetRows({count}) with {colCount} columns on {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT (exact 3035 threshold is only recorded on x64 for 2 columns across cursors 2/4/8 and 1/3/4 columns on ACCDB snapshot)"));
             }
         }
         if (Cursor.Eof || Cursor.Bof)
@@ -562,6 +569,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                             if (RecordsetType != 2)
                             {
                                 return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", $"GetRows on a deleted row of a type {RecordsetType} SELECT recordset (only dynaset is recorded)"));
+                            }
+                            for (int k = 0; k < colCount; k++)
+                            {
+                                if (Cursor.Columns[k].Origin != ColumnOrigin.BaseColumn)
+                                {
+                                    return CallResult.Fail(Failure.NotModelled(
+                                        "NotModelled.GetRowsDeletedRowExpression",
+                                        $"GetRows on a deleted dynaset row with non-base column {Cursor.Columns[k].Name} ({Cursor.Columns[k].Origin}) (only base-column dynaset deleted rows are recorded)"));
+                                }
                             }
                             for (int i = rowStart; i < cells.Count; i++)
                             {
@@ -626,14 +642,25 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     break;
                 }
             }
-            if (IntPtr.Size == 8 && colCount is >= 1 and <= 4 && rows < count && (long)(count - rows) * colCount * 24 >= 0x8000_0000L)
+            if (hasExact3035Threshold && rows < count)
             {
-                // q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb, q4-getrows-ceiling-cols-accdb:
-                // above the 2^31 shrink step ((NumRows - actualRows) * cols * 24 >= 2^31), ACE returns an unshrunk array
-                // whose tail elements beyond the rows read are not captured element-wise -> refuse by name.
-                return CallResult.Fail(Failure.NotModelled(
-                    "NotModelled.GetRowsUnshrunkArray",
-                    $"GetRows({count}) returning {rows} row(s) of {colCount} column(s) crosses ACE's 2^31 shrink step (unshrunk tail elements are not recorded)"));
+                bool unshrunk = colCount switch
+                {
+                    1 => (long)(count - rows) * 24 >= 0x8000_0000L,
+                    2 when isAccdbSnapshot => (long)(count - rows) * 48 >= 0x8000_0000L,
+                    2 => count > 1_000_000,
+                    _ => count > 5000,
+                };
+                if (unshrunk)
+                {
+                    // q4-getrows-ceiling-accdb, q4-getrows-ceiling-mdb, q4-getrows-ceiling-cols-accdb:
+                    // above the recorded shrunk boundary (2^31 shrink step for 1..2 cols on ACCDB snapshot, 1000000
+                    // for 2 cols on MDB/non-snapshot, 5000 for 3..4 cols on ACCDB snapshot), ACE returns an unshrunk
+                    // array (or the shrink step is unprobed) -> refuse by name.
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.GetRowsUnshrunkArray",
+                        $"GetRows({count}) returning {rows} row(s) of {colCount} column(s) on {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} exceeds the recorded shrunk-array boundary"));
+                }
             }
             // Row-0 failure (Decimal(38) 3000, externally deleted dynaset row 0, or ACCDB projected-expression failure)
             // returns the degenerate [0+0, 0+colCount] shape (dim 1 is 0, dim 2 is colCount).
@@ -916,8 +943,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// r-q-wire/str-memo-fieldsize-by-recordset-type; r-def-cursor-dao/chunk-read-offsets,
     /// chunk-binary-roundtrip).</item>
     /// </list>
-    /// Unrecorded cursor types, unrecorded non-LV field types outside {4, 7, 9, 10, 20}, non-dynaset deleted rows, and
-    /// unrecorded Cursor.Read failures remain refused by name.
+    /// Unrecorded cursor types, unrecorded column origins (only base columns, plus ACCDB dynaset Long expression 3259
+    /// per r-def-cursor-dao/recordset-field-properties and r-fix-cursor-dao/field-metadata-rw), unrecorded non-LV field
+    /// types outside {4, 7, 9, 10, 20}, non-dynaset deleted rows, and unrecorded Cursor.Read failures remain refused
+    /// by name.
     /// </summary>
     private CallResult FieldSize()
     {
@@ -940,6 +969,14 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         if (Recordset.Cursor.FieldType(_ordinal, out _) is not int type)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeType", $"Field.FieldSize of the column {Column.Name}, whose type is not identified"));
+        }
+        bool allowedOrigin = Column.Origin == ColumnOrigin.BaseColumn
+            || (Column.Origin == ColumnOrigin.Expression && !Recordset.IsMdb && Recordset.RecordsetType == 2 && type == 4);
+        if (!allowedOrigin)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldSizeColumnOrigin",
+                $"Field.FieldSize of {Column.Origin} column {Column.Name} (type {type}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
         if (type is not (12 or 11))
         {
@@ -1004,22 +1041,26 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// q3-lv-getchunk-args-mdb).</item>
     /// <item>Closed recordset (cursors 2, 4, 8 across ACCDB and MDB): 3267 from DAO.Field without an IErrorInfo on every
     /// field type, winning over non-LV 3259 (r-q32-dao-select-lv/q3-lv-states-accdb, q3-lv-states-mdb).</item>
-    /// <item>Non-LV types {Long 4, Double 7, Binary 9, Text 10, Decimal 20} across ACCDB and MDB cursors 2, 4, 8: 3259
-    /// from DAO.Field without an IErrorInfo, winning over BOF/EOF/empty 3021 and deleted-row 3167
+    /// <item>Non-LV base-column types {Long 4, Double 7, Binary 9, Text 10, Decimal 20} across ACCDB and MDB cursors
+    /// 2, 4, 8: 3259 from DAO.Field without an IErrorInfo, winning over BOF/EOF/empty 3021 and deleted-row 3167
     /// (r-q32-dao-select-lv/q3-lv-nonlv-accdb, q3-lv-nonlv-mdb, q3-lv-states-accdb, q3-lv-states-mdb,
     /// q3-lv-deleted-accdb, q3-lv-deleted-mdb).</item>
-    /// <item>Negative Offset or Bytes on Memo (12) or OLE (11) (including Null rows and coerced negatives like -1.5 or
-    /// True): 3001 from DAO.Field without an IErrorInfo (r-q32-dao-select-lv/q3-lv-cursors-accdb, q3-lv-cursors-mdb,
-    /// q3-lv-getchunk-args-accdb, q3-lv-getchunk-args-mdb).</item>
-    /// <item>BOF/EOF/empty: 3021 from DAO.Field without an IErrorInfo (q3-lv-states-accdb, q3-lv-states-mdb). Deleted
-    /// row on dynaset (2): 3167 from DAO.Field without an IErrorInfo (q3-lv-deleted-accdb, q3-lv-deleted-mdb).</item>
+    /// <item>BOF/EOF/empty on base-column Memo (12) or OLE (11) with non-negative arguments: 3021 from DAO.Field without
+    /// an IErrorInfo (q3-lv-states-accdb, q3-lv-states-mdb). Deleted row on dynaset (2) with non-negative arguments:
+    /// 3167 from DAO.Field without an IErrorInfo (q3-lv-deleted-accdb, q3-lv-deleted-mdb). Negative arguments on
+    /// BOF/EOF/empty/deleted rows are refused by name (<c>NotModelled.GetChunkNegativeState</c>).</item>
+    /// <item>Negative Offset or Bytes on a live current row of base-column Memo (12) or OLE (11) (including Null rows
+    /// and coerced negatives like -1.5 or True): 3001 from DAO.Field without an IErrorInfo
+    /// (r-q32-dao-select-lv/q3-lv-cursors-accdb, q3-lv-cursors-mdb, q3-lv-getchunk-args-accdb,
+    /// q3-lv-getchunk-args-mdb).</item>
     /// <item>Memo (12) and OLE (11) across ACCDB and MDB cursors 2, 4, 8: VT_NULL when Null; Memo returns UTF-16
     /// code-unit slice ("" when Bytes == 0 or Offset &gt;= length); OLE returns 0-based VT_ARRAY|VT_UI1 slice, or a null
     /// SAFEARRAY VT_ARRAY|VT_UI1 when Bytes == 0 or Offset &gt;= length (r-q32-dao-select-lv/q3-lv-cursors-accdb,
     /// q3-lv-cursors-mdb, q5-route-saved-accdb, q5-route-saved-mdb, q5-route-querydef-accdb, q5-route-querydef-mdb).</item>
     /// </list>
-    /// Unrecorded cursor types, unrecorded argument VarTypes, unrecorded non-LV types outside {4, 7, 9, 10, 20},
-    /// non-dynaset deleted rows, and unrecorded Cursor.Read failures remain refused by name.
+    /// Unrecorded cursor types, non-base column origins, unrecorded argument VarTypes, unrecorded non-LV types outside
+    /// {4, 7, 9, 10, 20}, negative args on BOF/EOF/empty/deleted states, non-dynaset deleted rows, and unrecorded
+    /// Cursor.Read failures remain refused by name.
     /// </summary>
     private CallResult GetChunk(nint offsetArg, nint bytesArg)
     {
@@ -1052,6 +1093,12 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkType", $"Field.GetChunk of the column {Column.Name}, whose type is not identified"));
         }
+        if (Column.Origin != ColumnOrigin.BaseColumn)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetChunkColumnOrigin",
+                $"Field.GetChunk of {Column.Origin} column {Column.Name} (only base columns are recorded)"));
+        }
         if (type is not (12 or 11))
         {
             if (type is 4 or 7 or 9 or 10 or 20)
@@ -1062,12 +1109,14 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "NotModelled.GetChunkNonLvType",
                 $"Field.GetChunk of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
-        if (offset < 0 || bytes < 0)
-        {
-            return Fail(3001, DaoErrors.InvalidArgument);
-        }
         if (Recordset.Cursor.Eof || Recordset.Cursor.Bof)
         {
+            if (offset < 0 || bytes < 0)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkNegativeState",
+                    "Field.GetChunk with a negative argument at BOF/EOF or on an empty recordset (precedence between 3001 and 3021 is not recorded)"));
+            }
             return Fail(3021, DaoErrors.NoCurrentRecord);
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
@@ -1075,6 +1124,12 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             if (failure!.IsNotModelled)
             {
                 return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+            }
+            if (offset < 0 || bytes < 0)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkNegativeState",
+                    $"Field.GetChunk with a negative argument when Cursor.Read failed with {failure.Number} (precedence between 3001 and {failure.Number} is not recorded)"));
             }
             if (failure.Number == 3167)
             {
@@ -1087,6 +1142,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 return Fail(3021, DaoErrors.NoCurrentRecord);
             }
             return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkReadFailure", $"Field.GetChunk of {Column.Name} met Cursor.Read failure {failure.Number} (not recorded)"));
+        }
+        if (offset < 0 || bytes < 0)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
         }
         return (VarType)value.Vt switch
         {
@@ -1229,8 +1288,9 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// Size: reads <see cref="ResultColumn.Size"/> when Sql provides it (base columns, GROUP BY keys, aggregates,
     /// union columns, derived columns). For a precision-38 Numeric base column where Sql leaves Size null, serves 20
     /// across ACCDB and MDB dynaset (2), snapshot (4) and forward-only (8) (r-q32-dao-select-lv/q2-dec38-accdb-dynaset,
-    /// q2-dec38-accdb-forward, q2-dec38-mdb-dynaset, q2-dec38-mdb-snapshot, q2-dec38-mdb-forward, q5-route-accdb,
-    /// q5-route-mdb; r-wire/read-dao, r-wire/read-param, r-wire/read-sql call 90[1].2) and refuses unrecorded cursor
+    /// q2-dec38-accdb-forward, q2-dec38-mdb-dynaset, q2-dec38-mdb-snapshot, q2-dec38-mdb-forward, q5-route-saved-accdb,
+    /// q5-route-saved-mdb, q5-route-querydef-accdb, q5-route-querydef-mdb; r-wire/read-dao, r-wire/read-param,
+    /// r-wire/read-sql call 90[1].2) and refuses unrecorded cursor
     /// types by name. For an <see cref="ColumnOrigin.Expression"/> column where Sql leaves Size null, serves the exact
     /// size recorded for each expression DAO type across r-def-cursor-dao/prov-alias-fields-metadata,
     /// query-field-metadata-expressions, recordset-field-properties, r-fix-cursor-dao/field-metadata-rw,
