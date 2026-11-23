@@ -122,17 +122,25 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public FileProfile Profile => _session.Profile;
 
     /// <summary>
-    /// Version: the file format's engine version, "4.0" for a Jet 4 MDB, "12.0" and "14.0" for the ACE formats of
-    /// CreateDatabase options 128 and 256 (qualified, R-FMT-1 FMT1-CREATE: r-fmt-1/create-*-empty,
-    /// r-q-fmt-sort/v64-corpus-mdb, r-q-fmt-sort/v128-corpus-accdb and r-q-fmt-sort/v256-corpus-accdb). The later ACE
-    /// format codes are not observed.
+    /// Version: the file format's engine version from page 0's format code (offset 20, <see cref="ProfileSelector"/>;
+    /// qualified, R-FMT-1 FMT1-CREATE):
+    /// Jet 4 (code 1) "4.0" (r-fmt-1/read-mdb-empty call 6, r-q-fmt-sort/v64-corpus-mdb),
+    /// ACE 2007 (code 2) "12.0" (r-fmt-1/read-accdb-empty call 6, r-q-fmt-sort/v128-corpus-accdb),
+    /// ACE 2010 (code 3) "14.0" (r-fmt-1/read-accdb-calculated call 6, r-q-fmt-sort/v256-corpus-accdb),
+    /// ACE 2016 (code 5) "16.7" (r-fmt-1/read-accdb-bigint call 6, r-expr-1/a-null-empty-error-literals call 7, r-sql-1/b-brackets call 6),
+    /// ACE 2019 (code 6) "32.0" (r-fmt-1/read-accdb-datetime2 call 6, r-fmt-2-pres-1/pres-catalog-ladder call 6, r-sort-3/create-nums-accdb call 462).
+    /// Any other format code stays refused by name (<c>NotModelled.DatabaseVersionFormat</c>).
     /// </summary>
-    private CallResult Version() => Profile.Format switch
+    private CallResult Version() => VersionResult(Profile.Format);
+
+    internal static CallResult VersionResult(FileFormat format) => format switch
     {
         FileFormat.Jet4 => Text("4.0"),
         FileFormat.Ace2007 => Text("12.0"),
         FileFormat.Ace2010 => Text("14.0"),
-        var other => CallResult.Fail(Failure.NotImplemented($"Database.Version of the {other} format (not observed)")),
+        FileFormat.Ace2016 => Text("16.7"),
+        FileFormat.Ace2019 => Text("32.0"),
+        var other => CallResult.Fail(Failure.NotModelled("NotModelled.DatabaseVersionFormat", $"Database.Version of the {other} format (not observed)")),
     };
 
     /// <summary>The decoded page-0 fields, read at open through the header mask (II-03 §1.2).</summary>

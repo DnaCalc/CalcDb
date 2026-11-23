@@ -645,4 +645,79 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Assert.Equal("n", Text(Get(n, "Name")));
         Ok(Method(reopened, "Close"));
     }
+
+    private void AssertDatabaseVersion(string fixture, string extension, byte expectedCode, FileFormat expectedFormat, string expectedVersion)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-ver-{Guid.NewGuid():N}{extension}");
+        File.WriteAllBytes(path, CalcDb.Evidence.ArtifactStore.ForRepository(DeclarationGenerationTests.Root()).ReadAll(fixture));
+        _files.Add(path);
+        DatabaseObject db = Recover<DatabaseObject>(Ok(_engine.DefaultWorkspace.OpenDatabase([Arg(path), Arg(false), Arg(true)])));
+        Assert.Equal(expectedCode, db.Profile.VersionCode);
+        Assert.Equal(expectedFormat, db.Profile.Format);
+        Assert.Equal(expectedVersion, Text(Get(db, "Version")));
+        PropertiesObject props = Object<PropertiesObject>(db, "Properties");
+        PropertyObject verProp = Object<PropertyObject>(props, "Item", "Version");
+        Assert.Equal(expectedVersion, Text(Get(verProp, "Value")));
+        Ok(Method(db, "Close"));
+    }
+
+    [Fact]
+    public void Database_Version_code_1_Jet4_answers_4_0()
+    {
+        // r-fmt-1/read-mdb-empty call 6 (db.Version = "4.0") and call 44 (Properties("Version").Value = "4.0") on r-fmt-1-mdb-empty.mdb (page 0 byte 20 = 1).
+        AssertDatabaseVersion("6b0a3d10ba22784f2e52995246efb394d3303b9a1019434f68a4e318aa503369", ".mdb", 1, FileFormat.Jet4, "4.0");
+    }
+
+    [Fact]
+    public void Database_Version_code_2_Ace2007_answers_12_0()
+    {
+        // r-fmt-1/read-accdb-empty call 6 (db.Version = "12.0") and call 44 (Properties("Version").Value = "12.0") on r-fmt-1-accdb-empty.accdb (page 0 byte 20 = 2).
+        AssertDatabaseVersion("c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559", ".accdb", 2, FileFormat.Ace2007, "12.0");
+    }
+
+    [Fact]
+    public void Database_Version_code_3_Ace2010_answers_14_0()
+    {
+        // r-fmt-1/read-accdb-calculated call 6 (db.Version = "14.0") and call 44 (Properties("Version").Value = "14.0") on r-fmt-1-accdb-calculated.accdb (page 0 byte 20 = 3).
+        AssertDatabaseVersion("434dad97c7467e3f184605cdf99af3b007d2a99fa8ab8f4c892c8484a8dbcad3", ".accdb", 3, FileFormat.Ace2010, "14.0");
+    }
+
+    [Fact]
+    public void Database_Version_code_5_Ace2016_answers_16_7()
+    {
+        // r-fmt-1/read-accdb-bigint call 6 (db.Version = "16.7") and call 44 (Properties("Version").Value = "16.7") on r-fmt-1-accdb-bigint.accdb (page 0 byte 20 = 5);
+        // also r-expr-1/a-null-empty-error-literals call 7 ("16.7") on r-expr-1-main.accdb (page 0 byte 20 = 5), while eng.Version at call 5 stays "16.0".
+        AssertDatabaseVersion("b3d92d52ac8e5ec84585b25d656969a06c0eda71bbdadfe9244a637a4f54c606", ".accdb", 5, FileFormat.Ace2016, "16.7");
+        AssertDatabaseVersion("04a50670cf8352110bd1d9ed48ff1033bfb94340e524c5dcc16b01c6a5475a54", ".accdb", 5, FileFormat.Ace2016, "16.7");
+        Assert.Equal("16.0", DBEngineObject.AceVersion);
+    }
+
+    [Fact]
+    public void Database_Version_code_6_Ace2019_answers_32_0()
+    {
+        // r-fmt-1/read-accdb-datetime2 call 6 (db.Version = "32.0") and call 44 (Properties("Version").Value = "32.0") on r-fmt-1-accdb-datetime2.accdb (page 0 byte 20 = 6);
+        // also r-fmt-2-pres-1/pres-catalog-ladder call 6 ("32.0") on r-fmt-2-pres-1-pres3-accdb.accdb (page 0 byte 20 = 6).
+        AssertDatabaseVersion("dd114816e817de98fc5378b765bf543836b73e3d41e88b2645ef3f2de85c4a1f", ".accdb", 6, FileFormat.Ace2019, "32.0");
+        AssertDatabaseVersion("45038559262fb66ba8c466cd3e03d03bb2b4dee0e46a33e99e1edee9d13e0e99", ".accdb", 6, FileFormat.Ace2019, "32.0");
+    }
+
+    [Fact]
+    public void Database_Version_refuses_an_unrecorded_format_code_by_name()
+    {
+        CallResult unrecorded = DatabaseObject.VersionResult((FileFormat)99);
+        Assert.NotNull(unrecorded.Failure);
+        Assert.Equal(FailureKind.NotModelled, unrecorded.Failure!.Kind);
+        Assert.StartsWith("NotModelled.DatabaseVersionFormat:", unrecorded.Failure.Description);
+
+        // An unrecorded page-0 format code (e.g. code 4) is also refused at OpenDatabase with UnknownVersion.
+        byte[] copy = CalcDb.Evidence.ArtifactStore.ForRepository(DeclarationGenerationTests.Root()).ReadAll("c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559");
+        copy[20] = 4;
+        string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-ver-code4-{Guid.NewGuid():N}.accdb");
+        File.WriteAllBytes(path, copy);
+        _files.Add(path);
+        CallResult opened = _engine.DefaultWorkspace.OpenDatabase([Arg(path), Arg(false), Arg(true)]);
+        Assert.NotNull(opened.Failure);
+        Assert.Equal(FailureKind.NotImplemented, opened.Failure!.Kind);
+        Assert.Contains("UnknownVersion", opened.Failure.Description);
+    }
 }
