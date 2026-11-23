@@ -122,32 +122,35 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_and_expression_column_and_gives_3167_for_Memo_FieldSize()
+    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_expression_column_FieldSize_GetChunk_and_GetRows()
     {
-        // Unrecorded neighbouring cases on a deleted row of a SELECT dynaset stay refused by name:
-        // Collect and non-base expression column. FieldSize of a Memo column on an externally deleted row
-        // is decided by r-q32-dao-select-lv/q3-lv-deleted-accdb (3167, DAO.Field, no IErrorInfo). Uses the
-        // retained r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
+        // Unrecorded neighbouring cases on a row deleted inside BeginTrans of a SELECT dynaset stay refused by name:
+        // Collect, non-base expression column, and FieldSize/GetChunk/GetRows (r-q32-dao-select-lv/q3-lv-deleted-*
+        // and q4-getrows-deleted-* only record deletes at transaction depth 0). Uses the retained
+        // r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
         DatabaseObject db = Open(DefCursorMain);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
         SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, N + 1 AS W, Mm FROM T ORDER BY ID", 2);
+        SelectRecordsetObject rsBase = OpenSelect(db, "SELECT ID, N FROM T ORDER BY ID", 2);
         Ok(Method(rs, "MoveFirst"));
+        Ok(Method(rsBase, "MoveFirst"));
 
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "DELETE FROM T WHERE ID = 1", 128));
 
         // Base column via Field.Value gives recorded 3167 (r-txn-1b/rs-types-after-rollback calls 41[0..2]).
         AssertDaoError(FieldValue(rs, "ID"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: true);
-        // Memo FieldSize inside the BeginTrans overlay delegates through Cursor.Read (same single-table dynaset overlay
-        // path as Field.Value) and gives recorded 3167 without IErrorInfo (r-q32-dao-select-lv/q3-lv-deleted-accdb).
-        AssertDaoError(Get(GetField(rs, "Mm"), "FieldSize"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: false);
 
         // Neighbouring unrecorded cases stay refused by name.
         AssertNotModelled(Get(rs, "Collect", 0), "NotModelled.CollectDeletedRow");
         AssertNotModelled(FieldValue(rs, "W"), "NotModelled.SelectDeletedRowExpression");
+        AssertNotModelled(Get(GetField(rs, "Mm"), "FieldSize"), "NotModelled.FieldSizeDeletedRowInTransaction");
+        AssertNotModelled(Method(GetField(rs, "Mm"), "GetChunk", 0, 4), "NotModelled.GetChunkDeletedRowInTransaction");
+        AssertNotModelled(Method(rsBase, "GetRows", 10), "NotModelled.GetRowsDeletedRowInTransaction");
 
         Ok(Method(ws, "Rollback"));
+        Ok(Method(rsBase, "Close"));
         Ok(Method(rs, "Close"));
     }
 

@@ -456,9 +456,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// by name.</item>
     /// <item>BOF, EOF and empty recordsets: 3021 from DAO.Recordset without IErrorInfo (q4-getrows-states-*, q5-route-*).</item>
     /// <item>Row errors: non-Null Decimal(38) 3000 across ACCDB and MDB (2, 4, 8), ACCDB projected-expression errors
-    /// (2, 4, 8), and externally deleted base-column row 0 on dynaset (3167) return S_OK stopping before the failing
-    /// row with [0+0, 0+cols] on row 0 and Errors untouched; a deleted base-column later row on dynaset is skipped
-    /// (q4-getrows-dec38-*, q4-getrows-deleted-*, q5-route-*, r-par-1/err-getrows-chunks).</item>
+    /// (2, 4, 8), and externally deleted base-column row 0 on dynaset at transaction depth 0 (3167) return S_OK
+    /// stopping before the failing row with [0+0, 0+cols] on row 0 and Errors untouched; a deleted base-column later
+    /// row on dynaset at transaction depth 0 is skipped (q4-getrows-dec38-*, q4-getrows-deleted-*, q5-route-*,
+    /// r-par-1/err-getrows-chunks). Deleted dynaset rows inside a transaction are refused by name.</item>
     /// <item>Unshrunk array: on x64 ACCDB snapshot (1 or 2 columns), refuses <c>NotModelled.GetRowsUnshrunkArray</c>
     /// when <c>(NumRows - actualRows) * cols * 24 &gt;= 2^31</c> (q4-getrows-ceiling-cols-accdb: 1 col 89478489/89478490,
     /// 2 cols 44739246/44739247). For 2 columns on MDB or non-snapshot cursors (where 1000000 is shrunk and 89478485
@@ -569,6 +570,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                             if (RecordsetType != 2)
                             {
                                 return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", $"GetRows on a deleted row of a type {RecordsetType} SELECT recordset (only dynaset is recorded)"));
+                            }
+                            if (Database.Workspace.Transactions.Depth > 0)
+                            {
+                                return CallResult.Fail(Failure.NotModelled(
+                                    "NotModelled.GetRowsDeletedRowInTransaction",
+                                    $"GetRows on a deleted dynaset row inside a transaction (depth {Database.Workspace.Transactions.Depth}; only depth 0 is recorded)"));
                             }
                             for (int k = 0; k < colCount; k++)
                             {
@@ -935,8 +942,9 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// q3-lv-deleted-accdb, q3-lv-deleted-mdb; r-def-cursor-dao/chunk-read-offsets).</item>
     /// <item>BOF/EOF/empty on Memo (12) or OLE (11): 3021 from DAO.Field without an IErrorInfo
     /// (r-q32-dao-select-lv/q3-lv-states-accdb, q3-lv-states-mdb).</item>
-    /// <item>Deleted row on dynaset (2) Memo (12) or OLE (11): 3167 from DAO.Field without an IErrorInfo
-    /// (r-q32-dao-select-lv/q3-lv-deleted-accdb, q3-lv-deleted-mdb).</item>
+    /// <item>Deleted row on dynaset (2) Memo (12) or OLE (11) at transaction depth 0: 3167 from DAO.Field without an
+    /// IErrorInfo (r-q32-dao-select-lv/q3-lv-deleted-accdb, q3-lv-deleted-mdb). Deleted dynaset rows inside a
+    /// transaction are refused by name.</item>
     /// <item>Memo (12) and OLE (11) across ACCDB and MDB cursors 2, 4, 8: 0 when Null, twice the BSTR UTF-16 code-unit
     /// length for Memo, and byte length for OLE (r-q32-dao-select-lv/q3-lv-cursors-accdb, q3-lv-cursors-mdb,
     /// q5-route-saved-accdb, q5-route-saved-mdb, q5-route-querydef-accdb, q5-route-querydef-mdb;
@@ -945,8 +953,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// </list>
     /// Unrecorded cursor types, unrecorded column origins (only base columns, plus ACCDB dynaset Long expression 3259
     /// per r-def-cursor-dao/recordset-field-properties and r-fix-cursor-dao/field-metadata-rw), unrecorded non-LV field
-    /// types outside {4, 7, 9, 10, 20}, non-dynaset deleted rows, and unrecorded Cursor.Read failures remain refused
-    /// by name.
+    /// types outside {4, 7, 9, 10, 20}, non-dynaset or in-transaction deleted rows, and unrecorded Cursor.Read failures
+    /// remain refused by name.
     /// </summary>
     private CallResult FieldSize()
     {
@@ -1000,9 +1008,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             }
             if (failure.Number == 3167)
             {
-                return Recordset.RecordsetType == 2
-                    ? Fail(3167, DaoErrors.RecordDeleted)
-                    : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDeletedRow", $"Field.FieldSize of {Column.Name} on a deleted row of a type {Recordset.RecordsetType} SELECT (only dynaset is recorded)"));
+                if (Recordset.RecordsetType != 2)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDeletedRow", $"Field.FieldSize of {Column.Name} on a deleted row of a type {Recordset.RecordsetType} SELECT (only dynaset is recorded)"));
+                }
+                if (Recordset.Database.Workspace.Transactions.Depth > 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.FieldSizeDeletedRowInTransaction",
+                        $"Field.FieldSize of {Column.Name} on a deleted dynaset row inside a transaction (depth {Recordset.Database.Workspace.Transactions.Depth}; only depth 0 is recorded)"));
+                }
+                return Fail(3167, DaoErrors.RecordDeleted);
             }
             if (failure.Number == 3021)
             {
@@ -1046,9 +1062,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// (r-q32-dao-select-lv/q3-lv-nonlv-accdb, q3-lv-nonlv-mdb, q3-lv-states-accdb, q3-lv-states-mdb,
     /// q3-lv-deleted-accdb, q3-lv-deleted-mdb).</item>
     /// <item>BOF/EOF/empty on base-column Memo (12) or OLE (11) with non-negative arguments: 3021 from DAO.Field without
-    /// an IErrorInfo (q3-lv-states-accdb, q3-lv-states-mdb). Deleted row on dynaset (2) with non-negative arguments:
-    /// 3167 from DAO.Field without an IErrorInfo (q3-lv-deleted-accdb, q3-lv-deleted-mdb). Negative arguments on
-    /// BOF/EOF/empty/deleted rows are refused by name (<c>NotModelled.GetChunkNegativeState</c>).</item>
+    /// an IErrorInfo (q3-lv-states-accdb, q3-lv-states-mdb). Deleted row on dynaset (2) at transaction depth 0 with
+    /// non-negative arguments: 3167 from DAO.Field without an IErrorInfo (q3-lv-deleted-accdb, q3-lv-deleted-mdb).
+    /// Deleted dynaset rows inside a transaction and negative arguments on BOF/EOF/empty/deleted rows are refused by
+    /// name (<c>NotModelled.GetChunkDeletedRowInTransaction</c>, <c>NotModelled.GetChunkNegativeState</c>).</item>
     /// <item>Negative Offset or Bytes on a live current row of base-column Memo (12) or OLE (11) (including Null rows
     /// and coerced negatives like -1.5 or True): 3001 from DAO.Field without an IErrorInfo
     /// (r-q32-dao-select-lv/q3-lv-cursors-accdb, q3-lv-cursors-mdb, q3-lv-getchunk-args-accdb,
@@ -1059,8 +1076,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// q3-lv-cursors-mdb, q5-route-saved-accdb, q5-route-saved-mdb, q5-route-querydef-accdb, q5-route-querydef-mdb).</item>
     /// </list>
     /// Unrecorded cursor types, non-base column origins, unrecorded argument VarTypes, unrecorded non-LV types outside
-    /// {4, 7, 9, 10, 20}, negative args on BOF/EOF/empty/deleted states, non-dynaset deleted rows, and unrecorded
-    /// Cursor.Read failures remain refused by name.
+    /// {4, 7, 9, 10, 20}, negative args on BOF/EOF/empty/deleted states, non-dynaset or in-transaction deleted rows,
+    /// and unrecorded Cursor.Read failures remain refused by name.
     /// </summary>
     private CallResult GetChunk(nint offsetArg, nint bytesArg)
     {
@@ -1133,9 +1150,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             }
             if (failure.Number == 3167)
             {
-                return Recordset.RecordsetType == 2
-                    ? Fail(3167, DaoErrors.RecordDeleted)
-                    : CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkDeletedRow", $"Field.GetChunk of {Column.Name} on a deleted row of a type {Recordset.RecordsetType} SELECT (only dynaset is recorded)"));
+                if (Recordset.RecordsetType != 2)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkDeletedRow", $"Field.GetChunk of {Column.Name} on a deleted row of a type {Recordset.RecordsetType} SELECT (only dynaset is recorded)"));
+                }
+                if (Recordset.Database.Workspace.Transactions.Depth > 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.GetChunkDeletedRowInTransaction",
+                        $"Field.GetChunk of {Column.Name} on a deleted dynaset row inside a transaction (depth {Recordset.Database.Workspace.Transactions.Depth}; only depth 0 is recorded)"));
+                }
+                return Fail(3167, DaoErrors.RecordDeleted);
             }
             if (failure.Number == 3021)
             {
