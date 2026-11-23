@@ -37,6 +37,8 @@ namespace CalcDb.Oracle.Runner;
 /// as one line per question to <c>compare-sets/NAME.tsv</c> in the store, and diff it per question against an earlier run
 /// (default: the committed baseline <c>docs/work/compare-baseline.tsv</c>); <c>--record</c> makes this run the baseline.
 /// <c>compare-set --diff A --against B</c> diffs two written runs without running anything (<see cref="CompareSetCommand"/>).</item>
+/// <item><c>compare-stops --name RUN [--store DIR] [--by-folder]</c>: count the refusal or failure behind each
+/// non-matching question's first stop over a finished <c>compare-set</c> run (<see cref="CompareStops"/>).</item>
 /// <item><c>reduce --question FILE [--max-trials N]</c>: find a smaller question with the same defining failure as the
 /// question's latest mismatched CalcDb comparison, every candidate run fresh on ACE and on CalcDb; writes the reduction chain
 /// under <c>reductions/</c> in the store and prints the reduced program (W-01/reduction, II-15 §23).</item>
@@ -57,7 +59,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|file-compare|batch|compare-set|reuse|broker|ask|fixtures|seal|prune|reduce|etw-check [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|inspect|file-compare|batch|compare-set|compare-stops|reuse|broker|ask|fixtures|seal|prune|reduce|etw-check [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -84,6 +86,7 @@ internal static partial class Program
                 "file-compare" => FileCompare(store, options, artifactsDir),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "compare-set" => CompareSetCommand(store, options, repo, evidenceDir, artifactsDir),
+                "compare-stops" => CompareStopsCommand(store, options, repo),
                 "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),
                 "broker" => OperatingSystem.IsWindows() ? BrokerCommand(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The broker runs only on a Windows oracle host."),
                 "ask" => AskCommand(store, options),
