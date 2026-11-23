@@ -52,8 +52,9 @@ scope or design, the book wins.
   writers. A child that still meets a byte no record decides, or a record that contradicts a note, stops and reports.
   The organizer then probes: a single discriminator itself, a larger round through a prober child that writes only
   cards, probes and evidence, and gives its qualified.md note in its report (process log, change 6, 2026-11-21).
-  A question that writes keeps the page bytes after each statement (`nativeRead` with `keep: true`), so a later writer
-  can read where ACE put what (94fd met a record without them); a fixture a round creates is registered with
+  A question that writes keeps all page bytes, catalog pages included, before and after each statement it asks about
+  (`nativeRead` with `keep: true`), so a later writer can read where ACE put what (94fd met a record without them; the
+  r-q29 to r-q31 setups kept no catalog pages, so their DDL had to be probed again, r-q34); a fixture a round creates is registered with
   `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
   the repository (63z8).
 - Set the model and reasoning of every child. Neon (`antigravity-acp:gemini-4-neon@high`) is the workhorse:
