@@ -46,8 +46,16 @@ scope or design, the book wins.
 ## Sub-sessions
 
 - A slice goes through the gates of [docs/work/landing-check.md](docs/work/landing-check.md): ready, brief, write,
-  review, land, compare. Run code writers in parallel, one per project at a time, each in its own worktree. A brief
-  names the projects or files the child owns, its build limits, and the book rows and records it relies on.
+  review, land, compare. Run code writers in parallel, one per project at a time, each in its own worktree, and at
+  most two that build at once; a prober, a read-only reviewer or a compare does not count (2026-11-24: three writers,
+  a landing check and a compare ran 13 or more builds and swapped on 31 GB). The third place goes to a probe round or
+  a review. A brief gives only what is the task's own (the deliverable, its records, the files the child owns, the
+  solution filter, the `-Questions` folders, roscli or not); the fixed parts are landing-check.md's standard brief,
+  which the brief names.
+- When the owner asks to pause: steer every running child to let its job finish, start nothing new, commit on its
+  branch, stop its daemon and end with a status (commits, done and checked, left in order, next step, undecided
+  bytes). Write each status into its register row, move its task to later, and let a running compare finish (it only
+  reads). On resume, each child goes on from its status.
 - A slice is ready when no new byte decision lacks a record: a prober closes its open questions one slice ahead of the
   writers. A child that still meets a byte no record decides, or a record that contradicts a note, stops and reports.
   The organizer then probes: a single discriminator itself, a larger round through a prober child that writes only

@@ -1201,3 +1201,37 @@ The check duration crossed because of parallel load, not one cost: a cap of abou
 the next change to try (the organizer's suggestion to the owner, 2026-11-23). Organizer calls per landing stay above
 the line; the writer-run review now in AGENTS.md is the change expected to bring them down, with `fhqk` and fewer
 interim child updates (a CodeAlta request). Organizer 11 forwards only the DDL prober's and the 344q writer's answers.
+
+## 2026-11-24 - Organizer 12 (01a2074e): process round on the owner's call
+
+**What this session measured.** Landed: the r-q34 DDL probe round (87 questions), 344q, tbg5, ddl1 (CREATE TABLE
+forms), gkpc and 5ktt. Core 464 to 469 of 1360, wide 747 to 761 of 3158, nothing lost. Two pauses by the owner. With
+three writers, a landing check and a 6-way compare at once, the machine ran 13 or more builds and swapped (31.4 GB RAM,
+about 10 GB free while paused; 17 idle build servers held 2.5 GB, freed by `dotnet build-server shutdown`). DDL writer 2
+traced the causes, and the organizer checked them in the files: `CalcDbSourceState` (Directory.Build.props) stamps the
+git state into all 33 assemblies, so every commit or clean/dirty switch recompiles every project and relinks NativeAOT,
+though only the oracle runner and Perf read it; the landing-check lock is per worktree, so nothing bounds builds on the
+machine; builds run at MSBuild's default 16 nodes with node reuse; each extra test project gets a build call of its own.
+
+**Changes.**
+- Task `x38g` (P1, first): CalcDbSource only in the projects that read it, one machine-wide lock for heavy builds and
+  the NativeAOT publish, -m:4 without node reuse, one build call per check; measured before and after. DDL writer 2
+  does it on its branch beside its CREATE INDEX stretch.
+- At most two children that build at once (AGENTS.md, Sub-sessions); the third place goes to a probe round or a review.
+  This replaces organizer 11's suggestion of about three heavy children.
+- The standard brief (landing-check.md): the fixed parts of every brief in one place, so a brief gives only the task's
+  own parts. Two parts are new: the writer checks the task's premise against its record before writing (5ktt's call 27
+  read `Recordset.Status`, not `RecordCount`, and nobody saw it before the writer had built and checked the change), and
+  counts before come from the baseline TSVs instead of a build of master in a fresh worktree.
+- The pause protocol the owner used twice (AGENTS.md, Sub-sessions): statuses into the register, tasks to later, a
+  running compare left to finish.
+- Task `6qw5`: the compare set ACE's clock fields aside only for ACE 2007 files, so Jet 4 and code 3, 5 and 6 files
+  compared strictly (12 r-q34 MDB questions differed only in page-17 dates).
+
+**Proposed to the owner, not adopted.** Two persistent writer worktrees (`CalcDb-w1`, `CalcDb-w2`) beside
+`CalcDb-check`, reused by each new code writer through `alta session create --worktree-path`, so a writer starts with
+warm `bin`, `obj` and `artifacts` instead of a cold build and NativeAOT publish. Creating them needs the owner's word
+(their CLAUDE.md); measure the cold start after `x38g` first.
+
+**Not changed, for CodeAlta.** Interim answer updates still wake the organizer at every turn a child ends while it waits
+on a job (about 40 this session), though every brief asks for none.

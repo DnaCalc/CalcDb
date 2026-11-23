@@ -39,6 +39,35 @@ A child ends with these parts and nothing else:
   those files.
 - **Open:** the branches of the slice it did not do, and every byte it met that no record decides.
 
+### The standard brief
+
+Every brief says "follow the standard brief of docs/work/landing-check.md" and adds only the task's own parts
+(AGENTS.md, Sub-sessions). The fixed parts:
+
+- Read README.md, AGENTS.md, docs/the-plan.md in full and this file before you start.
+- **Check the premise first.** Read the record the task names (the call, page or offset) and check that it shows what
+  the task says; if it does not, stop and report before writing code (5ktt, 2026-11-23: the r-ado-1b call its task
+  named read `Recordset.Status`, not `RecordCount`).
+- **Counts before** come from the baselines, not from a build of master: a folder's rows in
+  [compare-baseline-wide.tsv](compare-baseline-wide.tsv) (or compare-baseline.tsv for the core set). Counts after come
+  from your self-check's `-Questions`.
+- Build only the solution filter the brief names. Run every check, test or candidate run that may take more than half a
+  minute as an `alta job`; never wait for one in a shell call. Send no interim status while a job runs: end your turn
+  and the job brings you back.
+- Every rule cites the record (folder/question, call, page and offset) that shows its very case. A byte or a value no
+  record decides: stop and report it, or refuse it by name and list it under Open; never guess. Tests replay the
+  record's kept pages or calls.
+- One of everything: extend the writer, reader or helper that exists; never add a second one.
+- Start a roscli daemon only when the brief says so, and stop it before you end.
+- Do not touch the bookkeeping files (register.md, qualified.md, book-proposals.md, compare-baseline*.tsv,
+  process-log.md): give their lines in the report.
+- Commit on your branch with `git commit -F <unique message file in $TEMP>`, the message starting with the book ID and
+  the task id and ending with your model's Co-Authored-By line. Do not push, merge or land.
+- Review as gate 4 says: over about 300 lines, your own read-only Neon reviewer (`alta session create --title "Review
+  <topic>" --model-ref antigravity-acp:gemini-4-neon@high --no-sub-sessions` in your worktree); under it, the
+  organizer's.
+- End with the child's report above, nothing else.
+
 The solution filters `CalcDb.Isam.slnf`, `CalcDb.Sql.slnf`, `CalcDb.Com.slnf` and `CalcDb.Oracle.slnf` each hold an
 area's projects, everything they reference and the area's tests: a child builds, and loads into an editor or a Roslyn
 workspace, only its area. A project added to the solution goes into each filter whose area references it. A roscli
