@@ -190,6 +190,7 @@ public sealed class EditFrame : IDisposable
     private LockResource? _editLock;
     private bool _conflictReported;
     private GeneratedTicket? _ticket;
+    private long? _counterBeforeAddNew;
     private bool _autoNumberPersisted;
     private int _deferredRowCount;
     private readonly List<int> _deferredDecrements = [];
@@ -372,6 +373,7 @@ public sealed class EditFrame : IDisposable
             defaults[i] = converted.Value;
         }
         GeneratedTicket? newTicket = null;
+        long? counterBeforeAddNew = null;
         if (s.AutoNumber is not null && _table.Counter is { } counter)
         {
             if (counter.Increment != 1 && _table.Writer is { } formatWriter && !formatWriter.IsAccdb(_workspace.OverlayOf(formatWriter.File)))
@@ -380,6 +382,7 @@ public sealed class EditFrame : IDisposable
                     MutationOpen.AutoNumberIncrement,
                     $"AutoNumber insert with non-1 increment ({counter.Increment}) in an MDB file is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
             }
+            counterBeforeAddNew = counter.Last;
             if (!counter.TryIssue(out newTicket, out MutationOpen counterOpen, out string? counterDetail))
             {
                 return EditOutcome.NotModelled(counterOpen, counterDetail);
@@ -430,6 +433,7 @@ public sealed class EditFrame : IDisposable
             }
         }
         ReleaseTicket();
+        _counterBeforeAddNew = counterBeforeAddNew;
         _autoNumberPersisted = false;
         // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
         ReleaseEditLock();
@@ -625,24 +629,28 @@ public sealed class EditFrame : IDisposable
                             && _workspace.OverlayOf(refuseWriter.File) is null
                             && refuseWriter.IsAccdb(null)
                             && refPhys > 0;
+                        bool allowNonPkStatementAccdb = _workspace.InAutocommitFailOnErrorStatementLevel
+                            && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
+                            && refPhys > 0
+                            && !_workspace.HasStatementGlobalMapAllocation(refuseWriter.File);
                         if (CheckExplicitAutoNumberReseed(
                                 s.TableName,
                                 candidateValues[autoCol.Ordinal].Integer,
                                 _table.Counter,
                                 refusingIsPrimary,
                                 IsKeyOf(refPhys, autoCol),
-                                allowNonPkSingleRowAccdb) is { } reseedOpen)
+                                allowNonPkSingleRowAccdb || allowNonPkStatementAccdb) is { } reseedOpen)
                         {
                             return reseedOpen;
                         }
                         reseedRefuseAuto = true;
-                        twoGroupNonPkReseed = !refusingIsPrimary || !IsKeyOf(refPhys, autoCol);
+                        twoGroupNonPkReseed = allowNonPkSingleRowAccdb && (!refusingIsPrimary || !IsKeyOf(refPhys, autoCol));
                     }
                     autoFloor = AutoNumberFloor(candidateValues[autoCol.Ordinal].Integer, reseedRefuseAuto);
                 }
                 if (twoGroupNonPkReseed && autoFloor is { } reseedFloor)
                 {
-                    // Group 1 (exp-uk-dup-40, exp-uk-dup-5): commit the explicit AutoNumber reseed immediately (+1 on page 0).
+                    // Group 1 (exp-uk-dup-40, exp-uk-dup-5, exp-sel-eq-uk-dup1-existing): commit the explicit AutoNumber reseed immediately (+1 on page 0).
                     CompiledChange reseedChange = refuseWriter.CompileAutoNumberAdvance(reseedFloor, _workspace.OverlayOf(refuseWriter.File), reseedAutoNumber: true);
                     if (reseedChange.Change is not { } reseedCompiled)
                     {
@@ -663,8 +671,8 @@ public sealed class EditFrame : IDisposable
                     {
                         return new UpdateOutcome(null, open1, detail1);
                     }
-                    // Group 2 (exp-uk-dup-40, exp-uk-dup-5): stage prior-index UniqueEntryCount increments (e.g. PK +1)
-                    // for EndStatement (+2 total on page 0).
+                    // Group 2 (exp-uk-dup-40, exp-uk-dup-5, exp-sel-eq-uk-dup1-existing): stage prior-index UniqueEntryCount
+                    // increments (e.g. PK +1) for EndStatement (+2 total on page 0).
                     CompiledChange priorChange = refuseWriter.CompileRefusedUniqueInsert(s, candidateValues, refPhys, autoNumberFloor: null, _workspace.OverlayOf(refuseWriter.File), reseedAutoNumber: false);
                     if (priorChange.Change is not { } priorCompiled)
                     {
@@ -698,10 +706,14 @@ public sealed class EditFrame : IDisposable
                     MutationError? pubError;
                     if (_workspace.InStatement)
                     {
+                        // Jet 4 MDB statement Rollback 3022 side effects are recorded without an AutoNumber column on
+                        // existing or new pages (noan-dup-row2-mdb-existing, noan-dup-row2-mdb-newpage) and with a
+                        // generated unit-increment AutoNumber taking a new page (ins-dup-fail-mdb); MDB with a
+                        // generated AutoNumber on an existing page and MDB explicit AutoNumbers remain Open.
                         bool allowJet4MdbSideEffect = _workspace.InAutocommitFailOnErrorStatementLevel
-                            && _workspace.HasStatementGlobalMapAllocation(refuseWriter.File)
                             && !reseedRefuseAuto
-                            && _table.Counter is null or { Increment: 1 };
+                            && (s.AutoNumber is null
+                                || (_workspace.HasStatementGlobalMapAllocation(refuseWriter.File) && _table.Counter is { Increment: 1 }));
                         (open, detail) = _workspace.RecordStatementSideEffect(
                             refuseWriter.File,
                             sideCompiled.Edits,
@@ -735,7 +747,16 @@ public sealed class EditFrame : IDisposable
                     long val = candidateValues[autoCol2.Ordinal].Integer;
                     if (reseedRefuseAuto)
                     {
-                        refuseCounter.Reseed(val);
+                        if (_workspace.Depth > 0)
+                        {
+                            // Defer the in-memory Reseed until RollbackStatementFrame -> PlanStatementCounters or
+                            // CommitTrans admits the case so an Open-list refusal or unrecorded Rollback never mutates _table.Counter.
+                            _workspace.RecordPendingCounterReseed(refuseCounter, val, _counterBeforeAddNew);
+                        }
+                        else
+                        {
+                            refuseCounter.Reseed(val);
+                        }
                     }
                     else
                     {
@@ -760,20 +781,48 @@ public sealed class EditFrame : IDisposable
                 && Mode == EditMode.AddNew
                 && _workspace.InAutocommitFailOnErrorStatementLevel
                 && _table.Writer is { } fkWriter
-                && _workspace.Publisher is not null
-                && fkWriter.IsAccdb(_workspace.OverlayOf(fkWriter.File))
-                && (s.AutoNumber is null || _table.Counter is { Increment: 1 }))
+                && _workspace.Publisher is not null)
             {
-                // R-TXN-1 TXN-STMT (evidence/r-q27-autonumber-txn/ins-fk-3201-fail): a 3201 FK refusal on AddNew inside
-                // an autocommit dbFailOnError statement transaction on ACCDB persists UniqueEntryCount increments of
-                // physical indexes strictly before the refusing FK index (e.g. PK +1) and the refused row's AutoNumber
-                // floor into the statement's overlay. Multiple child-side FK indexes on the same table have no recorded
-                // check/counter order and are named.
+                if (!fkWriter.IsAccdb(_workspace.OverlayOf(fkWriter.File)))
+                {
+                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"a 3201 FK refusal on {s.TableName} in an MDB file is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                }
+                if (!_workspace.HasStatementAcceptedChanges)
+                {
+                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"first-row 3201 FK refusal on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                }
+                if (s.AutoNumber is { } fkAutoCheck)
+                {
+                    if (_cells[fkAutoCheck.Ordinal].Assigned)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.CounterWrite, $"a 3201 FK refusal with an explicit AutoNumber on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                    }
+                    if (_table.Counter is not { Increment: 1 })
+                    {
+                        return new UpdateOutcome(null, MutationOpen.AutoNumberIncrement, $"a 3201 FK refusal on {s.TableName} under non-1 increment ({_table.Counter?.Increment}) is not recorded");
+                    }
+                }
+                // R-TXN-1 TXN-STMT (evidence/r-q27-autonumber-txn/ins-fk-3201-fail;
+                // evidence/r-q29-stmt-rollback-counters/noan-fk-3201-existing, noan-fk-3201-newpage): a 3201 FK refusal
+                // on AddNew inside an autocommit dbFailOnError statement transaction on ACCDB after earlier accepted
+                // row(s) persists UniqueEntryCount increments of physical index 0 (PK +1) and, on an AutoNumber table,
+                // the refused row's generated AutoNumber floor into the statement's overlay. Every other index layout
+                // (not PK at physical 0 + single child FK at physical 1 with two indexes in all) and first-row 3201
+                // have no record and are refused by name.
+                byte pkType = FormatDescriptor.Jet4Family.IndexDescriptor.PrimaryKeyType;
                 byte fkType = FormatDescriptor.Jet4Family.IndexDescriptor.ForeignKeyType;
                 List<LogicalIndex> childFks = [.. s.Table.LogicalIndexes.Where(l => l.IndexType == fkType && l.RelatedTableType != 1)];
-                if (childFks.Count != 1)
+                bool hasPkAt0 = s.Table.LogicalIndexes.Any(l => l.PhysicalNumber == 0 && l.IndexType == pkType);
+                if (childFks.Count != 1
+                    || s.Table.PhysicalIndexes.Count != 2
+                    || s.Table.LogicalIndexes.Count != 2
+                    || childFks[0].PhysicalNumber != 1
+                    || !hasPkAt0)
                 {
-                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"a 3201 FK refusal on {s.TableName} with {childFks.Count} child foreign-key indexes: prior-index UniqueEntryCount order is not recorded (evidence/r-q27-autonumber-txn/ins-fk-3201-fail)");
+                    return new UpdateOutcome(
+                        null,
+                        MutationOpen.CounterWrite,
+                        $"a 3201 FK refusal on {s.TableName} is recorded only when the table has two indexes with the primary key at physical 0 and one child foreign-key index at physical 1 (evidence/r-q27-autonumber-txn/ins-fk-3201-fail; evidence/r-q29-stmt-rollback-counters/noan-fk-3201-*)");
                 }
                 var candidateValues = new NativeValue[_cells.Length];
                 for (int i = 0; i < candidateValues.Length; i++)
@@ -807,6 +856,63 @@ public sealed class EditFrame : IDisposable
                 }
             }
             else if (Mode == EditMode.AddNew
+                && _workspace.InAutocommitFailOnErrorStatementLevel
+                && failure.Error?.Number is (MutationError.Required or MutationError.RuleWithText) and int reqErrNum
+                && _table.Writer is { } reqWriter
+                && _workspace.Publisher is not null)
+            {
+                // R-TXN-1 TXN-STMT (evidence/r-q27-autonumber-txn/ins-req-3314-fail, ins-val-3316-fail;
+                // evidence/r-q29-stmt-rollback-counters/noan-req-3314-existing, noan-req-3314-newpage,
+                // noan-val-3316-existing, noan-val-3316-newpage): 3314/3316 inside an autocommit dbFailOnError ACCDB
+                // statement after earlier accepted row(s) counts no index entry for the refused row (advancing only
+                // TableDef offset 20 when the table has a generated unit-increment AutoNumber). MDB 3314/3316,
+                // first-row 3314/3316 (whatever the table's row count), explicit AutoNumbers, and non-1 increments
+                // remain Open.
+                if (!reqWriter.IsAccdb(_workspace.OverlayOf(reqWriter.File)))
+                {
+                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"refusal {reqErrNum} on {s.TableName} in an MDB file is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                }
+                if (!_workspace.HasStatementAcceptedChanges)
+                {
+                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"first-row refusal {reqErrNum} on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                }
+                if (s.AutoNumber is { } reqAuto)
+                {
+                    if (_cells[reqAuto.Ordinal].Assigned)
+                    {
+                        return new UpdateOutcome(null, MutationOpen.CounterWrite, $"refusal {reqErrNum} with an explicit AutoNumber on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                    }
+                    if (_table.Counter is not { Increment: 1 })
+                    {
+                        return new UpdateOutcome(null, MutationOpen.AutoNumberIncrement, $"refusal {reqErrNum} on {s.TableName} under non-1 increment ({_table.Counter?.Increment}) is not recorded");
+                    }
+                    if (CandidateValue(reqAuto.Ordinal) is { Kind: NativeKind.Long } reqAutoVal
+                        && AutoNumberFloor(reqAutoVal.Integer, reseed: false) is { } reqFloor)
+                    {
+                        CompiledChange adv = reqWriter.CompileAutoNumberAdvance(reqFloor, _workspace.OverlayOf(reqWriter.File));
+                        if (adv.Change is not { } advCompiled)
+                        {
+                            return new UpdateOutcome(null, MutationOpen.Publication, adv.NotWritten);
+                        }
+                        (MutationOpen advOpen, string? advDetail) = _workspace.RecordStatementSideEffect(
+                            reqWriter.File,
+                            advCompiled.Edits,
+                            advCompiled.Footprint,
+                            ConflictSource,
+                            out MutationError? advPubError,
+                            targetHasAutoNumber: true);
+                        if (advPubError is not null)
+                        {
+                            return new UpdateOutcome(advPubError);
+                        }
+                        if (advOpen != MutationOpen.None)
+                        {
+                            return new UpdateOutcome(null, advOpen, advDetail);
+                        }
+                    }
+                }
+            }
+            else if (Mode == EditMode.AddNew
                 && _workspace.InStatement
                 && s.AutoNumber is { } refusedAuto
                 && !_cells[refusedAuto.Ordinal].Assigned
@@ -814,10 +920,7 @@ public sealed class EditFrame : IDisposable
                 && _table.Writer is { } refusedWriter
                 && _workspace.Publisher is not null
                 && CandidateValue(refusedAuto.Ordinal) is { Kind: NativeKind.Long } refusedAutoVal
-                && ((failure.Error?.Number is MutationError.Required or MutationError.RuleWithText
-                        && _workspace.InAutocommitFailOnErrorStatementLevel
-                        && refusedWriter.IsAccdb(_workspace.OverlayOf(refusedWriter.File)))
-                    || (failure.Error?.Number == MutationError.ZeroLength
+                && ((failure.Error?.Number == MutationError.ZeroLength
                         && _workspace.Depth == 0
                         && _workspace.OverlayOf(refusedWriter.File) is null
                         && refusedWriter.IsAccdb(null)
@@ -829,10 +932,8 @@ public sealed class EditFrame : IDisposable
                         && _workspace.OverlayOf(refusedWriter.File) is null
                         && refusedWriter.IsVerifiedAccdb(null))))
             {
-                // R-TXN-1 TXN-STMT, R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/ins-req-3314-fail,
-                // ins-val-3316-fail; memo-zerolength-false-fail, memo-zerolength-unset-fail;
+                // R-TXN-1 TXN-STMT, R-FMT-2 Generated values (memo-zerolength-false-fail, memo-zerolength-unset-fail;
                 // evidence/r-q30-sql-check/autonum-viol-ado-exec, autonum-viol-dao-exec):
-                // - 3314/3316 inside an autocommit dbFailOnError ACCDB INSERT ... SELECT statement level,
                 // - 3315 on a Memo column in a single-row autocommit ACCDB SQL INSERT, or
                 // - 3317 won by CheckStage in a single-row autocommit ACCDB SQL INSERT
                 // persists the refused row's generated AutoNumber advance (offset 20) into the statement's overlay
@@ -918,14 +1019,21 @@ public sealed class EditFrame : IDisposable
             return failure;
         }
 
-        // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10): downward explicit AutoNumber
-        // reseed on an accepted insert is recorded only for single-row autocommit ACCDB SQL INSERT; recordset AddNew,
-        // BeginTrans, and MDB downward reseeds are refused by name before locking or modifying disk or the counter.
-        bool allowDownwardReseed = _workspace.InStatement
+        // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10;
+        // evidence/r-q29-stmt-rollback-counters/exp-sel-below-dup2-existing, exp-sel-below-pk-dup2-existing): downward
+        // explicit AutoNumber reseed on an accepted insert is recorded for single-row autocommit ACCDB SQL INSERT and
+        // on an existing ACCDB page inside an autocommit dbFailOnError statement level; recordset AddNew, BeginTrans,
+        // MDB, and new-page statement-level downward reseeds are refused by name before modifying disk or the counter.
+        bool allowDownwardReseedSingleRow = _workspace.InStatement
             && _workspace.Depth == 0
             && _table.Writer is { } reseedCheckWriter
             && _workspace.OverlayOf(reseedCheckWriter.File) is null
             && reseedCheckWriter.IsAccdb(null);
+        bool allowDownwardReseedStmtLevel = _workspace.InAutocommitFailOnErrorStatementLevel
+            && _table.Writer is { } stmtReseedWriter
+            && stmtReseedWriter.IsAccdb(_workspace.OverlayOf(stmtReseedWriter.File))
+            && !_workspace.HasStatementGlobalMapAllocation(stmtReseedWriter.File);
+        bool allowDownwardReseed = allowDownwardReseedSingleRow || allowDownwardReseedStmtLevel;
         if (Mode == EditMode.AddNew
             && s.AutoNumber is { } explicitAuto
             && _cells[explicitAuto.Ordinal].Assigned
@@ -934,10 +1042,14 @@ public sealed class EditFrame : IDisposable
             && explicitValue.Integer < explicitCounter.Last
             && !allowDownwardReseed)
         {
+            if (_workspace.InStatementOwnLevel)
+            {
+                _workspace.SaveExplicitCounterBefore(explicitCounter, _counterBeforeAddNew);
+            }
             return new UpdateOutcome(
                 null,
                 MutationOpen.AutoNumberReseed,
-                $"explicit AutoNumber value {explicitValue.Integer} below counter {explicitCounter.Last} on {s.TableName} is recorded only for single-row autocommit ACCDB SQL INSERT (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10)");
+                $"explicit AutoNumber value {explicitValue.Integer} below counter {explicitCounter.Last} on {s.TableName} is recorded only for single-row autocommit ACCDB SQL INSERT or existing-page autocommit statement INSERT (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10; evidence/r-q29-stmt-rollback-counters/exp-sel-below-*)");
         }
 
         // 4. The lock footprint and, for an optimistic edit, the stored image (W-05/local-lockers-rebase).
@@ -983,9 +1095,10 @@ public sealed class EditFrame : IDisposable
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
-            // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10): a single-row autocommit
-            // ACCDB SQL INSERT with an explicit AutoNumber below the counter under unit increment reseeds TableDef
-            // offset 20 to the explicit value; upward values advance via Observe.
+            // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10;
+            // evidence/r-q29-stmt-rollback-counters/exp-sel-below-dup2-existing, exp-sel-below-pk-dup2-existing):
+            // an explicit AutoNumber below the counter under unit increment reseeds TableDef offset 20 to the explicit
+            // value; upward values advance via Observe.
             if (s.AutoNumber is { } autoCol && values[autoCol.Ordinal].Kind == NativeKind.Long)
             {
                 reseedAcceptedAuto = allowDownwardReseed
@@ -1006,6 +1119,20 @@ public sealed class EditFrame : IDisposable
             // set, EditMode and the buffer stay, and the ticket stays with the buffer, as after any failed Update.
             UnlockFootprint(footprint, held);
             return new UpdateOutcome(null, MutationOpen.Publication, physical.NotWritten);
+        }
+        if (allowDownwardReseedStmtLevel
+            && (reseedAcceptedAuto || _workspace.HasStatementDownwardReseed)
+            && physical.Change is { AllocatedGlobalMapPages.Count: > 0 })
+        {
+            if (_workspace.InStatementOwnLevel && s.AutoNumber is { } autoNewPage && assigned[autoNewPage.Ordinal] && _table.Counter is { } cNewPage)
+            {
+                _workspace.SaveExplicitCounterBefore(cNewPage, _counterBeforeAddNew);
+            }
+            UnlockFootprint(footprint, held);
+            return new UpdateOutcome(
+                null,
+                MutationOpen.AutoNumberReseed,
+                $"explicit AutoNumber value below counter taking a new data page on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
         }
         if (physical.Change is { } compiled && LockClosure(compiled, ref footprint, held) is { } refusedClosure)
         {
@@ -1045,6 +1172,10 @@ public sealed class EditFrame : IDisposable
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
+            if (_workspace.Depth > 0 && assigned[auto.Ordinal])
+            {
+                _workspace.SaveExplicitCounterBefore(counter, _counterBeforeAddNew);
+            }
             if (reseedAcceptedAuto)
             {
                 counter.Reseed(values[auto.Ordinal].Integer);
@@ -1089,6 +1220,10 @@ public sealed class EditFrame : IDisposable
     public UpdateOutcome RecordStatementConversionFailure(int aceErrorNumber)
     {
         MutationSemantics s = _table.Semantics;
+        if (s.AutoNumber is null && _table.Writer is not null && _workspace.Publisher is not null)
+        {
+            return new UpdateOutcome(null, MutationOpen.CounterWrite, $"conversion failure {aceErrorNumber} on {s.TableName} without an AutoNumber column is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+        }
         if (s.AutoNumber is not null && _table.Counter is { } preCounter && _table.Writer is { } preWriter && _workspace.Publisher is not null)
         {
             if (preCounter.Increment != 1)
@@ -2375,6 +2510,7 @@ public sealed class EditFrame : IDisposable
         _original = null;
         _originals = null;
         _conflictReported = false;
+        _counterBeforeAddNew = null;
         _autoNumberPersisted = false;
         ReleaseEditLock();
         Mode = EditMode.None;

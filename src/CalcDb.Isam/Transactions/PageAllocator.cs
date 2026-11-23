@@ -31,12 +31,31 @@ namespace CalcDb.Isam.Transactions;
 /// "Global-map growth and its own allocation"). Open (r-q16-overflow): whether ACE takes the lowest free page or the first
 /// free page of the session's extent (they coincide in every record), and a page freed earlier in the same session.
 /// </remarks>
-public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages)
+public sealed class PageAllocator
 {
+    private const string PendingRollbackExtentFailure =
+        "page 1 holds a pending rollback extent reservation before Close (qualified.md R-TXN-1 TXN-STMT Open)";
+
+    private readonly PageCache _cache;
+    private readonly FormatDescriptor _d;
+    private readonly bool _allowPendingRollbackExtent;
     private readonly HashSet<uint> _handedOut = [];
 
+    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages)
+        : this(cache, d, extentPages, allowPendingRollbackExtent: false)
+    {
+    }
+
+    internal PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, bool allowPendingRollbackExtent)
+    {
+        _cache = cache;
+        _d = d;
+        _allowPendingRollbackExtent = allowPendingRollbackExtent;
+        ExtentPages = Math.Max(extentPages, cache.KnownExtentPages);
+    }
+
     /// <summary>The file's extent in pages after the allocations so far.</summary>
-    public ulong ExtentPages { get; private set; } = Math.Max(extentPages, cache.KnownExtentPages);
+    public ulong ExtentPages { get; private set; }
 
     /// <summary>
     /// The file's extent in pages as seen through <paramref name="seen"/>: the maximum of <paramref name="baseExtent"/>,
@@ -67,15 +86,20 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     public uint? Allocate(PrivateOverlay? seen, out PageEdit mapEdit, out string? failure)
     {
         mapEdit = default;
-        ExtentPages = Math.Max(ExtentPages, ExtentOf(cache, ExtentPages, seen));
-        MapRules m = d.Map;
-        using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return null;
+        }
+        ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));
+        MapRules m = _d.Map;
+        using PagePin? pin = (seen is null ? _cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
         if (pin is null)
         {
             failure = $"the global map page {m.GlobalMapPage} could not be pinned";
             return null;
         }
-        if (MapPages.InlinePages(pin.Bytes, m.GlobalFreeSlot, d, out failure) is not { } free)
+        if (MapPages.InlinePages(pin.Bytes, m.GlobalFreeSlot, _d, out failure) is not { } free)
         {
             failure = "the global map: " + failure;
             return null;
@@ -101,7 +125,7 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
             failure = $"the lowest free page {page} is past the extent {ExtentPages}: pages in between would be neither free nor written";
             return null;
         }
-        if (!MapPages.TryInlineBit(pin.Bytes, m.GlobalFreeSlot, page, d, out int offset, out byte mask, out failure))
+        if (!MapPages.TryInlineBit(pin.Bytes, m.GlobalFreeSlot, page, _d, out int offset, out byte mask, out failure))
         {
             return null;
         }
@@ -118,14 +142,19 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     /// </summary>
     public PageEdit? Free(PrivateOverlay? seen, uint page, out string? failure)
     {
-        MapRules m = d.Map;
-        using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return null;
+        }
+        MapRules m = _d.Map;
+        using PagePin? pin = (seen is null ? _cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
         if (pin is null)
         {
             failure = $"the global map page {m.GlobalMapPage} could not be pinned";
             return null;
         }
-        if (!MapPages.TryInlineBit(pin.Bytes, m.GlobalFreeSlot, page, d, out int offset, out byte mask, out failure))
+        if (!MapPages.TryInlineBit(pin.Bytes, m.GlobalFreeSlot, page, _d, out int offset, out byte mask, out failure))
         {
             failure = "the global map: " + failure;
             return null;
@@ -147,15 +176,20 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     {
         firstFree = 0;
         globalMapImage = [];
-        ExtentPages = Math.Max(ExtentPages, ExtentOf(cache, ExtentPages, seen));
-        MapRules m = d.Map;
-        using PagePin? pin = (seen is null ? cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));
+        MapRules m = _d.Map;
+        using PagePin? pin = (seen is null ? _cache.Pin(m.GlobalMapPage) : seen.Pin(m.GlobalMapPage)).Pin;
         if (pin is null)
         {
             failure = $"the global map page {m.GlobalMapPage} could not be pinned";
             return false;
         }
-        if (MapPages.InlinePages(pin.Bytes, m.GlobalFreeSlot, d, out failure) is not { } free)
+        if (MapPages.InlinePages(pin.Bytes, m.GlobalFreeSlot, _d, out failure) is not { } free)
         {
             failure = "the global map: " + failure;
             return false;
@@ -184,6 +218,9 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     /// <summary>Number of pages allocated by this allocator so far.</summary>
     public int AllocatedCount => _handedOut.Count;
 
+    /// <summary>Pages allocated by this allocator so far.</summary>
+    public IReadOnlyCollection<uint> AllocatedPages => _handedOut;
+
     /// <summary>
     /// Reserve the unused tail of the session's 4-byte (32-page) global-map extent during an UPDATE that frees a chained
     /// long value, returning those reserved pages in <paramref name="reservedPages"/> so Database.Close restores their free
@@ -211,7 +248,12 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
     /// </summary>
     public bool TryReserveExtent(uint firstFreeBefore, ReadOnlySpan<byte> globalMapBefore, List<PageEdit> edits, List<uint> reservedPages, out string? failure)
     {
-        MapRules m = d.Map;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        MapRules m = _d.Map;
         uint rangeStart;
         uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
         if (_handedOut.Count > 0)
@@ -249,7 +291,7 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
         SortedDictionary<int, byte> clearByOffset = [];
         for (uint page = rangeStart; page < blockEnd; page++)
         {
-            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, d, out int offset, out byte mask, out failure))
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, _d, out int offset, out byte mask, out failure))
             {
                 failure = "the global map reservation: " + failure;
                 return false;
@@ -279,6 +321,125 @@ public sealed class PageAllocator(PageCache cache, FormatDescriptor d, ulong ext
         return true;
     }
 
+    /// <summary>
+    /// The three page-1 steps of a rolled-back ACCDB statement that took one or more new pages
+    /// (<c>evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live</c>, <c>noan-dup-twopages</c>): Group 1
+    /// clears the 4-byte (32-page) extent in page 1 (<see cref="ReserveEdits"/>, covering both
+    /// <see cref="AllocatedPages"/> and <see cref="UnusedExtentPages"/>), Group 2 frees the rolled-back allocated page
+    /// bit(s) (<see cref="FreeAllocatedEdits"/>), and Close returns the remaining unused extent pages
+    /// (<see cref="UnusedExtentPages"/>). Note: <c>noan-dup-twopages</c> and
+    /// <c>evidence/r-q27-autonumber-txn/ins-dup-fail-two-pages</c> record only the closed file after Close; the live
+    /// page-1 state between Group 2 and Close when two or more pages are allocated in one global-map byte is not
+    /// recorded and remains Open.
+    /// </summary>
+    internal sealed record RollbackExtentPlan(
+        List<PageEdit> ReserveEdits,
+        List<PageEdit> FreeAllocatedEdits,
+        List<uint> AllocatedPages,
+        List<uint> UnusedExtentPages);
+
+    /// <summary>
+    /// Plan the three page-1 steps for a rolled-back ACCDB statement that allocated <paramref name="allocatedPages"/>
+    /// from the committed global map (<c>evidence/r-q29-stmt-rollback-counters/noan-dup-row2-newpage-live</c>: page 50
+    /// allocated from <c>fc ff ff ff</c> at offset 4038; Group 1 clears 50..79 to <c>00 00 00 00</c>; Group 2 frees
+    /// page 50 to <c>04 00 00 00</c>; Close returns 51..79 to <c>fc ff ff ff</c>; closed-file multi-page match on
+    /// <c>noan-dup-twopages</c> and <c>ins-dup-fail-two-pages</c>, whose live page-1 state between Group 2 and Close is
+    /// not recorded). Refuses by name when free pages lie inside <see cref="ExtentPages"/>, when an allocated page
+    /// spills past <c>firstFreeBefore / 8</c>, or when a page past <see cref="ExtentPages"/> in the 4-byte block is
+    /// already cleared.
+    /// </summary>
+    internal bool TryPlanRollbackExtent(IReadOnlyCollection<uint> allocatedPages, out RollbackExtentPlan? plan, out string? failure)
+    {
+        plan = null;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        if (allocatedPages.Count == 0)
+        {
+            failure = "the rolled-back statement has no recorded global-map page numbers";
+            return false;
+        }
+        if (!TryCaptureGlobalFreeMap(seen: null, out uint firstFreeBefore, out byte[] globalMapBefore, out failure))
+        {
+            return false;
+        }
+        HashSet<uint> allocatedSet = [.. allocatedPages];
+        uint maxAllocated = 0;
+        foreach (uint page in allocatedSet)
+        {
+            if (page < firstFreeBefore)
+            {
+                failure = $"allocated page {page} precedes first free page {firstFreeBefore} in page 1";
+                return false;
+            }
+            if (page > maxAllocated)
+            {
+                maxAllocated = page;
+            }
+        }
+        if (maxAllocated / 8 != firstFreeBefore / 8)
+        {
+            failure = $"allocated page {maxAllocated} spills past first free page {firstFreeBefore}'s global-map byte ({firstFreeBefore / 8}): page-1 extent reservation across map bytes is not recorded";
+            return false;
+        }
+
+        MapRules m = _d.Map;
+        uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+        SortedDictionary<int, byte> reserveClearByOffset = [];
+        SortedDictionary<int, byte> freeAllocatedSetByOffset = [];
+        List<uint> plannedAllocatedPages = [];
+        List<uint> unusedExtentPages = [];
+        for (uint page = firstFreeBefore; page < blockEnd; page++)
+        {
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, _d, out int offset, out byte mask, out failure))
+            {
+                failure = "the global map reservation: " + failure;
+                return false;
+            }
+            bool wasFree = (globalMapBefore[offset] & mask) != 0;
+            if (!wasFree)
+            {
+                if (page >= ExtentPages)
+                {
+                    failure = $"page {page} past file extent {ExtentPages} is already cleared in page 1: a page-1 extent reservation is already active";
+                    return false;
+                }
+                continue;
+            }
+            reserveClearByOffset[offset] = (byte)(reserveClearByOffset.GetValueOrDefault(offset) | mask);
+            if (allocatedSet.Contains(page))
+            {
+                plannedAllocatedPages.Add(page);
+                freeAllocatedSetByOffset[offset] = (byte)(freeAllocatedSetByOffset.GetValueOrDefault(offset) | mask);
+            }
+            else
+            {
+                unusedExtentPages.Add(page);
+            }
+        }
+        if (freeAllocatedSetByOffset.Count == 0)
+        {
+            failure = "none of the rolled-back allocated pages were free in the committed global map";
+            return false;
+        }
+
+        List<PageEdit> reserveEdits = [];
+        foreach ((int offset, byte clearMask) in reserveClearByOffset)
+        {
+            reserveEdits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
+        }
+        List<PageEdit> freeAllocatedEdits = [];
+        foreach ((int offset, byte setMask) in freeAllocatedSetByOffset)
+        {
+            freeAllocatedEdits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, setMask, 0), PageRole.Map));
+        }
+        plan = new RollbackExtentPlan(reserveEdits, freeAllocatedEdits, plannedAllocatedPages, unusedExtentPages);
+        failure = null;
+        return true;
+    }
+
     /// <summary>The cache the allocator reads.</summary>
-    public PageCache File => cache;
+    public PageCache File => _cache;
 }

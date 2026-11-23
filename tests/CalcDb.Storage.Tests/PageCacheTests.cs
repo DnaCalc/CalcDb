@@ -262,4 +262,70 @@ public sealed class PageCacheTests
         Assert.Equal(0, cache.Counters.ScanFrames);
         Conservation.Settled(cache);
     }
+
+    [Fact]
+    public void Rollback_extent_ownership_tracks_active_and_abandoned_lockers()
+    {
+        var source = new ControlledSource();
+        var cache = new PageCache(source, fileIncarnation: 1, pageSize: PageSize, frameCount: 4);
+        var locker1 = new LockerId(1);
+        var locker2 = new LockerId(2);
+        var locker3 = new LockerId(3);
+
+        // Initial state: no pending extent.
+        Assert.False(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker1));
+
+        // Abandoning or unregistering an unknown locker is a no-op.
+        cache.AbandonRollbackExtentOwner(locker1);
+        cache.UnregisterRollbackExtentOwner(locker1);
+        Assert.False(cache.HasPendingRollbackExtent);
+
+        // Register locker1 (idempotent).
+        cache.RegisterRollbackExtentOwner(locker1);
+        cache.RegisterRollbackExtentOwner(locker1);
+        Assert.True(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker1));
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker2));
+
+        // Register locker2 alongside locker1.
+        cache.RegisterRollbackExtentOwner(locker2);
+        Assert.True(cache.HasPendingRollbackExtent);
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker1));
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker2));
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker3));
+
+        // Unregister locker1 leaves locker2 active.
+        cache.UnregisterRollbackExtentOwner(locker1);
+        Assert.True(cache.HasPendingRollbackExtent);
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker1));
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker2));
+
+        // Unregister locker2 clears the cache.
+        cache.UnregisterRollbackExtentOwner(locker2);
+        Assert.False(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker1));
+
+        // Abandoning an active owner keeps the pending extent visible to other lockers while letting the owner finish
+        // its own closing commit and unregister.
+        cache.RegisterRollbackExtentOwner(locker1);
+        cache.AbandonRollbackExtentOwner(locker1);
+        Assert.True(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker1));
+        Assert.True(cache.HasOtherRollbackExtentOwner(locker2));
+
+        // Re-registering an abandoned owner promotes it cleanly, and unregistering clears it completely.
+        cache.RegisterRollbackExtentOwner(locker1);
+        cache.UnregisterRollbackExtentOwner(locker1);
+        Assert.False(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker2));
+
+        // Direct unregister after abandon also clears the cache.
+        cache.RegisterRollbackExtentOwner(locker2);
+        cache.AbandonRollbackExtentOwner(locker2);
+        Assert.True(cache.HasPendingRollbackExtent);
+        cache.UnregisterRollbackExtentOwner(locker2);
+        Assert.False(cache.HasPendingRollbackExtent);
+        Assert.False(cache.HasOtherRollbackExtentOwner(locker1));
+    }
 }
