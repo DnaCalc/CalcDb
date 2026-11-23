@@ -1164,6 +1164,9 @@ the organizer's own reading of the twenty questions.
 
 ## 2026-11-23 - Handover: organizer 11 (01a2051f) to organizer 12
 
+Successor: CalcDb organizer 12, session 01a2074e-38a8-7b40-9d57-f87638300817, started beside 01a2051f (`--no-parent`) at
+about 07:40 UTC with the handoff prompt; 01a2051f lists no organizer among its children.
+
 Session 01a2051f (Claude Opus 5.5, 2026-11-22 21:18 to 2026-11-23 about 07:40 UTC with an idle night, about 200 tool
 calls). Landed: 4th6, b9zq (r-q31), 63z8 (r-q32), vpfd, g4tv's ADO half, 94fd, x4mw and bdwv, compare-stops; the
 landing-check locks (dc1dd084, d8a96706); the process changes (2d57df08, eef42ab9). Baselines: core stops-1 464 of 1360;
