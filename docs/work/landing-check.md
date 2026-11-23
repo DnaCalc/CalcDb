@@ -12,7 +12,8 @@ persistent check worktree and gave code writers worktrees of their own.
 2. **Brief.** The projects or files the child owns, its build limits, the book rows, the records it relies on, and
    whether it starts a roscli daemon (a writer that refactors or traces code across projects does; a prober or a
    one-file fix does not: AGENTS.md, C# navigation and edits).
-3. **Write.** In the child's own CodeAlta worktree (`alta session create --worktree`, branch `alta/<name>`). The child
+3. **Write.** A code writer in a writer slot (`CalcDb-w1`, `CalcDb-w2`; AGENTS.md, Repository), a prober in a CodeAlta
+   worktree of its own (`alta session create --worktree`), each on a branch `alta/<name>`. The child
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
    `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
 4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
@@ -111,7 +112,8 @@ refused with `-Snapshot`: the run that lands is unfiltered.
 integration checkout and `git push`. With `-Land` it runs them itself, and with `-Compare` it then runs the core compare
 from the snapshot once the check worktree is free, so one job checks, lands and compares and its result is the
 compare's verdicts. If master moved meanwhile, the fast-forward refuses and the check runs again. Once
-the child's session has ended, remove its worktree (`git worktree remove`) and delete its branch (`git branch -d`). For
+the child's session has ended, return a writer slot to master (`git -C <slot> switch --detach master`) or remove a
+prober's worktree (`git worktree remove`), and delete the branch (`git branch -d`). For
 a file list, commit exactly those files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and
 push. When two children in the integration checkout edited one file, stage only the landing child's hunks (a copy of
 the file, `git hash-object -w`, `git update-index --cacheinfo`) and check the staged diff. Then update the register row,

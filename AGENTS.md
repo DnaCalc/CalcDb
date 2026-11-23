@@ -25,10 +25,14 @@ scope or design, the book wins.
 
 - The integration checkout stays on master: `git pull --no-rebase`, commit, push. No rebase, force push or
   `reset --hard` there.
-- Two kinds of worktree sit beside it. The check worktree (`CalcDb-check`, detached) is used only by
-  [tools/landing-check.ps1](tools/landing-check.ps1). A writer or prober works in a CodeAlta worktree of its own
-  (`alta session create --worktree`, branch `alta/<name>`) and commits there; the organizer lands it by a merge,
-  never a rebase, then removes the worktree and deletes the branch (`git branch -d`). Branches are not pushed.
+- Three kinds of worktree sit beside it (owner, 2026-11-24). The check worktree (`CalcDb-check`, detached) is used
+  only by [tools/landing-check.ps1](tools/landing-check.ps1). Two writer slots, `CalcDb-w1` and `CalcDb-w2`, are
+  persistent worktrees that keep their `bin`, `obj` and `artifacts` between tasks, so a code writer starts warm instead
+  of with a cold build and NativeAOT publish: the organizer switches a free, clean slot to a new branch (`git -C <slot>
+  switch -c alta/<topic> master`) and creates the writer there (`alta session create --worktree-path <slot>`); after
+  the landing, `git -C <slot> switch --detach master` and `git branch -d alta/<topic>`. A prober works in a CodeAlta
+  worktree of its own (`alta session create --worktree`, branch `alta/<name>`), removed after its landing. Each child
+  commits on its branch; the organizer lands it by a merge, never a rebase. Branches are not pushed.
 - Only the organizer edits the bookkeeping files: [register.md](docs/work/register.md), `qualified.md`,
   `qualification-report.md`, `book-proposals.md`, `compare-baseline*.tsv` and the process log. A child gives the
   lines it would add in its report.
