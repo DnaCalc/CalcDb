@@ -1148,6 +1148,81 @@ is summarised in [qualification-report.md](qualification-report.md).
   - Several-column, compound, function and subquery CHECKs.
   - A TableDef validation rule or a 3022 against a CHECK.
 
+### R-CAT-1, R-FMT-2 DDL-SWEEP-1 (W-07, task zw4d): Memo/OLE with an inline constraint, CREATE INDEX on indexed or populated tables, COUNTER PK, NOT NULL, Jet 4 MDB
+- **Claim**: one DDL statement in a session of its own, pages kept before and after. DAO and ADO write the same bytes
+  outside the clock fields, and Jet 4 MDB writes the same TDEF and usage-map bytes as ACCDB modulo page numbers. By form:
+  - *Memo or OLE column with an inline constraint* (`CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10),
+    M MEMO)`): the table's usage-map page gives the constraint indexes their slots first (slot 2 the PK, then a unique
+    index), then each long-value column a pair of rows (owned, free) in column order (slots 3 and 4 for one Memo after
+    one PK). The TDEF ends with a 10-byte entry per long-value column, `(u16 column number, u32 owned map pointer, u32
+    free map pointer)`, between the logical index names and `FF FF` (`02 00 | 03 2b 00 00 | 04 2b 00 00`).
+  - *CREATE INDEX on a table with indexes or rows*: physical indexes and their 12-byte stats blocks stay in creation
+    order; the logical index entries and names are sorted by name (`ixDesc, ixDis, ixIgn, ixMulti, ixPK, ixU`; `IX_K`
+    before `PK`). An index built over existing rows writes the stats `(entries, distinct keys, 0)`: `(3, 2, 0)` for keys
+    10, 10, 20, and `(2, 2, 0)` for `WITH IGNORE NULL` over `'x', Null, 'z'`; a PK filled by INSERTs keeps `(0, 3, 0)`.
+    Physical index flags: PK `0x89`, unique `0x81`, plain `0x80`, `IGNORE NULL` `0x82`, `DISALLOW NULL` `0x88`; a `DESC`
+    column has column flag `0x00`, an ascending one `0x01`. In the catalog only the table's MSysObjects `DateUpdate`
+    changes (page 17); MSysACEs, the MSysObjects indexes and MSysRelationships do not.
+  - *CREATE UNIQUE INDEX on a table with a PK*: a new physical index (`0x81`, the next map slot, one new root page), the
+    columns and names shifted 12 bytes down for its stats block (`(0, 0, 0)` empty, `(3, 3, 0)` over 3 unique rows), a
+    logical entry inserted in name order. The page-0 commit counter rises by 2 in a session of its own and by 1 for each
+    further statement in the same session.
+  - *COUNTER PRIMARY KEY*: column flags `0x07`, the TDEF AutoNumber word 1, PK `0x89` with logical index type `0x01`, no
+    LvProp.
+  - *NOT NULL*: the TDEF column flags keep CanBeNull (`0x03` Long, `0x02` Text and Memo); `Required` True goes into the
+    MSysObjects LvProp only. One NOT NULL column (Long, Text(50), Memo, or Text(50) beside a PK) gives a 51-byte inline
+    blob with no AllowZeroLength and no entry for the PK column. Two NOT NULL columns (`A LONG NOT NULL, B TEXT(50) NOT
+    NULL`) give 74 bytes, over the 64-byte inline limit: the blob goes to a new LVAL page (44 in ACCDB, 21 in MDB), page
+    6 (the LvProp usage map) changes 2 bytes, and page 17 keeps a vacated copy of the row's first form.
+  - *Jet 4 MDB catalog*: MSysACEs data on page 18 (ACCDB 41); the page-1 map byte at 4034 (ACCDB 4037); the commit
+    counter at page 0 offset 3586. `CREATE TABLE T (n LONG)` leaves MDB pages 4 to 6, 9 and 11 to 16 unchanged.
+- **Conditions**: copies of r-cat-1-accdb-empty and r-cat-1-mdb-empty; DAO.DBEngine.120 and ADODB.Connection with
+  Microsoft.ACE.OLEDB.12.0; setup in one session, the statement asked in the next; every page kept after setup and after
+  the DDL.
+- **Records**: `evidence/r-q34-ddl-sweep/`, 53 questions, 70 attempts (17 asked twice, equal outside the clock fields):
+  lval-pk-* (8), ix-cat1b-* (4: the six-index chain, also in one session), ix-nonuq-rows-* (5), uqix-* (11), pk-counter-*
+  (7), pk-long-mdb-dao, create-one-long-mdb-* (2), nn-* (15). The organizer read the stats, the flags, the name order
+  and the long-value trailer in ix-nonuq-rows-nopk-accdb-dao, ix-nonuq-rows-withpk-accdb-dao, ix-cat1b-chain-accdb-dao
+  and lval-pk-memo-accdb-dao, and the page-6 and LVAL changes in nn-two-cols-accdb-dao and -mdb-dao against nn-text-accdb-dao.
+- **Open**: an index over rows that need more than one leaf page; the LVAL page's own layout for an LvProp blob. The
+  constraint forms are in the next note.
+
+### R-CAT-1, R-FMT-2 DDL-SWEEP-2 (W-07, task zw4d): FOREIGN KEY and ON DELETE CASCADE, ALTER TABLE ADD CONSTRAINT CHECK, UNIQUE, ALTER TABLE ADD CONSTRAINT UNIQUE, PRIMARY KEY and FOREIGN KEY
+- **Claim**: conditions as in DDL-SWEEP-1. Where DAO and ADO both accept a statement they write the same bytes outside
+  the clock fields, and Jet 4 MDB matches ACCDB modulo page numbers.
+  - *FOREIGN KEY, inline (`K LONG CONSTRAINT FK_T_P REFERENCES P(ID)`) or table-level, one or two columns*: the parent's
+    TDEF changes. Its logical index count rises by one (the physical count stays), with a hidden logical index `.rB`
+    (type `0x02`, relationship flag `0x01`, the child's TDEF page and index number) placed before the parent's PK
+    (`.rB`, `PKP`), and the parent's MSysObjects `DateUpdate` changes. The catalog gains an MSysObjects row of Type 8
+    (Id `0x80000000`, ParentId `0x0F000003`, Flags 0), two MSysACEs rows for it, and one MSysRelationships row per key
+    column (`ccolumn`, `icolumn`). The MSysRelationships data page is allocated before the child's FK root page. In the
+    child, the FK index (logical type `0x02`, physical flags `0x80`) sorts by name before the PK.
+  - *ON DELETE CASCADE*: DAO refuses it with 3289 and changes nothing; ADO accepts it, with 3 bytes differing from the
+    plain FK: byte 22 of the parent's `.rB` and of the child's FK entry (`00` to `01`), and MSysRelationships `grbit`
+    `0x00001000`.
+  - *ALTER TABLE ADD CONSTRAINT CHECK*: DAO refuses it with 3289 and changes nothing (alt-check-empty-accdb-dao: the file
+    is unchanged). ADO accepts it. The table's TDEF and MSysACEs are untouched. MSysObjects gains a Type 9 row (Id
+    `0x80000000`, then `0x80000001` for a second CHECK; ParentId `0x0F000003`; Flags `0x10000000`; ForeignName the table
+    and column, Connect the expression, compressed UTF-16). The table's own MSysObjects row gets its `DateUpdate` and an
+    LvProp on a new LVAL page (page 6 changes): MR2, the table property `CheckConstraints` (type `0x0C`) holding
+    NUL-separated UTF-16 (name, expression) pairs, `CK_V\0V >= 0\0\0`. A second CHECK writes both pairs into slot 1 of
+    the same LVAL page, marks slot 0 deleted (`0xd000`) and allocates no page. Empty and populated tables give the same
+    catalog changes.
+  - *UNIQUE in CREATE TABLE, column or table-level*: physical flags `0x81`, logical type `0x00`, flags `04 04`, as
+    CREATE UNIQUE INDEX writes.
+  - *ALTER TABLE ADD CONSTRAINT UNIQUE and PRIMARY KEY* (PK `0x89`, logical type `0x01`): the CREATE INDEX rules of
+    DDL-SWEEP-1, `(0, 0, 0)` on an empty table and `(3, 3, 0)` over 3 rows; only the table's `DateUpdate` changes in the
+    catalog.
+  - *ALTER TABLE ADD CONSTRAINT FOREIGN KEY*: the same structures as the inline FK (alt-fk-empty and fk-inline differ in
+    the page-0 commit counter and the clock fields only); over 2 child rows the FK stats are `(2, 2, 0)`.
+- **Records**: `evidence/r-q34-ddl-sweep/`, 34 questions, 50 attempts (16 asked twice, equal outside the clock fields):
+  fk-* (11), alt-check-* (6), uq-* (4), alt-uq-* (5), alt-pk-* (5), alt-fk-* (3). The organizer read the parent's `.rB`
+  and the changed pages in fk-inline-accdb-dao, the untouched TDEF and MSysACEs in alt-check-empty-accdb-ado, the
+  unchanged file of alt-check-empty-accdb-dao and the second CHECK's pages in alt-check-two-accdb-ado.
+- **Open**: ON UPDATE CASCADE and SET NULL; a parent with several FKs or a self-reference (the names after `.rB`); a
+  CHECK on a table whose LvProp already holds column properties (NOT NULL); CHECK inside CREATE TABLE; DROP CONSTRAINT,
+  DROP INDEX, ALTER COLUMN.
+
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
 - **Records**: evidence/r-txn-1/nest-inner-rollback/ (+ -mdb), nest-middle-rollback-after-inner-commit/, nest-outer-rollback-after-inner-commits/, nest-same-row-all-levels/, nest-empty-levels/, nest-resolve-without-level/, nest-late-file-b/; evidence/r-txn-1b/nest-depth-reuse-after-commit/, nest-depth-second-workspace/, nest-depth-recordset-writes/ (+ -mdb), commit-option-values/, commit-option-vartypes/, txn-call-argument-counts/; evidence/r-fix-cat-txn/nest-depth-recordset-writes-fresh-witness/.
