@@ -45,8 +45,9 @@ public enum NewFieldType : byte
 
 /// <summary>
 /// A field of a new table (II-11 §28 field descriptor; DAO CreateField): its name, type, optional size
-/// (characters for Text; bytes for Binary/VarBinary), optional Counter <c>(Seed, Increment)</c>, and Decimal
-/// <c>(Precision, Scale)</c>.
+/// (characters for Text; bytes for Binary/VarBinary), optional Counter <c>(Seed, Increment)</c>, Decimal
+/// <c>(Precision, Scale)</c>, and <c>Required</c> (<c>NOT NULL</c> on SQL/ADO: evidence/r-q15-ddl-open/lv-sql-notnull-*,
+/// evidence/r-q34-ddl-sweep/nn-*).
 /// </summary>
 public sealed record NewField(
     string Name,
@@ -55,7 +56,8 @@ public sealed record NewField(
     int? Seed = null,
     int? Increment = null,
     byte Precision = 0,
-    byte Scale = 0);
+    byte Scale = 0,
+    bool Required = false);
 
 /// <summary>
 /// An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, its option flags
@@ -165,8 +167,8 @@ public sealed class SchemaWriter
     private const byte AscendingColumnFlags = 0x01;
     private const byte DescendingColumnFlags = 0x00;
 
-    /// <summary>Maximum LVAL columns whose 2 empty 69-byte maps plus the table's 2 maps fit on one 4096-byte map page (2 + 2*27 = 56 &lt;= 57).</summary>
-    private const int MaxSinglePageLvalColumns = 27;
+    /// <summary>Maximum 69-byte inline usage maps that fit on one 4096-byte map page (57 * 71 = 4047 &lt;= 4082).</summary>
+    private const int MaxSinglePageMaps = 57;
 
     /// <summary>
     /// Remaining-free-space band matching <see cref="SameWidthWriter"/> / <c>RowWriter</c> (R-FMT-2 "LV form selection
@@ -183,6 +185,12 @@ public sealed class SchemaWriter
     /// map (evidence/r-q11-ddl-closure/append-dao: the 51-byte MR2 blob in LvProp).
     /// </summary>
     private static readonly StoredProperty DaoFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x00]);
+
+    /// <summary>
+    /// The one property a SQL/ADO <c>NOT NULL</c> column stores: <c>Required</c> True, with the DDL flag 01, in the
+    /// column's map (evidence/r-q15-ddl-open/lv-sql-notnull-*, evidence/r-q34-ddl-sweep/nn-*).
+    /// </summary>
+    private static readonly StoredProperty SqlFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x01]);
 
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
@@ -219,7 +227,7 @@ public sealed class SchemaWriter
     /// </summary>
     public SchemaRefusal? Check(CreateTableRequest request)
     {
-        if (FileRefusal() is { } file)
+        if (FileRefusal(allowJet4Mdb: request.Route is SchemaRoute.Sql or SchemaRoute.Ado) is { } file)
         {
             return file;
         }
@@ -258,6 +266,7 @@ public sealed class SchemaWriter
         int counterCount = 0;
         int lvalCount = 0;
         int fixedBytes = 0;
+        List<NewField> requiredFields = [];
         foreach (NewField f in request.Fields)
         {
             if (request.Route == SchemaRoute.Dao && f.Type != NewFieldType.Long)
@@ -265,6 +274,18 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, f.Type == NewFieldType.Text
                     ? $"DAO-appended Text field {f.Name}: recorded (r-q26 dao-ba-text, dao-bca-mixed, dao-fixed-var-ba, dao-var-fixed-ba: TypeInfo 09 04 00 00, two properties per Text column), not yet implemented"
                     : $"DAO-appended {f.Type} field {f.Name}: the DAO route writes only Long fields (r-q11 append-dao, r-q15 lv-dao-*, r-q26 dao-*-long)");
+            }
+            if (f.Required)
+            {
+                if (request.Route == SchemaRoute.Dao)
+                {
+                    return new SchemaRefusal(null, $"DAO-appended field {f.Name} with Required=True is not recorded (DAO route records Required=False)");
+                }
+                if (f.Type is not (NewFieldType.Long or NewFieldType.Text or NewFieldType.Memo))
+                {
+                    return new SchemaRefusal(null, $"NOT NULL on {f.Type} field {f.Name} is not recorded (evidence/r-q34-ddl-sweep/nn-* records Long, Text, Memo)");
+                }
+                requiredFields.Add(f);
             }
             switch (f.Type)
             {
@@ -350,60 +371,118 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"fixed column bytes ({fixedBytes}) exceed 16-bit FixedOffset range");
         }
-        if (lvalCount > MaxSinglePageLvalColumns)
+        int totalMapRows = 2 + request.AllIndexes.Count + (lvalCount * 2);
+        if (totalMapRows > MaxSinglePageMaps)
         {
-            return new SchemaRefusal(null, $"{lvalCount} LVAL columns exceed single-page map capacity ({MaxSinglePageLvalColumns})");
-        }
-        if (request.Route == SchemaRoute.Dao && CheckDaoLvPropPlan(request) is { } daoLvRefusal)
-        {
-            return daoLvRefusal;
+            return new SchemaRefusal(null, $"{totalMapRows} usage-map rows ({request.AllIndexes.Count} index(es) and {lvalCount} LVAL column(s)) exceed single-page map capacity ({MaxSinglePageMaps})");
         }
         if (request.AllIndexes.Count > 0)
         {
-            if (lvalCount > 0)
+            if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado) || request.AllIndexes.Count > 2)
             {
-                return new SchemaRefusal(null, "CREATE TABLE with both a long-value column (Memo/OLE) and an inline index/PRIMARY KEY (map-row order on page 43 is not recorded: r-q21-ddl-types Open)");
+                return new SchemaRefusal(null, "CREATE TABLE with indexes other than one SQL/ADO PRIMARY KEY (optionally followed by one inline UNIQUE on Text) is not recorded (r-q11 create-primary-key, r-q34-ddl-sweep)");
             }
+            (string Name, byte TypeCode)[] fieldTypes = [.. request.Fields.Select(f => (f.Name, NativeTypeOf(f.Type)))];
+            string[] fieldNames = [.. request.Fields.Select(f => f.Name)];
             NewIndex pk = request.AllIndexes[0];
-            if (request.Route != SchemaRoute.Sql || request.AllIndexes.Count > 1 || !pk.PrimaryKey || pk.Unique || pk.DisallowNull || pk.IgnoreNull
+            if (!pk.PrimaryKey || pk.Unique || pk.DisallowNull || pk.IgnoreNull
                 || pk.Fields.Count != 1 || (pk.Descending is not null && pk.Descending.Any(d => d)))
             {
-                return new SchemaRefusal(null, "CREATE TABLE with indexes other than one SQL PRIMARY KEY constraint on one ascending Long column (r-q11 create-primary-key)");
+                return new SchemaRefusal(null, "CREATE TABLE with first index other than one SQL/ADO PRIMARY KEY constraint on one ascending Long or Counter column (r-q11 create-primary-key, r-q34-ddl-sweep/pk-*)");
             }
-            if (IndexRefusal(pk, [.. request.Fields.Select(f => (f.Name, NativeTypeOf(f.Type)))], allowText: false) is { } refused)
+            if (IndexRefusal(pk, fieldTypes, allowText: false) is { } pkRefused)
             {
-                return refused;
+                return pkRefused;
             }
+            if (!TryMatchFieldName(pk.Fields[0], fieldNames, out int pkIdx, out string? pkUndecided) || pkIdx < 0)
+            {
+                return new SchemaRefusal(null, pkUndecided ?? $"index {pk.Name} names field {pk.Fields[0]}, which the table does not have once");
+            }
+            if (request.Fields[pkIdx].Required)
+            {
+                return new SchemaRefusal(null, $"NOT NULL on primary key column {request.Fields[pkIdx].Name} is not recorded (evidence/r-q34-ddl-sweep)");
+            }
+            if (request.AllIndexes.Count == 2)
+            {
+                NewIndex uq = request.AllIndexes[1];
+                if (uq.PrimaryKey || !uq.Unique || uq.DisallowNull || uq.IgnoreNull
+                    || uq.Fields.Count != 1 || (uq.Descending is not null && uq.Descending.Any(d => d)))
+                {
+                    return new SchemaRefusal(null, "CREATE TABLE with a second index other than one inline UNIQUE constraint on one ascending Text column after PRIMARY KEY is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-*)");
+                }
+                if (IndexRefusal(uq, fieldTypes, allowText: true) is { } uqRefused)
+                {
+                    return uqRefused;
+                }
+                if (!TryMatchFieldName(uq.Fields[0], fieldNames, out int uqIdx, out string? uqUndecided) || uqIdx < 0)
+                {
+                    return new SchemaRefusal(null, uqUndecided ?? $"index {uq.Name} names field {uq.Fields[0]}, which the table does not have once");
+                }
+                if (request.Fields[uqIdx].Type != NewFieldType.Text || uqIdx <= pkIdx)
+                {
+                    return new SchemaRefusal(null, $"CREATE TABLE inline UNIQUE index {uq.Name} on {request.Fields[uqIdx].Type} field {request.Fields[uqIdx].Name}: only a Text column declared after PRIMARY KEY is recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-*)");
+                }
+                if (request.Fields[uqIdx].Required)
+                {
+                    return new SchemaRefusal(null, $"NOT NULL on UNIQUE column {request.Fields[uqIdx].Name} is not recorded (evidence/r-q34-ddl-sweep)");
+                }
+                switch (FieldNameLookupClashOf(pk.Name, uq.Name, _sortOrder, out string? idxNameUndecided))
+                {
+                    case FieldNameClash.Duplicate:
+                        return new SchemaRefusal(null, $"CREATE TABLE index {uq.Name} clashes with index {pk.Name}: duplicate constraint names in CREATE TABLE are not recorded");
+                    case FieldNameClash.Undecided:
+                        return new SchemaRefusal(null, idxNameUndecided);
+                }
+            }
+        }
+        if (request.Route == SchemaRoute.Dao
+            && CheckLvPropPlan(request, request.Fields, DaoFieldRequired, allowMultiLvalPage: true) is { } daoLvRefusal)
+        {
+            return daoLvRefusal;
+        }
+        if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado
+            && requiredFields.Count > 0
+            && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalPage: false) is { } sqlLvRefusal)
+        {
+            return sqlLvRefusal;
         }
         return null;
     }
 
     /// <summary>
-    /// Pre-commit validation for DAO <c>TableDefs.Append</c> per-field <c>LvProp</c> commits (so no write is ever
-    /// published and then refused): simulates every commit <c>1..N</c> before Commit 1 and refuses by name:
+    /// Pre-commit validation for per-field <c>LvProp</c> updates (DAO <c>TableDefs.Append</c> commits <c>1..N</c>, and
+    /// SQL/ADO <c>CREATE TABLE ... NOT NULL</c> steps <c>1..R</c> inside its single commit) so no write is ever
+    /// published and then refused: simulates every step <c>1..M</c> before writing and refuses by name:
     /// <list type="bullet">
     /// <item>a blob exceeding <see cref="LongValuePlan.SingleRowPayloadMax"/> (3,816 bytes; chained LvProp),</item>
+    /// <item>multiple LVAL pages when <paramref name="allowMultiLvalPage"/> is false (SQL/ADO single-commit LVAL page
+    /// retirement is not recorded),</item>
     /// <item>a non-empty <c>MSysObjects.LvProp</c> free map (another table already uses an LvProp LVAL page),</item>
-    /// <item>an LVAL page whose remaining free space after a commit falls in <c>179..263</c> (the band <c>RowWriter</c>
+    /// <item>an LVAL page whose remaining free space after a step falls in <c>179..263</c> (the band <c>RowWriter</c>
     /// refuses) or <c>&lt;= 178</c> (leaving <c>MSysObjects.LvProp</c>'s free map is not recorded), and</item>
     /// <item>a worst-case allocation reaching page <see cref="InlineMapPageLimit"/> (512, inline usage-map limit).</item>
     /// </list>
     /// </summary>
-    private SchemaRefusal? CheckDaoLvPropPlan(CreateTableRequest request)
+    private SchemaRefusal? CheckLvPropPlan(
+        CreateTableRequest request,
+        IReadOnlyList<NewField> propFields,
+        StoredProperty property,
+        bool allowMultiLvalPage)
     {
-        PropertyMap[] allMaps = [.. request.Fields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [DaoFieldRequired]))];
+        PropertyMap[] allMaps = [.. propFields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [property]))];
         int pageDataCapacity = _d.PageSize - _d.DataPage.SlotBase;
         bool hasLval = false;
         int lvalFree = 0;
         int lvalSlots = 0;
         int lvalPagesNeeded = 0;
+        string routeLabel = request.Route == SchemaRoute.Dao ? "DAO TableDefs.Append" : $"{request.Route} CREATE TABLE NOT NULL";
 
         for (int k = 1; k <= allMaps.Length; k++)
         {
             int blobBytes = PropertyBlob.Encode(allMaps[..k]).Length;
             if (blobBytes > LongValuePlan.SingleRowPayloadMax)
             {
-                return new SchemaRefusal(null, $"DAO table property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
+                return new SchemaRefusal(null, $"{routeLabel} property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
             }
             if (blobBytes <= LongValuePlan.InlinePayloadMax)
             {
@@ -417,6 +496,10 @@ public sealed class SchemaWriter
             if (!hasLval || lvalFree < needed || lvalSlots >= _d.DataPage.WriterSlotLimit)
             {
                 lvalPagesNeeded++;
+                if (!allowMultiLvalPage && lvalPagesNeeded > 1)
+                {
+                    return new SchemaRefusal(null, $"{routeLabel} would require more than one MSysObjects.LvProp LVAL page (retiring a newly allocated LVAL page inside one SQL/ADO commit is not recorded)");
+                }
                 hasLval = true;
                 lvalSlots = 1;
                 lvalFree = pageDataCapacity - needed;
@@ -430,11 +513,11 @@ public sealed class SchemaWriter
             }
             if (lvalFree <= LvalFreeMapLeavesAtOrBelow)
             {
-                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({request.Fields[k - 1].Name}) would keep {lvalFree} free bytes (<= {LvalFreeMapLeavesAtOrBelow}): leaving MSysObjects.LvProp's free map is not recorded");
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({propFields[k - 1].Name}) would keep {lvalFree} free bytes (<= {LvalFreeMapLeavesAtOrBelow}): leaving MSysObjects.LvProp's free map is not recorded");
             }
             if (lvalFree < LvalFreeMapStaysAtOrAbove)
             {
-                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({request.Fields[k - 1].Name}) would keep {lvalFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection Open)");
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({propFields[k - 1].Name}) would keep {lvalFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection Open)");
             }
         }
 
@@ -460,10 +543,10 @@ public sealed class SchemaWriter
             return new SchemaRefusal(null, $"MSysObjects.LvProp free map already holds {freePages.Count} page(s) ({string.Join(", ", freePages)}): sharing an MSysObjects.LvProp LVAL page with another table is not recorded");
         }
 
-        // Worst-case allocation check before Commit 1: Commit 1 takes TableDef + map page (2 pages) and Commits 2..N+1
-        // take lvalPagesNeeded LVAL pages (retired pages stay unreleased in page 1 until Close). Refuse if any
+        // Worst-case allocation check before writing: TableDef + map page + index leaves (2 + AllIndexes.Count pages)
+        // plus lvalPagesNeeded LVAL pages (retired pages stay unreleased in page 1 until Close). Refuse if any
         // allocated page would reach InlineMapPageLimit (512) or fall outside MSysObjects.LvProp's inline maps.
-        int totalPagesNeeded = 2 + lvalPagesNeeded;
+        int totalPagesNeeded = 2 + request.AllIndexes.Count + lvalPagesNeeded;
         byte[]? page1 = PinCopy(_d.Map.GlobalMapPage);
         if (page1 is null)
         {
@@ -475,12 +558,12 @@ public sealed class SchemaWriter
         }
         if (globalFree.Count < totalPagesNeeded)
         {
-            return new SchemaRefusal(null, $"the global map's inline window has fewer than {totalPagesNeeded} free pages left for DAO TableDefs.Append");
+            return new SchemaRefusal(null, $"the global map's inline window has fewer than {totalPagesNeeded} free pages left for {routeLabel}");
         }
         uint maxPage = globalFree[totalPagesNeeded - 1];
         if (maxPage >= InlineMapPageLimit)
         {
-            return new SchemaRefusal(null, $"DAO TableDefs.Append worst-case allocation reaches page {maxPage} (>= {InlineMapPageLimit}): MSysObjects.LvProp inline map only covers pages < {InlineMapPageLimit}");
+            return new SchemaRefusal(null, $"{routeLabel} worst-case allocation reaches page {maxPage} (>= {InlineMapPageLimit}): MSysObjects.LvProp inline map only covers pages < {InlineMapPageLimit}");
         }
         byte[]? ownedMapPage = PinCopy(lvMaps.OwnedMap.Page);
         byte[]? freeMapPage = lvMaps.FreeMap.Page == lvMaps.OwnedMap.Page ? ownedMapPage : PinCopy(lvMaps.FreeMap.Page);
@@ -550,13 +633,19 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "DAO TableDefs.Append inside BeginTrans: how its per-field commits join the level is not recorded (task 4nfc)"), default, _pageCount);
         }
+        bool isJet4Mdb = IsJet4Mdb(PinCopy(0) ?? []);
+        if (isJet4Mdb && workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE in a Jet 4 MDB inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/*-mdb-* run outside BeginTrans)"), default, _pageCount);
+        }
         ulong extent = _pageCount;
         RowId objectRow = default;
         ulong initialUpdateBits = request.Route == SchemaRoute.Dao ? dateCreateBits : dateUpdateBits;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, request, dateCreateBits, initialUpdateBits, initialLvProp: null, out _, out _, out objectRow, out _, out extent));
+            p => CompileCreateTable(p, request, dateCreateBits, initialUpdateBits, initialLvProp: null, out _, out _, out objectRow, out _, out extent),
+            allowJet4Mdb: isJet4Mdb);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -610,6 +699,13 @@ public sealed class SchemaWriter
     /// </summary>
     private SchemaOutcome CreateTableSqlAdoDuplicateRollback(TransactionCoordinator workspace, SchemaRefusal refused)
     {
+        if (IsJet4Mdb(PinCopy(0) ?? []))
+        {
+            return new SchemaOutcome(
+                new SchemaRefusal(null, "SQL/ADO CREATE TABLE with duplicate field in a Jet 4 MDB: page-0 and catalog-count writes are not recorded (evidence/r-q28-schema-write-open/pair-sql-*, pair-ado-* are ACCDB only)"),
+                default,
+                _pageCount);
+        }
         if (workspace.Depth > 0)
         {
             return new SchemaOutcome(
@@ -817,14 +913,14 @@ public sealed class SchemaWriter
         byte[] tdef = new byte[_d.PageSize];
         TableDefEncoder.Encode(tdef, spec, _d);
         byte[] map = new byte[_d.PageSize];
-        // Map page rows: 0 = table owned, 1 = table free, then 2 empty maps per LVAL column (r-q21 col-memo,
-        // col-two-memos, col-longbinary, col-oleobject) or 1 map per inline index (r-q11 create-primary-key).
+        // Map page rows: 0 = table owned, 1 = table free, then 1 map per inline index (r-q11 create-primary-key,
+        // r-q34-ddl-sweep/lval-pk-*), then 2 empty maps per LVAL column (r-q21 col-memo/ole, r-q34-ddl-sweep/lval-pk-*).
         uint[][] mapRows =
         [
             [],
             [],
-            .. Enumerable.Repeat<uint[]>([], spec.LvalColumnMaps.Count * 2),
             .. leaves.Select(l => new[] { l }),
+            .. Enumerable.Repeat<uint[]>([], spec.LvalColumnMaps.Count * 2),
         ];
         MapPages.Initialize(map, mapRows, _d);
         if (!work.Apply(new PageEdit(tdefPage, new WholePage(tdef), PageRole.Catalog)) || !work.Apply(new PageEdit(mapPage, new WholePage(map), PageRole.Map))
@@ -876,8 +972,20 @@ public sealed class SchemaWriter
             }
             aceRows.Add(aceRow);
         }
-        extent = PageAllocator.ExtentOf(_cache, extent, p.Overlay);
-        return work.Change(_cache);
+        List<uint> releasedAtClose = [];
+        if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+        {
+            List<NewField> requiredFields = [.. request.Fields.Where(f => f.Required)];
+            for (int k = 1; k <= requiredFields.Count; k++)
+            {
+                if (!ApplyFieldProperties(work, p.Overlay, allocator, objectRow, requiredFields, k, SqlFieldRequired, dateUpdateBits, releasedAtClose))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(extent, allocator.ExtentPages), p.Overlay);
+        return work.Change(_cache, releasedAtClose);
     }
 
     /// <summary>
@@ -984,36 +1092,68 @@ public sealed class SchemaWriter
     {
         extent = currentExtent;
         var work = new Work(p);
+        var allocator = new PageAllocator(_cache, _d, currentExtent);
+        List<uint> releasedAtClose = [];
+        if (!ApplyFieldProperties(work, p.Overlay, allocator, objectRow, fields, fieldCount, DaoFieldRequired, dateUpdateBits, releasedAtClose))
+        {
+            return work.NotWritten();
+        }
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(currentExtent, allocator.ExtentPages), p.Overlay);
+        return work.Change(_cache, releasedAtClose);
+    }
+
+    /// <summary>
+    /// Shared <c>MSysObjects.LvProp</c> writer and LVAL spill path used by both DAO <c>TableDefs.Append</c>
+    /// (separate per-field commits with <see cref="DaoFieldRequired"/>) and SQL/ADO <c>CREATE TABLE ... NOT NULL</c>
+    /// (per-required-column steps inside the single create commit with <see cref="SqlFieldRequired"/>;
+    /// evidence/r-q15-ddl-open/lv-sql-notnull-*, evidence/r-q34-ddl-sweep/nn-*).
+    /// </summary>
+    private bool ApplyFieldProperties(
+        Work work,
+        PrivateOverlay overlay,
+        PageAllocator allocator,
+        RowId objectRow,
+        IReadOnlyList<NewField> fields,
+        int fieldCount,
+        StoredProperty property,
+        ulong dateUpdateBits,
+        List<uint> releasedAtClose)
+    {
         TableDefinition objects = _catalog.ObjectTable;
-        var source = new PageSource(_cache, p.Overlay);
+        var source = new PageSource(_cache, overlay);
         using RowView? resolved = RowResolver.Resolve(source, _d, objectRow, out TraversalFailure? failure);
         if (resolved is not { } row)
         {
-            return NotWritten($"MSysObjects row {objectRow} cannot be read: {failure?.Predicate ?? "deleted"}");
+            work.Fail($"MSysObjects row {objectRow} cannot be read: {failure?.Predicate ?? "deleted"}");
+            return false;
         }
         if (row.Data != row.Root)
         {
-            return NotWritten($"MSysObjects row {objectRow} is an overflow row: rewriting it is not recorded");
+            work.Fail($"MSysObjects row {objectRow} is an overflow row: rewriting it is not recorded");
+            return false;
         }
         ReadOnlySpan<byte> body = row.Body;
         if (!RowEnvelope.TryOpen(body, _d, out RowEnvelope envelope, out string? envFailure))
         {
-            return NotWritten($"MSysObjects row {objectRow}: {envFailure}");
+            work.Fail($"MSysObjects row {objectRow}: {envFailure}");
+            return false;
         }
         if (envelope.ColumnCount != objects.MaxColumns)
         {
-            return NotWritten($"MSysObjects row {objectRow} records {envelope.ColumnCount} of {objects.MaxColumns} columns");
+            work.Fail($"MSysObjects row {objectRow} records {envelope.ColumnCount} of {objects.MaxColumns} columns");
+            return false;
         }
 
         PropertyMap[] propMaps = new PropertyMap[fieldCount];
         for (int i = 0; i < fieldCount; i++)
         {
-            propMaps[i] = new PropertyMap(PropertySectionKind.ColumnValues, fields[i].Name, [DaoFieldRequired]);
+            propMaps[i] = new PropertyMap(PropertySectionKind.ColumnValues, fields[i].Name, [property]);
         }
         byte[] blob = PropertyBlob.Encode(propMaps);
         if (blob.Length > LongValuePlan.SingleRowPayloadMax)
         {
-            return NotWritten($"DAO table property blob ({blob.Length} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
+            work.Fail($"table property blob ({blob.Length} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
+            return false;
         }
 
         int dateUpdateOrdinal = Ordinal(objects, "DateUpdate");
@@ -1025,25 +1165,26 @@ public sealed class SchemaWriter
         FieldRead oldLvRead = envelope.ReadField(lvPropCol, knownFixedEnd);
         if (oldLvRead.Outcome == FieldOutcome.Malformed)
         {
-            return NotWritten($"MSysObjects.LvProp of row {objectRow}: {oldLvRead.Failure}");
+            work.Fail($"MSysObjects.LvProp of row {objectRow}: {oldLvRead.Failure}");
+            return false;
         }
         if (oldLvRead.Outcome == FieldOutcome.Bytes)
         {
             if (LongValuePlan.Inspect(body[oldLvRead.Start..oldLvRead.End], out string? planFailure) is not { } inspected)
             {
-                return NotWritten($"MSysObjects.LvProp of row {objectRow}: {planFailure}");
+                work.Fail($"MSysObjects.LvProp of row {objectRow}: {planFailure}");
+                return false;
             }
             oldPlan = inspected;
         }
 
         byte[] newLvPropField;
-        List<uint> releasedAtClose = [];
-        var allocator = new PageAllocator(_cache, _d, currentExtent);
         if (blob.Length <= LongValuePlan.InlinePayloadMax)
         {
             if (oldPlan is { Form: not LongValueForm.Inline })
             {
-                return NotWritten($"MSysObjects.LvProp shrinking from {oldPlan.Form} to inline is not recorded");
+                work.Fail($"MSysObjects.LvProp shrinking from {oldPlan.Form} to inline is not recorded");
+                return false;
             }
             newLvPropField = LongValuePlan.EncodeInline(blob);
         }
@@ -1051,7 +1192,8 @@ public sealed class SchemaWriter
         {
             if (objects.LongValueMaps.FirstOrDefault(m => m.PhysicalNumber == lvPropCol.PhysicalNumber) is not { } lvMaps)
             {
-                return NotWritten("MSysObjects TableDef names no long-value maps for LvProp");
+                work.Fail("MSysObjects TableDef names no long-value maps for LvProp");
+                return false;
             }
             int needed = blob.Length + _d.DataPage.SlotEntryBytes;
             if (oldPlan is { Form: LongValueForm.SingleRow } single)
@@ -1061,7 +1203,8 @@ public sealed class SchemaWriter
                 using PagePin? oldPin = source.Pin(oldPage).Pin;
                 if (oldPin is null)
                 {
-                    return NotWritten($"MSysObjects.LvProp LVAL page {oldPage} could not be pinned");
+                    work.Fail($"MSysObjects.LvProp LVAL page {oldPage} could not be pinned");
+                    return false;
                 }
                 int freeBytes = (int)_d.DataPage.FreeCount.Read(oldPin.Bytes);
                 int rowCount = (int)_d.DataPage.RowCount.Read(oldPin.Bytes);
@@ -1073,7 +1216,7 @@ public sealed class SchemaWriter
                     if (!work.Apply(new PageEdit(oldPage, new LvalAppendDelta(blob, newSlot, _d), PageRole.Data))
                         || !work.Apply(new PageEdit(oldPage, new LvalDeleteDelta(oldSlot, _d), PageRole.Data)))
                     {
-                        return work.NotWritten();
+                        return false;
                     }
                     newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(oldPage, newSlot), 0);
                 }
@@ -1084,34 +1227,38 @@ public sealed class SchemaWriter
                     byte[] oldCopy = oldPin.Bytes.ToArray();
                     if (!DataPages.TryDeleteSlot(oldCopy, oldSlot, _d, out string? delFailure, lval: true))
                     {
-                        return NotWritten($"MSysObjects.LvProp LVAL page {oldPage} slot {oldSlot}: {delFailure}");
+                        work.Fail($"MSysObjects.LvProp LVAL page {oldPage} slot {oldSlot}: {delFailure}");
+                        return false;
                     }
                     if (!DataPages.IsEmpty(oldCopy, _d, lval: true))
                     {
-                        return NotWritten($"MSysObjects.LvProp LVAL page {oldPage} still holds other live slots after deleting slot {oldSlot}: spilling from a shared MSysObjects LVAL page is not recorded");
+                        work.Fail($"MSysObjects.LvProp LVAL page {oldPage} still holds other live slots after deleting slot {oldSlot}: spilling from a shared MSysObjects LVAL page is not recorded");
+                        return false;
                     }
-                    if (allocator.Free(p.Overlay, oldPage, out string? freeFailure) is null)
+                    if (allocator.Free(overlay, oldPage, out string? freeFailure) is null)
                     {
-                        return NotWritten(freeFailure);
+                        work.Fail(freeFailure!);
+                        return false;
                     }
                     if (work.Allocate(allocator) is not { } newPage)
                     {
-                        return work.NotWritten();
+                        return false;
                     }
                     byte[] newLvalBytes = new byte[_d.PageSize];
                     DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
                     if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
                     {
-                        return NotWritten($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
+                        work.Fail($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
+                        return false;
                     }
                     if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
                         || !work.Apply(new PageEdit(oldPage, new LvalDeleteAndReleaseDelta(oldSlot, _d), PageRole.Data))
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.OwnedMap, oldPage, member: false, out string? mapFailure)
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.FreeMap, oldPage, member: false, out mapFailure)
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.OwnedMap, newPage, member: true, out mapFailure)
-                        || !ApplyMapBit(work, p.Overlay, lvMaps.FreeMap, newPage, member: true, out mapFailure))
+                        || !ApplyMapBit(work, overlay, lvMaps.OwnedMap, oldPage, member: false, out _)
+                        || !ApplyMapBit(work, overlay, lvMaps.FreeMap, oldPage, member: false, out _)
+                        || !ApplyMapBit(work, overlay, lvMaps.OwnedMap, newPage, member: true, out _)
+                        || !ApplyMapBit(work, overlay, lvMaps.FreeMap, newPage, member: true, out _))
                     {
-                        return work.NotWritten();
+                        return false;
                     }
                     releasedAtClose.Add(oldPage);
                     newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
@@ -1119,32 +1266,33 @@ public sealed class SchemaWriter
             }
             else if (oldPlan is null or { Form: LongValueForm.Inline })
             {
-                // First external LvProp commit for this table (dao-fields-2-p6, dao-name-8-p6, dao-first8-2fields).
-                // CheckDaoLvPropPlan already verified MSysObjects.LvProp's free map is empty before Commit 1 so no
+                // First external LvProp write for this table (dao-fields-2-p6, dao-name-8-p6, dao-first8-2fields,
+                // lv-sql-notnull-8..64, r-q34-ddl-sweep/nn-two-cols-*).
+                // CheckLvPropPlan already verified MSysObjects.LvProp's free map is empty before writing so no
                 // write is published and then refused; allocate a fresh LVAL page and add it to the owned and free maps.
-                // Follow-up: organizer task to merge SchemaWriter's MSysObjects.LvProp LVAL writer with RowWriter's
-                // PlaceExternalLongValue / RemoveLongValue once single-page retirement is unified across both.
                 if (work.Allocate(allocator) is not { } newPage)
                 {
-                    return work.NotWritten();
+                    return false;
                 }
                 byte[] newLvalBytes = new byte[_d.PageSize];
                 DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
                 if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
                 {
-                    return NotWritten($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
+                    work.Fail($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
+                    return false;
                 }
                 if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
-                    || !ApplyMapBit(work, p.Overlay, lvMaps.OwnedMap, newPage, member: true, out _)
-                    || !ApplyMapBit(work, p.Overlay, lvMaps.FreeMap, newPage, member: true, out _))
+                    || !ApplyMapBit(work, overlay, lvMaps.OwnedMap, newPage, member: true, out _)
+                    || !ApplyMapBit(work, overlay, lvMaps.FreeMap, newPage, member: true, out _))
                 {
-                    return work.NotWritten();
+                    return false;
                 }
                 newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
             }
             else
             {
-                return NotWritten($"MSysObjects.LvProp has form {oldPlan.Form}: chained MSysObjects.LvProp is not recorded");
+                work.Fail($"MSysObjects.LvProp has form {oldPlan.Form}: chained MSysObjects.LvProp is not recorded");
+                return false;
             }
         }
 
@@ -1167,7 +1315,8 @@ public sealed class SchemaWriter
                 FieldRead read = envelope.ReadField(objects.Columns[i], knownFixedEnd);
                 if (read.Outcome == FieldOutcome.Malformed)
                 {
-                    return NotWritten($"MSysObjects.{objects.Columns[i].Name} of row {objectRow}: {read.Failure}");
+                    work.Fail($"MSysObjects.{objects.Columns[i].Name} of row {objectRow}: {read.Failure}");
+                    return false;
                 }
                 encodedFields[i] = read.Outcome switch
                 {
@@ -1180,14 +1329,10 @@ public sealed class SchemaWriter
         }
         if (!RowEncoder.TryEncode(objects, encodedFields, _d, out byte[]? newRowBytes, out string? encodeFailure))
         {
-            return NotWritten($"MSysObjects row {objectRow}: {encodeFailure}");
+            work.Fail($"MSysObjects row {objectRow}: {encodeFailure}");
+            return false;
         }
-        if (!work.Apply(new PageEdit(objectRow.Page, new DataPageReplaceRowDelta(objectRow.Row, newRowBytes!, _d), PageRole.Data)))
-        {
-            return work.NotWritten();
-        }
-        extent = PageAllocator.ExtentOf(_cache, Math.Max(currentExtent, allocator.ExtentPages), p.Overlay);
-        return work.Change(_cache, releasedAtClose);
+        return work.Apply(new PageEdit(objectRow.Page, new DataPageReplaceRowDelta(objectRow.Row, newRowBytes!, _d), PageRole.Data));
     }
 
     private bool ApplyMapBit(Work work, PrivateOverlay overlay, RowLocator map, uint page, bool member, out string? failure)
@@ -1413,7 +1558,8 @@ public sealed class SchemaWriter
                     byte typeCode = f.Type == NewFieldType.Memo ? NativeTypes.Memo : NativeTypes.Ole;
                     columns.Add(new ColumnSpec(f.Name, typeCode, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 0));
                     variables++;
-                    byte ownedRow = (byte)(2 + (lvalMaps.Count * 2));
+                    // Inline constraint index maps take rows 2..2+I-1; LVAL (owned, free) pairs follow (evidence/r-q34-ddl-sweep/lval-pk-*).
+                    byte ownedRow = (byte)(2 + request.AllIndexes.Count + (lvalMaps.Count * 2));
                     byte freeRow = (byte)(ownedRow + 1);
                     lvalMaps.Add(new LvalColumnMapSpec((ushort)i, new RowLocator(mapPage, ownedRow), new RowLocator(mapPage, freeRow)));
                     break;
@@ -1469,10 +1615,10 @@ public sealed class SchemaWriter
     };
 
     /// <summary>
-    /// A TableDef spec with one more index, the table's first (r-q11 create-primary-key and create-then-index;
-    /// r-q21-ddl-types ix-*): physical and logical number 0, no entries, its map and its leaf; per-column slot flags
-    /// 0x01 ascending / 0x00 descending; physical flags 0x89 for primary key (logical type 1) or 0x80 | Unique(0x01) |
-    /// IgnoreNull(0x02) | DisallowNull(0x08) (logical type 0).
+    /// A TableDef spec with one more index (r-q11 create-primary-key and create-then-index; r-q21-ddl-types ix-*;
+    /// r-q34-ddl-sweep/lval-pk-uq-alltypes-*): sequential logical and physical numbers, no entries, its map and its
+    /// leaf; per-column slot flags 0x01 ascending / 0x00 descending; physical flags 0x89 for primary key (logical type 1)
+    /// or 0x80 | Unique(0x01) | IgnoreNull(0x02) | DisallowNull(0x08) (logical type 0).
     /// </summary>
     private TableDefSpec WithIndex(TableDefSpec spec, NewIndex index, RowLocator map, uint leaf)
     {
@@ -1495,7 +1641,11 @@ public sealed class SchemaWriter
                 | (index.IgnoreNull ? IgnoreNullIndexFlag : 0)
                 | (index.DisallowNull ? DisallowNullIndexFlag : 0));
         var physical = new PhysicalIndexSpec(keyCols, map, leaf, flags);
-        var logical = new LogicalIndexSpec(index.Name, 0, 0, index.PrimaryKey ? _d.IndexDescriptor.PrimaryKeyType : (byte)0);
+        var logical = new LogicalIndexSpec(
+            index.Name,
+            (uint)spec.LogicalIndexes.Count,
+            (uint)spec.PhysicalIndexes.Count,
+            index.PrimaryKey ? _d.IndexDescriptor.PrimaryKeyType : (byte)0);
         return spec with { PhysicalIndexes = [.. spec.PhysicalIndexes, physical], LogicalIndexes = [.. spec.LogicalIndexes, logical] };
     }
 
@@ -1586,17 +1736,31 @@ public sealed class SchemaWriter
         return leaf;
     }
 
-    /// <summary>A catalog change in a Jet 4 MDB is refused: its page-0 changes differ (evidence/r-q11-ddl-closure/mdb-create-one-long).</summary>
-    private SchemaRefusal? FileRefusal()
+    /// <summary>
+    /// ACCDB is admitted for all recorded catalog changes; Jet 4 MDB is admitted only when <paramref name="allowJet4Mdb"/>
+    /// is true (SQL/ADO CREATE TABLE: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/*-mdb-*).
+    /// </summary>
+    private SchemaRefusal? FileRefusal(bool allowJet4Mdb = false)
     {
         if (_catalog.TablesContainer is null)
         {
             return new SchemaRefusal(null, "the catalog has no Tables container");
         }
-        return DatabaseHeader.IsAccdb(PinCopy(0) ?? [], _d)
-            ? null
-            : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (its page-0 changes differ: evidence/r-q11-ddl-closure/mdb-create-one-long)");
+        byte[] page0 = PinCopy(0) ?? [];
+        if (DatabaseHeader.IsAccdb(page0, _d))
+        {
+            return null;
+        }
+        if (allowJet4Mdb && IsJet4Mdb(page0))
+        {
+            return null;
+        }
+        return new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE is recorded: evidence/r-q34-ddl-sweep/*-mdb-*)");
     }
+
+    private bool IsJet4Mdb(ReadOnlySpan<byte> page0) =>
+        ProfileSelector.Select(page0, out FileProfile? profile, _d) == ProfileRefusal.None
+        && profile!.Format == FileFormat.Jet4;
 
     /// <summary>The user table of this name (composed, without case: R-CAT-1 CAT-B), or null.</summary>
     private CatalogEntry? FindTable(string name)

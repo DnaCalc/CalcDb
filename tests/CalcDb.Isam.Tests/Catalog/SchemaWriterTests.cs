@@ -21,6 +21,7 @@ namespace CalcDb.Isam.Tests.Catalog;
 public sealed class SchemaWriterTests
 {
     private const string EmptyAccdb = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
+    private const string EmptyMdb = "99da59149c57559b5658a9a08625236a936808d2be0ead100da977bd3716bdb4";
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
 
     /// <summary>What ACE's record keeps: the read ranges (offset, bytes) after Close, the file's length, and its page hashes.</summary>
@@ -53,7 +54,7 @@ public sealed class SchemaWriterTests
                         reads.Add((offset.GetInt64(), data));
                     }
                 }
-                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() is "after-close" or "after-create-close" && e.TryGetProperty("files", out JsonElement files))
+                if (e.TryGetProperty("label", out JsonElement label) && label.GetString() is "after-close" or "after-create-close" or "after-ddl" && e.TryGetProperty("files", out JsonElement files))
                 {
                     JsonElement f0 = files[0];
                     length = f0.GetProperty("length").GetInt64();
@@ -165,6 +166,8 @@ public sealed class SchemaWriterTests
     }
 
     private static byte[] Fixture() => ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyAccdb);
+
+    private static byte[] FixtureMdb() => ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyMdb);
 
     /// <summary>ACE's dates for the table it created: its MSysObjects row, read from the image the record shows.</summary>
     private static (ulong Created, ulong Updated) AceDates(byte[] aceImage, string table)
@@ -491,8 +494,18 @@ public sealed class SchemaWriterTests
         using var session = new Session(fixture);
         SchemaWriter w = session.Writer();
 
-        // LVAL column + inline PRIMARY KEY (map-row order on page 43 not probed in r-q21-ddl-types).
-        Assert.NotNull(w.Check(new("T", [new("a", NewFieldType.Memo), Long("b")], SchemaRoute.Sql, [new("PK_T", ["b"], PrimaryKey: true)]))?.NotWritten);
+        // LVAL + inline PK is now recorded (evidence/r-q34-ddl-sweep/lval-pk-memo-accdb-dao); keep unrecorded inline
+        // constraint, NOT NULL, and map-capacity boundaries refused by name.
+        Assert.NotNull(w.Check(new("T", [Long("a")], SchemaRoute.Sql, [new("UX_T", ["a"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Long("id"), Long("k")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_T", ["k"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Text("s"), Long("id")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_T", ["s"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Long("id"), Text("s")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("PK_T", ["s"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("d", NewFieldType.Double, Required: true)], SchemaRoute.Sql))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("a", NewFieldType.Long, Required: true)], SchemaRoute.Dao))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("id", NewFieldType.Long, Required: true)], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true)]))?.NotWritten);
+        // 28 LVAL columns (2 + 56 = 58 > 57) and 27 LVAL + 2 indexes (2 + 2 + 54 = 58 > 57) exceed single-page map capacity.
+        Assert.NotNull(w.Check(new("T", [.. Enumerable.Range(0, 28).Select(i => new NewField($"m{i}", NewFieldType.Memo))], SchemaRoute.Sql))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Long("id"), Text("s"), .. Enumerable.Range(0, 27).Select(i => new NewField($"m{i}", NewFieldType.Memo))], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_T", ["s"], PrimaryKey: false, Unique: true)]))?.NotWritten);
         // Single-argument COUNTER(seed) and increment 0.
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Counter, Seed: 10)], SchemaRoute.Sql))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Counter, Seed: 1, Increment: 0)], SchemaRoute.Sql))?.NotWritten);
@@ -1156,6 +1169,196 @@ public sealed class SchemaWriterTests
         // Commit 1 allocated and published the TableDef and map pages 42 and 43; the refused commit wrote nothing.
         Assert.Equal(44UL, outcome.ExtentPages);
         Assert.Equal(44 * D.PageSize, session.File.Snapshot().Length);
+    }
+
+    /// <summary>
+    /// All 33 in-scope CREATE TABLE records of <c>evidence/r-q34-ddl-sweep</c> (18 ACCDB + 15 Jet 4 MDB; SQL and ADO routes):
+    /// LVAL + inline PK/UNIQUE, COUNTER PK, NOT NULL on LONG/TEXT/MEMO (inline and LVAL-spilling), and Jet 4 MDB.
+    /// </summary>
+    public static TheoryData<string, bool, CreateTableRequest> RQ34CreateTableCases()
+    {
+        NewField[] lvalMemoFields = [Long("ID"), Text("K", 10), new("M", NewFieldType.Memo)];
+        NewIndex[] pkT = [new("PK_T", ["ID"], PrimaryKey: true)];
+        NewField[] lvalOleMemoFields =
+        [
+            Long("ID"),
+            new("FBin", NewFieldType.Binary, Size: 16),
+            new("FOle", NewFieldType.Ole),
+            new("FMemo", NewFieldType.Memo),
+            Long("FLong"),
+            Text("FText", 32),
+            new("FDouble", NewFieldType.Double),
+        ];
+        NewField[] allTypesFields =
+        [
+            new("ID", NewFieldType.Counter),
+            Text("Code", 10),
+            Long("L"),
+            new("D", NewFieldType.Double),
+            new("C", NewFieldType.Currency),
+            new("Dt", NewFieldType.DateTime),
+            Text("S", 50),
+            new("M", NewFieldType.Memo),
+            new("B", NewFieldType.Ole),
+            new("Y", NewFieldType.YesNo),
+            new("Sh", NewFieldType.Short),
+            new("Bt", NewFieldType.Byte),
+            new("Sg", NewFieldType.Single),
+            new("G", NewFieldType.Guid),
+        ];
+        NewIndex[] pkAndUq = [new("PK_T", ["ID"], PrimaryKey: true), new("UX_T_Code", ["Code"], PrimaryKey: false, Unique: true)];
+        NewField[] pkCounterColsFields = [new("ID", NewFieldType.Counter), Long("K"), Text("S", 50), new("D", NewFieldType.Double)];
+        NewIndex[] pkOnly = [new("PK", ["ID"], PrimaryKey: true)];
+        NewField[] nnTwoColsFields = [new("A", NewFieldType.Long, Required: true), new("B", NewFieldType.Text, Size: 50, Required: true)];
+        NewField[] nnPkTextFields = [Long("ID"), Long("K"), new("S", NewFieldType.Text, Size: 50, Required: true)];
+
+        return new()
+        {
+            // Jet 4 MDB baseline (2)
+            { "create-one-long-mdb-ado", true, new("T", [Long("n")], SchemaRoute.Ado) },
+            { "create-one-long-mdb-dao", true, new("T", [Long("n")], SchemaRoute.Sql) },
+            // LVAL + inline constraint (8)
+            { "lval-pk-memo-accdb-ado", false, new("T", lvalMemoFields, SchemaRoute.Ado, pkT) },
+            { "lval-pk-memo-accdb-dao", false, new("T", lvalMemoFields, SchemaRoute.Sql, pkT) },
+            { "lval-pk-memo-mdb-dao", true, new("T", lvalMemoFields, SchemaRoute.Sql, pkT) },
+            { "lval-pk-ole-accdb-dao", false, new("T", [Long("ID"), new("B", NewFieldType.Ole)], SchemaRoute.Sql, pkT) },
+            { "lval-pk-ole-memo-accdb-dao", false, new("T", lvalOleMemoFields, SchemaRoute.Sql, pkT) },
+            { "lval-pk-ole-memo-mdb-dao", true, new("T", lvalOleMemoFields, SchemaRoute.Sql, pkT) },
+            { "lval-pk-uq-alltypes-accdb-dao", false, new("T", allTypesFields, SchemaRoute.Sql, pkAndUq) },
+            { "lval-pk-uq-alltypes-mdb-dao", true, new("T", allTypesFields, SchemaRoute.Sql, pkAndUq) },
+            // NOT NULL (15)
+            { "nn-long-accdb-ado", false, new("T", [new("n", NewFieldType.Long, Required: true)], SchemaRoute.Ado) },
+            { "nn-long-accdb-dao", false, new("T", [new("n", NewFieldType.Long, Required: true)], SchemaRoute.Sql) },
+            { "nn-long-mdb-ado", true, new("T", [new("n", NewFieldType.Long, Required: true)], SchemaRoute.Ado) },
+            { "nn-long-mdb-dao", true, new("T", [new("n", NewFieldType.Long, Required: true)], SchemaRoute.Sql) },
+            { "nn-memo-accdb-ado", false, new("T", [new("M", NewFieldType.Memo, Required: true)], SchemaRoute.Ado) },
+            { "nn-memo-accdb-dao", false, new("T", [new("M", NewFieldType.Memo, Required: true)], SchemaRoute.Sql) },
+            { "nn-memo-mdb-dao", true, new("T", [new("M", NewFieldType.Memo, Required: true)], SchemaRoute.Sql) },
+            { "nn-pk-text-accdb-dao", false, new("T", nnPkTextFields, SchemaRoute.Sql, pkOnly) },
+            { "nn-pk-text-mdb-dao", true, new("T", nnPkTextFields, SchemaRoute.Sql, pkOnly) },
+            { "nn-text-accdb-ado", false, new("T", [new("S", NewFieldType.Text, Size: 50, Required: true)], SchemaRoute.Ado) },
+            { "nn-text-accdb-dao", false, new("T", [new("S", NewFieldType.Text, Size: 50, Required: true)], SchemaRoute.Sql) },
+            { "nn-text-mdb-dao", true, new("T", [new("S", NewFieldType.Text, Size: 50, Required: true)], SchemaRoute.Sql) },
+            { "nn-two-cols-accdb-ado", false, new("T", nnTwoColsFields, SchemaRoute.Ado) },
+            { "nn-two-cols-accdb-dao", false, new("T", nnTwoColsFields, SchemaRoute.Sql) },
+            { "nn-two-cols-mdb-dao", true, new("T", nnTwoColsFields, SchemaRoute.Sql) },
+            // COUNTER PK + MDB LONG PK (8)
+            { "pk-counter-accdb-ado", false, new("T", [new("ID", NewFieldType.Counter)], SchemaRoute.Ado, pkOnly) },
+            { "pk-counter-accdb-dao", false, new("T", [new("ID", NewFieldType.Counter)], SchemaRoute.Sql, pkOnly) },
+            { "pk-counter-cols-accdb-ado", false, new("T", pkCounterColsFields, SchemaRoute.Ado, pkOnly) },
+            { "pk-counter-cols-accdb-dao", false, new("T", pkCounterColsFields, SchemaRoute.Sql, pkOnly) },
+            { "pk-counter-cols-mdb-dao", true, new("T", pkCounterColsFields, SchemaRoute.Sql, pkOnly) },
+            { "pk-counter-mdb-ado", true, new("T", [new("ID", NewFieldType.Counter)], SchemaRoute.Ado, pkOnly) },
+            { "pk-counter-mdb-dao", true, new("T", [new("ID", NewFieldType.Counter)], SchemaRoute.Sql, pkOnly) },
+            { "pk-long-mdb-dao", true, new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Sql, pkOnly) },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableCases))]
+    public void R_q34_ddl_sweep_create_table_writes_ACE_pages(string question, bool isMdb, CreateTableRequest request)
+    {
+        AssertSqlCreateTableMatchesAce("r-q34-ddl-sweep", question, isMdb ? FixtureMdb() : Fixture(), request);
+    }
+
+    [Theory]
+    [InlineData("lv-sql-notnull-1", 1)]
+    [InlineData("lv-sql-notnull-4", 4)]
+    [InlineData("lv-sql-notnull-8", 8)]
+    [InlineData("lv-sql-notnull-16", 16)]
+    [InlineData("lv-sql-notnull-64", 64)]
+    public void R_q15_lv_sql_notnull_writes_ACE_pages(string question, int nameLength)
+    {
+        string colName = new('n', nameLength);
+        AssertSqlCreateTableMatchesAce(
+            "r-q15-ddl-open",
+            question,
+            Fixture(),
+            new("T", [new(colName, NewFieldType.Long, Required: true)], SchemaRoute.Sql));
+    }
+
+    [Fact]
+    public void R_q11_mdb_create_one_long_writes_ACE_pages()
+    {
+        AssertSqlCreateTableMatchesAce(
+            "r-q11-ddl-closure",
+            "mdb-create-one-long",
+            FixtureMdb(),
+            new("T", [Long("n")], SchemaRoute.Sql));
+    }
+
+    private static void AssertSqlCreateTableMatchesAce(string card, string question, byte[] fixture, CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, card);
+        byte[] ace = kept.AceImage(fixture);
+        (ulong created, ulong updated) = AceDates(ace, request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+
+        List<(long Page, int Start, int Length)>? clockSpans = null;
+        NewField[] requiredFields = [.. request.Fields.Where(f => f.Required)];
+        if (requiredFields.Length >= 2)
+        {
+            PropertyMap firstMap = new(PropertySectionKind.ColumnValues, requiredFields[0].Name, [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [0x01])]);
+            byte[] firstBlob = PropertyBlob.Encode([firstMap]);
+            if (firstBlob.Length <= LongValuePlan.InlinePayloadMax)
+            {
+                CatalogSnapshot catalog = CatalogBootstrap.Open(session.Cache, D, session.Pages, out _)!;
+                CatalogEntry entry = catalog.Entries.Single(e => e.Name == request.Name && e.ParentId == catalog.TablesContainer);
+                using PagePin objPin = session.Cache.Pin(entry.Root.Page).Pin!;
+                SlotView liveSlot = DataPages.CheckedSlot(objPin.Bytes, entry.Root.Row, D, out _)!.Value;
+                int ghostStart = liveSlot.Start - firstBlob.Length;
+                int dateUpdateOff = ghostStart + D.Row.FixedBase + catalog.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+                ulong aceGhostDateUpdate = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + dateUpdateOff);
+                TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceGhostDateUpdate)) - DateTime.FromOADate(BitConverter.UInt64BitsToDouble(updated));
+                Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"{card}/{question}: ghost DateUpdate differed from live DateUpdate by {delta}");
+                clockSpans = [(entry.Root.Page, dateUpdateOff, 8)];
+            }
+        }
+
+        AssertAsAce(kept, fixture, ours, clockSpans);
+    }
+
+    [Fact]
+    public void Jet4_mdb_unrecorded_operations_and_sql_notnull_multi_lval_page_stay_refused_by_name()
+    {
+        byte[] mdb = FixtureMdb();
+        using (var session = new Session(mdb))
+        {
+            SchemaWriter w = session.Writer();
+            // DAO route on MDB stays refused by name.
+            Assert.NotNull(w.Check(new("T", [Long("n")], SchemaRoute.Dao))?.NotWritten);
+            // Duplicate-field 3380 rollback on MDB stays refused by name (no writes).
+            SchemaOutcome dup = w.CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Sql), 1, 1);
+            Assert.False(dup.Succeeded);
+            Assert.False(dup.PublishedAny);
+            Assert.Null(dup.Refused?.Error);
+            Assert.Contains("Jet 4 MDB", dup.Refused?.NotWritten);
+            // CREATE TABLE on MDB inside BeginTrans stays refused by name.
+            Assert.Null(session.Workspace.BeginTrans());
+            SchemaOutcome inTx = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Sql), 1, 1);
+            Assert.False(inTx.Succeeded);
+            Assert.False(inTx.PublishedAny);
+            Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
+            Assert.Null(session.Workspace.Rollback().Error);
+            // Create a table on MDB, then verify CreateIndex and DropTable on MDB remain refused by name.
+            session.Create(new("T", [Long("n")], SchemaRoute.Sql), 1, 1);
+            SchemaWriter w2 = session.Writer();
+            Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_T", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
+            Assert.NotNull(w2.DropTable(session.Workspace, new("T", SchemaRoute.Sql)).Refused?.NotWritten);
+        }
+
+        // SQL NOT NULL requiring > 1 MSysObjects.LvProp LVAL page (26 30-char NOT NULL columns) stays refused before writing.
+        using (var accdb = new Session(Fixture()))
+        {
+            NewField[] manyRequired = [.. Enumerable.Range(1, 26).Select(i => new NewField($"f{i:D2}_xxxxxxxxxxxxxxxxxxxxxxxxxx", NewFieldType.Long, Required: true))];
+            SchemaRefusal? refused = accdb.Writer().Check(new("T", manyRequired, SchemaRoute.Sql));
+            Assert.NotNull(refused);
+            Assert.Null(refused.Value.Error);
+            Assert.Contains("more than one", refused.Value.NotWritten);
+        }
     }
 }
 

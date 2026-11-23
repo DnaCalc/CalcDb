@@ -129,7 +129,7 @@ public static unsafe class ActionExecutor
         }
         if (DdlParser.IsDdlLeadingKeyword(normalized))
         {
-            return DdlExecutor.Execute(normalized, database, options);
+            return DdlExecutor.Execute(normalized, database, options, source);
         }
         if (source is ActionErrorSource.Database or ActionErrorSource.Ado)
         {

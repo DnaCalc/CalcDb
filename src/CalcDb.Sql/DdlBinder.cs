@@ -144,21 +144,21 @@ public static class DdlBinder
     }
 
     /// <summary>Parse and bind a SQL DDL statement against <paramref name="database"/>.</summary>
-    public static BoundDdl? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
+    public static BoundDdl? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
         DdlStatement? stmt = DdlParser.Parse(sql, out failure);
         if (stmt is null)
         {
             return null;
         }
-        return Bind(stmt, database, out failure);
+        return Bind(stmt, database, out failure, route);
     }
 
     /// <summary>Bind a parsed <see cref="DdlStatement"/> against <paramref name="database"/>.</summary>
-    public static BoundDdl? Bind(DdlStatement statement, ISqlDatabase database, out SqlFailure? failure) =>
+    public static BoundDdl? Bind(DdlStatement statement, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql) =>
         statement switch
         {
-            CreateTableStatement ct => BindCreateTable(ct, database, out failure),
+            CreateTableStatement ct => BindCreateTable(ct, database, out failure, route),
             CreateIndexStatement ci => BindCreateIndex(ci, database, out failure),
             DropTableStatement dt => BindDropTable(dt, database, out failure),
             DropIndexStatement di => BindDropIndex(di, database, out failure),
@@ -184,7 +184,7 @@ public static class DdlBinder
 
     // ---- CREATE TABLE ----------------------------------------------------------------------------------------------
 
-    private static BoundDdl? BindCreateTable(CreateTableStatement stmt, ISqlDatabase database, out SqlFailure? failure)
+    private static BoundDdl? BindCreateTable(CreateTableStatement stmt, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
         if (!IsValidObjectName(stmt.TableName))
         {
@@ -205,10 +205,12 @@ public static class DdlBinder
         var colNames = new List<string>(stmt.Columns.Count);
         int counterCount = 0;
         bool hasPrimaryKey = false;
+        bool pkIsInline = false;
         int totalIndexes = 0;
         var deferredInlineFks = new List<(DdlColumnDef Col, DdlColumnConstraint Fk)>();
         var primaryKeys = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var uniqueConstraints = new List<(string? Name, IReadOnlyList<string> Columns)>();
+        var uniqueIsInline = new List<bool>();
         var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns)>();
 
         TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
@@ -247,12 +249,14 @@ public static class DdlBinder
                         return Fail(BindAce(3283, SqlMessages.PrimaryKeyAlreadyExists), out failure);
                     }
                     hasPrimaryKey = true;
+                    pkIsInline = true;
                     primaryKeys.Add((cc.Name, [col.Name]));
                     totalIndexes++;
                 }
                 else if (cc.Kind == DdlConstraintKind.Unique)
                 {
                     uniqueConstraints.Add((cc.Name, [col.Name]));
+                    uniqueIsInline.Add(true);
                     totalIndexes++;
                 }
                 else if (cc.Kind == DdlConstraintKind.ForeignKey)
@@ -310,6 +314,7 @@ public static class DdlBinder
             else if (tc.Kind == DdlConstraintKind.Unique)
             {
                 uniqueConstraints.Add((tc.Name, tc.Columns));
+                uniqueIsInline.Add(false);
             }
             else if (tc.Kind == DdlConstraintKind.ForeignKey)
             {
@@ -342,7 +347,7 @@ public static class DdlBinder
             return Fail(BindOpen("NotModelled.DdlTooManyTableConstraints", "more than 32 constraints in CREATE TABLE (3626 is recorded only for CREATE INDEX)"), out failure);
         }
 
-        // ---- Lowering to SchemaWriter.CreateTableRequest (SchemaRoute.Sql) ----
+        // ---- Lowering to SchemaWriter.CreateTableRequest ----
 
         if (stmt.Columns.Count == 0)
         {
@@ -352,13 +357,13 @@ public static class DdlBinder
 
         // Preserve declaration order (r-q15-ddl-open/columns-z-a proved ACE writes columns in declaration order).
         var fields = new List<NewField>(stmt.Columns.Count);
-        bool hasLval = false;
         foreach (DdlColumnDef col in stmt.Columns)
         {
-            if (col.Nullability == DdlNullability.NotNull)
+            bool required = col.Nullability == DdlNullability.NotNull;
+            if (required && col.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text or DdlTypeKind.Memo))
             {
-                // r-q15-ddl-open/lv-sql-notnull-1 to r-q15-ddl-open/lv-sql-notnull-64 (one Long column): NOT NULL writes an LvProp blob on MSysObjects.
-                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on column '{col.Name}' writes an LvProp blob (r-q15-ddl-open) not yet modelled in SchemaWriter"), out failure);
+                // evidence/r-q34-ddl-sweep/nn-* records NOT NULL on LONG, TEXT, and MEMO only.
+                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on {col.DataType.Kind} column '{col.Name}' is not recorded (evidence/r-q34-ddl-sweep/nn-* records LONG, TEXT, MEMO)"), out failure);
             }
             switch (col.DataType.Kind)
             {
@@ -372,7 +377,7 @@ public static class DdlBinder
                     fields.Add(new NewField(col.Name, NewFieldType.Short));
                     break;
                 case DdlTypeKind.Long:
-                    fields.Add(new NewField(col.Name, NewFieldType.Long));
+                    fields.Add(new NewField(col.Name, NewFieldType.Long, Required: required));
                     break;
                 case DdlTypeKind.Counter:
                     if (col.DataType.Seed is int seed)
@@ -438,15 +443,13 @@ public static class DdlBinder
                         // r-def-expr-sql/ddl-type-names-accdb accepts TEXT(0); SchemaWriter requires 1..255.
                         return Fail(BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on column '{col.Name}' is not modelled in SchemaWriter"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Text, size));
+                    fields.Add(new NewField(col.Name, NewFieldType.Text, size, Required: required));
                     break;
                 }
                 case DdlTypeKind.Memo:
-                    hasLval = true;
-                    fields.Add(new NewField(col.Name, NewFieldType.Memo));
+                    fields.Add(new NewField(col.Name, NewFieldType.Memo, Required: required));
                     break;
                 case DdlTypeKind.LongBinary:
-                    hasLval = true;
                     fields.Add(new NewField(col.Name, NewFieldType.Ole));
                     break;
                 case DdlTypeKind.Guid:
@@ -461,18 +464,10 @@ public static class DdlBinder
         {
             return Fail(BindOpen("NotModelled.DdlForeignKey", "FOREIGN KEY constraints are not modelled in SchemaWriter"), out failure);
         }
-        if (uniqueConstraints.Count > 0)
-        {
-            return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints are not modelled in SchemaWriter"), out failure);
-        }
 
-        IReadOnlyList<NewIndex>? indexes = null;
+        List<NewIndex>? indexes = null;
         if (primaryKeys.Count == 1)
         {
-            if (hasLval)
-            {
-                return Fail(BindOpen("NotModelled.DdlLvalWithInlineConstraint", "CREATE TABLE with both a Memo/OLE column and an inline PRIMARY KEY constraint is not modelled in SchemaWriter (r-q21-ddl-types Open)"), out failure);
-            }
             (string? pkName, IReadOnlyList<string> pkCols) = primaryKeys[0];
             if (pkName is null)
             {
@@ -487,15 +482,56 @@ public static class DdlBinder
                 return Fail(pkUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(pkCols[0])), out failure);
             }
             DdlColumnDef pkCol = columns[pkIdx];
-            if (pkCol.DataType.Kind != DdlTypeKind.Long)
+            if (pkCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Counter))
             {
                 return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY on {pkCol.DataType.Kind} column '{pkCol.Name}' is not modelled in SchemaWriter"), out failure);
             }
+            if (pkCol.Nullability == DdlNullability.NotNull)
+            {
+                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+            }
             indexes = [new NewIndex(pkName, [pkCol.Name], PrimaryKey: true)];
+
+            if (uniqueConstraints.Count > 0)
+            {
+                // evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao and lval-pk-uq-alltypes-mdb-dao record one named
+                // inline UNIQUE constraint on a TEXT column declared after a single-column PRIMARY KEY; leave every other UNIQUE shape refused.
+                if (uniqueConstraints.Count > 1 || !uniqueIsInline[0] || !pkIsInline)
+                {
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints other than one named inline TEXT UNIQUE after an inline PRIMARY KEY are not modelled in SchemaWriter"), out failure);
+                }
+                (string? uqName, IReadOnlyList<string> uqCols) = uniqueConstraints[0];
+                if (uqName is null || uqCols.Count != 1)
+                {
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "unnamed or multi-column UNIQUE constraints are not modelled in SchemaWriter"), out failure);
+                }
+                if (!TryResolveFieldName(uqCols[0], colNames, sortOrder, out int uqIdx, out SqlFailure? uqUndecided) || uqIdx < 0)
+                {
+                    return Fail(uqUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(uqCols[0])), out failure);
+                }
+                DdlColumnDef uqCol = columns[uqIdx];
+                if (uqCol.DataType.Kind != DdlTypeKind.Text || uqIdx <= pkIdx)
+                {
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"inline UNIQUE on {uqCol.DataType.Kind} column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao records a TEXT column after PRIMARY KEY)"), out failure);
+                }
+                if (uqCol.Nullability == DdlNullability.NotNull)
+                {
+                    return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                }
+                if (SchemaWriter.FieldNameLookupClashOf(pkName, uqName, sortOrder, out _) != FieldNameClash.None)
+                {
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE constraint '{uqName}' clashes with PRIMARY KEY '{pkName}' (duplicate constraint names in CREATE TABLE are not recorded)"), out failure);
+                }
+                indexes.Add(new NewIndex(uqName, [uqCol.Name], PrimaryKey: false, Unique: true));
+            }
+        }
+        else if (uniqueConstraints.Count > 0)
+        {
+            return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints without a PRIMARY KEY are not modelled in SchemaWriter"), out failure);
         }
 
         failure = null;
-        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, SchemaRoute.Sql, indexes));
+        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, route, indexes));
     }
 
     private static SqlFailure? ValidateDataType(string colName, DdlDataType dataType, ref int counterCount)
@@ -1245,7 +1281,11 @@ public static class DdlExecutor
     private const int AdmittedOptionsMask = DbInconsistent | DbConsistent | DbFailOnError;
 
     /// <summary>Parse, bind and execute a SQL DDL statement.</summary>
-    public static ActionOutcome Execute(string sql, ISqlActionDatabase database, int options = 0)
+    public static ActionOutcome Execute(
+        string sql,
+        ISqlActionDatabase database,
+        int options = 0,
+        ActionErrorSource source = ActionErrorSource.Database)
     {
         if ((options & ~AdmittedOptionsMask) != 0)
         {
@@ -1260,21 +1300,26 @@ public static class DdlExecutor
         {
             return ActionOutcome.Fail(failure!);
         }
-        BoundDdl? plan = DdlBinder.Bind(stmt, database, out failure);
+        SchemaRoute route = source == ActionErrorSource.Ado ? SchemaRoute.Ado : SchemaRoute.Sql;
+        BoundDdl? plan = DdlBinder.Bind(stmt, database, out failure, route);
         if (plan is null)
         {
             // Colliding SQL/ADO CREATE TABLE (3380) is not a no-op on ACE: it increments MSysObjects/MSysACEs
             // UniqueEntryCount and writes two page-0 commits (r-q28-schema-write-open/pair-sql-*, pair-ado-*).
             if (stmt is CreateTableStatement ct && failure is { IsNotModelled: false, Number: 3380 })
             {
-                return ExecuteDuplicateCreateTable(ct, failure, database);
+                return ExecuteDuplicateCreateTable(ct, failure, database, route);
             }
             return ActionOutcome.Fail(failure!);
         }
         return Execute(plan, database, options);
     }
 
-    private static ActionOutcome ExecuteDuplicateCreateTable(CreateTableStatement ct, SqlFailure bindFailure, ISqlActionDatabase database)
+    private static ActionOutcome ExecuteDuplicateCreateTable(
+        CreateTableStatement ct,
+        SqlFailure bindFailure,
+        ISqlActionDatabase database,
+        SchemaRoute route)
     {
         if (database is not ISqlSchemaDatabase schemaDb)
         {
@@ -1292,7 +1337,7 @@ public static class DdlExecutor
         var request = new CreateTableRequest(
             ct.TableName,
             [.. ct.Columns.Select(c => new NewField(c.Name, NewFieldType.Long))],
-            SchemaRoute.Sql);
+            route);
         SchemaOutcome outcome = writer.CreateTable(database.Workspace, request, schemaDb.NowDateBits(), schemaDb.NowDateBits());
         if (outcome.PublishedAny)
         {
