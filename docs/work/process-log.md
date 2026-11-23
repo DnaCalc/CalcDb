@@ -1154,3 +1154,47 @@ CodeAlta, not a CalcDb task.
 **Owner's call (2026-11-23).** The DDL sweep goes next: the r-q29, r-q30 and r-q31 folders (131 questions) stop in their
 setup DDL as candidates, so the compare cannot see the rules they decide (`zw4d`, `m9gw`, `3s5d`, UNIQUE and REFERENCES).
 It starts with a count of the refusal at each question's first stop over the wide set.
+
+**The first count (compare-stops, `dppk`).** Over wide-x4mw-1, 401 of 2,411 non-matching questions stop first on a DDL
+refusal by name, and about 84 more on a CHECK constraint that reaches ADO as an unmapped 3289. The largest DDL stop was
+not on the organizer's list: a CREATE TABLE with a Memo or OLE column and an inline primary key (146 questions in 34
+folders). The prober was steered to it. compare-stops (1,231 lines) landed on the organizer's review alone, an
+exception to the reviewer rule: it is analysis tooling, changes neither engine nor evidence, and its r-q29 counts matched
+the organizer's own reading of the twenty questions.
+
+## 2026-11-23 - Handover: organizer 11 (01a2051f) to organizer 12
+
+Session 01a2051f (Claude Opus 5.5, 2026-11-22 21:18 to 2026-11-23 about 07:40 UTC with an idle night, about 200 tool
+calls). Landed: 4th6, b9zq (r-q31), 63z8 (r-q32), vpfd, g4tv's ADO half, 94fd, x4mw and bdwv, compare-stops; the
+landing-check locks (dc1dd084, d8a96706); the process changes (2d57df08, eef42ab9). Baselines: core stops-1 464 of 1360;
+wide wide-x4mw-1 747 of 3158. Tasks found: 4th6, x4mw, bdwv, dcrs, pdhk, 344q, zw4d, 5ktt, cxb6, fhqk, dppk. Indicators
+(`tools/process-indicators.ps1`, window since 2026-11-22 09:26; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 80% (28,941 of 36,351) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 13,028 / 15,913 / 3,149 / 465 / 3,796 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 75; 76% | below 70% |
+| Landing check duration (median of 104 runs) | **260 s**: crossed. This session's checks ran beside four to six children and the compares (b9zq's self-check hit its 900 s limit); x4mw's check alone took 248 s | above 3 min |
+| Compare baselines | core 4th6-1, 63z8-1, 94fd-1, x4mw-1, stops-1 all 464 of 1360; wide wide-x4mw-1 747 (18 gained; the w7dm and mhzd flips explained) | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 200 calls for 8 landings plus the progress report, the process changes and the DDL planning (about 25); vpfd's writer-run review took about 6 | above about 15 |
+| Reviewer findings per 1,000 lines | vpfd 4.7 (own reviewer), g4tv ADO 5.7, 94fd second pass 6 on 1,344 | above about 3 |
+| Rules found wrong after landing | 0 | more than one a day |
+| Children stopped waiting for a record | 1: 94fd at writes beside a pending extent (fail-late-candidate kept no pages; task cxb6) | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land`), plus one 20-minute rerun after a push during a check | above 5 min |
+| Book contradictions found | 0 | rising |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 11 (Opus) | about 600 wall, with an idle night | about 200 |
+| 4th6 writer | 36 | 68 |
+| b9zq prober / 63z8 prober | 70 / 93 | 212 / 246 |
+| vpfd writer / its own reviewer | 122 / 23 | 344 / 141 |
+| x4mw and bdwv writer | about 60 working, 464 wall | 109 |
+| compare-stops writer | 32 | 105 |
+| DDL prober r-q34 (running) / 344q writer (running) | 42+ / 40+ | 149+ / 207+ |
+
+The check duration crossed because of parallel load, not one cost: a cap of about three heavy children at a time is
+the next change to try (the organizer's suggestion to the owner, 2026-11-23). Organizer calls per landing stay above
+the line; the writer-run review now in AGENTS.md is the change expected to bring them down, with `fhqk` and fewer
+interim child updates (a CodeAlta request). Organizer 11 forwards only the DDL prober's and the 344q writer's answers.
