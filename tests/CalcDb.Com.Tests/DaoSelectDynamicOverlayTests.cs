@@ -122,16 +122,19 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_expression_column_and_FieldSize()
+    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_expression_column_FieldSize_GetChunk_and_GetRows()
     {
-        // Unrecorded neighbouring cases on a deleted row of a SELECT dynaset stay refused by name:
-        // Collect, non-base expression column, and FieldSize of a Memo column. Uses the retained
+        // Unrecorded neighbouring cases on a row deleted inside BeginTrans of a SELECT dynaset stay refused by name:
+        // Collect, non-base expression column, and FieldSize/GetChunk/GetRows (r-q32-dao-select-lv/q3-lv-deleted-*
+        // and q4-getrows-deleted-* only record deletes at transaction depth 0). Uses the retained
         // r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
         DatabaseObject db = Open(DefCursorMain);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
         SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, N + 1 AS W, Mm FROM T ORDER BY ID", 2);
+        SelectRecordsetObject rsBase = OpenSelect(db, "SELECT ID, N FROM T ORDER BY ID", 2);
         Ok(Method(rs, "MoveFirst"));
+        Ok(Method(rsBase, "MoveFirst"));
 
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db, "Execute", "DELETE FROM T WHERE ID = 1", 128));
@@ -142,9 +145,12 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         // Neighbouring unrecorded cases stay refused by name.
         AssertNotModelled(Get(rs, "Collect", 0), "NotModelled.CollectDeletedRow");
         AssertNotModelled(FieldValue(rs, "W"), "NotModelled.SelectDeletedRowExpression");
-        AssertNotModelled(Get(GetField(rs, "Mm"), "FieldSize"), "NotModelled.FieldSizeDeletedRow");
+        AssertNotModelled(Get(GetField(rs, "Mm"), "FieldSize"), "NotModelled.FieldSizeDeletedRowInTransaction");
+        AssertNotModelled(Method(GetField(rs, "Mm"), "GetChunk", 0, 4), "NotModelled.GetChunkDeletedRowInTransaction");
+        AssertNotModelled(Method(rsBase, "GetRows", 10), "NotModelled.GetRowsDeletedRowInTransaction");
 
         Ok(Method(ws, "Rollback"));
+        Ok(Method(rsBase, "Close"));
         Ok(Method(rs, "Close"));
     }
 
