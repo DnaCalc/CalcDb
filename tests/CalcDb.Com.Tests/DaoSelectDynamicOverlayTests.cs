@@ -122,11 +122,12 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_expression_column_and_FieldSize()
+    public void Select_dynaset_deleted_row_refuses_unrecorded_Collect_and_expression_column_and_gives_3167_for_Memo_FieldSize()
     {
         // Unrecorded neighbouring cases on a deleted row of a SELECT dynaset stay refused by name:
-        // Collect, non-base expression column, and FieldSize of a Memo column. Uses the retained
-        // r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
+        // Collect and non-base expression column. FieldSize of a Memo column on an externally deleted row
+        // is decided by r-q32-dao-select-lv/q3-lv-deleted-accdb (3167, DAO.Field, no IErrorInfo). Uses the
+        // retained r-def-cursor-dao-main.accdb fixture (table T with PK ID, Long N, Memo Mm).
         DatabaseObject db = Open(DefCursorMain);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
@@ -138,11 +139,12 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
 
         // Base column via Field.Value gives recorded 3167 (r-txn-1b/rs-types-after-rollback calls 41[0..2]).
         AssertDaoError(FieldValue(rs, "ID"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: true);
+        // Memo FieldSize on externally deleted row gives recorded 3167 without IErrorInfo (r-q32-dao-select-lv/q3-lv-deleted-accdb).
+        AssertDaoError(Get(GetField(rs, "Mm"), "FieldSize"), 3167, "DAO.Field", "Record is deleted.", publishesErrorInfo: false);
 
         // Neighbouring unrecorded cases stay refused by name.
         AssertNotModelled(Get(rs, "Collect", 0), "NotModelled.CollectDeletedRow");
         AssertNotModelled(FieldValue(rs, "W"), "NotModelled.SelectDeletedRowExpression");
-        AssertNotModelled(Get(GetField(rs, "Mm"), "FieldSize"), "NotModelled.FieldSizeDeletedRow");
 
         Ok(Method(ws, "Rollback"));
         Ok(Method(rs, "Close"));
