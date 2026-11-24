@@ -358,6 +358,31 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: `evidence/r-fmt-1/create-accdb-empty/`, `create-mdb-empty/` (and the 50 other creations, same sizes); `evidence/r-sort-3/create-version-32/`, `create-version-256/` (attempt `a2`, "14.0"), `create-locale-spellings/`; `evidence/r-q-fmt-sort/v256-corpus-accdb/` (second, independent "14.0" creation, re-read), `v128-corpus-accdb/` ("12.0"), `v64-corpus-mdb/` ("4.0"). Discriminators: option 64 versus 128 versus 256 with the same locale; 32 versus the others; spelling variants with the option fixed.
 - **Open**: options 1, 8 and 16 (older Jet) were never asked.
 
+### R-FMT-1 FMT1-CREATE, R-CAT-1 CAT-NEW r-q38 (W-07, task 537t): an empty Jet 4 MDB differs from run to run only in the bytes its creation date derives
+
+- **Claim**: `CreateDatabase(path, locale, 64)` gives a 77,824-byte, 19-page file. Across 10 empty MDBs (two days a week
+  apart, ACE 16.0.20527.20196 and 16.0.20625.20044) exactly 160 bytes differ, all derived from the creation date as
+  the ACCDB image's are: page 0 decoded `0x42..0x6A`, the integer day truncated (`46350.960005` gives `46350`) as ten
+  u32LE; page 0 decoded `0x72..0x7A`, the creation date; page 17 DateCreate and DateUpdate of the 8 MSysObjects rows,
+  all equal to it; and the Owner (page 17) and MSysACEs SID (page 18) words under the date's 2-byte SID keystream.
+  The header mask over `0x18..0x98` and the SID keystream are the ACCDB ones. Against the 42-page ACCDB image: page 0
+  carries `Standard Jet DB` and version byte `0x01`; page 1 frees pages 19 to 511; MSysObjects holds the first 8 of
+  the ACCDB rows (no MSysComplexType tables; page 2 counts 8, index leaves on pages 7 and 8), MSysACEs the 16
+  non-complex rows on page 18 (page 3 counts 16 and 8, usage maps on page 9, index leaf page 10); pages 4 to 6 and
+  11 to 16 are the ACCDB pages byte for byte. Until Close ACE holds the new file without FILE_SHARE_READ (Win32 32)
+  and makes no `.ldb`; Close changes no byte.
+- **Conditions**: unencrypted Jet 4, General sort; `;LANGID=0x0409;CP=1252;COUNTRY=0` and `;LANGID=0x0409`; the
+  DBEngine and `Workspaces(0)` routes; `.mdb` and `.accdb` file names.
+- **Records**: `evidence/r-q38-mdb-new-image/` (eng-general-full a1 to a3, eng-langid-only a1 and a2,
+  ws-general-full a1 and a2; the whole file after CreateDatabase, after `db.Close` and after release); the earlier
+  same-day empties `r-fmt-1/create-mdb-empty`, `r-cat-1/create-mdb-empty`, `r-cat-1/create-accdb-ext-v40` (file
+  artifacts). `file-compare --repeats` gives the four repeat pairs equal outside the clock fields; the ten-file,
+  two-day comparison was the prober's own byte check, not a tool run (the organizer read only the new records'
+  pages).
+- **Open**: what decides the constant header words the ACCDB code already names (decoded `0x19..0x2C`, `0x6A` 4518,
+  `0x98` 0x0654, the `0xE00` table); other locales, code pages and sort orders; `dbEncrypt` (192), passwords; the
+  option as another variant type.
+
 ### R-FMT-1 FMT1-REOPEN and R-PRESERVE-1 PRES-NOOP: opening, enumerating, reading, edit-and-cancel and closing leave the file bytes unchanged
 
 - **Claim**: a read-only open (`OpenDatabase(path, False, True)`) with metadata enumeration and reads of user tables does not change one byte: the SHA-256 is the same at creation, before the open and after the close, for 52 fixtures. A read/write open does the same, one element at a time: open and close; the same again; open, enumerate TableDefs, fields and QueryDefs; open, read all rows through a dynaset; open, open the table, MoveFirst, Edit and CancelUpdate. While open, a 64-byte lock file exists (`.laccdb` or `.ldb`) and it is gone after close.
