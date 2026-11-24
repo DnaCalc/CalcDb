@@ -1728,7 +1728,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             return saved.Family is QueryFamily.Select or QueryFamily.Union
                 ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
-                : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
+                : ExecuteSavedAction(saved);
         }
 
         // TableDirect, adCmdTable, SELECT @@IDENTITY, or SELECT SQL -> row-returning.
@@ -1750,7 +1750,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 return saved.Family is QueryFamily.Select or QueryFamily.Union
                     ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
-                    : ExecuteSavedAction(session, saved, noRecords, recordsAffectedArg);
+                    : ExecuteSavedAction(saved);
             }
         }
 
@@ -1765,7 +1765,6 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return ExecuteAction(
             session,
             effectiveText,
-            isSavedQuery: false,
             allowAdoConnectionExecute: string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal),
             noRecords,
             recordsAffectedArg);
@@ -1835,7 +1834,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return result;
     }
 
-    private CallResult ExecuteSavedAction(AdoOpenSession session, SavedQuery query, bool noRecords, nint recordsAffectedArg)
+    /// <summary>
+    /// No retained record shows ACE answering <c>Connection.Execute</c> of a saved action query (saved SELECT/UNION
+    /// queries route through <see cref="ExecuteRowReturning"/>). Refuse before <see cref="ActionExecutor.Execute"/>
+    /// runs so nothing is written.
+    /// </summary>
+    private static CallResult ExecuteSavedAction(SavedQuery query)
     {
         if (query.Family is not { } family || family == QueryFamily.PassThrough)
         {
@@ -1843,20 +1847,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 "NotModelled.ExecutePassThrough",
                 $"Connection.Execute of the {query.Family?.ToString() ?? "unclassified"} query '{query.Name}'"));
         }
-        RenderedSql rendered = QuerySql.Render(query);
-        if (rendered.Text is not { } sql)
-        {
-            return CallResult.Fail(Failure.NotModelled(
-                "NotModelled.QuerySqlShape",
-                $"the SQL of '{query.Name}': {rendered.NotModelled}"));
-        }
-        return ExecuteAction(session, sql, isSavedQuery: true, allowAdoConnectionExecute: false, noRecords, recordsAffectedArg);
+        return CallResult.Fail(Failure.NotModelled(
+            "NotModelled.AdoSavedActionQuery",
+            $"Connection.Execute of saved {family} query '{query.Name}' has no retained ACE record"));
     }
 
     private CallResult ExecuteAction(
         AdoOpenSession session,
         string sql,
-        bool isSavedQuery,
         bool allowAdoConnectionExecute,
         bool noRecords,
         nint recordsAffectedArg)
@@ -1866,14 +1864,48 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return NotImplemented("Connection.Execute after a catalog change whose catalog cannot be read: " + stale);
         }
 
+        if (ValidateRecordsAffected(recordsAffectedArg) is { } preByRefFail)
+        {
+            return CallResult.Fail(preByRefFail);
+        }
+
+        using ActionSyntax? parsed = ActionParser.Parse(sql, out _);
+        TableEditContext? editContext = parsed is null ? null : session.Sql.EditContext(parsed.TargetName, out _);
+        if (editContext is not null)
+        {
+            if (editContext.Semantics.HasCheckConstraints)
+            {
+                if (!allowAdoConnectionExecute)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoCommandCheckConstraint",
+                        $"Command.Execute on table '{editContext.Semantics.TableName}' with CHECK constraints has no retained ACE record"));
+                }
+                bool isMdb = session.Profile.Format == FileFormat.Jet4;
+                if (!IsRecordedAdoCheckActionKind(isMdb, parsed!.Kind))
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoCheckConstraintAction",
+                        $"Connection.Execute {parsed.Kind} on {(isMdb ? "Jet 4 MDB" : "ACCDB")} table '{editContext.Semantics.TableName}' with CHECK constraints has no retained ACE record"));
+                }
+            }
+            if (parsed!.Kind is ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update
+                && HasTextlessValidationRule(editContext.Semantics))
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoProviderError",
+                    $"ADO {(allowAdoConnectionExecute ? "Connection.Execute" : "Command.Execute")} on table '{editContext.Semantics.TableName}' with a textless ValidationRule (ACE 3317) has no retained ACE record"));
+            }
+        }
+
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        // Pass ActionErrorSource.Ado only for ad-hoc Connection.Execute (not Command.Execute or saved queries).
+        // Pass ActionErrorSource.Ado only for ad-hoc Connection.Execute; never pass ActionErrorSource.Database from ADO.
         ActionOutcome outcome = ActionExecutor.Execute(
             sql,
             session.Sql,
             128,
             null,
-            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.Database);
+            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.QueryDef);
         if (outcome.Failure is { } sqlFailure)
         {
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")
@@ -1881,10 +1913,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return CallResult.Fail(Failure.NotModelled(sqlFailure.NotModelled!, sqlFailure.Message));
             }
             bool allowAdoCheckViolation = sqlFailure.Number == 3317
-                && IsRecordedAdoCheckViolation(session, sql, sqlFailure.Message, isSavedQuery, allowAdoConnectionExecute);
+                && IsRecordedAdoCheckViolation(editContext, sqlFailure.Message, allowAdoConnectionExecute);
             MappedProviderError? mapped = AdoSqlErrors.TryMap(
                 sqlFailure,
-                isSavedQuery,
+                isSavedQuery: false,
                 out Failure? unmodelled,
                 sql,
                 allowAdoCheckViolation);
@@ -1931,35 +1963,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     /// <summary>
     /// True only when an ACE 3317 failure came from ad-hoc <c>Connection.Execute</c> violating a SQL <c>CHECK</c>
-    /// constraint on a recorded format/action tuple (ACCDB INSERT/UPDATE, MDB INSERT ... VALUES):
-    /// r-oledb-odbc/error-record-channels #142-152, r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22,
-    /// r-q30-sql-check/mdb-viol-ado-exec #28-39, r-q30-sql-check/upd-viol-ado-exec #29-40,
-    /// r-q31-sql-check-2/multi-ins-ado-exec #32-43, r-q31-sql-check-2/multi-upd-ado-exec #30-41.
-    /// Excludes Command.Execute, saved queries, textless field/table ValidationRule, and MDB UPDATE.
+    /// constraint (not a textless field/table ValidationRule).
     /// </summary>
     private static bool IsRecordedAdoCheckViolation(
-        AdoOpenSession session,
-        string sql,
+        TableEditContext? editContext,
         string message,
-        bool isSavedQuery,
         bool allowAdoConnectionExecute)
     {
-        if (isSavedQuery || !allowAdoConnectionExecute)
-        {
-            return false;
-        }
-        using ActionSyntax? action = ActionParser.Parse(sql, out _);
-        if (action is null)
-        {
-            return false;
-        }
-        bool isMdb = session.Profile.Format == FileFormat.Jet4;
-        if (!IsRecordedAdoCheckActionKind(isMdb, action.Kind))
-        {
-            return false;
-        }
-        TableEditContext? editContext = session.Sql.EditContext(action.TargetName, out _);
-        if (editContext is null || editContext.Semantics.CheckConstraints.Count == 0)
+        if (!allowAdoConnectionExecute || editContext is null || editContext.Semantics.CheckConstraints.Count == 0)
         {
             return false;
         }
@@ -1975,6 +1986,43 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return false;
     }
 
+    private static bool HasTextlessValidationRule(MutationSemantics semantics)
+    {
+        if (semantics.TableRule is { ValidationText: null })
+        {
+            return true;
+        }
+        foreach (ColumnSemantics col in semantics.Columns)
+        {
+            if (col.Rule is { ValidationText: null })
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Validate a ByRef <c>RecordsAffected</c> argument before executing an action statement so an unrecorded ByRef
+    /// type refuses without modifying the database.
+    /// </summary>
+    private static Failure? ValidateRecordsAffected(nint arg)
+    {
+        if (arg == 0)
+        {
+            return null;
+        }
+        NativeVariant* v = (NativeVariant*)arg;
+        if ((v->Vt & (ushort)VarType.ByRef) == 0)
+        {
+            return null;
+        }
+        VarType baseVt = (VarType)(v->Vt & ~(ushort)VarType.ByRef);
+        return baseVt is VarType.Variant or VarType.I4 or VarType.Bstr
+            ? null
+            : Failure.NotImplemented($"Connection.Execute RecordsAffected ByRef of {baseVt} (not recorded)");
+    }
+
     /// <summary>
     /// Write <paramref name="count"/> back to a ByRef <c>RecordsAffected</c> argument on success only
     /// (r-ops/byref-ado-execute-records-affected, r-q2-ado-misc/ado-recordsaffected-byref,
@@ -1982,6 +2030,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
     /// </summary>
     private static Failure? WriteRecordsAffected(nint arg, int count)
     {
+        if (ValidateRecordsAffected(arg) is { } fail)
+        {
+            return fail;
+        }
         if (arg == 0)
         {
             return null;
