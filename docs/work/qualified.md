@@ -1254,7 +1254,31 @@ is summarised in [qualification-report.md](qualification-report.md).
   corpus test over all retained fixtures (`probes/r-fmt-2b/create-w-accdb` for the pre-column rows);
   `evidence/r-q19-growth-open/split-uncovered-right-leaf-below` page 0 (0x05B5 to 0x0940), `evidence/r-q8-header-counter`.
   Built in publication (18c274e3).
-- **Open**: an empty BINARY value and a fixed field set to Null (r-q36); the counter at 0xFFFF.
+- **Open**: an empty BINARY value; the counter at 0xFFFF. A fixed field set to Null: see the r-q36 note below.
+
+### R-FMT-2 r-q36 (W-05, task bfhj): a leading U+FEFF is stored as written, a row with no variable column pads to 4 bytes before its mask, a fixed field set to Null keeps its bytes
+
+- **Claim**:
+  - *Leading U+FEFF*: uncompressed Text, a single-page and a chained long-value Memo, and a compressible column whose
+    value does not compress store the UTF-16LE units as written, starting `ff fe`: no escape, no prefix, no error.
+    ACE's reader takes a leading `ff fe` as the compressed marker on compressed Text, inline Memo and compressed
+    single-page Memo, which is why such values read back changed (the R-ORACLE-1 OR-WIRE note).
+  - *Compression ties*: Text with the compression flag compresses when the compressed form is no longer than the raw
+    one; Memo only when it is shorter. An inline Memo (64 raw bytes or fewer, decided before compression) compresses
+    whatever its flag says; a single-page long-value Memo follows its flag; a chained one never compresses.
+  - *Rows with no variable column*: the bytes before the null mask are at least 4, so `max(0, 2 - fixedSize)` zero
+    bytes sit between the fixed area and the mask (2 for Yes/No-only tables, 1 for one Byte column, none from 2 fixed
+    bytes). With a variable column there is no pad: the first variable value starts at the end of the fixed area.
+  - *Fixed field set to Null*: ACE clears the field's mask bit and keeps its fixed bytes as they were, in place and in
+    every rewrite (grow, shrink, an overflow move); a field inserted Null keeps zeros. A trailing Null Decimal does not
+    shorten C. SQL UNIQUEIDENTIFIER and BIGINT columns are variable (flags `0x02`), so Null removes their value.
+- **Conditions**: ACCDB (versions 2 and 6) and Jet 4 MDB; DAO and ADO; SQL INSERT and UPDATE, recordset AddNew and
+  Edit; Yes/No-only tables of 1 to 41 columns, 0 to 3 fixed bytes, all fixed scalar types and DATETIME2.
+- **Records**: `evidence/r-q36-publication-bytes/` (33 questions, 7 frozen fixtures in `probes/fixtures.json`): feff-*,
+  zf-*, nullfix-*. The organizer read nullfix-pure-inplace-accdb-dao page 45 (only the mask bytes at 4094 change) and
+  zf-fixed1-disc-accdb-dao page 53 (`09 00 5a 00 ab 00`).
+- **Open**: compression beyond these ties; a table whose rows have C below MaxColumns; the slack an ADO keyset shrink
+  zeroes (nullfix-ado-accdb, after-ado-rs, page 45 slot 2).
 
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
