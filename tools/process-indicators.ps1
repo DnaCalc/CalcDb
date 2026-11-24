@@ -13,14 +13,18 @@ $repo = (git rev-parse --show-toplevel).Trim()
 $engine = '^src/CalcDb\.(Com|Com\.Core|Com\.Dao|Com\.Ado|Sql|Isam|Format|Storage|Storage\.Windows|Values|Values\.Windows|Catalog|Expressions|Foundation)/'
 $engineTests = '^tests/CalcDb\.(Com|Sql|Isam|Format|Storage|Values|Expressions)\.Tests/'
 $process = '^(AGENTS\.md|CLAUDE\.md|docs/the-plan\.md|docs/work/(landing-check|process-log)\.md|tools/(landing-check|process-indicators)\.ps1)$'
-$books = '^docs/work/(register|qualified|qualification-report|book-proposals)\.md$|^docs/work/compare-baseline.*\.tsv$'
-$lines = @{ engine = 0; tests = 0; tooling = 0; process = 0; bookkeeping = 0; probeTool = 0 }
+$books = '^docs/work/(register|qualified|qualification-report|book-proposals)\.md$'
+# The baseline TSVs are copies of a compare run's output: counted on their own, outside the share (process review,
+# 2026-11-24: 3,242 of the 3,405 bookkeeping lines of organizer 12's window were baseline copies).
+$generated = '^docs/work/compare-baseline.*\.tsv$'
+$lines = @{ engine = 0; tests = 0; tooling = 0; process = 0; bookkeeping = 0; probeTool = 0; generated = 0 }
 $evidenceFiles = 0
 foreach ($row in git -C $repo log --since="$Since" --numstat --format= --no-renames) {
     if ($row -notmatch '^(\d+|-)\t(\d+|-)\t(.+)$') { continue }
     $n = $(if ($Matches[1] -eq '-') { 0 } else { [int] $Matches[1] + [int] $Matches[2] })
     $path = $Matches[3]
     if ($path -match '^(evidence|probes)/') { $evidenceFiles++ }
+    elseif ($path -match $generated) { $lines.generated += $n }
     elseif ($path -match $engine) { $lines.engine += $n }
     elseif ($path -match $engineTests) { $lines.tests += $n }
     elseif ($path -match $process) { $lines.process += $n }
@@ -54,8 +58,8 @@ function Pct($x) { "{0:P0}" -f $x }
 ""
 "| Indicator | Value | Review when |"
 "| --- | --- | --- |"
-"| Engine share of changed lines (engine and its tests, of all but evidence) | $(Pct $share) ($($lines.engine + $lines.tests) of $all) | below two thirds over a day |"
-"| Lines changed: engine / tests / tooling (of it probes) / process / bookkeeping | $($lines.engine) / $($lines.tests) / $($lines.tooling) ($($lines.probeTool)) / $($lines.process) / $($lines.bookkeeping) | probe tooling above the engine for a week |"
+"| Engine share of changed lines (engine and its tests, of all but evidence and baseline copies) | $(Pct $share) ($($lines.engine + $lines.tests) of $all) | below two thirds over a day |"
+"| Lines changed: engine / tests / tooling (of it probes) / process / bookkeeping | $($lines.engine) / $($lines.tests) / $($lines.tooling) ($($lines.probeTool)) / $($lines.process) / $($lines.bookkeeping); baseline copies $($lines.generated) | probe tooling above the engine for a week |"
 "| Evidence and probe files changed | $evidenceFiles | - |"
 "| Landings checked; passed on the first run | $($names.Count); $(if ($names.Count) { Pct ($firstPass / $names.Count) } else { '-' }) | below 70% |"
 "| Landing check duration (median of $($secs.Count) runs) | $(if ($null -ne $median) { "$median s" } else { '-' }) | above 3 min |"

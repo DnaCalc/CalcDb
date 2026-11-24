@@ -38,8 +38,8 @@ A child ends with these parts and nothing else:
 - **Tests:** the tests that cite those records, and the result of its last self-check.
 - **Review:** the reviewer's session, its minutes and tool calls, and each finding with its disposition (applied in
   commit X, or declined because Y).
-- **Bookkeeping:** the register row text, qualified.md note or process-log lines it would add. Only the organizer edits
-  those files.
+- **Bookkeeping:** the register row text (its status in one or two sentences: what it admits, with the commit), the
+  qualified.md note or the process-log lines it would add. Only the organizer edits those files.
 - **Open:** the branches of the slice it did not do, and every byte it met that no record decides.
 
 ### The standard brief

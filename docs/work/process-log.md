@@ -1282,3 +1282,26 @@ waits.
 
 Successor: CalcDb organizer 13, session 01a20b62-7ddf-74d7-b222-f8bffa05e182, started beside 01a2074e (`--no-parent`). Organizer 12 forwards
 only DDL writer 3a's (01a20b14) final answer.
+
+## 2026-11-24 - Organizer 13 (01a20b62): triggered process review
+
+Two indicators of organizer 12's handover crossed (The Plan §4). Asked first: what process to remove.
+
+**Engine share: a counting effect.** Of the 3,405 bookkeeping lines, 3,242 were the compare-baseline TSVs, copies of a
+compare run's output that the organizer commits; hand-written bookkeeping was 163 lines. `tools/process-indicators.ps1`
+now counts the baseline copies on their own, outside the share: over the same window the share is 74% (8,213 of 11,129),
+above the line. Tooling (2,290 lines: x38g, 6qw5, compare-stops) was real work the builds and the compare needed.
+
+**Removed: report text in register rows.** Rows reached 6,042 characters (median 379, 163 KB in all), and every search
+of the register returns them whole into the organizer's context. A done row's status now gives its commit, its
+sessions and one or two sentences on what it admits (register header; the child's report, landing-check.md). Old rows
+stay as they are.
+
+**Check duration: code landings are fast, probe landings are not.** After x38g a code landing that selects two test
+projects took 142 s (ptrj-fix). A landing that touches `evidence/` or `probes/` selects all ten projects and runs them
+one after another: 7 min 10 s of r-q35's 716 s check (Isam 138 s, Sql 110 s). Skipping them is not safe, since Format
+and Isam tests enumerate the evidence fixtures; running them concurrently is task `c68k`. Organizer calls per landing
+stay with `fhqk`.
+
+Nothing else removed: the per-landing review, the ready gate and the standard brief each answer a failure of the last
+two days (ptrj's refused recorded case, 94fd's record without pages, 5ktt's misread call).
