@@ -33,6 +33,7 @@ param(
     [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
     [switch] $Finish,                               # with -Land and -Compare: if nothing lost, record baseline, push and clean up
     [int] $MaxCpuCount = 4,                         # MSBuild -m cap (with -nr:false) so builds do not spawn 16 resident nodes
+    [int] $MaxParallelTests = 3,                    # concurrent dotnet test --no-build processes (c68k)
     [int] $LockWaitMinutes = 90)                    # how long a run waits for another run's lock before it gives up
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
@@ -46,6 +47,7 @@ if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for i
 if ($Land -and (-not $Branch -or $Filter)) { throw "-Land lands a -Branch check that ran every selected test (no -Filter)" }
 if ($Compare -and -not ($Land -and $Snapshot)) { throw "-Compare compares what -Land landed, from the -Snapshot binaries" }
 if ($Finish -and -not ($Land -and $Compare)) { throw "-Finish requires -Land and -Compare" }
+if ($MaxParallelTests -lt 1) { throw "-MaxParallelTests must be at least 1" }
 $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 function Step([string] $what) { "[{0,5:n0} s] {1}" -f $sw.Elapsed.TotalSeconds, $what }
@@ -631,42 +633,142 @@ try {
         if (Test-Path $out) { Remove-Item $out -Recurse -Force }
         New-Item -ItemType Directory -Force $out | Out-Null
         $env:COLUMNS = "4000"
-        foreach ($t in $Tests) {
-            $log = Join-Path $out "$t.txt"
-            dotnet test "tests/CalcDb.$t.Tests" --no-build @filterArgs --logger "console;verbosity=detailed" `
-                --logger "trx;LogFileName=$t.trx" --results-directory $out > $log 2>&1
-            $code = $LASTEXITCODE
-            $text = (Get-Content $log -Raw) -replace '\r?\n\s*', ' '
-            $trxPath = Join-Path $out "$t.trx"
-            $trx = if (Test-Path $trxPath) { [xml] (Get-Content $trxPath -Raw) } else { $null }
-            if ($trx) {
-                $c = $trx.TestRun.ResultSummary.Counters
-                Step "$t`: total $($c.total), passed $($c.passed), failed $($c.failed), not executed $($c.notExecuted) (exit $code)"
-            } else { Step "$t`: no trx (exit $code)" }
-            if ($code) {
-                $failed++
-                if ($trx) {
-                    $trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed' | Select-Object -First 30 |
-                        ForEach-Object { "  FAILED $($_.testName)" }
+        if ($Tests.Count -gt 0) {
+            # Run selected test projects concurrently, bounded ($MaxParallelTests, default 3), longest first (c68k).
+            # Shared-path audit across all ten test projects: none write .oracle-runs or artifacts/native, all temp
+            # files use per-test GUIDs or ProcessId, and only Com touches HKCU registration.
+            $testPriority = @('Isam', 'Sql', 'Evidence', 'Format', 'Corpus', 'Com', 'Values', 'Storage', 'Perf', 'Expressions')
+            $testRank = [Collections.Generic.Dictionary[string, int]]::new([StringComparer]::OrdinalIgnoreCase)
+            for ($i = 0; $i -lt $testPriority.Count; $i++) { $testRank[$testPriority[$i]] = $i }
+            $queue = [Collections.Generic.Queue[string]]::new()
+            foreach ($t in @($Tests | Sort-Object {
+                        if ($testRank.ContainsKey($_)) { $testRank[$_] } else { $testPriority.Count }
+                    }, { $_ })) {
+                $queue.Enqueue($t)
+            }
+            $limit = [Math]::Min($MaxParallelTests, $queue.Count)
+            if ($queue.Count -gt 1) {
+                Step "running $($queue.Count) test projects ($limit at a time): $($queue.ToArray() -join ', ')"
+            }
+            $running = [Collections.Generic.List[object]]::new()
+            function Start-TestProject([string] $TestName) {
+                $log = Join-Path $out "$TestName.txt"
+                $errLog = Join-Path $out "$TestName.err.tmp"
+                $psi = [Diagnostics.ProcessStartInfo]::new('dotnet')
+                $psi.WorkingDirectory = $work
+                $psi.UseShellExecute = $false
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError = $true
+                $psi.Environment['COLUMNS'] = '4000'
+                foreach ($a in @('test', "tests/CalcDb.$TestName.Tests", '--no-build') + $filterArgs + @('--logger', 'console;verbosity=detailed', '--logger', "trx;LogFileName=$TestName.trx", '--results-directory', $out)) {
+                    [void] $psi.ArgumentList.Add($a)
                 }
-                if (-not $trx) { Get-Content $log -Tail 15 | ForEach-Object { "  $_" } }
+                $outStream = $null; $errStream = $null; $proc = $null
+                try {
+                    $outStream = [IO.File]::Create($log)
+                    $errStream = [IO.File]::Create($errLog)
+                    $projSw = [Diagnostics.Stopwatch]::StartNew()
+                    $proc = [Diagnostics.Process]::Start($psi)
+                    $outTask = $proc.StandardOutput.BaseStream.CopyToAsync($outStream)
+                    $errTask = $proc.StandardError.BaseStream.CopyToAsync($errStream)
+                    $waitTask = $proc.WaitForExitAsync()
+                    return [pscustomobject]@{
+                        Name = $TestName; Log = $log; ErrLog = $errLog; Proc = $proc; Sw = $projSw
+                        OutStream = $outStream; ErrStream = $errStream; OutTask = $outTask; ErrTask = $errTask; WaitTask = $waitTask
+                    }
+                } catch {
+                    if ($proc) { try { if (-not $proc.HasExited) { $proc.Kill($true) } } catch {}; try { $proc.Dispose() } catch {} }
+                    if ($outStream) { try { $outStream.Dispose() } catch {} }
+                    if ($errStream) { try { $errStream.Dispose() } catch {} }
+                    if (Test-Path $errLog) { Remove-Item $errLog -Force -ErrorAction SilentlyContinue }
+                    throw
+                }
             }
-            # Replay counters the replay tests print per record, summed by form (edit/lock "checks", action "actions").
-            $sums = @{}
-            foreach ($m in [regex]::Matches($text, '(\d+) (checks )?matched(?: \((\d+) actions\))?, (\d+) mismatched, (\d+) not modelled')) {
-                $form = if ($m.Groups[2].Success) { 'checks' } elseif ($m.Groups[3].Success) { 'actions' } else { 'values' }
-                if (-not $sums[$form]) { $sums[$form] = @(0, 0, 0, 0, 0) }
-                $s = $sums[$form]
-                $s[0] += [int] $m.Groups[1].Value; $s[1] += [int] $m.Groups[4].Value; $s[2] += [int] $m.Groups[5].Value
-                if ($m.Groups[3].Success) { $s[3] += [int] $m.Groups[3].Value }
-                $s[4]++
+            try {
+                while ($running.Count -lt $limit -and $queue.Count -gt 0) {
+                    $running.Add((Start-TestProject $queue.Dequeue()))
+                }
+                while ($running.Count -gt 0) {
+                    [Threading.Tasks.Task[]] $waitTasks = @($running | ForEach-Object { $_.WaitTask })
+                    $doneTask = [Threading.Tasks.Task]::WhenAny($waitTasks).GetAwaiter().GetResult()
+                    $completed = @($running | Where-Object { $_.WaitTask.IsCompleted -or [object]::ReferenceEquals($_.WaitTask, $doneTask) })
+                    $finished = [Collections.Generic.List[object]]::new()
+                    foreach ($item in $completed) {
+                        [void] $running.Remove($item)
+                        $code = -1
+                        try {
+                            [void] $item.WaitTask.GetAwaiter().GetResult()
+                            $item.Sw.Stop()
+                            [void] $item.OutTask.GetAwaiter().GetResult()
+                            [void] $item.ErrTask.GetAwaiter().GetResult()
+                        } finally {
+                            $item.OutStream.Dispose()
+                            $item.ErrStream.Dispose()
+                            if ($item.Proc.HasExited) { $code = $item.Proc.ExitCode }
+                            $item.Proc.Dispose()
+                        }
+                        if (Test-Path $item.ErrLog) {
+                            $errBytes = [IO.File]::ReadAllBytes($item.ErrLog)
+                            if ($errBytes.Length -gt 0) {
+                                $append = [IO.FileStream]::new($item.Log, [IO.FileMode]::Append, [IO.FileAccess]::Write)
+                                try { $append.Write($errBytes, 0, $errBytes.Length) } finally { $append.Dispose() }
+                            }
+                            Remove-Item $item.ErrLog -Force -ErrorAction SilentlyContinue
+                        }
+                        $finished.Add([pscustomobject]@{ Name = $item.Name; Log = $item.Log; Code = $code; Seconds = [int] [Math]::Round($item.Sw.Elapsed.TotalSeconds) })
+                    }
+                    # Refill slots before parsing trx/logs so no slot sits idle while summarizing.
+                    while ($running.Count -lt $limit -and $queue.Count -gt 0) {
+                        $running.Add((Start-TestProject $queue.Dequeue()))
+                    }
+                    foreach ($res in $finished) {
+                        $t = $res.Name
+                        $log = $res.Log
+                        $code = $res.Code
+                        $sec = $res.Seconds
+                        $rawLog = if (Test-Path $log) { Get-Content $log -Raw } else { "" }
+                        $text = "$rawLog" -replace '\r?\n\s*', ' '
+                        $trxPath = Join-Path $out "$t.trx"
+                        $trx = if (Test-Path $trxPath) { try { [xml] (Get-Content $trxPath -Raw) } catch { $null } } else { $null }
+                        if ($trx) {
+                            $c = $trx.TestRun.ResultSummary.Counters
+                            Step "$t`: total $($c.total), passed $($c.passed), failed $($c.failed), not executed $($c.notExecuted) (exit $code, ${sec}s)"
+                        } else { Step "$t`: no trx (exit $code, ${sec}s)" }
+                        if ($code) {
+                            $failed++
+                            if ($trx) {
+                                $trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed' | Select-Object -First 30 |
+                                    ForEach-Object { "  FAILED $($_.testName)" }
+                            }
+                            if (-not $trx -and (Test-Path $log)) { Get-Content $log -Tail 15 | ForEach-Object { "  $_" } }
+                        }
+                        # Replay counters the replay tests print per record, summed by form (edit/lock "checks", action "actions").
+                        $sums = @{}
+                        foreach ($m in [regex]::Matches($text, '(\d+) (checks )?matched(?: \((\d+) actions\))?, (\d+) mismatched, (\d+) not modelled')) {
+                            $form = if ($m.Groups[2].Success) { 'checks' } elseif ($m.Groups[3].Success) { 'actions' } else { 'values' }
+                            if (-not $sums[$form]) { $sums[$form] = @(0, 0, 0, 0, 0) }
+                            $s = $sums[$form]
+                            $s[0] += [int] $m.Groups[1].Value; $s[1] += [int] $m.Groups[4].Value; $s[2] += [int] $m.Groups[5].Value
+                            if ($m.Groups[3].Success) { $s[3] += [int] $m.Groups[3].Value }
+                            $s[4]++
+                        }
+                        foreach ($form in ($sums.Keys | Sort-Object)) {
+                            $s = $sums[$form]
+                            $acts = if ($form -eq 'actions') { " ($($s[3]) actions)" } else { "" }
+                            "    replay $form`: $($s[0]) matched$acts, $($s[1]) mismatched, $($s[2]) not modelled, over $($s[4]) records"
+                        }
+                        [regex]::Matches($text, 'MISMATCH: .{0,300}') | Select-Object -First 10 | ForEach-Object { "  $($_.Value)" }
+                    }
+                }
+            } finally {
+                foreach ($item in $running) {
+                    try { if (-not $item.Proc.HasExited) { $item.Proc.Kill($true) } } catch {}
+                    try { $item.OutStream.Dispose() } catch {}
+                    try { $item.ErrStream.Dispose() } catch {}
+                    try { $item.Proc.Dispose() } catch {}
+                    if (Test-Path $item.ErrLog) { Remove-Item $item.ErrLog -Force -ErrorAction SilentlyContinue }
+                }
             }
-            foreach ($form in $sums.Keys) {
-                $s = $sums[$form]
-                $acts = if ($form -eq 'actions') { " ($($s[3]) actions)" } else { "" }
-                "    replay $form`: $($s[0]) matched$acts, $($s[1]) mismatched, $($s[2]) not modelled, over $($s[4]) records"
-            }
-            [regex]::Matches($text, 'MISMATCH: .{0,300}') | Select-Object -First 10 | ForEach-Object { "  $($_.Value)" }
         }
         $runner = Join-Path $work "src\CalcDb.Oracle.Runner\bin\Debug\net11.0\calcdb-oracle.exe"
         $worker = Join-Path $work "src\CalcDb.Oracle.Worker\bin\Debug\net11.0-windows\win-x64\CalcDb.Oracle.Worker.exe"
