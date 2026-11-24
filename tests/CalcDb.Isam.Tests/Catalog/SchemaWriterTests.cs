@@ -159,6 +159,14 @@ public sealed class SchemaWriterTests
             return outcome;
         }
 
+        public SchemaOutcome AddCheckConstraint(AddCheckConstraintRequest request, ulong created, ulong updated)
+        {
+            SchemaOutcome outcome = Writer().AddCheckConstraint(Workspace, request, created, updated);
+            Assert.True(outcome.Succeeded, $"{outcome.Refused} {outcome.Accepted}");
+            Pages = outcome.ExtentPages;
+            return outcome;
+        }
+
         /// <summary>Database.Close of a session: publishes a closing commit only when pages are queued for release.</summary>
         public void Close()
         {
@@ -523,7 +531,10 @@ public sealed class SchemaWriterTests
         // LVAL + inline PK is now recorded (evidence/r-q34-ddl-sweep/lval-pk-memo-accdb-dao); keep unrecorded inline
         // constraint, NOT NULL, and map-capacity boundaries refused by name.
         Assert.NotNull(w.Check(new("T", [Long("a")], SchemaRoute.Sql, [new("UX_T", ["a"], PrimaryKey: false, Unique: true)]))?.NotWritten);
-        Assert.NotNull(w.Check(new("T", [Long("id"), Long("k")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_T", ["k"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        // 1-2 col Long/Text UNIQUE after PK is now recorded (evidence/r-q34-ddl-sweep/uq-*); keep 3-col, non-(Long/Text), and LVAL+2-col UNIQUE refused.
+        Assert.NotNull(w.Check(new("T", [Long("id"), Long("a"), Long("b"), Long("c")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_3", ["a", "b", "c"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Long("id"), new("d", NewFieldType.Double)], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_D", ["d"], PrimaryKey: false, Unique: true)]))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [Long("id"), Long("a"), Text("b"), new("m", NewFieldType.Memo)], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_2", ["a", "b"], PrimaryKey: false, Unique: true)]))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [Text("s"), Long("id")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("UX_T", ["s"], PrimaryKey: false, Unique: true)]))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [Long("id"), Text("s")], SchemaRoute.Sql, [new("PK_T", ["id"], PrimaryKey: true), new("PK_T", ["s"], PrimaryKey: false, Unique: true)]))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [new("d", NewFieldType.Double, Required: true)], SchemaRoute.Sql))?.NotWritten);
@@ -1657,14 +1668,14 @@ public sealed class SchemaWriterTests
             Assert.Equal(before, session.File.Snapshot());
         }
 
-        // Finding 4b: Populated Jet 4 MDB refuses PRIMARY, IGNORE NULL, DISALLOW NULL, and DESC (and ADO route) with 0 bytes written.
+        // Finding 4b: Populated Jet 4 MDB refuses IGNORE NULL, DISALLOW NULL, and DESC (and ADO route) with 0 bytes written;
+        // PRIMARY KEY on a populated Jet 4 MDB is now recorded in evidence/r-q34-ddl-sweep/alt-pk-rows-mdb-dao.
         byte[] mdbPopImage = Kept.AfterSetupImage("ix-nonuq-rows-nopk-mdb-dao");
         using (var session = new Session(mdbPopImage))
         {
             CreateIndexRequest[] mdbRefused =
             [
                 new("T", new("IX_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado),
-                new("T", new("PK_ID", ["ID"], PrimaryKey: true, Unique: true), SchemaRoute.Sql),
                 new("T", new("IX_IGN", ["K"], PrimaryKey: false, IgnoreNull: true), SchemaRoute.Sql),
                 new("T", new("IX_DIS", ["K"], PrimaryKey: false, DisallowNull: true), SchemaRoute.Sql),
                 new("T", new("IX_DESC", ["K"], PrimaryKey: false, Descending: [true]), SchemaRoute.Sql),
@@ -1744,5 +1755,176 @@ public sealed class SchemaWriterTests
             }
         }
     }
+
+    /// <summary>All 4 CREATE TABLE UNIQUE records of evidence/r-q34-ddl-sweep (uq-*).</summary>
+    public static TheoryData<string, bool, CreateTableRequest> RQ34CreateTableUniqueCases() => new()
+    {
+        { "uq-col-accdb-ado", false, new("T", [Long("ID"), Long("K")], SchemaRoute.Ado, [new("PK", ["ID"], PrimaryKey: true), new("UQ_K", ["K"], PrimaryKey: false, Unique: true)]) },
+        { "uq-col-accdb-dao", false, new("T", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK", ["ID"], PrimaryKey: true), new("UQ_K", ["K"], PrimaryKey: false, Unique: true)]) },
+        { "uq-col-mdb-dao", true, new("T", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK", ["ID"], PrimaryKey: true), new("UQ_K", ["K"], PrimaryKey: false, Unique: true)]) },
+        { "uq-table-2col-accdb-dao", false, new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Sql, [new("PK", ["ID"], PrimaryKey: true), new("UQ_KS", ["K", "S"], PrimaryKey: false, Unique: true)]) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableUniqueCases))]
+    public void R_q34_ddl_sweep_create_table_unique_writes_ACE_pages(string question, bool isMdb, CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] fixture = isMdb ? FixtureMdb() : Fixture();
+        (ulong created, ulong updated) = AceDates(kept.AceImage(fixture), request.Name);
+        using var session = new Session(fixture);
+        session.Create(request, created, updated);
+        session.Close();
+        AssertAsAce(kept, fixture, session.File.Snapshot());
+    }
+
+    /// <summary>All 10 ALTER TABLE ADD CONSTRAINT UNIQUE and PRIMARY KEY records of evidence/r-q34-ddl-sweep (alt-uq-*, alt-pk-*).</summary>
+    public static TheoryData<string, CreateIndexRequest> RQ34AlterConstraintIndexCases() => new()
+    {
+        { "alt-uq-empty-accdb-ado", new("T", new("UQ_V", ["V"], PrimaryKey: false, Unique: true), SchemaRoute.Ado) },
+        { "alt-uq-empty-accdb-dao", new("T", new("UQ_V", ["V"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "alt-uq-empty-mdb-dao", new("T", new("UQ_V", ["V"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "alt-uq-rows-accdb-dao", new("T", new("UQ_V", ["V"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "alt-uq-rows-mdb-dao", new("T", new("UQ_V", ["V"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "alt-pk-empty-accdb-ado", new("T", new("PK_T", ["ID"], PrimaryKey: true, Unique: false), SchemaRoute.Ado) },
+        { "alt-pk-empty-accdb-dao", new("T", new("PK_T", ["ID"], PrimaryKey: true, Unique: false), SchemaRoute.Sql) },
+        { "alt-pk-empty-mdb-dao", new("T", new("PK_T", ["ID"], PrimaryKey: true, Unique: false), SchemaRoute.Sql) },
+        { "alt-pk-rows-accdb-dao", new("T", new("PK_T", ["ID"], PrimaryKey: true, Unique: false), SchemaRoute.Sql) },
+        { "alt-pk-rows-mdb-dao", new("T", new("PK_T", ["ID"], PrimaryKey: true, Unique: false), SchemaRoute.Sql) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34AlterConstraintIndexCases))]
+    public void R_q34_ddl_sweep_alter_table_unique_and_pk_writes_ACE_pages(string question, CreateIndexRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (_, ulong updated) = AceDates(ace, request.Table);
+
+        using var session = new Session(startImage);
+        session.CreateIndex(request, updated);
+        session.Close();
+        AssertAsAce(kept, startImage, session.File.Snapshot());
+    }
+
+    /// <summary>All 5 succeeding ADO ALTER TABLE ADD CONSTRAINT CHECK records of evidence/r-q34-ddl-sweep (alt-check-*).</summary>
+    public static TheoryData<string, AddCheckConstraintRequest, int, int> RQ34AlterCheckCases() => new()
+    {
+        { "alt-check-empty-accdb-ado", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 1, unchecked((int)0x80000000) },
+        { "alt-check-empty-mdb-ado", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 1, unchecked((int)0x80000000) },
+        { "alt-check-rows-accdb-ado", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 1, unchecked((int)0x80000000) },
+        { "alt-check-rows-mdb-ado", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 1, unchecked((int)0x80000000) },
+        { "alt-check-two-accdb-ado", new("T", "CK_B", "V", "V <= 100", SchemaRoute.Ado), 2, unchecked((int)0x80000001) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34AlterCheckCases))]
+    public void R_q34_ddl_sweep_alter_table_check_writes_ACE_pages_and_roundtrips_CheckConstraintCatalog(
+        string question,
+        AddCheckConstraintRequest request,
+        int expectedConstraintCount,
+        int expectedNewId)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (_, ulong updated) = AceDates(ace, request.Table);
+
+        using var session = new Session(startImage);
+        session.AddCheckConstraint(request, updated, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+        AssertAsAce(kept, startImage, ours);
+
+        // Verify CheckConstraintCatalog reads back what SchemaWriter wrote.
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? catFail)!;
+        Assert.Null(catFail);
+        IReadOnlyList<CheckConstraintCatalogEntry>? checks = CheckConstraintCatalog.Read(session.Cache, D, cat, session.Pages, out string? readFail);
+        Assert.Null(readFail);
+        Assert.NotNull(checks);
+        IReadOnlyList<CatalogCheckConstraint> forT = CheckConstraintCatalog.ForTable(checks!, request.Table);
+        Assert.Equal(expectedConstraintCount, forT.Count);
+        CheckConstraintCatalogEntry added = Assert.Single(checks!, c => c.Name == request.ConstraintName);
+        Assert.Null(added.NotAdmitted);
+        Assert.Equal(expectedNewId, added.Id);
+        Assert.Equal(CheckConstraintCatalog.RecordedParentId, added.ParentId);
+        Assert.Equal(CheckConstraintCatalog.RecordedFlags, added.Flags);
+        Assert.Equal(request.Table, added.TableName);
+        Assert.Equal(request.Expression, added.Expression);
+    }
+
+    [Fact]
+    public void AddCheckConstraint_unrecorded_neighbours_refuse_without_writing()
+    {
+        using (var session = new Session(Fixture()))
+        {
+            session.Create(new("T", [Long("ID"), Long("V"), Text("S", 20)], SchemaRoute.Sql, [new("PK_T", ["ID"], PrimaryKey: true)]), 1, 1);
+            session.Create(new("WithNn", [Long("ID"), new("V", NewFieldType.Long, Required: true)], SchemaRoute.Sql), 1, 1);
+            byte[] before = session.File.Snapshot();
+
+            // Non-ADO routes refuse without writing.
+            foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao })
+            {
+                SchemaOutcome nonAdo = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_V", "V", "V >= 0", route), 2, 2);
+                Assert.False(nonAdo.Succeeded);
+                Assert.False(nonAdo.PublishedAny);
+                Assert.NotNull(nonAdo.Refused?.NotWritten);
+            }
+
+            // Inside BeginTrans refuses without writing.
+            Assert.Null(session.Workspace.BeginTrans());
+            SchemaOutcome inTx = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 2, 2);
+            Assert.False(inTx.Succeeded);
+            Assert.False(inTx.PublishedAny);
+            Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
+            Assert.Null(session.Workspace.Rollback().Error);
+
+            // Table whose LvProp already holds column properties (NOT NULL) refuses without writing.
+            SchemaOutcome existingColProp = session.Writer().AddCheckConstraint(session.Workspace, new("WithNn", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 2, 2);
+            Assert.False(existingColProp.Succeeded);
+            Assert.False(existingColProp.PublishedAny);
+            Assert.Contains("LvProp", existingColProp.Refused?.NotWritten);
+
+            // Expressions outside the single-column comparison subset refuse without writing.
+            foreach ((string col, string expr) in new[]
+            {
+                ("V", "V > 0 AND V < 10"),
+                ("V", "ID < V"),
+                ("V", "V = 'a'"),
+                ("S", "S <> '\u20AC'"),
+            })
+            {
+                SchemaOutcome badExpr = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_BAD", col, expr, SchemaRoute.Ado), 2, 2);
+                Assert.False(badExpr.Succeeded, $"{expr} should refuse");
+                Assert.False(badExpr.PublishedAny);
+                Assert.NotNull(badExpr.Refused?.NotWritten);
+            }
+
+            Assert.Equal(before, session.File.Snapshot());
+
+            // Adding a duplicate CHECK constraint name (case-insensitive) refuses without writing.
+            session.AddCheckConstraint(new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 2, 2);
+            byte[] afterFirst = session.File.Snapshot();
+            SchemaOutcome dup = session.Writer().AddCheckConstraint(session.Workspace, new("T", "ck_v", "V", "V <= 100", SchemaRoute.Ado), 3, 3);
+            Assert.False(dup.Succeeded);
+            Assert.False(dup.PublishedAny);
+            Assert.Contains("clashes", dup.Refused?.NotWritten);
+            Assert.Equal(afterFirst, session.File.Snapshot());
+        }
+
+        // Populated table with an existing row violating the CHECK refuses without writing.
+        byte[] popImage = Kept.AfterSetupImage("alt-check-rows-accdb-ado");
+        using (var session = new Session(popImage))
+        {
+            // Rows have V in {20, 10, 30}; V >= 25 fails on rows 1 and 2.
+            SchemaOutcome violated = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_HIGH", "V", "V >= 25", SchemaRoute.Ado), 2, 2);
+            Assert.False(violated.Succeeded);
+            Assert.False(violated.PublishedAny);
+            Assert.Contains("violates CHECK constraint", violated.Refused?.NotWritten);
+            Assert.Equal(popImage, session.File.Snapshot());
+        }
+    }
 }
+
 

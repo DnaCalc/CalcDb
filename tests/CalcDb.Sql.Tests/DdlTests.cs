@@ -701,9 +701,12 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE Cs1 (a COUNTER(1))", "NotModelled.DdlCounterSingleArg");
         AssertNotModelled(db, "CREATE TABLE Bi (x BIGINT)", "NotModelled.DdlBigIntOrDateTime2");
         AssertNotModelled(db, "CREATE TABLE Un (a LONG UNIQUE)", "NotModelled.DdlUniqueConstraint");
-        AssertNotModelled(db, "CREATE TABLE UqLong (id LONG CONSTRAINT PK_UqL PRIMARY KEY, a LONG CONSTRAINT UX_UqL UNIQUE)", "NotModelled.DdlUniqueConstraint");
+        // 1-2 col Long/Text inline/table-level UNIQUE after inline PK is now recorded (evidence/r-q34-ddl-sweep/uq-*);
+        // keep 3-col UNIQUE, non-(Long/Text) UNIQUE, UNIQUE before PK, table-level PK + UNIQUE, and LVAL + table-level UNIQUE refused.
+        AssertNotModelled(db, "CREATE TABLE Uq3 (id LONG CONSTRAINT PK_Uq3 PRIMARY KEY, a LONG, b LONG, c LONG, CONSTRAINT UX_Uq3 UNIQUE (a, b, c))", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqDbl (id LONG CONSTRAINT PK_UqD PRIMARY KEY, d DOUBLE CONSTRAINT UX_UqD UNIQUE)", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE UqBefore (s TEXT(10) CONSTRAINT UX_UqB UNIQUE, id LONG CONSTRAINT PK_UqB PRIMARY KEY)", "NotModelled.DdlUniqueConstraint");
-        AssertNotModelled(db, "CREATE TABLE UqTbl (id LONG CONSTRAINT PK_UqT PRIMARY KEY, s TEXT(10), CONSTRAINT UX_UqT UNIQUE (s))", "NotModelled.DdlUniqueConstraint");
+        AssertNotModelled(db, "CREATE TABLE UqTblLval (id LONG CONSTRAINT PK_UqTL PRIMARY KEY, s TEXT(10), m MEMO, CONSTRAINT UX_UqTL UNIQUE (s))", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE UqTblPk (id LONG, s TEXT(10) CONSTRAINT UX_UqTP UNIQUE, CONSTRAINT PK_UqTP PRIMARY KEY (id))", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE UqUnnamed (id LONG CONSTRAINT PK_UqU PRIMARY KEY, s TEXT(10) UNIQUE)", "NotModelled.DdlUniqueConstraint");
         AssertNotModelled(db, "CREATE TABLE UqDupName (id LONG CONSTRAINT PK_Same PRIMARY KEY, s TEXT(10) CONSTRAINT PK_Same UNIQUE)", "NotModelled.DdlUniqueConstraint");
@@ -1142,9 +1145,17 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE INDEX IX_S ON T (s)", "NotModelled.SchemaAccept.Publication");
         Assert.Equal(before, db.Image.Snapshot());
 
-        // Out-of-scope DDL forms stay refused by name (or ACE 3289 for DAO CHECK) without writing.
-        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT UX_S UNIQUE (s)", "NotModelled.DdlAlterTable");
+        // ALTER TABLE ADD CONSTRAINT UNIQUE lowers to CreateIndex and refuses leaf overflow with 0 bytes written;
+        // out-of-scope DDL forms stay refused by name (or ACE 3289 for DAO CHECK) without writing.
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT UX_S UNIQUE (s)", "NotModelled.SchemaAccept.Publication");
+        AssertNotModelled(db, "ALTER TABLE T DROP CONSTRAINT PK_T", "NotModelled.DdlAlterTable");
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT FK_T FOREIGN KEY (id) REFERENCES T (id)", "NotModelled.DdlForeignKey");
         AssertAceError(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", 3289);
+        AssertAceError(db, "ALTER TABLE T ADD CONSTRAINT CK_N CHECK (id > 0)", 3289);
+        AssertNotModelled(db, "CREATE TABLE Ck (n LONG CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE Ck (n LONG CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Fk (n LONG, CONSTRAINT FK_N FOREIGN KEY (n) REFERENCES T (id))", "NotModelled.DdlForeignKey");
         Assert.Equal(before, db.Image.Snapshot());
 
@@ -1154,6 +1165,125 @@ public sealed class DdlTests
         byte[] beforeAllNull = db.Image.Snapshot();
         AssertNotModelled(db, "CREATE INDEX IX_AN ON AllNull (k) WITH IGNORE NULL", "NotModelled.SchemaAccept.Publication");
         Assert.Equal(beforeAllNull, db.Image.Snapshot());
+    }
+
+    /// <summary>All 4 CREATE TABLE UNIQUE records of evidence/r-q34-ddl-sweep (uq-*).</summary>
+    public static TheoryData<string, bool, bool, string> RQ34CreateTableUniqueSqlCases() => new()
+    {
+        { "uq-col-accdb-ado", false, true, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT UQ_K UNIQUE)" },
+        { "uq-col-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT UQ_K UNIQUE)" },
+        { "uq-col-mdb-dao", true, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT UQ_K UNIQUE)" },
+        { "uq-table-2col-accdb-dao", false, false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), CONSTRAINT UQ_KS UNIQUE (K, S))" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableUniqueSqlCases))]
+    public void R_q34_ddl_sweep_create_table_unique_sql_matches_ACE_pages(string question, bool isMdb, bool isAdo, string sql)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(isMdb ? EmptyMdbSha : EmptyAccdbSha);
+        byte[] ace = kept.AceImage(startImage);
+        (ulong created, ulong updated) = AceDates(ace, "T");
+
+        var timestamps = new Queue<ulong>([created, updated]);
+        using var db = new WritableSqlFixture((byte[])startImage.Clone())
+        {
+            DateBitsProvider = () => timestamps.Count > 0 ? timestamps.Dequeue() : updated,
+        };
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: isAdo ? ActionErrorSource.Ado : ActionErrorSource.Database);
+        Assert.True(outcome.Succeeded, $"{question}: {outcome.Failure}");
+        Assert.Equal(0, outcome.RecordsAffected);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        }
+        AssertAsAce(kept, startImage, db.Image.Snapshot());
+    }
+
+    /// <summary>All 15 succeeding ALTER TABLE ADD CONSTRAINT (UNIQUE, PRIMARY KEY, CHECK) records of evidence/r-q34-ddl-sweep.</summary>
+    public static TheoryData<string, bool, string> RQ34AlterConstraintSqlCases() => new()
+    {
+        { "alt-uq-empty-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT UQ_V UNIQUE (V)" },
+        { "alt-uq-empty-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT UQ_V UNIQUE (V)" },
+        { "alt-uq-empty-mdb-dao", false, "ALTER TABLE T ADD CONSTRAINT UQ_V UNIQUE (V)" },
+        { "alt-uq-rows-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT UQ_V UNIQUE (V)" },
+        { "alt-uq-rows-mdb-dao", false, "ALTER TABLE T ADD CONSTRAINT UQ_V UNIQUE (V)" },
+        { "alt-pk-empty-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT PK_T PRIMARY KEY (ID)" },
+        { "alt-pk-empty-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT PK_T PRIMARY KEY (ID)" },
+        { "alt-pk-empty-mdb-dao", false, "ALTER TABLE T ADD CONSTRAINT PK_T PRIMARY KEY (ID)" },
+        { "alt-pk-rows-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT PK_T PRIMARY KEY (ID)" },
+        { "alt-pk-rows-mdb-dao", false, "ALTER TABLE T ADD CONSTRAINT PK_T PRIMARY KEY (ID)" },
+        { "alt-check-empty-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
+        { "alt-check-empty-mdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
+        { "alt-check-rows-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
+        { "alt-check-rows-mdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
+        { "alt-check-two-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_B CHECK (V <= 100)" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34AlterConstraintSqlCases))]
+    public void R_q34_ddl_sweep_alter_table_add_constraint_sql_matches_ACE_pages(string question, bool isAdo, string sql)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (_, ulong updated) = AceDates(ace, "T");
+
+        using var db = new WritableSqlFixture((byte[])startImage.Clone()) { DateBitsProvider = () => updated };
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: isAdo ? ActionErrorSource.Ado : ActionErrorSource.Database);
+        Assert.True(outcome.Succeeded, $"{question} ({sql}): {outcome.Failure}");
+        Assert.Equal(0, outcome.RecordsAffected);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        }
+        AssertAsAce(kept, startImage, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void R_q34_ddl_sweep_alter_table_check_dao_fails_3289_and_writes_nothing()
+    {
+        Kept kept = Kept.Of("alt-check-empty-accdb-dao", "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage("alt-check-empty-accdb-dao");
+
+        using var db = new WritableSqlFixture((byte[])startImage.Clone());
+        AssertAceError(db, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)", 3289, ActionErrorSource.Database);
+        Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+        byte[] after = db.Image.Snapshot();
+        Assert.Equal(startImage, after);
+        AssertAsAce(kept, startImage, after);
+    }
+
+    [Fact]
+    public void Alter_table_add_check_constraint_via_ado_is_enforced_and_refuses_unrecorded_shapes()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG)", db, source: ActionErrorSource.Ado).Succeeded);
+        Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD CONSTRAINT CK_MIN CHECK (V >= 0)", db, source: ActionErrorSource.Ado).Succeeded);
+
+        // Valid values (positive, zero, NULL) succeed; violating value fails ACE 3317 under dbFailOnError (128).
+        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (1, 10)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (2, 0)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (3, NULL)", db).Succeeded);
+        AssertAceError(db, "INSERT INTO T (ID, V) VALUES (4, -1)", 3317, options: 128);
+
+        // Adding a second CHECK constraint updates the same LVAL page and enforces both.
+        Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD CONSTRAINT CK_MAX CHECK (V <= 100)", db, source: ActionErrorSource.Ado).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (5, 100)", db).Succeeded);
+        AssertAceError(db, "INSERT INTO T (ID, V) VALUES (6, 101)", 3317, options: 128);
+
+        // Unrecorded CHECK neighbours refuse by name without writing.
+        byte[] beforeRefusals = db.Image.Snapshot();
+        AssertNotModelled(db, "ALTER TABLE T ADD CHECK (V > 0)", "NotModelled.DdlUnnamedCheckConstraint", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_COMP CHECK (V > 0 AND V < 10)", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_MISS CHECK (Nope > 0)", "NotModelled.DdlCheckUnknownColumn", ActionErrorSource.Ado);
+        Assert.Equal(beforeRefusals, db.Image.Snapshot());
+
+        // CHECK on a table whose LvProp already holds column NOT NULL property refuses by name without writing.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE WithNn (ID LONG, V LONG NOT NULL)", db, source: ActionErrorSource.Ado).Succeeded);
+        byte[] beforeNnCheck = db.Image.Snapshot();
+        AssertNotModelled(db, "ALTER TABLE WithNn ADD CONSTRAINT CK_V CHECK (V >= 0)", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
+        Assert.Equal(beforeNnCheck, db.Image.Snapshot());
     }
 
     private sealed class AlternateSortDatabase(WritableSqlFixture inner, uint lcid, CalcDb.Values.Scalar.TextCollation? databaseOrder) : ISqlActionDatabase
@@ -1170,18 +1300,18 @@ public sealed class DdlTests
         public CalcDb.Isam.TableCursor? OpenCursor(TableDefinition table, out string? failure) => inner.OpenCursor(table, out failure);
     }
 
-    private static void AssertAceError(ISqlActionDatabase db, string sql, int expectedNumber)
+    private static void AssertAceError(ISqlActionDatabase db, string sql, int expectedNumber, ActionErrorSource source = ActionErrorSource.Database, int options = 0)
     {
-        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, options: options, source: source);
         Assert.False(outcome.Succeeded, $"Expected ACE error {expectedNumber}, but succeeded.");
         Assert.NotNull(outcome.Failure);
         Assert.False(outcome.Failure!.IsNotModelled, $"Expected ACE error {expectedNumber}, got {outcome.Failure}");
         Assert.Equal(expectedNumber, outcome.Failure.Number);
     }
 
-    private static void AssertNotModelled(ISqlActionDatabase db, string sql, string expectedName)
+    private static void AssertNotModelled(ISqlActionDatabase db, string sql, string expectedName, ActionErrorSource source = ActionErrorSource.Database)
     {
-        ActionOutcome outcome = ActionExecutor.Execute(sql, db);
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: source);
         Assert.False(outcome.Succeeded, $"Expected {expectedName}, but succeeded.");
         Assert.NotNull(outcome.Failure);
         Assert.True(outcome.Failure!.IsNotModelled, $"Expected {expectedName}, got {outcome.Failure}");

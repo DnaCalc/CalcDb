@@ -849,11 +849,12 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                 {
                     db.LastActionOpen = why;
                 }
-                if (e.ExcepInfo is null || (mine.Phase == SqlPhase.Execute && !db.ReadOnly))
+                if (e.ExcepInfo is null || (!db.ReadOnly && (mine.Phase == SqlPhase.Execute || MayMutateBeforeError(e.ExcepInfo))))
                 {
                     // ACE succeeded or may have partially mutated rows before a mid-statement failure (R-ERR-1 ERR-PARTIAL /
-                    // R-TXN-1 TXN-STMT, e.g. r-txn-1b/rb-expression-failonerror-d1), whereas CalcDb stopped before/during
-                    // execution: mark the file dirty so later reads are counted as Open, never falsely compared.
+                    // R-TXN-1 TXN-STMT, e.g. r-txn-1b/rb-expression-failonerror-d1, r-q-expr-sql/fail-late-candidate), whereas
+                    // CalcDb stopped before/during execution: mark the file dirty so later reads are counted as Open, never
+                    // falsely compared.
                     MarkFileDirty(db.File, why);
                 }
                 return;
@@ -1161,6 +1162,21 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             {
                 _objects[name] = o;
             }
+        }
+
+        private static bool MayMutateBeforeError(ExcepInfoObservation excep)
+        {
+            if (excep.Scode is not { Length: > 2 } s
+                || !s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                || !uint.TryParse(s.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint scode))
+            {
+                return true;
+            }
+            // Runtime per-row DML failures (3022 unique, 3058 PK null, 3163 overflow text, 3200/3201 RI,
+            // 3314 required, 3315 ZLS, 3316/3317 rule/CHECK, 3421/3464 conversion, 6/11 arithmetic) can occur
+            // after ACE has already mutated earlier rows (r-q-expr-sql/fail-late-candidate).
+            uint code = scode & 0xFFFFu;
+            return code is 6 or 11 or 3022 or 3058 or 3163 or 3200 or 3201 or 3314 or 3315 or 3316 or 3317 or 3421 or 3464;
         }
 
         private static void MarkFileDirty(FileState? file, string why)
