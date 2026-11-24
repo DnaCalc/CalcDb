@@ -51,11 +51,12 @@ public enum BoundDdlKind : byte
     CreateTable,
     CreateIndex,
     DropTable,
+    AddCheckConstraint,
 }
 
 /// <summary>
-/// A bound SQL DDL statement lowered to one of <see cref="SchemaWriter"/>'s typed requests (with
-/// <see cref="SchemaRoute.Sql"/>). Statements valid in ACE whose physical mutation is not yet modelled in
+/// A bound SQL DDL statement lowered to one of <see cref="SchemaWriter"/>'s typed requests.
+/// Statements valid in ACE whose physical mutation is not yet modelled in
 /// <see cref="SchemaWriter"/> do not produce a <see cref="BoundDdl"/>; <see cref="DdlBinder"/> returns a named
 /// <c>NotModelled.*</c> refusal instead of guessing bytes.
 /// </summary>
@@ -64,7 +65,8 @@ public sealed record BoundDdl(
     BoundDdlKind Kind,
     CreateTableRequest? CreateTable = null,
     CreateIndexRequest? CreateIndex = null,
-    DropTableRequest? DropTable = null);
+    DropTableRequest? DropTable = null,
+    AddCheckConstraintRequest? AddCheckConstraint = null);
 
 /// <summary>
 /// Access SQL DDL binder (W-07/native-metadata-write stretch 2; II-11 §28): validates ACE's recorded bind rules and
@@ -146,7 +148,7 @@ public static class DdlBinder
     /// <summary>Parse and bind a SQL DDL statement against <paramref name="database"/>.</summary>
     public static BoundDdl? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
-        DdlStatement? stmt = DdlParser.Parse(sql, out failure);
+        DdlStatement? stmt = DdlParser.Parse(sql, out failure, allowAdoCheck: route == SchemaRoute.Ado);
         if (stmt is null)
         {
             return null;
@@ -162,7 +164,7 @@ public static class DdlBinder
             CreateIndexStatement ci => BindCreateIndex(ci, database, out failure, route),
             DropTableStatement dt => BindDropTable(dt, database, out failure),
             DropIndexStatement di => BindDropIndex(di, database, out failure),
-            AlterTableStatement at => BindAlterTable(at, database, out failure),
+            AlterTableStatement at => BindAlterTable(at, database, out failure, route),
             _ => Fail(SqlFailure.Open(SqlPhase.Bind, "NotModelled.DdlKind", statement.Kind.ToString()), out failure),
         };
 
@@ -505,29 +507,47 @@ public static class DdlBinder
 
             if (uniqueConstraints.Count > 0)
             {
-                // evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao and lval-pk-uq-alltypes-mdb-dao record one named
-                // inline UNIQUE constraint on a TEXT column declared after a single-column PRIMARY KEY; leave every other UNIQUE shape refused.
-                if (uniqueConstraints.Count > 1 || !uniqueIsInline[0] || !pkIsInline)
+                // evidence/r-q34-ddl-sweep/uq-col-*, uq-table-2col-accdb-dao, lval-pk-uq-alltypes-*:
+                // record one named inline or table-level UNIQUE constraint on 1-2 ascending Long/Text columns declared
+                // after an inline single-column PRIMARY KEY; leave every other UNIQUE shape refused by name.
+                if (uniqueConstraints.Count > 1 || !pkIsInline)
                 {
-                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints other than one named inline TEXT UNIQUE after an inline PRIMARY KEY are not modelled in SchemaWriter"), out failure);
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints other than one named UNIQUE constraint after an inline PRIMARY KEY are not modelled in SchemaWriter"), out failure);
                 }
                 (string? uqName, IReadOnlyList<string> uqCols) = uniqueConstraints[0];
-                if (uqName is null || uqCols.Count != 1)
+                if (uqName is null)
                 {
-                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "unnamed or multi-column UNIQUE constraints are not modelled in SchemaWriter"), out failure);
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "unnamed UNIQUE constraints are not modelled in SchemaWriter"), out failure);
                 }
-                if (!TryResolveFieldName(uqCols[0], colNames, sortOrder, out int uqIdx, out SqlFailure? uqUndecided) || uqIdx < 0)
+                if (uqCols.Count is < 1 or > 2)
                 {
-                    return Fail(uqUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(uqCols[0])), out failure);
+                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE constraint with {uqCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/uq-* records 1-2 columns)"), out failure);
                 }
-                DdlColumnDef uqCol = columns[uqIdx];
-                if (uqCol.DataType.Kind != DdlTypeKind.Text || uqIdx <= pkIdx)
+                var uqBoundCols = new List<string>(uqCols.Count);
+                foreach (string uqColName in uqCols)
                 {
-                    return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"inline UNIQUE on {uqCol.DataType.Kind} column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-accdb-dao records a TEXT column after PRIMARY KEY)"), out failure);
+                    if (!TryResolveFieldName(uqColName, colNames, sortOrder, out int uqIdx, out SqlFailure? uqUndecided) || uqIdx < 0)
+                    {
+                        return Fail(uqUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(uqColName)), out failure);
+                    }
+                    DdlColumnDef uqCol = columns[uqIdx];
+                    if (uqCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text) || uqIdx <= pkIdx)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE on {uqCol.DataType.Kind} column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/uq-* and lval-pk-uq-alltypes-* record Long/Text columns after PRIMARY KEY)"), out failure);
+                    }
+                    if (uqCol.Nullability == DdlNullability.NotNull)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                    }
+                    uqBoundCols.Add(uqCol.Name);
+                    if (uqIdx > lastIndexedIdx)
+                    {
+                        lastIndexedIdx = uqIdx;
+                    }
                 }
-                if (uqCol.Nullability == DdlNullability.NotNull)
+                if (firstLvalIdx >= 0 && !uniqueIsInline[0])
                 {
-                    return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                    return Fail(BindOpen("NotModelled.DdlLvalWithInlineConstraint", "table-level UNIQUE constraint alongside Memo/LongBinary columns is not recorded (evidence/r-q34-ddl-sweep/lval-pk-uq-alltypes-* records inline constraints only)"), out failure);
                 }
                 switch (SchemaWriter.FieldNameLookupClashOf(pkName, uqName, sortOrder, out string? clashUndecided))
                 {
@@ -536,8 +556,7 @@ public static class DdlBinder
                     case FieldNameClash.Undecided:
                         return Fail(BindOpen("NotModelled.DdlFieldNamePair", clashUndecided!), out failure);
                 }
-                indexes.Add(new NewIndex(uqName, [uqCol.Name], PrimaryKey: false, Unique: true));
-                lastIndexedIdx = uqIdx;
+                indexes.Add(new NewIndex(uqName, uqBoundCols, PrimaryKey: false, Unique: true));
             }
 
             if (firstLvalIdx >= 0)
@@ -1061,7 +1080,7 @@ public static class DdlBinder
 
     // ---- ALTER TABLE -----------------------------------------------------------------------------------------------
 
-    private static BoundDdl? BindAlterTable(AlterTableStatement stmt, ISqlDatabase database, out SqlFailure? failure)
+    private static BoundDdl? BindAlterTable(AlterTableStatement stmt, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
         if (IsLinked(database, stmt.TableName))
         {
@@ -1075,24 +1094,35 @@ public static class DdlBinder
             return Fail(BindAce(3371, SqlMessages.CannotFindTableOrConstraint), out failure);
         }
         bool inUse = database is ISqlSchemaDatabase sdUse && sdUse.IsTableInUse(stmt.TableName);
-        SqlFailure actionErr = ValidateAlterAction(stmt, table, database);
+        SqlFailure? actionErr = ValidateAlterAction(stmt, table, database, route, out BoundDdl? boundPlan);
         if (inUse)
         {
             // r-def-cursor-dao/err-drop-missing-index-column: 3211 is recorded for plain ALTER TABLE DROP COLUMN and before 3381.
-            if (stmt.Action is DropColumnsAlterAction && (actionErr.IsNotModelled || actionErr.Number == 3381))
+            if (stmt.Action is DropColumnsAlterAction && actionErr is { IsNotModelled: true } or { Number: 3381 })
             {
                 return Fail(BindAce(3211, SqlMessages.TableInUse(stmt.TableName)), out failure);
             }
-            string detail = actionErr.IsNotModelled
+            string detail = actionErr is null || actionErr.IsNotModelled
                 ? $"held table '{stmt.TableName}' in ALTER TABLE ({stmt.Action.GetType().Name})"
                 : $"held table '{stmt.TableName}' meets ALTER TABLE error ({actionErr.Number})";
             return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", detail), out failure);
         }
-        return Fail(actionErr, out failure);
+        if (actionErr is not null)
+        {
+            return Fail(actionErr, out failure);
+        }
+        failure = null;
+        return boundPlan;
     }
 
-    private static SqlFailure ValidateAlterAction(AlterTableStatement stmt, TableDefinition table, ISqlDatabase database)
+    private static SqlFailure? ValidateAlterAction(
+        AlterTableStatement stmt,
+        TableDefinition table,
+        ISqlDatabase database,
+        SchemaRoute route,
+        out BoundDdl? boundPlan)
     {
+        boundPlan = null;
         TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
         IReadOnlyList<string> tableColNames = [.. table.Columns.Select(c => c.Name)];
         switch (stmt.Action)
@@ -1161,6 +1191,48 @@ public static class DdlBinder
             case AddConstraintAlterAction addCon:
             {
                 DdlTableConstraint tc = addCon.Constraint;
+                if (tc.Kind == DdlConstraintKind.Check)
+                {
+                    if (route != SchemaRoute.Ado)
+                    {
+                        // DAO ANSI-89 mode: evidence/r-q34-ddl-sweep/alt-check-empty-accdb-dao -> 3289.
+                        return BindAce(3289, SqlMessages.ConstraintSyntaxError);
+                    }
+                    if (tc.Name is null)
+                    {
+                        return BindOpen("NotModelled.DdlUnnamedCheckConstraint", "unnamed CHECK constraint in ALTER TABLE is not recorded");
+                    }
+                    if (!IsValidObjectName(tc.Name))
+                    {
+                        return BindAce(3125, SqlMessages.InvalidObjectName(tc.Name));
+                    }
+                    string? checkFailure = null;
+                    if (string.IsNullOrWhiteSpace(tc.CheckExpression)
+                        || !CheckConstraintExpression.TryParse(tc.CheckExpression, out CheckConstraintExpression? parsedCheck, out checkFailure))
+                    {
+                        return BindOpen("NotModelled.DdlCheckExpression", checkFailure ?? "CHECK expression is outside the recorded single-column comparison subset");
+                    }
+                    if (!TryResolveFieldName(parsedCheck!.ColumnName, tableColNames, sortOrder, out int checkColIdx, out SqlFailure? checkColUndecided))
+                    {
+                        return checkColUndecided!;
+                    }
+                    if (checkColIdx < 0)
+                    {
+                        return BindOpen("NotModelled.DdlCheckUnknownColumn", $"CHECK constraint '{tc.Name}' references unknown column '{parsedCheck.ColumnName}' on table '{stmt.TableName}'");
+                    }
+                    ColumnDescriptor checkCol = table.Columns[checkColIdx];
+                    if ((parsedCheck.LiteralKind == CheckLiteralKind.Long && checkCol.TypeCode != NativeTypes.Long)
+                        || (parsedCheck.LiteralKind == CheckLiteralKind.Text && checkCol.TypeCode != NativeTypes.Text))
+                    {
+                        return BindOpen("NotModelled.DdlCheckExpression", $"CHECK constraint '{tc.Name}' compares {checkCol.Name} (type 0x{checkCol.TypeCode:X2}) against {parsedCheck.LiteralKind} literal");
+                    }
+                    boundPlan = new BoundDdl(
+                        stmt,
+                        BoundDdlKind.AddCheckConstraint,
+                        AddCheckConstraint: new AddCheckConstraintRequest(stmt.TableName, tc.Name, checkCol.Name, parsedCheck.Expression, route));
+                    return null;
+                }
+
                 if (tc.Name is not null && !IsValidObjectName(tc.Name))
                 {
                     return BindAce(3125, SqlMessages.InvalidObjectName(tc.Name));
@@ -1176,6 +1248,7 @@ public static class DdlBinder
                     return BindAce(3277, SqlMessages.TooManyIndexFields);
                 }
                 var seen = new List<string>(tc.Columns.Count);
+                var boundCols = new List<ColumnDescriptor>(tc.Columns.Count);
                 foreach (string c in tc.Columns)
                 {
                     if (!TryResolveFieldName(c, seen, sortOrder, out int seenIdx, out SqlFailure? dupUndecided))
@@ -1195,6 +1268,7 @@ public static class DdlBinder
                     {
                         return BindAce(3409, SqlMessages.InvalidIndexOrRelationField(c));
                     }
+                    boundCols.Add(table.Columns[colIdx]);
                 }
                 if (tc.Kind == DdlConstraintKind.ForeignKey)
                 {
@@ -1202,12 +1276,54 @@ public static class DdlBinder
                     {
                         return fkErr;
                     }
+                    if (table.LogicalIndexes.Count >= 32)
+                    {
+                        return BindAce(3626, SqlMessages.TooManyIndexes(stmt.TableName));
+                    }
+                    return BindOpen("NotModelled.DdlForeignKey", "ALTER TABLE ADD CONSTRAINT FOREIGN KEY is not modelled in SchemaWriter");
                 }
                 if (table.LogicalIndexes.Count >= 32)
                 {
                     return BindAce(3626, SqlMessages.TooManyIndexes(stmt.TableName));
                 }
-                return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE ADD CONSTRAINT is not modelled in SchemaWriter");
+
+                // ALTER TABLE ADD CONSTRAINT UNIQUE / PRIMARY KEY lowers to SchemaWriter.CreateIndex
+                // (evidence/r-q34-ddl-sweep/alt-uq-*, alt-pk-*).
+                if (tc.Name is null)
+                {
+                    return BindOpen("NotModelled.DdlUnnamedConstraint", $"unnamed {tc.Kind} constraint in ALTER TABLE is not modelled in SchemaWriter");
+                }
+                foreach (LogicalIndex existingIdx in table.LogicalIndexes)
+                {
+                    switch (SchemaWriter.FieldNameLookupClashOf(existingIdx.Name, tc.Name, sortOrder, out string? clashUndecided))
+                    {
+                        case FieldNameClash.Duplicate:
+                            return BindOpen("NotModelled.DdlDuplicateConstraintName", $"constraint '{tc.Name}' clashes with existing index '{existingIdx.Name}' on table '{stmt.TableName}'");
+                        case FieldNameClash.Undecided:
+                            return BindOpen("NotModelled.DdlFieldNamePair", clashUndecided!);
+                    }
+                }
+                if (boundCols.Count is < 1 or > 2)
+                {
+                    return BindOpen("NotModelled.DdlIndexShape", $"ALTER TABLE ADD CONSTRAINT with {boundCols.Count} columns is not modelled in SchemaWriter (r-q11/r-q21/r-q34 record 1–2 columns)");
+                }
+                foreach (ColumnDescriptor col in boundCols)
+                {
+                    if (col.TypeCode is not (NativeTypes.Long or NativeTypes.Text))
+                    {
+                        return BindOpen("NotModelled.DdlIndexKeyType", $"ALTER TABLE ADD CONSTRAINT on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21/r-q34 record Long and Text)");
+                    }
+                }
+                var newIndex = new NewIndex(
+                    tc.Name,
+                    [.. boundCols.Select(c => c.Name)],
+                    PrimaryKey: tc.Kind == DdlConstraintKind.PrimaryKey,
+                    Unique: tc.Kind == DdlConstraintKind.Unique);
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.CreateIndex,
+                    CreateIndex: new CreateIndexRequest(stmt.TableName, newIndex, route));
+                return null;
             }
 
             case AlterColumnAlterAction alterCol:
@@ -1322,12 +1438,12 @@ public static class DdlExecutor
         {
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle"));
         }
-        DdlStatement? stmt = DdlParser.Parse(sql, out SqlFailure? failure);
+        SchemaRoute route = source == ActionErrorSource.Ado ? SchemaRoute.Ado : SchemaRoute.Sql;
+        DdlStatement? stmt = DdlParser.Parse(sql, out SqlFailure? failure, allowAdoCheck: route == SchemaRoute.Ado);
         if (stmt is null)
         {
             return ActionOutcome.Fail(failure!);
         }
-        SchemaRoute route = source == ActionErrorSource.Ado ? SchemaRoute.Ado : SchemaRoute.Sql;
         BoundDdl? plan = DdlBinder.Bind(stmt, database, out failure, route);
         if (plan is null)
         {
@@ -1412,9 +1528,9 @@ public static class DdlExecutor
             // Unpublished schema changes live in the Workspace overlay, which CatalogBootstrap.Open does not yet read.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "DDL inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
         }
-        if (plan.Kind is BoundDdlKind.CreateTable or BoundDdlKind.CreateIndex && schemaDb.PageCount >= 510)
+        if (plan.Kind is BoundDdlKind.CreateTable or BoundDdlKind.CreateIndex or BoundDdlKind.AddCheckConstraint && schemaDb.PageCount >= 510)
         {
-            // SchemaWriter.CompileCreateTable/CreateIndex encodes inline maps with basePage=0 (MapPages.Initialize), which
+            // SchemaWriter.CompileCreateTable/CreateIndex/AddCheckConstraint encodes inline maps with basePage=0 (MapPages.Initialize), which
             // only admits page numbers < 512 (CalcDb.Format/IndexPages.cs EncodeInline). Refuse honestly instead of throwing.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriterInlineMapRange", $"file has {schemaDb.PageCount} pages; SchemaWriter's inline map encoder only handles pages < 512"));
         }
@@ -1429,6 +1545,7 @@ public static class DdlExecutor
             BoundDdlKind.CreateTable => writer.CreateTable(database.Workspace, plan.CreateTable!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
             BoundDdlKind.CreateIndex => writer.CreateIndex(database.Workspace, plan.CreateIndex!, schemaDb.NowDateBits()),
             BoundDdlKind.DropTable => writer.DropTable(database.Workspace, plan.DropTable!),
+            BoundDdlKind.AddCheckConstraint => writer.AddCheckConstraint(database.Workspace, plan.AddCheckConstraint!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
@@ -1450,7 +1567,7 @@ public static class DdlExecutor
                 string msg = errNum switch
                 {
                     3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
-                    3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? ""),
+                    3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? ""),
                     _ => $"ACE schema error {errNum}",
                 };
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, msg));

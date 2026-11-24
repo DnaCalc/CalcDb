@@ -53,6 +53,7 @@ public enum DdlConstraintKind : byte
     PrimaryKey,
     Unique,
     ForeignKey,
+    Check,
 }
 
 /// <summary>A column-level constraint (<c>[CONSTRAINT name] PRIMARY KEY | UNIQUE | REFERENCES t [(c, …)]</c>).</summary>
@@ -75,7 +76,8 @@ public sealed record DdlTableConstraint(
     DdlConstraintKind Kind,
     IReadOnlyList<string> Columns,
     string? RefTable = null,
-    IReadOnlyList<string>? RefColumns = null);
+    IReadOnlyList<string>? RefColumns = null,
+    string? CheckExpression = null);
 
 /// <summary>One key column in <c>CREATE [UNIQUE] INDEX … (col [ASC|DESC], …)</c>.</summary>
 public sealed record DdlIndexColumn(string Name, bool Descending);
@@ -266,18 +268,23 @@ public static class DdlParser
             || lead.Equals("REVOKE", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Parse a DDL statement; returns null with ACE's syntax error on failure.</summary>
-    public static DdlStatement? Parse(string source, out SqlFailure? failure)
+    /// <summary>
+    /// Parse a DDL statement; returns null with ACE's syntax error on failure.
+    /// When <paramref name="allowAdoCheck"/> is true (ADO route), <c>ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)</c>
+    /// parses to <see cref="DdlConstraintKind.Check"/> and <c>CHECK</c> inside <c>CREATE TABLE</c> refuses by name;
+    /// when false (DAO/SQL ANSI-89 route), <c>CHECK</c> keeps its recorded DAO 3289/3290 syntax errors.
+    /// </summary>
+    public static DdlStatement? Parse(string source, out SqlFailure? failure, bool allowAdoCheck = false)
     {
         if (!SqlParser.NormalizeSource(ref source, out failure))
         {
             return null;
         }
-        var p = new Parser(source);
+        var p = new Parser(source, allowAdoCheck);
         return p.Statement(out failure);
     }
 
-    private sealed class Parser(string s)
+    private sealed class Parser(string s, bool allowAdoCheck)
     {
         private enum IdentifierMode : byte
         {
@@ -590,7 +597,7 @@ public static class DdlParser
 
                     if (!IsBracketed() && IsTableConstraintLead())
                     {
-                        DdlTableConstraint? tc = ParseTableConstraint(out failure);
+                        DdlTableConstraint? tc = ParseTableConstraint(inAlter: false, out failure);
                         if (tc is null)
                         {
                             return null;
@@ -653,6 +660,15 @@ public static class DdlParser
                 _p = saved;
                 return followedByKey;
             }
+            if (allowAdoCheck && w.Equals("CHECK", StringComparison.OrdinalIgnoreCase))
+            {
+                int saved = _p;
+                Skip();
+                _p += w.Length;
+                bool followedByParen = IsSymbol('(');
+                _p = saved;
+                return followedByParen;
+            }
             return false;
         }
 
@@ -710,7 +726,7 @@ public static class DdlParser
                         failure = conNameFail ?? Open("NotModelled.DdlConstraintSyntax", "missing or malformed constraint name after CONSTRAINT");
                         return null;
                     }
-                    DdlColumnConstraint? cc = ParseColumnConstraintBody(constraintName, out failure);
+                    DdlColumnConstraint? cc = ParseColumnConstraintBody(constraintName, isAlter, out failure);
                     if (cc is null)
                     {
                         return null;
@@ -720,13 +736,23 @@ public static class DdlParser
                 }
                 if (IsWord("PRIMARY") || IsWord("UNIQUE") || IsWord("REFERENCES"))
                 {
-                    DdlColumnConstraint? cc = ParseColumnConstraintBody(null, out failure);
+                    DdlColumnConstraint? cc = ParseColumnConstraintBody(null, isAlter, out failure);
                     if (cc is null)
                     {
                         return null;
                     }
                     constraints.Add(cc);
                     continue;
+                }
+                if (allowAdoCheck && IsWord("CHECK"))
+                {
+                    // CHECK inside CREATE TABLE (or ALTER TABLE ADD COLUMN) via ADO is not recorded; DAO keeps 3290/3293.
+                    failure = Open(
+                        isAlter ? "NotModelled.DdlAlterColumnCheck" : "NotModelled.DdlCreateTableCheck",
+                        isAlter
+                            ? "column-level CHECK constraint in ALTER TABLE ADD COLUMN via ADO is not modelled"
+                            : "CHECK constraint inside CREATE TABLE via ADO is not modelled");
+                    return null;
                 }
 
                 // Unsupported column modifiers (DEFAULT, WITH COMPRESSION, CHECK, COLLATE, COMMENT, AUTO_INCREMENT,
@@ -817,7 +843,7 @@ public static class DdlParser
             return new DdlDataType(kind);
         }
 
-        private DdlColumnConstraint? ParseColumnConstraintBody(string? name, out SqlFailure? failure)
+        private DdlColumnConstraint? ParseColumnConstraintBody(string? name, bool isAlter, out SqlFailure? failure)
         {
             if (TakeWord("PRIMARY"))
             {
@@ -842,11 +868,21 @@ public static class DdlParser
                 }
                 return new DdlColumnConstraint(name, DdlConstraintKind.ForeignKey, refTable, refCols);
             }
+            if (allowAdoCheck && IsWord("CHECK"))
+            {
+                // Named inline CHECK in CREATE TABLE (or ALTER TABLE ADD COLUMN) via ADO is not recorded; DAO keeps 3289.
+                failure = Open(
+                    isAlter ? "NotModelled.DdlAlterColumnCheck" : "NotModelled.DdlCreateTableCheck",
+                    isAlter
+                        ? "column-level CHECK constraint in ALTER TABLE ADD COLUMN via ADO is not modelled"
+                        : "CHECK constraint inside CREATE TABLE via ADO is not modelled");
+                return null;
+            }
             failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
             return null;
         }
 
-        private DdlTableConstraint? ParseTableConstraint(out SqlFailure? failure)
+        private DdlTableConstraint? ParseTableConstraint(bool inAlter, out SqlFailure? failure)
         {
             failure = null;
             string? name = null;
@@ -891,10 +927,126 @@ public static class DdlParser
                 }
                 return new DdlTableConstraint(name, DdlConstraintKind.ForeignKey, cols!, refTable, refCols);
             }
+            if (TakeWord("CHECK"))
+            {
+                if (!allowAdoCheck)
+                {
+                    // DAO ANSI-89 mode: CONSTRAINT ... CHECK (...) -> 3289 (r-def-expr-sql/ddl-column-clauses: Cc15;
+                    // evidence/r-q34-ddl-sweep/alt-check-empty-accdb-dao).
+                    failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
+                    return null;
+                }
+                if (!inAlter)
+                {
+                    failure = Open("NotModelled.DdlCreateTableCheck", "CHECK constraint inside CREATE TABLE via ADO is not modelled");
+                    return null;
+                }
+                if (!ParseCheckExpression(out string? expr, out failure))
+                {
+                    return null;
+                }
+                return new DdlTableConstraint(name, DdlConstraintKind.Check, [], CheckExpression: expr);
+            }
 
-            // Includes CONSTRAINT ... CHECK (...) -> 3289 (ddl-column-clauses: Cc15).
+            // Includes unrecognized constraint forms -> 3289.
             failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
             return null;
+        }
+
+        private bool ParseCheckExpression(out string? expression, out SqlFailure? failure)
+        {
+            expression = null;
+            if (!TakeSymbol('('))
+            {
+                failure = Open("NotModelled.DdlCheckSyntax", "expected '(' after CHECK");
+                return false;
+            }
+            int start = _p;
+            int depth = 1;
+            while (_p < s.Length && depth > 0)
+            {
+                char ch = s[_p];
+                if (ch == '\'')
+                {
+                    _p++;
+                    bool closed = false;
+                    while (_p < s.Length)
+                    {
+                        if (s[_p] == '\'')
+                        {
+                            _p++;
+                            if (_p < s.Length && s[_p] == '\'')
+                            {
+                                _p++;
+                                continue;
+                            }
+                            closed = true;
+                            break;
+                        }
+                        _p++;
+                    }
+                    if (!closed)
+                    {
+                        failure = Open("NotModelled.DdlCheckSyntax", "unterminated string literal in CHECK expression");
+                        return false;
+                    }
+                    continue;
+                }
+                if (ch == '[')
+                {
+                    int close = s.IndexOf(']', _p + 1);
+                    if (close < 0)
+                    {
+                        failure = Open("NotModelled.DdlCheckSyntax", "unterminated bracketed identifier in CHECK expression");
+                        return false;
+                    }
+                    _p = close + 1;
+                    continue;
+                }
+                if (ch == '`')
+                {
+                    int close = s.IndexOf('`', _p + 1);
+                    if (close < 0)
+                    {
+                        failure = Open("NotModelled.DdlCheckSyntax", "unterminated backtick identifier in CHECK expression");
+                        return false;
+                    }
+                    _p = close + 1;
+                    continue;
+                }
+                if (ch == '(')
+                {
+                    depth++;
+                    _p++;
+                    continue;
+                }
+                if (ch == ')')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        break;
+                    }
+                    _p++;
+                    continue;
+                }
+                _p++;
+            }
+            if (depth != 0)
+            {
+                failure = Open("NotModelled.DdlCheckSyntax", "unterminated '(' in CHECK expression");
+                return false;
+            }
+            string body = s[start.._p].Trim();
+            _p++; // consume matching ')'
+            if (body.Length == 0)
+            {
+                failure = Open("NotModelled.DdlCheckSyntax", "empty CHECK expression");
+                return false;
+            }
+            expression = body;
+            failure = null;
+            return true;
         }
 
         private bool ParseConstraintColumnList(out List<string>? cols, out SqlFailure? failure)
@@ -1183,7 +1335,7 @@ public static class DdlParser
                 }
                 if (!IsBracketed() && IsTableConstraintLead())
                 {
-                    DdlTableConstraint? tc = ParseTableConstraint(out failure);
+                    DdlTableConstraint? tc = ParseTableConstraint(inAlter: true, out failure);
                     if (tc is null)
                     {
                         return null;
