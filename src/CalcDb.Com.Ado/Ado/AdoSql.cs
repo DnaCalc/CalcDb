@@ -251,7 +251,8 @@ internal static class AdoSqlErrors
         bool isSavedQuery,
         out Failure? unmodelled,
         string? sql = null,
-        bool allowAdoCheckViolation = false)
+        bool allowAdoCheckViolation = false,
+        bool isConnectionExecuteAction = false)
     {
         if (failure.IsNotModelled)
         {
@@ -310,6 +311,17 @@ internal static class AdoSqlErrors
             3188 or 3218 => CurrentlyLockedOnCommand(),
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route (FK delete violation)
             3200 => Make(AdoObject.HResultFail, failure.Message, 5003000, "3200", -534971980, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #82-92 (child FK insert/update violation on Connection.Execute only)
+            3201 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultFail, failure.Message, 5003000, "3201", -535037517, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #122-132, r-q2-expr-sql/act-ado-failure-lane #65,
+            // r-q30-sql-check/ord-req-before-check #28-39 (Required field violation on Connection.Execute only)
+            3314 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultFail, failure.Message, 5003000, "3314", -541331061, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62 (data type mismatch on Connection.Execute only)
+            3464 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, "3464", -539888598, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #193-203 (field too small on Connection.Execute only)
+            3163 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultDataOverflow, failure.Message, 5003163, "3163", -68551703, AdoObject.IidCommand),
+            // r-oledb-odbc/error-record-channels #253-263 (DROP TABLE / cannot delete index or table on Connection.Execute only)
+            3281 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultFail, failure.Message, 5003281, "3281", -68813851, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #142-152, r-q-cat-txn-lock/ii11-ado-check-constraint #20/#22,
             // r-q30-sql-check/mdb-viol-ado-exec #28-39, r-q30-sql-check/upd-viol-ado-exec #29-40,
             // r-q31-sql-check-2/multi-ins-ado-exec #32-43, r-q31-sql-check-2/multi-upd-ado-exec #30-41:

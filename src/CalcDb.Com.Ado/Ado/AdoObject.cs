@@ -146,11 +146,17 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>DB_E_CANNOTFETCHBACKWARDS / 0x80040E24.</summary>
     public const int HResultCannotFetchBackwards = unchecked((int)0x80040E24);
 
+    /// <summary>DB_E_CANTCONVERTVALUE / 0x80040E07 (Data type mismatch in criteria expression 3464; r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62).</summary>
+    public const int HResultCantConvertValue = unchecked((int)0x80040E07);
+
     /// <summary>DB_E_NOTABLE / 0x80040E37.</summary>
     public const int HResultNoTable = unchecked((int)0x80040E37);
 
     /// <summary>DB_SEC_E_AUTH_FAILED / 0x80040E4D.</summary>
     public const int HResultAuthFailed = unchecked((int)0x80040E4D);
+
+    /// <summary>DB_E_DATAOVERFLOW / 0x80040E57 (Field too small 3163 on Execute; r-oledb-odbc/error-record-channels #193-203).</summary>
+    public const int HResultDataOverflow = unchecked((int)0x80040E57);
 
     /// <summary>0x80040E60 (Sort order cannot be applied on Memo or Binary column; r-ado-1b/view-sort-grammar #77, #81).</summary>
     public const int HResultCannotSort = unchecked((int)0x80040E60);

@@ -112,4 +112,7 @@ public sealed class AutoNumberCounter(uint stored, int increment = 1)
             _last = value;
         }
     }
+
+    /// <summary>Restore the counter's prior <see cref="Last"/> when a refused statement aborts without writing.</summary>
+    internal void Restore(long value) => _last = value;
 }

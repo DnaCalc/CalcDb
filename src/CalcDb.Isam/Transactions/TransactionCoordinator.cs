@@ -215,7 +215,55 @@ public sealed class ExplicitFrame
     }
 
     public IReadOnlyList<AcceptedRowChange> AcceptedChanges => Changes;
+
+    internal StatementFrameCheckpoint CaptureCheckpoint() => new(
+        Changes.Count,
+        UnwrittenCount,
+        StatementCount,
+        HasNonInsertSelectWork,
+        ConsumedAutoNumbers is { Count: > 0 } ? new Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>(ConsumedAutoNumbers) : null,
+        StatementTableDefPages is { Count: > 0 } ? [.. StatementTableDefPages] : null,
+        HasAutoNumberTarget,
+        HasGeneratedAutoNumber,
+        RolledBackGlobalMapAllocations is { Count: > 0 } ? [.. RolledBackGlobalMapAllocations] : null,
+        InitialExplicitCounters is { Count: > 0 } ? new Dictionary<AutoNumberCounter, long>(InitialExplicitCounters, ReferenceEqualityComparer.Instance) : null,
+        PendingCounterReseed);
+
+    internal void RestoreCheckpoint(StatementFrameCheckpoint checkpoint)
+    {
+        if (Changes.Count > checkpoint.ChangesCount)
+        {
+            Changes.RemoveRange(checkpoint.ChangesCount, Changes.Count - checkpoint.ChangesCount);
+        }
+        UnwrittenCount = checkpoint.UnwrittenCount;
+        StatementCount = checkpoint.StatementCount;
+        HasNonInsertSelectWork = checkpoint.HasNonInsertSelectWork;
+        ConsumedAutoNumbers = checkpoint.ConsumedAutoNumbers is null
+            ? null
+            : new Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>(checkpoint.ConsumedAutoNumbers);
+        StatementTableDefPages = checkpoint.StatementTableDefPages is null ? null : [.. checkpoint.StatementTableDefPages];
+        HasAutoNumberTarget = checkpoint.HasAutoNumberTarget;
+        HasGeneratedAutoNumber = checkpoint.HasGeneratedAutoNumber;
+        RolledBackGlobalMapAllocations = checkpoint.RolledBackGlobalMapAllocations is null ? null : [.. checkpoint.RolledBackGlobalMapAllocations];
+        InitialExplicitCounters = checkpoint.InitialExplicitCounters is null
+            ? null
+            : new Dictionary<AutoNumberCounter, long>(checkpoint.InitialExplicitCounters, ReferenceEqualityComparer.Instance);
+        PendingCounterReseed = checkpoint.PendingCounterReseed;
+    }
 }
+
+internal sealed record StatementFrameCheckpoint(
+    int ChangesCount,
+    int UnwrittenCount,
+    int StatementCount,
+    bool HasNonInsertSelectWork,
+    Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>? ConsumedAutoNumbers,
+    HashSet<(PageCache Cache, uint TableDefPage)>? StatementTableDefPages,
+    bool HasAutoNumberTarget,
+    bool HasGeneratedAutoNumber,
+    HashSet<PageCache>? RolledBackGlobalMapAllocations,
+    Dictionary<AutoNumberCounter, long>? InitialExplicitCounters,
+    (AutoNumberCounter Counter, long Value)? PendingCounterReseed);
 
 /// <summary>
 /// The AutoNumber a transaction level consumed in one table (R-FMT-2 Generated values), persisted to TableDef 0x14 by
@@ -366,7 +414,10 @@ public sealed class StatementScope : IDisposable
         return _owner.EndStatement();
     }
 
-    /// <summary>Abort the statement without publishing: outside every level, discard anything this statement staged.</summary>
+    /// <summary>
+    /// Abort the statement cleanly without publishing: discard its own frame, staged edits, accepted-index entries,
+    /// counters, AutoNumber marks, locks, and side-effect roles at depth 0 or back to the enclosing level's checkpoint.
+    /// </summary>
     public void Abort()
     {
         if (_done)
@@ -478,6 +529,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private bool _statementRefusalIsCheckConstraint;
     private ResolutionOutcome? _statementFailure;
     private int _statementPendingStart;
+    private StatementFrameCheckpoint? _statementOuterCheckpoint;
+    private List<FileParticipant>? _statementScopedParticipants;
+    private Dictionary<(PageCache Cache, ulong Page), PageRole>? _statementSavedSideEffectRoles;
+    private HashSet<PageCache>? _statementSavedPendingCloseCommit;
+    private Dictionary<(PageCache File, ulong Page, LockLifetime Lifetime), int>? _statementLocks;
+    private Dictionary<AutoNumberCounter, long>? _statementInitialCounters;
     private int _unwrittenPendingCount;
 
     /// <summary>
@@ -527,6 +584,19 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_frames.Count > 0)
         {
             _frames[^1].SaveExplicitCounterBefore(counter, valueBefore);
+        }
+    }
+
+    /// <summary>
+    /// Record an <see cref="AutoNumberCounter"/>'s value before the active statement mutates it, so
+    /// <see cref="StatementScope.Abort"/> restores the exact pre-statement counter even for non-1 increments.
+    /// </summary>
+    internal void SaveStatementCounterBefore(AutoNumberCounter counter, long? valueBefore = null)
+    {
+        if (_statement is not null)
+        {
+            _statementInitialCounters ??= new Dictionary<AutoNumberCounter, long>(ReferenceEqualityComparer.Instance);
+            _statementInitialCounters.TryAdd(counter, valueBefore ?? counter.Last);
         }
     }
 
@@ -672,11 +742,45 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public LockAcquisition Lock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime)
     {
         _locked.Add(file);
-        return file.Locks.Acquire(Locker, footprint, lifetime, WaitPolicy, Scheduler);
+        LockAcquisition got = file.Locks.Acquire(Locker, footprint, lifetime, WaitPolicy, Scheduler);
+        if (_statement is not null && got.Conflict is null && lifetime != LockLifetime.PendingEdit)
+        {
+            RecordStatementLockDelta(file, footprint, lifetime, +1);
+        }
+        return got;
     }
 
     /// <summary>Release one count of <paramref name="lifetime"/> on <paramref name="footprint"/>.</summary>
-    public void Unlock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime) => file.Locks.Release(Locker, footprint, lifetime);
+    public void Unlock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime)
+    {
+        file.Locks.Release(Locker, footprint, lifetime);
+        if (_statement is not null && lifetime != LockLifetime.PendingEdit)
+        {
+            RecordStatementLockDelta(file, footprint, lifetime, -1);
+        }
+    }
+
+    private void RecordStatementLockDelta(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime, int delta)
+    {
+        if (footprint.IsEmpty)
+        {
+            return;
+        }
+        _statementLocks ??= [];
+        for (int i = 0; i < footprint.Length; i++)
+        {
+            var key = (file, footprint[i].Page, lifetime);
+            int next = _statementLocks.TryGetValue(key, out int existing) ? existing + delta : delta;
+            if (next <= 0)
+            {
+                _statementLocks.Remove(key);
+            }
+            else
+            {
+                _statementLocks[key] = next;
+            }
+        }
+    }
 
     /// <summary>
     /// The publication of this locker's committed changes of <paramref name="file"/> is in the committed images: their
@@ -890,6 +994,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             file.Locks.Convert(Locker, LockLifetime.Transaction, LockLifetime.UntilPublished);
         }
+        ConvertStatementLocks(LockLifetime.Transaction, LockLifetime.UntilPublished);
         // The outer commit publishes the change set before it returns (TXN-FLUSH-COMMIT; PublicationPolicy).
         (MutationOpen open, string? detail) = Publish(forceFlush: options == 1, CommitMode.Immediate);
         if (open == MutationOpen.None)
@@ -2042,6 +2147,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (limitation is not null)
             {
                 top.RestoreExplicitCounters();
+                RestoreStatementCounters(_statementInitialCounters);
                 _statementFailure = limitation;
                 return new ResolutionOutcome(ResolvedChanges: resolved);
             }
@@ -2058,6 +2164,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     if (!edited.Succeeded)
                     {
                         top.RestoreExplicitCounters();
+                        RestoreStatementCounters(_statementInitialCounters);
                         _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage} could not take the counters the statement reached: {edited.Failure} {edited.Detail}");
                         return new ResolutionOutcome(ResolvedChanges: resolved);
                     }
@@ -2072,6 +2179,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         if (!mapEdit.Succeeded)
                         {
                             top.RestoreExplicitCounters();
+                            RestoreStatementCounters(_statementInitialCounters);
                             _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"page {globalMapPage} could not join the counters' commit: {mapEdit.Failure} {mapEdit.Detail}");
                             return new ResolutionOutcome(ResolvedChanges: resolved);
                         }
@@ -2105,6 +2213,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (limitation is not null)
         {
             top.RestoreExplicitCounters();
+            RestoreStatementCounters(_statementInitialCounters);
             _statementFailure = limitation;
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
@@ -2151,6 +2260,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 if (err1 is not null || open1 != MutationOpen.None)
                 {
                     top.RestoreExplicitCounters();
+                    if (!_unresolved.Contains(counters.File))
+                    {
+                        RestoreStatementCounters(_statementInitialCounters);
+                    }
                     _statementFailure = new ResolutionOutcome(err1, open1, detail1);
                     return new ResolutionOutcome(ResolvedChanges: resolved);
                 }
@@ -2464,6 +2577,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
         _pendingGroup2AllocatedPages.Clear();
+        _statement = null;
+        _statementChanges = 0;
         _statementRollbackGroup2File = null;
         _statementHasSideEffect = false;
         _statementAllowJet4MdbCommitCounter = false;
@@ -2472,6 +2587,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementRefusal = null;
         _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
+        _statementPendingStart = 0;
+        _statementOuterCheckpoint = null;
+        _statementScopedParticipants = null;
+        _statementSavedSideEffectRoles = null;
+        _statementSavedPendingCloseCommit = null;
+        _statementLocks = null;
+        _statementInitialCounters = null;
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
         foreach (PageCache extentCache in _rollbackExtentPending)
@@ -2539,9 +2661,25 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
         _statementPendingStart = _frames.Count == 0 ? _pending.Count : 0;
+        _statementOuterCheckpoint = null;
+        _statementScopedParticipants = null;
+        _statementSavedSideEffectRoles = _sideEffectRoles.Count > 0 ? new Dictionary<(PageCache Cache, ulong Page), PageRole>(_sideEffectRoles) : null;
+        _statementSavedPendingCloseCommit = _pendingCloseCommit.Count > 0 ? [.. _pendingCloseCommit] : null;
+        _statementLocks = null;
+        _statementInitialCounters = null;
+        if (_participants.Count > 0)
+        {
+            _statementScopedParticipants = new List<FileParticipant>(_participants.Count);
+            foreach (FileParticipant p in _participants.Values)
+            {
+                p.Overlay.BeginScope();
+                _statementScopedParticipants.Add(p);
+            }
+        }
         if (_frames.Count > 0)
         {
             ExplicitFrame current = _frames[^1];
+            _statementOuterCheckpoint = current.CaptureCheckpoint();
             current.StatementCount++;
             if (!isInsertSelect)
             {
@@ -2567,8 +2705,25 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementRefusal = null;
         _statementRefusalIsCheckConstraint = false;
         _statementPendingStart = 0;
+        _statementOuterCheckpoint = null;
+        List<FileParticipant>? scopedParticipants = _statementScopedParticipants;
+        _statementScopedParticipants = null;
+        _statementSavedSideEffectRoles = null;
+        _statementSavedPendingCloseCommit = null;
+        _statementLocks = null;
+        _statementInitialCounters = null;
         PageCache? group2File = _statementRollbackGroup2File;
         _statementRollbackGroup2File = null;
+        if (scopedParticipants is not null)
+        {
+            foreach (FileParticipant p in scopedParticipants)
+            {
+                if (_participants.TryGetValue(p.Cache, out FileParticipant? current) && ReferenceEquals(current, p))
+                {
+                    p.Overlay.CommitScope();
+                }
+            }
+        }
         if (stmtFailure is { } failed)
         {
             _pendingGroup2AllocatedPages.Clear();
@@ -2611,7 +2766,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementChanges = 0;
         _statementHasSideEffect = false;
         _statementAllowJet4MdbCommitCounter = false;
+        int externalDepth = _statementExternalDepth;
         _statementExternalDepth = 0;
+        bool hasOwnLevel = _statementHasOwnLevel;
         _statementHasOwnLevel = false;
         _statementFailure = null;
         _statementRefusal = null;
@@ -2620,27 +2777,161 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _pendingGroup2AllocatedPages.Clear();
         int pendingStart = _statementPendingStart;
         _statementPendingStart = 0;
+        StatementFrameCheckpoint? outerCheckpoint = _statementOuterCheckpoint;
+        _statementOuterCheckpoint = null;
+        List<FileParticipant>? scopedParticipants = _statementScopedParticipants;
+        _statementScopedParticipants = null;
+        Dictionary<(PageCache Cache, ulong Page), PageRole>? savedSideEffectRoles = _statementSavedSideEffectRoles;
+        _statementSavedSideEffectRoles = null;
+        HashSet<PageCache>? savedPendingCloseCommit = _statementSavedPendingCloseCommit;
+        _statementSavedPendingCloseCommit = null;
+        Dictionary<(PageCache File, ulong Page, LockLifetime Lifetime), int>? statementLocks = _statementLocks;
+        _statementLocks = null;
+        Dictionary<AutoNumberCounter, long>? initialCounters = _statementInitialCounters;
+        _statementInitialCounters = null;
+
+        if (hasOwnLevel && _frames.Count > externalDepth)
+        {
+            bool hadOwnOverlayScope = _frames.Count > 1;
+            ExplicitFrame own = _frames[^1];
+            _frames.RemoveAt(_frames.Count - 1);
+            own.RestoreExplicitCounters();
+            UnindexChanges(own.Changes);
+            if (hadOwnOverlayScope && scopedParticipants is not null)
+            {
+                foreach (FileParticipant p in scopedParticipants)
+                {
+                    if (_participants.TryGetValue(p.Cache, out FileParticipant? current) && ReferenceEquals(current, p))
+                    {
+                        p.Overlay.RollbackScope();
+                    }
+                }
+            }
+            foreach (PopulationFamily pop in _populations)
+            {
+                pop.OnTransactionRollback(own);
+            }
+        }
+
+        HashSet<FileParticipant>? scopedSet = scopedParticipants is { Count: > 0 }
+            ? new HashSet<FileParticipant>(scopedParticipants, ReferenceEqualityComparer.Instance)
+            : null;
+        if (scopedParticipants is not null)
+        {
+            foreach (FileParticipant p in scopedParticipants)
+            {
+                if (_participants.TryGetValue(p.Cache, out FileParticipant? current) && ReferenceEquals(current, p))
+                {
+                    p.Overlay.RollbackScope();
+                }
+            }
+        }
+        foreach (FileParticipant p in _participants.Values.ToArray())
+        {
+            if ((scopedSet is null || !scopedSet.Contains(p)) && !_unresolved.Contains(p.Cache))
+            {
+                p.Dispose();
+                _participants.Remove(p.Cache);
+            }
+        }
+
+        RestoreStatementCounters(initialCounters);
+
+        _sideEffectRoles.Clear();
+        if (savedSideEffectRoles is not null)
+        {
+            foreach (((PageCache Cache, ulong Page) key, PageRole role) in savedSideEffectRoles)
+            {
+                _sideEffectRoles[key] = role;
+            }
+        }
+        _pendingCloseCommit.Clear();
+        if (savedPendingCloseCommit is not null)
+        {
+            _pendingCloseCommit.UnionWith(savedPendingCloseCommit);
+        }
+
         if (_frames.Count > 0)
         {
+            if (outerCheckpoint is not null)
+            {
+                ExplicitFrame outer = _frames[^1];
+                for (int i = outerCheckpoint.ChangesCount; i < outer.Changes.Count; i++)
+                {
+                    IndexRemoved(outer.Changes[i]);
+                }
+                outer.RestoreCheckpoint(outerCheckpoint);
+            }
+            ReleaseStatementLocks(statementLocks);
             return;
         }
-        if (pendingStart == 0)
-        {
-            _pending.Clear();
-            _sideEffectRoles.Clear();
-            _pendingCloseCommit.Clear();
-            ClearAcceptedIndex();
-            ReleaseParticipants();
-            ReleaseLocks(LockLifetime.UntilPublished);
-            return;
-        }
+
         if (pendingStart < _pending.Count)
         {
             for (int i = pendingStart; i < _pending.Count; i++)
             {
                 IndexRemoved(_pending[i]);
+                if (_pending[i].Physical is null)
+                {
+                    _unwrittenPendingCount--;
+                }
             }
             _pending.RemoveRange(pendingStart, _pending.Count - pendingStart);
+        }
+        ReleaseStatementLocks(statementLocks);
+    }
+
+    private static void RestoreStatementCounters(Dictionary<AutoNumberCounter, long>? counters)
+    {
+        if (counters is null)
+        {
+            return;
+        }
+        foreach ((AutoNumberCounter counter, long originalLast) in counters)
+        {
+            counter.Restore(originalLast);
+        }
+    }
+
+    private void ConvertStatementLocks(LockLifetime from, LockLifetime to)
+    {
+        if (_statement is null || _statementLocks is not { Count: > 0 } locks)
+        {
+            return;
+        }
+        List<((PageCache File, ulong Page, LockLifetime Lifetime) Key, int Count)> moved = [];
+        foreach (((PageCache File, ulong Page, LockLifetime Lifetime) key, int count) in locks)
+        {
+            if (key.Lifetime == from)
+            {
+                moved.Add((key, count));
+            }
+        }
+        foreach (((PageCache File, ulong Page, LockLifetime Lifetime) key, int count) in moved)
+        {
+            locks.Remove(key);
+            var target = (key.File, key.Page, to);
+            locks[target] = locks.TryGetValue(target, out int existing) ? existing + count : count;
+        }
+    }
+
+    private void ReleaseStatementLocks(Dictionary<(PageCache File, ulong Page, LockLifetime Lifetime), int>? locks)
+    {
+        if (locks is not { Count: > 0 })
+        {
+            return;
+        }
+        foreach (((PageCache file, ulong page, LockLifetime lifetime), int count) in locks)
+        {
+            if (lifetime == LockLifetime.UntilPublished && _unresolved.Contains(file))
+            {
+                continue;
+            }
+            LockResource resource = new(page, LockPurpose.DataPage);
+            for (int i = 0; i < count; i++)
+            {
+                file.Locks.Release(Locker, [resource], lifetime);
+            }
         }
     }
 

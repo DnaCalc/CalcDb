@@ -418,6 +418,10 @@ public sealed class EditFrame : IDisposable
                     $"AutoNumber insert with non-1 increment ({counter.Increment}) in an MDB file is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
             }
             counterBeforeAddNew = counter.Last;
+            if (_workspace.InStatement)
+            {
+                _workspace.SaveStatementCounterBefore(counter, counterBeforeAddNew.Value);
+            }
             if (!counter.TryIssue(out newTicket, out MutationOpen counterOpen, out string? counterDetail))
             {
                 return EditOutcome.NotModelled(counterOpen, counterDetail);
@@ -828,6 +832,10 @@ public sealed class EditFrame : IDisposable
                 }
                 if (s.AutoNumber is { } autoCol2 && _table.Counter is { } refuseCounter && candidateValues[autoCol2.Ordinal].Kind == NativeKind.Long)
                 {
+                    if (_workspace.InStatement)
+                    {
+                        _workspace.SaveStatementCounterBefore(refuseCounter, _counterBeforeAddNew);
+                    }
                     long val = candidateValues[autoCol2.Ordinal].Integer;
                     if (reseedRefuseAuto)
                     {
@@ -1301,6 +1309,10 @@ public sealed class EditFrame : IDisposable
         }
         if (s.AutoNumber is { } auto && _table.Counter is { } counter && mode == EditMode.AddNew && values[auto.Ordinal].Kind == NativeKind.Long)
         {
+            if (_workspace.InStatement)
+            {
+                _workspace.SaveStatementCounterBefore(counter, _counterBeforeAddNew);
+            }
             if (_workspace.Depth > 0 && assigned[auto.Ordinal])
             {
                 _workspace.SaveExplicitCounterBefore(counter, _counterBeforeAddNew);

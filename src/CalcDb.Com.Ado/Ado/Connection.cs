@@ -1915,37 +1915,38 @@ internal sealed unsafe class ConnectionObject : AdoObject
                         $"Connection.Execute {parsed.Kind} on {(isMdb ? "Jet 4 MDB" : "ACCDB")} table '{editContext.Semantics.TableName}' with CHECK constraints has no retained ACE record"));
                 }
             }
-            if (parsed!.Kind is ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update
-                && HasTextlessValidationRule(editContext.Semantics))
-            {
-                return CallResult.Fail(Failure.NotModelled(
-                    "NotModelled.AdoProviderError",
-                    $"ADO {(allowAdoConnectionExecute ? "Connection.Execute" : "Command.Execute")} on table '{editContext.Semantics.TableName}' with a textless ValidationRule (ACE 3317) has no retained ACE record"));
-            }
+        }
+
+        MappedProviderError? TryMapFailure(SqlFailure failure, out Failure? unmodelled)
+        {
+            bool allowAdoCheckViolation = failure.Number == 3317
+                && IsRecordedAdoCheckViolation(editContext, failure.Message, allowAdoConnectionExecute);
+            return AdoSqlErrors.TryMap(
+                failure,
+                isSavedQuery: false,
+                out unmodelled,
+                sql,
+                allowAdoCheckViolation,
+                isConnectionExecuteAction: allowAdoConnectionExecute);
         }
 
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        // Pass ActionErrorSource.Ado only for ad-hoc Connection.Execute; never pass ActionErrorSource.Database from ADO.
+        // Pass ActionErrorSource.Ado for ad-hoc Connection.Execute and ActionErrorSource.AdoCommand for Command.Execute;
+        // never pass ActionErrorSource.Database from ADO.
         ActionOutcome outcome = ActionExecutor.Execute(
             sql,
             session.Sql,
             128,
             null,
-            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.QueryDef);
+            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.AdoCommand,
+            acceptsFailure: f => TryMapFailure(f, out _) is not null);
         if (outcome.Failure is { } sqlFailure)
         {
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")
             {
                 return CallResult.Fail(Failure.NotModelled(sqlFailure.NotModelled!, sqlFailure.Message));
             }
-            bool allowAdoCheckViolation = sqlFailure.Number == 3317
-                && IsRecordedAdoCheckViolation(editContext, sqlFailure.Message, allowAdoConnectionExecute);
-            MappedProviderError? mapped = AdoSqlErrors.TryMap(
-                sqlFailure,
-                isSavedQuery: false,
-                out Failure? unmodelled,
-                sql,
-                allowAdoCheckViolation);
+            MappedProviderError? mapped = TryMapFailure(sqlFailure, out Failure? unmodelled);
             if (mapped is { } err)
             {
                 SetProviderError(err.ErrorEntry);
@@ -2005,22 +2006,6 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             string expected = $"One or more values are prohibited by the validation rule '{check.Name}' set for '{tableName}'. Enter a value that the expression for this field can accept.";
             if (string.Equals(message, expected, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static bool HasTextlessValidationRule(MutationSemantics semantics)
-    {
-        if (semantics.TableRule is { ValidationText: null })
-        {
-            return true;
-        }
-        foreach (ColumnSemantics col in semantics.Columns)
-        {
-            if (col.Rule is { ValidationText: null })
             {
                 return true;
             }

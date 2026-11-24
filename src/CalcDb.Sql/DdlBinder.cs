@@ -1702,7 +1702,8 @@ public static class DdlExecutor
         string sql,
         ISqlActionDatabase database,
         int options = 0,
-        ActionErrorSource source = ActionErrorSource.Database)
+        ActionErrorSource source = ActionErrorSource.Database,
+        Func<SqlFailure, bool>? acceptsFailure = null)
     {
         if ((options & ~AdmittedOptionsMask) != 0)
         {
@@ -1723,8 +1724,13 @@ public static class DdlExecutor
         {
             // Colliding SQL/ADO CREATE TABLE (3380) is not a no-op on ACE: it increments MSysObjects/MSysACEs
             // UniqueEntryCount and writes two page-0 commits (r-q28-schema-write-open/pair-sql-*, pair-ado-*).
+            // Skip that side effect if the caller will refuse 3380 so nothing is written.
             if (stmt is CreateTableStatement ct && failure is { IsNotModelled: false, Number: 3380 })
             {
+                if (acceptsFailure is not null && !acceptsFailure(failure))
+                {
+                    return ActionOutcome.Fail(failure);
+                }
                 return ExecuteDuplicateCreateTable(ct, failure, database, route);
             }
             return ActionOutcome.Fail(failure!);
