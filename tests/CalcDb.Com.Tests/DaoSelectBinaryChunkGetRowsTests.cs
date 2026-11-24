@@ -765,6 +765,13 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "abc", 4);
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "", 4);
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, DBNull.Value, 4);
+        // Bytes (p1) DISP_E_OVERFLOW -> DAO 3001 with IErrorInfo and *puArgErr=0 (q3-lv-getchunk-args-accdb seq 29, -mdb seq 21).
+        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 0u, 0, 4294967296.0);
+        // Offset (p0) overflow is not recorded and is refused by name.
+        AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentConversion", 4294967296.0, 4);
+        // Unrecorded source VarType refused by name before VariantChangeTypeEx runs.
+        AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentType", 1.5f, 4);
+        AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentType", 0, 4.0f);
         Ok(Method(dispRs, "Close"));
 
         // Empty recordset: non-negative -> 3021, negative -> NotModelled.GetChunkNegativeState.
@@ -1140,6 +1147,51 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
                     Marshal.Release(errorInfo);
                 }
                 Assert.Equal(publishesErrorInfo, hasErrorInfo);
+            }
+            finally
+            {
+                if (excep.Source != 0)
+                {
+                    Marshal.FreeBSTR(excep.Source);
+                }
+                if (excep.Description != 0)
+                {
+                    Marshal.FreeBSTR(excep.Description);
+                }
+                if (excep.HelpFile != 0)
+                {
+                    Marshal.FreeBSTR(excep.HelpFile);
+                }
+            }
+        }
+        finally
+        {
+            if (reversed is not null)
+            {
+                NativeMemory.Free(reversed);
+            }
+        }
+    }
+
+    private void AssertInvokeNotModelled(DispatchObject target, string member, string expectedName, params object?[] args)
+    {
+        NativeVariant* reversed = args.Length == 0 ? null : (NativeVariant*)NativeMemory.Alloc((nuint)(args.Length * sizeof(NativeVariant)));
+        try
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                reversed[args.Length - 1 - i] = *(NativeVariant*)Arg(args[i]);
+            }
+            DispParams dp = new() { Args = (nint)reversed, ArgCount = (uint)args.Length };
+            NativeVariant result = default;
+            ExcepInfo excep = default;
+            uint argError = uint.MaxValue;
+            int hr = target.Invoke(target.Declaration.Member(member, InvokeKind.Method).MemberId, (ushort)InvokeKind.Method, &dp, &result, &excep, &argError);
+            try
+            {
+                Assert.Equal(HResults.DISP_E_EXCEPTION, hr);
+                Assert.Equal(HResults.E_NOTIMPL, excep.Scode);
+                Assert.StartsWith(expectedName + ":", Marshal.PtrToStringBSTR(excep.Description));
             }
             finally
             {

@@ -889,23 +889,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
         ExcepInfo* info,
         uint* argError)
     {
-        // Inspect raw parameter 0 before DispatchObject coerces BSTR parameters so only recorded
-        // Sort(VT_NULL) and Find(VT_NULL) map to Provider 0x80020005 (r-ado-1b/view-sort-grammar, view-find-client).
-        if ((dispId == 1031 && (flags & 4) != 0) || (dispId == 1058 && (flags & 1) != 0))
-        {
-            RecordsetObject rs = Recover<RecordsetObject>(self);
-            rs._rawParam0WasNull = IsRawParam0Null(parameters, isPropertyPut: dispId == 1031);
-            rs._coercionParam = -1;
-            try
-            {
-                return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
-            }
-            finally
-            {
-                rs._rawParam0WasNull = false;
-                rs._coercionParam = -1;
-            }
-        }
         // Inspect raw GetString delimiter parameters (2..4) before DispatchObject coerces non-BSTR values to BSTR.
         if (dispId == 1062 && (flags & 1) != 0)
         {
@@ -997,46 +980,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return false;
         }
         return true;
-    }
-
-    private static bool IsRawParam0Null(DispParams* parameters, bool isPropertyPut)
-    {
-        if (parameters is null || parameters->ArgCount == 0 || parameters->Args == 0)
-        {
-            return false;
-        }
-        uint count = parameters->ArgCount;
-        uint named = parameters->NamedArgCount;
-        if (named > count)
-        {
-            return false;
-        }
-        NativeVariant* rgvarg = (NativeVariant*)parameters->Args;
-        NativeVariant* target = null;
-        uint positional = count - named;
-        if (positional > 0)
-        {
-            target = rgvarg + (count - 1);
-        }
-        else if (named > 0 && parameters->NamedArgs != 0)
-        {
-            int* namedIds = (int*)parameters->NamedArgs;
-            int wanted = isPropertyPut ? -3 : 0;
-            for (uint j = 0; j < named; j++)
-            {
-                if (namedIds[j] == wanted)
-                {
-                    target = rgvarg + j;
-                    break;
-                }
-            }
-        }
-        if (target is null)
-        {
-            return false;
-        }
-        NativeVariant* cell = Args.Cell((nint)target);
-        return ((VarType)cell->Vt & ~VarType.ByRef) == VarType.Null;
     }
 
     // CursorOptionEnum flags (Ado.g.cs):
@@ -1137,10 +1080,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private ConnectionObject? _activeConnection;
     private bool _wasEverOpened;
     private bool _closedAfterOpen;
-    private bool _rawParam0WasNull;
     private bool _getStringNonBstrDelimiter;
     private bool _getRowsRecordedBinaryArgShape;
-    private int _coercionParam = -1;
 
     // Open-state cursor fields:
     private IAdoRowSource? _rows;
@@ -1265,11 +1206,21 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     private void ResetServerValueReadState() => _serverValueReadOrdinals?.Clear();
 
-    protected override ushort CoercionFlags(MemberDecl member, int parameter)
+    /// <summary>
+    /// Refuse unrecorded source VarTypes on Sort (only by-value BSTR and Null recorded: r-ado-1b/view-sort-grammar,
+    /// view-sort-server) and Find (Criteria: only by-value BSTR and Null; SkipRecords: only by-value I4:
+    /// r-ado-1b/view-find-client) before IDispatch coerces them silently.
+    /// </summary>
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
-        _coercionParam = parameter;
-        return 0;
-    }
+        ("Sort", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.Bstr or VarType.Null) =>
+            Failure.NotModelled("NotModelled.AdoSortArgumentType", $"Recordset.Sort put with {sourceType} argument (only BSTR and Null are recorded)"),
+        ("Find", 0) when sourceType is not (VarType.Bstr or VarType.Null) =>
+            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find Criteria with {sourceType} argument (only BSTR and Null are recorded)"),
+        ("Find", 1) when sourceType != VarType.I4 =>
+            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find SkipRecords with {sourceType} argument (only by-value I4 is recorded)"),
+        _ => null,
+    };
 
     /// <summary>
     /// Handle IDispatch coercion failure on Sort, Find, and GetString:
@@ -1278,11 +1229,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
     ///   Connection.Errors entry.
     /// - Any other argument conversion failure on Sort, Find, or GetString is refused by name.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing)
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
     {
         if (member.Name is "Sort" or "Find")
         {
-            if (!missing && _coercionParam == 0 && _rawParam0WasNull)
+            if (conversion.Reason == ArgumentConversionReason.TypeMismatch
+                && conversion.Parameter == 0
+                && conversion.SourceType == VarType.Null)
             {
                 if (IsOpen && IsClientCursor)
                 {
