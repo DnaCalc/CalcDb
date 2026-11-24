@@ -1,0 +1,61 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q37-valrule-put/create-check-accdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-P",
+    "II-06",
+    "W-08"
+  ],
+  "description": "Create ACCDB fixture with table T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W LONG) and an ADO CheckConstraint CK_V CHECK (V >= 0) already in MSysObjects.LvProp. Keeps whole file after creation.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q37-check-accdb.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke", "target": "db", "member": "Execute", "kind": "method",
+      "args": [
+        { "type": "bstr", "text": "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W LONG)" },
+        { "type": "i4", "value": 128 }
+      ]
+    },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps" },
+    { "op": "invoke", "target": "ps", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds" },
+    { "op": "invoke", "target": "ds", "member": "Value", "kind": "propertyPut", "args": [{ "type": "outputPath", "fileName": "r-q37-check-accdb.accdb" }] },
+    { "op": "release", "target": "ds" },
+    { "op": "release", "target": "ps" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q37-check-accdb.accdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 262144, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}
