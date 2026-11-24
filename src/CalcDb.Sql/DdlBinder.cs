@@ -159,7 +159,7 @@ public static class DdlBinder
         statement switch
         {
             CreateTableStatement ct => BindCreateTable(ct, database, out failure, route),
-            CreateIndexStatement ci => BindCreateIndex(ci, database, out failure),
+            CreateIndexStatement ci => BindCreateIndex(ci, database, out failure, route),
             DropTableStatement dt => BindDropTable(dt, database, out failure),
             DropIndexStatement di => BindDropIndex(di, database, out failure),
             AlterTableStatement at => BindAlterTable(at, database, out failure),
@@ -841,7 +841,7 @@ public static class DdlBinder
 
     // ---- CREATE [UNIQUE] INDEX -------------------------------------------------------------------------------------
 
-    private static BoundDdl? BindCreateIndex(CreateIndexStatement stmt, ISqlDatabase database, out SqlFailure? failure)
+    private static BoundDdl? BindCreateIndex(CreateIndexStatement stmt, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
         bool linked = IsLinked(database, stmt.TableName);
         TableDefinition? table = linked ? null : FindTable(database, stmt.TableName);
@@ -883,7 +883,7 @@ public static class DdlBinder
             return Fail(indexErr, out failure);
         }
 
-        // ---- Lowering to SchemaWriter.CreateIndexRequest (SchemaRoute.Sql) ----
+        // ---- Lowering to SchemaWriter.CreateIndexRequest ----
 
         bool primary = (stmt.Options & DdlIndexOptions.Primary) != 0;
         bool disallowNull = (stmt.Options & DdlIndexOptions.DisallowNull) != 0;
@@ -917,7 +917,7 @@ public static class DdlBinder
         return new BoundDdl(
             stmt,
             BoundDdlKind.CreateIndex,
-            CreateIndex: new CreateIndexRequest(stmt.TableName, newIndex, SchemaRoute.Sql));
+            CreateIndex: new CreateIndexRequest(stmt.TableName, newIndex, route));
     }
 
     private static SqlFailure? ValidateCreateIndexBody(

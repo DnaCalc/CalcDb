@@ -29,6 +29,7 @@ param(
     [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
     [switch] $Land,                                 # with -Branch: after a pass, fast-forward master to the checked commit and push
     [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
+    [int] $MaxCpuCount = 4,                         # MSBuild -m cap (with -nr:false) so builds do not spawn 16 resident nodes
     [int] $LockWaitMinutes = 90)                    # how long a run waits for another run's lock before it gives up
 $ErrorActionPreference = 'Stop'
 # pwsh -File passes "a,b" as one string: split lists on commas.
@@ -198,10 +199,13 @@ try {
 
         # The project graph: each project's direct references, by project name.
         $projects = @{}
+        $projByPath = @{}
         foreach ($p in Get-ChildItem src, tests, tools -Recurse -Filter *.csproj | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }) {
             $xml = [xml] (Get-Content $p.FullName -Raw)
             $refs = @($xml.Project.ItemGroup.ProjectReference.Include | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
-            $projects[$p.BaseName] = [pscustomobject]@{ Dir = ([IO.Path]::GetRelativePath($work, $p.DirectoryName) -replace '\\', '/') + '/'; Refs = $refs }
+            $relProj = ([IO.Path]::GetRelativePath($work, $p.FullName) -replace '\\', '/')
+            $projects[$p.BaseName] = [pscustomobject]@{ Dir = ([IO.Path]::GetRelativePath($work, $p.DirectoryName) -replace '\\', '/') + '/'; Proj = $relProj; Refs = $refs }
+            $projByPath[$relProj] = $p.BaseName
         }
         function Closure([string] $start) {
             $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -211,6 +215,7 @@ try {
         }
         # Tests from the graph: a test project runs when its closure holds a changed project. A change to the build
         # files, evidence/ or probes/ (which the replay tests read) runs every test project.
+        $explicitTests = @($Tests)
         $testProjects = @($projects.Keys | Where-Object { $projects[$_].Dir -like 'tests/*' -and $_ -match '^CalcDb\.(.+)\.Tests$' } | Sort-Object)
         $everything = [bool] ($changed | Where-Object { $_ -match '^(Directory\.Build\.(props|targets)|Directory\.Packages\.props|global\.json|CalcDb\.slnx|NuGet\.config)$|^(evidence|probes)/' } | Select-Object -First 1)
         $changedProjects = @($changed | ForEach-Object {
@@ -220,45 +225,99 @@ try {
             } | Sort-Object -Unique)
         $graphTests = @($testProjects | Where-Object {
                 $everything -or @((Closure $_) | Where-Object { $_ -in $changedProjects }).Count } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
-        $Tests = @(@($graphTests) + @($Tests) | Sort-Object -Unique)
+        $inFilter = if ($Solution -ne "CalcDb.slnx") {
+            @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
+        } else { @() }
+        # During a -Filter iteration against an area filter (with no -Questions/-Snapshot), keep test projects scoped to
+        # that filter (plus any explicit -Tests) so iterating on Sql/Isam does not build and NativeAOT-publish Com.
+        if ($Filter -and $Solution -ne "CalcDb.slnx" -and -not $Questions.Count -and -not $Snapshot) {
+            $graphTests = @($graphTests | Where-Object { "tests/CalcDb.$_.Tests/CalcDb.$_.Tests.csproj" -in $inFilter })
+        }
+        $Tests = @(@($graphTests) + @($explicitTests) | Sort-Object -Unique)
         $why = if ($everything) { "build files, evidence or probes changed" } else { "changed projects: $($changedProjects -join ', ')" }
         Step "tests from the project graph: $(if ($Tests.Count) { $Tests -join ', ' } else { 'none' }) ($why)"
 
-        $build = dotnet build $Solution -v q -clp:ErrorsOnly 2>&1
-        if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
-        Step "built $Solution"
-        # The tests run with --no-build: a selected test project outside an area filter is built too, or it would run
-        # older binaries (found by the c7gn writer's self-check, 2026-11-21). So are the runner and the worker that the
-        # candidate check and the snapshot use (only the Oracle filter holds them: under the Com filter a fresh worktree
-        # left all 54 r-q24 candidates NotStarted, whxg writer, 2026-11-22).
+        # Build everything needed in one dotnet build call (x38g). The tests run with --no-build: any selected test
+        # project outside an area filter, plus the runner and worker when -Questions or -Snapshot is used, is folded
+        # into a single temporary solution filter instead of running N separate dotnet build invocations.
+        $buildTarget = $Solution
+        $buildLabel = $Solution
+        $tempSlnf = $null
+        $buildProjectPaths = @($projects.Values | ForEach-Object { $_.Proj })
         if ($Solution -ne "CalcDb.slnx") {
-            $inFilter = @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
             $extra = @($Tests | ForEach-Object { "tests/CalcDb.$_.Tests/CalcDb.$_.Tests.csproj" })
             if ($Questions.Count -or $Snapshot) {
                 $extra += "src/CalcDb.Oracle.Runner/CalcDb.Oracle.Runner.csproj", "src/CalcDb.Oracle.Worker/CalcDb.Oracle.Worker.csproj"
             }
-            foreach ($proj in $extra) {
-                if ($proj -in $inFilter) { continue }
-                $build = dotnet build $proj -v q -clp:ErrorsOnly 2>&1
-                if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED $proj"; exit $failed }
-                Step "built $proj (outside $Solution)"
+            $extra = @($extra | Where-Object { $_ -notin $inFilter } | Sort-Object -Unique)
+            $neededSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($proj in @($inFilter) + @($extra)) {
+                $projName = $projByPath[$proj]
+                if ($projName) {
+                    foreach ($c in (Closure $projName)) { if ($projects[$c]) { [void] $neededSet.Add($projects[$c].Proj) } }
+                } else { [void] $neededSet.Add($proj) }
+            }
+            $buildProjectPaths = @($neededSet | Sort-Object)
+            if ($extra.Count -gt 0) {
+                $tempSlnf = Join-Path $env:TEMP "calcdb-build-$PID.slnf"
+                @{ solution = @{ path = (Join-Path $work "CalcDb.slnx"); projects = $buildProjectPaths } } |
+                    ConvertTo-Json -Depth 4 | Set-Content $tempSlnf -Encoding utf8
+                $buildTarget = $tempSlnf
+                $buildLabel = "$Solution + $($extra.Count) extra"
             }
         }
 
-        # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
-        # last publish here. Four Com test classes, the candidate check and the snapshot load the published module.
-        if ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) {
-            $dirs = @((Closure 'CalcDb.Com') | ForEach-Object { $projects[$_].Dir }) + @('Directory.Build.props', 'global.json')
-            $sources = git -C $work ls-files -co --exclude-standard -- $dirs | Sort-Object
-            $text = ($sources | ForEach-Object { "$_ $((Get-FileHash (Join-Path $work $_) -Algorithm SHA256).Hash)" }) -join "`n"
-            $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($text)))
-            $stamp = Join-Path $work "artifacts\native\calcdb-native-sources.sha256"
-            if ((Test-Path $stamp) -and (Get-Content $stamp -Raw).Trim() -eq $hash) { Step "native deployment current (CalcDb.Com closure unchanged)" }
-            else {
-                $pub = dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native -v q 2>&1
-                if ($LASTEXITCODE) { $failed++; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
-                else { Set-Content $stamp $hash -NoNewline; Step "published CalcDb.Com" }
+        # Skip NuGet restore only when every project in the build set already has an up-to-date project.assets.json.
+        $canSkipRestore = $true
+        $globalConfigMax = [DateTime]::MinValue
+        foreach ($cfg in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props', 'global.json', 'NuGet.config')) {
+            $cfgPath = Join-Path $work $cfg
+            if (Test-Path $cfgPath) {
+                $t = (Get-Item $cfgPath).LastWriteTimeUtc
+                if ($t -gt $globalConfigMax) { $globalConfigMax = $t }
             }
+        }
+        foreach ($proj in $buildProjectPaths) {
+            $projFull = Join-Path $work $proj
+            $objDir = Join-Path (Split-Path $projFull) "obj"
+            $assets = Join-Path $objDir "project.assets.json"
+            if (-not (Test-Path $assets)) { $canSkipRestore = $false; break }
+            $stampFile = Join-Path $objDir "project.nuget.cache"
+            $stampTime = if (Test-Path $stampFile) { (Get-Item $stampFile).LastWriteTimeUtc } else { (Get-Item $assets).LastWriteTimeUtc }
+            if ($stampTime -lt $globalConfigMax -or $stampTime -lt (Get-Item $projFull).LastWriteTimeUtc) { $canSkipRestore = $false; break }
+        }
+        $msbuildArgs = @("-m:$MaxCpuCount", "-nr:false")
+        $restoreArgs = if ($canSkipRestore) { @("--no-restore") } else { @() }
+
+        # Machine-wide build lock: only one dotnet build / NativeAOT publish runs on this machine at a time, across
+        # every worktree, and with bounded MSBuild nodes (-nr:false) so builds do not thrash RAM or leave resident nodes.
+        $buildLockDir = Join-Path $env:LOCALAPPDATA "CalcDb"
+        New-Item -ItemType Directory -Force $buildLockDir | Out-Null
+        $buildLockPath = Join-Path $buildLockDir "dotnet-build.lock"
+        $buildLock = Wait-Lock $buildLockPath "dotnet build"
+        try {
+            $build = dotnet build $buildTarget @restoreArgs @msbuildArgs -v q -clp:ErrorsOnly 2>&1
+            if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
+            Step "built $buildLabel$(if ($canSkipRestore) { ' (no-restore)' } else { '' })"
+
+            # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
+            # last publish here. Four Com test classes, the candidate check and the snapshot load the published module.
+            if ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) {
+                $dirs = @((Closure 'CalcDb.Com') | ForEach-Object { $projects[$_].Dir }) + @('Directory.Build.props', 'global.json')
+                $sources = git -C $work ls-files -co --exclude-standard -- $dirs | Sort-Object
+                $text = ($sources | ForEach-Object { "$_ $((Get-FileHash (Join-Path $work $_) -Algorithm SHA256).Hash)" }) -join "`n"
+                $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($text)))
+                $stamp = Join-Path $work "artifacts\native\calcdb-native-sources.sha256"
+                if ((Test-Path $stamp) -and (Get-Content $stamp -Raw).Trim() -eq $hash) { Step "native deployment current (CalcDb.Com closure unchanged)" }
+                else {
+                    $pub = dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native @msbuildArgs -v q 2>&1
+                    if ($LASTEXITCODE) { $failed++; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
+                    else { Set-Content $stamp $hash -NoNewline; Step "published CalcDb.Com" }
+                }
+            }
+        } finally {
+            if ($tempSlnf -and (Test-Path $tempSlnf)) { Remove-Item $tempSlnf -Force -ErrorAction SilentlyContinue }
+            $buildLock.Dispose()
         }
 
         $out = Join-Path $env:TEMP "calcdb-land-out\$Name-$($candidate.Substring(0, 8))"

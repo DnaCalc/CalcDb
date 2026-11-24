@@ -248,7 +248,47 @@ public sealed class IndexEntryInsert(byte[] newEntry, FormatDescriptor d) : IPag
         }
     }
 
-    internal static bool TryApply(Span<byte> page, ReadOnlySpan<byte> newEntry, FormatDescriptor d, out string? failure)
+    /// <summary>The stored key of one index for a row's values (II-05 §§4–6: each field's contribution, then the long-key finish).</summary>
+    public static byte[]? EncodeKey(
+        IReadOnlyList<ColumnDescriptor> columns,
+        IReadOnlyList<IndexColumn> keyColumns,
+        IReadOnlyList<NativeValue> values,
+        out string? failure,
+        bool valuesByColumnOrdinal = false)
+    {
+        failure = null;
+        int capacity = 0;
+        var codecs = new FieldKeyCodec[columns.Count];
+        for (int i = 0; i < codecs.Length; i++)
+        {
+            if (IndexKeys.CodecFor(columns[i], out KeyCodecRefusal refusal, keyColumns[i].Ascending) is not { } codec)
+            {
+                failure = $"column {columns[i].Name} has no key codec ({refusal})";
+                return null;
+            }
+            codecs[i] = codec;
+            capacity += codec.MaxFieldBytes;
+        }
+        byte[] key = new byte[Math.Max(capacity, IndexKeys.MaxUnshortenedKey + 2)];
+        int length = 0;
+        for (int i = 0; i < codecs.Length; i++)
+        {
+            NativeValue v = values[valuesByColumnOrdinal ? columns[i].Ordinal : i];
+            if (EntryKeys.ValueOf(v) is not { } value || !IndexKeys.TryWriteField(key.AsSpan(length), codecs[i], keyColumns[i].Ascending, value, out int written))
+            {
+                failure = $"a {v.Kind} key value for column {columns[i].Name}";
+                return null;
+            }
+            length += written;
+        }
+        return key.AsSpan(0, IndexKeys.FinishComposite(key, length)).ToArray();
+    }
+
+    /// <summary>Complete leaf entry: encoded key followed by big-endian 3-byte page number and 1-byte row slot (II-05 §2).</summary>
+    public static byte[] EncodeEntry(byte[] key, RowId root) =>
+        [.. key, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
+
+    public static bool TryApply(Span<byte> page, ReadOnlySpan<byte> newEntry, FormatDescriptor d, out string? failure, bool allowRecompress = true)
     {
         if (IndexPages.Decode(page, d, out failure) is not { } leaf)
         {
@@ -279,7 +319,7 @@ public sealed class IndexEntryInsert(byte[] newEntry, FormatDescriptor d) : IPag
         // its 402nd entry, leaf 48 of split-long-descending-sync with its next peer 49; split-inner-below and -middle leaf 48
         // full at 516 entries under prefix 2 although its entries share 3).
         int common = IndexPages.CommonPrefix(entries);
-        if (prefix != 0 || common == 0)
+        if (!allowRecompress || prefix != 0 || common == 0)
         {
             return false;
         }
@@ -1472,8 +1512,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
     }
 
-    private static byte[] EncodeEntry(byte[] key, RowId root) =>
-        [.. key, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
+    private static byte[] EncodeEntry(byte[] key, RowId root) => IndexEntryInsert.EncodeEntry(key, root);
 
     private static void NullsInKey(IndexCheck index, IReadOnlyList<NativeValue> values, out bool allNull, out bool anyNull)
     {
@@ -1514,8 +1553,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return null;
         }
-        oldEntry = [.. oldKey, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
-        newEntry = [.. newKey, (byte)(root.Page >> 16), (byte)(root.Page >> 8), (byte)root.Page, root.Row];
+        oldEntry = EncodeEntry(oldKey, root);
+        newEntry = EncodeEntry(newKey, root);
         var navigator = new IndexNavigator(Seen(seen), _d, index.Physical, _table.FirstPage);
         for (IndexPosition? p = navigator.LowerBound(KeyBound.Low(oldKey)); p is { } at && navigator.KeyMatches(at, KeyBound.Low(oldKey)); p = navigator.Next(at))
         {
@@ -1529,35 +1568,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     }
 
     /// <summary>The stored key of one tree for a row's values (II-05 §§4–6: each field's contribution, then the long-key finish).</summary>
-    private static byte[]? Key(IndexCheck index, IReadOnlyList<NativeValue> values, out string? failure)
-    {
-        failure = null;
-        int capacity = 0;
-        var codecs = new FieldKeyCodec[index.Columns.Count];
-        for (int i = 0; i < codecs.Length; i++)
-        {
-            if (IndexKeys.CodecFor(index.Columns[i], out KeyCodecRefusal refusal, index.Physical.Columns[i].Ascending) is not { } codec)
-            {
-                failure = $"column {index.Columns[i].Name} has no key codec ({refusal})";
-                return null;
-            }
-            codecs[i] = codec;
-            capacity += codec.MaxFieldBytes;
-        }
-        byte[] key = new byte[Math.Max(capacity, IndexKeys.MaxUnshortenedKey + 2)];
-        int length = 0;
-        for (int i = 0; i < codecs.Length; i++)
-        {
-            NativeValue v = values[index.Columns[i].Ordinal];
-            if (EntryKeys.ValueOf(v) is not { } value || !IndexKeys.TryWriteField(key.AsSpan(length), codecs[i], index.Physical.Columns[i].Ascending, value, out int written))
-            {
-                failure = $"a {v.Kind} key value for column {index.Columns[i].Name}";
-                return null;
-            }
-            length += written;
-        }
-        return key.AsSpan(0, IndexKeys.FinishComposite(key, length)).ToArray();
-    }
+    private static byte[]? Key(IndexCheck index, IReadOnlyList<NativeValue> values, out string? failure) =>
+        IndexEntryInsert.EncodeKey(index.Columns, index.Physical.Columns, values, out failure, valuesByColumnOrdinal: true);
 
     /// <summary>
     /// Whether the replacement stays inside its leaf (null) or why not: on a leaf that is not the root, the new entry must
