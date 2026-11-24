@@ -150,8 +150,6 @@ public sealed class InStrStrCompTests
     [InlineData("StrComp('a', 'a ', 1)", -1)]
     [InlineData("StrComp('a ', 'a', 1)", 1)]
     [InlineData("StrComp(Chr(0), '', 1)", 1)]
-    [InlineData("StrComp('a' & Chr(0) & 'b', 'a' & Chr(0) & 'B', 1)", 0)]
-    [InlineData("StrComp('a' & Chr(0) & 'a', 'a' & Chr(0) & 'b', 1)", -1)]
     public void StrComp_evaluates_text_compare_mode_when_host_supplies_collation(string text, short expected)
     {
         using BoundExpression expr = Bind(text);
@@ -165,6 +163,41 @@ public sealed class InStrStrCompTests
         {
             AssertTextCompareRefused(expr);
         }
+    }
+
+    [Theory]
+    [InlineData("InStr('\uFF21', 'a')", "NotModelled.InStrWidthFold")]
+    [InlineData("InStr(1, '\uFF21', 'A', 1)", "NotModelled.InStrWidthFold")]
+    [InlineData("InStr('a', '\uFF21')", "NotModelled.InStrWidthFold")]
+    [InlineData("StrComp('a' & Chr(0), 'a', 1)", "NotModelled.StrCompEmbeddedNul")]
+    [InlineData("StrComp(Chr(0) & 'a', 'A', 1)", "NotModelled.StrCompEmbeddedNul")]
+    [InlineData("StrComp('a' & Chr(0) & 'b', 'a' & Chr(0) & 'B', 1)", "NotModelled.StrCompEmbeddedNul")]
+    public void Text_compare_refuses_unmodelled_width_and_embedded_nul_cases(string text, string expectedOpen)
+    {
+        using BoundExpression expr = Bind(text);
+        if (QueryContext.TextOrder is not null)
+        {
+            Assert.False(expr.Evaluate(EmptyRow.Instance));
+            Assert.NotNull(expr.LastFailure);
+            Assert.True(expr.LastFailure!.IsNotModelled);
+            Assert.Equal(expectedOpen, expr.LastFailure.NotModelled);
+        }
+        else
+        {
+            AssertTextCompareRefused(expr);
+        }
+    }
+
+    [Fact]
+    public void Binary_compare_still_evaluates_fullwidth_InStr_and_embedded_nul_StrComp()
+    {
+        using BoundExpression instr = Bind("InStr(1, '\uFF21', 'A', 0)");
+        Assert.True(instr.Evaluate(EmptyRow.Instance), instr.LastFailure?.ToString());
+        Assert.Equal(0, (int)instr.Value.Int64);
+
+        using BoundExpression strcomp = Bind("StrComp('a' & Chr(0), 'a', 0)");
+        Assert.True(strcomp.Evaluate(EmptyRow.Instance), strcomp.LastFailure?.ToString());
+        Assert.Equal((short)1, (short)strcomp.Value.Int64);
     }
 
     [Fact]
@@ -216,7 +249,7 @@ public sealed class InStrStrCompTests
     public void Warm_text_compare_InStr_and_StrComp_allocate_nothing_per_call()
     {
         using BoundExpression instr = Bind("InStr(1, 'a' & Chr(0) & 'Éb', 'éb', 1)");
-        using BoundExpression strcomp = Bind("StrComp('a' & Chr(0) & 'b', 'a' & Chr(0) & 'B', 1)");
+        using BoundExpression strcomp = Bind("StrComp('aÉb', 'aéb', 1)");
         if (QueryContext.TextOrder is null)
         {
             AssertTextCompareRefused(instr);

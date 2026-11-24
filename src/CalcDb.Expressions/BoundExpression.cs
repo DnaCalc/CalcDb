@@ -416,7 +416,11 @@ public sealed unsafe class BoundExpression : IDisposable
                     }
                     break;
                 case Op.StrComp:
-                    r = StrComp(ref sp, ins);
+                    if (!StrComp(ref sp, ins, out r))
+                    {
+                        Unwind(sp);
+                        return false;
+                    }
                     break;
                 default:
                     r = Between(ref sp, ins);
@@ -614,6 +618,16 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             else if (_active.TextOrder is { } textOrder)
             {
+                if (ContainsHalfwidthOrFullwidth(s1) || ContainsHalfwidthOrFullwidth(s2))
+                {
+                    // r-def-expr-sql/str-stored-instr-strcomp (#305, #2433): ACE returns 0 for InStr('\uFF21', 'a') and
+                    // InStr(1, '\uFF21', 'A', 1), whereas ExpressionContext.TextOrder folds width (NORM_IGNOREWIDTH).
+                    LastFailure = ExpressionFailure.Open(
+                        ExpressionPhase.Evaluate,
+                        "NotModelled.InStrWidthFold",
+                        "InStr text compare with halfwidth/fullwidth form (r-def-expr-sql/str-stored-instr-strcomp)");
+                    return false;
+                }
                 pos = IndexOfText(s1, s2, start, textOrder);
             }
             else
@@ -644,11 +658,12 @@ public sealed unsafe class BoundExpression : IDisposable
     /// <see cref="NotModelledCase.TextCompareMode"/> when none is supplied); compare=2 or &lt;0 fails 5; Null string1 or
     /// string2 yields Null; compare&gt;2 is named <see cref="NotModelledCase.TextCompareMode"/>.
     /// </summary>
-    private ScalarOutcome StrComp(ref int sp, Instruction ins)
+    private bool StrComp(ref int sp, Instruction ins, out ScalarOutcome result)
     {
         int n = ins.Operand, first = sp - n;
         int d = ins.Descriptor;
         int site = _descriptors[d].Site;
+        result = default;
         ScalarOutcome conv1 = default, conv2 = default;
         try
         {
@@ -659,35 +674,41 @@ public sealed unsafe class BoundExpression : IDisposable
                 if (cmpArg.Vt == (ushort)VarType.Null)
                 {
                     // r-expr-1/pat-15-strcomp-selector, r-expr-1b/str-strcomp-and-text-operators: Null compare fails 3464.
-                    return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Equal));
+                    result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Equal));
+                    return true;
                 }
                 ScalarOutcome cm = ScalarKernel.Apply(_descriptors[d + 2], cmpArg, _active);
                 if (!cm.Succeeded)
                 {
-                    return cm;
+                    result = cm;
+                    return true;
                 }
                 compare = (int)cm.Value.Int64;
                 if (compare < 0 || compare == 2)
                 {
-                    return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.InvalidProcedureCall, site, ScalarOperation.Equal));
+                    result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.InvalidProcedureCall, site, ScalarOperation.Equal));
+                    return true;
                 }
                 if (compare > 2)
                 {
-                    return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+                    result = ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+                    return true;
                 }
             }
             NativeVariant v1 = _stack[first].Value;
             NativeVariant v2 = _stack[first + 1].Value;
             if (v1.Vt == (ushort)VarType.Null || v2.Vt == (ushort)VarType.Null)
             {
-                return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                return true;
             }
             if (v1.Vt != (ushort)VarType.Bstr)
             {
                 conv1 = ScalarKernel.Apply(_descriptors[d], v1, _active);
                 if (!conv1.Succeeded)
                 {
-                    return conv1;
+                    result = conv1;
+                    return true;
                 }
                 v1 = conv1.Value;
             }
@@ -696,7 +717,8 @@ public sealed unsafe class BoundExpression : IDisposable
                 conv2 = ScalarKernel.Apply(_descriptors[d + 1], v2, _active);
                 if (!conv2.Succeeded)
                 {
-                    return conv2;
+                    result = conv2;
+                    return true;
                 }
                 v2 = conv2.Value;
             }
@@ -709,14 +731,28 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             else if (_active.TextOrder is { } textOrder)
             {
+                if (!s1.IsEmpty && !s2.IsEmpty && (s1.IndexOf('\0') >= 0 || s2.IndexOf('\0') >= 0))
+                {
+                    // r-def-expr-sql/str-stored-instr-strcomp (#5805, #5820, #7411, #7426): ACE returns 0 for
+                    // StrComp('a' & Chr(0), 'a', 1) and StrComp(Chr(0) & 'a', 'a', 1) (and against 'A'), whereas
+                    // ExpressionContext.TextOrder splits on U+0000 (empty vs non-empty stays matched for
+                    // r-expr-1b/str-strcomp-and-text-operators StrComp(Chr(0), '') = 1).
+                    LastFailure = ExpressionFailure.Open(
+                        ExpressionPhase.Evaluate,
+                        "NotModelled.StrCompEmbeddedNul",
+                        "StrComp text compare with U+0000 in a non-empty comparison (r-def-expr-sql/str-stored-instr-strcomp)");
+                    return false;
+                }
                 cmp = textOrder.Compare(s1, s2);
             }
             else
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+                result = ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.TextCompareMode, site, ScalarOperation.Equal));
+                return true;
             }
             short answer = cmp < 0 ? (short)-1 : cmp > 0 ? (short)1 : (short)0;
-            return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = (ushort)answer });
+            result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = (ushort)answer });
+            return true;
         }
         finally
         {
@@ -728,6 +764,18 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             sp = first;
         }
+    }
+
+    private static bool ContainsHalfwidthOrFullwidth(ReadOnlySpan<char> s)
+    {
+        foreach (char c in s)
+        {
+            if (c is >= '\uFF00' and <= '\uFFEF')
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int IndexOfText(ReadOnlySpan<char> haystack, ReadOnlySpan<char> needle, int start, TextCollation textOrder)

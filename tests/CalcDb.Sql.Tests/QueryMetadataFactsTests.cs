@@ -279,30 +279,8 @@ public sealed class QueryMetadataFactsTests(ITestOutputHelper output)
         {
             output.WriteLine("  MISMATCH: " + m);
         }
-        if (KnownOutOfScopeMismatches.TryGetValue(record, out string[]? expected))
-        {
-            // Exposed when h6r9 lifted TextCodec.Measure's refusal on row 9 (ff fe 62 00 6f 00 6d 00), unblocking all
-            // 18 queries (6,960 matched, 0 open). The 6 remaining mismatches are in CalcDb.Expressions /
-            // CalcDb.Values.Windows (InStr fullwidth 'Ａ' vs 'a' and StrComp embedded NUL), outside W-05/h6r9 scope.
-            Assert.Empty(replay.Open);
-            Assert.Equal(expected, replay.Mismatches);
-            return;
-        }
         Assert.Empty(replay.Mismatches);
     }
-
-    private static readonly Dictionary<string, string[]> KnownOutOfScopeMismatches = new(StringComparer.Ordinal)
-    {
-        ["r-def-expr-sql/str-stored-instr-strcomp/r-def-expr-sql.str-stored-instr-strcomp.f8c292089f.a1.json"] =
-        [
-            "#305 rs0x.Value[v]: ACE VT_I4 0, CalcDb VT_I4 1",
-            "#2433 rs4x.Value[v]: ACE VT_I4 0, CalcDb VT_I4 1",
-            "#5805 rs10x.Value[v]: ACE VT_I2 0, CalcDb VT_I2 1",
-            "#5820 rs10x.Value[v]: ACE VT_I2 0, CalcDb VT_I2 -1",
-            "#7411 rs13x.Value[v]: ACE VT_I2 0, CalcDb VT_I2 1",
-            "#7426 rs13x.Value[v]: ACE VT_I2 0, CalcDb VT_I2 -1",
-        ],
-    };
 
     [Fact]
     public unsafe void Uncompressed_leading_feff_text_reads_intact_on_RowReader_and_roundtrips_on_SelectCursor()
