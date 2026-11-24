@@ -110,7 +110,9 @@ scope or design, the book wins.
 - Commit with `git commit -F <message file>`. A message file outside the repository works in
   every shell; give it a unique name (`$TEMP/msg-<topic>-<session>.txt`), never a fixed one.
 - Inspect oracle results with `calcdb-oracle show`, not with one-off scripts; `--pages` and `--diff` print a record's
-  kept page bytes and what changed against the input or an earlier point.
+  kept page bytes and what changed against the input or an earlier point. It is not on the PATH: use a worktree's
+  build or a compare snapshot's `runner\calcdb-oracle.exe`, and `show --record <record.json>` for a retained record
+  ([oracle-runner.md](docs/work/oracle-runner.md), Use).
 - At each organizer handover, put the table of `pwsh tools/process-indicators.ps1` in
   [docs/work/process-log.md](docs/work/process-log.md), with the session rows filled in from `alta session report`.
   A full process review runs when an indicator crosses its line, at most once a week otherwise (The Plan §4).

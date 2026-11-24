@@ -184,4 +184,48 @@ public sealed unsafe class ScalarKernelTests(ITestOutputHelper output)
             _ = ScalarKernel.Apply(cint, six, Context);
         }
     }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("0.0", 0)]
+    [InlineData("1.0", 1)]
+    [InlineData("1.00", 1)]
+    [InlineData("1E0", 1)]
+    [InlineData("0E0", 0)]
+    [InlineData("0.0E5", 0)]
+    [InlineData("1E3", 1000)]
+    [InlineData(".5E1", 5)]
+    [InlineData("5.E1", 50)]
+    [InlineData("2147483647.0", int.MaxValue)]
+    public void Exact_Int32_numeric_literals_parse_as_VT_I4(string spelling, int expected)
+    {
+        Assert.True(ScalarLiterals.TryNumber(spelling, out NativeVariant v));
+        Assert.Equal((ushort)VarType.I4, v.Vt);
+        Assert.Equal(expected, (int)v.Int64);
+    }
+
+    [Theory]
+    [InlineData("2147483648", VarType.Decimal)]
+    [InlineData("1.5", VarType.Decimal)]
+    [InlineData("1.5E0", VarType.Decimal)]
+    [InlineData("4.94065645841247E-324", VarType.R8)]
+    [InlineData("1E308", VarType.R8)]
+    public void Non_Int32_numeric_literals_preserve_Decimal_or_Double(string spelling, VarType expected)
+    {
+        Assert.True(ScalarLiterals.TryNumber(spelling, out NativeVariant v));
+        Assert.Equal((ushort)expected, v.Vt);
+    }
+
+    [Fact]
+    public void TryNegateInt32Min_matches_unsigned_2147483648_only()
+    {
+        Assert.True(ScalarLiterals.TryNegateInt32Min("2147483648", out NativeVariant min));
+        Assert.Equal((ushort)VarType.I4, min.Vt);
+        Assert.Equal(int.MinValue, (int)min.Int64);
+
+        Assert.False(ScalarLiterals.TryNegateInt32Min("2147483648.0", out _));
+        Assert.False(ScalarLiterals.TryNegateInt32Min("2.147483648E9", out _));
+        Assert.False(ScalarLiterals.TryNegateInt32Min("2147483649", out _));
+        Assert.False(ScalarLiterals.TryNegateInt32Min("2147483647", out _));
+    }
 }

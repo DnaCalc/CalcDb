@@ -1,5 +1,6 @@
 using CalcDb.Expressions;
 using CalcDb.Format;
+using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Values.Scalar;
 
@@ -38,15 +39,25 @@ public sealed class StaticFieldTypeTests
     [Theory]
     [InlineData("SELECT -True AS v FROM T", 3, ColumnTypeRule.Bound)]
     [InlineData("SELECT -CByte(1) AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT -CInt(-32768) AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT -CLng(-2147483648) AS v FROM T", 4, ColumnTypeRule.Bound)]
     [InlineData("SELECT -1 AS v FROM T", 4, ColumnTypeRule.Bound)]
-    [InlineData("SELECT -2147483648 AS v FROM T", 4, ColumnTypeRule.NotModelled)]
-    [InlineData("SELECT -0.0 AS v FROM T", 4, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT -2147483648 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT -0.0 AS v FROM T", 4, ColumnTypeRule.Bound)]
     [InlineData("SELECT -2147483649 AS v FROM T", 20, ColumnTypeRule.Bound)]
     [InlineData("SELECT -'3' AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("SELECT -M AS v FROM T", 20, ColumnTypeRule.Bound)]
     [InlineData("SELECT 1 + 2 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1 + 1.0 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1.0 * 3 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT CCur(1) + 1.0 AS v FROM T", 5, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1E0 + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1E3 + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT .5E1 + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 5.E1 + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 0.0E5 + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
     [InlineData("SELECT 2147483647 + 1 AS v FROM T", 7, ColumnTypeRule.Bound)]
-    [InlineData("SELECT -2147483648 - 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT -2147483648 - 1 AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("SELECT 65536 * 65536 AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("SELECT True + True AS v FROM T", 3, ColumnTypeRule.Bound)]
     [InlineData("SELECT Y + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
@@ -70,6 +81,104 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT 2 ^ 3 AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("PARAMETERS p Long; SELECT p + 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
     public void Arithmetic_operators_resolve_decided_static_field_types(string sql, int expectedType, ColumnTypeRule expectedRule)
+    {
+        using BoundSelect plan = Prepare(sql);
+        ResultColumn col = Assert.Single(plan.Columns);
+        Assert.Equal(expectedType, col.FieldType);
+        Assert.Equal(expectedRule, col.TypeRule);
+    }
+
+    [Theory]
+    [InlineData("SELECT Asc('A') AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT AscW('A') AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IsNumeric('123') AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IsDate('2024-03-05') AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT VarType(1) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LenB('abc') AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT InStrB('abc', 'b') AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT InStrB(1, 'abc', 'b', 0) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Sqr(4) AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Exp(1) AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Log(1) AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Atn(0) AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT CVDate('2024-03-05') AS v FROM T", 8, ColumnTypeRule.Bound)]
+    [InlineData("SELECT TypeName(1) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT String(3, 'a') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Space(3) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Trim(' a ') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Trim$(' a ') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LTrim(' a') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT RTrim('a ') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT ChrW(65) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT ChrW$(65) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Chr$(65) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Left$('abc', 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT UCase$('abc') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LCase('ABC') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LCase$('ABC') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LeftB('abc', 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT RightB('abc', 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT MidB('abc', 1) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT MidB('abc', 1, 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Hex(16) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Hex$(16) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Oct(8) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Oct$(8) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Replace('abc', 'a', 'x') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Replace('abc', 'a', 'x', 1, -1, 0) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT StrReverse('abc') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    public void Lifted_fixed_return_functions_resolve_decided_static_field_types(string sql, int expectedType, ColumnTypeRule expectedRule)
+    {
+        using BoundSelect plan = Prepare(sql);
+        ResultColumn col = Assert.Single(plan.Columns);
+        Assert.Equal(expectedType, col.FieldType);
+        Assert.Equal(expectedRule, col.TypeRule);
+    }
+
+    [Theory]
+    [InlineData("SELECT IIf(True, 1, 2) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(True, Null, 1) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(False, 1, Null) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(IsNull(L), -1, L) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(True, 'a') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(True, 'a', 'b') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(True, MemoCol, 'x') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Switch(True, MemoCol) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Choose(1, MemoCol) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Switch(True, 1, True, 2) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Switch(True, Null) AS v FROM T", 0, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Choose(1, Null) AS v FROM T", 0, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Choose(2, 'a', Null, 'c') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Switch(1 = 1, 1.5) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, CByte(1), CInt(1)) AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT IIf(True, CInt(1), CLng(1)) AS v FROM T", 4, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Switch(True, CByte(1), False, 2) AS v FROM T", 4, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(Y), 0, Y) AS v FROM T", 4, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, CCur(1)) AS v FROM T", 5, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 1.5) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Choose(2, 1, 2.5) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 2.5E-300) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(D), L, D) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(L = 2, 1 / L, CInt(Txt)) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(DT), 0, DT) AS v FROM T", 8, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, '1', 2) AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') - 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT 2 * IIf(True, 1, 'a') AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT -IIf(True, 1, 'a') AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') + '2' AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, CCur(1)) + 1 AS v FROM T", 5, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 1.5) + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Switch(1 = 1, 1.5) + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(DT), 0, DT) + 1 AS v FROM T", 8, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Switch(True, 1, True, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Choose(1, 1, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Choose(1, 2.5, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(D), 'x', D) AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Choose(L, 'a', 1 / L, 'c') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, #2024-03-05#, 'x') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    public void Conditional_functions_resolve_decided_static_field_types(string sql, int expectedType, ColumnTypeRule expectedRule)
     {
         using BoundSelect plan = Prepare(sql);
         ResultColumn col = Assert.Single(plan.Columns);
@@ -103,6 +212,24 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT DT * DT AS v FROM T")]
     [InlineData("SELECT Y + Y AS v FROM T")]
     [InlineData("SELECT pImplicit + 1 AS v FROM T")]
+    [InlineData("SELECT String$(3, 'a') AS v FROM T")]
+    [InlineData("SELECT Space$(3) AS v FROM T")]
+    [InlineData("SELECT LTrim$(' a') AS v FROM T")]
+    [InlineData("SELECT RTrim$('a ') AS v FROM T")]
+    [InlineData("SELECT Right$('abc', 2) AS v FROM T")]
+    [InlineData("SELECT Mid$('abc', 1, 2) AS v FROM T")]
+    [InlineData("SELECT IIf(True, Null, Null) AS v FROM T")]
+    [InlineData("SELECT IIf(True, CInt(1), CInt(2)) AS v FROM T")]
+    [InlineData("SELECT IIf(True, CCur(1), 'a') AS v FROM T")]
+    [InlineData("SELECT IIf(True, 1.5, 2.5) AS v FROM T")]
+    [InlineData("SELECT Choose(1, 1.5) AS v FROM T")]
+    [InlineData("SELECT IIf(True, MemoCol, 1) AS v FROM T")]
+    [InlineData("SELECT IIf(True, MemoCol, D) AS v FROM T")]
+    [InlineData("SELECT Choose(1, Y, 1, 'a') AS v FROM T")]
+    [InlineData("SELECT Choose(1, Y, 'a', 1) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CInt(1), 1, 1.5) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CInt(1), 1.5, 1) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CByte(1), 1, 'a') AS v FROM T")]
     public void Unrecorded_combinations_stay_named(string sql)
     {
         using BoundSelect plan = Prepare(sql);
@@ -120,6 +247,162 @@ public sealed class StaticFieldTypeTests
         Assert.Null(col.FieldType);
         Assert.Equal(ColumnTypeRule.NullAtOpen, col.TypeRule);
         Assert.Equal("NotModelled.ExpressionFieldType", col.TypeOpen);
+    }
+
+    [Fact]
+    public void Folded_unary_negate_overflow_fails_at_read_while_VarType_and_TypeName_widen()
+    {
+        const string rExpr1bMainSha = "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337";
+        var db = new SqlFixture(rExpr1bMainSha);
+
+        // r-expr-1b/arith-overflow-promotion (#176/#182/#183/#188/#193): -CInt(-32768) is Field.Type 3, fails 6 at read, VarType 3, TypeName "Long".
+        using (BoundSelect plan = BoundSelect.Prepare("SELECT -CInt(-32768) AS v, VarType(-CInt(-32768)) AS vt, TypeName(-CInt(-32768)) AS tn FROM One", db, out SqlFailure? bindFail)!)
+        {
+            Assert.Null(bindFail);
+            using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail)!;
+            Assert.Null(openFail);
+            Assert.Equal(3, cur.FieldType(0, out _));
+            Assert.False(cur.Read(0, out _, out SqlFailure? readFail));
+            Assert.NotNull(readFail);
+            Assert.Equal(SqlPhase.Read, readFail!.Phase);
+            Assert.Equal(AceError.Overflow, readFail.Number);
+
+            Assert.True(cur.Read(1, out Values.NativeVariant vt, out SqlFailure? vtFail));
+            Assert.Null(vtFail);
+            Assert.Equal((ushort)VarType.I4, vt.Vt);
+            Assert.Equal(3, (int)vt.Int64);
+
+            Assert.True(cur.Read(2, out Values.NativeVariant tn, out SqlFailure? tnFail));
+            Assert.Null(tnFail);
+            Assert.Equal((ushort)VarType.Bstr, tn.Vt);
+            Assert.Equal("Long", Values.Bstrs.Chars(tn.Pointer).ToString());
+        }
+
+        // r-expr-1b/arith-overflow-promotion (#200/#206/#207/#212/#217): -CLng(-2147483648) is Field.Type 4, fails 6 at read, VarType 5, TypeName "Double".
+        using (BoundSelect plan = BoundSelect.Prepare("SELECT -CLng(-2147483648) AS v, VarType(-CLng(-2147483648)) AS vt, TypeName(-CLng(-2147483648)) AS tn FROM One", db, out SqlFailure? bindFail)!)
+        {
+            Assert.Null(bindFail);
+            using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail)!;
+            Assert.Null(openFail);
+            Assert.Equal(4, cur.FieldType(0, out _));
+            Assert.False(cur.Read(0, out _, out SqlFailure? readFail));
+            Assert.NotNull(readFail);
+            Assert.Equal(SqlPhase.Read, readFail!.Phase);
+            Assert.Equal(AceError.Overflow, readFail.Number);
+
+            Assert.True(cur.Read(1, out Values.NativeVariant vt, out SqlFailure? vtFail));
+            Assert.Null(vtFail);
+            Assert.Equal((ushort)VarType.I4, vt.Vt);
+            Assert.Equal(5, (int)vt.Int64);
+
+            Assert.True(cur.Read(2, out Values.NativeVariant tn, out SqlFailure? tnFail));
+            Assert.Null(tnFail);
+            Assert.Equal((ushort)VarType.Bstr, tn.Vt);
+            Assert.Equal("Double", Values.Bstrs.Chars(tn.Pointer).ToString());
+        }
+
+        // Compound call under unary minus whose inner value widens is unrecorded and stays NotModelled.FoldWidening.
+        using (BoundSelect plan = BoundSelect.Prepare("SELECT -IIf(True, CInt(-32768), CLng(1)) AS v FROM One", db, out SqlFailure? bindFail)!)
+        {
+            Assert.Null(bindFail);
+            Assert.Null(SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail));
+            Assert.NotNull(openFail);
+            Assert.Equal("NotModelled.FoldWidening", openFail!.NotModelled);
+        }
+    }
+
+    [Fact]
+    public void Projected_expression_values_coerce_to_static_field_type()
+    {
+        const string rExpr1bMainSha = "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337";
+        var db = new SqlFixture(rExpr1bMainSha);
+
+        const string sql =
+            "SELECT IIf(True, 1, 'a') AS s, IIf(True, 1, 1.5) AS d1, Switch(1 = 1, 1.5) AS d2, " +
+            "IIf(True, 1, 'a') + 1 AS d3, CSng(1) AS d4, IIf(True, 1, CCur(1)) AS cy FROM One";
+        using BoundSelect plan = BoundSelect.Prepare(sql, db, out SqlFailure? bindFail)!;
+        Assert.Null(bindFail);
+        using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail)!;
+        Assert.Null(openFail);
+
+        Assert.True(cur.Read(0, out Values.NativeVariant s, out _));
+        Assert.Equal((ushort)VarType.Bstr, s.Vt);
+        Assert.Equal("1", Values.Bstrs.Chars(s.Pointer).ToString());
+
+        Assert.True(cur.Read(1, out Values.NativeVariant d1, out _));
+        Assert.Equal((ushort)VarType.R8, d1.Vt);
+        Assert.Equal(1.0, d1.Double);
+
+        Assert.True(cur.Read(2, out Values.NativeVariant d2, out _));
+        Assert.Equal((ushort)VarType.R8, d2.Vt);
+        Assert.Equal(1.5, d2.Double);
+
+        Assert.True(cur.Read(3, out Values.NativeVariant d3, out _));
+        Assert.Equal((ushort)VarType.R8, d3.Vt);
+        Assert.Equal(2.0, d3.Double);
+
+        Assert.True(cur.Read(4, out Values.NativeVariant d4, out _));
+        Assert.Equal((ushort)VarType.R8, d4.Vt);
+        Assert.Equal(1.0, d4.Double);
+
+        Assert.True(cur.Read(5, out Values.NativeVariant cy, out _));
+        Assert.Equal((ushort)VarType.Currency, cy.Vt);
+        Assert.Equal(10000L, cy.Int64);
+    }
+
+    [Fact]
+    public void Row_dependent_projected_expression_values_coerce_across_rows()
+    {
+        const string rExpr1bMainSha = "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337";
+        var db = new SqlFixture(rExpr1bMainSha);
+
+        const string sql =
+            "SELECT ID, IIf(IsNull(D), 'x', D) AS dtxt, IIf(IsNull(Y), 0, Y) AS yl, IIf(IsNull(DT), 0, DT) AS dtd " +
+            "FROM Mx ORDER BY ID";
+        using BoundSelect plan = BoundSelect.Prepare(sql, db, out SqlFailure? bindFail)!;
+        Assert.Null(bindFail);
+        using SelectCursor cur = SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail)!;
+        Assert.Null(openFail);
+
+        Assert.Equal(10, cur.FieldType(1, out _));
+        Assert.Equal(4, cur.FieldType(2, out _));
+        Assert.Equal(8, cur.FieldType(3, out _));
+
+        int rows = 0;
+        while (!cur.Eof)
+        {
+            Assert.True(cur.Read(1, out Values.NativeVariant dt, out SqlFailure? f1));
+            Assert.Null(f1);
+            Assert.Equal((ushort)VarType.Bstr, dt.Vt);
+
+            Assert.True(cur.Read(2, out Values.NativeVariant yl, out SqlFailure? f2));
+            Assert.Null(f2);
+            Assert.Equal((ushort)VarType.I4, yl.Vt);
+
+            Assert.True(cur.Read(3, out Values.NativeVariant dtd, out SqlFailure? f3));
+            Assert.Null(f3);
+            Assert.Equal((ushort)VarType.Date, dtd.Vt);
+
+            rows++;
+            cur.MoveNext();
+        }
+        Assert.True(rows >= 2);
+
+        // DISTINCT over a mixed-arm Text expression compares projected VT_BSTR values rather than raw VT_R8 vs VT_BSTR.
+        using BoundSelect distinctPlan = BoundSelect.Prepare("SELECT DISTINCT IIf(IsNull(D), 'x', D) AS dtxt FROM Mx", db, out SqlFailure? dBindFail)!;
+        Assert.Null(dBindFail);
+        using SelectCursor dCur = SelectCursor.Open(distinctPlan, db, ResultKind.Snapshot, out SqlFailure? dOpenFail)!;
+        Assert.Null(dOpenFail);
+        int distinctRows = 0;
+        while (!dCur.Eof)
+        {
+            Assert.True(dCur.Read(0, out Values.NativeVariant v, out SqlFailure? rf));
+            Assert.Null(rf);
+            Assert.Equal((ushort)VarType.Bstr, v.Vt);
+            distinctRows++;
+            dCur.MoveNext();
+        }
+        Assert.True(distinctRows >= 2);
     }
 
     private static BoundSelect Prepare(string sql)

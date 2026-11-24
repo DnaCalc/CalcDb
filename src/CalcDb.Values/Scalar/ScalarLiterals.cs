@@ -6,13 +6,13 @@ namespace CalcDb.Values.Scalar;
 
 /// <summary>
 /// The values of an expression's literal spellings (II-10 §2: the binder converts a literal through the literal grammar,
-/// not through the locale's text conversion). The types are ACE's (r-expr-1b/meta-conversion-field-types and
-/// info-result-vartype-numeric, as the kernel catalog uses them): an integer that fits a Long is VT_I4; a decimal point,
-/// an exponent or a larger integer is VT_DECIMAL; a value beyond Decimal's range or below its scale is VT_R8 (Abs(-1E308)
-/// is Double, 4.94065645841247E-324 is not 0); True
-/// and False are VT_I2 -1 and 0 with a Boolean contract. A date literal reads with the US convention whatever the
-/// locale (qualified.md "R-EXPR-1 EXPR-BIND, EXPR-INVENTORY (Find criteria)": #15/1/2020# and #1/15/2020# are one
-/// date, #1/32/2020# is a syntax error).
+/// not through the locale's text conversion). The types are ACE's (r-expr-1b/meta-conversion-field-types,
+/// r-wire/expr-literal-tags, r-def-expr-sql/expr-literals-numeric-suffix-radix, and info-result-vartype-numeric, as the
+/// kernel catalog uses them): an integer or exact-Int32 decimal/exponent literal that fits a Long is VT_I4; a fractional
+/// decimal/exponent literal or larger integer within Decimal's range is VT_DECIMAL; a value beyond Decimal's range or
+/// below its scale is VT_R8 (Abs(-1E308) is Double, 4.94065645841247E-324 is not 0); True and False are VT_I2 -1 and 0
+/// with a Boolean contract. A date literal reads with the US convention whatever the locale (qualified.md "R-EXPR-1
+/// EXPR-BIND, EXPR-INVENTORY (Find criteria)": #15/1/2020# and #1/15/2020# are one date, #1/32/2020# is a syntax error).
 /// </summary>
 public static class ScalarLiterals
 {
@@ -38,6 +38,15 @@ public static class ScalarLiterals
         if (decimal.TryParse(spelling, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal d)
             && (d != 0 || !HasNonZeroDigit(spelling)))
         {
+            // r-wire/expr-literal-tags (#422 1E0, #968 -0.0, #1004 0.0), r-expr-1b/num-abs-sgn-int-fix (#44, #563),
+            // r-def-expr-sql/expr-literals-numeric-suffix-radix (#177 1E3, #241 .5E1, #1641 1.0, #1833 1E0, #1897 0.0E5):
+            // a decimal-point or exponent numeric literal whose exact value fits Int32 is VT_I4 (Long).
+            if (decimal.Truncate(d) == d && d >= int.MinValue && d <= int.MaxValue)
+            {
+                value.Vt = (ushort)VarType.I4;
+                value.Int64 = unchecked((uint)(int)d);
+                return true;
+            }
             value = Decimal(d);
             return true;
         }
@@ -47,6 +56,24 @@ public static class ScalarLiterals
             value.Double = r;
             return true;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// True when <paramref name="spelling"/> is the unsigned integer literal <c>2147483648</c> (no point or exponent),
+    /// whose unary negation is VT_I4 <see cref="int.MinValue"/> (r-wire/expr-literal-tags #329/#350,
+    /// r-def-expr-sql/expr-literals-numeric-suffix-radix #1385, r-expr-1b/arith-overflow-promotion #128/#135).
+    /// </summary>
+    public static bool TryNegateInt32Min(ReadOnlySpan<char> spelling, out NativeVariant value)
+    {
+        if (spelling.IndexOfAny('.', 'e', 'E') < 0
+            && decimal.TryParse(spelling, NumberStyles.None, CultureInfo.InvariantCulture, out decimal d)
+            && d == 2147483648m)
+        {
+            value = new NativeVariant { Vt = (ushort)VarType.I4, Int64 = unchecked((uint)int.MinValue) };
+            return true;
+        }
+        value = default;
         return false;
     }
 
