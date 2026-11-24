@@ -152,10 +152,16 @@ public readonly ref struct RowEnvelope
     }
 }
 
-/// <summary>One column's encoded value for <see cref="RowEncoder.TryEncode"/>: Null, a Yes/No mask bit, or its exact payload bytes.</summary>
+/// <summary>
+/// One column's encoded value for <see cref="RowEncoder.TryEncode"/>: Null (optionally carrying preserved fixed-slot
+/// bytes across a rewrite; R-FMT-2 r-q36), a Yes/No mask bit, or its exact payload bytes.
+/// </summary>
 public readonly record struct EncodedField(bool IsNull, bool Boolean = false, byte[]? Bytes = null)
 {
     public static EncodedField Null { get; } = new(true);
+
+    /// <summary>A Null fixed field whose existing fixed-area bytes stay in place across a rewrite (R-FMT-2 r-q36).</summary>
+    public static EncodedField PreservedNull(byte[] fixedBytes) => new(true, Bytes: fixedBytes);
 
     public static EncodedField OfBoolean(bool value) => new(false, Boolean: value);
 
@@ -163,12 +169,13 @@ public readonly record struct EncodedField(bool IsNull, bool Boolean = false, by
 }
 
 /// <summary>
-/// Ordinary row encoder (II-04 §2; verified byte-for-byte across 382,187 live rows in 269 retained ACE fixtures).
-/// Writes <c>C = MaxColumns</c>, zero-initialized fixed area (5,140/5,140 newly inserted Null fixed fields are zero),
-/// contiguous variable payloads in <see cref="ColumnDescriptor.VariableIndex"/> order with immediately adjacent trailer
-/// (120,238/120,238 rows have zero padding), and the <c>ceil(C/8)</c>-byte mask with zero unused high bits. Refuses
-/// schemas or values whose ACE byte rules are not established (dropped columns, 0-fixed-width tables, or rows past
-/// 4,060 bytes).
+/// Ordinary row encoder (II-04 §2; verified byte-for-byte across live rows in retained ACE fixtures and R-FMT-2 r-q36,
+/// <c>evidence/r-q36-publication-bytes/zf-*</c>, <c>nullfix-*</c>).
+/// Writes <c>C = MaxColumns</c>, fixed area (zeros for newly inserted Null fixed fields, preserved old bytes when
+/// supplied via <see cref="EncodedField.PreservedNull"/>), when <c>V == 0</c> pads with <c>max(0, 2 - fixedSize)</c>
+/// zero bytes so at least 4 bytes precede the null mask (no pad when <c>V &gt; 0</c>), contiguous variable payloads in
+/// <see cref="ColumnDescriptor.VariableIndex"/> order with immediately adjacent trailer, and the <c>ceil(C/8)</c>-byte
+/// mask with zero unused high bits. Refuses dropped-column schemas (<c>C != MaxColumns</c>) and rows past 4,060 bytes.
 /// </summary>
 public static class RowEncoder
 {
@@ -192,11 +199,6 @@ public static class RowEncoder
             return false;
         }
         int fixedEnd = table.KnownFixedEnd(c, d);
-        if (fixedEnd <= d.Row.FixedBase)
-        {
-            failure = "table has no non-Boolean fixed storage: ACE's 2-byte prefix padding on zero-fixed tables is not established";
-            return false;
-        }
         int v = table.VariableColumns;
         var variableSlots = v > 0 ? new (ColumnDescriptor Column, EncodedField Field)?[v] : null;
         var seenPhysical = new bool[c];
@@ -222,7 +224,7 @@ public static class RowEncoder
             }
             if (col.IsFixed)
             {
-                if (field.IsNull)
+                if (field.IsNull && field.Bytes is null)
                 {
                     continue;
                 }
@@ -253,7 +255,9 @@ public static class RowEncoder
             }
         }
         int maskBytes = (c + 7) / 8;
-        long eod = fixedEnd + variableBytes;
+        // R-FMT-2 r-q36 (evidence/r-q36-publication-bytes/zf-*): when V == 0, at least 4 bytes precede the null mask
+        // (max(0, 2 - fixedSize) zero pad bytes); when V > 0, no pad sits before the variable area.
+        long eod = v == 0 ? Math.Max(fixedEnd, d.Row.FixedBase + 2) : fixedEnd + variableBytes;
         long trailerBytes = v > 0 ? 4L + (2L * v) : 0L;
         long total = eod + trailerBytes + maskBytes;
         if (total > MaxOrdinaryRowBytes || eod > ushort.MaxValue)
@@ -267,9 +271,9 @@ public static class RowEncoder
         {
             ColumnDescriptor col = columns[i];
             EncodedField field = fields[i];
-            if (col.IsFixed && !col.IsMaskBoolean && !field.IsNull)
+            if (col.IsFixed && !col.IsMaskBoolean && field.Bytes is { } fixedBytes)
             {
-                field.Bytes!.CopyTo(row, d.Row.FixedBase + col.FixedOffset);
+                fixedBytes.CopyTo(row, d.Row.FixedBase + col.FixedOffset);
             }
         }
         if (v > 0 && variableSlots is not null)

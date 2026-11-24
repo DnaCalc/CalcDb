@@ -45,7 +45,7 @@ public sealed class NativeRowAndDataPageTests
                 {
                     continue;
                 }
-                if (table.Columns.Count != table.MaxColumns || table.KnownFixedEnd(table.MaxColumns, D) <= D.Row.FixedBase)
+                if (table.Columns.Count != table.MaxColumns)
                 {
                     continue;
                 }
@@ -75,7 +75,18 @@ public sealed class NativeRowAndDataPageTests
                         }
                         else if (fr.Outcome == FieldOutcome.Null)
                         {
-                            fields[i] = EncodedField.Null;
+                            if (col.IsFixed)
+                            {
+                                int width = NativeTypes.FixedWidth(col.TypeCode) ?? col.Length;
+                                int begin = D.Row.FixedBase + col.FixedOffset;
+                                fields[i] = begin + width <= env.MaskStart
+                                    ? EncodedField.PreservedNull(body.Slice(begin, width).ToArray())
+                                    : EncodedField.Null;
+                            }
+                            else
+                            {
+                                fields[i] = EncodedField.Null;
+                            }
                         }
                         else if (fr.Outcome == FieldOutcome.Bytes)
                         {
@@ -159,7 +170,7 @@ public sealed class NativeRowAndDataPageTests
     }
 
     [Fact]
-    public void TextCodec_TryEncode_handles_empty_uncompressed_and_refuses_compression_and_bom()
+    public void TextCodec_TryEncode_and_Decode_follow_r_q36_feff_and_compression_ties()
     {
         Assert.True(TextCodec.TryEncode(ReadOnlySpan<char>.Empty, unicodeCompression: false, out byte[]? empty, out string? err));
         Assert.Null(err);
@@ -168,21 +179,56 @@ public sealed class NativeRowAndDataPageTests
         const string sample = "Bä€\u0000Z";
         Assert.True(TextCodec.TryEncode(sample, unicodeCompression: false, out byte[]? encoded, out err), err);
         Assert.Equal(Encoding.Unicode.GetBytes(sample), encoded);
-        TextDecode roundTrip = TextCodec.Decode(encoded!);
+        TextDecode roundTrip = TextCodec.Decode(encoded!, allowCompressed: false);
         Assert.True(roundTrip.Succeeded);
         Assert.Equal(sample, roundTrip.Text);
 
-        Assert.False(TextCodec.TryEncode("abc", unicodeCompression: true, out _, out string? compErr));
-        Assert.Contains("Unicode-compressed", compErr);
+        // Leading U+FEFF stored verbatim in uncompressed Text/Memo; decoded verbatim when allowCompressed == false,
+        // and as compressed stream when allowCompressed == true (r-q36 feff-ascii-accdb-dao IDs 1..4).
+        Assert.True(TextCodec.TryEncode("\uFEFFxxx", TextCompressionPolicy.Uncompressed, out byte[]? rawFeff3, out err), err);
+        Assert.Equal("fffe780078007800", Convert.ToHexStringLower(rawFeff3!));
+        Assert.Equal("\uFEFFxxx", TextCodec.Decode(rawFeff3!, allowCompressed: false).Text);
+        Assert.Equal("xxx", TextCodec.Decode(rawFeff3!, allowCompressed: true).Text);
 
-        Assert.False(TextCodec.TryEncode("\uFEFFabc", unicodeCompression: false, out _, out string? bomErr));
-        Assert.Contains("U+FEFF", bomErr);
+        // Text compression tie (<=): \uFEFFxxxx has rawLen=10 and compressedLen=10 -> compresses for Text, stays raw for Memo.
+        Assert.True(TextCodec.TryEncode("\uFEFFxxxx", TextCompressionPolicy.CompressIfNotLonger, out byte[]? compText4, out err), err);
+        Assert.Equal("fffe00fffe0078787878", Convert.ToHexStringLower(compText4!));
+        Assert.Equal("\uFEFFxxxx", TextCodec.Decode(compText4!, allowCompressed: true).Text);
+
+        Assert.True(TextCodec.TryEncode("\uFEFFxxxx", TextCompressionPolicy.CompressIfShorter, out byte[]? rawMemo4, out err), err);
+        Assert.Equal("fffe7800780078007800", Convert.ToHexStringLower(rawMemo4!));
+
+        // Memo compression (<): \uFEFFxxxxx has rawLen=12 and compressedLen=11 -> compresses for both Text and Memo.
+        Assert.True(TextCodec.TryEncode("\uFEFFxxxxx", TextCompressionPolicy.CompressIfShorter, out byte[]? compMemo5, out err), err);
+        Assert.Equal("fffe00fffe007878787878", Convert.ToHexStringLower(compMemo5!));
+        Assert.Equal("\uFEFFxxxxx", TextCodec.Decode(compMemo5!, allowCompressed: true).Text);
+
+        // Mixed runs (feff-content-accdb-dao IDs 10, 11, 13):
+        string id10 = "\uFEFF" + new string('x', 10) + "€";
+        Assert.True(TextCodec.TryEncode(id10, TextCompressionPolicy.CompressIfNotLonger, out byte[]? enc10, out _));
+        Assert.Equal("fffe00fffe007878787878787878787800ac20", Convert.ToHexStringLower(enc10!));
+        Assert.Equal(id10, TextCodec.Decode(enc10!, allowCompressed: true).Text);
+
+        string id11 = "\uFEFF€" + new string('x', 10);
+        Assert.True(TextCodec.TryEncode(id11, TextCompressionPolicy.CompressIfNotLonger, out byte[]? enc11, out _));
+        Assert.Equal("fffe00fffeac200078787878787878787878", Convert.ToHexStringLower(enc11!));
+        Assert.Equal(id11, TextCodec.Decode(enc11!, allowCompressed: true).Text);
+
+        // Embedded U+0000 prevents compression; high-byte 0x00 inside compressed 2-byte units decodes (feff-content IDs 15-16).
+        Assert.True(TextCodec.TryEncode("\uFEFFa\0b", TextCompressionPolicy.CompressIfNotLonger, out byte[]? enc15, out _));
+        Assert.Equal("fffe610000006200", Convert.ToHexStringLower(enc15!));
+        Assert.Equal("ab", TextCodec.Decode(enc15!, allowCompressed: true).Text);
+        Assert.Equal("\uFEFFa\0b", TextCodec.Decode(enc15!, allowCompressed: false).Text);
+
+        Assert.True(TextCodec.TryEncode("\uFEFFxxxx\0yyyy", TextCompressionPolicy.CompressIfNotLonger, out byte[]? enc16, out _));
+        Assert.Equal("fffe780078007800780000007900790079007900", Convert.ToHexStringLower(enc16!));
+        Assert.Equal("xxxxyyyy", TextCodec.Decode(enc16!, allowCompressed: true).Text);
     }
 
     [Fact]
-    public void RowEncoder_TryEncode_refuses_unestablished_layouts_and_oversized_rows()
+    public void RowEncoder_TryEncode_follows_r_q36_zero_fixed_padding_and_preserved_null()
     {
-        // Dropped columns: ColumnCount != MaxColumns
+        // Dropped columns: ColumnCount != MaxColumns stays refused (Open in r-q36).
         TableDefinition dropped = MakeTable(
             maxColumns: 2,
             variableColumns: 0,
@@ -190,7 +236,34 @@ public sealed class NativeRowAndDataPageTests
         Assert.False(RowEncoder.TryEncode(dropped, [EncodedField.OfBytes(new byte[4])], D, out _, out string? droppedErr));
         Assert.Contains("dropped-column", droppedErr);
 
-        // Zero-fixed-width table (only Yes/No + variable Text)
+        // V == 0, fixedSize == 0 (Yes/No-only B1): 2 pad bytes before mask (zf-bool-cols-accdb-dao).
+        TableDefinition b1 = MakeTable(maxColumns: 1, variableColumns: 0, columns: [BoolCol("b1", 0)]);
+        Assert.True(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], D, out byte[]? b1Row, out string? b1Err), b1Err);
+        Assert.Equal("0100000000", Convert.ToHexStringLower(b1Row!));
+
+        // V == 0, fixedSize == 1 (F1B9: 1 Byte + 8 Yes/No): 1 pad byte before mask (zf-fixed1-disc-accdb-dao page 53).
+        TableDefinition f1b9 = MakeTable(
+            maxColumns: 9,
+            variableColumns: 0,
+            columns:
+            [
+                FixedCol("x", 0, NativeTypes.Byte, 1, 0),
+                BoolCol("b1", 1), BoolCol("b2", 2), BoolCol("b3", 3), BoolCol("b4", 4),
+                BoolCol("b5", 5), BoolCol("b6", 6), BoolCol("b7", 7), BoolCol("b8", 8),
+            ]);
+        Assert.True(RowEncoder.TryEncode(
+            f1b9,
+            [
+                EncodedField.OfBytes([0x5A]),
+                EncodedField.OfBoolean(true), EncodedField.OfBoolean(false), EncodedField.OfBoolean(true), EncodedField.OfBoolean(false),
+                EncodedField.OfBoolean(true), EncodedField.OfBoolean(false), EncodedField.OfBoolean(true), EncodedField.OfBoolean(false),
+            ],
+            D,
+            out byte[]? f1b9Row,
+            out string? f1b9Err), f1b9Err);
+        Assert.Equal("09005a00ab00", Convert.ToHexStringLower(f1b9Row!));
+
+        // V > 0, fixedSize == 0 (BV: Yes/No + variable Text): no pad bytes (zf-var-mixed-accdb-dao).
         TableDefinition zeroFixed = MakeTable(
             maxColumns: 2,
             variableColumns: 1,
@@ -199,12 +272,39 @@ public sealed class NativeRowAndDataPageTests
                 BoolCol("B", 0),
                 VarCol("S", 1, NativeTypes.Text, 100, 0),
             ]);
-        Assert.False(RowEncoder.TryEncode(zeroFixed, [EncodedField.OfBoolean(true), EncodedField.OfBytes(Encoding.Unicode.GetBytes("a"))], D, out _, out string? zeroFixedErr));
-        Assert.Contains("zero-fixed", zeroFixedErr);
+        Assert.True(RowEncoder.TryEncode(zeroFixed, [EncodedField.OfBoolean(true), EncodedField.OfBytes(Encoding.Unicode.GetBytes("a"))], D, out byte[]? bvRow, out string? bvErr), bvErr);
+        Assert.Equal("0200610004000200010003", Convert.ToHexStringLower(bvRow!));
 
-        // Trailing Null fixed Decimal encodes with C = MaxColumns, 17 zero bytes, and cleared mask bit
-        // (all 18 corpus tables with existing trailing Decimal columns write C = MaxColumns; rows with C = MaxColumns - 1
-        // in 3b512c8f, 4f42d3fa, and 53afa2ad predate ALTER TABLE ADD COLUMN / CreateField).
+        // V > 0, fixedSize == 1 (F1V: Byte + Text): no pad bytes (zf-fixed1-disc-accdb-dao).
+        TableDefinition f1v = MakeTable(
+            maxColumns: 2,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("x", 0, NativeTypes.Byte, 1, 0),
+                VarCol("s", 1, NativeTypes.Text, 50, 0),
+            ]);
+        Assert.True(RowEncoder.TryEncode(f1v, [EncodedField.OfBytes([0x5A]), EncodedField.OfBytes(Encoding.Unicode.GetBytes("a"))], D, out byte[]? f1vRow, out string? f1vErr), f1vErr);
+        Assert.Equal("02005a610005000300010003", Convert.ToHexStringLower(f1vRow!));
+
+        // PreservedNull writes existing fixed bytes while keeping the null-mask bit cleared (r-q36 nullfix-*).
+        TableDefinition fixedPair = MakeTable(
+            maxColumns: 2,
+            variableColumns: 0,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 1, NativeTypes.Long, 4, 4),
+            ]);
+        Assert.True(RowEncoder.TryEncode(
+            fixedPair,
+            [EncodedField.OfBytes([1, 0, 0, 0]), EncodedField.PreservedNull([0x09, 0x03, 0x00, 0x00])],
+            D,
+            out byte[]? preservedRow,
+            out string? preservedErr), preservedErr);
+        Assert.Equal("0200010000000903000001", Convert.ToHexStringLower(preservedRow!));
+
+        // Trailing Null fixed Decimal encodes with C = MaxColumns, 17 zero bytes, and cleared mask bit.
         TableDefinition trailingDec = MakeTable(
             maxColumns: 2,
             variableColumns: 0,

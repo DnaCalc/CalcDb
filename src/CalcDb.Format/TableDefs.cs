@@ -170,6 +170,7 @@ public static class NativeTypes
     public const byte Memo = 12;
     public const byte Guid = 15;
     public const byte Numeric = 16;
+    public const byte BigInt = 19;
     public const byte ExtendedDateTime = 20;
 
     /// <summary>The fixed storage width of a fixed-size scalar, or null for variable/other kinds.</summary>
