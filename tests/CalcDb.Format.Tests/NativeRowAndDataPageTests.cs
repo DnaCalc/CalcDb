@@ -75,11 +75,6 @@ public sealed class NativeRowAndDataPageTests
                         }
                         else if (fr.Outcome == FieldOutcome.Null)
                         {
-                            if (col.IsFixed && col.TypeCode == NativeTypes.Numeric && col.PhysicalNumber == table.MaxColumns - 1)
-                            {
-                                skip = true;
-                                break;
-                            }
                             fields[i] = EncodedField.Null;
                         }
                         else if (fr.Outcome == FieldOutcome.Bytes)
@@ -207,7 +202,9 @@ public sealed class NativeRowAndDataPageTests
         Assert.False(RowEncoder.TryEncode(zeroFixed, [EncodedField.OfBoolean(true), EncodedField.OfBytes(Encoding.Unicode.GetBytes("a"))], D, out _, out string? zeroFixedErr));
         Assert.Contains("zero-fixed", zeroFixedErr);
 
-        // Trailing Null fixed Decimal
+        // Trailing Null fixed Decimal encodes with C = MaxColumns, 17 zero bytes, and cleared mask bit
+        // (all 18 corpus tables with existing trailing Decimal columns write C = MaxColumns; rows with C = MaxColumns - 1
+        // in 3b512c8f, 4f42d3fa, and 53afa2ad predate ALTER TABLE ADD COLUMN / CreateField).
         TableDefinition trailingDec = MakeTable(
             maxColumns: 2,
             variableColumns: 0,
@@ -216,8 +213,11 @@ public sealed class NativeRowAndDataPageTests
                 FixedCol("ID", 0, NativeTypes.Long, 4, 0),
                 FixedCol("D", 1, NativeTypes.Numeric, 17, 4),
             ]);
-        Assert.False(RowEncoder.TryEncode(trailingDec, [EncodedField.OfBytes(new byte[4]), EncodedField.Null], D, out _, out string? decErr));
-        Assert.Contains("trailing Null fixed Decimal", decErr);
+        Assert.True(RowEncoder.TryEncode(trailingDec, [EncodedField.OfBytes([7, 0, 0, 0]), EncodedField.Null], D, out byte[]? decRow, out string? decErr), decErr);
+        Assert.True(RowEnvelope.TryOpen(decRow!, D, out RowEnvelope decEnv, out string? decOpenErr), decOpenErr);
+        Assert.Equal(2, decEnv.ColumnCount);
+        Assert.Equal(FieldOutcome.Null, decEnv.ReadField(trailingDec.Columns[1], trailingDec.KnownFixedEnd(decEnv.ColumnCount, D)).Outcome);
+        Assert.All(decRow!.AsSpan(D.Row.FixedBase + 4, 17).ToArray(), b => Assert.Equal((byte)0, b));
 
         // Oversized (> 4,060 bytes)
         TableDefinition wide = MakeTable(
@@ -480,14 +480,19 @@ public sealed class NativeRowAndDataPageTests
         Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out err), err);
         Assert.Equal(2, accdb[D.Header.CommitCounter.Offset]);
 
-        accdb[D.Header.CommitCounter.Offset] = 254;
+        D.Header.CommitCounter.Write(accdb, 0x01FE);
         Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out err), err);
-        Assert.Equal(255, accdb[D.Header.CommitCounter.Offset]);
+        Assert.Equal(0x01FFUL, D.Header.CommitCounter.Read(accdb));
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out err), err);
+        Assert.Equal(0x0200UL, D.Header.CommitCounter.Read(accdb));
+        Assert.Equal(0x00, accdb[D.Header.CommitCounter.Offset]);
+        Assert.Equal(0x02, accdb[D.Header.CommitCounter.Offset + 1]);
 
-        // Overflow past 255 is refused and never wraps to 0
+        // Overflow past 65,535 (0xFFFF) is refused and never wraps to 0
+        D.Header.CommitCounter.Write(accdb, ushort.MaxValue);
         Assert.False(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out string? overflowErr));
-        Assert.Contains("255", overflowErr);
-        Assert.Equal(255, accdb[D.Header.CommitCounter.Offset]);
+        Assert.Contains("65535", overflowErr);
+        Assert.Equal((ulong)ushort.MaxValue, D.Header.CommitCounter.Read(accdb));
 
         // Jet 4 MDB is not ACCDB and is refused without modifying offset 3586
         byte[] mdb = new byte[D.PageSize];

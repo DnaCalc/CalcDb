@@ -525,9 +525,9 @@ public sealed class CommitCounterDelta(FormatDescriptor d, bool allowJet4Mdb = f
             }
             FieldRule rule = d.Header.CommitCounter;
             ulong current = rule.Read(decodedPage);
-            if (current >= 255)
+            if ((current & 0xFF) >= byte.MaxValue)
             {
-                throw new FormatViolationException($"Page 0 commit counter: page 0 commit counter at offset {rule.Offset} is {current}: wrap or carry past 255 is not observed (R-CRASH-1)");
+                throw new FormatViolationException($"Page 0 commit counter: Jet 4 MDB page 0 commit counter low byte at offset {rule.Offset} is {current & 0xFF}: wrap or carry past 255 is not observed (R-CRASH-1)");
             }
             rule.Write(decodedPage, current + 1);
             return;
@@ -558,8 +558,8 @@ public sealed class CommitCounterDelta(FormatDescriptor d, bool allowJet4Mdb = f
 /// </list>
 /// Every unestablished case (a split of an odd count or under a second level, an uncovered entry inside a leaf with a
 /// stored prefix, an emptied non-root leaf, LVAL Memo/OLE, calculated column, overflow-body delete or rewrite, dropped
-/// columns, 0-fixed-width tables, trailing Null fixed Decimal, Unicode-compressed Text, leading U+FEFF, partial-Null
-/// IgnoreNulls key) is refused with a named reason.
+/// columns, 0-fixed-width tables, Unicode-compressed Text, leading U+FEFF, partial-Null IgnoreNulls key) is refused
+/// with a named reason.
 /// </summary>
 public sealed class SameWidthWriter(TableFootprints footprints)
 {
@@ -609,6 +609,27 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     }
 
     /// <summary>
+    /// Materialize Null values in ordinary Yes/No columns as <see langword="false"/> (mask bit 0) before row and index
+    /// compilation (R-FMT-2 Ordinary Boolean; evidence/r-fmt-2-pres-1/bool-ladder, evidence/r-expr-locale/invoke-1031,
+    /// evidence/r-ado-1b/edit-update-args). Non-Null mismatched kinds stay unnormalized so the compiler refuses them.
+    /// </summary>
+    private IReadOnlyList<NativeValue> NormalizeMaskBooleans(IReadOnlyList<NativeValue> values)
+    {
+        IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
+        int count = Math.Min(columns.Count, values.Count);
+        NativeValue[]? copy = null;
+        for (int i = 0; i < count; i++)
+        {
+            if (columns[i].IsMaskBoolean && values[i].Kind == NativeKind.Null)
+            {
+                copy ??= [.. values];
+                copy[i] = new NativeValue(NativeKind.Boolean) { Boolean = false };
+            }
+        }
+        return copy ?? values;
+    }
+
+    /// <summary>
     /// Compile the modification of <paramref name="root"/> to <paramref name="values"/> (every column, in order). The row,
     /// its index entries and its leaves are read as <paramref name="seen"/>, the Workspace's overlay, shows them: an
     /// earlier change of the level or statement can have moved the row in its page or replaced another entry of a leaf
@@ -616,6 +637,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null, bool inStatement = false, bool inExplicitTransaction = false, bool hasPriorGlobalMapActivity = false)
     {
+        values = NormalizeMaskBooleans(values);
         using RowView? resolved = RowResolver.Resolve(Seen(seen), _d, root, out TraversalFailure? failure);
         if (resolved is not { } row)
         {
@@ -788,6 +810,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             return NotWritten("file page count is not supplied for insert usage-map traversal");
         }
+        values = NormalizeMaskBooleans(values);
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         var encoded = new EncodedField[columns.Count];
         List<(int Index, ColumnDescriptor Column, byte[] Payload)> longValues = [];
@@ -1454,6 +1477,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     public CompiledChange CompileRefusedUniqueInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, int refusingPhysicalNumber, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
     {
+        values = NormalizeMaskBooleans(values);
         List<int> incrementUnique = [];
         foreach (IGrouping<int, IndexCheck> tree in semantics.Indexes.GroupBy(x => x.Physical.Number).OrderBy(g => g.Key))
         {

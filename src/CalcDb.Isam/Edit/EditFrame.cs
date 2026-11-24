@@ -1802,7 +1802,16 @@ public sealed class EditFrame : IDisposable
         }
     }
 
-    private NativeValue CandidateValue(int ordinal) => _cells[ordinal].State == CellState.Unset ? NativeValue.Null : _cells[ordinal].Value;
+    private NativeValue CandidateValue(int ordinal)
+    {
+        NativeValue value = _cells[ordinal].State == CellState.Unset ? NativeValue.Null : _cells[ordinal].Value;
+        // R-FMT-2 Ordinary Boolean (evidence/r-fmt-2-pres-1/bool-ladder, evidence/r-expr-locale/invoke-1031,
+        // evidence/r-ado-1b/edit-update-args): an ordinary Yes/No column cannot store Null; an unset or Null
+        // candidate materializes as False (mask bit 0).
+        return value.Kind == NativeKind.Null && _table.Semantics.Table.Columns[ordinal].IsMaskBoolean
+            ? new NativeValue(NativeKind.Boolean) { Boolean = false }
+            : value;
+    }
 
     private EditOutcome Check(BoundRule rule, string owner, MutationErrorSource source)
     {

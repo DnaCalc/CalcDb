@@ -31,7 +31,7 @@ public sealed class NewDatabaseImageTests
         Assert.Equal(FileFormat.Ace2007, profile!.Format);
         DatabaseHeader parsed = DatabaseHeader.Decode(page0, D);
         Assert.Equal(general, parsed.SortOrder);
-        Assert.Equal(0UL, D.Header.CommitCounter.Read(page0));
+        Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(page0));
 
         // Verify the derived 2-byte SID keystream unmasks ACE's MSysObjects.Owner slot 0 to built-in Engine (02 03).
         InspectionReport report = Inspector.Inspect(ace);

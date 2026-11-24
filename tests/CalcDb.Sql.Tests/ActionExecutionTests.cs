@@ -119,13 +119,18 @@ public sealed class ActionExecutionTests
             Assert.Empty(actDb.ReadSelect("SELECT ID FROM T WHERE ID = 15"));
         }
 
-        // r-fix-cursor-dao/ovf-insert-byte-failonerror: parent INSERT on a relationship table clears RI and stops at
-        // Publication because Yes/No Flg is omitted (Null into Yes/No).
+        // r-fix-cursor-dao/ovf-insert-byte-failonerror: parent INSERT on a relationship table clears RI, wraps Bt
+        // 300 mod 256 to 44, and materializes omitted Yes/No column Flg as False.
         using (var relDb = new WritableSqlFixture(ErrBaseAccdb))
         {
             ActionOutcome omittedFlg = ActionExecutor.Execute("INSERT INTO P (ID, Code, Req, Bt) VALUES (16, 'x16', 'r', 300)", relDb, options: 128);
-            Assert.False(omittedFlg.Succeeded);
-            Assert.Equal("NotModelled.Edit.Publication", omittedFlg.Failure!.NotModelled);
+            Assert.True(omittedFlg.Succeeded, omittedFlg.Failure?.ToString());
+            Assert.Equal(1, omittedFlg.RecordsAffected);
+            var insertedRow = relDb.ReadSelect("SELECT Bt, Flg FROM P WHERE ID = 16");
+            Assert.Single(insertedRow);
+            Assert.Equal("44", insertedRow[0][0].Integer);
+            Assert.Equal("VT_BOOL", insertedRow[0][1].VtName);
+            Assert.Equal("0", insertedRow[0][1].Integer);
 
             // r-fix-cursor-dao/con-fk-orphan-insert-failonerror: orphan child INSERT fails 3201 naming parent table 'P'.
             ActionOutcome orphan = ActionExecutor.Execute("INSERT INTO Ch (CID, PID) VALUES (10, 999)", relDb, options: 128);
