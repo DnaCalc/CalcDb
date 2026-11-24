@@ -199,14 +199,21 @@ internal sealed unsafe class DBEngineObject : DaoObject
         ("CreateDatabase", 0) when sourceType != VarType.Bstr =>
             Failure.NotModelled("NotModelled.CreateDatabaseArgumentType", $"DBEngine.CreateDatabase Name with {sourceType} argument (only BSTR is recorded)"),
         ("CreateDatabase", 1) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null) =>
-            Failure.NotModelled("NotModelled.CreateDatabaseArgumentType", $"DBEngine.CreateDatabase Connect with {sourceType} argument (only BSTR, Empty and Null are recorded)"),
+            Failure.NotModelled("NotModelled.CreateDatabaseArgumentType", $"DBEngine.CreateDatabase Locale with {sourceType} argument (only BSTR, Empty and Null are recorded)"),
+        ("CommitTrans", 0) when sourceType != VarType.I4 =>
+            Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.CommitTrans Option with {sourceType} argument (recorded on Workspace only)"),
         _ => null,
     };
 
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => member.Name switch
     {
         "CommitTrans" => Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)"),
-        "CreateDatabase" => conversion.Missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        "CreateDatabase" when conversion is { Parameter: 1, Reason: ArgumentConversionReason.Missing } => InvalidArgumentCount(),
+        "CreateDatabase" when conversion is { Parameter: 1, Reason: ArgumentConversionReason.TypeMismatch } =>
+            Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        "CreateDatabase" => Failure.NotModelled(
+            "NotModelled.CreateDatabaseArgumentConversion",
+            $"DBEngine.CreateDatabase parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (only Locale Missing/Null is recorded)"),
         _ => null,
     };
 
@@ -399,25 +406,37 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback" ? InvalidArgumentCount() : null;
 
     /// <summary>
-    /// CommitTrans(Options): only the source VarTypes recorded in r-txn-1b/commit-option-vartypes are admitted;
-    /// unrecorded VarTypes (VT_R4, VT_CY, VT_DATE, VT_DECIMAL, VT_I8, ByRef, ...) are refused by name before
-    /// VariantChangeType runs.
+    /// Refuse unrecorded source VarTypes before VariantChangeType runs: CommitTrans(Options) admits only the VarTypes
+    /// recorded in r-txn-1b/commit-option-vartypes; Workspace.CreateDatabase admits only BSTR on Name and Connect.
     /// </summary>
-    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
-        member.Name == "CommitTrans" && parameter == 0 && sourceType is not (
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
+    {
+        ("CommitTrans", 0) when sourceType is not (
             VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or
-            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr)
-            ? Failure.NotModelled(
+            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr) =>
+            Failure.NotModelled(
                 "NotModelled.CommitTransArgumentType",
-                $"Workspace.CommitTrans Options vt=0x{(ushort)sourceType:X4} (only Empty, Null, I2, I4, R8, Bstr, Bool and UI1 are recorded)")
-            : null;
+                $"Workspace.CommitTrans Options vt=0x{(ushort)sourceType:X4} (only Empty, Null, I2, I4, R8, Bstr, Bool and UI1 are recorded)"),
+        ("CreateDatabase", 0 or 1) when sourceType != VarType.Bstr =>
+            Failure.NotModelled(
+                "NotModelled.CreateDatabaseArgumentType",
+                $"Workspace.CreateDatabase parameter {parameter} with {sourceType} argument (only BSTR is recorded)"),
+        _ => null,
+    };
 
     /// <summary>
     /// CommitTrans(Null) is 3421 from DAO.Workspace with an IErrorInfo (r-txn-1b/commit-option-vartypes).
-    /// Coercion overflow on CommitTrans is not recorded; only non-missing type-conversion failure keeps 3421.
+    /// Coercion overflow and other HRESULTs on CommitTrans are not recorded and are refused by name.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
-        member.Name == "CommitTrans" && !conversion.Missing ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true } : null;
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => member.Name switch
+    {
+        "CommitTrans" when conversion.Reason == ArgumentConversionReason.TypeMismatch =>
+            Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        "CommitTrans" when !conversion.Missing => Failure.NotModelled(
+            "NotModelled.CommitTransArgumentConversion",
+            $"Workspace.CommitTrans Options ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
+        _ => null,
+    };
 
     private static CallResult Live(ComObject self, Func<WorkspaceObject, CallResult> op)
     {

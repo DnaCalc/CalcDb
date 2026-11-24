@@ -765,9 +765,10 @@ public sealed unsafe class DaoSelectBinaryChunkGetRowsTests : IDisposable
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "abc", 4);
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, "", 4);
         AssertInvokeDaoError(dispMemo, "GetChunk", 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, DBNull.Value, 4);
-        // Coercion DISP_E_OVERFLOW -> DAO 3001 with IErrorInfo and *puArgErr (q3-lv-getchunk-args-accdb seq 29, -mdb seq 21).
+        // Bytes (p1) DISP_E_OVERFLOW -> DAO 3001 with IErrorInfo and *puArgErr=0 (q3-lv-getchunk-args-accdb seq 29, -mdb seq 21).
         AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 0u, 0, 4294967296.0);
-        AssertInvokeDaoError(dispMemo, "GetChunk", 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u, 4294967296.0, 4);
+        // Offset (p0) overflow is not recorded and is refused by name.
+        AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentConversion", 4294967296.0, 4);
         // Unrecorded source VarType refused by name before VariantChangeTypeEx runs.
         AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentType", 1.5f, 4);
         AssertInvokeNotModelled(dispMemo, "GetChunk", "NotModelled.GetChunkArgumentType", 0, 4.0f);

@@ -725,35 +725,22 @@ internal sealed unsafe class AdoFieldObject : AdoObject
         ExcepInfo* info,
         uint* argError)
     {
-        // Inspect raw GetChunk(Length) argument BEFORE DispatchObject coerces non-I4 values to I4
-        // (evidence/r-oledb-odbc/stream-getchunk records only 1 positional VT_I4 argument).
+        // Named arguments on GetChunk (e.g. Length:=4) are not recorded; DispatchObject handles ArgCount and
+        // ScalarArgumentRefusal handles every non-VT_I4 source type before coercion.
         if (dispId == 1108 && (flags & 1) != 0)
         {
             AdoFieldObject field = Recover<AdoFieldObject>(self);
-            field._getChunkBadArgReason = CheckGetChunkRawArg(parameters);
+            field._getChunkNamedArg = parameters is not null && parameters->NamedArgCount != 0;
             try
             {
                 return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
             }
             finally
             {
-                field._getChunkBadArgReason = null;
+                field._getChunkNamedArg = false;
             }
         }
         return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
-    }
-
-    private static string? CheckGetChunkRawArg(DispParams* parameters)
-    {
-        if (parameters is null || parameters->ArgCount != 1 || parameters->NamedArgCount != 0 || parameters->Args == 0)
-        {
-            return "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)";
-        }
-        NativeVariant* cell = Args.Cell(parameters->Args);
-        VarType vt = (VarType)cell->Vt;
-        return vt == VarType.I4
-            ? null
-            : $"Field.GetChunk with argument vt=0x{(ushort)vt:X4} (only by-value VT_I4 is recorded)";
     }
 
     private static readonly OperationTable Operations = new OperationTable(Decl)
@@ -779,7 +766,7 @@ internal sealed unsafe class AdoFieldObject : AdoObject
     private readonly AdoFieldsObject _fields;
     private readonly int _ordinal;
     private readonly int _generation;
-    private string? _getChunkBadArgReason;
+    private bool _getChunkNamedArg;
 
     public AdoFieldObject(AdoFieldsObject fields, int ordinal, int generation) : base(Decl, Vtable, "ADODB.Field")
     {
@@ -802,10 +789,8 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             : null;
 
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
-        member.Name == "GetChunk"
-            ? Failure.NotModelled(
-                "NotModelled.AdoGetChunkArg",
-                conversion.Missing ? "Field.GetChunk with Missing argument is not recorded" : "Field.GetChunk with non-I4 argument is not recorded")
+        member.Name == "GetChunk" && conversion.Missing
+            ? Failure.NotModelled("NotModelled.AdoGetChunkArg", "Field.GetChunk with Missing argument is not recorded")
             : null;
 
     private AdoFieldDescriptor Desc => _fields.Descriptor(_ordinal);
@@ -828,9 +813,9 @@ internal sealed unsafe class AdoFieldObject : AdoObject
 
     private CallResult GetChunk(nint lengthArg)
     {
-        if (_getChunkBadArgReason is { } badArg)
+        if (_getChunkNamedArg)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.AdoGetChunkArg", badArg));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.AdoGetChunkArg", "Field.GetChunk requires 1 positional I4 argument (named arguments are not recorded)"));
         }
         if (!IsValid || !_fields.Recordset.IsOpen)
         {

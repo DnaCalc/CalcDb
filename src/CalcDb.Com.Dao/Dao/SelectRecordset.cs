@@ -399,6 +399,19 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
+    /// <summary>
+    /// Refuse unrecorded Move(Rows) source VarTypes before IDispatch coercion, matching Dao.RecordsetObject.Move
+    /// (r-cursor-1b/move-argument-forms).
+    /// </summary>
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
+        member.Name == "Move" && parameter == 0 && sourceType is not (
+            VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or
+            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr)
+            ? Failure.NotModelled(
+                "NotModelled.MoveArgumentType",
+                $"Recordset.Move with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)")
+            : null;
+
     private SelectFieldsObject FieldsCollection => _fields ??= new SelectFieldsObject(this);
 
     private static CallResult Live(ComObject self, Func<SelectRecordsetObject, CallResult> op)
@@ -1083,8 +1096,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
         }
-        if (!TryParseChunkArg(offsetArg, out int offset, out CallResult argError)
-            || !TryParseChunkArg(bytesArg, out int bytes, out argError))
+        if (!TryParseChunkArg(0, offsetArg, out int offset, out CallResult argError)
+            || !TryParseChunkArg(1, bytesArg, out int bytes, out argError))
         {
             return argError;
         }
@@ -1179,10 +1192,20 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         };
     }
 
-    private static bool IsRecordedChunkArgType(VarType vt) =>
-        vt is VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr;
+    private static bool IsRecordedChunkArgType(int parameter, VarType vt) => parameter switch
+    {
+        0 => vt is VarType.I4 or VarType.I2 or VarType.Bool or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
+        1 => vt is VarType.I4 or VarType.UI1 or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
+        _ => false,
+    };
 
-    private bool TryParseChunkArg(nint arg, out int value, out CallResult error)
+    private static Failure UnrecordedChunkArgType(int parameter, VarType vt) => Failure.NotModelled(
+        "NotModelled.GetChunkArgumentType",
+        parameter == 0
+            ? $"Field.GetChunk Offset with {vt} argument (only I4, I2, Bool, Empty, Null, R8 and BSTR are recorded)"
+            : $"Field.GetChunk Bytes with {vt} argument (only I4, UI1, Empty, Null, R8 and BSTR are recorded)");
+
+    private bool TryParseChunkArg(int parameter, nint arg, out int value, out CallResult error)
     {
         value = 0;
         error = default;
@@ -1208,19 +1231,24 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             error = Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
             return false;
         }
-        if (IsRecordedChunkArgType(vt))
+        if (IsRecordedChunkArgType(parameter, vt))
         {
             if (OwnedVariant.TryChangeScalar(cell, VarType.I4, SessionLocale.Lcid, out NativeVariant coerced, out int hr))
             {
                 value = (int)coerced.Int64;
                 return true;
             }
-            error = hr == HResults.DISP_E_OVERFLOW
-                ? Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true)
-                : Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+            error = hr switch
+            {
+                HResults.DISP_E_OVERFLOW when parameter == 1 => Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true),
+                HResults.DISP_E_TYPEMISMATCH => Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true),
+                _ => CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkArgumentConversion",
+                    $"Field.GetChunk parameter {parameter} ({vt}) failed coercion with 0x{hr:X8} (not recorded)")),
+            };
             return false;
         }
-        error = CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk with {vt} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)"));
+        error = CallResult.Fail(UnrecordedChunkArgType(parameter, vt));
         return false;
     }
 
@@ -1283,20 +1311,20 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         member.Name == "GetChunk" ? InvalidArgumentCount() : null;
 
     /// <summary>
-    /// Refuse unrecorded source VarTypes on GetChunk before IDispatch coerces them to VT_I4
+    /// Refuse unrecorded per-parameter source VarTypes on GetChunk before IDispatch coerces them to VT_I4
     /// (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb, q3-lv-getchunk-args-mdb).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
-        member.Name == "GetChunk" && !IsRecordedChunkArgType(sourceType)
-            ? Failure.NotModelled("NotModelled.GetChunkArgumentType", $"Field.GetChunk with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)")
+        member.Name == "GetChunk" && !IsRecordedChunkArgType(parameter, sourceType)
+            ? UnrecordedChunkArgType(parameter, sourceType)
             : null;
 
     /// <summary>
     /// GetChunk's scalar parameters coerce to I4 under SessionLocale.Lcid ahead of Closed (3267) and non-LV (3259):
-    /// Missing and DISP_E_OVERFLOW (e.g. 4294967296.0, q3-lv-getchunk-args-accdb seq 29, -mdb seq 21) fail 3001 from
-    /// DAO.Field with an IErrorInfo and write *puArgErr; DISP_E_TYPEMISMATCH (Null, non-numeric BSTR, "") fails 3421
-    /// from DAO.Field with an IErrorInfo and writes *puArgErr (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb,
-    /// q3-lv-getchunk-args-mdb).
+    /// Missing and Bytes (p1) DISP_E_OVERFLOW (4294967296.0, q3-lv-getchunk-args-accdb seq 29, -mdb seq 21) fail 3001
+    /// from DAO.Field with an IErrorInfo and write *puArgErr; DISP_E_TYPEMISMATCH (Null, non-numeric BSTR, "") fails
+    /// 3421 from DAO.Field with an IErrorInfo and writes *puArgErr (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb,
+    /// q3-lv-getchunk-args-mdb). Unrecorded Offset (p0) overflow and other HRESULTs are refused by name.
     /// </summary>
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
     {
@@ -1304,9 +1332,15 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return null;
         }
-        return conversion.Reason is ArgumentConversionReason.Missing or ArgumentConversionReason.Overflow
-            ? InvalidArgumentCount()
-            : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true };
+        return conversion.Reason switch
+        {
+            ArgumentConversionReason.Missing => InvalidArgumentCount(),
+            ArgumentConversionReason.Overflow when conversion.Parameter == 1 => InvalidArgumentCount(),
+            ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+            _ => Failure.NotModelled(
+                "NotModelled.GetChunkArgumentConversion",
+                $"Field.GetChunk parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
+        };
     }
 
     private static CallResult Live(ComObject self, Func<SelectFieldObject, CallResult> op)

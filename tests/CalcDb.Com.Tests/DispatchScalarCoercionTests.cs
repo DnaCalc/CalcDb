@@ -73,10 +73,11 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         SelectFieldObject memo = Recover<SelectFieldObject>(Ok(Get(
             Recover<SelectFieldsObject>(Ok(Get(rs, "Fields"))), "Item", "FMemo")));
 
-        // q3-lv-getchunk-args-accdb seq 29 / q3-lv-getchunk-args-mdb seq 21: DISP_E_OVERFLOW -> DAO 3001 + IErrorInfo + *puArgErr.
+        // q3-lv-getchunk-args-accdb seq 29 / q3-lv-getchunk-args-mdb seq 21: Bytes (p1) DISP_E_OVERFLOW -> DAO 3001 + IErrorInfo + *puArgErr=0.
         AssertInvokeDaoError(memo, "GetChunk", InvokeKind.Method, 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 0u,
             RawInt32(0), RawDouble(4294967296.0));
-        AssertInvokeDaoError(memo, "GetChunk", InvokeKind.Method, 3001, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 1u,
+        // Offset (p0) overflow is not recorded and is refused by name.
+        AssertInvokeNotModelled(memo, "GetChunk", InvokeKind.Method, "NotModelled.GetChunkArgumentConversion",
             RawDouble(-4294967296.0), RawInt32(4));
 
         // DISP_E_TYPEMISMATCH -> DAO 3421 + IErrorInfo + *puArgErr.
@@ -84,6 +85,12 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             RawNull(), RawInt32(4));
         AssertInvokeDaoError(memo, "GetChunk", InvokeKind.Method, 3421, "DAO.Field", publishesErrorInfo: true, expectedArgErr: 0u,
             RawInt32(0), RawBstr("abc"));
+
+        // Per-parameter VarType gating (q3-lv-getchunk-args-accdb seq 48-50, -mdb seq 32-34):
+        // UI1 is recorded on Bytes (p1) only; I2 and Bool are recorded on Offset (p0) only.
+        AssertInvokeNotModelled(memo, "GetChunk", InvokeKind.Method, "NotModelled.GetChunkArgumentType", RawByte(1), RawInt32(4));
+        AssertInvokeNotModelled(memo, "GetChunk", InvokeKind.Method, "NotModelled.GetChunkArgumentType", RawInt32(0), RawInt16(4));
+        AssertInvokeNotModelled(memo, "GetChunk", InvokeKind.Method, "NotModelled.GetChunkArgumentType", RawInt32(0), RawBool(true));
 
         // Unrecorded source VarTypes refused by name before VariantChangeTypeEx runs.
         int byRefI4Value = 4;
@@ -113,6 +120,10 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             Marshal.FreeBSTR(bstrVal);
         }
 
+        // SelectRecordsetObject.Move also refuses unrecorded source VarTypes before coercion.
+        AssertInvokeNotModelled(rs, "Move", InvokeKind.Method, "NotModelled.MoveArgumentType", RawSingle(1.0f));
+        AssertInvokeNotModelled(rs, "Move", InvokeKind.Method, "NotModelled.MoveArgumentType", RawByRef(VarType.I4, (nint)(&byRefI4Value)));
+
         Ok(Method(rs, "Close"));
     }
 
@@ -127,7 +138,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         nint byRefBstr = Marshal.StringToBSTR("ID = 1");
         try
         {
-            // Move (r-cursor-1b/move-argument-forms): unrecorded VarTypes refused; Null -> 3421, Missing -> 3001.
+            // Move (r-cursor-1b/move-argument-forms): unrecorded VarTypes and unrecorded overflow refused; Null -> 3421, Missing -> 3001.
             foreach (NativeVariant bad in new[]
             {
                 RawSingle(1.0f),
@@ -140,10 +151,11 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             {
                 AssertInvokeNotModelled(rs, "Move", InvokeKind.Method, "NotModelled.MoveArgumentType", bad);
             }
+            AssertInvokeNotModelled(rs, "Move", InvokeKind.Method, "NotModelled.RecordsetArgumentConversion", RawDouble(4294967296.0));
             AssertInvokeDaoError(rs, "Move", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
             AssertInvokeDaoError(rs, "Move", InvokeKind.Method, 3001, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawMissing());
 
-            // PercentPosition put (r-cursor-1b/percent-assign): unrecorded VarTypes refused; Null -> 3421.
+            // PercentPosition put (r-cursor-1b/percent-assign): unrecorded VarTypes and unrecorded overflow refused; Null -> 3421.
             foreach (NativeVariant bad in new[]
             {
                 RawInt16(50),
@@ -155,6 +167,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             {
                 AssertInvokeNotModelled(rs, "PercentPosition", InvokeKind.PropertyPut, "NotModelled.PercentPositionArgumentType", bad);
             }
+            AssertInvokeNotModelled(rs, "PercentPosition", InvokeKind.PropertyPut, "NotModelled.RecordsetArgumentConversion", RawDouble(1e39));
             AssertInvokeDaoError(rs, "PercentPosition", InvokeKind.PropertyPut, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
 
             // Seek p0 (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek): unrecorded VarTypes refused; Null -> 3421, Missing -> 3001.
@@ -170,7 +183,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             AssertInvokeDaoError(rs, "Seek", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 1u, RawNull(), RawInt32(1));
             AssertInvokeDaoError(rs, "Seek", InvokeKind.Method, 3001, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 1u, RawMissing(), RawInt32(1));
 
-            // FindFirst p0 (r-cursor-1b/find-expression-forms): unrecorded VarTypes refused; Null -> 3421.
+            // FindFirst/FindNext p0 (r-cursor-1b/find-expression-forms): unrecorded VarTypes refused; Null -> 3421.
             foreach (NativeVariant bad in new[]
             {
                 RawSingle(1.0f),
@@ -180,8 +193,25 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             })
             {
                 AssertInvokeNotModelled(rs, "FindFirst", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
+                AssertInvokeNotModelled(rs, "FindNext", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
             }
             AssertInvokeDaoError(rs, "FindFirst", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
+
+            // FindLast/FindPrevious p0 (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends): only Bstr and Null are recorded.
+            foreach (NativeVariant bad in new[]
+            {
+                RawInt32(1),
+                RawDouble(1.0),
+                RawBool(true),
+                RawEmpty(),
+                RawByRef(VarType.Bstr, (nint)(&byRefBstr)),
+            })
+            {
+                AssertInvokeNotModelled(rs, "FindLast", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
+                AssertInvokeNotModelled(rs, "FindPrevious", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
+            }
+            AssertInvokeDaoError(rs, "FindLast", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
+            AssertInvokeDaoError(rs, "FindPrevious", InvokeKind.Method, 3001, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawMissing());
         }
         finally
         {
@@ -204,7 +234,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         nint byRefBstr = Marshal.StringToBSTR("temp.accdb");
         try
         {
-            // Workspace.CommitTrans (r-txn-1b/commit-option-vartypes): unrecorded VarTypes refused; Null -> 3421.
+            // Workspace.CommitTrans (r-txn-1b/commit-option-vartypes): unrecorded VarTypes and overflow refused; Null -> 3421.
             foreach (NativeVariant bad in new[]
             {
                 RawSingle(0f),
@@ -217,9 +247,20 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             {
                 AssertInvokeNotModelled(ws, "CommitTrans", InvokeKind.Method, "NotModelled.CommitTransArgumentType", bad);
             }
+            AssertInvokeNotModelled(ws, "CommitTrans", InvokeKind.Method, "NotModelled.CommitTransArgumentConversion", RawDouble(4294967296.0));
             AssertInvokeDaoError(ws, "CommitTrans", InvokeKind.Method, 3421, "DAO.Workspace", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
 
-            // DBEngine.CreateDatabase (r-wire/opt-createdatabase): unrecorded p0/p1 VarTypes refused; p1 Null -> 3421.
+            // Workspace.CreateDatabase: only Bstr recorded on p0/p1.
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawInt32(1), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"));
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr("dummy.accdb"), RawNull());
+
+            // DBEngine.CommitTrans: unrecorded non-I4 VarTypes refused by name (recorded on Workspace only).
+            AssertInvokeNotModelled(engineObj, "CommitTrans", InvokeKind.Method, "NotModelled.EngineTransactionArguments", RawSingle(0f));
+            AssertInvokeNotModelled(engineObj, "CommitTrans", InvokeKind.Method, "NotModelled.EngineTransactionArguments", RawByRef(VarType.I4, (nint)(&byRefI4)));
+
+            // DBEngine.CreateDatabase (r-wire/opt-createdatabase): unrecorded p0/p1 VarTypes and p0 Missing refused; p1 Null -> 3421, p1 Missing -> 3001.
             AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
                 RawInt32(1), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"));
             AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
@@ -228,8 +269,12 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
                 RawBstr("dummy.accdb"), RawInt32(1));
             AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
                 RawBstr("dummy.accdb"), RawDouble(1.0));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentConversion",
+                RawMissing(), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"), RawMissing());
             AssertInvokeDaoError(engineObj, "CreateDatabase", InvokeKind.Method, 3421, "DAO.DbEngine", publishesErrorInfo: true, expectedArgErr: 1u,
                 RawBstr("dummy.accdb"), RawNull(), RawMissing());
+            AssertInvokeDaoError(engineObj, "CreateDatabase", InvokeKind.Method, 3001, "DAO.DbEngine", publishesErrorInfo: true, expectedArgErr: 1u,
+                RawBstr("dummy.accdb"), RawMissing(), RawMissing());
         }
         finally
         {
@@ -249,8 +294,14 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         ConnectionObject conn = ComObject.Recover<ConnectionObject>(connPtr);
         AdoRecordsetObject rs = ComObject.Recover<AdoRecordsetObject>(rsPtr);
 
-        // Connection.Open (r-ado-1b/conn-open-args seq 111): Open(Missing, Null, Null) on ACE Provider -> Provider 0x80020005, argErr 0.
+        // Connection.Open (r-ado-1b/conn-open-args seq 111): Open(Missing, Null, Null) on ACE Provider -> Provider 0x80020005, argErr 0;
+        // unrecorded VarTypes on p0/p1/p2/p3 are refused before coercion.
         Ok(Call(conn, "Provider", InvokeKind.PropertyPut, "Microsoft.ACE.OLEDB.12.0"));
+        AssertInvokeNotModelled(conn, "Open", InvokeKind.Method, "NotModelled.AdoConnectionOpenArgumentType", RawInt32(123));
+        AssertInvokeNotModelled(conn, "Open", InvokeKind.Method, "NotModelled.AdoConnectionOpenArgumentType", RawNull());
+        AssertInvokeNotModelled(conn, "Open", InvokeKind.Method, "NotModelled.AdoConnectionOpenArgumentType", RawMissing(), RawInt32(123));
+        AssertInvokeNotModelled(conn, "Open", InvokeKind.Method, "NotModelled.AdoConnectionOpenArgumentType", RawMissing(), RawMissing(), RawMissing(), RawBstr("16"));
+        AssertInvokeNotModelled(conn, "Open", InvokeKind.Method, "NotModelled.AdoConnectionOpenArgumentType", RawMissing(), RawMissing(), RawMissing(), RawDouble(4294967296.0));
         AssertInvokeAdoError(conn, "Open", InvokeKind.Method, HResults.DISP_E_TYPEMISMATCH, expectedArgErr: 0u,
             RawMissing(), RawNull(), RawNull());
 
@@ -318,7 +369,13 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
 
     private static NativeVariant RawMissing() => new() { Vt = (ushort)VarType.Error, Int64 = unchecked((uint)HResults.DISP_E_PARAMNOTFOUND) };
 
+    private static NativeVariant RawEmpty() => new() { Vt = (ushort)VarType.Empty };
+
     private static NativeVariant RawNull() => new() { Vt = (ushort)VarType.Null };
+
+    private static NativeVariant RawByte(byte value) => new() { Vt = (ushort)VarType.UI1, Int64 = value };
+
+    private static NativeVariant RawBool(bool value) => new() { Vt = (ushort)VarType.Bool, Int64 = value ? 0xFFFF : 0 };
 
     private static NativeVariant RawInt16(short value) => new() { Vt = (ushort)VarType.I2, Int64 = (ushort)value };
 

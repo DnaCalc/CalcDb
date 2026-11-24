@@ -584,15 +584,38 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private AdoErrorsObject ErrorsCollection => _errors ??= new AdoErrorsObject();
 
     /// <summary>
-    /// Handle IDispatch scalar coercion failure on Connection.Open (e.g., VT_NULL for UserID or Password in
-    /// r-ado-1b/conn-open-args of): compose the pre-open ConnectionString, populate Errors with Provider Type mismatch,
-    /// and fail with 0x80020005.
+    /// Refuse unrecorded scalar VarTypes on Connection.Open before IDispatch coercion: across evidence only
+    /// ConnectionString (BSTR), UserID/Password (BSTR or Null, r-ado-1b/conn-open-args), and Options (by-value I4,
+    /// r-ado-1b/conn-open-args seq 77, 94) are recorded.
+    /// </summary>
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
+    {
+        ("Open", 0) when sourceType != VarType.Bstr =>
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open ConnectionString with {sourceType} argument (only BSTR is recorded)"),
+        ("Open", 1 or 2) when sourceType is not (VarType.Bstr or VarType.Null) =>
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open parameter {parameter} with {sourceType} argument (only BSTR and Null are recorded)"),
+        ("Open", 3) when sourceType != VarType.I4 =>
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open Options with {sourceType} argument (only by-value I4 is recorded)"),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Handle IDispatch scalar coercion failure on Connection.Open: only recorded UserID/Password VT_NULL
+    /// DISP_E_TYPEMISMATCH (r-ado-1b/conn-open-args seq 111: Open(Missing, Null, Null)) composes the pre-open
+    /// ConnectionString, populates Errors with Provider Type mismatch, and fails with 0x80020005. Other non-Missing
+    /// conversion failures on Open are refused by name.
     /// </summary>
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
     {
         if (conversion.Missing || member.Name != "Open" || IsOpen)
         {
             return null;
+        }
+        if (conversion is not { Reason: ArgumentConversionReason.TypeMismatch, Parameter: 1 or 2, SourceType: VarType.Null })
+        {
+            return Failure.NotModelled(
+                "NotModelled.AdoConnectionOpenArgumentConversion",
+                $"Connection.Open parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (only UserID/Password Null TypeMismatch is recorded)");
         }
         EffectiveProvider effective = Effective();
         if (effective.Route != ProviderRoute.Ace)

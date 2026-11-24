@@ -346,8 +346,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// Refuse unrecorded source VarTypes before IDispatch coercion for members whose records probe only a specific subset:
     /// Move (r-cursor-1b/move-argument-forms), PercentPosition (r-cursor-1b/percent-assign), Seek comparison
-    /// (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek), and FindFirst/FindLast/FindNext/FindPrevious criteria
-    /// (r-cursor-1b/find-expression-forms).
+    /// (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek), FindFirst/FindNext criteria
+    /// (r-cursor-1b/find-expression-forms, r-wire/opt-find-criteria), and FindLast/FindPrevious criteria
+    /// (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
@@ -357,22 +358,32 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             Failure.NotModelled("NotModelled.PercentPositionArgumentType", $"Recordset.PercentPosition put with {sourceType} argument (only I4, R4, R8, BSTR, Empty and Null are recorded)"),
         ("Seek", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.Bool) =>
             Failure.NotModelled("NotModelled.SeekComparisonType", $"Recordset.Seek comparison with {sourceType} argument (only BSTR, Empty, Null, I4 and Bool are recorded)"),
-        ("FindFirst" or "FindLast" or "FindNext" or "FindPrevious", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.R8 or VarType.Bool) =>
+        ("FindFirst" or "FindNext", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.R8 or VarType.Bool) =>
             Failure.NotModelled("NotModelled.FindCriteriaType", $"Recordset.{member.Name} criteria with {sourceType} argument (only BSTR, Empty, Null, I4, R8 and Bool are recorded)"),
+        ("FindLast" or "FindPrevious", 0) when sourceType is not (VarType.Bstr or VarType.Null) =>
+            Failure.NotModelled("NotModelled.FindCriteriaType", $"Recordset.{member.Name} criteria with {sourceType} argument (only BSTR and Null are recorded)"),
         _ => null,
     };
 
     /// <summary>
-    /// A scalar argument that does not coerce is 3421 (CUR-POS: Move(Null) and Move("abc"), r-cursor-1b/move-argument-forms;
-    /// PercentPosition = Null, percent-assign); Missing for a required one is 3001 (Move(Missing); Seek(Missing, 4),
-    /// seek-operator-spelling). Both publish IErrorInfo. Overflow on Move/PercentPosition is not recorded and keeps 3421.
+    /// A scalar argument that fails DISP_E_TYPEMISMATCH is 3421 (CUR-POS: Move(Null) and Move("abc"),
+    /// r-cursor-1b/move-argument-forms; PercentPosition = Null, percent-assign; Find/Seek Null); Missing for a required
+    /// one is 3001 (Move(Missing); Seek(Missing, 4), seek-operator-spelling; Find*(Missing), opt-find-criteria). Both
+    /// publish IErrorInfo. DISP_E_OVERFLOW and other conversion HRESULTs on Recordset members have no retained record
+    /// and are refused by name.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
-        conversion.Missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true };
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => conversion.Reason switch
+    {
+        ArgumentConversionReason.Missing => InvalidArgumentCount(),
+        ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        _ => Failure.NotModelled(
+            "NotModelled.RecordsetArgumentConversion",
+            $"Recordset.{member.Name} parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
+    };
 
-    /// <summary>The Find criteria coerces a VT_BOOL as "True" (VARIANT_ALPHABOOL; R-CURSOR-1 CUR-FIND, find-expression-forms against findfirst-fresh-recordset).</summary>
+    /// <summary>The FindFirst/FindNext criteria coerces a VT_BOOL as "True" (VARIANT_ALPHABOOL; R-CURSOR-1 CUR-FIND, find-expression-forms against findfirst-fresh-recordset).</summary>
     protected override ushort CoercionFlags(MemberDecl member, int parameter) =>
-        parameter == 0 && member.Name is "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" ? VariantAlphaBool : (ushort)0;
+        parameter == 0 && member.Name is "FindFirst" or "FindNext" ? VariantAlphaBool : (ushort)0;
 
     private const ushort VariantAlphaBool = 0x2;
 
