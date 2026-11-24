@@ -1280,6 +1280,44 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Open**: compression beyond these ties; a table whose rows have C below MaxColumns; the slack an ADO keyset shrink
   zeroes (nullfix-ado-accdb, after-ado-rs, page 45 slot 2).
 
+### R-CAT-1, R-FMT-2 r-q37 (W-08, task 9dvt): DAO Field.ValidationRule and ValidationText puts on a stored table write only the table's LvProp, page 0's counter and the pages that hold the blob
+
+- **Claim**:
+  - *MR2 records*: both properties sit in `MSysObjects.LvProp` of the table's row, in the field's `ColumnValues`
+    section; the TableDef page never changes. ValidationRule is flags `0x01`, type `0x0C` (Memo), UTF-16LE with a
+    trailing `00 00` (DAO's get returns the trailing U+0000); ValidationText is flags `0x01`, type `0x0A` (Text),
+    UTF-16LE without one (also at 256 characters, length `0x0200`). Neither has an `ff fe` prefix.
+  - *Order*: existing Names entries, sections and per-field property order stay; a new name, section or property is
+    appended in write order; a replacement is written in place. Putting the same value again still rewrites LvProp,
+    DateUpdate, the LVAL slot and page 0's counter.
+  - *Where the blob lives*: a blob of 64 bytes or fewer is inline in MSysObjects (`[len:u16] 00 80` and 8 zero bytes,
+    then the blob; pages 1 and 6 unchanged); one of 66 to 4,080 bytes is a single-row LVAL page (`[len:u16] 00 40
+    [slot:u8][page:u24]` and 4 zero bytes). A rewrite that fits marks the old slot `0xD000` and appends a slot; one that
+    does not allocates a new LVAL page, marks the old one freed (`09` at byte 0, free space `0x0FF0`, slot 0 `0xD000`,
+    payload not zeroed), moves its bits in page 6 at once and returns the page in page 1 at Close. Above 4,080 bytes
+    (ACCDB, two pages) the blob is chained (flags `0x00`, a clock-derived LongValueStamp in LvProp and the head page),
+    its pages set in page 6's owned map only; replacing it by a short blob frees the chain without writing `09`.
+  - *Removal*: `""` drops the property (and an empty section) and keeps its name in Names; on a Null LvProp it writes a
+    40-byte Names-only inline blob. A blob that shrinks to 64 bytes or fewer moves back inline and frees its LVAL page
+    as above.
+  - *Other bytes*: each put is written at once (seen while open): DateUpdate and LvProp in the MSysObjects row, and page
+    0 offset `0xE02` +1. A Close that changed page 1 (its 32-page reservation, a returned page) adds +1 more; one that
+    did not leaves page 0 alone. `[V] < [W]` fails 3783 (`0x800A0EC7`), `>` 3320 (`0x800A0CF8`), VT_NULL on either
+    property 3421 (`0x800A0D5D`), each leaving the file byte-identical.
+- **Conditions**: ACCDB and Jet 4 MDB; native DAO, `Field.ValidationRule` and `Field.ValidationText` puts as VT_BSTR on a
+  Long or Text field of an empty stored table, one session; fields with no properties, with Description and Format,
+  with Required, and beside a table CheckConstraints entry.
+- **Records**: `evidence/r-q37-valrule-put/` (42 questions, 6 frozen fixtures `r-q37-*` in `probes/fixtures.json`; every
+  page before, after each put while open, and after Close); repeats (`a2`) of rule-alone-accdb, rule-alone-mdb,
+  both-rule-then-text-accdb, long-rule-2040-accdb and remove-rule-only-accdb equal outside CatalogDate and
+  LongValueStamp. The organizer read rule-alone-accdb page 45 after Close: `> 10` stored as 10 bytes, type `0x0C`. The
+  earlier setups (r-q29 noan-val-3316-*, r-q30 ord-valrule-*, r-q31 mdb-ord-valrule-check-dao) kept pages only after
+  their puts and agree.
+- **Open**: a 65-byte blob (64 is inline and 66 an LVAL page; none of 65 is recorded); a chained blob on Jet 4 MDB, or
+  of three or more pages; an LVAL page shared with another live row; an MSysObjects page without room for the inline
+  blob; the length limits of the rule and the text; a table with rows; TableDef-level rules, a draft field before
+  Append, other variant types; why the chained replacement allocated page 48 and not 47; the counter's width and wrap.
+
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
 - **Records**: evidence/r-txn-1/nest-inner-rollback/ (+ -mdb), nest-middle-rollback-after-inner-commit/, nest-outer-rollback-after-inner-commits/, nest-same-row-all-levels/, nest-empty-levels/, nest-resolve-without-level/, nest-late-file-b/; evidence/r-txn-1b/nest-depth-reuse-after-commit/, nest-depth-second-workspace/, nest-depth-recordset-writes/ (+ -mdb), commit-option-values/, commit-option-vartypes/, txn-call-argument-counts/; evidence/r-fix-cat-txn/nest-depth-recordset-writes-fresh-witness/.
