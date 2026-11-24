@@ -312,14 +312,140 @@ public sealed unsafe class DaoCreateDatabaseTests : IDisposable
     }
 
     [Fact]
+    public void CreateDatabase_creates_valid_open_Jet4_MDB_readable_and_exclusive_without_lock_file()
+    {
+        // W-07/new-database-image, R-FMT-1 FMT1-CREATE, R-CAT-1 CAT-NEW, R-LOCK-1 EX-CREATE (r-q38-mdb-new-image,
+        // r-fmt-1/create-mdb-empty, r-cat-1/create-mdb-empty): 19-page (77,824B) Jet 4 MDB, Version="4.0",
+        // CollatingOrder=1033, 4 visible system TableDefs, exclusive handle (denies concurrent open), no .ldb, reopens cleanly.
+        const int dbVersion40 = 64;
+        DBEngineObject eng = Engine();
+        string path = TempPath("fresh.mdb");
+        DatabaseObject db = Recover<DatabaseObject>(Ok(Method(eng, "CreateDatabase", path, DbLangGeneral, dbVersion40)));
+
+        Assert.Equal(path, Text(Get(db, "Name")));
+        Assert.Equal("4.0", Text(Get(db, "Version")));
+        Assert.Equal((VarType.I4, 1033L), Scalar(Get(db, "CollatingOrder")));
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(db, "Updatable")));
+        Assert.Equal((VarType.Bool, 0xFFFFL), Scalar(Get(db, "Transactions")));
+
+        // No .ldb or .laccdb lock file created alongside the database.
+        Assert.False(File.Exists(Path.ChangeExtension(path, ".ldb")));
+        Assert.False(File.Exists(Path.ChangeExtension(path, ".laccdb")));
+
+        // Exclusive handle denies concurrent reader open while Database is open.
+        OpenResult concurrent = WindowsFile.Open(path, Admission.ReaderOnly);
+        Assert.False(concurrent.Succeeded);
+        Assert.True(concurrent.SharingViolation);
+
+        // TableDefs: 4 visible system tables in MSysObjects (no MSysComplexColumns in Jet 4 MDB).
+        DispatchObject tds = Object<DispatchObject>(db, "TableDefs");
+        Assert.Equal((VarType.I2, 4L), Scalar(Get(tds, "Count")));
+        var names = new List<string>();
+        for (int i = 0; i < 4; i++)
+        {
+            DispatchObject td = Object<DispatchObject>(tds, "Item", i);
+            names.Add(Text(Get(td, "Name")));
+        }
+        Assert.Equal(["MSysACEs", "MSysObjects", "MSysQueries", "MSysRelationships"], names);
+
+        // Database.Properties are readable on the newly created Jet 4 MDB.
+        PropertiesObject props = Object<PropertiesObject>(db, "Properties");
+        Assert.True(Scalar(Get(props, "Count")).Payload > 0);
+        PropertyObject verProp = Object<PropertyObject>(props, "Item", "Version");
+        Assert.Equal("4.0", Text(Get(verProp, "Value")));
+        PropertyObject colProp = Object<PropertyObject>(props, "Item", "CollatingOrder");
+        Assert.Equal((VarType.I4, 1033L), Scalar(Get(colProp, "Value")));
+
+        Ok(Method(db, "Close"));
+
+        // On-disk image is 77,824 bytes (19 pages) and passes CalcDb.Format.Inspector with zero problems.
+        byte[] image = File.ReadAllBytes(path);
+        Assert.Equal(77824, image.Length);
+        InspectionReport report = Inspector.Inspect(image);
+        Assert.Empty(report.Problems);
+        Assert.Equal(FileFormat.Jet4, report.Profile!.Format);
+        Assert.Equal(19, report.PageCount);
+        Assert.Equal(1033, report.Header!.SortOrder.Identifier);
+
+        // Reopens cleanly via OpenDatabase.
+        DatabaseObject reopened = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path)));
+        Assert.Equal("4.0", Text(Get(reopened, "Version")));
+        Assert.Equal((VarType.I4, 1033L), Scalar(Get(reopened, "CollatingOrder")));
+        Ok(Method(reopened, "Close"));
+    }
+
+    [Fact]
+    public void CreateDatabase_Jet4_MDB_supports_recorded_routes_locales_extensions_and_errors()
+    {
+        // r-q38-mdb-new-image (eng-general-full, eng-langid-only, ws-general-full) and r-cat-1/create-accdb-ext-v40
+        const int dbVersion40 = 64;
+        DBEngineObject eng = Engine();
+        WorkspacesObject wss = Object<WorkspacesObject>(eng, "Workspaces");
+        WorkspaceObject ws = Object<WorkspaceObject>(wss, "Item", 0);
+        DatabasesObject dbs = Object<DatabasesObject>(ws, "Databases");
+
+        (DispatchObject Target, string FileName, string Locale)[] cases =
+        [
+            (eng, "eng-full.mdb", DbLangGeneral),
+            (eng, "eng-langid-only.mdb", ";LANGID=0x0409"),
+            (ws, "ws-full.mdb", DbLangGeneral),
+            (ws, "ws-langid-only.mdb", ";LANGID=0x0409"), // shared WorkspaceObject.CreateDatabase route
+            (eng, "accdb-ext-v40.accdb", DbLangGeneral),
+        ];
+
+        foreach (var (target, fileName, locale) in cases)
+        {
+            string path = TempPath(fileName);
+            DatabaseObject db = Recover<DatabaseObject>(Ok(Method(target, "CreateDatabase", path, locale, dbVersion40)));
+            Assert.Equal((VarType.I2, 1L), Scalar(Get(dbs, "Count")));
+            Assert.Equal("4.0", Text(Get(db, "Version")));
+            Assert.Equal((VarType.I4, 1033L), Scalar(Get(db, "CollatingOrder")));
+            Assert.False(File.Exists(Path.ChangeExtension(path, ".ldb")));
+            Ok(Method(db, "Close"));
+            Assert.Equal((VarType.I2, 0L), Scalar(Get(dbs, "Count")));
+            Assert.Equal(77824, new FileInfo(path).Length);
+        }
+
+        // Front-end/OS error paths (recorded on ACCDB in r-cat-1/create-accdb-existing-destination,
+        // r-cat-1/create-accdb-in-transaction, r-dao-1-err-1/create-workspace-route, and
+        // r-sort-3/create-locale-spellings) also hold through the shared CreateDatabase path with Option = 64.
+        string existing = TempPath("already.mdb");
+        byte[] sentinel = [9, 8, 7, 6];
+        File.WriteAllBytes(existing, sentinel);
+        Fails(Method(eng, "CreateDatabase", existing, DbLangGeneral, dbVersion40), 3204, "DAO.Workspace", DaoErrors.DatabaseAlreadyExists);
+        Assert.Equal(sentinel, File.ReadAllBytes(existing));
+
+        string inTxnPath = TempPath("in-txn.mdb");
+        Ok(Method(eng, "BeginTrans"));
+        Fails(Method(eng, "CreateDatabase", inTxnPath, DbLangGeneral, dbVersion40), 3246, "DAO.Workspace", DaoErrors.NotSupportedInTransactions);
+        Assert.False(File.Exists(inTxnPath));
+        Ok(Method(eng, "Rollback"));
+
+        Fails(Method(eng, "CreateDatabase", TempPath("err1.mdb"), "", dbVersion40), 3001, "DAO.Workspace", DaoErrors.InvalidArgument);
+        Fails(Method(eng, "CreateDatabase", TempPath("err2.mdb"), "LANGID=0x0409;CP=1252;COUNTRY=0", dbVersion40), 3170, "DAO.Workspace", DaoErrors.CouldNotFindInstallableIsam);
+        Fails(Method(eng, "CreateDatabase", TempPath("err3.mdb"), ";LANGID=0x0000;CP=1252;COUNTRY=0", dbVersion40), 3228, "DAO.Workspace", DaoErrors.CollatingSequenceNotSupported);
+        string badPath = Path.Combine(_dir, "missing-dir", "child.mdb");
+        Fails(Method(eng, "CreateDatabase", badPath, DbLangGeneral, dbVersion40), 3044, "DAO.Workspace", DaoErrors.NotAValidPath(badPath));
+    }
+
+    [Fact]
     public void CreateDatabase_gives_named_NotModelled_refusals_for_out_of_stretch_forms()
     {
         DBEngineObject eng = Engine();
-        Refused(Method(eng, "CreateDatabase", TempPath("m1.mdb"), DbLangGeneral, 64), "NotModelled.CreateJet4Mdb");
         Refused(Method(eng, "CreateDatabase", TempPath("m2.accdb"), DbLangGeneral, 192), "NotModelled.CreateJet4Mdb");
         Refused(Method(eng, "CreateDatabase", TempPath("m3.accdb"), DbLangGeneral, 256), "NotModelled.CreateAce2010");
         Refused(Method(eng, "CreateDatabase", TempPath("m4.accdb"), DbLangGeneral + ";pwd=secret", DbVersion120), "NotModelled.DatabasePassword");
+        Refused(Method(eng, "CreateDatabase", TempPath("m4b.mdb"), DbLangGeneral + ";pwd=secret", 64), "NotModelled.DatabasePassword");
         Refused(Method(eng, "CreateDatabase", TempPath("m5.accdb"), ";LANGID=0x0407;CP=1252;COUNTRY=0", DbVersion120), "NotModelled.CreateLocale");
+        Refused(Method(eng, "CreateDatabase", TempPath("m5b.mdb"), ";LANGID=0x0407;CP=1252;COUNTRY=0", 64), "NotModelled.CreateLocale");
+        // Partial dbLangGeneral spellings are recorded for ACCDB only, not Jet 4 MDB (r-q38-mdb-new-image).
+        Refused(Method(eng, "CreateDatabase", TempPath("m5c.mdb"), ";LANGID=0x0409;CP=1252", 64), "NotModelled.CreateLocale");
+        Refused(Method(eng, "CreateDatabase", TempPath("m5d.mdb"), ";LANGID=0x0409;COUNTRY=0", 64), "NotModelled.CreateLocale");
         Refused(Method(eng, "CreateDatabase", TempPath("m6.accdb"), DbLangGeneral, 32), "NotModelled.CreateOption");
+        Refused(Method(eng, "CreateDatabase", TempPath("m6b.mdb"), DbLangGeneral, 66), "NotModelled.CreateOption"); // dbVersion40 | dbEncrypt
+        // Non-VT_I4 spellings of option 64 are not recorded for Jet 4 MDB.
+        Refused(Method(eng, "CreateDatabase", TempPath("m7a.mdb"), DbLangGeneral, (short)64), "NotModelled.CreateDatabaseArgumentType");
+        Refused(Method(eng, "CreateDatabase", TempPath("m7b.mdb"), DbLangGeneral, 64.0), "NotModelled.CreateDatabaseArgumentType");
+        Refused(Method(eng, "CreateDatabase", TempPath("m7c.mdb"), DbLangGeneral, "64"), "NotModelled.CreateDatabaseArgumentType");
     }
 }

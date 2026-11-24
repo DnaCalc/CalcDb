@@ -6,7 +6,7 @@ namespace CalcDb.Catalog;
 /// <summary>
 /// Parameters for synthesizing a new database image (W-07/new-database-image, II-16 §24).
 /// </summary>
-/// <param name="Format">Target file format profile (currently <see cref="FileFormat.Ace2007"/>).</param>
+/// <param name="Format">Target file format profile (<see cref="FileFormat.Ace2007"/> or <see cref="FileFormat.Jet4"/>).</param>
 /// <param name="SortOrder">Database collating sort descriptor (currently General - Legacy <c>(1033, 0, 0)</c>).</param>
 /// <param name="CodePage">Database code page (1252 for <c>dbLangGeneral</c>).</param>
 /// <param name="CreationDateBits">
@@ -16,8 +16,8 @@ namespace CalcDb.Catalog;
 /// </param>
 /// <param name="IncrementComplexTypeUpdateUlp">
 /// Whether the 8 single-column <c>MSysComplexType_*</c> catalog rows (<c>UnsignedByte</c> through <c>Text</c>,
-/// <c>MSysObjects</c> slots 9–16) carry <c>DateUpdate = CreationDateBits + 1 ULP</c>, matching ACE's observed post-create
-/// metadata update on those 8 rows.
+/// <c>MSysObjects</c> slots 9–16 in ACCDB) carry <c>DateUpdate = CreationDateBits + 1 ULP</c>, matching ACE's observed
+/// post-create metadata update on those 8 rows. Ignored for Jet 4 MDB (which has no complex tables).
 /// </param>
 public sealed record NewDatabaseRequest(
     FileFormat Format,
@@ -26,7 +26,7 @@ public sealed record NewDatabaseRequest(
     ulong CreationDateBits,
     bool IncrementComplexTypeUpdateUlp = true)
 {
-    /// <summary>General - Legacy sort order (<c>1033, 0, 0</c>) for <c>dbLangGeneral</c> ACCDB 2007 databases.</summary>
+    /// <summary>General - Legacy sort order (<c>1033, 0, 0</c>) for <c>dbLangGeneral</c> Jet 4 MDB and ACCDB 2007 databases.</summary>
     public static TextSortOrder GeneralLegacySort { get; } = new(1033, 0, 0);
 
     public const ushort WesternCodePage = 1252;
@@ -38,25 +38,40 @@ public sealed record NewDatabaseRequest(
         ulong oaBits = BitConverter.DoubleToUInt64Bits(ts.ToOADate());
         return new NewDatabaseRequest(FileFormat.Ace2007, GeneralLegacySort, WesternCodePage, oaBits);
     }
+
+    /// <summary>Create a Jet 4 MDB (<c>dbVersion40</c>, option 64, <c>r-q38-mdb-new-image</c>) <c>dbLangGeneral</c> request for the given local timestamp.</summary>
+    public static NewDatabaseRequest Jet4MdbGeneral(DateTime? localTimestamp = null)
+    {
+        DateTime ts = localTimestamp ?? DateTime.Now;
+        ulong oaBits = BitConverter.DoubleToUInt64Bits(ts.ToOADate());
+        return new NewDatabaseRequest(FileFormat.Jet4, GeneralLegacySort, WesternCodePage, oaBits, IncrementComplexTypeUpdateUlp: false);
+    }
 }
 
 /// <summary>
-/// Synthesizes a complete 42-page (172,032-byte) empty ACCDB (<see cref="FileFormat.Ace2007"/>, <c>dbVersion120</c>,
-/// <c>dbLangGeneral</c>) database image purely through <see cref="CalcDb.Format"/> emitters (W-07/new-database-image;
-/// II-16 §24). Produces 0 byte differences against native ACE empty ACCDB images when replayed with the same
-/// <see cref="NewDatabaseRequest.CreationDateBits"/>.
+/// Synthesizes a complete empty database image purely through <see cref="CalcDb.Format"/> emitters
+/// (W-07/new-database-image; II-16 §24): 42-page (172,032-byte) ACE 2007 ACCDB (<see cref="FileFormat.Ace2007"/>,
+/// <c>dbVersion120</c>) or 19-page (77,824-byte) Jet 4 MDB (<see cref="FileFormat.Jet4"/>, <c>dbVersion40</c>,
+/// <c>r-q38-mdb-new-image</c>, <c>r-fmt-1/create-mdb-empty</c>, <c>r-cat-1/create-mdb-empty</c>,
+/// <c>r-cat-1/create-accdb-ext-v40</c>), both with <c>dbLangGeneral</c>. Produces 0 byte differences against native
+/// ACE empty images when replayed with the same <see cref="NewDatabaseRequest.CreationDateBits"/>.
 /// </summary>
 public static class NewDatabaseSynthesizer
 {
     /// <summary>Initial page count of an empty ACE 2007 ACCDB image (42 pages = 172,032 bytes).</summary>
     public const int Accdb2007PageCount = 42;
 
+    /// <summary>Initial page count of an empty Jet 4 MDB image (19 pages = 77,824 bytes; <c>r-q38-mdb-new-image</c>).</summary>
+    public const int Jet4MdbPageCount = 19;
+
+    private const int Jet4InitialObjectCount = 8;
+
     private const byte SystemTableType = 0x53; // 'S'
     private const byte ComplexTableType = 0x4E; // 'N'
 
     // Built-in Jet/ACE 2-byte SIDs before XOR with the per-database RC4 SID keystream: observed in the four retained
-    // empty ACCDB fixtures ACE created on different dates (r-fmt-1-accdb-empty, r-cat-1-accdb-empty, r-cat-1
-    // create-accdb-option and create-accdb-work; NewDatabaseSynthesizerTests).
+    // empty ACCDB fixtures and the ten retained empty Jet 4 MDB images (r-q38-mdb-new-image, r-fmt-1-mdb-empty,
+    // r-cat-1-mdb-empty, r-cat-1-accdb-ext-v40).
     private static readonly byte[] SidEngine = DefaultAdminSecurity.Engine.ToArray();
     private static readonly byte[] SidAdmin = DefaultAdminSecurity.Admin.ToArray();
     private static readonly byte[] SidUsers = DefaultAdminSecurity.Users.ToArray();
@@ -103,6 +118,8 @@ public static class NewDatabaseSynthesizer
         new(39, TablesContainerId, "MSysComplexType_Attachment", 1, ComplexTypeObjectFlag, null),
     ];
 
+    private static readonly ObjectSeed[] Jet4InitialObjects = InitialObjects[..Jet4InitialObjectCount];
+
     private static readonly AceSeed[] InitialAces =
     [
         new(2, SidAdmin, 0x00060000, false),
@@ -143,6 +160,16 @@ public static class NewDatabaseSynthesizer
         new(RelationshipsContainerId, SidUsers, 0x000FFFFF, true),
     ];
 
+    // Jet 4 MDB carries only the 16 ACEs belonging to the 8 non-complex catalog objects, in the same slot order
+    // (r-q38-mdb-new-image pages 10 and 18).
+    private static readonly AceSeed[] Jet4InitialAces = BuildJet4InitialAces();
+
+    private static AceSeed[] BuildJet4InitialAces()
+    {
+        HashSet<int> jet4ObjectIds = [.. Jet4InitialObjects.Select(static o => o.Id)];
+        return [.. InitialAces.Where(a => jet4ObjectIds.Contains(a.ObjectId))];
+    }
+
     /// <summary>Synthesize the full database image as a single contiguous byte array.</summary>
     public static byte[] SynthesizeImage(NewDatabaseRequest request, FormatDescriptor? descriptor = null)
     {
@@ -156,12 +183,12 @@ public static class NewDatabaseSynthesizer
         return image;
     }
 
-    /// <summary>Synthesize all 42 pages of an empty ACCDB 2007 database.</summary>
+    /// <summary>Synthesize all pages of an empty Jet 4 MDB (19 pages) or ACE 2007 ACCDB (42 pages) database.</summary>
     public static byte[][] SynthesizePages(NewDatabaseRequest request, FormatDescriptor? descriptor = null)
     {
-        if (request.Format != FileFormat.Ace2007)
+        if (request.Format is not (FileFormat.Ace2007 or FileFormat.Jet4))
         {
-            throw new NotSupportedException($"NewDatabaseSynthesizer currently supports {FileFormat.Ace2007}, not {request.Format}.");
+            throw new NotSupportedException($"NewDatabaseSynthesizer currently supports {FileFormat.Jet4} and {FileFormat.Ace2007}, not {request.Format}.");
         }
         if (request.SortOrder != NewDatabaseRequest.GeneralLegacySort || request.CodePage != NewDatabaseRequest.WesternCodePage)
         {
@@ -170,8 +197,13 @@ public static class NewDatabaseSynthesizer
 
         FormatDescriptor d = descriptor ?? FormatDescriptor.Jet4Family;
         uint sortTypeInfo = PackSortOrder(request.SortOrder);
+        bool isJet4 = request.Format == FileFormat.Jet4;
+        int pageCount = isJet4 ? Jet4MdbPageCount : Accdb2007PageCount;
+        uint acesDataPage = isJet4 ? 18u : 41u;
+        ReadOnlySpan<ObjectSeed> objects = isJet4 ? Jet4InitialObjects : InitialObjects;
+        ReadOnlySpan<AceSeed> aces = isJet4 ? Jet4InitialAces : InitialAces;
 
-        var pages = new byte[Accdb2007PageCount][];
+        var pages = new byte[pageCount][];
         for (int i = 0; i < pages.Length; i++)
         {
             pages[i] = new byte[d.PageSize];
@@ -179,22 +211,22 @@ public static class NewDatabaseSynthesizer
 
         // Page 0: Database header + derived 2-byte SID RC4 keystream.
         Span<byte> sidKeystream = stackalloc byte[2];
-        DatabaseHeaderEncoder.EncodeAccdb2007(pages[0], request.SortOrder, request.CodePage, request.CreationDateBits, d, sidKeystream);
+        DatabaseHeaderEncoder.Encode(pages[0], request.Format, request.SortOrder, request.CodePage, request.CreationDateBits, d, sidKeystream);
 
-        // Page 1: Global usage map (owner 1; slot 0 = free pages [42..512), slot 1 = empty).
+        // Page 1: Global usage map (owner 1; slot 0 = free pages [pageCount..512), slot 1 = empty).
         DataPages.Initialize(pages[1], owner: 1, d);
-        AppendMap(pages[1], MapDeclaration.EncodeInlineRange(0, Accdb2007PageCount, 512, d), d);
+        AppendMap(pages[1], MapDeclaration.EncodeInlineRange(0, (uint)pageCount, 512, d), d);
         AppendMap(pages[1], MapDeclaration.EncodeInline(0, [], d), d);
 
         // TableDefs & their usage maps.
-        TableDefEncoder.Encode(pages[2], MSysObjectsSpec(sortTypeInfo), d);
+        TableDefEncoder.Encode(pages[2], MSysObjectsSpec(sortTypeInfo, (uint)objects.Length), d);
         WriteUsageMapPage(pages[6], d,
             [17], [17], // table owned/free
             [], [], [], [], [], [], [], [], [], [], [], [], [], [], // 7 LVAL columns x (owned, free)
             [7], [8]); // 2 physical indexes
 
-        TableDefEncoder.Encode(pages[3], MSysAcesSpec(sortTypeInfo), d);
-        WriteUsageMapPage(pages[9], d, [41], [41], [10]);
+        TableDefEncoder.Encode(pages[3], MSysAcesSpec(sortTypeInfo, (uint)aces.Length, (uint)objects.Length), d);
+        WriteUsageMapPage(pages[9], d, [acesDataPage], [acesDataPage], [10]);
 
         TableDefEncoder.Encode(pages[4], MSysQueriesSpec(sortTypeInfo), d);
         WriteUsageMapPage(pages[11], d, [], [], [], [], [12]);
@@ -202,44 +234,50 @@ public static class NewDatabaseSynthesizer
         TableDefEncoder.Encode(pages[5], MSysRelationshipsSpec(sortTypeInfo), d);
         WriteUsageMapPage(pages[13], d, [], [], [14], [15], [16]);
 
-        TableDefEncoder.Encode(pages[18], MSysComplexColumnsSpec(sortTypeInfo), d);
-        WriteUsageMapPage(pages[19], d, [], [], [20], [21], [22]);
+        if (!isJet4)
+        {
+            TableDefEncoder.Encode(pages[18], MSysComplexColumnsSpec(sortTypeInfo), d);
+            WriteUsageMapPage(pages[19], d, [], [], [20], [21], [22]);
 
-        WriteComplexScalarTable(pages, 23, 24, NativeTypes.Byte, sortTypeInfo, flags: 0x03, length: 1, isVariable: false, d);
-        WriteComplexScalarTable(pages, 25, 26, NativeTypes.Integer, sortTypeInfo, flags: 0x03, length: 2, isVariable: false, d);
-        WriteComplexScalarTable(pages, 27, 28, NativeTypes.Long, sortTypeInfo, flags: 0x03, length: 4, isVariable: false, d);
-        WriteComplexScalarTable(pages, 29, 30, NativeTypes.Single, sortTypeInfo, flags: 0x03, length: 4, isVariable: false, d);
-        WriteComplexScalarTable(pages, 31, 32, NativeTypes.Double, sortTypeInfo, flags: 0x03, length: 8, isVariable: false, d);
-        WriteComplexScalarTable(pages, 33, 34, NativeTypes.Guid, sortTypeInfo, flags: 0x03, length: 16, isVariable: false, d);
-        // Decimal complex type: precision 18, scale 0 (TypeInfo = 0x00000012), variable flag 0x02, declared length 9.
-        WriteComplexScalarTable(pages, 35, 36, NativeTypes.Numeric, typeInfo: 0x00000012u, flags: 0x02, length: 9, isVariable: true, d);
-        WriteComplexScalarTable(pages, 37, 38, NativeTypes.Text, sortTypeInfo, flags: 0x02, length: 510, isVariable: true, d);
+            WriteComplexScalarTable(pages, 23, 24, NativeTypes.Byte, sortTypeInfo, flags: 0x03, length: 1, isVariable: false, d);
+            WriteComplexScalarTable(pages, 25, 26, NativeTypes.Integer, sortTypeInfo, flags: 0x03, length: 2, isVariable: false, d);
+            WriteComplexScalarTable(pages, 27, 28, NativeTypes.Long, sortTypeInfo, flags: 0x03, length: 4, isVariable: false, d);
+            WriteComplexScalarTable(pages, 29, 30, NativeTypes.Single, sortTypeInfo, flags: 0x03, length: 4, isVariable: false, d);
+            WriteComplexScalarTable(pages, 31, 32, NativeTypes.Double, sortTypeInfo, flags: 0x03, length: 8, isVariable: false, d);
+            WriteComplexScalarTable(pages, 33, 34, NativeTypes.Guid, sortTypeInfo, flags: 0x03, length: 16, isVariable: false, d);
+            // Decimal complex type: precision 18, scale 0 (TypeInfo = 0x00000012), variable flag 0x02, declared length 9.
+            WriteComplexScalarTable(pages, 35, 36, NativeTypes.Numeric, typeInfo: 0x00000012u, flags: 0x02, length: 9, isVariable: true, d);
+            WriteComplexScalarTable(pages, 37, 38, NativeTypes.Text, sortTypeInfo, flags: 0x02, length: 510, isVariable: true, d);
 
-        TableDefEncoder.Encode(pages[39], MSysComplexAttachmentSpec(sortTypeInfo), d);
-        WriteUsageMapPage(pages[40], d, [], [], [], [], [], []);
+            TableDefEncoder.Encode(pages[39], MSysComplexAttachmentSpec(sortTypeInfo), d);
+            WriteUsageMapPage(pages[40], d, [], [], [], [], [], []);
+        }
 
         // Decode the synthesized MSysObjects and MSysACEs TableDefs so row & index encoding uses the single schema path.
         TableDefinition objectsDef = DecodeSinglePageTableDef(pages[2], 2, d);
         TableDefinition acesDef = DecodeSinglePageTableDef(pages[3], 3, d);
 
-        // Page 17: MSysObjects data page (18 rows).
-        WriteMSysObjectsDataPage(pages[17], objectsDef, request, sidKeystream, d);
+        // Page 17: MSysObjects data page (8 rows in Jet 4 MDB, 18 rows in ACCDB).
+        WriteMSysObjectsDataPage(pages[17], objectsDef, objects, request, sidKeystream, d);
 
-        // Page 41: MSysACEs data page (36 rows).
-        WriteMSysAcesDataPage(pages[41], acesDef, sidKeystream, d);
+        // MSysACEs data page: page 18 (16 rows) in Jet 4 MDB, page 41 (36 rows) in ACCDB.
+        WriteMSysAcesDataPage(pages[acesDataPage], acesDef, aces, sidKeystream, d);
 
-        // Index leaf pages (3 populated + 7 empty).
-        WriteMSysObjectsParentIdNameIndex(pages[7], objectsDef, d);
-        WriteMSysObjectsIdIndex(pages[8], d);
-        WriteMSysAcesObjectIdIndex(pages[10], d);
+        // Index leaf pages (3 populated + 4 empty in Jet 4 MDB, + 3 complex empty in ACCDB).
+        WriteMSysObjectsParentIdNameIndex(pages[7], objectsDef, objects, d);
+        WriteMSysObjectsIdIndex(pages[8], objects, d);
+        WriteMSysAcesObjectIdIndex(pages[10], aces, acesDataPage, d);
 
         IndexPages.InitializeLeaf(pages[12], owner: 4, d);
         IndexPages.InitializeLeaf(pages[14], owner: 5, d);
         IndexPages.InitializeLeaf(pages[15], owner: 5, d);
         IndexPages.InitializeLeaf(pages[16], owner: 5, d);
-        IndexPages.InitializeLeaf(pages[20], owner: 18, d);
-        IndexPages.InitializeLeaf(pages[21], owner: 18, d);
-        IndexPages.InitializeLeaf(pages[22], owner: 18, d);
+        if (!isJet4)
+        {
+            IndexPages.InitializeLeaf(pages[20], owner: 18, d);
+            IndexPages.InitializeLeaf(pages[21], owner: 18, d);
+            IndexPages.InitializeLeaf(pages[22], owner: 18, d);
+        }
 
         return pages;
     }
@@ -299,6 +337,7 @@ public static class NewDatabaseSynthesizer
     private static void WriteMSysObjectsDataPage(
         Span<byte> page,
         TableDefinition def,
+        ReadOnlySpan<ObjectSeed> objects,
         NewDatabaseRequest request,
         ReadOnlySpan<byte> sidKeystream,
         FormatDescriptor d)
@@ -308,7 +347,7 @@ public static class NewDatabaseSynthesizer
         byte[] dateUpdateSame = dateCreate;
         byte[] dateUpdatePlus1 = EncodeUInt64LE(request.IncrementComplexTypeUpdateUlp ? request.CreationDateBits + 1 : request.CreationDateBits);
 
-        foreach (ObjectSeed row in InitialObjects)
+        foreach (ObjectSeed row in objects)
         {
             if (!TextCodec.TryEncode(row.Name, unicodeCompression: false, out byte[]? nameBytes, out string? textFailure) || nameBytes is null)
             {
@@ -354,11 +393,12 @@ public static class NewDatabaseSynthesizer
     private static void WriteMSysAcesDataPage(
         Span<byte> page,
         TableDefinition def,
+        ReadOnlySpan<AceSeed> aces,
         ReadOnlySpan<byte> sidKeystream,
         FormatDescriptor d)
     {
         DataPages.Initialize(page, owner: 3, d);
-        foreach (AceSeed ace in InitialAces)
+        foreach (AceSeed ace in aces)
         {
             // Column order matches MSysACEs TableDef alphabetical column blocks:
             // 0:ACM, 1:FInheritable, 2:ObjectId, 3:SID.
@@ -381,18 +421,18 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteMSysObjectsParentIdNameIndex(Span<byte> page, TableDefinition objectsDef, FormatDescriptor d)
+    private static void WriteMSysObjectsParentIdNameIndex(Span<byte> page, TableDefinition objectsDef, ReadOnlySpan<ObjectSeed> objects, FormatDescriptor d)
     {
         IndexPages.InitializeLeaf(page, owner: 2, d);
         ColumnDescriptor nameCol = objectsDef.Columns.Single(c => c.Name == "Name");
         FieldKeyCodec nameCodec = IndexKeys.CodecFor(nameCol, out KeyCodecRefusal refusal)
             ?? throw new InvalidOperationException($"Missing key codec for MSysObjects.Name: {refusal}");
 
-        var entries = new List<byte[]>(InitialObjects.Length);
+        var entries = new List<byte[]>(objects.Length);
         byte[] scratch = new byte[IndexKeys.MaxFieldBytes + nameCodec.MaxFieldBytes + d.IndexPage.LeafTrailerBytes];
-        for (int slot = 0; slot < InitialObjects.Length; slot++)
+        for (int slot = 0; slot < objects.Length; slot++)
         {
-            ObjectSeed row = InitialObjects[slot];
+            ObjectSeed row = objects[slot];
             if (!IndexKeys.TryWriteField(scratch, NativeTypes.Long, ascending: true, new KeyValue(KeyValueKind.Integer, Integer: row.ParentId), out int n1))
             {
                 throw new InvalidOperationException("Failed to encode ParentId index key.");
@@ -412,14 +452,14 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteMSysObjectsIdIndex(Span<byte> page, FormatDescriptor d)
+    private static void WriteMSysObjectsIdIndex(Span<byte> page, ReadOnlySpan<ObjectSeed> objects, FormatDescriptor d)
     {
         IndexPages.InitializeLeaf(page, owner: 2, d);
-        var entries = new List<byte[]>(InitialObjects.Length);
+        var entries = new List<byte[]>(objects.Length);
         byte[] scratch = new byte[IndexKeys.MaxFieldBytes + d.IndexPage.LeafTrailerBytes];
-        for (int slot = 0; slot < InitialObjects.Length; slot++)
+        for (int slot = 0; slot < objects.Length; slot++)
         {
-            ObjectSeed row = InitialObjects[slot];
+            ObjectSeed row = objects[slot];
             if (!IndexKeys.TryWriteField(scratch, NativeTypes.Long, ascending: true, new KeyValue(KeyValueKind.Integer, Integer: row.Id), out int n))
             {
                 throw new InvalidOperationException("Failed to encode Id index key.");
@@ -434,19 +474,19 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteMSysAcesObjectIdIndex(Span<byte> page, FormatDescriptor d)
+    private static void WriteMSysAcesObjectIdIndex(Span<byte> page, ReadOnlySpan<AceSeed> aces, uint acesDataPage, FormatDescriptor d)
     {
         IndexPages.InitializeLeaf(page, owner: 3, d);
-        var entries = new List<byte[]>(InitialAces.Length);
+        var entries = new List<byte[]>(aces.Length);
         byte[] scratch = new byte[IndexKeys.MaxFieldBytes + d.IndexPage.LeafTrailerBytes];
-        for (int slot = 0; slot < InitialAces.Length; slot++)
+        for (int slot = 0; slot < aces.Length; slot++)
         {
-            AceSeed ace = InitialAces[slot];
+            AceSeed ace = aces[slot];
             if (!IndexKeys.TryWriteField(scratch, NativeTypes.Long, ascending: true, new KeyValue(KeyValueKind.Integer, Integer: ace.ObjectId), out int n))
             {
                 throw new InvalidOperationException("Failed to encode MSysACEs.ObjectId index key.");
             }
-            WriteLeafTrailer(scratch.AsSpan(n, 4), dataPage: 41, slot: (byte)slot);
+            WriteLeafTrailer(scratch.AsSpan(n, 4), dataPage: acesDataPage, slot: (byte)slot);
             entries.Add(scratch.AsSpan(0, n + 4).ToArray());
         }
         entries.Sort(static (a, b) => IndexKeys.Compare(a, b));
@@ -485,9 +525,9 @@ public static class NewDatabaseSynthesizer
         return bytes;
     }
 
-    private static TableDefSpec MSysObjectsSpec(uint sortTypeInfo) => new(
+    private static TableDefSpec MSysObjectsSpec(uint sortTypeInfo, uint rowCount) => new(
         TableType: SystemTableType,
-        RowCount: (uint)InitialObjects.Length,
+        RowCount: rowCount,
         AutoNumber: 0,
         MaxColumns: 17,
         VariableColumns: 11,
@@ -515,8 +555,8 @@ public static class NewDatabaseSynthesizer
         ],
         PhysicalIndexes:
         [
-            new([new(1, true, 0x01), new(2, true, 0x01)], new RowLocator(6, 16), 7, 0x81, EntryCount: 0, UniqueEntryCount: 18),
-            new([new(0, true, 0x01)], new RowLocator(6, 17), 8, 0x81, EntryCount: 0, UniqueEntryCount: 18),
+            new([new(1, true, 0x01), new(2, true, 0x01)], new RowLocator(6, 16), 7, 0x81, EntryCount: 0, UniqueEntryCount: rowCount),
+            new([new(0, true, 0x01)], new RowLocator(6, 17), 8, 0x81, EntryCount: 0, UniqueEntryCount: rowCount),
         ],
         LogicalIndexes:
         [
@@ -534,9 +574,9 @@ public static class NewDatabaseSynthesizer
             new(12, new RowLocator(6, 6), new RowLocator(6, 7)),
         ]);
 
-    private static TableDefSpec MSysAcesSpec(uint sortTypeInfo) => new(
+    private static TableDefSpec MSysAcesSpec(uint sortTypeInfo, uint rowCount, uint uniqueObjectCount) => new(
         TableType: SystemTableType,
-        RowCount: (uint)InitialAces.Length,
+        RowCount: rowCount,
         AutoNumber: 0,
         MaxColumns: 4,
         VariableColumns: 1,
@@ -551,7 +591,7 @@ public static class NewDatabaseSynthesizer
         ],
         PhysicalIndexes:
         [
-            new([new(0, true, 0x01)], new RowLocator(9, 2), 10, 0x88, EntryCount: 0, UniqueEntryCount: 18),
+            new([new(0, true, 0x01)], new RowLocator(9, 2), 10, 0x88, EntryCount: 0, UniqueEntryCount: uniqueObjectCount),
         ],
         LogicalIndexes:
         [

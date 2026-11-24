@@ -734,6 +734,24 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
                 RawByRef(VarType.I4, (nint)(&commitI4)));
             AssertInvokeNotModelled(engineObj, "CommitTrans", InvokeKind.Method, "NotModelled.EngineTransactionArguments",
                 RawByRef(VarType.I4, (nint)(&commitI4)));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawByRef(VarType.Bstr, (nint)(&bstrPath1)), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"), RawInt32(64));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr(createPath4), RawByRef(VarType.Bstr, (nint)(&localeValid)), RawInt32(64));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr(createPath4), RawByRef(VarType.Variant, (nint)(&varNull)), RawInt16(64));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawByRef(VarType.Bstr, (nint)(&bstrPath1)), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"), RawInt16(64));
+            AssertInvokeNotModelled(engineObj, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr(createPath4), RawByRef(VarType.Variant, (nint)(&varNull)), RawInt32(192));
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawByRef(VarType.Bstr, (nint)(&bstrPath3)), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"), RawInt32(64));
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr(createPath4), RawByRef(VarType.Bstr, (nint)(&localeValid)), RawInt32(64));
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawBstr(createPath4), RawByRef(VarType.Variant, (nint)(&varNull)), RawInt16(64));
+            AssertInvokeNotModelled(ws, "CreateDatabase", InvokeKind.Method, "NotModelled.CreateDatabaseArgumentType",
+                RawByRef(VarType.Bstr, (nint)(&bstrPath3)), RawBstr(";LANGID=0x0409;CP=1252;COUNTRY=0"), RawInt32(192));
             Ok(Method(mdbRs, "Close"));
             Ok(Method(mdb, "Close"));
             Ok(Method(engMdb, "Close"));
