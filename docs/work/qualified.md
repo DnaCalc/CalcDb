@@ -1232,9 +1232,29 @@ is summarised in [qualification-report.md](qualification-report.md).
   fk-* (11), alt-check-* (6), uq-* (4), alt-uq-* (5), alt-pk-* (5), alt-fk-* (3). The organizer read the parent's `.rB`
   and the changed pages in fk-inline-accdb-dao, the untouched TDEF and MSysACEs in alt-check-empty-accdb-ado, the
   unchanged file of alt-check-empty-accdb-dao and the second CHECK's pages in alt-check-two-accdb-ado.
+- **Built** (ddl3a 125f02d1, ddl3b 2a9112ef): the logical index block's bytes 21 and 22 are the update and delete
+  actions, `04 04` on an index no relationship uses, `00 00` on a plain FK, `00 01` with ON DELETE CASCADE; the Type 8
+  row's MSysACEs grant Admin `0x000F00FE` and Users `0x000FFFFF`. Through ADO an unnamed column CHECK in CREATE TABLE
+  fails 3292 and writes nothing, through DAO 3290 (`evidence/r-q-cat-txn-lock/ii11-ado-check-constraint`, seq 23).
 - **Open**: ON UPDATE CASCADE and SET NULL; a parent with several FKs or a self-reference (the names after `.rB`); a
-  CHECK on a table whose LvProp already holds column properties (NOT NULL); CHECK inside CREATE TABLE; DROP CONSTRAINT,
-  DROP INDEX, ALTER COLUMN.
+  second negative MSysObjects Id (a second relationship, or one beside a Type 9 CHECK); a 1-to-1 FK; ALTER TABLE ADD
+  CONSTRAINT FOREIGN KEY through ADO or with orphan rows (3379); a CHECK on a table whose LvProp already holds column
+  properties (NOT NULL); CHECK inside CREATE TABLE; DROP CONSTRAINT, DROP INDEX, ALTER COLUMN.
+
+### R-FMT-2, R-CRASH-1 Publication (W-05, task zx68): fixed BINARY pads with zeros, GUID is 16 raw bytes, a row keeps every column, the ACCDB commit counter is two bytes
+
+- **Claim**: a fixed BINARY(n) value shorter than n is stored right-padded with zero bytes; a variable GUID field stores
+  its 16 bytes; a row written after its last column was created has C = MaxColumns even when trailing fixed Decimal
+  columns are Null (the shorter rows of the r-fmt-2b fixtures were written before `CreateField`); the ACCDB commit counter
+  at page 0 offset 0xE02 is a little-endian u16 that carries past 0xFF.
+- **Conditions**: ACCDB and Jet 4 MDB for the values; ACCDB for the counter (the Jet 4 MDB carry past 0xFF is not seen
+  and stays refused); DAO, ADO and SQL writes.
+- **Records**: retained fixture `3616122c` (`probes/r-oledb-odbc/create-v2-accdb`, Items.Bin: 7 bytes padded to 16;
+  Items.G), `evidence/r-oledb-odbc/txn-held-rows` calls 149-177; `evidence/r-fmt-1/create-accdb-guid`; the row-rebuild
+  corpus test over all retained fixtures (`probes/r-fmt-2b/create-w-accdb` for the pre-column rows);
+  `evidence/r-q19-growth-open/split-uncovered-right-leaf-below` page 0 (0x05B5 to 0x0940), `evidence/r-q8-header-counter`.
+  Built in publication (18c274e3).
+- **Open**: an empty BINARY value and a fixed field set to Null (r-q36); the counter at 0xFFFF.
 
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.
