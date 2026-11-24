@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 using CalcDb.Format;
@@ -110,7 +111,7 @@ public class ExpressionSchema
 /// borrows its operands). The steady per-row path allocates no managed memory (The Plan §3.2). Not thread-safe: one
 /// evaluation at a time, as one recordset uses it.
 /// </summary>
-public sealed unsafe class BoundExpression : IDisposable
+public sealed unsafe partial class BoundExpression : IDisposable
 {
     private readonly Instruction[] _program;
     private readonly NativeVariant[] _constants;
@@ -196,21 +197,33 @@ public sealed unsafe class BoundExpression : IDisposable
         /// <summary>x Between low And high: GreaterOrEqual, LessOrEqual, And; the same with the bounds exchanged; Or.</summary>
         Between,
 
-        /// <summary>InStr([start,] string1, string2[, compare]): 2..4 arguments (r-expr-1b/str-instr-compare-modes, r-str-ado-act/str-projection).</summary>
-        InStr,
+        /// <summary>Pop IIf condition and jump to <see cref="Instruction.Operand"/> if false/Null (lazy IIf).</summary>
+        JumpIfFalse,
 
-        /// <summary>StrComp(string1, string2[, compare]): 2..3 arguments (r-expr-1b/str-strcomp-and-text-operators, r-sort-3b/lg-compare-ops).</summary>
-        StrComp,
+        /// <summary>Unconditional jump to <see cref="Instruction.Operand"/> (skip false branch of IIf).</summary>
+        Jump,
+
+        /// <summary>Reached only when 2-argument IIf takes its omitted false branch: names NotModelled.IIfMissingFalsePart.</summary>
+        IIfMissingFalse,
+
+        /// <summary>Expression-layer function call dispatched by <see cref="Instruction.Function"/> with <see cref="Instruction.Operand"/> arguments.</summary>
+        CallFunction,
     }
 
     [StructLayout(LayoutKind.Auto)]
-    private readonly record struct Instruction(Op Op, int Operand, int Descriptor, bool Flag = false);
+    private readonly record struct Instruction(Op Op, int Operand, int Descriptor, bool Flag = false, ExprFunction Function = ExprFunction.None);
 
     [StructLayout(LayoutKind.Auto)]
     private struct Slot
     {
         public NativeVariant Value;
         public bool Owned;
+
+        /// <summary>
+        /// True when a VT_I2 value originated from a Boolean-typed expression function (CBool, IsNull, IsEmpty, IsError,
+        /// IsNumeric, IsDate) or stored Yes/No field so inner VarType/TypeName report 11/"Boolean" while DAO projection stays VT_I2.
+        /// </summary>
+        public bool BooleanTag;
     }
 
     /// <summary>
@@ -351,6 +364,7 @@ public sealed unsafe class BoundExpression : IDisposable
         {
             Instruction ins = _program[pc];
             ScalarOutcome r;
+            bool booleanTag = false;
             switch (ins.Op)
             {
                 case Op.LoadField:
@@ -364,24 +378,65 @@ public sealed unsafe class BoundExpression : IDisposable
                 case Op.LoadSlot:
                     stack[sp].Value = row!.Slot(ins.Operand);
                     stack[sp].Owned = false;
+                    stack[sp].BooleanTag = stack[sp].Value.Vt == (ushort)VarType.Bool;
                     sp++;
                     continue;
                 case Op.LoadConstant:
                     stack[sp].Value = _constants[ins.Operand];
                     stack[sp].Owned = false;
+                    stack[sp].BooleanTag = false;
                     sp++;
                     continue;
                 case Op.Unary:
-                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 1].Value, _active);
+                {
+                    bool prevBool = stack[sp - 1].BooleanTag;
+                    ScalarDescriptor desc = _descriptors[ins.Descriptor];
+                    NativeVariant input = stack[sp - 1].Value;
+                    r = ScalarKernel.Apply(desc, input, _active);
+                    if (!r.Succeeded
+                        && _active.FoldsAtOpen
+                        && desc.Operation == ScalarOperation.Negate
+                        && r.Failure.Kind == ScalarFailureKind.Failed
+                        && r.Failure.Number == AceError.Overflow)
+                    {
+                        // r-expr-1b/arith-overflow-promotion (#187/#192, #211/#216): during open-time folding,
+                        // VarType(-CInt(-32768)) is 3 ("Long") and VarType(-CLng(-2147483648)) is 5 ("Double");
+                        // oleaut32 VarNeg widens Integer -32768 -> Long 32768 and Long -2147483648 -> Double 2147483648.
+                        if (input.Vt == (ushort)VarType.I2 && unchecked((short)input.Int64) == short.MinValue)
+                        {
+                            r = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 32768 });
+                        }
+                        else if (input.Vt == (ushort)VarType.I4 && unchecked((int)input.Int64) == int.MinValue)
+                        {
+                            r = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.R8, Double = 2147483648.0 });
+                        }
+                    }
                     Release(ref stack[sp - 1]);
                     sp--;
+                    booleanTag = desc.Operation == ScalarOperation.CVar ? prevBool : ins.Flag;
                     break;
+                }
                 case Op.Binary:
-                    r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 2].Value, stack[sp - 1].Value, _active);
+                {
+                    ScalarDescriptor desc = _descriptors[ins.Descriptor];
+                    NativeVariant left = stack[sp - 2].Value;
+                    NativeVariant right = stack[sp - 1].Value;
+                    r = ScalarKernel.Apply(desc, left, right, _active);
+                    if (r.Succeeded
+                        && desc.Operation == ScalarOperation.Add
+                        && left.Vt == (ushort)VarType.UI1
+                        && right.Vt == (ushort)VarType.UI1
+                        && r.Value.Vt == (ushort)VarType.I2)
+                    {
+                        // r-expr-1/b-mixed-precedence (#135/#136/#275): stored Byte + Byte overflowing 255 widens
+                        // to VT_I4 (Long), not oleaut32 VarAdd's VT_I2 (CByte returns VT_I2 so it stays Integer).
+                        r = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = unchecked((short)r.Value.Int64) });
+                    }
                     Release(ref stack[sp - 1]);
                     Release(ref stack[sp - 2]);
                     sp -= 2;
                     break;
+                }
                 case Op.Ternary:
                     r = ScalarKernel.Apply(_descriptors[ins.Descriptor], stack[sp - 3].Value, stack[sp - 2].Value, stack[sp - 1].Value, _active);
                     Release(ref stack[sp - 1]);
@@ -408,15 +463,34 @@ public sealed unsafe class BoundExpression : IDisposable
                 case Op.In:
                     r = In(ref sp, ins);
                     break;
-                case Op.InStr:
-                    if (!InStr(ref sp, ins, out r))
+                case Op.JumpIfFalse:
+                    if (!EvalIIfCondition(ref sp, ins.Descriptor, out bool truth))
                     {
                         Unwind(sp);
                         return false;
                     }
-                    break;
-                case Op.StrComp:
-                    r = StrComp(ref sp, ins);
+                    if (!truth)
+                    {
+                        pc = ins.Operand - 1;
+                    }
+                    continue;
+                case Op.Jump:
+                    pc = ins.Operand - 1;
+                    continue;
+                case Op.IIfMissingFalse:
+                    LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IIfMissingFalsePart", "IIf with 2 arguments and a false or Null condition is not recorded");
+                    Unwind(sp);
+                    return false;
+                case Op.CallFunction:
+                    if (!CallFunction(ref sp, ins, out r, out booleanTag, out bool pushed))
+                    {
+                        Unwind(sp);
+                        return false;
+                    }
+                    if (pushed)
+                    {
+                        continue;
+                    }
                     break;
                 default:
                     r = Between(ref sp, ins);
@@ -430,6 +504,7 @@ public sealed unsafe class BoundExpression : IDisposable
             }
             stack[sp].Value = r.Value;
             stack[sp].Owned = r.Type == VarType.Bstr;
+            stack[sp].BooleanTag = booleanTag;
             sp++;
         }
         return true;
@@ -765,6 +840,7 @@ public sealed unsafe class BoundExpression : IDisposable
     {
         ColumnDescriptor column = _fields[index].Column;
         slot.Owned = false;
+        slot.BooleanTag = false;
         if (cursor is null)
         {
             slot.Value = new NativeVariant { Vt = (ushort)VarType.Null };
@@ -830,6 +906,7 @@ public sealed unsafe class BoundExpression : IDisposable
             LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.FieldType", $"field {column.Name} gives a {v.Kind} value");
             return false;
         }
+        slot.BooleanTag = slot.Value.Vt == (ushort)VarType.Bool;
         return true;
     }
 
@@ -882,6 +959,7 @@ public sealed unsafe class BoundExpression : IDisposable
             slot.Owned = false;
         }
         slot.Value = default;
+        slot.BooleanTag = false;
     }
 
     private void Unwind(int sp)
@@ -983,8 +1061,22 @@ public sealed unsafe class BoundExpression : IDisposable
 
         private Bound Literal(SyntaxNode node)
         {
+            NativeVariant value = node.Value;
+            if (node.Literal == LiteralKind.Number
+                && value.Vt == (ushort)VarType.Decimal
+                && node.Text is { } text
+                && decimal.TryParse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal dec)
+                && decimal.Truncate(dec) == dec
+                && dec >= int.MinValue && dec <= int.MaxValue)
+            {
+                // r-wire/expr-literal-tags (#421 1E0, #967 -0.0, #1003 0.0), r-expr-1b/num-abs-sgn-int-fix (#44, #563),
+                // r-def-expr-sql/expr-literals-numeric-suffix-radix (#176 1E3, #240 .5E1, #1640 1.0, #1832 1E0, #1896 0.0E5):
+                // a decimal-point or exponent numeric literal whose exact value fits Int32 evaluates as VT_I4 (Long).
+                // Narrowed at bind time so Syntax preserves ScalarLiterals' VT_DECIMAL for SqlBinder.StaticNegate.
+                value = new NativeVariant { Vt = (ushort)VarType.I4, Int64 = unchecked((uint)(int)dec) };
+            }
             Program.Add(new Instruction(Op.LoadConstant, Constants.Count, 0));
-            Constants.Add(node.Value);
+            Constants.Add(value);
             return node.Literal switch
             {
                 LiteralKind.Boolean => new Bound(StaticType.Boolean, OperandContract.BooleanLiteral, 1),
@@ -1062,6 +1154,18 @@ public sealed unsafe class BoundExpression : IDisposable
 
         private Bound Unary(SyntaxNode node, int at)
         {
+            if (node.Operation == ScalarOperation.Negate
+                && node.Left is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal, Text: { } text }
+                && decimal.TryParse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal dec)
+                && dec == 2147483648m)
+            {
+                // r-wire/expr-literal-tags (#967), r-expr-1b/arith-overflow-promotion (#140/#145):
+                // -2147483648 is VT_I4 (Long int.MinValue), while 2147483648 and -2147483649 stay VT_DECIMAL.
+                // Folded at bind time so Syntax keeps Unary(Negate, Literal(2147483648)) for SqlBinder.StaticNegate.
+                Program.Add(new Instruction(Op.LoadConstant, Constants.Count, 0));
+                Constants.Add(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = unchecked((uint)int.MinValue) });
+                return new Bound(StaticType.Value, OperandContract.Literal, 1);
+            }
             Bound operand = Bind(node.Left!, at);
             Program.Add(new Instruction(Op.Unary, 0, Descriptor(node.Operation, node.Offset, 1, operand.Contract, default)));
             return new Bound(node.Operation == ScalarOperation.Not ? StaticType.Boolean : StaticType.Value, OperandContract.Expression, operand.Depth);
@@ -1170,6 +1274,12 @@ public sealed unsafe class BoundExpression : IDisposable
             return new Bound(StaticType.Boolean, OperandContract.Expression, Math.Max(x.Depth, Math.Max(low.Depth + 1, high.Depth + 2)));
         }
 
+        private int _iifDepth;
+
+        private BindError TooComplex(string name, int site, string openName, string openDetail) => Query
+            ? new BindError(ExpressionFailure.Ace(ExpressionPhase.Bind, 3075, ExpressionMessages.ExpressionTooComplex) with { Site = site, Subject = name })
+            : Open(openName, openDetail);
+
         private Bound Call(SyntaxNode node, int at)
         {
             FunctionInventory.Entry entry = FunctionInventory.Resolve(node.Text!) is { } e ? e : throw Open("NotModelled.Function", $"function {node.Text} is not in CalcDb's inventory yet");
@@ -1185,6 +1295,15 @@ public sealed unsafe class BoundExpression : IDisposable
                 case FunctionAvailability.Domain:
                     throw Fail(3072, ExpressionMessages.FunctionNotAvailable);
             }
+            ExprFunction fn = FunctionInventory.ResolveExpressionFunction(node.Text!);
+            if (fn == ExprFunction.IIf)
+            {
+                return BindIIf(node, at);
+            }
+            if (fn != ExprFunction.None)
+            {
+                return BindExpressionFunction(fn, node, entry, at);
+            }
             int n = node.Items.Count;
             var contracts = new OperandContract[Math.Max(n, 2)];
             int depth = 1;
@@ -1194,39 +1313,238 @@ public sealed unsafe class BoundExpression : IDisposable
                 contracts[i] = arg.Contract;
                 depth = Math.Max(depth, arg.Depth + i);
             }
-            if (node.Text!.Equals("InStr", StringComparison.OrdinalIgnoreCase))
-            {
-                if (n is < 2 or > 4)
-                {
-                    throw WrongArity(node.Text!, n, node.Offset);
-                }
-                int first = Descriptors.Count;
-                Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[0] : default, default);
-                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 1 : 0], default);
-                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 2 : 1], default);
-                Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 4 ? contracts[3] : default, default);
-                Program.Add(new Instruction(Op.InStr, n, first));
-                return new Bound(entry.Type, OperandContract.FunctionResult, depth);
-            }
-            if (node.Text!.Equals("StrComp", StringComparison.OrdinalIgnoreCase))
-            {
-                if (n is < 2 or > 3)
-                {
-                    throw WrongArity(node.Text!, n, node.Offset);
-                }
-                int first = Descriptors.Count;
-                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
-                Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[1], default);
-                Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
-                Program.Add(new Instruction(Op.StrComp, n, first));
-                return new Bound(entry.Type, OperandContract.FunctionResult, depth);
-            }
             if (n is < 1 or > 3)
             {
                 throw WrongArity(node.Text!, n, node.Offset);
             }
-            int d = Descriptor(entry.Operation, node.Offset, n, contracts[0], contracts[1]);
-            Program.Add(new Instruction(n switch { 1 => Op.Unary, 2 => Op.Binary, _ => Op.Ternary }, 0, d));
+            ScalarOperation op = entry.Operation!.Value;
+            int d = Descriptor(op, node.Offset, n, contracts[0], contracts[1]);
+            bool booleanTag = n == 1 && op is ScalarOperation.CBool or ScalarOperation.IsNull or ScalarOperation.IsEmpty or ScalarOperation.IsError;
+            Program.Add(new Instruction(n switch { 1 => Op.Unary, 2 => Op.Binary, _ => Op.Ternary }, 0, d, booleanTag));
+            return new Bound(entry.Type, OperandContract.FunctionResult, depth);
+        }
+
+        private Bound BindIIf(SyntaxNode node, int at)
+        {
+            int n = node.Items.Count;
+            if (n is < 2 or > 3)
+            {
+                throw WrongArity(node.Text!, n, node.Offset);
+            }
+            if (_iifDepth == 0)
+            {
+                int maxNested = MaxIIfDepth(node);
+                if (maxNested >= 20)
+                {
+                    throw TooComplex(node.Text!, node.Offset, "NotModelled.IIfNestingDepth", $"IIf nested {maxNested} deep in a criteria");
+                }
+                if (maxNested > 10)
+                {
+                    throw Open("NotModelled.IIfNestingDepth", $"IIf nested {maxNested} deep (10 succeeds and 20 fails 3075 in r-expr-1b/cond-iif-forms)");
+                }
+            }
+            _iifDepth++;
+            try
+            {
+                Bound cond = Bind(node.Items[0], at);
+                int jumpFalseAt = Program.Count;
+                Program.Add(default);
+                Bound trueBranch = Bind(node.Items[1], at);
+                int jumpEndAt = Program.Count;
+                Program.Add(default);
+                int falseStart = Program.Count;
+                Program[jumpFalseAt] = new Instruction(Op.JumpIfFalse, falseStart, Descriptor(ScalarOperation.CDbl, node.Offset, 1, cond.Contract, default));
+                int falseDepth;
+                if (n == 3)
+                {
+                    falseDepth = Bind(node.Items[2], at).Depth;
+                }
+                else
+                {
+                    Program.Add(new Instruction(Op.IIfMissingFalse, 0, 0));
+                    falseDepth = 1;
+                }
+                Program[jumpEndAt] = new Instruction(Op.Jump, Program.Count, 0);
+                return new Bound(StaticType.Unknown, OperandContract.FunctionResult, Math.Max(cond.Depth, Math.Max(trueBranch.Depth, falseDepth)));
+            }
+            finally
+            {
+                _iifDepth--;
+            }
+        }
+
+        private static int MaxIIfDepth(SyntaxNode? node)
+        {
+            if (node is null)
+            {
+                return 0;
+            }
+            int child = Math.Max(MaxIIfDepth(node.Left), MaxIIfDepth(node.Right));
+            for (int i = 0; i < node.Items.Count; i++)
+            {
+                child = Math.Max(child, MaxIIfDepth(node.Items[i]));
+            }
+            return node.Kind == SyntaxKind.Call && node.Text!.Equals("IIf", StringComparison.OrdinalIgnoreCase)
+                ? 1 + child
+                : child;
+        }
+
+        private Bound BindExpressionFunction(ExprFunction fn, SyntaxNode node, FunctionInventory.Entry entry, int at)
+        {
+            int n = node.Items.Count;
+            switch (fn)
+            {
+                case ExprFunction.Switch:
+                    if (n == 0)
+                    {
+                        // r-expr-1/e-conditional-selection: Switch() fails 5 (Invalid procedure call) at evaluation.
+                        Program.Add(new Instruction(Op.CallFunction, 0, 0, Function: fn));
+                        return new Bound(entry.Type, OperandContract.FunctionResult, 1);
+                    }
+                    if ((n & 1) != 0)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    if (n >= 40)
+                    {
+                        throw TooComplex(node.Text!, node.Offset, "NotModelled.SwitchArityLimit", $"Switch with {n} arguments in a criteria");
+                    }
+                    if (n > 6)
+                    {
+                        throw Open("NotModelled.SwitchArityLimit", $"Switch with {n} arguments (up to 6 succeeds and 40 fails 3075 in r-expr-1b/cond-switch-choose-forms)");
+                    }
+                    break;
+                case ExprFunction.Choose:
+                    if (n < 2)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    if (n >= 101)
+                    {
+                        throw TooComplex(node.Text!, node.Offset, "NotModelled.ChooseArityLimit", $"Choose with {n} arguments in a criteria");
+                    }
+                    if (n > 21)
+                    {
+                        throw Open("NotModelled.ChooseArityLimit", $"Choose with {n} arguments (up to 21 succeeds and 101 fails 3075 in r-expr-1b/cond-switch-choose-forms)");
+                    }
+                    break;
+                case ExprFunction.InStr or ExprFunction.InStrB:
+                    if (n is < 2 or > 4)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.StrComp or ExprFunction.MidDollar or ExprFunction.MidB:
+                    if (n is < 2 or > 3)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.String or ExprFunction.StringDollar or ExprFunction.LeftDollar or ExprFunction.RightDollar or ExprFunction.LeftB or ExprFunction.RightB:
+                    if (n != 2)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.Replace:
+                    if (n is < 3 or > 6)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                default:
+                    if (n != 1)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+            }
+            var contracts = new OperandContract[Math.Max(n, 2)];
+            int depth = 1;
+            for (int i = 0; i < n; i++)
+            {
+                Bound arg = Bind(node.Items[i], at + i);
+                contracts[i] = arg.Contract;
+                depth = Math.Max(depth, arg.Depth + i);
+            }
+            int first = Descriptors.Count;
+            switch (fn)
+            {
+                case ExprFunction.InStr or ExprFunction.InStrB:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[0] : default, default);
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 1 : 0], default);
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[n >= 3 ? 2 : 1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 4 ? contracts[3] : default, default);
+                    break;
+                case ExprFunction.StrComp:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
+                    break;
+                case ExprFunction.Switch:
+                    for (int i = 0; i < n; i += 2)
+                    {
+                        Descriptor(ScalarOperation.CBool, node.Offset, 1, contracts[i], default);
+                    }
+                    break;
+                case ExprFunction.Choose:
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.String or ExprFunction.StringDollar:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    break;
+                case ExprFunction.VarType or ExprFunction.TypeName:
+                    break;
+                case ExprFunction.Space or ExprFunction.SpaceDollar or ExprFunction.ChrW or ExprFunction.ChrWDollar or ExprFunction.ChrDollar:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.Trim or ExprFunction.TrimDollar or ExprFunction.LTrim or ExprFunction.LTrimDollar or ExprFunction.RTrim or ExprFunction.RTrimDollar
+                    or ExprFunction.Asc or ExprFunction.AscW or ExprFunction.LCase or ExprFunction.LCaseDollar or ExprFunction.LenB or ExprFunction.StrReverse:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.Sqr or ExprFunction.Exp or ExprFunction.Log or ExprFunction.Atn
+                    or ExprFunction.Hex or ExprFunction.HexDollar or ExprFunction.Oct or ExprFunction.OctDollar or ExprFunction.IsNumeric:
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.IsDate:
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.CVDate:
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.LeftDollar:
+                    Descriptor(ScalarOperation.Left, node.Offset, 2, contracts[0], contracts[1]);
+                    break;
+                case ExprFunction.RightDollar:
+                    Descriptor(ScalarOperation.Right, node.Offset, 2, contracts[0], contracts[1]);
+                    break;
+                case ExprFunction.MidDollar:
+                    Descriptor(ScalarOperation.Mid, node.Offset, n, contracts[0], contracts[1]);
+                    break;
+                case ExprFunction.UCaseDollar:
+                    Descriptor(ScalarOperation.UCase, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.LeftB or ExprFunction.RightB:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    break;
+                case ExprFunction.MidB:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
+                    break;
+                case ExprFunction.Replace:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[2], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 4 ? contracts[3] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 5 ? contracts[4] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 6 ? contracts[5] : default, default);
+                    break;
+            }
+            Program.Add(new Instruction(Op.CallFunction, n, first, Function: fn));
             return new Bound(entry.Type, OperandContract.FunctionResult, depth);
         }
 
