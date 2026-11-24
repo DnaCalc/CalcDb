@@ -175,9 +175,10 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
         ProfileSelector.Select(storedHeader, out FileProfile? profile, descriptor) == ProfileRefusal.None && profile!.IsAce;
 
     /// <summary>
-    /// Increment the ACCDB page-0 commit counter at <see cref="HeaderRules.CommitCounter"/> (offset 3586) by 1
-    /// (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits). Refuses non-ACCDB
-    /// pages and overflow past 255 (wrap/carry past 255 is unobserved).
+    /// Increment the ACCDB page-0 commit counter at <see cref="HeaderRules.CommitCounter"/> (u16LE at [3586, 3588)) by 1
+    /// (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
+    /// evidence/r-q19-growth-open/split-uncovered-right-leaf-below). Refuses non-ACCDB pages and overflow past 65,535
+    /// (wrap past 65,535 is unobserved).
     /// </summary>
     public static bool TryIncrementCommitCounter(Span<byte> page0, FormatDescriptor d, out string? failure)
     {
@@ -194,9 +195,9 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
         }
         FieldRule rule = d.Header.CommitCounter;
         ulong current = rule.Read(page0);
-        if (current >= 255)
+        if (current >= ushort.MaxValue)
         {
-            failure = $"page 0 commit counter at offset {rule.Offset} is {current}: wrap or carry past 255 is not observed (R-CRASH-1)";
+            failure = $"page 0 commit counter at offset {rule.Offset} is {current}: wrap past {ushort.MaxValue} is not observed (R-CRASH-1)";
             return false;
         }
         rule.Write(page0, current + 1);

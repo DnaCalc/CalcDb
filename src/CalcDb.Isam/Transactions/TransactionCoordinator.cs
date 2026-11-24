@@ -969,9 +969,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
             }
         }
-        if (incrementPage0 && CommitCounterAt(cache) >= byte.MaxValue)
+        if (incrementPage0)
         {
-            return (MutationOpen.Publication, "ACCDB page-0 commit counter at offset 3586 is already 255: wrap or multi-byte carry is not observed (evidence/r-q8-header-counter)");
+            ulong current = CommitCounterAt(cache);
+            if (isAccdb)
+            {
+                if (current >= ushort.MaxValue)
+                {
+                    return (MutationOpen.Publication, $"ACCDB page-0 commit counter at offset 3586 is already {ushort.MaxValue}: wrap past {ushort.MaxValue} is not observed (evidence/r-q19-growth-open/split-uncovered-right-leaf-below)");
+                }
+            }
+            else if ((current & 0xFF) >= byte.MaxValue)
+            {
+                return (MutationOpen.Publication, "Jet 4 MDB page-0 commit counter low byte at offset 3586 is already 255: wrap or multi-byte carry is not observed (evidence/r-q27-autonumber-txn/ins-txn-rb-mdb)");
+            }
         }
         return (MutationOpen.None, null);
     }

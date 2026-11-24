@@ -105,7 +105,10 @@ public static class FieldEncoder
             failure = "a calculated column";
             return false;
         }
-        if (NativeTypes.FixedWidth(column.TypeCode) != bytes.Length)
+        int? expectedWidth = column.TypeCode == NativeTypes.Binary
+            ? (column.IsFixed && column.Length > 0 ? column.Length : null)
+            : NativeTypes.FixedWidth(column.TypeCode);
+        if (expectedWidth != bytes.Length)
         {
             failure = $"native type {column.TypeCode} has no fixed width of {bytes.Length}";
             return false;
@@ -130,6 +133,11 @@ public static class FieldEncoder
             case (NativeTypes.Double, NativeKind.Double) or (NativeTypes.DateTime, NativeKind.DateTime):
                 BinaryPrimitives.WriteUInt64LittleEndian(bytes, value.Bits);
                 return true;
+            case (NativeTypes.Binary, NativeKind.Binary) when value.Bytes is { Length: > 0 } raw && raw.Length <= bytes.Length:
+                // Fixed-width BINARY(n) (evidence/r-oledb-odbc r-oledb-odbc-v2-accdb.accdb Items.Bin): right-zero-padded to column.Length.
+                bytes.Clear();
+                raw.CopyTo(bytes);
+                return true;
             case (NativeTypes.Guid, NativeKind.Guid) when value.Bytes is { Length: 16 } guid:
                 guid.CopyTo(bytes);
                 return true;
@@ -153,7 +161,8 @@ public static class FieldEncoder
     /// <summary>
     /// Encode <paramref name="value"/>'s payload for the variable-length <paramref name="column"/> (II-04 §§5–7;
     /// W-05/growth-structural-closure). Supports in-row Text (via <see cref="TextCodec.TryEncode"/>), non-empty Binary,
-    /// and inline Memo/OLE payloads of 1 to <see cref="LongValuePlan.InlinePayloadMax"/> (64) bytes
+    /// 16-byte variable GUID (<c>evidence/r-fmt-1/create-accdb-guid</c>, <c>r-oledb-odbc-v2-accdb.accdb</c>), and inline
+    /// Memo/OLE payloads of 1 to <see cref="LongValuePlan.InlinePayloadMax"/> (64) bytes
     /// (<c>evidence/r-q19-growth-open/lv-inline-memo</c>, <c>lv-inline-ole</c>); refuses calculated columns, empty
     /// long values, payloads above 64 bytes (which require LVAL placement), Unicode-compressed Text/Memo, leading
     /// U+FEFF, and mismatched kinds.
@@ -211,6 +220,9 @@ public static class FieldEncoder
                 return TextCodec.TryEncode(value.Text ?? "", compressed, out bytes, out failure);
             case (NativeTypes.Binary, NativeKind.Binary) when value.Bytes is { Length: > 0 } raw:
                 bytes = raw.ToArray();
+                return true;
+            case (NativeTypes.Guid, NativeKind.Guid) when value.Bytes is { Length: 16 } guid:
+                bytes = guid.ToArray();
                 return true;
             default:
                 failure = $"a {value.Kind} value for variable native type {column.TypeCode}";

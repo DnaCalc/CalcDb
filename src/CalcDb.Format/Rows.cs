@@ -167,8 +167,8 @@ public readonly record struct EncodedField(bool IsNull, bool Boolean = false, by
 /// Writes <c>C = MaxColumns</c>, zero-initialized fixed area (5,140/5,140 newly inserted Null fixed fields are zero),
 /// contiguous variable payloads in <see cref="ColumnDescriptor.VariableIndex"/> order with immediately adjacent trailer
 /// (120,238/120,238 rows have zero padding), and the <c>ceil(C/8)</c>-byte mask with zero unused high bits. Refuses
-/// schemas or values whose ACE byte rules are not established (dropped columns, 0-fixed-width tables, trailing Null
-/// fixed Decimal, or rows past 4,060 bytes).
+/// schemas or values whose ACE byte rules are not established (dropped columns, 0-fixed-width tables, or rows past
+/// 4,060 bytes).
 /// </summary>
 public static class RowEncoder
 {
@@ -224,11 +224,6 @@ public static class RowEncoder
             {
                 if (field.IsNull)
                 {
-                    if (col.TypeCode == NativeTypes.Numeric && col.PhysicalNumber == c - 1)
-                    {
-                        failure = $"trailing Null fixed Decimal column {col.Name}: ACE trims C on some fixtures";
-                        return false;
-                    }
                     continue;
                 }
                 int width = NativeTypes.FixedWidth(col.TypeCode) ?? col.Length;

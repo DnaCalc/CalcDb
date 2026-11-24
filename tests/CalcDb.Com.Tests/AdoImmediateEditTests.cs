@@ -184,18 +184,19 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(2, Get(fId, "Value"));
             Assert.Equal("u2", Get(fS, "Value"));
 
-            // Upstream CalcDb.Isam (task zx68) refuses inserting a row into table T when unselected Yes/No column Y is Null
-            // (NotModelled.Edit.Publication). Assert the exact named refusal (zx68) and verify the remaining
-            // r-ado-1b/edit-update-args assertions on table T.
-            Outcome addNewY = Call(rs, "AddNew", "Code", "n9");
-            AssertError(addNewY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y"); // zx68
+            // r-ado-1b/edit-update-args #53-85: AddNew("Code", "n9") and AddNew/Code="n11"/Update("S", "u3") succeed
+            // with unselected Yes/No column Y materializing as False and trailing Null fixed Decimal N preserved.
+            Assert.Null(Call(rs, "AddNew", "Code", "n9").Failure);
             Assert.Equal(0, Get(rs, "EditMode"));
+            Assert.Equal(8, Get(fId, "Value"));
+            Assert.Same(DBNull.Value, Get(fS, "Value"));
 
             Assert.Null(Call(rs, "AddNew").Failure);
             Assert.Null(Put(fCode, "Value", "n11").Failure);
-            Outcome updAfterAddY = Call(rs, "Update", "S", "u3");
-            AssertError(updAfterAddY, HResults.E_NOTIMPL, expectedDescription: "NotModelled.Edit.Publication: a Null value for the Yes/No field Y"); // zx68
-            Assert.Null(Call(rs, "CancelUpdate").Failure);
+            Assert.Null(Call(rs, "Update", "S", "u3").Failure);
+            Assert.Equal(0, Get(rs, "EditMode"));
+            Assert.Equal(9, Get(fId, "Value"));
+            Assert.Equal("u3", Get(fS, "Value"));
 
             AssertError(Call(rs, "Update", "NoSuch", "x"), unchecked((int)0x800A0CC1), expectedHelpContext: 1240649u, expectedInfoGuid: IidRecordset);
             AssertError(Call(rs, "Update", Missing, "x"), unchecked((int)0x800A0BB9), expectedHelpContext: 1240641u, expectedInfoGuid: IidRecordset);
@@ -907,20 +908,17 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Equal(393216, Get(cnHeld, "Attributes"));
             Assert.Equal(1, Call(cnHeld, "BeginTrans").Value);
 
-            // Upstream CalcDb.Isam (task zx68) refuses republishing Items row 1 because of unselected BINARY(16) column
-            // Bin (NotModelled.Edit.Publication). Assert the exact zx68 refusal, cancel the edit, and verify the
-            // retaining Attributes=393216 CommitTrans/RollbackTrans/Close lifecycle from #146-161 and #177 without
-            // substituting another table.
+            // r-oledb-odbc/txn-held-rows #149-161, #177: Update succeeds with unselected BINARY(16) Bin, variable GUID G,
+            // and trailing Null fixed Decimal N; CommitTrans commits "tx3" and retains the transaction, then "tx4" is
+            // rolled back by RollbackTrans while keeping the retained transaction open (so Close fails 0x800A0CAE).
             Assert.Null(Put(fTxt, "Value", "tx3").Failure);
-            AssertError(
-                Call(h1, "Update"),
-                HResults.E_NOTIMPL,
-                expectedDescription: "NotModelled.Edit.Publication: field Bin: native type 9 has no fixed width of 16"); // zx68
-            Assert.Null(Call(h1, "CancelUpdate").Failure);
+            Assert.Null(Call(h1, "Update").Failure);
 
             Assert.Null(Call(cnHeld, "CommitTrans").Failure); // retains active txn (#151)
             Assert.Equal(4096, Get(cnHeld, "IsolationLevel")); // (#152)
-            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // retains active txn (#158)
+            Assert.Null(Put(fTxt, "Value", "tx4").Failure);
+            Assert.Null(Call(h1, "Update").Failure);
+            Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // rolls back tx4, retains active txn (#158)
             Assert.Null(Call(cnHeld, "RollbackTrans").Failure); // still in retained txn (#159)
             AssertError(Call(cnHeld, "Close"), unchecked((int)0x800A0CAE)); // (#177)
 
@@ -928,6 +926,15 @@ public sealed unsafe class AdoImmediateEditTests
             Release(flds);
             Assert.Null(Call(h1, "Close").Failure);
             Release(h1);
+
+            nint rk = (nint)Call(cnHeld, "Execute", "SELECT ID, Code, Txt FROM Items ORDER BY ID", Missing, 1).Value!;
+            nint rkFlds = (nint)Get(rk, "Fields")!;
+            nint rkTxt = (nint)Get(rkFlds, "Item", 2)!;
+            Assert.Equal("tx3", Get(rkTxt, "Value"));
+            Release(rkTxt);
+            Release(rkFlds);
+            Assert.Null(Call(rk, "Close").Failure);
+            Release(rk);
         }
         finally
         {

@@ -342,6 +342,92 @@ public sealed class CompareStopsTests : IDisposable
         Assert.Equal(CompareStops.AttemptMissingStop, byCase["f-edge/no-attempt"]);
     }
 
+    [Fact]
+    public void GroupByDetail_groups_matching_stop_by_description_from_excepInfo_and_errorInfo()
+    {
+        var store = new JobStore(_root);
+        DateTimeOffset runAt = new(2026, 11, 24, 6, 0, 0, TimeSpan.Zero);
+
+        StageAttempt(store, "f-a/pub-1", ModuleSha, runAt.AddSeconds(-10),
+            """
+            { "event": "invoke", "programPath": "4", "member": "Update", "invokeHresult": "0x80020009",
+              "excepInfo": { "scode": "0x80004001", "source": { "text": "CalcDb" },
+                "description": { "text": "NotModelled.Edit.Publication: a Null value for the Yes/No field Y" } } }
+            """);
+
+        StageAttempt(store, "f-b/pub-2", ModuleSha, runAt.AddSeconds(-9),
+            """
+            { "event": "invoke", "programPath": "5", "member": "Update", "invokeHresult": "0x80004001",
+              "errorInfo": { "present": true, "source": { "text": "CalcDb" },
+                "description": { "text": "NotModelled.Edit.Publication: a Null value for the Yes/No field Y" } } }
+            """);
+
+        StageAttempt(store, "f-a/pub-3", ModuleSha, runAt.AddSeconds(-8),
+            """
+            { "event": "invoke", "programPath": "6", "member": "Update", "invokeHresult": "0x80020009",
+              "excepInfo": { "scode": "0x80004001", "source": { "text": "CalcDb" },
+                "description": { "text": "NotModelled.Edit.Publication: field Bin: native type 9 has no fixed width of 16" } } }
+            """);
+
+        StageAttempt(store, "f-a/other-stop", ModuleSha, runAt.AddSeconds(-7),
+            """
+            { "event": "invoke", "programPath": "7", "member": "Execute", "invokeHresult": "0x80020009",
+              "excepInfo": { "scode": "0x80004001", "source": { "text": "CalcDb" },
+                "description": { "text": "NotModelled.Other: should not be included" } } }
+            """);
+
+        var run = new CompareSet.Run("detail-test", "calls.trace@11", ModuleSha, "src", runAt,
+            [
+                new("f-a", "f-a/pub-1", nameof(ComparisonStatus.Mismatched), 2, "Update", "4 $.invokeHresult [call]: expected \"0x00000000\" actual \"0x80020009\""),
+                new("f-b", "f-b/pub-2", nameof(ComparisonStatus.Mismatched), 2, "Update", "5 $.invokeHresult [call]: expected \"0x00000000\" actual \"0x80004001\""),
+                new("f-a", "f-a/pub-3", nameof(ComparisonStatus.Mismatched), 2, "Update", "6 $.invokeHresult [call]: expected \"0x00000000\" actual \"0x80020009\""),
+                new("f-a", "f-a/other-stop", nameof(ComparisonStatus.Mismatched), 2, "Execute", "7 $.invokeHresult [call]: expected \"0x00000000\" actual \"0x80020009\""),
+            ]);
+
+        CompareStops.Report report = CompareStops.Analyze(store, run);
+        CompareStops.DetailReport detail = CompareStops.GroupByDetail(report, "NotModelled.Edit.Publication");
+
+        Assert.Equal("NotModelled.Edit.Publication", detail.Stop);
+        Assert.Equal(3, detail.Questions);
+        Assert.Equal(2, detail.Folders);
+        Assert.Equal(2, detail.Rows.Count);
+
+        Assert.Equal("a Null value for the Yes/No field Y", detail.Rows[0].Detail);
+        Assert.Equal(2, detail.Rows[0].Questions);
+        Assert.Equal(2, detail.Rows[0].Folders);
+        Assert.Equal("f-a/pub-1", detail.Rows[0].Example);
+
+        Assert.Equal("field Bin: native type 9 has no fixed width of 16", detail.Rows[1].Detail);
+        Assert.Equal(1, detail.Rows[1].Questions);
+        Assert.Equal(1, detail.Rows[1].Folders);
+        Assert.Equal("f-a/pub-3", detail.Rows[1].Example);
+
+        string rendered = CompareStops.RenderDetail(detail, byFolder: true);
+        Assert.Contains("3 questions stopped at NotModelled.Edit.Publication (2 folders)", rendered, StringComparison.Ordinal);
+        Assert.Contains("a Null value for the Yes/No field Y", rendered, StringComparison.Ordinal);
+        Assert.Contains("field Bin: native type 9 has no fixed width of 16", rendered, StringComparison.Ordinal);
+        Assert.Contains("by folder:", rendered, StringComparison.Ordinal);
+        Assert.Contains("f-a (2 questions):", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("should not be included", rendered, StringComparison.Ordinal);
+
+        CompareStops.DetailReport empty = CompareStops.GroupByDetail(report, "NotModelled.NonExistent");
+        Assert.Equal(0, empty.Questions);
+        Assert.Empty(empty.Rows);
+        Assert.Contains("no matching questions", CompareStops.RenderDetail(empty, byFolder: false), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NormalizeDetail_handles_null_empty_bare_prefix_and_multiline()
+    {
+        const string stop = "NotModelled.Edit.Publication";
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, null));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, "   \r\n\t "));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, stop + ":"));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, stop + ":   "));
+        Assert.Equal("line1 line2 line3", CompareStops.NormalizeDetail(stop, stop + ": line1\r\nline2\nline3"));
+        Assert.Equal("other detail", CompareStops.NormalizeDetail(stop, "  other detail  "));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

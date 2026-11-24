@@ -241,21 +241,39 @@ public sealed class CounterAndLandingTests
             Assert.Equal(2, rig2.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
         }
 
-        // 2. Overflow at 255: refused by name, file unchanged (never wraps to 0)
+        // 2. Carry past 255 into byte 3587 (evidence/r-q19-growth-open/split-uncovered-right-leaf-below): 0x01ff -> 0x0200
+        using (var rigCarry = new Rig(EditFixture))
+        {
+            byte[] page0 = rigCarry.File.Image.Snapshot().AsSpan(0, D.PageSize).ToArray();
+            D.Header.CommitCounter.Write(page0, 0x01FF);
+            WriteRawPage(rigCarry.File, 0, page0);
+            (TableDefinition gCarry, _) = rigCarry.Table("G");
+            (EditFrame frameCarry, TableCursor cursorCarry) = rigCarry.OpenTable("G");
+            SeekRowById(cursorCarry, gCarry, 1);
+            Assert.True(frameCarry.Edit().Succeeded);
+            Assert.True(frameCarry.Assign(Col(gCarry, "N"), I4(57)).Succeeded);
+            Assert.True(frameCarry.Update().Succeeded);
+            byte[] afterCarry = rigCarry.File.Image.Snapshot();
+            Assert.Equal(0x0200UL, D.Header.CommitCounter.Read(afterCarry.AsSpan(0, D.PageSize)));
+            Assert.Equal(0x00, afterCarry[D.Header.CommitCounter.Offset]);
+            Assert.Equal(0x02, afterCarry[D.Header.CommitCounter.Offset + 1]);
+        }
+
+        // 3. Overflow at 65535 (0xFFFF): refused by name, file unchanged (never wraps to 0)
         using (var rig3 = new Rig(EditFixture))
         {
             byte[] page0 = rig3.File.Image.Snapshot().AsSpan(0, D.PageSize).ToArray();
-            page0[D.Header.CommitCounter.Offset] = 255;
+            D.Header.CommitCounter.Write(page0, ushort.MaxValue);
             WriteRawPage(rig3.File, 0, page0);
             byte[] beforeOverflow = rig3.File.Image.Snapshot();
             (TableDefinition g3, _) = rig3.Table("G");
             (EditFrame frame3, TableCursor cursor3) = rig3.OpenTable("G");
             SeekRowById(cursor3, g3, 1);
             Assert.True(frame3.Edit().Succeeded);
-            Assert.True(frame3.Assign(Col(g3, "N"), I4(57)).Succeeded);
+            Assert.True(frame3.Assign(Col(g3, "N"), I4(58)).Succeeded);
             UpdateOutcome overflow = frame3.Update();
             Assert.Equal(MutationOpen.Publication, overflow.Open);
-            Assert.Contains("255", overflow.Detail, StringComparison.Ordinal);
+            Assert.Contains("65535", overflow.Detail, StringComparison.Ordinal);
             Assert.Equal(beforeOverflow, rig3.File.Image.Snapshot());
         }
 
