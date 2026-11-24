@@ -459,7 +459,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         }
         if (col.Origin == ColumnOrigin.Expression)
         {
-            if (TryProjectValue(program.Value, _types[column], _plan.Context, out NativeVariant projected, out SqlFailure? projFailure))
+            if (TryProjectValue(program.Value, _types[column], _plan.Context, SqlPhase.Read, out NativeVariant projected, out SqlFailure? projFailure))
             {
                 SelectValues.Clear(ref _projected[column]);
                 _projected[column] = projected;
@@ -483,7 +483,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// Returns false when no conversion was needed (caller uses <paramref name="source"/> directly) or on failure
     /// (with <paramref name="failure"/> set); returns true with an owned <paramref name="converted"/> on conversion.
     /// </summary>
-    private static bool TryProjectValue(in NativeVariant source, int? fieldType, ExpressionContext context, out NativeVariant converted, out SqlFailure? failure)
+    private static bool TryProjectValue(in NativeVariant source, int? fieldType, ExpressionContext context, SqlPhase phase, out NativeVariant converted, out SqlFailure? failure)
     {
         converted = default;
         failure = null;
@@ -510,8 +510,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             ScalarFailure f = r.Failure;
             failure = f.Kind == ScalarFailureKind.NotModelled
-                ? SqlFailure.Open(SqlPhase.Read, $"NotModelled.{f.Case}", f.Describe())
-                : SqlFailure.Ace(SqlPhase.Read, f.Number, AceError.Describe(f.Number));
+                ? SqlFailure.Open(phase, $"NotModelled.{f.Case}", f.Describe())
+                : SqlFailure.Ace(phase, f.Number, AceError.Describe(f.Number));
             return false;
         }
         converted = r.Value;
@@ -751,6 +751,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private readonly bool[] _nullExtended = new bool[readers.Length];
         private readonly List<(int Start, int Count, string Reason)> _runs = [];
         private NativeVariant[] _constants = [];
+        private int?[] _types = [];
         private int _slotWidth;
         private int _derivedWidth;
         private int _group = -1;
@@ -781,18 +782,48 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         private static NativeVariant Copy(in NativeVariant v) => SelectValues.Copy(v);
 
+        /// <summary>
+        /// Evaluates a row-dependent column and applies the same static DAO Field.Type projection as <see cref="Read"/>,
+        /// returning an owned <see cref="NativeVariant"/> that the caller must release via <see cref="SelectValues.Clear"/>.
+        /// </summary>
+        private bool EvaluateProjected(int column, SqlPhase phase, out NativeVariant owned, out SqlFailure? failure)
+        {
+            owned = default;
+            failure = null;
+            ResultColumn col = plan.ColumnList[column];
+            if (!col.Program.Evaluate(this))
+            {
+                failure = SqlFailure.Of(col.Program.LastFailure!, phase, plan.Source, 0, plan.Source.Length);
+                return false;
+            }
+            if (col.Origin == ColumnOrigin.Expression)
+            {
+                if (TryProjectValue(col.Program.Value, _types[column], plan.Context, phase, out NativeVariant projected, out failure))
+                {
+                    owned = projected;
+                    return true;
+                }
+                if (failure is not null)
+                {
+                    return false;
+                }
+            }
+            owned = Copy(col.Program.Value);
+            return true;
+        }
+
         public Prepared? Run(out SqlFailure? failure)
         {
             int n = plan.ColumnList.Count;
             _constants = new NativeVariant[n];
-            var types = new int?[n];
+            _types = new int?[n];
             var open = new string?[n];
             var reads = new SqlFailure?[n];
             bool hasSubquery = plan.Sources.Count == 1 && plan.Sources[0].Subquery is not null;
             for (int i = 0; i < n; i++)
             {
                 ResultColumn c = plan.ColumnList[i];
-                types[i] = c.FieldType;
+                _types[i] = c.FieldType;
                 open[i] = c.TypeOpen;
                 // r-expr-1/b-numeric-text-compare (pn = pt fails 3464 at open), r-expr-1/b-fixed-point-fidelity (pc +
                 // CCur(0.0001) overflows at open): a column over parameters and no field is computed once at open. In a
@@ -828,7 +859,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
                 if (c.Origin == ColumnOrigin.Expression)
                 {
-                    if (TryProjectValue(c.Program.Value, types[i], plan.Context, out NativeVariant projected, out SqlFailure? projFailure))
+                    if (TryProjectValue(c.Program.Value, _types[i], plan.Context, SqlPhase.Read, out NativeVariant projected, out SqlFailure? projFailure))
                     {
                         _constants[i] = projected;
                     }
@@ -850,7 +881,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 {
                     // qualified.md "the DAO Field.Type of a projected column": a Null-literal operator whose value is Null is
                     // 9; otherwise its operator's type where recorded (1 <> Null and False And Null are 3, 7 & Null is 10).
-                    types[i] = _constants[i].Vt == (ushort)VarType.Null ? 9 : c.NonNullType;
+                    _types[i] = _constants[i].Vt == (ushort)VarType.Null ? 9 : c.NonNullType;
                     open[i] = null;
                 }
             }
@@ -887,7 +918,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             (PopulationMode popMode, string? popOpenName, string? popOpenDetail) = ClassifyPopulation(plan, kind, hasSubquery);
             return new Prepared
             {
-                Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
+                Constants = _constants, Types = _types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
                 DerivedSlots = _derivedSlots, DerivedWidth = _derivedWidth, Tuples = _tuples, Parameters = parameters, Ambiguity = ambiguity,
                 PopulationMode = popMode, PopulationOpenName = popOpenName, PopulationOpenDetail = popOpenDetail, StreamIndex = streamIndex,
             };
@@ -1459,19 +1490,19 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     {
                         continue;
                     }
-                    BoundExpression p = plan.ColumnList[c].Program;
                     for (int i = start; i < start + count && !columns[c]; i++)
                     {
                         Stand(rows[i]);
-                        bool ok = p.Evaluate(this);
+                        bool ok = EvaluateProjected(c, SqlPhase.Read, out NativeVariant v, out _);
                         if (i == start)
                         {
                             firstOk[c] = ok;
-                            first[c] = ok ? Copy(p.Value) : default;
+                            first[c] = v;
                             continue;
                         }
                         // A row whose read fails, beside one whose read succeeds, differs from it.
-                        columns[c] = ok != firstOk[c] || (ok && !Same(first[c], p.Value));
+                        columns[c] = ok != firstOk[c] || (ok && !Same(first[c], v));
+                        SelectValues.Clear(ref v);
                     }
                     SelectValues.Clear(ref first[c]);
                 }
@@ -1522,10 +1553,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
                 return null;
             }
-            if (root is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left.Kind: SyntaxKind.Call or SyntaxKind.Literal })
+            if (root is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { Kind: SyntaxKind.Call, Text: { } callee } }
+                && (callee.Equals("CInt", StringComparison.OrdinalIgnoreCase) || callee.Equals("CLng", StringComparison.OrdinalIgnoreCase)))
             {
                 // r-expr-1b/arith-overflow-promotion (#176/#183 -CInt(-32768), #200/#207 -CLng(-2147483648)):
-                // unary minus over a Call or Literal that widens under Folding does not fit its static Integer/Long column and fails 6 at read.
+                // unary minus over CInt/CLng that widens under Folding does not fit its static Integer/Long column and fails 6 at read.
                 read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
                 return null;
             }
@@ -2613,13 +2645,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                             values.Add(Copy(_constants[c]));
                             continue;
                         }
-                        BoundExpression p = plan.ColumnList[c].Program;
-                        if (!p.Evaluate(this))
+                        if (!EvaluateProjected(c, SqlPhase.Open, out NativeVariant v, out failure))
                         {
-                            failure = At(p.LastFailure!);
                             return null;
                         }
-                        values.Add(Copy(p.Value));
+                        values.Add(v);
                     }
                     int lo = 0, hi = kept.Count;
                     bool duplicate = false;

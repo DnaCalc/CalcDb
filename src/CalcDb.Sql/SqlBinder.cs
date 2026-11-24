@@ -2706,10 +2706,9 @@ public sealed class BoundSelect : IDisposable
         private StaticTypeResult StaticConditional(SyntaxNode root, GroupScope? group, ConditionalKind kind)
         {
             int step = kind == ConditionalKind.Switch ? 2 : 1;
-            OperandKind? current = null;
-            int? currentType = null;
+            OperandKind? firstKind = null;
+            OperandKind? secondKind = null;
             bool innerMatches = true;
-            bool sawMultipleKinds = false;
             for (int i = 1; i < root.Items.Count; i += step)
             {
                 SyntaxNode arm = root.Items[i];
@@ -2718,36 +2717,27 @@ public sealed class BoundSelect : IDisposable
                     continue;
                 }
                 StaticTypeResult armType = OperandOf(arm, group);
-                OperandKind k = armType.Kind switch
-                {
-                    OperandKind.LongLiteral => OperandKind.Long,
-                    OperandKind.Memo => OperandKind.Text,
-                    _ => armType.Kind,
-                };
+                OperandKind k = armType.Kind == OperandKind.LongLiteral ? OperandKind.Long : armType.Kind;
                 if (k == OperandKind.Unknown)
                 {
                     return StaticTypeResult.Unknown;
                 }
                 innerMatches &= armType.InnerMatchesDao;
-                if (current is null)
+                if (firstKind is null || firstKind == k)
                 {
-                    current = k;
-                    continue;
+                    firstKind = k;
                 }
-                if (current == k)
+                else if (secondKind is null || secondKind == k)
                 {
-                    continue;
+                    secondKind = k;
                 }
-                sawMultipleKinds = true;
-                if (!TryCombineConditionalKinds(current.Value, k, out OperandKind combined, out int ft, out bool preservesInner))
+                else
                 {
+                    // No retained record decides >2 distinct non-Null arm kinds in Switch/Choose; refuse rather than fold left-to-right.
                     return StaticTypeResult.Unknown;
                 }
-                current = combined;
-                currentType = ft;
-                innerMatches &= preservesInner;
             }
-            if (current is null)
+            if (firstKind is null)
             {
                 // r-expr-1b/cond-switch-choose-forms (#109/#115 Switch(True, Null), #292/#298 Choose(1, Null)),
                 // r-expr-1b/null-propagation-functions (#595/#601, #609/#615): all-Null Switch/Choose is 0; all-Null IIf is unrecorded.
@@ -2755,21 +2745,23 @@ public sealed class BoundSelect : IDisposable
                     ? new(OperandKind.Unknown, 0, true)
                     : StaticTypeResult.Unknown;
             }
-            if (sawMultipleKinds)
+            if (secondKind is { } second)
             {
-                return new(current.Value, currentType!.Value, innerMatches);
+                return TryCombineConditionalKinds(firstKind.Value, second, out OperandKind combined, out int ft, out bool preservesInner)
+                    ? new(combined, ft, innerMatches && preservesInner)
+                    : StaticTypeResult.Unknown;
             }
-            return current.Value switch
+            return firstKind.Value switch
             {
                 // r-expr-1b/meta-conversion-field-types (#379/#384), cond-iif-forms (#128/#134, #152/#158),
                 // cond-switch-choose-forms (#8/#14, #85/#91), r-fix-expr-sql/stored-null-iif (#780/#799): Long arms are 4.
                 OperandKind.Long => new(OperandKind.Long, 4, innerMatches),
-                // r-expr-1b/meta-text-function-field-types (#255/#260, #275/#280, #288/#293), meta-memo-functions (#229/#234,
-                // #451/#456, #464/#469), cond-iif-forms (#176/#182), cond-switch-choose-forms (#316/#322, #624/#630),
-                // r-def-expr-sql/str-memo-versus-text-expressions (#424/#429): Text/Memo arms are 10.
-                OperandKind.Text => new(OperandKind.Text, 10, innerMatches),
+                // r-expr-1b/meta-text-function-field-types (#255/#260, #275/#280, #288/#293), meta-memo-functions (#451/#456, #464/#469),
+                // cond-iif-forms (#176/#182), cond-switch-choose-forms (#316/#322, #624/#630): Text or Memo arms are 10.
+                OperandKind.Text or OperandKind.Memo => new(OperandKind.Text, 10, innerMatches),
                 // r-expr-1b/cond-switch-choose-forms (#181/#187): Switch(1 = 1, 1.5) is 7 (Double); inner is VT_DECIMAL.
-                OperandKind.DecimalLiteral => new(OperandKind.Double, 7, false),
+                // Single-kind DecimalLiteral in IIf/Choose has no retained record and stays refused.
+                OperandKind.DecimalLiteral when kind == ConditionalKind.Switch => new(OperandKind.Double, 7, false),
                 _ => StaticTypeResult.Unknown,
             };
         }
@@ -2819,11 +2811,18 @@ public sealed class BoundSelect : IDisposable
                     fieldType = 8;
                     preservesInner = false;
                     return true;
+                // r-expr-1b/meta-memo-functions (#229/#234, #242/#247),
+                // r-def-expr-sql/str-memo-versus-text-expressions (#424/#429): Text with Memo is 10 (Text, VT_BSTR).
+                case (OperandKind.Text, OperandKind.Memo):
+                    combined = OperandKind.Text;
+                    fieldType = 10;
+                    preservesInner = true;
+                    return true;
                 // r-expr-1/e-conditional-selection (#10/#16, #24/#30, #80/#86, #254/#265),
                 // r-expr-1b/cond-iif-forms (#215/#221 Date+Text, #407/#413, #455/#461),
                 // r-expr-1b/cond-switch-choose-forms (#133/#139, #441/#447, #513/#519 Decimal+Text),
                 // r-fix-expr-sql/stored-null-iif (#2028/#2047 Double+Text),
-                // r-q-expr-sql/e-row-arms (#206/#225, #272/#291 Double+Text): Text/Memo with Long/Double/Date/DecimalLiteral is 10 (Text).
+                // r-q-expr-sql/e-row-arms (#206/#225, #272/#291 Double+Text): Text with Long/Double/Date/DecimalLiteral is 10 (Text).
                 case (OperandKind.Long, OperandKind.Text):
                 case (OperandKind.Double, OperandKind.Text):
                 case (OperandKind.Date, OperandKind.Text):
@@ -2886,7 +2885,7 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1b/arith-overflow-promotion, r-def-expr-sql/expr-operator-spellings: -True / -False is 3 (Integer).
                 OperandKind.BooleanLiteral => new(OperandKind.Integer, 3, true),
                 // r-expr-1b/arith-overflow-promotion: -CByte(1) is 3 (Integer).
-                OperandKind.CByte => new(OperandKind.Integer, 3, true),
+                OperandKind.CByte => new(OperandKind.Integer, 3, op.InnerMatchesDao),
                 // r-expr-1b/arith-overflow-promotion (#176/#182): -CInt(-32768) is 3 (Integer).
                 OperandKind.Integer => new(OperandKind.Integer, 3, op.InnerMatchesDao),
                 // r-expr-1b/op-precedence: -(7 \ 2) is 4 (Long); r-expr-1b/arith-overflow-promotion (#200/#206): -CLng(-2147483648) is 4 (Long).
@@ -2894,9 +2893,9 @@ public sealed class BoundSelect : IDisposable
                 // r-sql-13b/agg-expression-composition: -Sum(v) is 7 (Double).
                 OperandKind.Double => new(OperandKind.Double, 7, op.InnerMatchesDao),
                 // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-plus-amp-precedence-and-types: -'3' is 7 (Double).
-                OperandKind.Text => new(OperandKind.Double, 7, true),
+                OperandKind.Text => new(OperandKind.Double, 7, op.InnerMatchesDao),
                 // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity: -M (stored Decimal) is 20 (Decimal).
-                OperandKind.StoredDecimal => new(OperandKind.StoredDecimal, 20, true),
+                OperandKind.StoredDecimal => new(OperandKind.StoredDecimal, 20, op.InnerMatchesDao),
                 _ => StaticTypeResult.Unknown,
             };
         }
@@ -2913,8 +2912,8 @@ public sealed class BoundSelect : IDisposable
             bool bothInner = left.InnerMatchesDao && right.InnerMatchesDao;
             return root.Operation switch
             {
-                ScalarOperation.Power => StaticPower(left, right),
-                ScalarOperation.Divide => StaticDivide(left, right),
+                ScalarOperation.Power => StaticPower(left, right, bothInner),
+                ScalarOperation.Divide => StaticDivide(left, right, bothInner),
                 ScalarOperation.IntegerDivide => StaticIntegerDivide(left, right, bothInner),
                 ScalarOperation.Modulo => StaticModulo(left, right, bothInner),
                 ScalarOperation.Add => StaticAdd(left, right, bothInner),
@@ -2924,7 +2923,7 @@ public sealed class BoundSelect : IDisposable
             };
         }
 
-        private static StaticTypeResult StaticPower(StaticTypeResult left, StaticTypeResult right) => (left.Kind, right.Kind) switch
+        private static StaticTypeResult StaticPower(StaticTypeResult left, StaticTypeResult right, bool bothInner) => (left.Kind, right.Kind) switch
         {
             // r-expr-1b/num-power-operator, r-expr-1b/meta-conversion-field-types, r-expr-1b/op-precedence,
             // r-expr-1b/op-plus-amp-precedence-and-types, r-expr-1/inv-number-conversion-financial, r-def-expr-sql/expr-operator-spellings:
@@ -2941,11 +2940,11 @@ public sealed class BoundSelect : IDisposable
                 or (OperandKind.BooleanLiteral, OperandKind.LongLiteral)
                 or (OperandKind.Text, OperandKind.LongLiteral)
                 or (OperandKind.LongLiteral, OperandKind.Text)
-                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
             _ => StaticTypeResult.Unknown,
         };
 
-        private static StaticTypeResult StaticDivide(StaticTypeResult left, StaticTypeResult right) => (left.Kind, right.Kind) switch
+        private static StaticTypeResult StaticDivide(StaticTypeResult left, StaticTypeResult right, bool bothInner) => (left.Kind, right.Kind) switch
         {
             // r-expr-1b/meta-conversion-field-types, r-expr-1/b-intdiv-mod, r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence,
             // r-expr-1/e-failure-phase, r-expr-1/e-eager-failures, r-q-expr-sql/e-row-arms, r-sql-13b/agg-expression-composition,
@@ -2963,7 +2962,7 @@ public sealed class BoundSelect : IDisposable
                 or (OperandKind.Currency, OperandKind.Currency)
                 or (OperandKind.Currency, OperandKind.LongLiteral)
                 or (OperandKind.Date, OperandKind.LongLiteral)
-                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
             // r-expr-1b/arith-overflow-promotion: CSng(1) / CSng(3) is 7 (Double), inner is VT_R4.
             (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
             _ => StaticTypeResult.Unknown,
@@ -3065,13 +3064,13 @@ public sealed class BoundSelect : IDisposable
                 (OperandKind.Currency, OperandKind.Currency)
                     or (OperandKind.Currency, OperandKind.LongLiteral)
                     or (OperandKind.Currency, OperandKind.Long)
-                    or (OperandKind.Long, OperandKind.Currency) => new(OperandKind.Currency, 5, true),
+                    or (OperandKind.Long, OperandKind.Currency) => new(OperandKind.Currency, 5, bothInner),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence: C + D and D + C are 5 (Currency);
                 // oleaut32 VarAdd(VT_CY, VT_R8) returns VT_R8.
                 (OperandKind.Currency, OperandKind.Double)
                     or (OperandKind.Double, OperandKind.Currency) => new(OperandKind.Currency, 5, false),
                 // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity: CCur(...) + 0.00001 is 20 (Decimal).
-                (OperandKind.Currency, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                (OperandKind.Currency, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, bothInner),
                 // r-expr-1b/arith-overflow-promotion: CSng(1) + CSng(2) is 7 (Double); oleaut32 VarAdd(VT_R4, VT_R4) returns VT_R4.
                 (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/arith-overflow-promotion,
@@ -3082,7 +3081,7 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Double, OperandKind.Single)
                     or (OperandKind.Double, OperandKind.LongLiteral)
                     or (OperandKind.Double, OperandKind.Integer)
-                    or (OperandKind.Integer, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.Integer, OperandKind.Double) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1b/arith-overflow-promotion: 0.1 + 0.2 and 1 + 0.5 are 20 (Decimal).
                 (OperandKind.DecimalLiteral, OperandKind.DecimalLiteral)
                     or (OperandKind.LongLiteral, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
@@ -3096,13 +3095,13 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.LongLiteral, OperandKind.Date)
                     or (OperandKind.Date, OperandKind.Currency)
                     or (OperandKind.Date, OperandKind.Date)
-                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, true),
+                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, bothInner),
                 // r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-literals-date-forms: #1/1/2000# + 0.5 is 20 (Decimal).
-                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, bothInner),
                 // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-fix-expr-sql/stored-null-iif,
                 // r-expr-1b/meta-memo-functions, r-def-expr-sql/expr-operator-spellings: Text + Text and Memo + Text are 10 (Text).
                 (OperandKind.Text, OperandKind.Text)
-                    or (OperandKind.Memo, OperandKind.Text) => new(OperandKind.Text, 10, true),
+                    or (OperandKind.Memo, OperandKind.Text) => new(OperandKind.Text, 10, bothInner),
                 // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-expr-1b/cmp-stored-lanes,
                 // r-expr-1b/cond-iif-forms (#407, #455), r-def-expr-sql/expr-operator-spellings: Text + number/Boolean is 7 (Double).
                 (OperandKind.Text, OperandKind.LongLiteral)
@@ -3140,23 +3139,23 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1b/op-precedence: (10 - 3) - 2 is 4 (Long).
                 (OperandKind.Long, OperandKind.LongLiteral) => new(OperandKind.Long, 4, bothInner),
                 // r-expr-1/b-fixed-point-fidelity: Currency - Currency is 5 (Currency).
-                (OperandKind.Currency, OperandKind.Currency) => new(OperandKind.Currency, 5, true),
+                (OperandKind.Currency, OperandKind.Currency) => new(OperandKind.Currency, 5, bothInner),
                 // r-expr-1/b-floating-fidelity: Double - Double and Single - Double are 7 (Double).
                 (OperandKind.Double, OperandKind.Double)
-                    or (OperandKind.Single, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.Single, OperandKind.Double) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/arith-overflow-promotion,
                 // r-expr-1/c-date-payloads, r-def-expr-sql/expr-literals-date-forms: Date - Date is 7 (Double).
-                (OperandKind.Date, OperandKind.Date) => new(OperandKind.Double, 7, true),
+                (OperandKind.Date, OperandKind.Date) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1/c-date-payloads, r-expr-1b/op-plus-amp-precedence-and-types: Date - Long/Text is 8 (Date).
                 (OperandKind.Date, OperandKind.LongLiteral)
-                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, true),
+                    or (OperandKind.Date, OperandKind.Text) => new(OperandKind.Date, 8, bothInner),
                 // r-expr-1b/op-plus-amp-precedence-and-types: #1/1/2000# - 0.5 is 20 (Decimal).
-                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                (OperandKind.Date, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, bothInner),
                 // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
                 // Text subtraction is 7 (Double).
                 (OperandKind.Text, OperandKind.Text)
                     or (OperandKind.Text, OperandKind.LongLiteral)
-                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
                 _ => StaticTypeResult.Unknown,
             };
         }
@@ -3191,10 +3190,10 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity, r-expr-1b/arith-overflow-promotion:
                 // Currency * Currency/LongLiteral is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)
-                    or (OperandKind.Currency, OperandKind.LongLiteral) => new(OperandKind.Currency, 5, true),
+                    or (OperandKind.Currency, OperandKind.LongLiteral) => new(OperandKind.Currency, 5, bothInner),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence: Currency * Double is 7 (Double).
                 (OperandKind.Currency, OperandKind.Double)
-                    or (OperandKind.Double, OperandKind.Currency) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.Double, OperandKind.Currency) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1b/arith-overflow-promotion, r-fix-expr-sql/dec-fixed-point-fidelity: Currency * Decimal is 7 (Double);
                 // oleaut32 VarMul with Decimal returns VT_DECIMAL.
                 (OperandKind.Currency, OperandKind.DecimalLiteral)
@@ -3204,17 +3203,17 @@ public sealed class BoundSelect : IDisposable
                 (OperandKind.Single, OperandKind.Long)
                     or (OperandKind.Long, OperandKind.Single)
                     or (OperandKind.Double, OperandKind.LongLiteral)
-                    or (OperandKind.LongLiteral, OperandKind.Double) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.LongLiteral, OperandKind.Double) => new(OperandKind.Double, 7, bothInner),
                 // r-sql-13b/agg-expression-composition: Sum(v) * 1.5 is 7 (Double); oleaut32 VarMul(VT_R8, VT_DECIMAL) returns VT_DECIMAL.
                 (OperandKind.Double, OperandKind.DecimalLiteral) => new(OperandKind.Double, 7, false),
                 // r-expr-1b/arith-overflow-promotion: 0.1 * 3 is 20 (Decimal).
                 (OperandKind.DecimalLiteral, OperandKind.LongLiteral) => new(OperandKind.DecimalLiteral, 20, true),
                 // r-expr-1b/arith-overflow-promotion: #1/1/2000# * 2 is 7 (Double).
-                (OperandKind.Date, OperandKind.LongLiteral) => new(OperandKind.Double, 7, true),
+                (OperandKind.Date, OperandKind.LongLiteral) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
                 // Text multiplication is 7 (Double).
                 (OperandKind.Text, OperandKind.Text)
-                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, true),
+                    or (OperandKind.LongLiteral, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
                 _ => StaticTypeResult.Unknown,
             };
         }

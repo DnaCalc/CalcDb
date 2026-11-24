@@ -164,6 +164,14 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT IIf(True, 1, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
     [InlineData("SELECT IIf(True, '1', 2) AS v FROM T", 10, ColumnTypeRule.NotModelled)]
     [InlineData("SELECT IIf(True, 1, 'a') + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') - 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT 2 * IIf(True, 1, 'a') AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT -IIf(True, 1, 'a') AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 'a') + '2' AS v FROM T", 10, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, CCur(1)) + 1 AS v FROM T", 5, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(True, 1, 1.5) + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Switch(1 = 1, 1.5) + 1 AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT IIf(IsNull(DT), 0, DT) + 1 AS v FROM T", 8, ColumnTypeRule.NotModelled)]
     [InlineData("SELECT Switch(True, 1, True, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
     [InlineData("SELECT Choose(1, 1, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
     [InlineData("SELECT Choose(1, 2.5, 'a') AS v FROM T", 10, ColumnTypeRule.NotModelled)]
@@ -213,6 +221,15 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT IIf(True, Null, Null) AS v FROM T")]
     [InlineData("SELECT IIf(True, CInt(1), CInt(2)) AS v FROM T")]
     [InlineData("SELECT IIf(True, CCur(1), 'a') AS v FROM T")]
+    [InlineData("SELECT IIf(True, 1.5, 2.5) AS v FROM T")]
+    [InlineData("SELECT Choose(1, 1.5) AS v FROM T")]
+    [InlineData("SELECT IIf(True, MemoCol, 1) AS v FROM T")]
+    [InlineData("SELECT IIf(True, MemoCol, D) AS v FROM T")]
+    [InlineData("SELECT Choose(1, Y, 1, 'a') AS v FROM T")]
+    [InlineData("SELECT Choose(1, Y, 'a', 1) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CInt(1), 1, 1.5) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CInt(1), 1.5, 1) AS v FROM T")]
+    [InlineData("SELECT Choose(1, CByte(1), 1, 'a') AS v FROM T")]
     public void Unrecorded_combinations_stay_named(string sql)
     {
         using BoundSelect plan = Prepare(sql);
@@ -282,6 +299,15 @@ public sealed class StaticFieldTypeTests
             Assert.Null(tnFail);
             Assert.Equal((ushort)VarType.Bstr, tn.Vt);
             Assert.Equal("Double", Values.Bstrs.Chars(tn.Pointer).ToString());
+        }
+
+        // Compound call under unary minus whose inner value widens is unrecorded and stays NotModelled.FoldWidening.
+        using (BoundSelect plan = BoundSelect.Prepare("SELECT -IIf(True, CInt(-32768), CLng(1)) AS v FROM One", db, out SqlFailure? bindFail)!)
+        {
+            Assert.Null(bindFail);
+            Assert.Null(SelectCursor.Open(plan, db, ResultKind.Snapshot, out SqlFailure? openFail));
+            Assert.NotNull(openFail);
+            Assert.Equal("NotModelled.FoldWidening", openFail!.NotModelled);
         }
     }
 
@@ -361,6 +387,22 @@ public sealed class StaticFieldTypeTests
             cur.MoveNext();
         }
         Assert.True(rows >= 2);
+
+        // DISTINCT over a mixed-arm Text expression compares projected VT_BSTR values rather than raw VT_R8 vs VT_BSTR.
+        using BoundSelect distinctPlan = BoundSelect.Prepare("SELECT DISTINCT IIf(IsNull(D), 'x', D) AS dtxt FROM Mx", db, out SqlFailure? dBindFail)!;
+        Assert.Null(dBindFail);
+        using SelectCursor dCur = SelectCursor.Open(distinctPlan, db, ResultKind.Snapshot, out SqlFailure? dOpenFail)!;
+        Assert.Null(dOpenFail);
+        int distinctRows = 0;
+        while (!dCur.Eof)
+        {
+            Assert.True(dCur.Read(0, out Values.NativeVariant v, out SqlFailure? rf));
+            Assert.Null(rf);
+            Assert.Equal((ushort)VarType.Bstr, v.Vt);
+            distinctRows++;
+            dCur.MoveNext();
+        }
+        Assert.True(distinctRows >= 2);
     }
 
     private static BoundSelect Prepare(string sql)
