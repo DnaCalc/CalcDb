@@ -69,7 +69,7 @@ public readonly ref struct TextFieldRead
     public TextShape Shape { get; }
 
     /// <summary>Writes the text's units into <paramref name="dest"/>, whose length is <see cref="TextShape.Units"/>.</summary>
-    public void DecodeInto(Span<char> dest) => TextCodec.DecodeInto(Encoded, dest);
+    public void DecodeInto(Span<char> dest) => TextCodec.DecodeInto(Encoded, dest, allowCompressed: Shape.Compressed);
 }
 
 /// <summary>

@@ -557,9 +557,8 @@ public sealed class CommitCounterDelta(FormatDescriptor d, bool allowJet4Mdb = f
 /// TableDef to its Close. <c>DELETE</c> without WHERE releases the table's data page (<see cref="CompileRelease"/>).</item>
 /// </list>
 /// Every unestablished case (a split of an odd count or under a second level, an uncovered entry inside a leaf with a
-/// stored prefix, an emptied non-root leaf, LVAL Memo/OLE, calculated column, overflow-body delete or rewrite, dropped
-/// columns, 0-fixed-width tables, Unicode-compressed Text, leading U+FEFF, partial-Null IgnoreNulls key) is refused
-/// with a named reason.
+/// stored prefix, an emptied non-root leaf, calculated column, overflow-body delete or rewrite, dropped columns,
+/// partial-Null IgnoreNulls key) is refused with a named reason.
 /// </summary>
 public sealed class SameWidthWriter(TableFootprints footprints)
 {
@@ -649,7 +648,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// earlier change of the level or statement can have moved the row in its page or replaced another entry of a leaf
     /// (an Edit of a row this Workspace changed is refused before, PrivateRow).
     /// </summary>
-    public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null, bool inStatement = false, bool inExplicitTransaction = false, bool hasPriorGlobalMapActivity = false, bool allowFixedLongNull = false)
+    public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null, bool inStatement = false, bool inExplicitTransaction = false, bool hasPriorGlobalMapActivity = false)
     {
         values = NormalizeMaskBooleans(values);
         using RowView? resolved = RowResolver.Resolve(Seen(seen), _d, root, out TraversalFailure? failure);
@@ -715,25 +714,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 if (present)
                 {
-                    // R-FMT-2 / R-CAT-1 II-07 (evidence/r-q30-sql-check/null-upd-ado-exec,
-                    // evidence/r-q31-sql-check-2/null-upd-text-table-ado): a single-row autocommit ADO ACCDB SQL
-                    // UPDATE setting an unindexed checked fixed Long column to Null clears only its null-mask bit and
-                    // leaves the 4-byte fixed slot bytes untouched (non-CHECK tables, unchecked columns, DAO/QueryDef,
-                    // multi-row UPDATE, recordset Edit, RewrittenRow, indexed columns, explicit transactions, non-Long
-                    // fixed types, and MDB stay refused).
-                    if (allowFixedLongNull
-                        && inStatement
-                        && !inExplicitTransaction
-                        && c.TypeCode == NativeTypes.Long
-                        && IsVerifiedAccdb(seen)
-                        && semantics.HasCheckConstraints
-                        && semantics.CheckConstraints.Any(ck => ck.Column is { } col && col.Ordinal == c.Ordinal)
-                        && !semantics.Indexes.Any(ix => ix.Columns.Any(ic => ic.Ordinal == c.Ordinal)))
-                    {
-                        edits.Add(new PageEdit(row.Data.Page, new BitDelta(maskByte, 0, bit), PageRole.Data));
-                        continue;
-                    }
-                    return NotWritten($"fixed field {c.Name} becomes Null: the bytes ACE leaves in a Null fixed field are not observed");
+                    // R-FMT-2 r-q36 (evidence/r-q36-publication-bytes/nullfix-pure-inplace-*, nullfix-ext-*):
+                    // setting a fixed field to Null clears only its null-mask bit and leaves the existing fixed bytes
+                    // untouched in place (all fixed scalar types and DATETIME2, ACCDB and MDB, DAO/ADO/SQL).
+                    edits.Add(new PageEdit(row.Data.Page, new BitDelta(maskByte, 0, bit), PageRole.Data));
                 }
                 continue;
             }
@@ -845,7 +829,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         values = NormalizeMaskBooleans(values);
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         var encoded = new EncodedField[columns.Count];
-        List<(int Index, ColumnDescriptor Column, byte[] Payload)> longValues = [];
+        List<(int Index, ColumnDescriptor Column, PreparedLongValue LongValue)> longValues = [];
         List<int> inlineCandidates = [];
         for (int i = 0; i < columns.Count; i++)
         {
@@ -857,16 +841,16 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && v.Kind != NativeKind.Null)
             {
-                if (PrepareLongValuePayload(c, v, seen, out string? lvFailure) is not { } payload)
+                if (PrepareLongValuePayload(c, v, seen, out string? lvFailure) is not { } prepared)
                 {
                     return NotWritten($"field {c.Name}: {lvFailure}");
                 }
                 int lvIndex = longValues.Count;
-                longValues.Add((i, c, payload));
-                if (payload.Length <= LongValuePlan.InlinePayloadMax)
+                longValues.Add((i, c, prepared));
+                if (prepared.IsInlineCandidate)
                 {
                     inlineCandidates.Add(lvIndex);
-                    encoded[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(payload));
+                    encoded[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(prepared.Payload));
                 }
                 else
                 {
@@ -927,12 +911,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         List<PageEdit> edits = [];
         for (int lvIndex = 0; lvIndex < longValues.Count; lvIndex++)
         {
-            (int colIndex, ColumnDescriptor c, byte[] payload) = longValues[lvIndex];
-            if (payload.Length <= LongValuePlan.InlinePayloadMax && lvIndex != spilledInlineIndex)
+            (int colIndex, ColumnDescriptor c, PreparedLongValue prepared) = longValues[lvIndex];
+            if (prepared.IsInlineCandidate && lvIndex != spilledInlineIndex)
             {
                 continue;
             }
-            if (PlaceExternalLongValue(c, payload, allocator, seen, edits, out string? lvFailure) is not { } reference)
+            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled: lvIndex == spilledInlineIndex);
+            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, edits, out string? lvFailure) is not { } reference)
             {
                 return NotWritten($"field {c.Name}: {lvFailure}");
             }
@@ -1693,7 +1678,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         var allocator = new PageAllocator(_cache, _d, ExtentOf(seen));
         List<PageEdit> longValueEdits = [];
         List<(ColumnDescriptor Column, byte[] StoredField)> oldLongValues = [];
-        List<(int ColumnIndex, ColumnDescriptor Column, byte[] Payload)> newLongValues = [];
+        List<(int ColumnIndex, ColumnDescriptor Column, PreparedLongValue LongValue)> newLongValues = [];
         List<int> inlineCandidates = [];
         HashSet<uint> clearedFreeLvalPages = [];
         int oldChainCount = 0;
@@ -1720,17 +1705,34 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             if (NativeValue.SameStored(stored[i], v))
             {
                 FieldRead read = envelope.ReadField(c, knownFixedEnd);
-                fields[i] = read.Outcome switch
-                {
-                    FieldOutcome.Null => EncodedField.Null,
-                    FieldOutcome.Boolean => EncodedField.OfBoolean(read.Value),
-                    FieldOutcome.Bytes => EncodedField.OfBytes(body[read.Start..read.End].ToArray()),
-                    _ => default,
-                };
                 if (read.Outcome == FieldOutcome.Malformed)
                 {
                     failure = $"field {c.Name} of row {row.Root}: {read.Failure}";
                     return null;
+                }
+                if (read.Outcome == FieldOutcome.Null)
+                {
+                    if (c.IsFixed && !c.IsMaskBoolean)
+                    {
+                        if (!TryPreservedFixedNull(c, body, out EncodedField preserved, out failure))
+                        {
+                            failure = $"field {c.Name} of row {row.Root}: {failure}";
+                            return null;
+                        }
+                        fields[i] = preserved;
+                    }
+                    else
+                    {
+                        fields[i] = EncodedField.Null;
+                    }
+                }
+                else if (read.Outcome == FieldOutcome.Boolean)
+                {
+                    fields[i] = EncodedField.OfBoolean(read.Value);
+                }
+                else
+                {
+                    fields[i] = EncodedField.OfBytes(body[read.Start..read.End].ToArray());
                 }
                 if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && read.Outcome == FieldOutcome.Bytes
                     && LongValuePlan.Inspect(body[read.Start..read.End], out _) is { Form: LongValueForm.Inline })
@@ -1801,10 +1803,19 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 if (c.IsFixed)
                 {
-                    failure = $"fixed field {c.Name} becomes Null: the bytes ACE leaves in a Null fixed field are not observed";
-                    return null;
+                    // R-FMT-2 r-q36 (nullfix-*): a fixed field set to Null clears its mask bit and keeps its old
+                    // fixed-area bytes in every rewrite (grow, shrink, overflow move).
+                    if (!TryPreservedFixedNull(c, body, out EncodedField preserved, out failure))
+                    {
+                        failure = $"field {c.Name} of row {row.Root}: {failure}";
+                        return null;
+                    }
+                    fields[i] = preserved;
                 }
-                fields[i] = EncodedField.Null;
+                else
+                {
+                    fields[i] = EncodedField.Null;
+                }
             }
             else if (c.IsFixed)
             {
@@ -1818,17 +1829,17 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             else if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
             {
-                if (PrepareLongValuePayload(c, v, seen, out failure) is not { } payload)
+                if (PrepareLongValuePayload(c, v, seen, out failure) is not { } prepared)
                 {
                     failure = $"field {c.Name}: {failure}";
                     return null;
                 }
                 int lvIndex = newLongValues.Count;
-                newLongValues.Add((i, c, payload));
-                if (payload.Length <= LongValuePlan.InlinePayloadMax)
+                newLongValues.Add((i, c, prepared));
+                if (prepared.IsInlineCandidate)
                 {
                     inlineCandidates.Add(lvIndex);
-                    fields[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(payload));
+                    fields[i] = EncodedField.OfBytes(LongValuePlan.EncodeInline(prepared.Payload));
                 }
                 else
                 {
@@ -1873,8 +1884,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             for (int lvIndex = 0; lvIndex < newLongValues.Count; lvIndex++)
             {
-                (int _, ColumnDescriptor newCol, byte[] payload) = newLongValues[lvIndex];
-                if (payload.Length <= LongValuePlan.InlinePayloadMax && lvIndex != spilledInlineIndex)
+                (int _, ColumnDescriptor newCol, PreparedLongValue prepared) = newLongValues[lvIndex];
+                if (prepared.IsInlineCandidate && lvIndex != spilledInlineIndex)
                 {
                     failure = $"field {newCol.Name} of row {row.Root}: replacing a chained long value by an inline (<= {LongValuePlan.InlinePayloadMax}-byte) long value on UPDATE is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
                     return null;
@@ -1893,18 +1904,19 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         // lv-op-chain-to-single; evidence/r-q22-lv-open/lv-free-timing-update-chain-*).
         for (int lvIndex = 0; lvIndex < newLongValues.Count; lvIndex++)
         {
-            (int colIndex, ColumnDescriptor c, byte[] payload) = newLongValues[lvIndex];
-            if (payload.Length <= LongValuePlan.InlinePayloadMax && lvIndex != spilledInlineIndex)
+            (int colIndex, ColumnDescriptor c, PreparedLongValue prepared) = newLongValues[lvIndex];
+            if (prepared.IsInlineCandidate && lvIndex != spilledInlineIndex)
             {
                 continue;
             }
+            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled: lvIndex == spilledInlineIndex);
             int allocatedBefore = allocator.AllocatedCount;
-            if (PlaceExternalLongValue(c, payload, allocator, seen, longValueEdits, out failure, clearedFreeLvalPages) is not { } reference)
+            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, longValueEdits, out failure, clearedFreeLvalPages) is not { } reference)
             {
                 failure = $"field {c.Name}: {failure}";
                 return null;
             }
-            if (oldChainCount > 0 && payload.Length <= LongValuePlan.SingleRowPayloadMax && allocator.AllocatedCount > allocatedBefore)
+            if (oldChainCount > 0 && externalPayload.Length <= LongValuePlan.SingleRowPayloadMax && allocator.AllocatedCount > allocatedBefore)
             {
                 failure = $"field {c.Name} of row {row.Root}: replacing a chained long value by a single-row long value that allocates a new LVAL page is not recorded (only landing on an existing LV free page is recorded: evidence/r-q22-lv-open/lv-free-timing-update-chain-to-single)";
                 return null;
@@ -2054,11 +2066,27 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// </summary>
     private const int LvalFreeMapStaysAtOrAbove = 264;
 
+    private bool TryPreservedFixedNull(ColumnDescriptor c, ReadOnlySpan<byte> body, out EncodedField field, out string? failure)
+    {
+        int width = NativeTypes.FixedWidth(c.TypeCode) ?? c.Length;
+        int start = _d.Row.FixedBase + c.FixedOffset;
+        if (start < 0 || width < 0 || start + width > body.Length)
+        {
+            field = default;
+            failure = $"fixed slot [{start}..{start + width}) exceeds row length {body.Length}";
+            return false;
+        }
+        field = EncodedField.PreservedNull(body.Slice(start, width).ToArray());
+        failure = null;
+        return true;
+    }
+
     /// <summary>
     /// Measure the encoded ordinary-row byte length of <paramref name="fields"/> using the same layout formula as
     /// <see cref="RowEncoder.TryEncode"/> (without enforcing the 4,060-byte cap), so <see cref="CompileInsert"/> and
     /// <see cref="RewrittenRow"/> can apply the 4,060-byte inline-LV spill bound
-    /// (<c>evidence/r-q22-lv-open/lv-inline-tight-3958</c> vs <c>lv-inline-tight-3960</c>).
+    /// (<c>evidence/r-q22-lv-open/lv-inline-tight-3958</c> vs <c>lv-inline-tight-3960</c>; R-FMT-2 r-q36 zero-fixed
+    /// padding <c>evidence/r-q36-publication-bytes/zf-*</c>).
     /// </summary>
     private long? MeasureEncodedRowBytes(EncodedField[] fields)
     {
@@ -2069,10 +2097,6 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return null;
         }
         int fixedEnd = _table.KnownFixedEnd(c, _d);
-        if (fixedEnd <= _d.Row.FixedBase)
-        {
-            return null;
-        }
         long variableBytes = 0;
         for (int i = 0; i < columns.Count; i++)
         {
@@ -2083,23 +2107,45 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         int v = _table.VariableColumns;
         int maskBytes = (c + 7) / 8;
+        long eod = v == 0 ? Math.Max(fixedEnd, _d.Row.FixedBase + 2) : fixedEnd + variableBytes;
         long trailerBytes = v > 0 ? 4L + (2L * v) : 0L;
-        return fixedEnd + variableBytes + trailerBytes + maskBytes;
+        return eod + trailerBytes + maskBytes;
     }
+
+    private readonly record struct PreparedLongValue(byte[] Payload, int RawLength, bool IsInlineCandidate, string? TextSource);
 
     /// <summary>
     /// Encode a non-Null Memo or OLE value into its payload bytes and check preconditions common to inline and
-    /// external placement: Memo text via <see cref="TextCodec.TryEncode"/> (which refuses <c>MEMO WITH COMPRESSION</c>
-    /// and a leading U+FEFF by name; 0-byte Memo is admitted as the 12-byte inline header with length 0 and inline flag
-    /// 0x80, <c>evidence/r-q27-autonumber-txn/memo-zerolength-true-fail</c>), OLE bytes as given, refusing 0-byte OLE
-    /// payloads and MDB files.
+    /// external placement (R-FMT-2 r-q36: <c>evidence/r-q36-publication-bytes/feff-ascii-*</c>, <c>feff-content-*</c>,
+    /// <c>feff-memo-lval-*</c>):
+    /// <list type="bullet">
+    /// <item>Memo form is decided on raw UTF-16LE byte length BEFORE compression: <c>&lt;= 64</c> raw bytes is inline
+    /// and compresses on <c>&lt;</c> regardless of <c>ExtendedFlags</c>; <c>65..3,816</c> raw bytes is single-page LVAL
+    /// and compresses on <c>&lt;</c> only when <c>(ExtendedFlags &amp; 0x01) != 0</c>; <c>&gt; 3,816</c> raw bytes is
+    /// chained LVAL and never compresses. 0-byte Memo is admitted as the 12-byte inline header with length 0 and inline
+    /// flag 0x80 (<c>evidence/r-q27-autonumber-txn/memo-zerolength-true-fail</c>).</item>
+    /// <item>OLE bytes are stored as given; 0-byte OLE payloads stay refused.</item>
+    /// <item>Jet 4 MDB is admitted for inline and single-page LVAL Memo (<c>feff-ascii-mdb-dao</c>,
+    /// <c>feff-content-mdb-dao</c>, <c>zf-var-mixed-mdb-dao</c>); MDB chained Memo and MDB OLE stay refused.</item>
+    /// </list>
     /// </summary>
-    private byte[]? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure)
+    private PreparedLongValue? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure)
     {
         byte[]? payload;
+        int rawLength;
+        bool isInlineCandidate;
+        string? textSource = null;
         if (c.TypeCode == NativeTypes.Memo && value.Kind == NativeKind.Text)
         {
-            if (!TextCodec.TryEncode(value.Text ?? "", (c.ExtendedFlags & 0x01) != 0, out payload, out failure))
+            textSource = value.Text ?? "";
+            rawLength = textSource.Length * 2;
+            isInlineCandidate = rawLength <= LongValuePlan.InlinePayloadMax;
+            TextCompressionPolicy policy = isInlineCandidate
+                ? TextCompressionPolicy.CompressIfShorter
+                : rawLength <= LongValuePlan.SingleRowPayloadMax && (c.ExtendedFlags & 0x01) != 0
+                    ? TextCompressionPolicy.CompressIfShorter
+                    : TextCompressionPolicy.Uncompressed;
+            if (!TextCodec.TryEncode(textSource, policy, out payload, out failure))
             {
                 return null;
             }
@@ -2107,13 +2153,15 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         else if (c.TypeCode == NativeTypes.Ole && value.Kind is NativeKind.Binary or NativeKind.LongBinary && value.Bytes is { } bytes)
         {
             payload = bytes.ToArray();
+            rawLength = payload.Length;
+            isInlineCandidate = rawLength <= LongValuePlan.InlinePayloadMax;
         }
         else
         {
             failure = $"a {value.Kind} value for the long-value column";
             return null;
         }
-        if (payload!.Length == 0 && c.TypeCode != NativeTypes.Memo)
+        if (rawLength == 0 && c.TypeCode != NativeTypes.Memo)
         {
             failure = "an empty (0-byte) OLE long value is not recorded (R-FMT-2 LV form selection)";
             return null;
@@ -2122,12 +2170,31 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
             {
-                failure = "writing a long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
-                return null;
+                if (c.TypeCode != NativeTypes.Memo || rawLength > LongValuePlan.SingleRowPayloadMax)
+                {
+                    failure = c.TypeCode == NativeTypes.Memo
+                        ? "writing a chained Memo long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)"
+                        : "writing an OLE long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
+                    return null;
+                }
             }
         }
         failure = null;
-        return payload;
+        return new PreparedLongValue(payload!, rawLength, isInlineCandidate, textSource);
+    }
+
+    /// <summary>
+    /// Payload bytes to place on an LVAL page: an inline-sized Memo spilled past the 4,060-byte ordinary-row limit
+    /// obeys the column's compression flag as a single-page LVAL (R-FMT-2 r-q36).
+    /// </summary>
+    private static byte[] ExternalLongValuePayload(ColumnDescriptor c, PreparedLongValue prepared, bool spilled)
+    {
+        if (spilled && c.TypeCode == NativeTypes.Memo && (c.ExtendedFlags & 0x01) == 0 && prepared.TextSource is { } text)
+        {
+            TextCodec.TryEncode(text, TextCompressionPolicy.Uncompressed, out byte[]? raw, out _);
+            return raw!;
+        }
+        return prepared.Payload;
     }
 
     /// <summary>

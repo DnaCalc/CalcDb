@@ -348,16 +348,30 @@ public sealed class PublicationTests
     [Fact]
     public void A_change_the_slice_does_not_write_stays_pending_and_the_commit_is_named()
     {
-        // The boundary of the slice: a fixed field becoming Null has no physical form (the bytes ACE leaves in a Null fixed
-        // field are not observed); nothing is written.
+        // The boundary of the slice: writing a non-Null value to a column absent from a row's stored C (row growth past C) is refused by name; nothing is written.
         using var rig = new Rig();
-        EditFrame frame = rig.On(rig.A, "G", 1);
+        (TableDefinition g, TableEditContext origCtx) = rig.Table("G");
+        TableDefinition added = g with
+        {
+            Columns = [.. g.Columns.Select(c => c.Name == "N" ? c with { PhysicalNumber = g.MaxColumns } : c)],
+            MaxColumns = g.MaxColumns + 1,
+        };
+        using var addedSem = MutationSemantics.Compile("G", added, null, new EmptyRuleBinder(), D.IndexDescriptor);
+        var addedCtx = new TableEditContext(
+            addedSem,
+            new StoredUniqueProbe(rig.File.Cache, D, g, rig.File.Image.PageCount),
+            7177,
+            origCtx.HasRelationships,
+            new TableFootprints(rig.File.Cache, D, added, rig.File.Image.PageCount));
+        using TableCursor cur = TableCursor.Open(rig.File.Cache, D, g, rig.File.Image.PageCount, 0, out _)!;
+        Assert.Equal(MoveOutcome.Moved, cur.MoveFirst());
+        using var frame = new EditFrame(addedCtx, cur, rig.A);
         Assert.Null(rig.A.BeginTrans());
         Assert.True(frame.Edit().Succeeded);
-        Assert.True(frame.Assign(Column(frame, "N"), new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+        Assert.True(frame.Assign(Column(frame, "N"), I4(99)).Succeeded);
         UpdateOutcome update = frame.Update();
         Assert.Equal(MutationOpen.Publication, update.Open);
-        Assert.Contains("becomes Null", update.Detail, StringComparison.Ordinal);
+        Assert.Contains("absent from row", update.Detail, StringComparison.Ordinal);
         Assert.Equal(EditMode.Edit, frame.Mode); // refused and withdrawn (task sjws): the edit stays, the level holds nothing
         Assert.Empty(rig.A.Frames[0].AcceptedChanges);
         ResolutionOutcome commit = rig.A.CommitTrans();
@@ -367,17 +381,47 @@ public sealed class PublicationTests
     }
 
     [Fact]
-    public void A_fixed_field_becoming_Null_is_not_written()
+    public void A_fixed_field_becoming_Null_clears_mask_bit_and_keeps_fixed_bytes()
     {
-        // The bytes ACE leaves in a Null fixed field are not observed: the automatic Update is refused by name and withdrawn.
+        // R-FMT-2 r-q36 (nullfix-*): setting a fixed field to Null clears its mask bit and keeps its old fixed bytes in place.
         using var rig = new Rig();
-        EditFrame frame = rig.On(rig.A, "G", 1);
+        (EditFrame frame, TableCursor cursor) = rig.Open(rig.A, "G", 1);
+        RowId rid = cursor.CurrentRow!.Value;
+        ColumnDescriptor nCol = Column(frame, "N");
+        Assert.Equal(1, cursor.Read(nCol).Value.Integer);
+
         Assert.True(frame.Edit().Succeeded);
-        Assert.True(frame.Assign(Column(frame, "N"), new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
+        Assert.True(frame.Assign(nCol, new NativeVariant { Vt = (ushort)VarType.Null }).Succeeded);
         UpdateOutcome update = frame.Update();
-        Assert.Equal(MutationOpen.Publication, update.Open);
-        Assert.Contains("becomes Null", update.Detail, StringComparison.Ordinal);
+        Assert.True(update.Succeeded, update.ToString());
+        Assert.Equal(MutationOpen.None, update.Open);
         Assert.Empty(rig.A.PendingPublication);
-        Assert.Equal(rig.Before, rig.File.Image.Snapshot());
+
+        byte[] after = rig.File.Image.Snapshot();
+        Dictionary<int, List<int>> changed = Changed(rig.Before, after);
+        Assert.Equal(2, changed.Count); // page 0 commit counter and G's data page
+        Assert.Single(changed[(int)rid.Page]); // only the row's null-mask byte changes; fixed bytes stay in place
+        Assert.Equal(NativeKind.Null, cursor.Read(nCol).Value.Kind);
+    }
+
+    private sealed class EmptyRuleBinder : IMutationRuleBinder
+    {
+        public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
+
+        public IMutationRule? BindFieldRule(TableDefinition table, ColumnDescriptor column, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
+
+        public IMutationRule? BindTableRule(TableDefinition table, string expression, out string? notAdmitted)
+        {
+            notAdmitted = null;
+            return null;
+        }
     }
 }

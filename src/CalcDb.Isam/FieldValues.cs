@@ -31,6 +31,9 @@ public enum NativeKind
     /// </summary>
     Decimal,
 
+    /// <summary>A 64-bit signed integer (SQL BIGINT, native type 19, variable 8 bytes LE; r-q36 nullfix-ext-accdb-dao).</summary>
+    BigInt,
+
     /// <summary>
     /// An Extended Date/Time field as its exact 42 row bytes in <see cref="NativeValue.Bytes"/>; their date meaning is
     /// not modelled, because ACE's digit layout is not II-04 §5.5's (<see cref="ScalarPayloadRules.ExtendedBytes"/>).
@@ -78,7 +81,7 @@ public readonly record struct NativeValue(NativeKind Kind)
     {
         NativeKind.Null => "Null",
         NativeKind.Boolean => Boolean ? "True" : "False",
-        NativeKind.Byte or NativeKind.Integer or NativeKind.Long => Integer.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        NativeKind.Byte or NativeKind.Integer or NativeKind.Long or NativeKind.BigInt => Integer.ToString(System.Globalization.CultureInfo.InvariantCulture),
         NativeKind.Text => $"\"{Text}\"",
         NativeKind.Decimal => $"Decimal {(Boolean ? "-" : "")}{Decimal.Magnitude}e-{Scale}",
         NativeKind.Failed => "failed: " + Failure,
@@ -160,12 +163,12 @@ public static class FieldEncoder
 
     /// <summary>
     /// Encode <paramref name="value"/>'s payload for the variable-length <paramref name="column"/> (II-04 §§5–7;
-    /// W-05/growth-structural-closure). Supports in-row Text (via <see cref="TextCodec.TryEncode"/>), non-empty Binary,
-    /// 16-byte variable GUID (<c>evidence/r-fmt-1/create-accdb-guid</c>, <c>r-oledb-odbc-v2-accdb.accdb</c>), and inline
-    /// Memo/OLE payloads of 1 to <see cref="LongValuePlan.InlinePayloadMax"/> (64) bytes
-    /// (<c>evidence/r-q19-growth-open/lv-inline-memo</c>, <c>lv-inline-ole</c>); refuses calculated columns, empty
-    /// long values, payloads above 64 bytes (which require LVAL placement), Unicode-compressed Text/Memo, leading
-    /// U+FEFF, and mismatched kinds.
+    /// W-05/growth-structural-closure; R-FMT-2 r-q36, <c>evidence/r-q36-publication-bytes/feff-*</c>, <c>nullfix-ext-*</c>).
+    /// Supports in-row Text (via <see cref="TextCodec.TryEncode(ReadOnlySpan{char}, TextCompressionPolicy, out byte[]?, out string?)"/>),
+    /// non-empty Binary, 16-byte variable GUID, 8-byte variable BIGINT, and inline Memo/OLE payloads whose raw byte length
+    /// is at most <see cref="LongValuePlan.InlinePayloadMax"/> (64) bytes (for Memo, decided before compression and compressed
+    /// on <c>&lt;</c> regardless of <c>ExtendedFlags</c>); refuses calculated columns, empty OLE long values, payloads above
+    /// 64 raw bytes (which require LVAL placement), and mismatched kinds.
     /// </summary>
     public static bool TryEncodeVariable(in NativeValue value, ColumnDescriptor column, FormatDescriptor d, out byte[]? bytes, out string? failure)
     {
@@ -178,15 +181,22 @@ public static class FieldEncoder
         }
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            // Inline long values: 0..64 bytes for Memo (II-04 §7.1; R-FMT-2 "LV form selection":
-            // evidence/r-q19-growth-open/lv-inline-memo 2..64 vs 66..98; evidence/r-q27-autonumber-txn/memo-zerolength-true-fail
-            // 0-byte Memo encodes as 12-byte inline header with length 0 and inline flag 0x80), 1..64 bytes for OLE
-            // (lv-inline-ole 1..64 vs 65..99; 0-byte OLE is not recorded).
+            // Inline long values: 0..64 raw bytes for Memo (II-04 §7.1; R-FMT-2 "LV form selection" and r-q36:
+            // inline form is decided on raw UTF-16 byte length BEFORE compression, and inline Memo compresses on <
+            // regardless of ExtendedFlags; evidence/r-q36-publication-bytes/feff-memo-lval-accdb-dao), 1..64 bytes
+            // for OLE (lv-inline-ole 1..64 vs 65..99; 0-byte OLE is not recorded).
             byte[]? payload;
+            int rawLength;
             if (column.TypeCode == NativeTypes.Memo && value.Kind == NativeKind.Text)
             {
-                bool compressedMemo = (column.ExtendedFlags & 0x01) != 0;
-                if (!TextCodec.TryEncode(value.Text ?? "", compressedMemo, out payload, out failure))
+                string text = value.Text ?? "";
+                rawLength = text.Length * 2;
+                if (rawLength > LongValuePlan.InlinePayloadMax)
+                {
+                    failure = $"a {rawLength}-byte long value exceeds the {LongValuePlan.InlinePayloadMax}-byte inline bound and requires LVAL placement";
+                    return false;
+                }
+                if (!TextCodec.TryEncode(text, TextCompressionPolicy.CompressIfShorter, out payload, out failure))
                 {
                     return false;
                 }
@@ -194,35 +204,42 @@ public static class FieldEncoder
             else if (column.TypeCode == NativeTypes.Ole && value.Kind is NativeKind.Binary or NativeKind.LongBinary && value.Bytes is { } rawOle)
             {
                 payload = rawOle.ToArray();
+                rawLength = payload.Length;
             }
             else
             {
                 failure = $"a {value.Kind} value for long-value column (native type {column.TypeCode})";
                 return false;
             }
-            if (payload!.Length == 0 && column.TypeCode != NativeTypes.Memo)
+            if (rawLength == 0 && column.TypeCode != NativeTypes.Memo)
             {
                 failure = "an empty (0-byte) OLE long value is not recorded (R-FMT-2 LV form selection)";
                 return false;
             }
-            if (payload.Length <= LongValuePlan.InlinePayloadMax)
+            if (rawLength <= LongValuePlan.InlinePayloadMax)
             {
-                bytes = LongValuePlan.EncodeInline(payload);
+                bytes = LongValuePlan.EncodeInline(payload!);
                 return true;
             }
-            failure = $"a {payload.Length}-byte long value exceeds the {LongValuePlan.InlinePayloadMax}-byte inline bound and requires LVAL placement";
+            failure = $"a {rawLength}-byte long value exceeds the {LongValuePlan.InlinePayloadMax}-byte inline bound and requires LVAL placement";
             return false;
         }
         switch (column.TypeCode, value.Kind)
         {
             case (NativeTypes.Text, NativeKind.Text):
-                bool compressed = (column.ExtendedFlags & 0x01) != 0;
-                return TextCodec.TryEncode(value.Text ?? "", compressed, out bytes, out failure);
+                TextCompressionPolicy policy = (column.ExtendedFlags & 0x01) != 0
+                    ? TextCompressionPolicy.CompressIfNotLonger
+                    : TextCompressionPolicy.Uncompressed;
+                return TextCodec.TryEncode(value.Text ?? "", policy, out bytes, out failure);
             case (NativeTypes.Binary, NativeKind.Binary) when value.Bytes is { Length: > 0 } raw:
                 bytes = raw.ToArray();
                 return true;
             case (NativeTypes.Guid, NativeKind.Guid) when value.Bytes is { Length: 16 } guid:
                 bytes = guid.ToArray();
+                return true;
+            case (NativeTypes.BigInt, NativeKind.BigInt):
+                bytes = new byte[8];
+                BinaryPrimitives.WriteInt64LittleEndian(bytes, value.Integer);
                 return true;
             default:
                 failure = $"a {value.Kind} value for variable native type {column.TypeCode}";
@@ -235,6 +252,27 @@ public static class FieldEncoder
 public static class FieldDecoder
 {
     public const long DefaultLongValueBudget = 64L << 20;
+
+    /// <summary>
+    /// Whether ACE's reader interprets a leading <c>FF FE</c> as the compressed-text marker for <paramref name="column"/>
+    /// (R-FMT-2 r-q36, <c>evidence/r-q36-publication-bytes/feff-*</c>, <c>r-q-wire/feff-accdb-dao-put-refetch</c>):
+    /// compressed Text (<c>ExtendedFlags &amp; 0x01</c>), inline Memo (always), and compressed single-page LVAL Memo
+    /// (<c>ExtendedFlags &amp; 0x01</c>); uncompressed Text, uncompressed single-page LVAL Memo, and chained LVAL Memo
+    /// decode verbatim UTF-16LE.
+    /// </summary>
+    private static bool AllowCompressedText(ColumnDescriptor column, LongValueForm? memoForm = null) =>
+        column.TypeCode switch
+        {
+            NativeTypes.Text => (column.ExtendedFlags & 0x01) != 0,
+            NativeTypes.Memo => memoForm switch
+            {
+                LongValueForm.Inline => true,
+                LongValueForm.SingleRow => (column.ExtendedFlags & 0x01) != 0,
+                LongValueForm.Chain => false,
+                _ => true,
+            },
+            _ => true,
+        };
 
     /// <summary>
     /// Locates the field's bytes in the row; false with the whole value when there are none to decode (a malformed
@@ -271,15 +309,17 @@ public static class FieldDecoder
         return true;
     }
 
-    /// <summary>The exact payload of a Memo or OLE field's long value, under the row's read view, or null with the failure.</summary>
-    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageSource cache, ReadView? view, FormatDescriptor d, long longValueBudget, out string? failure)
+    /// <summary>The exact payload and storage form of a Memo or OLE field's long value, under the row's read view, or null with the failure.</summary>
+    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageSource cache, ReadView? view, FormatDescriptor d, long longValueBudget, out LongValueForm form, out string? failure)
     {
+        form = default;
         LongValuePlan? plan = LongValuePlan.Inspect(bytes, out string? planFailure);
         if (plan is null)
         {
             failure = planFailure!;
             return null;
         }
+        form = plan.Form;
         byte[]? payload = LongValueReader.Read(plan, bytes, cache, d, longValueBudget, out TraversalFailure? lvFailure, view);
         if (payload is null)
         {
@@ -316,16 +356,22 @@ public static class FieldDecoder
         {
             return new TextFieldRead(FieldResult.Of(value));
         }
+        bool allowCompressed;
         if (column.TypeCode == NativeTypes.Memo)
         {
-            byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out string? failure);
+            byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out LongValueForm form, out string? failure);
             if (payload is null)
             {
                 return new TextFieldRead(FieldResult.Of(NativeValue.Fail(failure!)));
             }
             bytes = payload;
+            allowCompressed = AllowCompressedText(column, form);
         }
-        TextShape shape = TextCodec.Measure(bytes);
+        else
+        {
+            allowCompressed = AllowCompressedText(column);
+        }
+        TextShape shape = TextCodec.Measure(bytes, allowCompressed: allowCompressed);
         if (!shape.Succeeded)
         {
             return new TextFieldRead(FieldResult.Of(NativeValue.Fail(shape.Failure!)));
@@ -349,19 +395,19 @@ public static class FieldDecoder
         {
             case NativeTypes.Memo or NativeTypes.Ole:
             {
-                byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out string? failure);
+                byte[]? payload = LongValue(bytes, cache, row.View, d, longValueBudget, out LongValueForm form, out string? failure);
                 if (payload is null)
                 {
                     return NativeValue.Fail(failure!);
                 }
                 if (column.TypeCode == NativeTypes.Memo)
                 {
-                    return DecodeText(payload);
+                    return DecodeText(payload, AllowCompressedText(column, form));
                 }
                 return new NativeValue(NativeKind.LongBinary) { Bytes = payload };
             }
             default:
-                return Decode(bytes, column.TypeCode, column.NumericScale, d);
+                return Decode(bytes, column.TypeCode, column.NumericScale, d, AllowCompressedText(column));
         }
     }
 
@@ -382,7 +428,7 @@ public static class FieldDecoder
         byte[]? content = null;
         if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
         {
-            content = LongValue(bytes, cache, view, d, longValueBudget, out string? lvFailure);
+            content = LongValue(bytes, cache, view, d, longValueBudget, out _, out string? lvFailure);
             if (content is null)
             {
                 return NativeValue.Fail(lvFailure!);
@@ -402,21 +448,21 @@ public static class FieldDecoder
         {
             NativeTypes.Boolean => payload.Length == 1 ? new NativeValue(NativeKind.Boolean) { Boolean = payload[0] != 0 } : NativeValue.Fail($"calculated Yes/No payload of {payload.Length} bytes"),
             NativeTypes.Numeric => ScalarCodecs.TryDecodeCalculatedNumeric(payload, d.Payload, out NativeDecimal number, out string? numericFailure) ? NativeValue.Of(number) : NativeValue.Fail(numericFailure!),
-            NativeTypes.Memo => DecodeText(payload),
+            NativeTypes.Memo => DecodeText(payload, allowCompressed: true),
             NativeTypes.Ole => new NativeValue(NativeKind.LongBinary) { Bytes = payload.ToArray() },
-            _ => Decode(payload, type, 0, d),
+            _ => Decode(payload, type, 0, d, allowCompressed: true),
         };
     }
 
-    private static NativeValue DecodeText(ReadOnlySpan<byte> bytes)
+    private static NativeValue DecodeText(ReadOnlySpan<byte> bytes, bool allowCompressed)
     {
-        TextDecode text = TextCodec.Decode(bytes);
+        TextDecode text = TextCodec.Decode(bytes, allowCompressed: allowCompressed);
         CostCounters.Current.TextDecodedUnits += text.Text?.Length ?? 0;
         return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text } : NativeValue.Fail(text.Failure!);
     }
 
     /// <summary>One in-row payload by its native type (a NUMERIC at <paramref name="scale"/>); a fixed scalar must have exactly its width.</summary>
-    private static NativeValue Decode(ReadOnlySpan<byte> bytes, byte type, byte scale, FormatDescriptor d)
+    private static NativeValue Decode(ReadOnlySpan<byte> bytes, byte type, byte scale, FormatDescriptor d, bool allowCompressed)
     {
         if (NativeTypes.FixedWidth(type) is int width && bytes.Length != width)
         {
@@ -444,12 +490,16 @@ public static class FieldDecoder
                 return ScalarCodecs.TryDecodeNumeric(bytes, d.Payload, scale, out NativeDecimal number, out string? numericFailure)
                     ? NativeValue.Of(number)
                     : NativeValue.Fail(numericFailure!);
+            case NativeTypes.BigInt:
+                return bytes.Length == 8
+                    ? new NativeValue(NativeKind.BigInt) { Integer = BinaryPrimitives.ReadInt64LittleEndian(bytes), Bits = BinaryPrimitives.ReadUInt64LittleEndian(bytes) }
+                    : NativeValue.Fail($"a BigInt payload of {bytes.Length} bytes, not 8");
             case NativeTypes.ExtendedDateTime:
                 return bytes.Length == d.Payload.ExtendedBytes
                     ? new NativeValue(NativeKind.ExtendedDateTime) { Bytes = bytes.ToArray() }
                     : NativeValue.Fail($"an Extended Date/Time payload of {bytes.Length} bytes, not {d.Payload.ExtendedBytes}");
             case NativeTypes.Text:
-                return DecodeText(bytes);
+                return DecodeText(bytes, allowCompressed);
             case NativeTypes.Binary:
                 return new NativeValue(NativeKind.Binary) { Bytes = bytes.ToArray() };
             default:

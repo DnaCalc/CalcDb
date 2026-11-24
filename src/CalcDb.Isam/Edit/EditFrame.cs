@@ -1220,8 +1220,7 @@ public sealed class EditFrame : IDisposable
                 _workspace.OverlayOf(editWriter.File),
                 inStatement: _workspace.InStatement,
                 inExplicitTransaction: _workspace.Depth > 0,
-                hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(editWriter.File),
-                allowFixedLongNull: AllowAdoCheckNullUpdate);
+                hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(editWriter.File));
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
@@ -2797,12 +2796,7 @@ public sealed class EditFrame : IDisposable
             {
                 return new TextFieldRead(new FieldResult(v, null));
             }
-            if (text.Length > 0 && text[0] == '﻿')
-            {
-                // Uncompressed text starting U+FEFF collides with the compressed marker (TextCodec, R-FMT-2 Text grammar).
-                return new TextFieldRead(new FieldResult(NativeValue.Fail("a candidate text starting U+FEFF"), CursorFailure.NotObserved));
-            }
-            // The cell's units, borrowed as uncompressed UTF-16LE: no copy (The Plan §3.2).
+            // The cell's units, borrowed as uncompressed UTF-16LE (Shape.Compressed = false keeps leading U+FEFF verbatim): no copy (The Plan §3.2).
             return new TextFieldRead(MemoryMarshal.AsBytes(text.AsSpan()), new TextShape(text.Length, false, null));
         }
 
@@ -2864,7 +2858,7 @@ public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, Table
     /// <summary>A Seek key of the candidate's value: Text up to the 255 units an entry keeps; Null and Decimal are not probed.</summary>
     private static KeyValue? KeyOf(in NativeValue v) => v.Kind switch
     {
-        NativeKind.Null or NativeKind.Decimal or NativeKind.Binary or NativeKind.ExtendedDateTime => null,
+        NativeKind.Null or NativeKind.Decimal or NativeKind.Binary or NativeKind.BigInt or NativeKind.ExtendedDateTime => null,
         NativeKind.Text when v.Text is not { Length: <= 255 } => null,
         _ => EntryKeys.ValueOf(v),
     };

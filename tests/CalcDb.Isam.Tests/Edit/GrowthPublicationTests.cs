@@ -834,23 +834,22 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void Refuses_LVAL_dropped_column_BOM_overflow_and_relationship()
+    public void Refuses_LVAL_dropped_column_overflow_and_relationship_and_admits_leading_BOM()
     {
-        // 1. Unrecorded Memo edge (leading U+FEFF) + Null OLE insert in WAccdbFixture (inline/single/chained LV writes
-        // and deletes are covered byte-for-byte against evidence/r-q19-growth-open/lv-* in KeptPageReplayTests).
+        // 1. Leading U+FEFF Memo insert (lifted by R-FMT-2 r-q36) + Null OLE insert in WAccdbFixture.
         using (var rig = new Rig(WAccdbFixture))
         {
-            // Leading U+FEFF Memo insert refused by name (TextCodec.TryEncode through RowWriter.PlacedLongValue).
             (TableDefinition mm, _) = rig.Table("Mm");
             (EditFrame mmFrame, _) = rig.OpenTable(rig.A, "Mm");
             Assert.True(mmFrame.AddNew().Succeeded);
             Assert.True(mmFrame.Assign(Col(mm, "ID"), I4(999)).Succeeded);
             AssignText(mmFrame, Col(mm, "M"), "\uFEFFmemo-bom");
-            AssertNotWritten(mmFrame.Update(), rig.A, "U+FEFF", rig.Before, rig.File.Image);
+            UpdateOutcome mmUpdate = mmFrame.Update();
+            Assert.True(mmUpdate.Succeeded, mmUpdate.ToString());
+            Assert.NotNull(mmUpdate.Change!.Physical);
+            Assert.Empty(rig.A.PendingPublication);
 
-            // An OLE insert whose long value is Null compiles: a Null long value is a Null field of the row, as in the
-            // catalog rows ACE writes with Null Memo and OLE fields (evidence/r-q11-ddl-closure, W-07/native-metadata-write).
-            // The refused Memo change was withdrawn (task sjws), so nothing waits before it: it is published.
+            // An OLE insert whose long value is Null compiles: a Null long value is a Null field of the row.
             (TableDefinition lo, _) = rig.Table("Lo");
             (EditFrame loFrame, _) = rig.OpenTable(rig.A, "Lo");
             Assert.True(loFrame.AddNew().Succeeded);
@@ -862,18 +861,19 @@ public sealed class GrowthPublicationTests
             Assert.NotEqual(rig.Before, rig.File.Image.Snapshot());
         }
 
-        // 2. Leading U+FEFF Text, Overflow-body Delete, and Relationship on EditFixture.
+        // 2. Leading U+FEFF Text (lifted by R-FMT-2 r-q36), Overflow-body Delete, and Relationship on EditFixture.
         using (var rig = new Rig(EditFixture))
         {
             (TableDefinition g, _) = rig.Table("G");
             (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
 
-            // Leading U+FEFF refused
+            // Leading U+FEFF Text writes verbatim UTF-16LE starting FF FE (uncompressed column).
             Assert.True(frame.AddNew().Succeeded);
-            byte[] afterBomAddNew = rig.File.Image.Snapshot();
             AssignText(frame, Col(g, "T"), "\uFEFFbom");
             AssignText(frame, Col(g, "U"), "u-bom");
-            AssertNotWritten(frame.Update(), rig.A, "U+FEFF", afterBomAddNew, rig.File.Image);
+            UpdateOutcome bomUpdate = frame.Update();
+            Assert.True(bomUpdate.Succeeded, bomUpdate.ToString());
+            Assert.Empty(rig.A.PendingPublication);
 
             // Relationship table refuses both AddNew and Delete with MutationOpen.Relationship
             var relCtx = new TableEditContext(
@@ -908,7 +908,7 @@ public sealed class GrowthPublicationTests
     }
 
     [Fact]
-    public void Refuses_calculated_UnicodeCompressed_droppedColumn_zeroFixed_and_partialNull_IgnoreNulls()
+    public void Refuses_calculated_droppedColumn_and_partialNull_IgnoreNulls_and_admits_UnicodeCompressed_and_zeroFixed()
     {
         using var rig = new Rig(EditFixture);
         (TableDefinition g, _) = rig.Table("G");
@@ -916,7 +916,7 @@ public sealed class GrowthPublicationTests
         ulong pageCount = rig.File.Image.PageCount;
         var binder = new EmptyRuleBinder();
 
-        // 1. Calculated column on CompileInsert
+        // 1. Calculated column on CompileInsert (still refused)
         ColumnDescriptor calcCol = Col(g, "T") with { ExtendedFlags = (byte)(Col(g, "T").ExtendedFlags | D.Payload.CalculatedFlags) };
         TableDefinition calcTable = g with { Columns = [Col(g, "ID"), calcCol, Col(g, "N"), Col(g, "U")] };
         var calcSem = MutationSemantics.Compile("G", calcTable, null, binder, D.IndexDescriptor);
@@ -925,16 +925,15 @@ public sealed class GrowthPublicationTests
         Assert.Null(calcOut.Change);
         Assert.Contains("calculated", calcOut.NotWritten);
 
-        // 2. Unicode-compressed Text column (ExtendedFlags bit 0x01) on CompileInsert
+        // 2. Unicode-compressed Text column (ExtendedFlags bit 0x01) on CompileInsert (lifted by R-FMT-2 r-q36)
         ColumnDescriptor compCol = Col(g, "T") with { ExtendedFlags = (byte)(Col(g, "T").ExtendedFlags | 0x01) };
         TableDefinition compTable = g with { Columns = [Col(g, "ID"), compCol, Col(g, "N"), Col(g, "U")] };
         var compSem = MutationSemantics.Compile("G", compTable, null, binder, D.IndexDescriptor);
         var compWriter = new SameWidthWriter(new TableFootprints(cache, D, compTable, pageCount));
         CompiledChange compOut = compWriter.CompileInsert(compSem, [LongVal(10), TextVal("abc"), NativeValue.Null, NativeValue.Null], 10);
-        Assert.Null(compOut.Change);
-        Assert.Contains("Unicode-compressed", compOut.NotWritten);
+        Assert.NotNull(compOut.Change);
 
-        // 3. Dropped-column schema (ColumnCount != MaxColumns) on CompileInsert
+        // 3. Dropped-column schema (ColumnCount != MaxColumns) on CompileInsert (still refused)
         TableDefinition droppedTable = g with { MaxColumns = g.MaxColumns + 1 };
         var droppedSem = MutationSemantics.Compile("G", droppedTable, null, binder, D.IndexDescriptor);
         var droppedWriter = new SameWidthWriter(new TableFootprints(cache, D, droppedTable, pageCount));
@@ -942,16 +941,15 @@ public sealed class GrowthPublicationTests
         Assert.Null(droppedOut.Change);
         Assert.Contains("dropped-column", droppedOut.NotWritten);
 
-        // 4. Zero-fixed-width table on CompileInsert
+        // 4. Zero-fixed-width table on CompileInsert (lifted by R-FMT-2 r-q36)
         ColumnDescriptor varOnly = Col(g, "T") with { PhysicalNumber = 0, Ordinal = 0, VariableIndex = 0 };
         TableDefinition zeroFixedTable = g with { MaxColumns = 1, ColumnCount = 1, VariableColumns = 1, Columns = [varOnly], PhysicalIndexes = [], LogicalIndexes = [], RealIndexCount = 0, LogicalIndexCount = 0 };
         var zfSem = MutationSemantics.Compile("G", zeroFixedTable, null, binder, D.IndexDescriptor);
         var zfWriter = new SameWidthWriter(new TableFootprints(cache, D, zeroFixedTable, pageCount));
         CompiledChange zfOut = zfWriter.CompileInsert(zfSem, [TextVal("abc")], null);
-        Assert.Null(zfOut.Change);
-        Assert.Contains("zero-fixed", zfOut.NotWritten);
+        Assert.NotNull(zfOut.Change);
 
-        // 5. Partial-Null key in multi-column IgnoreNulls index on CompileInsert
+        // 5. Partial-Null key in multi-column IgnoreNulls index on CompileInsert (still refused)
         PhysicalIndex multiIgnore = new(
             Number: 0,
             Columns: [new IndexColumn(Col(g, "N").PhysicalNumber, true, 0x01), new IndexColumn(Col(g, "U").PhysicalNumber, true, 0x01)],
@@ -966,5 +964,48 @@ public sealed class GrowthPublicationTests
         CompiledChange ignOut = ignWriter.CompileInsert(ignSem, [LongVal(10), TextVal("ok"), LongVal(5), NativeValue.Null], 10);
         Assert.Null(ignOut.Change);
         Assert.Contains("partial-Null", ignOut.NotWritten);
+    }
+
+    [Fact]
+    public void Row_rewrite_preserves_stale_fixed_bytes_for_newly_and_already_Null_fields()
+    {
+        // R-FMT-2 r-q36 (nullfix-grow-*, nullfix-shrink-*): a row rewrite preserves existing fixed bytes for both
+        // newly-Null fixed fields and already-Null fixed fields.
+        using var rig = new Rig(EditFixture);
+        (TableDefinition g, _) = rig.Table("G");
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable(rig.A, "G");
+        SeekRowById(cursor, g, 1);
+        RowId rid = cursor.CurrentRow!.Value;
+        ColumnDescriptor nCol = Col(g, "N");
+        ColumnDescriptor tCol = Col(g, "T");
+
+        Assert.Equal(1, cursor.Read(nCol).Value.Integer);
+        byte[] expectedFixedBytes = [1, 0, 0, 0];
+
+        // 1. Set N = Null AND grow T in one Edit (RewrittenRow with newly-Null fixed field).
+        Assert.True(frame.Edit().Succeeded);
+        Assert.True(frame.Assign(nCol, Null()).Succeeded);
+        AssignText(frame, tCol, new string('x', tCol.Length / 2));
+        UpdateOutcome growOut = frame.Update();
+        Assert.True(growOut.Succeeded, growOut.ToString());
+        Assert.Equal(NativeKind.Null, cursor.Read(nCol).Value.Kind);
+        Assert.Equal(expectedFixedBytes, ReadFixedFieldBytes(rig.File.Image.Snapshot(), rid, nCol));
+
+        // 2. Shrink T while N remains Null (RewrittenRow with already-Null fixed field).
+        Assert.True(frame.Edit().Succeeded);
+        AssignText(frame, tCol, "s");
+        UpdateOutcome shrinkOut = frame.Update();
+        Assert.True(shrinkOut.Succeeded, shrinkOut.ToString());
+        Assert.Equal(NativeKind.Null, cursor.Read(nCol).Value.Kind);
+        Assert.Equal(expectedFixedBytes, ReadFixedFieldBytes(rig.File.Image.Snapshot(), rid, nCol));
+
+        static byte[] ReadFixedFieldBytes(byte[] image, RowId rowId, ColumnDescriptor col)
+        {
+            ReadOnlySpan<byte> page = image.AsSpan((int)rowId.Page * D.PageSize, D.PageSize);
+            SlotView? slot = DataPages.CheckedSlot(page, rowId.Row, D, out _);
+            Assert.NotNull(slot);
+            ReadOnlySpan<byte> body = page.Slice(slot.Value.Start, slot.Value.Length);
+            return body.Slice(D.Row.FixedBase + col.FixedOffset, 4).ToArray();
+        }
     }
 }

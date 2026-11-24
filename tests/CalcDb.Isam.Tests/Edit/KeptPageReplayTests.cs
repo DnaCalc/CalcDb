@@ -2218,12 +2218,14 @@ public sealed class KeptPageReplayTests
             Assert.Equal(twoMemoImg, s.File.Snapshot());
         }
 
-        // 2. MEMO WITH COMPRESSION (ExtendedFlags = 0x01): refused by name via TextCodec.TryEncode.
-        foreach ((string question, int chars) in new[]
+        // 2. MEMO WITH COMPRESSION (ExtendedFlags = 0x01; R-FMT-2 r-q22 / r-q36): single-row boundary (<= 3,816)
+        // is decided on uncompressed UTF-16 byte length; single-row compresses (100 -> 102B, 1908 -> 1910B),
+        // chained (1909 -> 3,818 raw bytes) never compresses.
+        foreach ((string question, int chars, LongValueForm expectedForm, int expectedPayloadBytes) in new[]
         {
-            ("lv-memo-comp-100", 100),
-            ("lv-memo-comp-1908", 1908),
-            ("lv-memo-comp-1909", 1909),
+            ("lv-memo-comp-100", 100, LongValueForm.SingleRow, 102),
+            ("lv-memo-comp-1908", 1908, LongValueForm.SingleRow, 1910),
+            ("lv-memo-comp-1909", 1909, LongValueForm.Chain, 3818),
         })
         {
             byte[] image = SeedGrowthOpen(question, "r-q22-lv-open");
@@ -2240,10 +2242,25 @@ public sealed class KeptPageReplayTests
             try
             {
                 Assert.True(frame.Assign(t.Columns[1], val).Succeeded);
-                UpdateOutcome refused = frame.Update();
-                Assert.False(refused.Succeeded, $"{question} should refuse");
-                Assert.Equal(MutationOpen.Publication, refused.Open);
-                Assert.Contains("compress", refused.Detail, StringComparison.OrdinalIgnoreCase);
+                UpdateOutcome outcome = frame.Update();
+                Assert.True(outcome.Succeeded, $"{question} should succeed: {outcome}");
+                Assert.Equal(MutationOpen.None, outcome.Open);
+                using TableCursor readCur = TableCursor.Open(s.Cache, D, t, s.File.PageCount, 0, out _)!;
+                Assert.Equal(MoveOutcome.Moved, readCur.MoveFirst());
+                FieldResult read = readCur.Read(t.Columns[1]);
+                Assert.Equal(NativeKind.Text, read.Value.Kind);
+                Assert.Equal(new string('a', chars), read.Value.Text);
+                byte[] after = s.File.Snapshot();
+                ReadOnlySpan<byte> dataPage = after.AsSpan(46 * D.PageSize, D.PageSize);
+                SlotView? slot = DataPages.CheckedSlot(dataPage, 0, D, out _);
+                Assert.NotNull(slot);
+                ReadOnlySpan<byte> body = dataPage.Slice(slot.Value.Start, slot.Value.Length);
+                Assert.True(RowEnvelope.TryOpen(body, D, out RowEnvelope env, out _));
+                FieldRead fr = env.ReadField(t.Columns[1], t.KnownFixedEnd(env.ColumnCount, D));
+                LongValuePlan? plan = LongValuePlan.Inspect(body[fr.Start..fr.End], out _);
+                Assert.NotNull(plan);
+                Assert.Equal(expectedForm, plan.Form);
+                Assert.Equal((uint)expectedPayloadBytes, plan.Length);
             }
             finally
             {
@@ -2756,14 +2773,14 @@ public sealed class KeptPageReplayTests
             Assert.Contains("overflows its data page", r.Detail);
         }
 
-        // 8. MDB file: writing a long value, removing a single-row LV, and removing an inline LV (before early return)
-        // all refuse by name.
+        // 8. MDB file: writing a chained Memo long value, removing a single-row LV, and removing an inline LV (before
+        // early return) all refuse by name (inline and single-page Memo writes are lifted by R-FMT-2 r-q36).
         {
             byte[] mdbPage0 = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(Jet4MdbFixture).AsSpan(0, D.PageSize).ToArray();
             byte[] img = SeedGrowthOpen("lv-op-single-larger");
             mdbPage0.CopyTo(img, 0);
             using var sWrite = new Session(img);
-            UpdateOutcome rWrite = TryInsertLv(sWrite, 4, memo: true, 100);
+            UpdateOutcome rWrite = TryInsertLv(sWrite, 4, memo: true, 4000);
             Assert.False(rWrite.Succeeded);
             Assert.Equal(MutationOpen.Publication, rWrite.Open);
             Assert.Contains("MDB", rWrite.Detail);
