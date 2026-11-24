@@ -244,7 +244,7 @@ internal sealed unsafe partial class RecordReplay(string record) : IDisposable, 
 
     private TransactionCoordinator NewLocker()
     {
-        var locker = new TransactionCoordinator(new LockerId((ulong)_lockers.Count + 1)) { WaitPolicy = _policy, Scheduler = _scheduler, Publisher = this };
+        var locker = new TransactionCoordinator(new LockerId((ulong)_lockers.Count + 1)) { WaitPolicy = _policy, Scheduler = _scheduler, Publisher = this, Clock = static () => TimeSpan.Zero };
         _lockers.Add(locker);
         return locker;
     }

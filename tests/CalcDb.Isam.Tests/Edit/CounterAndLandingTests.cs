@@ -42,11 +42,7 @@ public sealed class CounterAndLandingTests
         {
             File = new ReplayFixture(fixtureSha);
             Before = File.Image.Snapshot();
-            A = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler() };
-            if (clock is not null)
-            {
-                A.Clock = clock;
-            }
+            A = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler(), Clock = clock ?? (static () => TimeSpan.Zero) };
         }
 
         public ReplayFixture File { get; }
@@ -729,7 +725,7 @@ public sealed class CounterAndLandingTests
     public void NeedsCloseCommit_tracks_per_session_allocations_releases_and_ignores_direct_frees_and_other_sessions()
     {
         using var rig = new Rig(EditFixture);
-        using var other = new TransactionCoordinator(new LockerId(2)) { Publisher = rig.File, Scheduler = new CountingScheduler() };
+        using var other = new TransactionCoordinator(new LockerId(2)) { Publisher = rig.File, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         PageCache cache = rig.File.Cache;
         (TableDefinition table, TableEditContext ctx) = rig.Table("G");
 

@@ -27,8 +27,8 @@ public sealed class LockerTests
             var db = new ReplayFixture(EditFixture);
             File = db;
             (Table, Context) = db.Table("G")!.Value;
-            A = new TransactionCoordinator(new LockerId(1)) { Scheduler = Waits };
-            B = new TransactionCoordinator(new LockerId(2)) { Scheduler = Waits };
+            A = new TransactionCoordinator(new LockerId(1)) { Scheduler = Waits, Clock = static () => TimeSpan.Zero };
+            B = new TransactionCoordinator(new LockerId(2)) { Scheduler = Waits, Clock = static () => TimeSpan.Zero };
         }
 
         public ReplayFixture File { get; }

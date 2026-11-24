@@ -123,7 +123,7 @@ public sealed class SchemaWriterTests
             File = new MemoryDatabaseFile([.. fixture], D.PageSize);
             Cache = new PageCache(File, File.Incarnation, D.PageSize, 256);
             Pages = File.PageCount;
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Clock = static () => TimeSpan.Zero };
         }
 
         public MemoryDatabaseFile File { get; }

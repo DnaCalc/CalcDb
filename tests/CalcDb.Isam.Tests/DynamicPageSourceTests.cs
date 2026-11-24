@@ -29,7 +29,7 @@ public sealed class DynamicPageSourceTests
     public void TableCursor_with_dynamic_PageSource_follows_overlay_creation_revision_rollback_and_commit()
     {
         using var file = new ReplayFixture(EditFixture);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         (TableDefinition g, TableEditContext gCtx) = file.Table("G")!.Value;
         ulong pages = file.Image.PageCount;
 
@@ -96,7 +96,7 @@ public sealed class DynamicPageSourceTests
     public void TableCursor_indexed_Seek_and_IndexNavigator_invalidate_decoded_pages_across_overlay_transitions()
     {
         using var file = new ReplayFixture(EditFixture);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         (TableDefinition r, TableEditContext rCtx) = file.Table("R")!.Value;
         ulong pages = file.Image.PageCount;
         var dynamicSource = new PageSource(file.Cache, ws);
@@ -141,7 +141,7 @@ public sealed class DynamicPageSourceTests
     public void PopulationCursor_family_follows_dynamic_PageSource_and_snapshot_refuses_dynamic_PageSource()
     {
         using var file = new ReplayFixture(EditFixture);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         (TableDefinition g, TableEditContext gCtx) = file.Table("G")!.Value;
         ulong pages = file.Image.PageCount;
         ColumnDescriptor nCol = Col(g, "N");
@@ -192,7 +192,7 @@ public sealed class DynamicPageSourceTests
     public void RowReader_opened_over_dynamic_PageSource_tracks_overlay_transitions()
     {
         using var file = new ReplayFixture(EditFixture);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         (TableDefinition g, TableEditContext gCtx) = file.Table("G")!.Value;
         ulong pages = file.Image.PageCount;
         ColumnDescriptor nCol = Col(g, "N");

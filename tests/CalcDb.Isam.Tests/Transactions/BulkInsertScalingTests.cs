@@ -58,7 +58,7 @@ public sealed class BulkInsertScalingTests(ITestOutputHelper output)
             _image = new MemoryDatabaseFile(EmptyBytes.Value, D.PageSize);
             // 1024 frames comfortably holds all ~70 data/map/TableDef pages for 16k rows without frame-reuse scans (gx5w).
             _cache = new PageCache(_image, _image.Incarnation, D.PageSize, 1024);
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler() };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
 
             CatalogSnapshot catalog = CatalogBootstrap.Open(_cache, D, _image.PageCount, out CatalogFailure? catFail)!;
             Assert.Null(catFail);

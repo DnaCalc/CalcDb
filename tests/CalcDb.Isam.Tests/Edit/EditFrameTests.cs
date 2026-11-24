@@ -30,7 +30,7 @@ public sealed unsafe class EditFrameTests(ITestOutputHelper output)
             Context = context;
             Cursor = db.Open(table, 2)!;
             Cursor.MoveFirst();
-            Workspace = new TransactionCoordinator(new LockerId(1));
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
             Frame = new EditFrame(context, Cursor, Workspace);
         }
 

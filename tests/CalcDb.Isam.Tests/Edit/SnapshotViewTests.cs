@@ -24,7 +24,7 @@ public sealed class SnapshotViewTests
         {
             File = new ReplayFixture(fixture);
             (Table, Context) = File.Table(table)!.Value;
-            Writer = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler() };
+            Writer = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         }
 
         public ReplayFixture File { get; }

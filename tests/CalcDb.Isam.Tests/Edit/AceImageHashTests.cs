@@ -56,7 +56,7 @@ public sealed class AceImageHashTests
     {
         private readonly List<IDisposable> _owned = [];
 
-        public TransactionCoordinator Ws { get; } = new(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        public TransactionCoordinator Ws { get; } = new(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
 
         public (EditFrame Frame, TableCursor Cursor, TableDefinition Table) OpenTable(string table)
         {
