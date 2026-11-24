@@ -1,0 +1,56 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q38-mdb-new-image/eng-general-full",
+  "bookRefs": [
+    "W-07",
+    "R-FMT-1",
+    "R-CAT-1",
+    "II-03",
+    "II-04",
+    "II-06"
+  ],
+  "description": "W-07/new-database-image (537t, Jet 4 MDB): DBEngine.CreateDatabase with full R-FMT-1 locale (;LANGID=0x0409;CP=1252;COUNTRY=0) and option 64 (dbVersion40). Keeps the whole 77,824-byte file via nativeRead both immediately after CreateDatabase (while Database is still open) and after Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeModules", "label": "before-create" },
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create-engine" },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q38-eng-general-full.mdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 64 }
+      ],
+      "bind": "db"
+    },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg_open", "file": "work:r-q38-eng-general-full.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg_open", "offset": 0, "count": 131072, "keep": true },
+    { "op": "nativeClose", "handle": "pg_open" },
+    { "op": "invoke", "target": "db", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "CollatingOrder", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-db-close", "keep": false, "pageSize": 4096 },
+    { "op": "release", "target": "eng" },
+    { "op": "observeModules", "label": "after-close" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg_close", "file": "work:r-q38-eng-general-full.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg_close", "offset": 0, "count": 131072, "keep": true },
+    { "op": "nativeClose", "handle": "pg_close" }
+  ]
+}
