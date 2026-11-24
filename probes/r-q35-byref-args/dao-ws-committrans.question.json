@@ -1,0 +1,131 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q35-byref-args/dao-ws-committrans",
+  "bookRefs": ["R-ORACLE-1", "OR-WIRE", "R-STRING-1", "STR-BYREF", "R-TXN-1", "TXN-FLUSH-LIVE"],
+  "description": "Card R-ORACLE-1 OR-WIRE (3m35): ByRef forms of DAO Workspace.CommitTrans(Options) and DBEngine.CommitTrans(Options) on ACCDB (same fixture and setup as r-txn-1b/commit-option-vartypes, writable OpenDatabase in Workspaces(0)). Workspace.CommitTrans asks every VarType admitted by value: I4 1, I2 1, UI1 1, Bool True, R8 1.0, BSTR '1' (each as VT_BYREF|<T> and VT_BYREF|VT_VARIANT), plus Empty and Null (as VT_BYREF|VT_VARIANT); DBEngine.CommitTrans asks I4 1 (VT_BYREF|VT_I4 and VT_BYREF|VT_VARIANT). Each step wraps BeginTrans, UPDATE Lv SET V = V + 1 WHERE ID = 1, CommitTrans(arg), DBEngine.Errors, Rollback, DBEngine.Errors and reads SUM(V) from Lv. Asks whether each ByRef form answers identically to its by-value form.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-txn-1b-main-accdb.accdb",
+      "sha256": "cde7b712cc54e824851b29bf6e711b875a9018edb83b623b81a13a3798799ddb",
+      "length": 339968,
+      "provenance": "r-txn-1b.create-main-accdb.e4d92aea6d.a1 qk1-e4d92aea6db1253b5b424b8e6c661b41c07bcb69f225432a7f8c87b4d6721bbc output:r-txn-1b-main-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db",
+      "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }]
+    },
+    { "op": "invoke", "target": "eng", "member": "Workspaces", "kind": "propertyGet", "args": [], "bind": "wss" },
+    { "op": "invoke", "target": "wss", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "i4", "value": 0 }], "bind": "ws" },
+    { "op": "release", "target": "wss" },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i2", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i2", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "ui1", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "ui1", "value": 1 } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bool", "value": true } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bool", "value": true } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "r8", "bits": "3ff0000000000000" } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "r8", "bits": "3ff0000000000000" } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "1" } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "1" } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "empty" } }] },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "ws", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "ws", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "null" } }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "en" },
+    { "op": "forEachItem", "target": "en", "bind": "e", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "e", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Source", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "en" },
+    { "op": "invoke", "target": "ws", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "eng", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "eng", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "eng", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "eng", "member": "BeginTrans", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE Lv SET V = V + 1 WHERE ID = 1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "eng", "member": "CommitTrans", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "eng", "member": "Rollback", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "chk", "args": [{ "type": "bstr", "text": "SELECT SUM(V) AS Tot, COUNT(*) AS Cnt FROM Lv" }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "chk", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "cfl" },
+    { "op": "invoke", "target": "cfl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Tot" }], "bind": "ftot" },
+    { "op": "invoke", "target": "ftot", "member": "Value", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "ftot" },
+    { "op": "release", "target": "cfl" },
+    { "op": "invoke", "target": "chk", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "chk" },
+
+    { "op": "release", "target": "ws" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
