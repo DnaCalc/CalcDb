@@ -424,7 +424,7 @@ public sealed class AceImageHashTests
 
     /// <summary>
     /// evidence/r-q17-growth/retire-delete-au1 (DELETE FROM Au1, one session; the same after-hash as
-    /// r-q16-overflow/lower-free's first session) and retire-delete-au1-read-open (the file read before Close): the
+    /// r-q16-overflow/lower-free-grow-row2-plus-30's first session) and retire-delete-au1-read-open (the file read before Close): the
     /// statement clears page 110 from Au1's owned map and FreeMap, sets the TableDef's row count and index counter to 0
     /// and empties the PK root leaf, leaving the data page as it was; page 1 marks 110 free at Close, with the Close commit.
     /// </summary>

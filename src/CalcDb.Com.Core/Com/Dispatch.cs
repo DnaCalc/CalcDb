@@ -157,7 +157,7 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
     /// <see cref="ScalarArgumentRefusal"/> and coercion (R-ERR-1 ERR-BIND). False by default so unrecorded ByRef
     /// forms stay refused by name.
     /// </summary>
-    protected virtual bool AdmitsByRefScalarArgument(MemberDecl member, int parameter) => false;
+    protected virtual bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => false;
 
     /// <summary>
     /// A named refusal for a passed, non-Missing declared scalar argument inspected with its original
@@ -430,7 +430,7 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
                     NativeVariant deref = default;
                     NativeVariant* source = raw;
                     VarType sourceType = rawType;
-                    if ((rawType & VarType.ByRef) != 0 && AdmitsByRefScalarArgument(member, k))
+                    if ((rawType & VarType.ByRef) != 0 && AdmitsByRefScalarArgument(member, k, args))
                     {
                         deref = ByRefValues.Dereference(raw);
                         source = &deref;

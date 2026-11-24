@@ -343,21 +343,28 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
+    private bool IsMdb => Database.Profile.Format == FileFormat.Jet4;
+
     /// <summary>
-    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for Move(Rows),
-    /// FindFirst(Criteria) and Seek(Comparison) (r-q2-cursor-dao/byref-dao-move-seek calls 9, 26, 46). Other scalar
-    /// members (PercentPosition, FindNext/FindLast/FindPrevious) keep ByRef refused by name.
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value on ACCDB for
+    /// Move(Rows), FindFirst(Criteria), Seek(Comparison) (r-q2-cursor-dao/byref-dao-move-seek calls 9, 26, 46),
+    /// PercentPosition put (r-q35-byref-args/dao-rs-percentposition), and FindLast/FindNext/FindPrevious(Criteria)
+    /// (r-q35-byref-args/dao-rs-findlast). MDB ByRef forms are not recorded and stay refused by name.
     /// </summary>
-    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter) =>
-        parameter == 0 && member.Name is "Move" or "FindFirst" or "Seek";
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        !IsMdb && parameter == 0 && (
+            member.Name is "Move" or "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" or "Seek"
+            || (member.Name == "PercentPosition" && member.Kind == InvokeKind.PropertyPut));
 
     /// <summary>
     /// Refuse unrecorded source VarTypes before IDispatch coercion for members whose records probe only a specific subset:
     /// Move (r-cursor-1b/move-argument-forms; ByRef: r-q2-cursor-dao/byref-dao-move-seek call 9), PercentPosition
-    /// (r-cursor-1b/percent-assign), Seek comparison (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek; ByRef:
-    /// r-q2-cursor-dao/byref-dao-move-seek call 46), FindFirst/FindNext criteria (r-cursor-1b/find-expression-forms,
-    /// r-wire/opt-find-criteria; FindFirst ByRef: r-q2-cursor-dao/byref-dao-move-seek call 26), and
-    /// FindLast/FindPrevious criteria (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends).
+    /// (r-cursor-1b/percent-assign; ByRef: r-q35-byref-args/dao-rs-percentposition), Seek comparison
+    /// (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek; ByRef: r-q2-cursor-dao/byref-dao-move-seek call 46),
+    /// FindFirst/FindNext criteria (r-cursor-1b/find-expression-forms, r-wire/opt-find-criteria; ByRef:
+    /// r-q2-cursor-dao/byref-dao-move-seek call 26, r-q35-byref-args/dao-rs-findlast), and FindLast/FindPrevious
+    /// criteria (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends; ByRef:
+    /// r-q35-byref-args/dao-rs-findlast).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
@@ -459,16 +466,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         for (int i = 0; i < keys.Length; i++)
         {
             ColumnDescriptor? column = table.KeyColumn(i);
-            // Key1 (p1) admits one-level ByRef (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) as by-value
-            // (r-q2-cursor-dao/byref-dao-move-seek call 46); nested ByRef and ByRef on Key2..Key13 are refused by name.
+            // Key1 (p1) admits one-level ByRef (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) as by-value on ACCDB
+            // (r-q2-cursor-dao/byref-dao-move-seek call 46); MDB, nested ByRef and ByRef on Key2..Key13 are refused by name.
             NativeVariant* rawKey = Args.Cell(args[1 + i]);
-            NativeVariant keyCell = i == 0 ? ByRefValues.Dereference(rawKey) : *rawKey;
+            NativeVariant keyCell = i == 0 && !IsMdb ? ByRefValues.Dereference(rawKey) : *rawKey;
             if (((VarType)keyCell.Vt & VarType.ByRef) != 0
                 || (((VarType)rawKey->Vt & VarType.ByRef) != 0 && TypedCall.IsMissing(&keyCell)))
             {
                 return CallResult.Fail(Failure.NotModelled(
                     "NotModelled.SeekKeyArgumentType",
-                    $"Recordset.Seek Key{i + 1} with {(VarType)rawKey->Vt} argument (only by-value, or one-level ByRef on Key1, is recorded)"));
+                    $"Recordset.Seek Key{i + 1} with {(VarType)rawKey->Vt} argument (only by-value, or ACCDB one-level ByRef on Key1, is recorded)"));
             }
             KeyArgumentFailure failure = KeyArgumentFailure.NotEncoded;
             SeekKey? key = column is null ? null

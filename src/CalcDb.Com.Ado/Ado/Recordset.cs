@@ -1207,18 +1207,31 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private void ResetServerValueReadState() => _serverValueReadOrdinals?.Clear();
 
     /// <summary>
-    /// Refuse unrecorded source VarTypes on Sort (only by-value BSTR and Null recorded: r-ado-1b/view-sort-grammar,
-    /// view-sort-server) and Find (Criteria: only by-value BSTR and Null; SkipRecords: only by-value I4:
-    /// r-ado-1b/view-find-client) before IDispatch coerces them silently.
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value on ACCDB for
+    /// Sort put (p0: r-q35-byref-args/ado-rs-sort) and Find Criteria/SkipRecords (p0/p1: r-q35-byref-args/ado-rs-find).
+    /// MDB ByRef forms and Find SearchDirection/Start (p2/p3) ByRef stay refused by name.
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
+    {
+        ("Sort", 0) when member.Kind == InvokeKind.PropertyPut => !_isMdb,
+        ("Find", 0 or 1) => !_isMdb,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Refuse unrecorded source VarTypes on Sort (BSTR and Null; ByRef on ACCDB: r-q35-byref-args/ado-rs-sort;
+    /// by-value: r-ado-1b/view-sort-grammar, view-sort-server) and Find (Criteria: BSTR and Null; SkipRecords: I4;
+    /// ByRef on ACCDB: r-q35-byref-args/ado-rs-find; by-value: r-ado-1b/view-find-client) before IDispatch coerces
+    /// them silently.
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
         ("Sort", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.Bstr or VarType.Null) =>
-            Failure.NotModelled("NotModelled.AdoSortArgumentType", $"Recordset.Sort put with {sourceType} argument (only BSTR and Null are recorded)"),
+            Failure.NotModelled("NotModelled.AdoSortArgumentType", $"Recordset.Sort put with {sourceType} argument (only BSTR, Null and ACCDB ByRef forms are recorded)"),
         ("Find", 0) when sourceType is not (VarType.Bstr or VarType.Null) =>
-            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find Criteria with {sourceType} argument (only BSTR and Null are recorded)"),
+            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find Criteria with {sourceType} argument (only BSTR, Null and ACCDB ByRef forms are recorded)"),
         ("Find", 1) when sourceType != VarType.I4 =>
-            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find SkipRecords with {sourceType} argument (only by-value I4 is recorded)"),
+            Failure.NotModelled("NotModelled.AdoFindArgumentType", $"Recordset.Find SkipRecords with {sourceType} argument (only I4 and ACCDB ByRef I4 are recorded)"),
         _ => null,
     };
 
@@ -2247,6 +2260,19 @@ internal sealed unsafe class RecordsetObject : AdoObject
         nint skipArg = args.Length > 1 ? args[1] : 0;
         nint dirArg = args.Length > 2 ? args[2] : 0;
         nint startArg = args.Length > 3 ? args[3] : 0;
+
+        if (dirArg != 0 && ((VarType)Args.Cell(dirArg)->Vt & VarType.ByRef) != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoFindArgumentType",
+                $"Recordset.Find SearchDirection with {(VarType)Args.Cell(dirArg)->Vt} argument (ByRef SearchDirection is not recorded)"));
+        }
+        if (startArg != 0 && ((VarType)Args.Cell(startArg)->Vt & VarType.ByRef) != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoFindArgumentType",
+                $"Recordset.Find Start with {(VarType)Args.Cell(startArg)->Vt} argument (ByRef Start is not recorded)"));
+        }
 
         if (criteriaArg != 0 && ((VarType)Args.Cell(criteriaArg)->Vt & ~VarType.ByRef) == VarType.Null)
         {
@@ -4411,13 +4437,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
                         "NotModelled.AdoGetChunkMemoNullOrEmpty",
                         $"Field.GetChunk on Null or empty Memo field '{desc.Name}' is not recorded"));
                 }
-                if (_chunkFieldOrdinal == ordinal && _chunkOffset > 0)
-                {
-                    return CallResult.Fail(Failure.NotModelled(
-                        "NotModelled.AdoGetChunkMemoContinuation",
-                        $"Consecutive Field.GetChunk continuation on Memo field '{desc.Name}' is not recorded"));
-                }
-                if (_chunkFieldOrdinal < 0 || _rows.Columns[_chunkFieldOrdinal].AdoType != 205)
+                bool continuing = _chunkFieldOrdinal == ordinal && _chunkOffset > 0;
+                if (!continuing && (_chunkFieldOrdinal < 0 || _rows.Columns[_chunkFieldOrdinal].AdoType != 205))
                 {
                     return CallResult.Fail(Failure.NotModelled(
                         "NotModelled.AdoGetChunkMemoFirstOnRow",
@@ -4432,18 +4453,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
                             $"Field.GetChunk on non-ASCII Memo field '{desc.Name}' is not recorded"));
                     }
                 }
-                if (length >= chars.Length)
+                int start = continuing ? _chunkOffset : 0;
+                if (length >= chars.Length - start)
                 {
                     return CallResult.Fail(Failure.NotModelled(
                         "NotModelled.AdoGetChunkMemoFullOrOverread",
-                        $"Field.GetChunk({length}) on Memo field '{desc.Name}' with length >= {chars.Length} is not recorded"));
+                        $"Field.GetChunk({length}) at offset {start} on Memo field '{desc.Name}' reaching or exceeding length {chars.Length} is not recorded"));
                 }
-                // r-oledb-odbc/stream-getchunk #37, #39, #41, #43, #95, #97, #99, #101:
-                // partial chunk (length < chars.Length) on ASCII Memo after OLE GetChunk returns length characters and marks the field consumed.
+                // r-oledb-odbc/stream-getchunk #37, #39, #41, #43, #95, #97, #99, #101 (first partial chunk);
+                // r-q35-byref-args/ado-field-getchunk a1 seq 24-25, 43-44 (consecutive partial chunk on server forward-only and client static):
+                // partial chunk (start + length < chars.Length) on ASCII Memo after OLE GetChunk returns length characters, advances offset, and marks the field consumed.
                 _chunkFieldOrdinal = ordinal;
-                _chunkOffset = length;
+                _chunkOffset = start + length;
                 (_chunkConsumedOrdinals ??= []).Add(ordinal);
-                return CallResult.Of(OwnedVariant.FromText(chars[..length]));
+                return CallResult.Of(OwnedVariant.FromText(chars.Slice(start, length)));
             }
         }
     }

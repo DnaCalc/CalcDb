@@ -3,6 +3,7 @@ using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
@@ -192,6 +193,19 @@ internal sealed unsafe class DBEngineObject : DaoObject
         "BeginTrans" or "CommitTrans" or "Rollback" => Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.{member.Name} with a wrong argument count (recorded on Workspace only)"),
         "CreateDatabase" => InvalidArgumentCount(),
         _ => null,
+    };
+
+    /// <summary>
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
+    /// DBEngine.CommitTrans Option (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 74, 78) and
+    /// DBEngine.CreateDatabase Name/Locale (p0/p1: r-q35-byref-args/dao-eng-createdatabase calls 7, 11, 15, 19,
+    /// 23, 27, 31, 35). CreateDatabase Option (p2) ByRef stays refused by name in WorkspaceObject.ValidateCreateOption.
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
+    {
+        ("CommitTrans", 0) => !(Engine.Touched && Engine.DefaultWorkspace.HasOpenMdbDatabase),
+        ("CreateDatabase", 0 or 1) => true,
+        _ => false,
     };
 
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
@@ -405,9 +419,26 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// </summary>
     protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback" ? InvalidArgumentCount() : null;
 
+    /// <summary>Whether any currently open database in this Workspace is Jet 4 MDB (used to keep ACCDB-only ByRef rules off MDB).</summary>
+    internal bool HasOpenMdbDatabase => _databases.Any(static d => !d.Closed && d.Profile.Format == FileFormat.Jet4);
+
+    /// <summary>
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
+    /// Workspace.CommitTrans Options (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 10-62) and
+    /// Workspace.CreateDatabase Name/Connect (p0/p1: r-q35-byref-args/dao-eng-createdatabase calls 39, 43, 47, 51).
+    /// CreateDatabase Option (p2) ByRef stays refused by name in ValidateCreateOption.
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
+    {
+        ("CommitTrans", 0) => !HasOpenMdbDatabase,
+        ("CreateDatabase", 0 or 1) => true,
+        _ => false,
+    };
+
     /// <summary>
     /// Refuse unrecorded source VarTypes before VariantChangeType runs: CommitTrans(Options) admits only the VarTypes
-    /// recorded in r-txn-1b/commit-option-vartypes; Workspace.CreateDatabase admits only BSTR on Name and Connect.
+    /// recorded in r-txn-1b/commit-option-vartypes (ByRef on ACCDB: r-q35-byref-args/dao-ws-committrans);
+    /// Workspace.CreateDatabase admits only BSTR on Name and Connect (ByRef: r-q35-byref-args/dao-eng-createdatabase).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
@@ -718,7 +749,14 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         {
             return null; // Omitted or Missing -> dbVersion120 (Ace2007)
         }
-        VarType vt = Args.TypeOf(optionArg) & ~VarType.ByRef;
+        VarType rawVt = (VarType)Args.Cell(optionArg)->Vt;
+        if ((rawVt & VarType.ByRef) != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.CreateDatabaseArgumentType",
+                $"CreateDatabase Option with {rawVt} argument (ByRef Option is not recorded)"));
+        }
+        VarType vt = rawVt;
         if (vt == VarType.Empty)
         {
             return null; // r-wire/opt-createdatabase (o2): VT_EMPTY -> default dbVersion120 (Ace2007)
