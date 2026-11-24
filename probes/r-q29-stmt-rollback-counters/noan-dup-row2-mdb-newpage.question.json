@@ -44,8 +44,7 @@
     { "op": "release", "target": "db" },
     { "op": "observeFiles", "label": "after-setup", "keep": false, "pageSize": 4096 },
     { "op": "nativeOpen", "bind": "pg-setup", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
-    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 8192, "keep": true },
-    { "op": "nativeRead", "handle": "pg-setup", "offset": 77824, "count": 110592, "keep": true },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 110592, "keep": true },
     { "op": "nativeClose", "handle": "pg-setup" },
     { "op": "pause", "ms": 1000 },
     { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
@@ -63,8 +62,7 @@
     { "op": "release", "target": "db" },
     { "op": "observeFiles", "label": "after-statement", "keep": false, "pageSize": 4096 },
     { "op": "nativeOpen", "bind": "pg-stmt", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
-    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 8192, "keep": true },
-    { "op": "nativeRead", "handle": "pg-stmt", "offset": 77824, "count": 110592, "keep": true },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 110592, "keep": true },
     { "op": "nativeClose", "handle": "pg-stmt" },
     { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "dbro1" },
     { "op": "invoke", "target": "dbro1", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds1" },
@@ -80,8 +78,7 @@
     { "op": "release", "target": "db" },
     { "op": "observeFiles", "label": "after-next", "keep": false, "pageSize": 4096 },
     { "op": "nativeOpen", "bind": "pg-next", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
-    { "op": "nativeRead", "handle": "pg-next", "offset": 0, "count": 8192, "keep": true },
-    { "op": "nativeRead", "handle": "pg-next", "offset": 77824, "count": 110592, "keep": true },
+    { "op": "nativeRead", "handle": "pg-next", "offset": 0, "count": 114688, "keep": true },
     { "op": "nativeClose", "handle": "pg-next" },
     { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "db" },
     { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
@@ -103,6 +100,9 @@
     { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
     { "op": "release", "target": "db" },
     { "op": "release", "target": "eng" },
-    { "op": "observeFiles", "label": "after-close", "keep": false }
+    { "op": "observeFiles", "label": "after-close", "keep": false },
+    { "op": "nativeOpen", "bind": "pg-close", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-close", "offset": 0, "count": 114688, "keep": true },
+    { "op": "nativeClose", "handle": "pg-close" }
   ]
 }
