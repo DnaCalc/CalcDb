@@ -2242,6 +2242,27 @@ public sealed class SchemaWriterTests
                 2, 2);
             Assert.False(dupChildIdx.Succeeded);
 
+            // Gate 4 Findings #1, #3, #4: 1-to-1 PK/UNIQUE-overlapping FK, Counter child FK on ALTER, ADO ALTER FK,
+            // 0-PK child on ALTER, and 2-col ALTER FK all refuse without writing.
+            SchemaOutcome oneToOneCreate = session.Writer().CreateTable(
+                session.Workspace,
+                new("OneToOne", [Long("ID")], SchemaRoute.Sql, [new("PK_O", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_O", ["ID"], "P", ["ID"])),
+                2, 2);
+            Assert.False(oneToOneCreate.Succeeded);
+            Assert.Contains("1-to-1", oneToOneCreate.Refused?.NotWritten);
+            SchemaOutcome oneToOneAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_PK", ["ID"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(oneToOneAlter.Succeeded);
+            Assert.Contains("1-to-1", oneToOneAlter.Refused?.NotWritten);
+            SchemaOutcome adoAlterFk = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_ADO", ["K"], "P", ["ID"]), SchemaRoute.Ado),
+                2, 2);
+            Assert.False(adoAlterFk.Succeeded);
+            Assert.Contains("DAO/SQL", adoAlterFk.Refused?.NotWritten);
+
             // Inside BeginTrans refuses without writing.
             Assert.Null(session.Workspace.BeginTrans());
             SchemaOutcome inTxCreate = session.Writer().CreateTable(
@@ -2260,16 +2281,54 @@ public sealed class SchemaWriterTests
 
             Assert.Equal(before, session.File.Snapshot());
 
-            // Adding a second FK referencing the same parent refuses without writing.
+            // Child table with Counter column, UNIQUE index, 0-PK, or 2-col FK on ALTER TABLE refuse without writing.
+            session.Create(new("P2", [Long("ID")], SchemaRoute.Sql, [new("PK_P2", ["ID"], PrimaryKey: true)]), 2, 2);
+            session.Create(new("T_NoPk", [Long("K")], SchemaRoute.Sql), 2, 2);
+            session.Create(new("T_Auto", [new("ID", NewFieldType.Counter), Long("K")], SchemaRoute.Sql, [new("PK_TA", ["ID"], PrimaryKey: true)]), 2, 2);
+            session.Create(new("T_Uq", [Long("ID"), Long("U")], SchemaRoute.Sql, [new("PK_TU", ["ID"], PrimaryKey: true), new("UQ_TU", ["U"], PrimaryKey: false, Unique: true)]), 2, 2);
+            byte[] beforeExtraAlter = session.File.Snapshot();
+
+            SchemaOutcome noPkAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_NoPk", new NewForeignKey("FK_NP_A", ["K"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(noPkAlter.Succeeded);
+            Assert.Contains("single-column PRIMARY KEY", noPkAlter.Refused?.NotWritten);
+
+            SchemaOutcome autoAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_Auto", new NewForeignKey("FK_AUTO", ["ID"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(autoAlter.Succeeded);
+            Assert.Contains("Counter", autoAlter.Refused?.NotWritten);
+
+            SchemaOutcome uqAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_Uq", new NewForeignKey("FK_UQ_CHILD", ["U"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(uqAlter.Succeeded);
+            Assert.Contains("1-to-1", uqAlter.Refused?.NotWritten);
+
+            Assert.Equal(beforeExtraAlter, session.File.Snapshot());
+
+            // Adding a second FK referencing the same parent or a second distinct parent (existing negative MSysObjects.Id) refuses without writing.
             session.Create(new("C1", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK_C1", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_C1_P", ["K"], "P", ["ID"])), 2, 2);
             byte[] afterFirstFk = session.File.Snapshot();
-            SchemaOutcome secondFk = session.Writer().AddForeignKey(
+            SchemaOutcome secondFkSameParent = session.Writer().AddForeignKey(
                 session.Workspace,
                 new("T", new NewForeignKey("FK_T_P2", ["K"], "P", ["ID"]), SchemaRoute.Sql),
                 3, 3);
-            Assert.False(secondFk.Succeeded);
-            Assert.False(secondFk.PublishedAny);
-            Assert.Contains("already has relationship", secondFk.Refused?.NotWritten);
+            Assert.False(secondFkSameParent.Succeeded);
+            Assert.False(secondFkSameParent.PublishedAny);
+            Assert.Contains("already has relationship", secondFkSameParent.Refused?.NotWritten);
+
+            SchemaOutcome secondFkOtherParent = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_P2B", ["K"], "P2", ["ID"]), SchemaRoute.Sql),
+                3, 3);
+            Assert.False(secondFkOtherParent.Succeeded);
+            Assert.False(secondFkOtherParent.PublishedAny);
+            Assert.Contains("negative-Id", secondFkOtherParent.Refused?.NotWritten);
             Assert.Equal(afterFirstFk, session.File.Snapshot());
         }
 

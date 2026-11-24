@@ -1372,13 +1372,24 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE BadBoth (ID LONG CONSTRAINT PKB PRIMARY KEY, K LONG, CONSTRAINT FK_B FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE ON UPDATE CASCADE)", "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
         Assert.Equal(beforeErrors, db.Image.Snapshot());
 
-        // ALTER TABLE ADD CONSTRAINT FOREIGN KEY ... ON DELETE CASCADE, second FK to same parent, self-ref, and DROP CONSTRAINT refuse by name.
+        // ALTER TABLE ADD CONSTRAINT FOREIGN KEY ... ON DELETE CASCADE, second FK to same/other parent, self-ref,
+        // 1-to-1 PK/UNIQUE-overlapping FK, Counter child FK, ADO ALTER FK, held parent table, and DROP CONSTRAINT refuse by name.
         Assert.True(ActionExecutor.Execute("CREATE TABLE P2 (ID LONG CONSTRAINT PKP2 PRIMARY KEY)", db).Succeeded);
         Assert.True(ActionExecutor.Execute("CREATE TABLE T2 (ID LONG CONSTRAINT PKT2 PRIMARY KEY, K LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE TAuto (ID COUNTER CONSTRAINT PKTA PRIMARY KEY, K LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE TUq (ID LONG CONSTRAINT PKTU PRIMARY KEY, U LONG CONSTRAINT UQ_TU UNIQUE)", db).Succeeded);
         Assert.True(ActionExecutor.Execute("INSERT INTO T2 (ID, K) VALUES (1, 999)", db).Succeeded);
         byte[] beforeRefusals = db.Image.Snapshot();
 
         AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_C FOREIGN KEY (K) REFERENCES P2(ID) ON DELETE CASCADE", "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_ADO FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.DdlForeignKey", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE OneToOne (ID LONG CONSTRAINT PK_O PRIMARY KEY, CONSTRAINT FK_O FOREIGN KEY (ID) REFERENCES P2(ID))", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_PK FOREIGN KEY (ID) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE TUq ADD CONSTRAINT FK_TU_U FOREIGN KEY (U) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE TAuto ADD CONSTRAINT FK_TA_ID FOREIGN KEY (ID) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        var lockedParent = new LockedTableDatabase(db, "P2");
+        AssertNotModelled(lockedParent, "CREATE TABLE CHeld (ID LONG CONSTRAINT PKCH PRIMARY KEY, K LONG CONSTRAINT FK_CH REFERENCES P2(ID))", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(lockedParent, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_HELD FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.DdlTableInUsePrecedence");
         AssertNotModelled(db, "CREATE TABLE C2 (ID LONG CONSTRAINT PKC2 PRIMARY KEY, K LONG CONSTRAINT FK_C2_P REFERENCES P(ID))", "NotModelled.SchemaWriter");
         AssertNotModelled(db, "CREATE TABLE SelfT (ID LONG CONSTRAINT PKS PRIMARY KEY, K LONG CONSTRAINT FK_SELF REFERENCES SelfT(ID))", "NotModelled.DdlForeignKey");
         AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_P2 FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.SchemaWriter");

@@ -588,8 +588,23 @@ public sealed class SchemaWriter
                 {
                     return new SchemaRefusal(null, $"CREATE TABLE index '{pkName}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
                 }
+                foreach (string fkField in fk.Fields)
+                {
+                    foreach (string pkField in request.AllIndexes[0].Fields)
+                    {
+                        switch (FieldNameLookupClashOf(pkField, fkField, _sortOrder, out string? pkFkUndecided))
+                        {
+                            case FieldNameClash.Duplicate:
+                                return new SchemaRefusal(null, $"CREATE TABLE FOREIGN KEY '{fk.Name}' overlaps child PRIMARY KEY column '{pkField}' (1-to-1 / PK-overlapping FOREIGN KEY is not recorded in evidence/r-q34-ddl-sweep/fk-*)");
+                            case FieldNameClash.Undecided:
+                                return new SchemaRefusal(null, pkFkUndecided);
+                        }
+                    }
+                }
             }
-            if (PrepareForeignKeyState(request.Name, childTable: null, fieldTypes, fk, isAlterTable: false, request.Route, out preparedFk) is { } fkRefusal)
+            (string Name, byte TypeCode, bool IsAutoNumber)[] fkFieldInfos =
+                [.. request.Fields.Select(f => (f.Name, NativeTypeOf(f.Type), f.Type == NewFieldType.Counter))];
+            if (PrepareForeignKeyState(request.Name, childTable: null, fkFieldInfos, fk, isAlterTable: false, request.Route, out preparedFk) is { } fkRefusal)
             {
                 return fkRefusal;
             }
@@ -1192,13 +1207,9 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE ADD CONSTRAINT FOREIGN KEY inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
         }
-        if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
+        if (request.Route != SchemaRoute.Sql)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {request.Route} route is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
-        }
-        if (isJet4Mdb && request.Route == SchemaRoute.Ado)
-        {
-            return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE ADD CONSTRAINT FOREIGN KEY on a Jet 4 MDB via ADO is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/alt-fk-empty-mdb-dao)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {request.Route} route is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } childEntry)
         {
@@ -1212,7 +1223,7 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on table '{childEntry.Name}' with Memo/Ole columns is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
         }
-        (string Name, byte TypeCode)[] childCols = [.. childTable.Columns.Select(c => (c.Name, c.TypeCode))];
+        (string Name, byte TypeCode, bool IsAutoNumber)[] childCols = [.. childTable.Columns.Select(c => (c.Name, c.TypeCode, c.IsAutoNumber))];
         if (PrepareForeignKeyState(childEntry.Name, childTable, childCols, request.ForeignKey, isAlterTable: true, request.Route, out PreparedForeignKey? prepared) is { } fkRefusal)
         {
             return new SchemaOutcome(fkRefusal, default, _pageCount);
@@ -2321,7 +2332,7 @@ public sealed class SchemaWriter
     private SchemaRefusal? PrepareForeignKeyState(
         string childTableName,
         TableDefinition? childTable,
-        IReadOnlyList<(string Name, byte TypeCode)> childColumns,
+        IReadOnlyList<(string Name, byte TypeCode, bool IsAutoNumber)> childColumns,
         NewForeignKey fk,
         bool isAlterTable,
         SchemaRoute route,
@@ -2351,6 +2362,10 @@ public sealed class SchemaWriter
         if (!IsAsciiIndexSortName(fk.Name))
         {
             return new SchemaRefusal(null, $"FOREIGN KEY name '{fk.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
+        }
+        if (isAlterTable && fk.Fields.Count != 1)
+        {
+            return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' with {fk.Fields.Count} column(s) is not recorded (evidence/r-q34-ddl-sweep/alt-fk-* records 1-column Long FOREIGN KEY only)");
         }
         if (fk.Fields.Count is < 1 or > 2)
         {
@@ -2382,9 +2397,9 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, lookupUndecided ?? $"FOREIGN KEY '{fk.Name}' names child column '{childCol}', which table '{childTableName}' does not have");
             }
             byte tc = childColumns[matchedIdx].TypeCode;
-            if (tc != NativeTypes.Long)
+            if (tc != NativeTypes.Long || childColumns[matchedIdx].IsAutoNumber)
             {
-                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on column '{childColumns[matchedIdx].Name}' of native type 0x{tc:X2} is not recorded (evidence/r-q34-ddl-sweep/fk-* records Long columns only)");
+                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on {(childColumns[matchedIdx].IsAutoNumber ? "Counter" : $"native type 0x{tc:X2}")} column '{childColumns[matchedIdx].Name}' is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record Long columns only)");
             }
             canonicalChildCols.Add(childColumns[matchedIdx].Name);
         }
@@ -2590,11 +2605,11 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "MSysObjects has no Relationships container (Id 0x0F000003, Type 3)");
         }
-        if (maxNegativeId == -1)
+        if (maxNegativeId is not null)
         {
-            return new SchemaRefusal(null, "MSysObjects negative Id range exhausted (0xFFFFFFFF)");
+            return new SchemaRefusal(null, $"MSysObjects already has a negative-Id object (0x{(uint)maxNegativeId.Value:X8}): negative-Id allocation for a second relationship or relationship alongside a CHECK constraint is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record the first negative Id 0x80000000 only)");
         }
-        int nextId = maxNegativeId is int maxNeg ? maxNeg + 1 : int.MinValue;
+        int nextId = int.MinValue;
 
         TableDefSpec? childSpec = null;
         byte childMapSlot = 0;
@@ -2603,6 +2618,44 @@ public sealed class SchemaWriter
         uint uniqueEntryCount = 0;
         if (childTable is not null)
         {
+            foreach (LogicalIndex li in childTable.LogicalIndexes)
+            {
+                if (childTable.PhysicalOf(li) is not { } pi)
+                {
+                    continue;
+                }
+                bool isPkOrUnique = li.IndexType == _d.IndexDescriptor.PrimaryKeyType
+                    || (pi.Flags & _d.IndexDescriptor.UniqueFlag) != 0;
+                if (!isPkOrUnique)
+                {
+                    continue;
+                }
+                foreach (IndexColumn ic in pi.Columns)
+                {
+                    ColumnDescriptor? idxCol = childTable.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber);
+                    if (idxCol is null)
+                    {
+                        continue;
+                    }
+                    foreach (string fkCol in canonicalChildCols)
+                    {
+                        switch (FieldNameLookupClashOf(idxCol.Name, fkCol, _sortOrder, out string? overlapUndecided))
+                        {
+                            case FieldNameClash.Duplicate:
+                                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' overlaps existing PRIMARY KEY or UNIQUE index '{li.Name}' column '{idxCol.Name}' on '{childTableName}' (1-to-1 FK grbit/index sharing is not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                            case FieldNameClash.Undecided:
+                                return new SchemaRefusal(null, overlapUndecided);
+                        }
+                    }
+                }
+            }
+            if (childTable.LogicalIndexes.Count != 1
+                || childTable.PhysicalIndexes.Count != 1
+                || childTable.LogicalIndexes[0].IndexType != _d.IndexDescriptor.PrimaryKeyType
+                || childTable.PhysicalIndexes[0].Columns.Count != 1)
+            {
+                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on '{childTableName}' requires one single-column PRIMARY KEY and no other indexes (0-PK, multi-index, or 2-col PK child tables are not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+            }
             var fkIndexShape = new NewIndex(fk.Name, canonicalChildCols, PrimaryKey: false);
             if (ExistingIndexesRefusal(childTable, fkIndexShape) is { } existingRefusal)
             {

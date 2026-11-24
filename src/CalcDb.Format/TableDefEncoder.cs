@@ -75,9 +75,6 @@ public static class TableDefEncoder
     /// <summary>Unconfirmed ACE 2007 constant <c>0x00000783</c> observed at every 52-byte physical index block <c>[0..4)</c>.</summary>
     public const uint UnconfirmedPhysicalIndexMarker = 0x00000783u;
 
-    /// <summary>Unconfirmed ACE 2007 constant <c>0x0404</c> observed at every 28-byte logical index block <c>[21..23)</c>.</summary>
-    public const ushort UnconfirmedLogicalIndexMarker = 0x0404;
-
     /// <summary>Two-byte TableDef stream terminator (<c>FF FF</c>) after trailing LVAL column maps.</summary>
     public const ushort StreamTerminator = 0xFFFF;
 

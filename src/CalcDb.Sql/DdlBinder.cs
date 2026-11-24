@@ -598,9 +598,9 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "multiple FOREIGN KEY constraints in one CREATE TABLE are not modelled in SchemaWriter"), out failure);
             }
-            if (primaryKeys.Count != 1 || indexes is null)
+            if (primaryKeys.Count != 1 || indexes is null || indexes[0].Fields.Count != 1)
             {
-                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE with FOREIGN KEY without a PRIMARY KEY is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE with FOREIGN KEY requires one single-column PRIMARY KEY (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
             }
             if (uniqueConstraints.Count > 0)
             {
@@ -644,6 +644,16 @@ public static class DdlBinder
                 {
                     return Fail(BindOpen("NotModelled.DdlForeignKey", $"FOREIGN KEY on {fkCol.DataType.Kind} column '{fkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/fk-* records Long columns only)"), out failure);
                 }
+                foreach (string pkColName in indexes[0].Fields)
+                {
+                    switch (SchemaWriter.FieldNameLookupClashOf(pkColName, fkCol.Name, sortOrder, out string? pkFkUndecided))
+                    {
+                        case FieldNameClash.Duplicate:
+                            return Fail(BindOpen("NotModelled.DdlForeignKey", $"CREATE TABLE FOREIGN KEY '{fkName}' overlaps child PRIMARY KEY column '{pkColName}' (1-to-1 / PK-overlapping FOREIGN KEY is not recorded in evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+                        case FieldNameClash.Undecided:
+                            return Fail(BindOpen("NotModelled.DdlFieldNamePair", pkFkUndecided!), out failure);
+                    }
+                }
                 fkBoundCols.Add(fkCol.Name);
             }
             switch (SchemaWriter.FieldNameLookupClashOf(indexes[0].Name, fkName, sortOrder, out string? fkClashUndecided))
@@ -656,6 +666,10 @@ public static class DdlBinder
             if (!TryResolveReferencedColumns(database, sortOrder, refTableName, refCols, out List<string>? refBoundCols, out SqlFailure? refFailure))
             {
                 return Fail(refFailure!, out failure);
+            }
+            if (database is ISqlSchemaDatabase sdParentUse && sdParentUse.IsTableInUse(refTableName))
+            {
+                return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", $"held referenced parent table '{refTableName}' in CREATE TABLE FOREIGN KEY"), out failure);
             }
             foreignKey = new NewForeignKey(fkName, fkBoundCols, refTableName, refBoundCols!, onDeleteCascade);
         }
@@ -1237,6 +1251,10 @@ public static class DdlBinder
             return Fail(BindAce(3371, SqlMessages.CannotFindTableOrConstraint), out failure);
         }
         bool inUse = database is ISqlSchemaDatabase sdUse && sdUse.IsTableInUse(stmt.TableName);
+        string? fkParentName = stmt.Action is AddConstraintAlterAction { Constraint: { Kind: DdlConstraintKind.ForeignKey, RefTable: { } refTable } }
+            ? refTable
+            : null;
+        bool parentInUse = fkParentName is not null && database is ISqlSchemaDatabase sdParentUse && sdParentUse.IsTableInUse(fkParentName);
         SqlFailure? actionErr = ValidateAlterAction(stmt, table, database, route, out BoundDdl? boundPlan);
         if (inUse)
         {
@@ -1248,6 +1266,13 @@ public static class DdlBinder
             string detail = actionErr is null || actionErr.IsNotModelled
                 ? $"held table '{stmt.TableName}' in ALTER TABLE ({stmt.Action.GetType().Name})"
                 : $"held table '{stmt.TableName}' meets ALTER TABLE error ({actionErr.Number})";
+            return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", detail), out failure);
+        }
+        if (parentInUse)
+        {
+            string detail = actionErr is null || actionErr.IsNotModelled
+                ? $"held referenced parent table '{fkParentName}' in ALTER TABLE ADD CONSTRAINT FOREIGN KEY"
+                : $"held referenced parent table '{fkParentName}' meets ALTER TABLE error ({actionErr.Number})";
             return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", detail), out failure);
         }
         if (actionErr is not null)
@@ -1445,15 +1470,32 @@ public static class DdlBinder
                                 return BindOpen("NotModelled.DdlFieldNamePair", clashUndecided!);
                         }
                     }
-                    if (boundCols.Count is < 1 or > 2)
+                    if (route != SchemaRoute.Sql)
                     {
-                        return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY with {boundCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records 1-2 Long columns)");
+                        return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {route} route is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/alt-fk-*)");
+                    }
+                    if (boundCols.Count != 1)
+                    {
+                        return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY with {boundCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records 1-column Long FOREIGN KEY only)");
                     }
                     foreach (ColumnDescriptor col in boundCols)
                     {
-                        if (col.TypeCode != NativeTypes.Long)
+                        if (col.TypeCode != NativeTypes.Long || col.IsAutoNumber)
                         {
-                            return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records Long columns only)");
+                            return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {(col.IsAutoNumber ? "Counter" : $"native type 0x{col.TypeCode:X2}")} column '{col.Name}' is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records Long columns only)");
+                        }
+                        foreach (LogicalIndex li in table.LogicalIndexes)
+                        {
+                            if (table.PhysicalOf(li) is not { } pi)
+                            {
+                                continue;
+                            }
+                            bool isPkOrUnique = li.IndexType == D.IndexDescriptor.PrimaryKeyType
+                                || (pi.Flags & D.IndexDescriptor.UniqueFlag) != 0;
+                            if (isPkOrUnique && pi.Columns.Any(ic => ic.PhysicalNumber == col.PhysicalNumber))
+                            {
+                                return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY overlapping existing PRIMARY KEY or UNIQUE index '{li.Name}' column '{col.Name}' is not recorded (1-to-1 FK grbit/index sharing is not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                            }
                         }
                     }
                     if (!TryResolveReferencedColumns(database, sortOrder, tc.RefTable!, tc.RefColumns, out List<string>? refBoundCols, out SqlFailure? refFailure))
