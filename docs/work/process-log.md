@@ -1305,3 +1305,47 @@ stay with `fhqk`.
 
 Nothing else removed: the per-landing review, the ready gate and the standard brief each answer a failure of the last
 two days (ptrj's refused recorded case, 94fd's record without pages, 5ktt's misread call).
+
+## 2026-11-24 - Handover: organizer 13 (01a20b62) to organizer 14
+
+Session 01a20b62 (Claude Opus 5.5, 2026-11-24 about 02:40 to 17:15 UTC, about 210 tool calls in this runtime). Landed:
+the process review (68a15745), fhqk, mkb7, ddl3a with the first `-Finish`, c68k (test projects three at a time), gpzk,
+ddl3b (FOREIGN KEY), publication (zx68 and `compare-stops --detail`), the r-q36 probe round, pdhk with qj3q, nxk2 (44
+expression functions), hmxw (a refused execute writes nothing) and h6r9 (r-q36's groups). Baselines: core 469 to 474
+of 1360 (h6r9-1); wide 763 of 3158 (wide-0124-2) to 1056 of 3540 (wide-h6r9-1), r-q27 to r-q36 now in the set. Tasks
+found: 3vkh, qj3q, gpzk, 9dvt, sqkg, xmgx, bfhj, h6r9, hmxw, x8vx, 7mxt, nxk2, k65r.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-23 19:03; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 86% (16,572 of 19,274) | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 9,840 / 6,732 / 1,616 / 919 / 167; baseline copies 8,256 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 42; 76% | below 70% |
+| Landing check duration (median of 61 runs) | 279 s; since c68k a full-selection check takes about 160 to 220 s | above 3 min |
+| Compare baselines | core 469 to 474; wide 763 to 1056; two r-q8 write-behind flips (mhzd) and one lock-file race (k65r), each rerun and explained | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 210 for 13 landings and the review (about 16) | above about 15 |
+| Reviewer findings per 1,000 lines | ddl3b 7 on about 1,950; nxk2 14 on about 3,000 in two passes; pdhk 5 on about 2,800; h6r9 4 on about 1,450; hmxw 3 on 610 | rising over three landings, or above about 3 |
+| Rules found wrong after landing | 0; one caught at the organizer's review before landing: h6r9's test allow-list of 6 wrong InStr and StrComp answers, replaced by named refusals | more than one a day |
+| Children stopped waiting for a record | 0 | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land`); the h6r9 merge conflict with nxk2 in BoundExpression.cs resolved by the organizer in about 10 calls | above 5 min |
+| Book contradictions found | 0 | rising |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 13 (Opus) | about 875 wall | about 210 |
+| DDL writer 3b (01a20b9c) / Isam writer, publication (01a20bb8) | 111 / 107 | 342 / 336 |
+| pdhk writer (01a20ce6-23d0) / functions writer (01a20ce6-23d6) | 108 / 171 | 377 / 424 |
+| h6r9 writer (01a20d56) / hmxw writer (01a20da8) | 260 / 110 | 726 / 252 |
+| gpzk prober (01a20b9f) / r-q36 prober (01a20caf) / c68k writer (01a20b89) | 49 / 74 / 29 | 557 / 215 / 56 |
+| three Neon starts that failed ('initialize' not answered in 120 s, 15:15 to 15:25 UTC) | - | 0 |
+
+Organizer calls per landing are just above the line, and reviewer findings stay above about 3 per 1,000 lines in every
+large stretch, as in organizer 12's window: the next weekly review (The Plan §4) should ask whether one deliverable per
+stretch is kept (nxk2 was briefed for 3 functions and wrote 44). Two delivery failures of CodeAlta: DDL writer 3b's and
+the publication writer's final answers (05:22, 05:50) never reached the organizer, so the work sat idle until the owner
+asked; a fallback reminder found nothing lost afterwards. Antigravity again stopped starting agents at 15:15 and had not
+recovered at 17:15: sqkg went back to not started.
+
+Successor: CalcDb organizer 14, session 01a20e84-7dc9-7cf4-bd8f-34c7e945b0ba, started beside 01a20b62 (`--no-parent`).
+Organizer 13 has no running child and forwards nothing.
