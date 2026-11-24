@@ -25,7 +25,19 @@ public sealed class ClockNormalizationTests
     private const string CompactedA2 = "a022b45d8cae0ea01dd96e2ab5b11e75312b1e29a97a642ebea31527fcf3c124";
     private const string CompactedA3 = "e8041261426ab93ec4888266a7f54d3df4a0d0e8a11b884710e0eb3c7a11d030";
 
-    private const string MdbFixture = "4a447e7517e51e0ed2b734fd8a20d32ab22e83f427667a4f0e8fb2ff0b544bf7"; // r-ado-1b-mdb
+    // Three empty Jet 4 MDB files ACE CreateDatabase(..., dbVersion40) wrote on different times, plus two Jet 4 MDBs
+    // created on different days (r-q32-mdb, r-sort-3c-mdb) showing the page-0 password day mask.
+    private const string MdbFmtEmpty = "6b0a3d10ba22784f2e52995246efb394d3303b9a1019434f68a4e318aa503369"; // r-fmt-1-mdb-empty
+    private const string MdbCatEmpty = "99da59149c57559b5658a9a08625236a936808d2be0ead100da977bd3716bdb4"; // r-cat-1-mdb-empty
+    private const string MdbAccdbExtV40 = "71c86a9e2981931d9ec0985f6a91ff3bf120e02839c5b9745a6275a66410d3de"; // r-cat-1-accdb-ext-v40
+    private const string MdbQ32 = "cbce097e8ef4b8b84f6244a661c7e386a2469aab64057be068e5a169a2e3b1f2"; // r-q32-mdb
+    private const string MdbSort3c = "cf56c817542e7be094d055719aeff989c02afc24d9ff2709d70693f6f360b962"; // r-sort-3c-mdb
+
+    // ACE 2010/2016/2019 fixtures whose retained a1/a2 ACE repeats (r-fmt-1/create-accdb-calculated,
+    // r-fmt-1/create-accdb-bigint, r-fmt-1/create-accdb-datetime2) decide their clock fields.
+    private const string Ace2010Fixture = "434dad97c7467e3f184605cdf99af3b007d2a99fa8ab8f4c892c8484a8dbcad3"; // r-fmt-1-accdb-calculated (code 3)
+    private const string Ace2016Fixture = "b3d92d52ac8e5ec84585b25d656969a06c0eda71bbdadfe9244a637a4f54c606"; // r-fmt-1-accdb-bigint (code 5)
+    private const string Ace2019Fixture = "dd114816e817de98fc5378b765bf543836b73e3d41e88b2645ef3f2de85c4a1f"; // r-fmt-1-accdb-datetime2 (code 6)
 
     private static readonly ArtifactStore Store = FindStore();
 
@@ -163,26 +175,79 @@ public sealed class ClockNormalizationTests
         Assert.False(FileImageComparison.Compare(Bytes(ChangedA2), zero).EqualOutsideClock);
     }
 
-    [Fact]
-    public void A_profile_without_a_recorded_repeat_is_compared_strictly()
+    private static byte[] WithHeaderProfile(byte[] image, bool jetSignature, byte versionCode)
     {
-        byte[] mdb = Bytes(MdbFixture);
-        Assert.Null(AceClockFields.Find(mdb, out string? refusal));
-        Assert.Contains("Jet4", refusal, StringComparison.Ordinal);
-        byte[] changed = (byte[])mdb.Clone();
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        byte[] copy = (byte[])image.Clone();
+        ReadOnlySpan<byte> sig = jetSignature ? d.Header.JetSignature : d.Header.AceSignature;
+        sig.CopyTo(copy.AsSpan(d.Header.SignatureOffset));
+        d.Header.Version.Write(copy.AsSpan(), versionCode);
+        return copy;
+    }
+
+    [Theory]
+    [InlineData(true, (byte)0, "Jet3Excluded")]
+    [InlineData(false, (byte)4, "UnknownVersion")]
+    [InlineData(true, (byte)2, "SignatureVersionMismatch")]
+    public void Refused_profiles_are_compared_strictly_and_report_refusals_on_both_sides(bool jetSignature, byte versionCode, string refusalName)
+    {
+        byte[] image = WithHeaderProfile(Bytes(FmtEmpty), jetSignature, versionCode);
+        Assert.Null(AceClockFields.Find(image, out string? refusal));
+        Assert.Contains(refusalName, refusal, StringComparison.Ordinal);
+
+        Assert.False(AceClockFields.TryBuildPageContext(p =>
+        {
+            long off = (long)p * 4096;
+            return off + 4096 <= image.Length ? image.AsMemory((int)off, 4096) : null;
+        }, out PageClockContext? ctx, out string? ctxRefusal));
+        Assert.Null(ctx);
+        Assert.Contains(refusalName, ctxRefusal, StringComparison.Ordinal);
+
+        byte[] changed = (byte[])image.Clone();
         changed[0x72] ^= 0x01; // where an ACCDB keeps its creation DATE
-        FileImageVerdict verdict = FileImageComparison.Compare(mdb, changed);
+        string expectedNote = $"expected: profile refused ({refusalName}); actual: profile refused ({refusalName})";
+        FileImageVerdict verdict = FileImageComparison.Compare(image, changed);
         Assert.False(verdict.EqualOutsideClock);
         Assert.Contains("compared strictly", verdict.Difference, StringComparison.Ordinal);
+        Assert.Contains(expectedNote, verdict.Difference, StringComparison.Ordinal);
+        Assert.Contains(verdict.Notes, n => n.Contains("compared strictly", StringComparison.Ordinal) && n.Contains(expectedNote, StringComparison.Ordinal));
+
+        ComparisonRecord trace = CompareFiles(image, changed);
+        Assert.Equal(ComparisonStatus.Mismatched, trace.Status);
+        Assert.Contains(trace.Notes, n => n.Contains("compared strictly", StringComparison.Ordinal) && n.Contains(expectedNote, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Both_sided_refusals_name_expected_and_actual_separately()
+    {
+        byte[] jet3 = WithHeaderProfile(Bytes(FmtEmpty), jetSignature: true, versionCode: 0);
+        byte[] unknown = WithHeaderProfile(Bytes(FmtEmpty), jetSignature: false, versionCode: 4);
+        const string expectedReason = "expected: profile refused (Jet3Excluded); actual: profile refused (UnknownVersion)";
+
+        FileImageVerdict fileVerdict = FileImageComparison.Compare(jet3, unknown);
+        Assert.False(fileVerdict.EqualOutsideClock);
+        Assert.Contains(expectedReason, fileVerdict.Difference, StringComparison.Ordinal);
+        Assert.Contains(fileVerdict.Notes, n => n.Contains(expectedReason, StringComparison.Ordinal));
+
+        // Kept nativeRead path (CompareKeptRead -> BuildPageContext refusal on both sides).
+        byte[] jet3Page0 = jet3.AsSpan(0, 4096).ToArray();
+        byte[] unknownPage0 = unknown.AsSpan(0, 4096).ToArray();
+        Capture oracle = RunWithEvents("ace", null, [ReadEvent(1, "0", 0, jet3Page0)]);
+        Capture candidate = RunWithEvents("calcdb", "calcdb", [ReadEvent(1, "0", 0, unknownPage0)]);
+        ComparisonRecord trace = CallTraceComparison.Compare("both-refused", "ace", oracle, "calcdb", candidate, "CalcDb.dll");
+        Assert.Equal(ComparisonStatus.Mismatched, trace.Status);
+        Assert.Contains(trace.Notes, n => n.Contains("read work/new.accdb@0", StringComparison.Ordinal) && n.Contains(expectedReason, StringComparison.Ordinal));
     }
 
     // calls.trace: a files event is compared through the file bytes when both sides' bytes are available.
 
-    private static Capture Run(string dir, string sha, long length, string? implementation)
+    private static Capture Run(string dir, string sha, long length, string? implementation) =>
+        RunWithEvents(dir, implementation, [new FilesEvent { Seq = 1, ProgramPath = "0", Label = "after-close", Files = [new FileObservation { RelativePath = "work/new.accdb", Length = length, Sha256 = sha }] }]);
+
+    private static Capture RunWithEvents(string dir, string? implementation, IReadOnlyList<CaptureEvent> events)
     {
-        var events = new List<CaptureEvent>
+        var all = new List<CaptureEvent>(events)
         {
-            new FilesEvent { Seq = 1, ProgramPath = "0", Label = "after-close", Files = [new FileObservation { RelativePath = "work/new.accdb", Length = length, Sha256 = sha }] },
             new ModulesEvent { Seq = 9, ProgramPath = "9", Label = "end", Complete = true, BytesNeeded = 8, BytesProvided = 8, ModulePaths = implementation is null ? [] : [@"C:\deploy\CalcDb.dll"], Identities = [] },
         };
         return new()
@@ -192,12 +257,27 @@ public sealed class ClockNormalizationTests
             QuestionKey = "qk1-synthetic",
             Environment = ((EnvironmentReceipt)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(EnvironmentReceipt)))
                 with { AttemptDirectory = @"C:\runs\" + dir, Implementation = implementation },
-            Events = events,
+            Events = all,
             Artifacts = [],
             Execution = "ReturnedSuccess",
             CaptureErrors = [],
         };
     }
+
+    private static HandleEvent ReadEvent(int seq, string programPath, long offset, byte[] slice) => new()
+    {
+        Seq = seq,
+        ProgramPath = programPath,
+        Op = "read",
+        Handle = "h1",
+        RelativePath = "work/new.accdb",
+        Success = true,
+        Offset = offset,
+        BytesRead = slice.Length,
+        Bytes = Convert.ToHexStringLower(slice),
+        BytesSha256 = Sha(slice),
+        AtUtc = DateTimeOffset.UnixEpoch,
+    };
 
     private static ComparisonRecord CompareFiles(byte[] ace, byte[] calcDb, bool bytesAvailable = true)
     {
@@ -787,5 +867,477 @@ public sealed class ClockNormalizationTests
         {
             Assert.StartsWith(targetOwner.Location(4096) + " (outside ACE clock fields)", singleFlip.Difference, StringComparison.Ordinal);
         }
+    }
+
+    // calls.trace revision 11 (task 6qw5): Jet 4 and ACE 2010/2016/2019 clock normalization decided by ACE repeats.
+
+    [Fact]
+    public void Revision_11_extends_clock_normalization_to_jet4_and_later_ace_profiles()
+    {
+        Assert.True(CallTraceComparison.Rule.Revision >= 11);
+        PermittedNormalization n = Assert.Single(CallTraceComparison.Rule.Normalizations, n => n.Name == CallTraceComparison.ClockNormalization);
+        Assert.Contains("Jet 4", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ACE 2007/2010/2016/2019", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ACE 2010", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ACE 2016", n.RejectingControl, StringComparison.Ordinal);
+        Assert.Contains("ACE 2019", n.RejectingControl, StringComparison.Ordinal);
+        Assert.Contains("still differ", n.RejectingControl, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(MdbFmtEmpty, MdbCatEmpty)]
+    [InlineData(MdbCatEmpty, MdbFmtEmpty)]
+    [InlineData(MdbFmtEmpty, MdbAccdbExtV40)]
+    [InlineData(MdbAccdbExtV40, MdbFmtEmpty)]
+    [InlineData(MdbCatEmpty, MdbAccdbExtV40)]
+    [InlineData(MdbAccdbExtV40, MdbCatEmpty)]
+    public void Jet4_empty_MDB_repeats_are_equal_outside_the_clock_in_both_directions(string first, string second)
+    {
+        FileImageVerdict verdict = FileImageComparison.Compare(Bytes(first), Bytes(second));
+        Assert.True(verdict.EqualOutsideClock, $"{verdict.Difference}: {verdict.Expected} / {verdict.Actual}");
+        Assert.Contains(verdict.Notes, n => n.StartsWith("CreationDate (set aside)", StringComparison.Ordinal));
+        Assert.Contains(verdict.Notes, n => n.StartsWith("CatalogDate (set aside): 16 of 16", StringComparison.Ordinal));
+        Assert.Contains(verdict.Notes, n => n.StartsWith("MaskedSid (compared with the clock removed): 24 of 24", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Jet4_empty_MDB_rejects_every_byte_outside_set_aside_fields_and_unpaired_creation_date()
+    {
+        byte[] expected = Bytes(MdbFmtEmpty), original = Bytes(MdbCatEmpty);
+        ClockFieldMap map = AceClockFields.Find(original, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        Assert.Equal(FileFormat.Jet4, map.Format);
+        bool SetAside(long offset) => map.Fields.Any(f => f.SetAside && offset >= f.Offset && offset < f.Offset + f.Length);
+
+        var random = new Random(20261123);
+        IEnumerable<long> offsets = map.Fields.Where(f => !f.SetAside).Select(f => f.Offset)
+            .Concat([0x3C, original.Length - 1])
+            .Concat(Enumerable.Range(0, 400).Select(_ => (long)random.Next(original.Length)));
+        int checkedCount = 0;
+        foreach (long offset in offsets.Where(o => !SetAside(o)).Distinct())
+        {
+            byte[] changed = (byte[])original.Clone();
+            changed[offset] ^= 0x01;
+            FileImageVerdict verdict = FileImageComparison.Compare(expected, changed);
+            Assert.False(verdict.EqualOutsideClock, $"Jet 4 byte at page {offset / 4096} offset 0x{offset % 4096:X} was unexpectedly set aside");
+            checkedCount++;
+        }
+        Assert.True(checkedCount > 380);
+
+        // Changing CreationDate byte 1 without updating the SIDs must fail at the first MaskedSid.
+        ClockField date = map.Fields.Single(f => f.Kind == ClockFieldKind.CreationDate);
+        ClockField firstSid = map.Fields.First(f => f.Kind == ClockFieldKind.MaskedSid);
+        byte[] unpairedDate = (byte[])original.Clone();
+        unpairedDate[date.Offset + 1] ^= 0x01;
+        FileImageVerdict sidFailure = FileImageComparison.Compare(expected, unpairedDate);
+        Assert.False(sidFailure.EqualOutsideClock);
+        Assert.StartsWith(firstSid.Location(4096) + " (outside ACE clock fields)", sidFailure.Difference, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Jet4_page0_password_day_mask_normalizes_across_creation_days_and_still_compares_password_bytes()
+    {
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        byte[][] mdbs = [Bytes(MdbFmtEmpty), Bytes(MdbQ32), Bytes(MdbSort3c)];
+        var creationDays = new HashSet<int>();
+        foreach (byte[] mdb in mdbs)
+        {
+            byte[] decoded = HeaderMask.Decode(mdb.AsSpan(0, 4096), d);
+            int day = (int)BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(decoded.AsSpan(DatabaseHeaderEncoder.CreationDateOffset)));
+            creationDays.Add(day);
+
+            ClockFieldMap map = AceClockFields.Find(mdb, out string? refusal) ?? throw new InvalidOperationException(refusal);
+            Assert.Equal(FileFormat.Jet4, map.Format);
+            byte[] normalizedDecoded = HeaderMask.Decode(map.Normalized.AsSpan(0, 4096), d);
+            // All 40 unmasked password bytes are zero for an unencrypted empty-password Jet 4 MDB, regardless of creation day.
+            Assert.All(normalizedDecoded.AsSpan(DatabaseHeaderEncoder.PasswordOffset, DatabaseHeaderEncoder.PasswordBytes).ToArray(), b => Assert.Equal(0, b));
+        }
+        Assert.Equal(3, creationDays.Count);
+
+        // Flipping any password byte in a Jet 4 MDB still differs after removing the creation-day mask.
+        byte[] a = Bytes(MdbFmtEmpty), b = (byte[])Bytes(MdbCatEmpty).Clone();
+        b[DatabaseHeaderEncoder.PasswordOffset + 7] ^= 0x01;
+        FileImageVerdict v = FileImageComparison.Compare(a, b);
+        Assert.False(v.EqualOutsideClock);
+        Assert.StartsWith($"page 0 offset 0x{DatabaseHeaderEncoder.PasswordOffset + 7:X} (outside ACE clock fields)", v.Difference, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(@"evidence\r-q34-ddl-sweep\create-one-long-mdb-dao\r-q34-ddl-sweep.create-one-long-mdb-dao.301b2b6bf0.a1.json",
+                @"evidence\r-q34-ddl-sweep\create-one-long-mdb-dao\r-q34-ddl-sweep.create-one-long-mdb-dao.301b2b6bf0.a2.json")]
+    [InlineData(@"evidence\r-q34-ddl-sweep\nn-two-cols-mdb-dao\r-q34-ddl-sweep.nn-two-cols-mdb-dao.83676eef57.a1.json",
+                @"evidence\r-q34-ddl-sweep\nn-two-cols-mdb-dao\r-q34-ddl-sweep.nn-two-cols-mdb-dao.83676eef57.a2.json")]
+    [InlineData(@"evidence\r-q34-ddl-sweep\nn-pk-text-mdb-dao\r-q34-ddl-sweep.nn-pk-text-mdb-dao.ee4d5599fc.a1.json",
+                @"evidence\r-q34-ddl-sweep\nn-pk-text-mdb-dao\r-q34-ddl-sweep.nn-pk-text-mdb-dao.ee4d5599fc.a2.json")]
+    [InlineData(@"evidence\r-q34-ddl-sweep\pk-counter-cols-mdb-dao\r-q34-ddl-sweep.pk-counter-cols-mdb-dao.d65d34592b.a1.json",
+                @"evidence\r-q34-ddl-sweep\pk-counter-cols-mdb-dao\r-q34-ddl-sweep.pk-counter-cols-mdb-dao.d65d34592b.a2.json")]
+    [InlineData(@"evidence\r-q34-ddl-sweep\alt-check-empty-mdb-ado\r-q34-ddl-sweep.alt-check-empty-mdb-ado.dfb7ff5fde.a1.json",
+                @"evidence\r-q34-ddl-sweep\alt-check-empty-mdb-ado\r-q34-ddl-sweep.alt-check-empty-mdb-ado.dfb7ff5fde.a2.json")]
+    public void Jet4_DDL_repeats_match_in_both_directions_for_files_and_traces(string a1Path, string a2Path)
+    {
+        EvidenceRecord a1 = LoadRecord(a1Path);
+        EvidenceRecord a2 = LoadRecord(a2Path);
+
+        // Full file bytes from the final full-file nativeRead in each retained record.
+        HandleEvent read1 = a1.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null);
+        HandleEvent read2 = a2.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null);
+        byte[] file1 = Convert.FromHexString(read1.Bytes!);
+        byte[] file2 = Convert.FromHexString(read2.Bytes!);
+
+        FileImageVerdict fwd = FileImageComparison.Compare(file1, file2);
+        Assert.True(fwd.EqualOutsideClock, $"{fwd.Difference}: {fwd.Expected} / {fwd.Actual}");
+        Assert.Contains(fwd.Notes, n => n.StartsWith("CatalogDate (set aside):", StringComparison.Ordinal));
+
+        FileImageVerdict rev = FileImageComparison.Compare(file2, file1);
+        Assert.True(rev.EqualOutsideClock, $"{rev.Difference}: {rev.Expected} / {rev.Actual}");
+
+        // Full CallTraceComparison (native-vs-native repeat) matches cleanly in both directions.
+        ComparisonRecord traceFwd = CallTraceComparison.Compare("jet4-repeat", a1.RecordId, a1.Capture, a2.RecordId, a2.Capture, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.Equal(ComparisonStatus.Matched, traceFwd.Status);
+        Assert.Empty(traceFwd.Differences);
+        Assert.Contains(traceFwd.Notes, n => n.Contains("CatalogDate (set aside):", StringComparison.Ordinal));
+
+        ComparisonRecord traceRev = CallTraceComparison.Compare("jet4-repeat", a2.RecordId, a2.Capture, a1.RecordId, a1.Capture, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.Equal(ComparisonStatus.Matched, traceRev.Status);
+        Assert.Empty(traceRev.Differences);
+    }
+
+    [Fact]
+    public void Jet4_vacated_MSysObjects_copy_normalizes_only_its_clock_bytes_and_rejects_every_other_byte()
+    {
+        // evidence/r-q34-ddl-sweep/nn-two-cols-mdb-dao: live slot 8 at [0xD19, 0xD66) (DateCreate 0xD25, DateUpdate 0xD2D)
+        // and vacated prefix copy at [0xCE6, 0xD19) (DateCreate 0xCF2, DateUpdate 0xCFA).
+        EvidenceRecord a1 = LoadRecord(@"evidence\r-q34-ddl-sweep\nn-two-cols-mdb-dao\r-q34-ddl-sweep.nn-two-cols-mdb-dao.83676eef57.a1.json");
+        PageClockContext ctx = BuildContextFromRecord(a1);
+        Assert.Equal(FileFormat.Jet4, ctx.Format);
+        byte[] page17 = KeptPage(a1.Capture!, 17 * 4096);
+
+        ClockFieldMap map = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        long[] vacatedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("vacated copy", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([0xCF2L, 0xCFAL], vacatedDates);
+        long[] live8Dates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("slot 8 ", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([0xD25L, 0xD2DL], live8Dates);
+
+        // Rejecting control: every single byte in [0xCE6, 0xD66) outside the 16+16 clock bytes, plus gap bytes, still differs.
+        foreach (int off in Enumerable.Range(0xCE6, 0xD66 - 0xCE6)
+            .Where(o => !(o >= 0xCF2 && o < 0xD02) && !(o >= 0xD25 && o < 0xD35))
+            .Concat([40, 1000, 0xCE5]))
+        {
+            byte[] bad = (byte[])page17.Clone();
+            bad[off] ^= 0x01;
+            FileImageVerdict v = FileImageComparison.CompareSlice(17 * 4096, page17, bad, ctx, ctx);
+            Assert.False(v.EqualOutsideClock, $"Jet 4 byte 0x{off:X} in vacated/live MSysObjects row was unexpectedly masked");
+        }
+    }
+
+    private static PageClockContext BuildContextFromImage(byte[] image)
+    {
+        Assert.True(AceClockFields.TryBuildPageContext(p =>
+        {
+            long off = (long)p * 4096;
+            return off + 4096 <= image.Length ? image.AsMemory((int)off, 4096) : null;
+        }, out PageClockContext? ctx, out string? refusal), refusal);
+        return ctx!;
+    }
+
+    private static byte[] RestampClockFields(byte[] original, double newCreationDate)
+    {
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        ClockFieldMap map = AceClockFields.Find(original, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        byte[] twin = (byte[])original.Clone();
+
+        byte[] decodedOld = HeaderMask.Decode(original.AsSpan(0, 4096), d);
+        Span<byte> ksOld = stackalloc byte[2];
+        DatabaseHeaderEncoder.DeriveSidKeystream(decodedOld, ksOld);
+        uint oldDay = unchecked((uint)(int)BitConverter.UInt64BitsToDouble(
+            BinaryPrimitives.ReadUInt64LittleEndian(decodedOld.AsSpan(DatabaseHeaderEncoder.CreationDateOffset))));
+
+        byte[] decodedNew = (byte[])decodedOld.Clone();
+        uint newDay = unchecked((uint)(int)newCreationDate);
+        Assert.NotEqual(oldDay, newDay);
+
+        Span<byte> oldDayMask = stackalloc byte[4];
+        Span<byte> newDayMask = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(oldDayMask, oldDay);
+        BinaryPrimitives.WriteUInt32LittleEndian(newDayMask, newDay);
+        for (int i = 0; i < DatabaseHeaderEncoder.PasswordBytes; i++)
+        {
+            decodedNew[DatabaseHeaderEncoder.PasswordOffset + i] ^= (byte)(oldDayMask[i & 3] ^ newDayMask[i & 3]);
+        }
+
+        Span<byte> ksNew = stackalloc byte[2];
+        double candidateDate = newCreationDate;
+        do
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(
+                decodedNew.AsSpan(DatabaseHeaderEncoder.CreationDateOffset),
+                BitConverter.DoubleToUInt64Bits(candidateDate));
+            DatabaseHeaderEncoder.DeriveSidKeystream(decodedNew, ksNew);
+            candidateDate += 0.0001;
+        }
+        while (ksOld.SequenceEqual(ksNew));
+
+        HeaderMask.Encode(decodedNew, d).AsSpan().CopyTo(twin.AsSpan(0, 4096));
+
+        byte xor0 = (byte)(ksOld[0] ^ ksNew[0]);
+        byte xor1 = (byte)(ksOld[1] ^ ksNew[1]);
+        foreach (ClockField f in map.Fields)
+        {
+            if (f.Kind == ClockFieldKind.CatalogDate)
+            {
+                twin[f.Offset + 3] ^= 0x15;
+            }
+            else if (f.Kind == ClockFieldKind.MaskedSid)
+            {
+                twin[f.Offset] ^= xor0;
+                twin[f.Offset + 1] ^= xor1;
+            }
+        }
+        return twin;
+    }
+
+    [Theory]
+    [InlineData(Ace2010Fixture, FileFormat.Ace2010,
+                @"evidence\r-fmt-1\create-accdb-calculated\r-fmt-1.create-accdb-calculated.2fc86c508a.a1.json",
+                @"evidence\r-fmt-1\create-accdb-calculated\r-fmt-1.create-accdb-calculated.2fc86c508a.a2.json", 40)]
+    [InlineData(Ace2016Fixture, FileFormat.Ace2016,
+                @"evidence\r-fmt-1\create-accdb-bigint\r-fmt-1.create-accdb-bigint.f4a5dbbc74.a1.json",
+                @"evidence\r-fmt-1\create-accdb-bigint\r-fmt-1.create-accdb-bigint.f4a5dbbc74.a2.json", 38)]
+    [InlineData(Ace2019Fixture, FileFormat.Ace2019,
+                @"evidence\r-fmt-1\create-accdb-datetime2\r-fmt-1.create-accdb-datetime2.0f836f2e13.a1.json",
+                @"evidence\r-fmt-1\create-accdb-datetime2\r-fmt-1.create-accdb-datetime2.0f836f2e13.a2.json", 38)]
+    public void Ace2010_Ace2016_Ace2019_clock_fields_normalize_in_both_directions_and_reject_every_non_set_aside_byte(
+        string fixtureSha, FileFormat expectedFormat, string a1RecordPath, string a2RecordPath, int expectedCatalogDates)
+    {
+        // Both deciding ACE repeat records (a1 on day 46343, a2 on day 46350) are retained in evidence/r-fmt-1/.
+        EvidenceRecord a1 = LoadRecord(a1RecordPath);
+        EvidenceRecord a2 = LoadRecord(a2RecordPath);
+        Assert.Equal(a1.Capture!.QuestionKey, a2.Capture!.QuestionKey);
+        string a1Sha = a1.Capture.Events.OfType<FilesEvent>().Last().Files[0].Sha256!;
+        string a2Sha = a2.Capture.Events.OfType<FilesEvent>().Last().Files[0].Sha256!;
+        Assert.Equal(fixtureSha, a1Sha, StringComparer.OrdinalIgnoreCase);
+        Assert.NotEqual(a1Sha, a2Sha, StringComparer.OrdinalIgnoreCase);
+
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        byte[] original = Bytes(fixtureSha);
+        ClockFieldMap map = AceClockFields.Find(original, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        Assert.Equal(expectedFormat, map.Format);
+        Assert.Equal(expectedCatalogDates, map.Fields.Count(f => f.Kind == ClockFieldKind.CatalogDate));
+        int sidCount = map.Fields.Count(f => f.Kind == ClockFieldKind.MaskedSid);
+        Assert.True(sidCount > 38);
+
+        // Unmasked page-0 password bytes are all zero for an unencrypted empty-password database.
+        byte[] normalizedDecoded = HeaderMask.Decode(map.Normalized.AsSpan(0, 4096), d);
+        Assert.All(normalizedDecoded.AsSpan(DatabaseHeaderEncoder.PasswordOffset, DatabaseHeaderEncoder.PasswordBytes).ToArray(), b => Assert.Equal(0, b));
+
+        // Restamp to day 46350 (matching a2's creation day) with re-masked PasswordDayMask, SIDs, and catalog dates.
+        byte[] twin = RestampClockFields(original, 46350.98145);
+
+        FileImageVerdict fwd = FileImageComparison.Compare(original, twin);
+        Assert.True(fwd.EqualOutsideClock, $"{fwd.Difference}: {fwd.Expected} / {fwd.Actual}");
+        Assert.Contains(fwd.Notes, n => n.StartsWith("CreationDate (set aside)", StringComparison.Ordinal));
+        Assert.Contains(fwd.Notes, n => n.StartsWith("PasswordDayMask (compared with the clock removed)", StringComparison.Ordinal));
+        Assert.Contains(fwd.Notes, n => n.StartsWith($"CatalogDate (set aside): {expectedCatalogDates} of {expectedCatalogDates}", StringComparison.Ordinal));
+        Assert.Contains(fwd.Notes, n => n.StartsWith($"MaskedSid (compared with the clock removed): {sidCount} of {sidCount}", StringComparison.Ordinal));
+
+        FileImageVerdict rev = FileImageComparison.Compare(twin, original);
+        Assert.True(rev.EqualOutsideClock, $"{rev.Difference}: {rev.Expected} / {rev.Actual}");
+
+        // Rejecting control: flipping a password byte still differs after removing the creation-day mask.
+        byte[] badPassword = (byte[])twin.Clone();
+        badPassword[DatabaseHeaderEncoder.PasswordOffset + 5] ^= 0x01;
+        FileImageVerdict pwVerdict = FileImageComparison.Compare(original, badPassword);
+        Assert.False(pwVerdict.EqualOutsideClock);
+        Assert.StartsWith($"page 0 offset 0x{DatabaseHeaderEncoder.PasswordOffset + 5:X} (outside ACE clock fields)", pwVerdict.Difference, StringComparison.Ordinal);
+
+        // Rejecting control: changing CreationDate byte 1 without updating SIDs fails at the first MaskedSid.
+        ClockField date = map.Fields.Single(f => f.Kind == ClockFieldKind.CreationDate);
+        ClockField firstSid = map.Fields.First(f => f.Kind == ClockFieldKind.MaskedSid);
+        byte[] unpairedDate = (byte[])twin.Clone();
+        unpairedDate[date.Offset + 1] ^= 0x01;
+        FileImageVerdict sidFailure = FileImageComparison.Compare(original, unpairedDate);
+        Assert.False(sidFailure.EqualOutsideClock);
+        Assert.StartsWith(firstSid.Location(4096) + " (outside ACE clock fields)", sidFailure.Difference, StringComparison.Ordinal);
+
+        // Rejecting control: every byte outside the set-aside fields still differs (seeded sweep).
+        bool SetAside(long offset) => map.Fields.Any(f => f.SetAside && offset >= f.Offset && offset < f.Offset + f.Length);
+        var random = new Random(20261124 + (int)expectedFormat);
+        IEnumerable<long> offsets = map.Fields.Where(f => !f.SetAside).Select(f => f.Offset)
+            .Concat([0x3C, original.Length - 1])
+            .Concat(Enumerable.Range(0, 400).Select(_ => (long)random.Next(original.Length)));
+        int checkedCount = 0;
+        foreach (long offset in offsets.Where(o => !SetAside(o)).Distinct())
+        {
+            byte[] changed = (byte[])twin.Clone();
+            changed[offset] ^= 0x01;
+            FileImageVerdict v = FileImageComparison.Compare(original, changed);
+            Assert.False(v.EqualOutsideClock, $"{expectedFormat} byte at page {offset / 4096} offset 0x{offset % 4096:X} was unexpectedly set aside");
+            checkedCount++;
+        }
+        Assert.True(checkedCount > 380);
+    }
+
+    [Fact]
+    public void Ace2010_normalizes_vacated_MSysObjects_copy_while_Ace2016_and_Ace2019_keep_vacated_copies_strict()
+    {
+        // evidence/r-fmt-1/create-accdb-calculated (ACE 2010, a1/a2): live slot 18 at [0x8EF, 0x93C) (DateCreate 0x8FB,
+        // DateUpdate 0x903) and vacated prefix copy at [0x8BA, 0x8EF) (DateCreate 0x8C6, DateUpdate 0x8CE, Owner 0x8DC).
+        byte[] ace2010 = Bytes(Ace2010Fixture);
+        ClockFieldMap map = AceClockFields.Find(ace2010, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        Assert.Equal(FileFormat.Ace2010, map.Format);
+
+        long[] vacatedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("vacated copy", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([0x8C6L, 0x8CEL], vacatedDates);
+        long[] vacatedOwners = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.MaskedSid && f.Where.Contains("vacated copy", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([0x8DCL], vacatedOwners);
+        long[] live18Dates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("slot 18 ", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([0x8FBL, 0x903L], live18Dates);
+
+        PageClockContext ace2010Ctx = BuildContextFromImage(ace2010);
+        byte[] page17 = ace2010.AsSpan(17 * 4096, 4096).ToArray();
+        foreach (int off in Enumerable.Range(0x8BA, 0x93C - 0x8BA)
+            .Where(o => !(o >= 0x8C6 && o < 0x8D6) && !(o >= 0x8FB && o < 0x90B))
+            .Concat([52, 1000, 0x8B9]))
+        {
+            byte[] bad = (byte[])page17.Clone();
+            bad[off] ^= 0x01;
+            FileImageVerdict v = FileImageComparison.CompareSlice(17 * 4096, page17, bad, ace2010Ctx, ace2010Ctx);
+            Assert.False(v.EqualOutsideClock, $"ACE 2010 byte 0x{off:X} in vacated/live MSysObjects row was unexpectedly masked");
+        }
+
+        // Neither ACE 2016 (r-fmt-1/create-accdb-bigint) nor ACE 2019 (r-fmt-1/create-accdb-datetime2) repeats show
+        // a vacated MSysObjects copy -> those profiles must leave vacated copies strictly compared.
+        byte[] flippedVacatedDate = (byte[])page17.Clone();
+        flippedVacatedDate[0x8C6] ^= 0x01;
+        foreach ((string fixtureSha, FileFormat expectedFormat) in new (string, FileFormat)[]
+            { (Ace2016Fixture, FileFormat.Ace2016), (Ace2019Fixture, FileFormat.Ace2019) })
+        {
+            PageClockContext otherCtx = BuildContextFromImage(Bytes(fixtureSha));
+            Assert.Equal(expectedFormat, otherCtx.Format);
+            ClockFieldMap otherMap = AceClockFields.FindInSlice(17 * 4096, page17, otherCtx, out string? otherRefusal)
+                ?? throw new InvalidOperationException(otherRefusal);
+            Assert.DoesNotContain(otherMap.Fields, f => f.Where.Contains("vacated copy", StringComparison.Ordinal));
+            Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, flippedVacatedDate, otherCtx, otherCtx).EqualOutsideClock);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, (byte)1, FileFormat.Jet4)]
+    [InlineData(false, (byte)3, FileFormat.Ace2010)]
+    [InlineData(false, (byte)5, FileFormat.Ace2016)]
+    [InlineData(false, (byte)6, FileFormat.Ace2019)]
+    public void Profiles_without_chained_LVAL_or_deleted_row_repeats_leave_LongValueStamp_and_deleted_rows_strict(
+        bool jetSignature, byte versionCode, FileFormat expectedFormat)
+    {
+        // Non-vacuous LongValueStamp rejecting control: ChangedA3 has a real agreeing non-zero chained LVAL stamp
+        // (page 46 offset 0xFC7 and page 47 offset 0x8). Under Jet 4, ACE 2010, ACE 2016, and ACE 2019, Find must
+        // emit zero LongValueStamp fields and flipping both agreeing stamps together must fail comparison.
+        byte[] ace2007 = Bytes(ChangedA3);
+        ClockField[] ace2007Stamps = [.. AceClockFields.Find(ace2007, out _)!.Fields.Where(f => f.Kind == ClockFieldKind.LongValueStamp)];
+        Assert.Equal(2, ace2007Stamps.Length);
+
+        byte[] retagged = WithHeaderProfile(ace2007, jetSignature, versionCode);
+        ClockFieldMap retaggedMap = AceClockFields.Find(retagged, out string? retagRefusal) ?? throw new InvalidOperationException(retagRefusal);
+        Assert.Equal(expectedFormat, retaggedMap.Format);
+        Assert.DoesNotContain(retaggedMap.Fields, f => f.Kind == ClockFieldKind.LongValueStamp);
+
+        byte[] bothStampsChanged = (byte[])retagged.Clone();
+        foreach (ClockField stamp in ace2007Stamps)
+        {
+            bothStampsChanged[stamp.Offset] ^= 0x10;
+        }
+        FileImageVerdict stampVerdict = FileImageComparison.Compare(retagged, bothStampsChanged);
+        Assert.False(stampVerdict.EqualOutsideClock);
+        Assert.StartsWith(ace2007Stamps[0].Location(4096) + " (outside ACE clock fields)", stampVerdict.Difference, StringComparison.Ordinal);
+
+        // Deleted MSysObjects row rejecting control: only ACE 2007 has a recorded deleted-row repeat (pair-dao-Aa-aA).
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        PageClockContext ctx;
+        byte[] page17;
+        int deletedDateCreate;
+        if (expectedFormat == FileFormat.Jet4)
+        {
+            EvidenceRecord mdbRec = LoadRecord(@"evidence\r-q34-ddl-sweep\create-one-long-mdb-dao\r-q34-ddl-sweep.create-one-long-mdb-dao.301b2b6bf0.a1.json");
+            ctx = BuildContextFromRecord(mdbRec);
+            byte[] srcPage17 = KeptPage(mdbRec.Capture!, 17 * 4096);
+            SlotView slot8 = DataPages.CheckedSlot(srcPage17, 8, d, out string? sf) ?? throw new InvalidOperationException(sf);
+            byte[] userRow = srcPage17.AsSpan(slot8.Start, slot8.Length).ToArray();
+            page17 = Bytes(MdbCatEmpty).AsSpan(17 * 4096, 4096).ToArray();
+            Assert.True(DataPages.TryAppendRow(page17, userRow, d, out byte appendedSlot, out string? f1), f1);
+            Assert.True(DataPages.TryDeleteSlot(page17, appendedSlot, d, out string? f2), f2);
+            deletedDateCreate = slot8.Start + 12;
+        }
+        else
+        {
+            ctx = BuildContextFromImage(WithHeaderProfile(Bytes(CatEmpty), jetSignature, versionCode));
+            EvidenceRecord pairRec = LoadRecord(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json");
+            page17 = KeptPage(pairRec.Capture!, 17 * 4096);
+            deletedDateCreate = 2246;
+        }
+
+        Assert.Equal(expectedFormat, ctx.Format);
+        ClockFieldMap sliceMap = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? sliceRefusal) ?? throw new InvalidOperationException(sliceRefusal);
+        Assert.DoesNotContain(sliceMap.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+        byte[] flippedDeletedDate = (byte[])page17.Clone();
+        flippedDeletedDate[deletedDateCreate] ^= 0x01;
+        Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, flippedDeletedDate, ctx, ctx).EqualOutsideClock);
+    }
+
+    [Fact]
+    public void Cross_profile_whole_file_and_block_slice_comparisons_stay_strict_and_name_both_profiles()
+    {
+        // Slice page 0 format must match PageClockContext format.
+        EvidenceRecord mdbRec = LoadRecord(@"evidence\r-q34-ddl-sweep\create-one-long-mdb-dao\r-q34-ddl-sweep.create-one-long-mdb-dao.301b2b6bf0.a1.json");
+        PageClockContext jet4Ctx = BuildContextFromRecord(mdbRec);
+        byte[] accdbPage0 = Bytes(CatEmpty).AsSpan(0, 4096).ToArray();
+        Assert.Null(AceClockFields.FindInSlice(0, accdbPage0, jet4Ctx, out string? mismatchRefusal));
+        Assert.Contains("does not match page context format", mismatchRefusal, StringComparison.Ordinal);
+
+        // CompareSlice with mismatched profiles (Jet 4 vs ACE 2007) stays strict even when only clock bytes differ.
+        FormatDescriptor d = FormatDescriptor.Jet4Family;
+        byte[] srcPage17 = KeptPage(mdbRec.Capture!, 17 * 4096);
+        SlotView slot8 = DataPages.CheckedSlot(srcPage17, 8, d, out string? sf) ?? throw new InvalidOperationException(sf);
+        PageClockContext ace2007Ctx = BuildContextFromImage(Bytes(CatEmpty));
+        byte[] otherPage17 = (byte[])srcPage17.Clone();
+        otherPage17[slot8.Start + 12] ^= 0x01;
+        FileImageVerdict crossSlice = FileImageComparison.CompareSlice(17 * 4096, srcPage17, otherPage17, jet4Ctx, ace2007Ctx);
+        Assert.False(crossSlice.EqualOutsideClock);
+        Assert.Contains("profile mismatch: expected Jet4, actual Ace2007", crossSlice.Difference, StringComparison.Ordinal);
+        Assert.Contains(crossSlice.Notes, n => n.Contains("profile mismatch: expected Jet4, actual Ace2007", StringComparison.Ordinal));
+
+        // Whole-file Compare and CompareSliceFromMaps (blockFiles path in CallTraceComparison) on equal-length
+        // Ace2016 vs Ace2019 files (both 192,512 bytes) stay strict and name both profiles.
+        byte[] ace2016 = Bytes(Ace2016Fixture);
+        byte[] ace2019 = Bytes(Ace2019Fixture);
+        Assert.Equal(ace2016.Length, ace2019.Length);
+        const string expectedMismatch = "profile mismatch: expected Ace2016, actual Ace2019";
+
+        FileImageVerdict whole = FileImageComparison.Compare(ace2016, ace2019);
+        Assert.False(whole.EqualOutsideClock);
+        Assert.Contains(expectedMismatch, whole.Difference, StringComparison.Ordinal);
+        Assert.Contains(whole.Notes, n => n.Contains(expectedMismatch, StringComparison.Ordinal));
+
+        string sha16 = Sha(ace2016), sha19 = Sha(ace2019);
+        byte[] p17_16 = ace2016.AsSpan(17 * 4096, 4096).ToArray();
+        byte[] p17_19 = ace2019.AsSpan(17 * 4096, 4096).ToArray();
+        Assert.False(p17_16.AsSpan().SequenceEqual(p17_19));
+
+        Capture oracle = RunWithEvents("ace", null,
+        [
+            new FilesEvent { Seq = 1, ProgramPath = "0", Label = "after-close", Files = [new FileObservation { RelativePath = "work/new.accdb", Length = ace2016.Length, Sha256 = sha16 }] },
+            ReadEvent(2, "1", 17 * 4096, p17_16),
+        ]);
+        Capture candidate = RunWithEvents("calcdb", "calcdb",
+        [
+            new FilesEvent { Seq = 1, ProgramPath = "0", Label = "after-close", Files = [new FileObservation { RelativePath = "work/new.accdb", Length = ace2019.Length, Sha256 = sha19 }] },
+            ReadEvent(2, "1", 17 * 4096, p17_19),
+        ]);
+        ComparisonRecord trace = CallTraceComparison.Compare("cross-profile-block", "ace", oracle, "calcdb", candidate, "CalcDb.dll",
+            oracleFiles: sha => sha == sha16 ? ace2016 : null,
+            candidateFiles: sha => sha == sha19 ? ace2019 : null);
+        Assert.Equal(ComparisonStatus.Mismatched, trace.Status);
+        Assert.Contains(trace.Notes, n => n.Contains("files[0]", StringComparison.Ordinal) && n.Contains(expectedMismatch, StringComparison.Ordinal));
+        Assert.Contains(trace.Notes, n => n.Contains("read work/new.accdb@69632", StringComparison.Ordinal) && n.Contains(expectedMismatch, StringComparison.Ordinal));
     }
 }
