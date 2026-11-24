@@ -1069,8 +1069,8 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 && decimal.Truncate(dec) == dec
                 && dec >= int.MinValue && dec <= int.MaxValue)
             {
-                // r-wire/expr-literal-tags (#421 1E0, #967 -0.0, #1003 0.0), r-expr-1b/num-abs-sgn-int-fix (#44, #563),
-                // r-def-expr-sql/expr-literals-numeric-suffix-radix (#176 1E3, #240 .5E1, #1640 1.0, #1832 1E0, #1896 0.0E5):
+                // r-wire/expr-literal-tags (#422 1E0, #968 -0.0, #1004 0.0), r-expr-1b/num-abs-sgn-int-fix (#44, #563),
+                // r-def-expr-sql/expr-literals-numeric-suffix-radix (#177 1E3, #241 .5E1, #1641 1.0, #1833 1E0, #1897 0.0E5):
                 // a decimal-point or exponent numeric literal whose exact value fits Int32 evaluates as VT_I4 (Long).
                 // Narrowed at bind time so Syntax preserves ScalarLiterals' VT_DECIMAL for SqlBinder.StaticNegate.
                 value = new NativeVariant { Vt = (ushort)VarType.I4, Int64 = unchecked((uint)(int)dec) };
@@ -1156,10 +1156,12 @@ public sealed unsafe partial class BoundExpression : IDisposable
         {
             if (node.Operation == ScalarOperation.Negate
                 && node.Left is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number, Value.Vt: (ushort)VarType.Decimal, Text: { } text }
-                && decimal.TryParse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out decimal dec)
+                && text.IndexOfAny('.', 'e', 'E') < 0
+                && decimal.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out decimal dec)
                 && dec == 2147483648m)
             {
-                // r-wire/expr-literal-tags (#967), r-expr-1b/arith-overflow-promotion (#140/#145):
+                // r-wire/expr-literal-tags (#329/#350), r-def-expr-sql/expr-literals-numeric-suffix-radix (#1385),
+                // r-expr-1b/arith-overflow-promotion (#128/#135):
                 // -2147483648 is VT_I4 (Long int.MinValue), while 2147483648 and -2147483649 stay VT_DECIMAL.
                 // Folded at bind time so Syntax keeps Unary(Negate, Literal(2147483648)) for SqlBinder.StaticNegate.
                 Program.Add(new Instruction(Op.LoadConstant, Constants.Count, 0));

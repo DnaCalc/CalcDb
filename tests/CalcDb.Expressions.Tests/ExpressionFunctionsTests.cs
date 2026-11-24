@@ -437,6 +437,7 @@ public sealed class ExpressionFunctionsTests
     [InlineData("Hex(True)", "FFFF")]
     [InlineData("Hex(-255)", "FFFFFF01")]
     [InlineData("Hex(-32768)", "FFFF8000")]
+    [InlineData("Hex(-2147483648)", "80000000")]
     [InlineData("Hex(2147483648)", "80000000")]
     [InlineData("Hex(4294967295)", "FFFFFFFF")]
     [InlineData("Hex(1E10)", "2540BE400")]
@@ -464,6 +465,13 @@ public sealed class ExpressionFunctionsTests
         AssertEvalAce("Hex('FF')", 3464);
         AssertEvalAce("Hex('')", 3464);
         AssertEvalOpen("Hex(1E20)", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(9007199254740992)", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(9007199254740993)", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(-0.4)", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(-1.5)", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(CDbl(-1))", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex(CCur(-1))", "NotModelled.HexOctRange");
+        AssertEvalOpen("Hex('-1')", "NotModelled.HexOctRange");
 
         var bigSchema = new SingleSlotSchema("BG", VarType.I8, StaticType.Value);
         using BoundExpression hexBig = Bind("Hex(BG)", schema: bigSchema);

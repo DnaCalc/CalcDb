@@ -338,7 +338,7 @@ public sealed unsafe partial class BoundExpression
     /// String(number, character) and String$(number, character) (r-expr-1b/str-trim-space-string, r-expr-1b/null-propagation-functions,
     /// r-expr-1b/str-len-lenb-forms, r-def-expr-sql/str-stored-case-trim-reverse): Null count fails 3464; negative count fails 5;
     /// Null character gives Null for String (named for String$); empty text character fails 5; text repeats its first UTF-16 unit;
-    /// numeric character converts as Long (half-to-even), &gt; 65535 fails 6, takes low byte (mod 256; 128..159 named for CP1252).
+    /// numeric character converts as Long (half-to-even), &gt; 65535 fails 6, takes low byte (mod 256; &gt;= 128 named for code page).
     /// </summary>
     private bool StringRepeat(ref int sp, Instruction ins, bool dollar, out ScalarOutcome result)
     {
@@ -1209,8 +1209,8 @@ public sealed unsafe partial class BoundExpression
     /// <summary>
     /// Hex/Hex$/Oct/Oct$ (r-expr-1b/str-hex-oct-forms, r-expr-1b/null-propagation-functions):
     /// Null yields Null for non-$ (named for $); VT_UI1 formats as 8-bit, VT_I2/VT_BOOL as 16-bit unsigned,
-    /// VT_I4 as 32-bit unsigned; other types convert via CDbl, round half-to-even, format as 32-bit unsigned for
-    /// int.MinValue..int.MaxValue or unsigned 64-bit up to 2^53 (outside named NotModelled.HexOctRange).
+    /// VT_I4 as 32-bit unsigned; other non-BigInt types convert via CDbl, round half-to-even, and format as
+    /// unsigned 64-bit strictly below 2^53 (negative non-integer values, VT_I8, and values &gt;= 2^53 named NotModelled.HexOctRange).
     /// </summary>
     private bool HexOrOct(ref int sp, Instruction ins, bool hex, bool dollar, out ScalarOutcome result)
     {
@@ -1241,7 +1241,7 @@ public sealed unsafe partial class BoundExpression
                     value = (uint)(int)v.Int64;
                     break;
                 case VarType.I8:
-                    LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.HexOctRange", "Hex/Oct of BigInt (VT_I8) is not recorded");
+                    LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.HexOctRange", "Hex/Oct of BigInt (VT_I8) is not modelled (negative VT_I8 and Oct are unrecorded)");
                     return false;
                 default:
                 {
@@ -1252,11 +1252,7 @@ public sealed unsafe partial class BoundExpression
                         return true;
                     }
                     double rounded = Math.Round(conv.Value.Double, MidpointRounding.ToEven);
-                    if (rounded >= int.MinValue && rounded <= int.MaxValue)
-                    {
-                        value = (uint)(int)rounded;
-                    }
-                    else if (rounded > int.MaxValue && rounded <= 9007199254740992.0)
+                    if (conv.Value.Double >= 0.0 && rounded < 9007199254740992.0)
                     {
                         value = (ulong)rounded;
                     }
