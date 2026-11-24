@@ -74,18 +74,33 @@ public sealed record PageClockContext(FileFormat Format, int PageSize, TableDefi
 /// <summary>
 /// Finds ACE's clock fields in a database image or kept page slice from its structure (W-01/corpus-comparison, tasks
 /// c4rv, 4t24, and 6qw5): page 0 through the decoded header, the catalog through MSysObjects' TableDef and rows (live
-/// and vacated copies below the lowest row; intact deleted rows on ACE 2007), MSysACEs through its catalog row, and
-/// (on ACE 2007) chained long values through every table's Memo and OLE columns. Defined for the ACE 2007 and Jet 4
-/// profiles, the ones whose ACE repeats decide their clock fields; any other profile (ACE 2010, ACE 2016, ACE 2019),
-/// or a file or page the inspector finds problems in, is refused, and the caller compares it strictly.
+/// rows on all five recorded profiles; vacated prefix copies below the lowest row on ACE 2007, Jet 4, and ACE 2010;
+/// intact deleted rows on ACE 2007), MSysACEs through its catalog row, and (on ACE 2007) chained long values through
+/// every table's Memo and OLE columns. Defined for the five profiles whose ACE repeats decide their clock fields
+/// (Jet 4, ACE 2007, ACE 2010, ACE 2016, ACE 2019); any unrecognized/refused profile, or a file or page the inspector
+/// finds problems in, is refused, and the caller compares it strictly.
 /// </summary>
 public static class AceClockFields
 {
     /// <summary>MSysObjects' TableDef is page 2 of every Jet 4 / ACE file (II-06 §1; the catalog's own row names Id 2).</summary>
     private const uint MSysObjectsPage = 2;
 
-    /// <summary>Profiles whose recorded ACE repeats decide their clock fields (ACE 2007: c4rv/4t24; Jet 4: 6qw5).</summary>
-    private static bool HasRecordedRepeats(FileFormat format) => format is FileFormat.Ace2007 or FileFormat.Jet4;
+    /// <summary>Profiles whose recorded ACE repeats decide their clock fields (ACE 2007: c4rv/4t24; Jet 4, ACE 2010, ACE 2016, ACE 2019: 6qw5).</summary>
+    private static bool HasRecordedRepeats(FileFormat format) =>
+        format is FileFormat.Jet4 or FileFormat.Ace2007 or FileFormat.Ace2010 or FileFormat.Ace2016 or FileFormat.Ace2019;
+
+    /// <summary>Profiles whose recorded ACE repeats show an intact deleted MSysObjects row (ACE 2007: r-q28-schema-write-open/pair-dao-Aa-aA).</summary>
+    private static bool AllowsDeletedMSysObjectsRows(FileFormat format) => format == FileFormat.Ace2007;
+
+    /// <summary>
+    /// Profiles whose recorded ACE repeats show a vacated MSysObjects prefix copy below the lowest row
+    /// (ACE 2007: r-q28-schema-write-open/dao-fields-7; Jet 4: r-q34-ddl-sweep/nn-two-cols-mdb-dao; ACE 2010: r-fmt-1/create-accdb-calculated).
+    /// </summary>
+    private static bool AllowsVacatedMSysObjectsCopies(FileFormat format) =>
+        format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2010;
+
+    /// <summary>Profiles whose recorded ACE repeats show a chained long-value tick stamp (ACE 2007: r-q13-new-file-interop/ace-created a2/a3).</summary>
+    private static bool AllowsLongValueStamp(FileFormat format) => format == FileFormat.Ace2007;
 
     private readonly record struct MSysObjectsColumns(
         ColumnDescriptor DateCreate,
@@ -138,13 +153,14 @@ public static class AceClockFields
             return null;
         }
 
-        bool allowDeletedRows = profile.Format == FileFormat.Ace2007;
+        bool allowDeletedRows = AllowsDeletedMSysObjectsRows(profile.Format);
+        bool allowVacatedCopies = AllowsVacatedMSysObjectsCopies(profile.Format);
         uint? acesPage = null;
         foreach (DataPageSummary dataPage in report.DataPages.Where(p => !p.IsLval && p.Owner == MSysObjectsPage))
         {
             int pageOffset = (int)(dataPage.Page * (long)pageSize);
             if (!NormalizeMSysObjectsDataPage(dataPage.Page, pageOffset, bytes.Slice(pageOffset, pageSize), normalized.AsSpan(pageOffset, pageSize),
-                objects, cols, sidKeystream, allowDeletedRows, d, fields, ref acesPage, out refusal))
+                objects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, d, fields, ref acesPage, out refusal))
             {
                 return null;
             }
@@ -167,9 +183,9 @@ public static class AceClockFields
         }
 
         // Chained long values: the definition's stamp word and the first LVAL page's stamp, where the two agree.
-        // Recorded by ACE 2007 repeats (r-q13-new-file-interop/ace-created a2/a3); no Jet 4 repeat writes a chained
-        // long value, so Jet 4 leaves LongValueStamp strict.
-        if (profile.Format == FileFormat.Ace2007)
+        // Recorded by ACE 2007 repeats (r-q13-new-file-interop/ace-created a2/a3); no Jet 4, ACE 2010, ACE 2016, or
+        // ACE 2019 repeat writes a chained long value, so those profiles leave LongValueStamp strict.
+        if (AllowsLongValueStamp(profile.Format))
         {
             int stamp = d.DataPage.Stamp.Offset;
             foreach (TableDefinition table in report.TableDefs)
@@ -268,8 +284,8 @@ public static class AceClockFields
     /// <summary>
     /// Finds ACE's clock fields inside a page-aligned byte slice (for example a kept <c>nativeRead</c>) using only the
     /// slice's own pages and the database's <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24; Jet 4
-    /// extended in revision 11, task 6qw5). Clock field offsets are returned in stored file coordinates. Non-MSysObjects
-    /// pages (other than page 0) have no fields masked and stay compared byte for byte.
+    /// and ACE 2010/2016/2019 extended in revision 11, task 6qw5). Clock field offsets are returned in stored file
+    /// coordinates. Non-MSysObjects pages (other than page 0) have no fields masked and stay compared byte for byte.
     /// </summary>
     public static ClockFieldMap? FindInSlice(long fileOffset, ReadOnlyMemory<byte> slice, PageClockContext context, out string? refusal)
     {
@@ -300,7 +316,8 @@ public static class AceClockFields
             ks.CopyTo(sidBuf);
             hasSid = true;
         }
-        bool allowDeletedRows = context.Format == FileFormat.Ace2007;
+        bool allowDeletedRows = AllowsDeletedMSysObjectsRows(context.Format);
+        bool allowVacatedCopies = AllowsVacatedMSysObjectsCopies(context.Format);
         int pageCount = slice.Length / pageSize;
         uint? unusedAcesPage = null;
         for (int k = 0; k < pageCount; k++)
@@ -333,7 +350,7 @@ public static class AceClockFields
             if (page[d.DataPage.Kind.Offset] == 0x01 && !DataPages.IsLvalPage(page, d) && d.DataPage.Owner.Read(page) == MSysObjectsPage)
             {
                 ReadOnlySpan<byte> sidKeystream = hasSid ? sidBuf : ReadOnlySpan<byte>.Empty;
-                if (!NormalizeMSysObjectsDataPage(pageNumber, pageFileOffset, page, normPage, context.MSysObjects, cols, sidKeystream, allowDeletedRows, d, fields, ref unusedAcesPage, out refusal))
+                if (!NormalizeMSysObjectsDataPage(pageNumber, pageFileOffset, page, normPage, context.MSysObjects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, d, fields, ref unusedAcesPage, out refusal))
                 {
                     return null;
                 }
@@ -391,11 +408,12 @@ public static class AceClockFields
     /// <summary>
     /// Locates and normalizes MSysObjects clock fields on one data page: live non-overflow rows, (when
     /// <paramref name="allowDeletedRows"/> is true) intact deleted rows immediately below <c>minStart</c> when the page
-    /// holds a deleted slot (r-q28-schema-write-open/pair-dao-Aa-aA), and any vacated prefix copy of the anchor row left
-    /// below it by an in-place shrink (r-q28-schema-write-open/dao-fields-7; r-q34-ddl-sweep/nn-two-cols-mdb-dao).
+    /// holds a deleted slot (r-q28-schema-write-open/pair-dao-Aa-aA), and (when <paramref name="allowVacatedCopies"/> is
+    /// true) any vacated prefix copy of the anchor row left below it by an in-place shrink
+    /// (r-q28-schema-write-open/dao-fields-7; r-q34-ddl-sweep/nn-two-cols-mdb-dao; r-fmt-1/create-accdb-calculated).
     /// </summary>
     private static bool NormalizeMSysObjectsDataPage(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
-        TableDefinition objects, MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowDeletedRows, FormatDescriptor d, List<ClockField> fields,
+        TableDefinition objects, MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowDeletedRows, bool allowVacatedCopies, FormatDescriptor d, List<ClockField> fields,
         ref uint? acesPage, out string? refusal)
     {
         refusal = null;
@@ -490,7 +508,8 @@ public static class AceClockFields
             anchorLength = live.Length;
         }
 
-        if (anchorStart > directoryEnd
+        if (allowVacatedCopies
+            && anchorStart > directoryEnd
             && RowEnvelope.TryOpen(page.Slice(anchorStart, anchorLength), d, out RowEnvelope anchorRow, out _))
         {
             NormalizeVacatedCopiesBelow(pageNumber, pageFileOffset, page, normalizedPage, directoryEnd, anchorStart, anchorLength, anchorRow, objects, cols, sidKeystream, d, fields);

@@ -31,7 +31,7 @@ public static class FileImageComparison
         ClockFieldMap? a = AceClockFields.Find(actual, out string? actualRefusal);
         if (e is null || a is null)
         {
-            string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
+            string why = FormatRefusal(e is null ? expectedRefusal : null, a is null ? actualRefusal : null);
             string note = $"compared strictly ({why})";
             return First(0, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
@@ -45,8 +45,8 @@ public static class FileImageComparison
 
     /// <summary>
     /// Compares two page-aligned kept slices starting at <paramref name="fileOffset"/> outside ACE's clock fields using
-    /// each side's own <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24; Jet 4 extended in revision
-    /// 11, task 6qw5).
+    /// each side's own <see cref="PageClockContext"/> (calls.trace revision 10, task 4t24; Jet 4 and ACE 2010/2016/2019
+    /// extended in revision 11, task 6qw5).
     /// </summary>
     public static FileImageVerdict CompareSlice(long fileOffset, ReadOnlyMemory<byte> expected, ReadOnlyMemory<byte> actual,
         PageClockContext? expectedContext, PageClockContext? actualContext)
@@ -57,7 +57,9 @@ public static class FileImageComparison
         }
         if (expectedContext is null || actualContext is null)
         {
-            string why = expectedContext is null ? "expected: no ACE clock page context" : "actual: no ACE clock page context";
+            string why = FormatRefusal(
+                expectedContext is null ? "no ACE clock page context" : null,
+                actualContext is null ? "no ACE clock page context" : null);
             string note = $"compared strictly ({why})";
             return First(fileOffset, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
@@ -70,7 +72,7 @@ public static class FileImageComparison
         ClockFieldMap? a = AceClockFields.FindInSlice(fileOffset, actual, actualContext, out string? actualRefusal);
         if (e is null || a is null)
         {
-            string why = e is null ? "expected: " + expectedRefusal : "actual: " + actualRefusal;
+            string why = FormatRefusal(e is null ? expectedRefusal : null, a is null ? actualRefusal : null);
             string note = $"compared strictly ({why})";
             return First(fileOffset, expected.Span, actual.Span, 4096, note, [note]) ?? new(true, null, "", "", []);
         }
@@ -152,6 +154,14 @@ public static class FileImageComparison
         }
         return n;
     }
+
+    internal static string FormatRefusal(string? expectedRefusal, string? actualRefusal) => (expectedRefusal, actualRefusal) switch
+    {
+        ({ } e, { } a) => $"expected: {e}; actual: {a}",
+        ({ } e, null) => $"expected: {e}",
+        (null, { } a) => $"actual: {a}",
+        _ => "strict comparison",
+    };
 
     private static FileImageVerdict? First(long fileOffset, ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, int pageSize, string context, IReadOnlyList<string>? notes = null)
     {

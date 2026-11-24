@@ -13,8 +13,9 @@ namespace CalcDb.Corpus;
 /// <remarks>
 /// A file a question created or changed is compared by its bytes outside ACE's clock fields when both files' bytes are
 /// available — directly or reconstructed from the capture's kept <c>nativeRead</c> pages and verified against its
-/// recorded SHA-256 (revision 8 task c4rv; revision 10 task 4t24, normalization <c>ace-clock-fields</c>) — and kept
-/// page-aligned <c>nativeRead</c> observations are compared by the same clock-field rule; otherwise by SHA-256, as before.
+/// recorded SHA-256 (revision 8 task c4rv; revision 10 task 4t24; revision 11 task 6qw5, normalization
+/// <c>ace-clock-fields</c>) — and kept page-aligned <c>nativeRead</c> observations are compared by the same clock-field
+/// rule; otherwise by SHA-256, as before.
 /// </remarks>
 public static class CallTraceComparison
 {
@@ -42,9 +43,9 @@ public static class CallTraceComparison
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
                 "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
                 "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
-            new(ClockNormalization, "ACE writes its clock into a file it creates or changes, so two ACE runs of one question give files and kept pages that differ there and nowhere else (ACE 2007: r-fmt-1/create-accdb-empty a1/a3, r-q11-ddl-closure/create-one-long, r-q13-new-file-interop/ace-created a2/a3, r-q28-schema-write-open/pair-dao-Aa-aA, dao-fields-7, dao-long30-26; Jet 4: r-fmt-1-mdb-empty/r-cat-1-mdb-empty/r-cat-1-accdb-ext-v40, r-q30-sql-check/mdb-viol-ado-exec, r-q31-sql-check-2/mdb-*, r-q34-ddl-sweep/*-mdb-* including nn-two-cols-mdb-dao). This is ACE's own nondeterminism, not a CalcDb difference.",
-                "Revision 8 (task c4rv), revision 10 (task 4t24), and revision 11 (task 6qw5): where the SHA-256 of a file observation differs and both files' bytes are available — directly or reconstructed from the capture's kept nativeRead pages and verified against its recorded SHA-256 — the files are compared byte for byte outside the clock fields each file's own structure locates (AceClockFields, ACE 2007 and Jet 4 profiles); kept page-aligned nativeRead observations are compared by the same rule from each capture's own kept pages and input. For both ACE 2007 and Jet 4, the page-0 creation DATE and MSysObjects DateCreate and DateUpdate of live rows and vacated copies left below a later commit of the same row (dao-fields-7; nn-two-cols-mdb-dao) are set aside, and the page-0 password and 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID are compared with each file's creation day and SID keystream removed. For ACE 2007 only (where repeats decide them), intact deleted MSysObjects rows (pair-dao-Aa-aA) and a chained long value's tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) are also set aside. Each kind of field whose bytes differed is a note; profiles without deciding repeats (ACE 2010, ACE 2016, ACE 2019) stay strict, named in the comparison note.",
-                "Any other byte, a different list of clock fields, a different length, deleted MSysObjects rows or chained long-value stamps on Jet 4, an undecided profile (ACE 2010, ACE 2016, ACE 2019), a non-page-aligned or non-MSysObjects kept read difference, and a file whose bytes are not available or do not hash to its recorded SHA-256 (compared by SHA-256, with a note) still differ.",
+            new(ClockNormalization, "ACE writes its clock into a file it creates or changes, so two ACE runs of one question give files and kept pages that differ there and nowhere else (ACE 2007: r-fmt-1/create-accdb-empty a1/a3, r-q11-ddl-closure/create-one-long, r-q13-new-file-interop/ace-created a2/a3, r-q28-schema-write-open/pair-dao-Aa-aA, dao-fields-7, dao-long30-26; Jet 4: r-fmt-1-mdb-empty/r-cat-1-mdb-empty/r-cat-1-accdb-ext-v40, r-q30-sql-check/mdb-viol-ado-exec, r-q31-sql-check-2/mdb-*, r-q34-ddl-sweep/*-mdb-* including nn-two-cols-mdb-dao; ACE 2010: r-fmt-1/create-accdb-calculated a1/a2; ACE 2016: r-fmt-1/create-accdb-bigint a1/a2; ACE 2019: r-fmt-1/create-accdb-datetime2 a1/a2). This is ACE's own nondeterminism, not a CalcDb difference.",
+                "Revision 8 (task c4rv), revision 10 (task 4t24), and revision 11 (task 6qw5): where the SHA-256 of a file observation differs and both files' bytes are available — directly or reconstructed from the capture's kept nativeRead pages and verified against its recorded SHA-256 — the files are compared byte for byte outside the clock fields each file's own structure locates (AceClockFields, Jet 4 and ACE 2007/2010/2016/2019 profiles); kept page-aligned nativeRead observations are compared by the same rule from each capture's own kept pages and input. Across all five profiles, the page-0 creation DATE and live MSysObjects DateCreate and DateUpdate are set aside, and the page-0 password and 2-byte SIDs of MSysObjects.Owner and MSysACEs.SID are compared with each file's creation day and SID keystream removed. Where repeats decide them, vacated MSysObjects prefix copies left below a later commit of the same row (ACE 2007 dao-fields-7; Jet 4 nn-two-cols-mdb-dao; ACE 2010 create-accdb-calculated) are normalized, and for ACE 2007 only, intact deleted MSysObjects rows (pair-dao-Aa-aA) and a chained long value's tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) are set aside. Each kind of field whose bytes differed is a note; refused or mismatched profiles stay strict, named in the comparison note.",
+                "Any other byte, a different list of clock fields, a different length, a cross-profile mismatch, vacated MSysObjects copies on ACE 2016 or ACE 2019, deleted MSysObjects rows or chained long-value stamps outside ACE 2007, any unrecognized/refused profile, a non-page-aligned or non-MSysObjects kept read difference, and a file whose bytes are not available or do not hash to its recorded SHA-256 (compared by SHA-256, with a note) still differ.",
                 ["R-FMT-1 FMT1-CREATE", "R-CAT-1 CAT-NEW", "II-04 §7.1", "II-15 §12"]),
         ],
         AcceptedDifferences =
@@ -299,10 +300,11 @@ public static class CallTraceComparison
             PageClockContext? aCtx = BuildPageContext(actualEvents, eventIndex, relPath, candidateFiles, out string? aRefusal);
             if (eCtx is null || aCtx is null)
             {
-                string? why = eCtx is null ? (eRefusal is not null ? "expected: " + eRefusal : null) : (aRefusal is not null ? "actual: " + aRefusal : null);
-                if (why is not null)
+                string? eWhy = eCtx is null ? eRefusal : null;
+                string? aWhy = aCtx is null ? aRefusal : null;
+                if (eWhy is not null || aWhy is not null)
                 {
-                    notes.Add($"{label}: compared strictly ({why})");
+                    notes.Add($"{label}: compared strictly ({FileImageComparison.FormatRefusal(eWhy, aWhy)})");
                 }
                 return;
             }
