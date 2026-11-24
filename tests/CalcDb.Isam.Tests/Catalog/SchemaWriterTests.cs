@@ -1381,12 +1381,12 @@ public sealed class SchemaWriterTests
             SchemaWriter w = session.Writer();
             // DAO route on MDB stays refused by name.
             Assert.NotNull(w.Check(new("T", [Long("n")], SchemaRoute.Dao))?.NotWritten);
-            // Unrecorded Jet 4 MDB column types (COUNTER(seed, inc), VARBINARY, BIGINT, DATETIME2) stay refused by name;
-            // ADO DECIMAL on Jet 4 MDB is now recorded (evidence/r-q36-publication-bytes/create-nullfix-mdb).
+            // Unrecorded Jet 4 MDB column types (COUNTER(seed, inc), VARBINARY, bare DECIMAL) stay refused by name;
+            // explicit ADO DECIMAL(p, s) on Jet 4 MDB is recorded (evidence/r-q36-publication-bytes/create-nullfix-mdb).
             Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("ID", NewFieldType.Counter, Seed: 100, Increment: 5)], SchemaRoute.Sql))?.NotWritten);
             Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("B", NewFieldType.VarBinary, Size: 16)], SchemaRoute.Sql))?.NotWritten);
             Assert.Null(w.Check(new("T", [new("D", NewFieldType.Decimal, Precision: 18, Scale: 2)], SchemaRoute.Ado)));
-            Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("B", NewFieldType.BigInt), new("DT", NewFieldType.DateTime2)], SchemaRoute.Sql))?.NotWritten);
+            Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("B", NewFieldType.Decimal, Precision: 18, Scale: 0, ImplicitDecimalPrecision: true)], SchemaRoute.Ado))?.NotWritten);
             // Duplicate-field 3380 rollback on MDB stays refused by name (no writes).
             SchemaOutcome dup = w.CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Sql), 1, 1);
             Assert.False(dup.Succeeded);

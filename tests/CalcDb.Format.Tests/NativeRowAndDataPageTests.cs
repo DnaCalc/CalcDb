@@ -240,7 +240,8 @@ public sealed class NativeRowAndDataPageTests
         TableDefinition b1 = MakeTable(maxColumns: 1, variableColumns: 0, columns: [BoolCol("b1", 0)]);
         Assert.True(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], D, out byte[]? b1Row, out string? b1Err), b1Err);
         Assert.Equal("0100000000", Convert.ToHexStringLower(b1Row!));
-        Assert.False(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], FormatDescriptor.Jet3, out _, out string? jet3Err));
+        FormatDescriptor jet3Like = D with { Row = D.Row with { FixedBase = 1 } };
+        Assert.False(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], jet3Like, out _, out string? jet3Err));
         Assert.Contains("Jet 3", jet3Err);
 
         // V == 0, fixedSize == 1 (F1B9: 1 Byte + 8 Yes/No): 1 pad byte before mask (zf-fixed1-disc-accdb-dao page 53).
