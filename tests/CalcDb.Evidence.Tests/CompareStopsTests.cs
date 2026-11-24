@@ -416,6 +416,18 @@ public sealed class CompareStopsTests : IDisposable
         Assert.Contains("no matching questions", CompareStops.RenderDetail(empty, byFolder: false), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void NormalizeDetail_handles_null_empty_bare_prefix_and_multiline()
+    {
+        const string stop = "NotModelled.Edit.Publication";
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, null));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, "   \r\n\t "));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, stop + ":"));
+        Assert.Equal(CompareStops.NoDetail, CompareStops.NormalizeDetail(stop, stop + ":   "));
+        Assert.Equal("line1 line2 line3", CompareStops.NormalizeDetail(stop, stop + ": line1\r\nline2\nline3"));
+        Assert.Equal("other detail", CompareStops.NormalizeDetail(stop, "  other detail  "));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

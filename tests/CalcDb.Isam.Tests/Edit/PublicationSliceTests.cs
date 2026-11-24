@@ -62,6 +62,22 @@ public sealed class PublicationSliceTests
         throw new Xunit.Sdk.XunitException($"Row {keyColumn}={keyValue} not found in table page {tableDefPage}.");
     }
 
+    private static byte[] ApplyEditsToSnapshot(byte[] snapshot, IReadOnlyList<PageEdit> edits)
+    {
+        byte[] image = [.. snapshot];
+        foreach (PageEdit edit in edits)
+        {
+            Assert.NotEqual(0u, edit.Page);
+            int offset = checked((int)edit.Page * D.PageSize);
+            if (offset + D.PageSize > image.Length)
+            {
+                Array.Resize(ref image, offset + D.PageSize);
+            }
+            edit.Delta.Apply(image.AsSpan(offset, D.PageSize));
+        }
+        return image;
+    }
+
     [Fact]
     public void FieldEncoder_TryEncodeFixed_encodes_fixed_BINARY_with_right_zero_padding_and_refuses_bad_shapes()
     {
@@ -175,10 +191,16 @@ public sealed class PublicationSliceTests
             }
         }
         Assert.NotNull(trueRow);
-        NativeValue[] withNullY = [.. rowValues!];
+        long trueRowId = rowValues![idCol.Ordinal].Integer;
+        NativeValue[] withNullY = [.. rowValues];
         withNullY[yCol.Ordinal] = NativeValue.Null;
         CompiledChange compiled = ctx.Writer!.Compile(ctx.Semantics, trueRow!.Value, withNullY);
         Assert.NotNull(compiled.Change);
+        Assert.Contains(compiled.Change.Edits, e => e.Delta is BitDelta);
+        byte[] afterClear = ApplyEditsToSnapshot(afterAdd, compiled.Change.Edits);
+        NativeValue clearedY = ReadAfterReopen(afterClear, table.FirstPage, "ID", trueRowId, "Y");
+        Assert.Equal(NativeKind.Boolean, clearedY.Kind);
+        Assert.False(clearedY.Boolean);
 
         NativeValue[] withBadY = [.. rowValues];
         withBadY[yCol.Ordinal] = new NativeValue(NativeKind.Long) { Integer = 1 };
@@ -240,6 +262,15 @@ public sealed class PublicationSliceTests
         insertValues[Col(table, "G").Ordinal] = new NativeValue(NativeKind.Guid) { Bytes = newGuid };
         CompiledChange inserted = ctx.Writer!.CompileInsert(ctx.Semantics, insertValues, autoNumberFloor: 99);
         Assert.NotNull(inserted.Change);
+
+        byte[] afterInsert = ApplyEditsToSnapshot(afterEdit, inserted.Change.Edits);
+        byte[] expectedPaddedBin = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        Assert.Equal(expectedPaddedBin, ReadAfterReopen(afterInsert, table.FirstPage, "ID", 99, "Bin").Bytes!.ToArray());
+        NativeValue reopenedGuid = ReadAfterReopen(afterInsert, table.FirstPage, "ID", 99, "G");
+        Assert.Equal(NativeKind.Guid, reopenedGuid.Kind);
+        Assert.Equal(newGuid, reopenedGuid.Bytes!.ToArray());
+        Assert.Equal("inserted", ReadAfterReopen(afterInsert, table.FirstPage, "ID", 99, "Txt").Text);
+        Assert.Equal(NativeKind.Null, ReadAfterReopen(afterInsert, table.FirstPage, "ID", 99, "N").Kind);
     }
 
     [Fact]
