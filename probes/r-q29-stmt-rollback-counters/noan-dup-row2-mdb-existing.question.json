@@ -10,7 +10,7 @@
     "CRASH-ORDER",
     "W-05"
   ],
-  "description": "Jet 4 MDB (copy of r-cat-1-mdb-empty.mdb) table T with no AutoNumber column (ID LONG PK, K LONG unique, S TEXT(50)) and one existing row (1, 400, 'pre') so the data page has room. Src has row 1 (ID 10, K 11) accepted and row 2 (ID 11, K 400) duplicating existing K on UK. INSERT INTO T SELECT ... ORDER BY N with dbFailOnError fails 3022 on row 2 by UK. Keeps pages 0-1 and 19+ after setup, after statement (1500 ms pause), and after follow-up INSERT; reads TableDef.RecordCount and rows.",
+  "description": "Jet 4 MDB (copy of r-cat-1-mdb-empty.mdb) table T with no AutoNumber column (ID LONG PK, K LONG unique, S TEXT(50)) and one existing row (1, 400, 'pre') so the data page has room. Src has row 1 (ID 10, K 11) accepted and row 2 (ID 11, K 400) duplicating existing K on UK. INSERT INTO T SELECT ... ORDER BY N with dbFailOnError fails 3022 on row 2 by UK. Keeps the whole file after setup, after statement (1500 ms pause), after follow-up INSERT, and after Close; reads TableDef.RecordCount and rows.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

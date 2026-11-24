@@ -10,7 +10,7 @@
     "CRASH-ORDER",
     "W-05"
   ],
-  "description": "ACCDB child table T with no AutoNumber column (ID LONG PK, K LONG REFERENCES P(ID), S TEXT(50)) and one existing row (1, 400, 'pre') so the data page has room, with parent P (ID 1, 2, 4, 400) and Src with K 1, 2, 99, 4. INSERT INTO T SELECT ... ORDER BY N with dbFailOnError fails 3201 at row 3 on an existing page. Keeps pages 0-1 and 42+ after setup, after statement (1500 ms pause), and after follow-up INSERT; reads TableDef.RecordCount and rows.",
+  "description": "ACCDB child table T with no AutoNumber column (ID LONG PK, K LONG REFERENCES P(ID), S TEXT(50)) and one existing row (1, 400, 'pre') so the data page has room, with parent P (ID 1, 2, 4, 400) and Src with K 1, 2, 99, 4. INSERT INTO T SELECT ... ORDER BY N with dbFailOnError fails 3201 at row 3 on an existing page. Keeps the whole file after setup, after statement (1500 ms pause), after follow-up INSERT, and after Close; reads TableDef.RecordCount and rows.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

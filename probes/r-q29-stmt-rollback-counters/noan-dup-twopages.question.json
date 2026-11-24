@@ -10,7 +10,7 @@
     "CRASH-ORDER",
     "W-05"
   ],
-  "description": "ACCDB empty table T with no AutoNumber column (ID LONG PK, K LONG unique, S1..S4 TEXT(255)) where each row is ~1050 bytes (3 rows per 4096-byte data page). Src has 6 rows with K 11, 12, 13, 14, 15, 12, so rows 1-5 span two data pages before row 6 fails 3022 under dbFailOnError. Keeps pages 0-1 and 42-65 after setup, after statement (1500 ms pause), and after follow-up INSERT; reads TableDef.RecordCount and rows.",
+  "description": "ACCDB empty table T with no AutoNumber column (ID LONG PK, K LONG unique, S1..S4 TEXT(255)) where each row is ~1050 bytes (3 rows per 4096-byte data page). Src has 6 rows with K 11, 12, 13, 14, 15, 12, so rows 1-5 span two data pages before row 6 fails 3022 under dbFailOnError. Keeps the whole file after setup, after statement (1500 ms pause), after follow-up INSERT, and after Close; reads TableDef.RecordCount and rows.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

@@ -9,7 +9,7 @@
     "CRASH-ORDER",
     "W-05"
   ],
-  "description": "ACCDB AutoNumber table An (ID COUNTER PK, K LONG unique, S TEXT(50), D DOUBLE) with counter at 10 and ID 10 deleted (existing row ID 1 K 1). Src has 1 row with explicit ID equal to the counter (ID 10, K 1): passes PK, refused 3022 by UK under dbFailOnError. Tests whether a single-row UK refusal with explicit ID == counter (leaving word 20 unchanged) still writes +2 on page 0. Keeps pages 0-1 and 42+ after setup, after statement (1500 ms pause), and after follow-up auto INSERT.",
+  "description": "ACCDB AutoNumber table An (ID COUNTER PK, K LONG unique, S TEXT(50), D DOUBLE) with counter at 10 and ID 10 deleted (existing row ID 1 K 1). Src has 1 row with explicit ID equal to the counter (ID 10, K 1): passes PK, refused 3022 by UK under dbFailOnError. Tests whether a single-row UK refusal with explicit ID == counter (leaving word 20 unchanged) still writes +2 on page 0. Keeps the whole file after setup, after statement (1500 ms pause), after follow-up auto INSERT, and after Close.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [

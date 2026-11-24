@@ -9,7 +9,7 @@
     "CRASH-ORDER",
     "W-05"
   ],
-  "description": "ACCDB AutoNumber table An (ID COUNTER PK, K LONG unique, S TEXT(50), D DOUBLE) with counter at 10 (existing rows ID 1 K 1 and ID 10 K 10, so data page has room). Src has explicit IDs above the counter: row 1 (ID 20, K 20) accepted, row 2 (ID 30, K 10) refused 3022 by UK, row 3 (ID 40, K 40). INSERT INTO An (ID, K, S) SELECT ID, K, S FROM Src ORDER BY N with dbFailOnError. Keeps pages 0-1 and 42+ after setup, after statement (1500 ms pause), and after follow-up auto INSERT; reads TableDef.RecordCount and rows.",
+  "description": "ACCDB AutoNumber table An (ID COUNTER PK, K LONG unique, S TEXT(50), D DOUBLE) with counter at 10 (existing rows ID 1 K 1 and ID 10 K 10, so data page has room). Src has explicit IDs above the counter: row 1 (ID 20, K 20) accepted, row 2 (ID 30, K 10) refused 3022 by UK, row 3 (ID 40, K 40). INSERT INTO An (ID, K, S) SELECT ID, K, S FROM Src ORDER BY N with dbFailOnError. Keeps the whole file after setup, after statement (1500 ms pause), after follow-up auto INSERT, and after Close; reads TableDef.RecordCount and rows.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [
