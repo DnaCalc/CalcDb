@@ -120,7 +120,8 @@ public static unsafe class ActionExecutor
         ISqlActionDatabase database,
         int options = 0,
         IReadOnlyList<NativeVariant?>? parameters = null,
-        ActionErrorSource source = ActionErrorSource.Database)
+        ActionErrorSource source = ActionErrorSource.Database,
+        Func<SqlFailure, bool>? acceptsFailure = null)
     {
         string normalized = sql;
         if (!SqlParser.NormalizeSource(ref normalized, out SqlFailure? normFail))
@@ -129,7 +130,7 @@ public static unsafe class ActionExecutor
         }
         if (DdlParser.IsDdlLeadingKeyword(normalized))
         {
-            return DdlExecutor.Execute(normalized, database, options, source);
+            return DdlExecutor.Execute(normalized, database, options, source, acceptsFailure);
         }
         if (source is ActionErrorSource.Database or ActionErrorSource.Ado)
         {
@@ -150,7 +151,7 @@ public static unsafe class ActionExecutor
         }
         using (plan)
         {
-            return Execute(plan, database, options, parameters, source);
+            return Execute(plan, database, options, parameters, source, acceptsFailure);
         }
     }
 
@@ -160,7 +161,8 @@ public static unsafe class ActionExecutor
         ISqlActionDatabase database,
         int options = 0,
         IReadOnlyList<NativeVariant?>? parameters = null,
-        ActionErrorSource source = ActionErrorSource.Database)
+        ActionErrorSource source = ActionErrorSource.Database,
+        Func<SqlFailure, bool>? acceptsFailure = null)
     {
         if ((options & ~AdmittedOptionsMask) != 0)
         {
@@ -199,22 +201,38 @@ public static unsafe class ActionExecutor
 
         bool failOnError = (options & DbFailOnError) != 0;
         // R-TXN-1 TXN-STMT (task sjws): the statement publishes once, at its end, what it changed, also the rows before a
-        // failure; inside a BeginTrans level its changes join the level.
+        // failure; inside a BeginTrans level its changes join the level. When a failure is unmodelled or the caller
+        // refuses to answer it, abort the statement cleanly so nothing is written or left staged.
         using StatementScope statement = database.Workspace.BeginStatement(isInsertSelect: plan.Kind == ActionKind.InsertSelect && plan.SourceSelect is not null);
         try
         {
             ActionOutcome outcome = plan.Kind switch
             {
                 ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues, source, isInsertValues: true),
-                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues, source),
+                ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues, source, acceptsFailure),
                 ActionKind.Update => ExecuteUpdate(plan, database, failOnError, paramValues, source),
-                ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues),
+                ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues, acceptsFailure),
                 _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionKind", plan.Kind.ToString())),
             };
-            if (outcome.Failure is { IsNotModelled: true })
+            if (outcome.Failure is { } fail)
             {
-                statement.Abort();
-                return outcome;
+                if (!CallerAcceptsFailure(fail, acceptsFailure))
+                {
+                    statement.Abort();
+                    return outcome;
+                }
+                if (fail.IsNotModelled)
+                {
+                    if (database.Workspace.Depth == 0)
+                    {
+                        statement.Abort();
+                    }
+                    else
+                    {
+                        _ = statement.Complete();
+                    }
+                    return outcome;
+                }
             }
             ResolutionOutcome published = statement.Complete();
             return !published.Succeeded
@@ -226,6 +244,9 @@ public static unsafe class ActionExecutor
             ClearAll(paramValues);
         }
     }
+
+    private static bool CallerAcceptsFailure(SqlFailure failure, Func<SqlFailure, bool>? acceptsFailure) =>
+        acceptsFailure is null || (!failure.IsNotModelled && acceptsFailure(failure));
 
     // ---- INSERT INTO ... VALUES (...) ----------------------------------------------------------------------------------
 
@@ -309,7 +330,7 @@ public static unsafe class ActionExecutor
                             ? ActionOutcome.Fail(ef)
                             : ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertExpressionErrorWithoutFailOnError", $"INSERT expression error without dbFailOnError: {ef}"));
                     }
-                    if (!ConvertForColumn(expr.Value, plan.InsertColumns[i], plan.Context, out converted[i], out SqlFailure? convFail))
+                    if (!ConvertForColumn(expr.Value, plan.InsertColumns[i], plan.Context, errorSource, out converted[i], out SqlFailure? convFail))
                     {
                         if (convFail!.IsNotModelled)
                         {
@@ -331,8 +352,7 @@ public static unsafe class ActionExecutor
                 if (rowFail is not null)
                 {
                     if (rowFail.IsNotModelled
-                        && editContext.Semantics.HasCheckConstraints
-                        && !frame.LastUpdatePersistedCheckAutoNumber
+                        && rowFail.NotModelled == "NotModelled.Edit.Rule"
                         && beforeCounter.HasValue
                         && editContext.Counter is { Increment: 1 } ctr
                         && ctr.Last != beforeCounter.Value)
@@ -366,7 +386,8 @@ public static unsafe class ActionExecutor
         ISqlActionDatabase database,
         bool failOnError,
         NativeVariant[] paramValues,
-        ActionErrorSource errorSource)
+        ActionErrorSource errorSource,
+        Func<SqlFailure, bool>? acceptsFailure)
     {
         // FROM-less constant SELECT (e.g. INSERT INTO U (ID, K) SELECT 602, 'y', r-def-expr-sql/sql-insert-values-forms)
         // evaluates like a single-row VALUES insert, except Jet 4 MDB CHECK and AutoNumber+CHECK nofail/explicit
@@ -514,7 +535,7 @@ public static unsafe class ActionExecutor
                         NativeVariant[] rawRow = sourceRows[r];
                         for (int c = 0; c < rawRow.Length; c++)
                         {
-                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, out converted[c], out SqlFailure? convFail))
+                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail))
                             {
                                 ClearAll(converted);
                                 if (!convFail!.IsNotModelled
@@ -525,6 +546,11 @@ public static unsafe class ActionExecutor
                                     && !explicitAutoNumber
                                     && editContext!.Semantics.AutoNumber is not null)
                                 {
+                                    if (!CallerAcceptsFailure(convFail, acceptsFailure))
+                                    {
+                                        txnStarted = false;
+                                        return ActionOutcome.Fail(convFail);
+                                    }
                                     // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (evidence/r-q27-autonumber-txn/ins-conv-3464-fail):
                                     // a 3464 conversion refusal on a later autocommit INSERT ... SELECT row under dbFailOnError
                                     // targeting a generated AutoNumber consumes that row's ticket and rolls back the statement
@@ -545,22 +571,22 @@ public static unsafe class ActionExecutor
                                     }
                                     return ActionOutcome.Fail(convFail);
                                 }
+                                SqlFailure finalFail = convFail.IsNotModelled
+                                    ? convFail
+                                    : !failOnError
+                                        ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertConversionWithoutFailOnError", $"INSERT SELECT conversion error without dbFailOnError: {convFail}")
+                                        : r > 0
+                                            ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT conversion error on row {r + 1}: {convFail}")
+                                            : convFail;
                                 if (txnStarted)
                                 {
-                                    database.Workspace.Rollback();
+                                    if (CallerAcceptsFailure(finalFail, acceptsFailure))
+                                    {
+                                        database.Workspace.Rollback();
+                                    }
                                     txnStarted = false;
                                 }
-                                if (convFail.IsNotModelled)
-                                {
-                                    return ActionOutcome.Fail(convFail);
-                                }
-                                if (!failOnError)
-                                {
-                                    return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertConversionWithoutFailOnError", $"INSERT SELECT conversion error without dbFailOnError: {convFail}"));
-                                }
-                                return r > 0
-                                    ? ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT conversion error on row {r + 1}: {convFail}"))
-                                    : ActionOutcome.Fail(convFail);
+                                return ActionOutcome.Fail(finalFail);
                             }
                         }
 
@@ -569,7 +595,10 @@ public static unsafe class ActionExecutor
                             ClearAll(converted);
                             if (txnStarted)
                             {
-                                database.Workspace.Rollback();
+                                if (CallerAcceptsFailure(reseedOpen, acceptsFailure))
+                                {
+                                    database.Workspace.Rollback();
+                                }
                                 txnStarted = false;
                             }
                             return ActionOutcome.Fail(reseedOpen);
@@ -581,7 +610,10 @@ public static unsafe class ActionExecutor
                         {
                             if (txnStarted)
                             {
-                                database.Workspace.Rollback();
+                                if (CallerAcceptsFailure(rowFail, acceptsFailure))
+                                {
+                                    database.Workspace.Rollback();
+                                }
                                 txnStarted = false;
                             }
                             return ActionOutcome.Fail(rowFail);
@@ -738,7 +770,7 @@ public static unsafe class ActionExecutor
                             continue;
                         }
 
-                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, out evaluated[i], out SqlFailure? convFail))
+                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, errorSource, out evaluated[i], out SqlFailure? convFail))
                         {
                             if (convFail!.IsNotModelled || failOnError)
                             {
@@ -822,7 +854,8 @@ public static unsafe class ActionExecutor
         BoundAction plan,
         ISqlActionDatabase database,
         bool failOnError,
-        NativeVariant[] paramValues)
+        NativeVariant[] paramValues,
+        Func<SqlFailure, bool>? acceptsFailure)
     {
         // R-FMT-2 (qualified.md: DELETE without WHERE; evidence/r-q17-growth/retire-delete-au1,
         // evidence/r-q19-growth-open/delete-all-*): a single-table DELETE without WHERE and without a join
@@ -898,28 +931,39 @@ public static unsafe class ActionExecutor
                         {
                             if (failOnError)
                             {
+                                SqlFailure conflictFail = SqlFailure.Ace(SqlPhase.Execute, MutationError.WriteConflict, new MutationError(MutationError.WriteConflict, MutationErrorSource.Database).Describe());
                                 if (txnStarted)
                                 {
-                                    database.Workspace.Rollback();
+                                    if (CallerAcceptsFailure(conflictFail, acceptsFailure))
+                                    {
+                                        database.Workspace.Rollback();
+                                    }
                                     txnStarted = false;
                                 }
-                                return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, MutationError.WriteConflict, new MutationError(MutationError.WriteConflict, MutationErrorSource.Database).Describe()));
+                                return ActionOutcome.Fail(conflictFail);
                             }
                             continue;
                         }
+                        SqlFailure bmSqlFail = SqlFailure.Open(SqlPhase.Execute, "NotModelled.Storage", $"DELETE bookmark failed on {rowId}: {bmFail}");
                         if (txnStarted)
                         {
-                            database.Workspace.Rollback();
+                            if (CallerAcceptsFailure(bmSqlFail, acceptsFailure))
+                            {
+                                database.Workspace.Rollback();
+                            }
                             txnStarted = false;
                         }
-                        return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Storage", $"DELETE bookmark failed on {rowId}: {bmFail}"));
+                        return ActionOutcome.Fail(bmSqlFail);
                     }
 
                     if (CommitRowChange(frame, frame.Delete, failOnError, out bool deleted) is { } delFail)
                     {
                         if (txnStarted)
                         {
-                            database.Workspace.Rollback();
+                            if (CallerAcceptsFailure(delFail, acceptsFailure))
+                            {
+                                database.Workspace.Rollback();
+                            }
                             txnStarted = false;
                         }
                         return ActionOutcome.Fail(delFail);
@@ -1165,8 +1209,9 @@ public static unsafe class ActionExecutor
     /// <item><b>Integer</b> (<c>r-q-wire/int-sql-literal-integer</c>): banker's-rounded via <c>CInt</c>; overflow fails <b>6</b> (<c>Overflow</c>).</item>
     /// <item><b>Long</b> (<c>r-q-wire/int-sql-literal-long</c>, <c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-sql-2-3/act-fail-conversion</c>):
     /// banker's-rounded via <c>CLng</c>; overflow or non-numeric text fails <b>3464</b> (<c>Data type mismatch in criteria expression.</c>).</item>
-    /// <item><b>Text</b> (<c>r-def-expr-sql/sql-insert-values-forms</c>): converts via <c>CStr</c> and silently truncates to
-    /// <c>column.Length / 2</c> UTF-16 units.</item>
+    /// <item><b>Text</b> (<c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-oledb-odbc/error-record-channels</c>):
+    /// converts via <c>CStr</c>; DAO SQL silently truncates to <c>column.Length / 2</c> UTF-16 units, while ADO
+    /// <c>Connection.Execute</c> fails <b>3163</b> (<c>The field is too small...</c>).</item>
     /// </list>
     /// The returned <paramref name="converted"/> owns any allocated BSTR and must be cleared with <see cref="SelectValues.Clear"/>.
     /// </summary>
@@ -1174,6 +1219,7 @@ public static unsafe class ActionExecutor
         in NativeVariant incoming,
         ColumnDescriptor column,
         ExpressionContext context,
+        ActionErrorSource errorSource,
         out NativeVariant converted,
         out SqlFailure? failure)
     {
@@ -1314,6 +1360,14 @@ public static unsafe class ActionExecutor
                 {
                     ReadOnlySpan<char> units = Bstrs.Chars(textVar.Pointer);
                     int maxUnits = column.TypeCode == NativeTypes.Text ? column.Length / 2 : units.Length;
+                    if (column.TypeCode == NativeTypes.Text && errorSource == ActionErrorSource.Ado && units.Length > maxUnits)
+                    {
+                        failure = SqlFailure.Ace(
+                            SqlPhase.Execute,
+                            MutationError.FieldTooSmall,
+                            new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field).Describe());
+                        return false;
+                    }
                     int keep = Math.Min(units.Length, maxUnits);
                     if (ownsTextVar && keep == units.Length)
                     {

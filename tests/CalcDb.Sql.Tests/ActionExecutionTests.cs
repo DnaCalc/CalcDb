@@ -587,4 +587,163 @@ public sealed class ActionExecutionTests
         Assert.True(fromSelect.IsNotModelled);
         Assert.Equal("NotModelled.ActionDeletedRecord", fromSelect.NotModelled);
     }
+
+    [Fact]
+    public void Action_executor_refused_failure_aborts_cleanly_at_depth_zero_and_inside_begintrans()
+    {
+        // Depth 0: multi-row INSERT ... SELECT with AutoNumber failing on row 2 (3022) when caller refuses -> zero writes,
+        // byte-identical image, no Close commit, counter untouched, and subsequent accepted INSERT receives maxBefore + 1.
+        using (var db = new WritableSqlFixture(Fmt2bAccdb))
+        {
+            TableDefinition au1 = db.Table("Au1")!;
+            int maxBefore = int.Parse(db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer!);
+            byte[] before = db.Image.Snapshot();
+
+            // First row inserts cleanly (ID=maxBefore+1), second row collides on PK (ID=1).
+            ActionOutcome refusedIns = ActionExecutor.Execute(
+                "INSERT INTO Au1 (ID, S) SELECT ID, S FROM Au1 ORDER BY ID",
+                db,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedIns.Succeeded);
+            Assert.Equal(MutationError.Duplicate, refusedIns.Failure!.Number);
+            Assert.Equal(0, db.Workspace.Depth);
+            Assert.Empty(db.Workspace.Publications);
+            Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+            Assert.False(db.Workspace.HasGlobalMapActivity(db.Cache));
+            Assert.Equal(before, db.Image.Snapshot());
+            Assert.Equal(maxBefore, db.EditContext("Au1", out _)!.Counter!.Last);
+
+            // Subsequent accepted INSERT into Au1 receives maxBefore + 1 (aborted statement did not advance AutoNumber).
+            ActionOutcome acceptedAfter = ActionExecutor.Execute(
+                "INSERT INTO Au1 (S) VALUES ('after-abort')",
+                db,
+                options: 128);
+            Assert.True(acceptedAfter.Succeeded, acceptedAfter.Failure?.ToString());
+            int maxAfter = int.Parse(db.ReadSelect("SELECT MAX(ID) FROM Au1")[0][0].Integer!);
+            Assert.Equal(maxBefore + 1, maxAfter);
+
+            // Multi-row generated AutoNumber INSERT ... SELECT failing on row 2 via 3464 conversion error when caller refuses:
+            // RecordStatementConversionFailure(3464) is skipped, zero writes happen, counter stays 0, and next insert gets ID = 1.
+            ActionOutcome createConv = ActionExecutor.Execute(
+                "CREATE TABLE AuConv (ID COUNTER CONSTRAINT PK_AuConv PRIMARY KEY, V LONG)",
+                db,
+                options: 128);
+            Assert.True(createConv.Succeeded, createConv.Failure?.ToString());
+            if (db.Workspace.NeedsCloseCommit(db.Cache))
+            {
+                Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            }
+            byte[] beforeConv = db.Image.Snapshot();
+            int pubsBeforeConv = db.Workspace.Publications.Count;
+
+            ActionOutcome refusedConv = ActionExecutor.Execute(
+                "INSERT INTO AuConv (V) SELECT IIf(ID = 1, 10, 'not-a-num') FROM Au1 ORDER BY ID",
+                db,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedConv.Succeeded);
+            Assert.Equal(3464, refusedConv.Failure!.Number);
+            Assert.Equal(0, db.Workspace.Depth);
+            Assert.Equal(pubsBeforeConv, db.Workspace.Publications.Count);
+            Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+            Assert.Equal(beforeConv, db.Image.Snapshot());
+            Assert.Equal(0, db.EditContext("AuConv", out _)!.Counter!.Last);
+
+            ActionOutcome acceptedConv = ActionExecutor.Execute(
+                "INSERT INTO AuConv (V) VALUES (42)",
+                db,
+                options: 128);
+            Assert.True(acceptedConv.Succeeded, acceptedConv.Failure?.ToString());
+            Assert.Equal("1", db.ReadSelect("SELECT ID FROM AuConv")[0][0].Integer);
+        }
+
+        // Depth 0: multi-row UPDATE failing row 2 (3316) when caller refuses -> row 1 is NOT published, image byte-identical.
+        using (var actDb = new WritableSqlFixture(ActAccdb))
+        {
+            byte[] before = actDb.Image.Snapshot();
+            ActionOutcome refusedUpd = ActionExecutor.Execute(
+                "UPDATE T2 SET W = W - 15",
+                actDb,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedUpd.Succeeded);
+            Assert.Equal(3316, refusedUpd.Failure!.Number);
+            Assert.Empty(actDb.Workspace.Publications);
+            Assert.Equal(before, actDb.Image.Snapshot());
+        }
+
+        // Depth 0: multi-row DELETE with FK 3200 on row 2 when caller refuses -> zero writes, depth 0, image byte-identical.
+        using (var relDb = new WritableSqlFixture(ErrBaseAccdb))
+        {
+            byte[] before = relDb.Image.Snapshot();
+            ActionOutcome refusedDel = ActionExecutor.Execute(
+                "DELETE FROM P",
+                relDb,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedDel.Succeeded);
+            Assert.Equal(3200, refusedDel.Failure!.Number);
+            Assert.Equal(0, relDb.Workspace.Depth);
+            Assert.Empty(relDb.Workspace.Publications);
+            Assert.Equal(before, relDb.Image.Snapshot());
+        }
+
+        // Inside outer BeginTrans: prior outer edit survives a caller-refused multi-row UPDATE and a caller-refused
+        // multi-row INSERT ... SELECT (own frame); outer CommitTrans commits only the prior edit.
+        using (var txnDb = new WritableSqlFixture(ActAccdb))
+        {
+            string origRow1 = txnDb.ReadSelect("SELECT V FROM T WHERE ID = 1")[0][0].Integer!;
+            string origT2Row1 = txnDb.ReadSelect("SELECT W FROM T2 WHERE ID = 1")[0][0].Integer!;
+
+            Assert.Null(txnDb.Workspace.BeginTrans());
+            ActionOutcome outerEdit = ActionExecutor.Execute("UPDATE T SET V = 77 WHERE ID = 1", txnDb, options: 128);
+            Assert.True(outerEdit.Succeeded, outerEdit.Failure?.ToString());
+
+            ActionOutcome refusedUpd = ActionExecutor.Execute(
+                "UPDATE T2 SET W = W - 15",
+                txnDb,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedUpd.Succeeded);
+            Assert.Equal(3316, refusedUpd.Failure!.Number);
+            Assert.Equal(1, txnDb.Workspace.Depth);
+            Assert.Equal("77", txnDb.ReadSelect("SELECT V FROM T WHERE ID = 1")[0][0].Integer);
+            Assert.Equal(origT2Row1, txnDb.ReadSelect("SELECT W FROM T2 WHERE ID = 1")[0][0].Integer);
+
+            ActionOutcome refusedIns = ActionExecutor.Execute(
+                "INSERT INTO T (ID, V, U, S, W, R) SELECT ID, V, U, S, W, R FROM T",
+                txnDb,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedIns.Succeeded);
+            Assert.Equal(MutationError.Duplicate, refusedIns.Failure!.Number);
+            Assert.Equal(1, txnDb.Workspace.Depth);
+
+            ResolutionOutcome committed = txnDb.Workspace.CommitTrans();
+            Assert.True(committed.Succeeded, committed.ToString());
+            Assert.Equal("77", txnDb.ReadSelect("SELECT V FROM T WHERE ID = 1")[0][0].Integer);
+            Assert.Equal(origT2Row1, txnDb.ReadSelect("SELECT W FROM T2 WHERE ID = 1")[0][0].Integer);
+            Assert.NotEqual("77", origRow1);
+        }
+    }
+
+    [Fact]
+    public void Ddl_executor_refused_duplicate_create_table_writes_nothing()
+    {
+        using var db = new WritableSqlFixture(ActAccdb);
+        byte[] before = db.Image.Snapshot();
+
+        ActionOutcome refused = ActionExecutor.Execute(
+            "CREATE TABLE DupCols (A LONG, a LONG)",
+            db,
+            options: 128,
+            source: ActionErrorSource.Ado,
+            acceptsFailure: _ => false);
+
+        Assert.False(refused.Succeeded);
+        Assert.Equal(3380, refused.Failure!.Number);
+        Assert.Empty(db.Workspace.Publications);
+        Assert.Equal(before, db.Image.Snapshot());
+    }
 }

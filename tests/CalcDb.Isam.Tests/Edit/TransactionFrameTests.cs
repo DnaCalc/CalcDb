@@ -114,4 +114,108 @@ public sealed class TransactionFrameTests
         Assert.True(ws.Rollback().Succeeded);
         Assert.Equal(7, Visible(ws, a, 17));
     }
+
+    [Fact]
+    public void Statement_abort_at_depth_zero_discards_own_frame_edits_locks_and_counters()
+    {
+        PageCache a = File(1, 17, 7);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
+        var unitCounter = new AutoNumberCounter(10, 1);
+        var stepCounter = new AutoNumberCounter(100, 5);
+
+        using (StatementScope stmt = ws.BeginStatement(isInsertSelect: true))
+        {
+            Assert.Null(ws.BeginTrans());
+            Assert.Equal(1, ws.Depth);
+            Assert.True(ws.Lock(a, [new LockResource(17, LockPurpose.DataPage)], ws.ChangeLifetime).Granted);
+            Change(ws, a, 17, 42);
+            ws.SaveStatementCounterBefore(unitCounter);
+            ws.SaveStatementCounterBefore(stepCounter);
+            Assert.True(unitCounter.TryIssue(out _, out _, out _));
+            Assert.True(stepCounter.TryIssue(out _, out _, out _));
+            ws.RecordConsumedAutoNumber(a, 2, 11, 1, reseed: false, unrecorded: null);
+
+            Assert.Equal(42, Visible(ws, a, 17));
+            Assert.Equal(11, unitCounter.Last);
+            Assert.Equal(105, stepCounter.Last);
+
+            stmt.Abort();
+        }
+
+        Assert.Equal(0, ws.Depth);
+        Assert.False(ws.InStatement);
+        Assert.Empty(ws.Participants);
+        Assert.Empty(ws.PendingPublication);
+        Assert.Empty(ws.Publications);
+        Assert.Equal(7, Visible(ws, a, 17));
+        Assert.Equal(10, unitCounter.Last);
+        Assert.Equal(100, stepCounter.Last);
+        Assert.Null(a.Locks.Holding(17));
+        Assert.False(ws.NeedsCloseCommit(a));
+        Assert.False(ws.HasGlobalMapActivity(a));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Statement_abort_inside_outer_begintrans_preserves_outer_edits_and_locks(bool withOwnLevel)
+    {
+        PageCache a = File(1, 17, 7), b = File(2, 21, 100);
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
+        var unitCounter = new AutoNumberCounter(10, 1);
+        var stepCounter = new AutoNumberCounter(100, 5);
+
+        Assert.Null(ws.BeginTrans());
+        Assert.True(ws.Lock(a, [new LockResource(17, LockPurpose.DataPage)], LockLifetime.Transaction).Granted);
+        Change(ws, a, 17, 9);
+        Assert.Equal(9, Visible(ws, a, 17));
+        Assert.Equal((new LockerId(1), 0, 1, 0), a.Locks.Holding(17));
+
+        using (StatementScope stmt = ws.BeginStatement(isInsertSelect: withOwnLevel))
+        {
+            if (withOwnLevel)
+            {
+                Assert.Null(ws.BeginTrans());
+                Assert.Equal(2, ws.Depth);
+            }
+            Assert.True(ws.Lock(a, [new LockResource(17, LockPurpose.DataPage), new LockResource(18, LockPurpose.DataPage)], LockLifetime.Transaction).Granted);
+            Assert.True(ws.Lock(b, [new LockResource(21, LockPurpose.DataPage)], LockLifetime.Transaction).Granted);
+            Change(ws, a, 17, 11);
+            Change(ws, b, 21, 101);
+            ws.SaveStatementCounterBefore(unitCounter);
+            ws.SaveStatementCounterBefore(stepCounter);
+            Assert.True(unitCounter.TryIssue(out _, out _, out _));
+            Assert.True(stepCounter.TryIssue(out _, out _, out _));
+            ws.RecordConsumedAutoNumber(a, 2, 11, 1, reseed: false, unrecorded: null);
+
+            Assert.Equal((11, 101), (Visible(ws, a, 17), Visible(ws, b, 21)));
+            Assert.Equal((new LockerId(1), 0, 2, 0), a.Locks.Holding(17));
+            Assert.Equal((new LockerId(1), 0, 1, 0), a.Locks.Holding(18));
+            Assert.Equal((new LockerId(1), 0, 1, 0), b.Locks.Holding(21));
+
+            stmt.Abort();
+        }
+
+        Assert.Equal(1, ws.Depth);
+        Assert.False(ws.InStatement);
+        Assert.Equal(9, Visible(ws, a, 17));
+        Assert.Equal(100, Visible(ws, b, 21));
+        Assert.Single(ws.Participants);
+        Assert.Equal(10, unitCounter.Last);
+        Assert.Equal(100, stepCounter.Last);
+        // Outer lock count on page 17 is preserved exactly; statement-only locks on A18 and B21 are released.
+        Assert.Equal((new LockerId(1), 0, 1, 0), a.Locks.Holding(17));
+        Assert.Null(a.Locks.Holding(18));
+        Assert.Null(b.Locks.Holding(21));
+        Assert.Empty(ws.Publications);
+        Assert.False(ws.NeedsCloseCommit(a));
+        Assert.False(ws.NeedsCloseCommit(b));
+
+        // Enclosing BeginTrans resolves cleanly afterward.
+        Assert.True(ws.Rollback().Succeeded);
+        Assert.Equal(0, ws.Depth);
+        Assert.Equal(7, Visible(ws, a, 17));
+        Assert.Null(a.Locks.Holding(17));
+        Assert.Empty(ws.Participants);
+    }
 }

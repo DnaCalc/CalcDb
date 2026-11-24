@@ -1117,4 +1117,352 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             throw new Xunit.Sdk.XunitException(failure.ToString());
         }
     }
+
+    /// <summary>
+    /// W-07/W-09 (x8vx):
+    /// (1) Recorded ADO action/DDL error tuples 3201, 3314, 3464, 3163, 3281 match r-oledb-odbc/error-record-channels
+    ///     and r-q2-expr-sql/act-ado-failure-lane verbatim (scode, helpContext, IID_ICommand, SQLState, NativeError).
+    /// (2) Unmapped ACE failures (3316 field/table ValidationRule with text, 3315 AllowZeroLength=False, 3058 Null in PK,
+    ///     11 division by zero, 6 overflow, and textless 3317 ValidationRule) abort cleanly via ActionExecutor's predicate
+    ///     on both Connection.Execute and Command.Execute — including after earlier rows in multi-row UPDATE, multi-row
+    ///     INSERT ... SELECT with AutoNumber, and inside BeginTrans + CommitTrans — leaving the file byte-identical.
+    /// (3) Textless ValidationRule no longer pre-refuses: a violating write refuses via NotModelled.AdoProviderError with
+    ///     zero disk writes, while a satisfying write succeeds.
+    /// </summary>
+    [Fact]
+    public void CalcDb_ADO_recorded_action_error_tuples_and_unmapped_refusal_clean_abort()
+    {
+        Assert.True(File.Exists(PublishedModule), $"publish first: dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native ({PublishedModule} is missing)");
+
+        const string OledbV2AccdbFixture = "3616122cce29bd4b057713e17102cbcde53bad9f8f4f28fb479849313e87615e";  // r-oledb-odbc-v2-accdb.accdb
+        const string ErrBaseAccdbFixture = "33192b8c7ea72f4d74393996eedd0b157654218c623c63c99de672149b49e5ed";  // r-err-1b base
+        const string Sql23ActAccdbFixture = "a9991effea1dc52b7f857ef9a05a68573df00212d4f79e3ff2c21c01c8f674cd"; // r-sql-2-3-act-accdb.accdb
+        const string EmptyAccdbFixture = "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559";    // r-fmt-1-accdb-empty.accdb
+
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string tempDir = Path.Combine(Path.GetTempPath(), $"calcdb-ado-x8vx-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        string dbMapped = CopyFixture(store, OledbV2AccdbFixture, tempDir, "mapped-errors.accdb");
+        string dbErrBase = CopyFixture(store, ErrBaseAccdbFixture, tempDir, "err-base.accdb");
+        string dbMultiUpd = CopyFixture(store, Sql23ActAccdbFixture, tempDir, "multi-upd.accdb");
+        string dbTextless = CopyFixture(store, EmptyAccdbFixture, tempDir, "textless-vr.accdb");
+        string dbTxn = CopyFixture(store, Sql23ActAccdbFixture, tempDir, "txn-abort.accdb");
+
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var scope = new Scope(Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Own.manifest"));
+
+                static Outcome RunCommandExecute(nint cn, string sql)
+                {
+                    nint cmd = New(OwnCommand);
+                    try
+                    {
+                        Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cn)).Failure);
+                        Assert.Null(Put(cmd, "CommandType", 1).Failure);
+                        Assert.Null(Put(cmd, "CommandText", sql).Failure);
+                        return Call(cmd, "Execute", Missing, Missing, 129);
+                    }
+                    finally
+                    {
+                        Release(cmd);
+                    }
+                }
+
+                static void AssertProviderError(nint cn, Outcome outcome, int expectedScode, int expectedHelpContext, string expectedSqlState, int expectedNativeError)
+                {
+                    Assert.NotNull(outcome.Failure);
+                    Assert.Equal(expectedScode, outcome.Failure!.Value.Scode);
+                    Assert.Equal((uint)expectedHelpContext, outcome.Failure.Value.HelpContext);
+                    Assert.Equal(IidCommand, outcome.Failure.Value.InfoGuid);
+                    nint errs = (nint)Get(cn, "Errors")!;
+                    try
+                    {
+                        Assert.Equal(1, Get(errs, "Count"));
+                        nint err0 = (nint)Get(errs, "Item", 0)!;
+                        try
+                        {
+                            Assert.Equal(expectedScode, Get(err0, "Number"));
+                            Assert.Equal(expectedHelpContext, Get(err0, "HelpContext"));
+                            Assert.Equal(expectedSqlState, Get(err0, "SQLState"));
+                            Assert.Equal(expectedNativeError, Get(err0, "NativeError"));
+                        }
+                        finally
+                        {
+                            Release(err0);
+                        }
+                    }
+                    finally
+                    {
+                        Release(errs);
+                    }
+                }
+
+                static void AssertUnmappedProviderRefusal(Outcome outcome)
+                {
+                    Assert.NotNull(outcome.Failure);
+                    Assert.Equal(HResults.E_NOTIMPL, outcome.Failure!.Value.Scode);
+                    Assert.Contains("NotModelled.AdoProviderError", outcome.Failure.Value.Description);
+                }
+
+                // 1. Five recorded ADO action/DDL error tuples (r-oledb-odbc/error-record-channels, r-q2-expr-sql/act-ado-failure-lane).
+                {
+                    nint cn = OpenAceConnection(dbMapped);
+                    try
+                    {
+                        // 3201 (FK child insert violation)
+                        AssertProviderError(
+                            cn,
+                            Call(cn, "Execute", "INSERT INTO Child (ID, TID) VALUES (9, 999)", Missing, 1),
+                            unchecked((int)0x80004005), 5003000, "3201", -535037517);
+
+                        // 3314 (Required field violation)
+                        AssertProviderError(
+                            cn,
+                            Call(cn, "Execute", "INSERT INTO Req (ID) VALUES (7)", Missing, 1),
+                            unchecked((int)0x80004005), 5003000, "3314", -541331061);
+
+                        // 3464 (Data type mismatch)
+                        AssertProviderError(
+                            cn,
+                            Call(cn, "Execute", "INSERT INTO Items (Code, L) VALUES ('x9', 'abc')", Missing, 1),
+                            unchecked((int)0x80040E07), 5003071, "3464", -539888598);
+
+                        // 3163 (Field too small)
+                        AssertProviderError(
+                            cn,
+                            Call(cn, "Execute", "INSERT INTO Items (Code) VALUES ('this-code-is-too-long')", Missing, 1),
+                            unchecked((int)0x80040E57), 5003163, "3163", -68551703);
+
+                        // 3281 (Cannot delete table participating in relationships)
+                        AssertProviderError(
+                            cn,
+                            Call(cn, "Execute", "DROP TABLE Items", Missing, 1),
+                            unchecked((int)0x80004005), 5003281, "3281", -68813851);
+
+                        // Also verify Command.Execute answers 3314 and 3464 with the same IID_ICommand tuple.
+                        AssertProviderError(
+                            cn,
+                            RunCommandExecute(cn, "INSERT INTO Items (Code, L) VALUES ('x8', 'abc')"),
+                            unchecked((int)0x80040E07), 5003071, "3464", -539888598);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                }
+
+                // 2. Unmapped ACE failures on Connection.Execute and Command.Execute leave the file byte-identical:
+                //    3316 (field & table ValidationRule with text), 3315 (AllowZeroLength=False), 3058 (Null in PK),
+                //    11 (division by zero), 6 (overflow).
+                {
+                    byte[] beforeErrBase = File.ReadAllBytes(dbErrBase);
+                    nint cn = OpenAceConnection(dbErrBase);
+                    try
+                    {
+                        // 3316 field & table ValidationRule (Connection.Execute + Command.Execute)
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)"));
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO VR (ID, Pv, A, B2) VALUES (11, 1, 5, 2)", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO VR (ID, Pv, A, B2) VALUES (11, 1, 5, 2)"));
+
+                        // 3315 AllowZeroLength=False
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO P (ID, Req) VALUES (99, '')", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO P (ID, Req) VALUES (99, '')"));
+
+                        // 3058 Null in primary key
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO P (ID, Req) VALUES (NULL, 'ok')", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO P (ID, Req) VALUES (NULL, 'ok')"));
+
+                        // 11 Division by zero
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO VR (ID, Pv, A, B2) VALUES (12, 1 / 0, 1, 2)", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO VR (ID, Pv, A, B2) VALUES (12, 1 / 0, 1, 2)"));
+
+                        // 6 Overflow
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO VR (ID, Pv, A, B2) VALUES (13, CInt(100000), 1, 2)", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO VR (ID, Pv, A, B2) VALUES (13, CInt(100000), 1, 2)"));
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeErrBase, File.ReadAllBytes(dbErrBase));
+                }
+
+                // 3. Multi-row UPDATE hitting unmapped 3316 on row 2 aborts row 1 too (Connection.Execute + Command.Execute).
+                {
+                    byte[] beforeMulti = File.ReadAllBytes(dbMultiUpd);
+                    nint cn = OpenAceConnection(dbMultiUpd);
+                    try
+                    {
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "UPDATE T2 SET W = W - 15", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "UPDATE T2 SET W = W - 15"));
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeMulti, File.ReadAllBytes(dbMultiUpd));
+                }
+
+                // 4. Textless ValidationRule (3317) on an AutoNumber table:
+                //    - Violating single-row INSERT, multi-row INSERT ... SELECT (row 2 fails after row 1 staged), and Command.Execute
+                //      refuse via the general predicate path (NotModelled.AdoProviderError) leaving the file byte-identical (no
+                //      AutoNumber advance, no Group 1/2, no Close commit).
+                //    - A satisfying INSERT succeeds through the same route and receives AutoNumber ID = 1!
+                {
+                    nint eng = New(OwnEngine);
+                    nint db = (nint)Call(eng, "OpenDatabase", dbTextless).Value!;
+                    try
+                    {
+                        Assert.Null(Call(db, "Execute", "CREATE TABLE AutoVr (ID COUNTER CONSTRAINT PK_AutoVr PRIMARY KEY, V LONG)").Failure);
+                        Assert.Null(Call(db, "Execute", "CREATE TABLE Src (V LONG)").Failure);
+                        Assert.Null(Call(db, "Execute", "INSERT INTO Src (V) VALUES (10)").Failure);
+                        Assert.Null(Call(db, "Execute", "INSERT INTO Src (V) VALUES (-5)").Failure);
+                        nint tdefs = (nint)Get(db, "TableDefs")!;
+                        nint td = (nint)Get(tdefs, "Item", "AutoVr")!;
+                        nint flds = (nint)Get(td, "Fields")!;
+                        nint fld = (nint)Get(flds, "Item", "V")!;
+                        Assert.Null(Put(fld, "ValidationRule", "> 0").Failure);
+                        Release(fld);
+                        Release(flds);
+                        Release(td);
+                        Release(tdefs);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(db, "Close").Failure);
+                        Release(db);
+                        Release(eng);
+                    }
+
+                    byte[] beforeTextless = File.ReadAllBytes(dbTextless);
+                    nint cn = OpenAceConnection(dbTextless);
+                    try
+                    {
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO AutoVr (V) VALUES (-1)", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO AutoVr (V) VALUES (-1)"));
+                        AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO AutoVr (V) SELECT V FROM Src", Missing, 1));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO AutoVr (V) SELECT V FROM Src"));
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeTextless, File.ReadAllBytes(dbTextless));
+
+                    // Satisfying write succeeds and receives AutoNumber 1 (proving earlier refused calls did not consume it).
+                    nint cnSat = OpenAceConnection(dbTextless);
+                    try
+                    {
+                        Assert.Null(Call(cnSat, "Execute", "INSERT INTO AutoVr (V) VALUES (42)", Missing, 129).Failure);
+                        Outcome sel = Call(cnSat, "Execute", "SELECT ID, V FROM AutoVr");
+                        Assert.Null(sel.Failure);
+                        nint rs = (nint)sel.Value!;
+                        try
+                        {
+                            nint fields = (nint)Get(rs, "Fields")!;
+                            nint f0 = (nint)Get(fields, "Item", 0)!;
+                            nint f1 = (nint)Get(fields, "Item", 1)!;
+                            Assert.Equal(1, Get(f0, "Value"));
+                            Assert.Equal(42, Get(f1, "Value"));
+                            Release(f1);
+                            Release(f0);
+                            Release(fields);
+                            Assert.Null(Call(rs, "Close").Failure);
+                        }
+                        finally
+                        {
+                            Release(rs);
+                        }
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnSat, "Close").Failure);
+                        Release(cnSat);
+                    }
+                }
+
+                // 5. Inside an outer BeginTrans: refused multi-row UPDATE (3316) aborts only itself;
+                //    outer edit commits cleanly, and an empty BeginTrans + refused call + CommitTrans leaves file byte-identical.
+                {
+                    byte[] beforeTxn = File.ReadAllBytes(dbTxn);
+                    nint cnEmpty = OpenAceConnection(dbTxn);
+                    try
+                    {
+                        Assert.Null(Call(cnEmpty, "BeginTrans").Failure);
+                        AssertUnmappedProviderRefusal(Call(cnEmpty, "Execute", "UPDATE T2 SET W = W - 15", Missing, 1));
+                        Assert.Null(Call(cnEmpty, "CommitTrans").Failure);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnEmpty, "Close").Failure);
+                        Release(cnEmpty);
+                    }
+                    Assert.Equal(beforeTxn, File.ReadAllBytes(dbTxn));
+
+                    nint cnOuter = OpenAceConnection(dbTxn);
+                    try
+                    {
+                        Assert.Null(Call(cnOuter, "BeginTrans").Failure);
+                        Assert.Null(Call(cnOuter, "Execute", "UPDATE T SET V = 77 WHERE ID = 1", Missing, 129).Failure);
+                        AssertUnmappedProviderRefusal(Call(cnOuter, "Execute", "UPDATE T2 SET W = W - 15", Missing, 1));
+                        Assert.Null(Call(cnOuter, "CommitTrans").Failure);
+
+                        Outcome checkT = Call(cnOuter, "Execute", "SELECT V FROM T WHERE ID = 1");
+                        nint rsT = (nint)checkT.Value!;
+                        nint fieldsT = (nint)Get(rsT, "Fields")!;
+                        nint fT = (nint)Get(fieldsT, "Item", 0)!;
+                        Assert.Equal(77, Get(fT, "Value"));
+                        Release(fT);
+                        Release(fieldsT);
+                        Assert.Null(Call(rsT, "Close").Failure);
+                        Release(rsT);
+
+                        Outcome checkT2 = Call(cnOuter, "Execute", "SELECT W FROM T2 WHERE ID = 1");
+                        nint rsT2 = (nint)checkT2.Value!;
+                        nint fieldsT2 = (nint)Get(rsT2, "Fields")!;
+                        nint fT2 = (nint)Get(fieldsT2, "Item", 0)!;
+                        Assert.Equal(30, Get(fT2, "Value"));
+                        Release(fT2);
+                        Release(fieldsT2);
+                        Assert.Null(Call(rsT2, "Close").Failure);
+                        Release(rsT2);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnOuter, "Close").Failure);
+                        Release(cnOuter);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                failure = e;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        try
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+        catch
+        {
+        }
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
 }
