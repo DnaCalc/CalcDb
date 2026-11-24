@@ -221,7 +221,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()));
 
     private readonly DefinitionCollection _owner;
-    private readonly CatalogEntry _entry;
+    private CatalogEntry _entry;
     private DefinitionCollection? _fields;
     private DefinitionCollection? _indexes;
     private PropertiesObject? _properties;
@@ -236,10 +236,10 @@ internal sealed unsafe class TableDefObject : DaoObject
     }
 
     private readonly string? _definitionFailure;
-    private readonly string? _blobFailure;
+    private string? _blobFailure;
 
     /// <summary>The table's MR2 property blob (CAT-P): its own map and one map per column with stored properties.</summary>
-    public PropertyBlob? Blob { get; }
+    public PropertyBlob? Blob { get; private set; }
 
     public string Name => _entry.Name;
 
@@ -250,6 +250,23 @@ internal sealed unsafe class TableDefObject : DaoObject
     private bool IsSystem => (_entry.Flags & SystemObjectFlag) != 0;
 
     protected override OperationTable Table => Operations;
+
+    /// <summary>
+    /// Reload this TableDef's catalog row and MR2 property blob after a property put published a new catalog image,
+    /// keeping held <see cref="DefinitionFieldObject"/> wrappers live against the updated blob (W-08, r-q37).
+    /// </summary>
+    internal void Refresh()
+    {
+        CatalogEntry? updated = _owner.Database.Catalog.LocalTables(_owner.Database.Format)
+            .FirstOrDefault(e => e.Id == _entry.Id);
+        if (updated is not null)
+        {
+            _entry = updated;
+        }
+        Blob = _owner.Database.Blob(_entry, out _blobFailure);
+        _properties?.Release();
+        _properties = null;
+    }
 
     private static CallResult Live(ComObject self, Func<TableDefObject, CallResult> op)
     {
@@ -499,7 +516,9 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Get("CollatingOrder", (self, args) => Live(self, f => f.OfTable(t => Int32(ColumnFacts.CollatingOrder(f._column)))))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
         .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
+        .Put("ValidationRule", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutValidationProperty(FieldValidationProperty.ValidationRule, value)); })
         .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
+        .Put("ValidationText", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutValidationProperty(FieldValidationProperty.ValidationText, value)); })
         .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
         .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
@@ -538,6 +557,19 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, Foundation.VarType sourceType) =>
+        member.Kind == InvokeKind.PropertyPut && member.Name is "ValidationRule" or "ValidationText"
+            && sourceType is not (Foundation.VarType.Bstr or Foundation.VarType.Null)
+            ? Failure.NotImplemented($"Field.{member.Name} put of variant type {sourceType} (qualified.md r-q37 Open)")
+            : null;
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
+        member.Kind == InvokeKind.PropertyPut && member.Name is "ValidationRule" or "ValidationText"
+            && conversion.Reason == ArgumentConversionReason.TypeMismatch
+            && conversion.SourceType == Foundation.VarType.Null
+            ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true }
+            : null;
+
     private static CallResult Live(ComObject self, Func<DefinitionFieldObject, CallResult> op)
     {
         var f = (DefinitionFieldObject)self;
@@ -552,6 +584,32 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private PropertyMap? ColumnMap(TableDefObject t) => t.Blob?.Map(PropertySectionKind.ColumnValues, _column.Name);
 
     private CallResult Stored(string name, CallResult unset) => OfTable(t => ColumnFacts.Stored(t.Blob, _column, name, unset));
+
+    /// <summary>
+    /// Write <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> on a stored table's field (W-08, task 9dvt;
+    /// qualified.md <c>r-q37</c>): <c>VT_NULL</c> raises DAO 3421 with <c>IErrorInfo</c> before touching the database;
+    /// other non-BSTR variants refuse by name.
+    /// </summary>
+    private CallResult PutValidationProperty(FieldValidationProperty property, nint valueArg) => OfTable(t =>
+    {
+        Foundation.VarType vt = Args.TypeOf(valueArg) & ~Foundation.VarType.ByRef;
+        if (vt == Foundation.VarType.Null)
+        {
+            return Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+        }
+        if (vt != Foundation.VarType.Bstr)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put of variant type {vt} (qualified.md r-q37 Open)"));
+        }
+        string text = Args.Text(valueArg) ?? "";
+        return _owner.Database.SetFieldValidationProperty(t, this, _column, property, text);
+    });
+
+    internal void InvalidateProperties()
+    {
+        _properties?.Release();
+        _properties = null;
+    }
 
     /// <summary>
     /// The 24 built-ins, then a TableDef field's other stored properties (r-dao-1b/field-properties-enumerated: Parent.Name

@@ -40,10 +40,21 @@ public sealed class PageAllocator
     private readonly FormatDescriptor _d;
     private readonly bool _allowPendingRollbackExtent;
     private readonly HashSet<uint> _handedOut = [];
+    private readonly List<uint> _sessionReservedPages = [];
+    private readonly List<uint> _consumedReservedPages = [];
 
     public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages)
         : this(cache, d, extentPages, allowPendingRollbackExtent: false)
     {
+    }
+
+    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, IReadOnlyList<uint>? sessionReservedPages)
+        : this(cache, d, extentPages, allowPendingRollbackExtent: false)
+    {
+        if (sessionReservedPages is { Count: > 0 })
+        {
+            _sessionReservedPages.AddRange(sessionReservedPages);
+        }
     }
 
     internal PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, bool allowPendingRollbackExtent)
@@ -56,6 +67,46 @@ public sealed class PageAllocator
 
     /// <summary>The file's extent in pages after the allocations so far.</summary>
     public ulong ExtentPages { get; private set; }
+
+    /// <summary>Whether this allocator holds unused pages from an earlier 32-page page-1 reservation in this session.</summary>
+    public bool HasSessionReservedPages => _sessionReservedPages.Count > 0;
+
+    /// <summary>Pages consumed from the session's reserved page-1 extent by <see cref="TryAllocateFromReserved"/>.</summary>
+    public IReadOnlyList<uint> ConsumedReservedPages => _consumedReservedPages;
+
+    /// <summary>
+    /// Consume the next contiguous page from the session's previously reserved 32-page page-1 extent without editing
+    /// page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-accdb, long-rule-spill-lval-mdb). Refuses by name when
+    /// no reserved pages remain or the next reserved page does not equal <see cref="ExtentPages"/>.
+    /// </summary>
+    public bool TryAllocateFromReserved(PrivateOverlay? seen, out uint page, out string? failure)
+    {
+        page = 0;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));
+        if (_sessionReservedPages.Count == 0)
+        {
+            failure = "the session's reserved page-1 extent has no pages left (allocating a second 32-page extent in one session is not recorded: r-q37-valrule-put)";
+            return false;
+        }
+        uint candidate = _sessionReservedPages[0];
+        if (candidate != ExtentPages)
+        {
+            failure = $"the next reserved page {candidate} is not contiguous with file extent {ExtentPages}: non-contiguous reuse of a session's reserved page-1 extent is not recorded (r-q37-valrule-put)";
+            return false;
+        }
+        _sessionReservedPages.RemoveAt(0);
+        _consumedReservedPages.Add(candidate);
+        _handedOut.Add(candidate);
+        ExtentPages = candidate + 1UL;
+        page = candidate;
+        failure = null;
+        return true;
+    }
 
     /// <summary>
     /// The file's extent in pages as seen through <paramref name="seen"/>: the maximum of <paramref name="baseExtent"/>,

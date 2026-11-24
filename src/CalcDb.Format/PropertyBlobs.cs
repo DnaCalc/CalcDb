@@ -37,11 +37,19 @@ public sealed class PropertyBlob
 {
     private static ReadOnlySpan<byte> Signature => "MR2\0"u8;
 
-    private PropertyBlob(IReadOnlyList<PropertyMap> maps, int opaqueSections)
+    private PropertyBlob(IReadOnlyList<string> names, int namesSections, IReadOnlyList<PropertyMap> maps, int opaqueSections)
     {
+        Names = names;
+        NamesSections = namesSections;
         Maps = maps;
         OpaqueSections = opaqueSections;
     }
+
+    /// <summary>The active names dictionary from the last <see cref="PropertySectionKind.Names"/> section (empty when none).</summary>
+    public IReadOnlyList<string> Names { get; }
+
+    /// <summary>Number of <see cref="PropertySectionKind.Names"/> sections encountered in the blob.</summary>
+    public int NamesSections { get; }
 
     public IReadOnlyList<PropertyMap> Maps { get; }
 
@@ -61,22 +69,37 @@ public sealed class PropertyBlob
     /// is a DAO-appended TableDef's: the column map <c>n</c> with <c>Required</c> (flags 01, Boolean, 00)
     /// (evidence/r-q11-ddl-closure/append-dao, 51 bytes); a blob with several names sections is not written.
     /// </summary>
-    public static byte[] Encode(IReadOnlyList<PropertyMap> maps)
+    public static byte[] Encode(IReadOnlyList<PropertyMap> maps) => Encode([], maps);
+
+    /// <summary>
+    /// Encode a blob keeping the supplied <paramref name="names"/> dictionary entries in order (including names no
+    /// remaining value section uses, and Names-only blobs when <paramref name="maps"/> is empty:
+    /// evidence/r-q37-valrule-put/remove-when-absent-accdb, remove-rule-only-*, remove-rule-shrink-inline-accdb),
+    /// appending any additional property names referenced by <paramref name="maps"/> in first-use order.
+    /// </summary>
+    public static byte[] Encode(IReadOnlyList<string> names, IReadOnlyList<PropertyMap> maps)
     {
-        List<string> names = [];
+        List<string> dictionary = new(names.Count);
+        foreach (string name in names)
+        {
+            if (!dictionary.Contains(name))
+            {
+                dictionary.Add(name);
+            }
+        }
         foreach (PropertyMap map in maps)
         {
             foreach (StoredProperty p in map.Properties)
             {
-                if (!names.Contains(p.Name))
+                if (!dictionary.Contains(p.Name))
                 {
-                    names.Add(p.Name);
+                    dictionary.Add(p.Name);
                 }
             }
         }
         var blob = new List<byte>(Signature.ToArray());
         var section = new List<byte>();
-        foreach (string name in names)
+        foreach (string name in dictionary)
         {
             AppendName(section, name);
         }
@@ -92,7 +115,7 @@ public sealed class PropertyBlob
                 AppendU16(section, (ushort)(8 + p.Payload.Length));
                 section.Add(p.Flags);
                 section.Add(p.NativeType);
-                AppendU16(section, (ushort)names.IndexOf(p.Name));
+                AppendU16(section, (ushort)dictionary.IndexOf(p.Name));
                 AppendU16(section, (ushort)p.Payload.Length);
                 section.AddRange(p.Payload);
             }
@@ -139,6 +162,7 @@ public sealed class PropertyBlob
         }
         var maps = new List<PropertyMap>();
         string[]? dictionary = null;
+        int namesSections = 0;
         int opaque = 0;
         int cursor = Signature.Length;
         while (cursor < raw.Length)
@@ -159,11 +183,12 @@ public sealed class PropertyBlob
             switch ((PropertySectionKind)kind)
             {
                 case PropertySectionKind.Names:
-                    dictionary = Names(section[6..], out failure);
+                    dictionary = ReadNames(section[6..], out failure);
                     if (dictionary is null)
                     {
                         return null;
                     }
+                    namesSections++;
                     break;
                 case PropertySectionKind.ObjectValues or PropertySectionKind.ColumnValues or PropertySectionKind.IndexValues:
                     if (dictionary is null)
@@ -184,10 +209,10 @@ public sealed class PropertyBlob
             }
             cursor += length;
         }
-        return new PropertyBlob(maps, opaque);
+        return new PropertyBlob(dictionary ?? [], namesSections, maps, opaque);
     }
 
-    private static string[]? Names(ReadOnlySpan<byte> body, out string? failure)
+    private static string[]? ReadNames(ReadOnlySpan<byte> body, out string? failure)
     {
         failure = null;
         var names = new List<string>();

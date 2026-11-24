@@ -35,11 +35,27 @@ public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits
     public IReadOnlyList<uint> ReleasedAtClose { get; init; } = [];
 
     /// <summary>
-    /// Whether this change took a chain-freeing UPDATE's 4-byte page-1 extent reservation (whose unused tail is in
-    /// <see cref="ReleasedAtClose"/>). While such a reservation is pending in a session, further page allocations are
-    /// refused by name until Close restores the reserved bits.
+    /// Whether this change took a 4-byte (32-page) page-1 extent reservation (whose unused tail is in
+    /// <see cref="ReleasedAtClose"/>). While such a reservation is pending in a session, further page-1 allocations are
+    /// refused by name until Close restores the reserved bits; callers that take reusable session extent pages also
+    /// populate <see cref="ReservedExtentPages"/> and later consume them via <see cref="ConsumedReservedPages"/>.
     /// </summary>
     public bool HasReservedExtent { get; init; }
+
+    /// <summary>
+    /// Unused pages of a newly taken 32-page page-1 extent that later catalog LVAL spills in the same session may
+    /// consume without re-editing page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-accdb,
+    /// long-rule-spill-lval-mdb). These pages must also appear in <see cref="ReleasedAtClose"/> so Close returns any
+    /// unconsumed tail.
+    /// </summary>
+    public IReadOnlyList<uint> ReservedExtentPages { get; init; } = [];
+
+    /// <summary>
+    /// Pages consumed from the session's previously reserved 32-page page-1 extent without editing page 1
+    /// (evidence/r-q37-valrule-put/long-rule-spill-lval-accdb, long-rule-spill-lval-mdb). Removed from the session's
+    /// reserved pool and from its pending Close release list when published.
+    /// </summary>
+    public IReadOnlyList<uint> ConsumedReservedPages { get; init; } = [];
 
     /// <summary>
     /// Global-map page numbers allocated by this change (from <see cref="PageAllocator"/>), so a rolled-back statement

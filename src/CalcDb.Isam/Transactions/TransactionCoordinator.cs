@@ -459,6 +459,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _releaseAtClose = [];
     private readonly HashSet<PageCache> _allocatedGlobalMap = [];
     private readonly HashSet<PageCache> _reservedExtent = [];
+    private readonly Dictionary<PageCache, List<uint>> _sessionReservedExtent = [];
     private readonly HashSet<PageCache> _rollbackExtentPending = [];
     private readonly Dictionary<PageCache, List<uint>> _pendingGroup2AllocatedPages = [];
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
@@ -561,6 +562,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public bool NeedsCloseCommit(PageCache cache) => _allocatedGlobalMap.Contains(cache) || _releaseAtClose.ContainsKey(cache);
 
     /// <summary>
+    /// Unused pages of this session's active 32-page page-1 reservation on <paramref name="cache"/> available for
+    /// contiguous catalog LVAL spills without re-editing page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-*).
+    /// </summary>
+    public IReadOnlyList<uint> SessionReservedPages(PageCache cache) =>
+        _sessionReservedExtent.TryGetValue(cache, out List<uint>? pages) ? [.. pages] : [];
+
+    /// <summary>
     /// Whether this Workspace has already published or accepted (unpublished) any global-map allocation, free, deferred
     /// page-1 release, or page-1 extent reservation on <paramref name="cache"/> in the current session.
     /// </summary>
@@ -568,11 +576,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _allocatedGlobalMap.Contains(cache)
         || _releaseAtClose.ContainsKey(cache)
         || _reservedExtent.Contains(cache)
+        || _sessionReservedExtent.ContainsKey(cache)
         || _rollbackExtentPending.Contains(cache)
         || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
 
     private bool HasActiveExtentReservation(PageCache cache) =>
         _reservedExtent.Contains(cache)
+        || _sessionReservedExtent.ContainsKey(cache)
         || _rollbackExtentPending.Contains(cache)
         || (_unpublishedReservedExtent.TryGetValue(cache, out int count) && count > 0);
 
@@ -591,7 +601,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     private static bool HasGlobalMapActivity(PhysicalChange physical)
     {
-        if (physical.HasReservedExtent || physical.ReleasedAtClose.Count > 0)
+        if (physical.HasReservedExtent
+            || physical.ReservedExtentPages.Count > 0
+            || physical.ConsumedReservedPages.Count > 0
+            || physical.ReleasedAtClose.Count > 0)
         {
             return true;
         }
@@ -1515,9 +1528,38 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     break;
                 }
             }
-            if (physical.HasReservedExtent)
+            if (physical.ConsumedReservedPages.Count > 0)
+            {
+                if (_sessionReservedExtent.TryGetValue(physical.File, out List<uint>? reservedPool))
+                {
+                    for (int ci2 = 0; ci2 < physical.ConsumedReservedPages.Count; ci2++)
+                    {
+                        reservedPool.Remove(physical.ConsumedReservedPages[ci2]);
+                    }
+                    if (reservedPool.Count == 0)
+                    {
+                        _sessionReservedExtent.Remove(physical.File);
+                    }
+                }
+                if (_releaseAtClose.TryGetValue(physical.File, out List<uint>? pendingClose))
+                {
+                    for (int ci2 = 0; ci2 < physical.ConsumedReservedPages.Count; ci2++)
+                    {
+                        pendingClose.Remove(physical.ConsumedReservedPages[ci2]);
+                    }
+                    if (pendingClose.Count == 0)
+                    {
+                        _releaseAtClose.Remove(physical.File);
+                    }
+                }
+            }
+            if (physical.HasReservedExtent || physical.ReservedExtentPages.Count > 0)
             {
                 _reservedExtent.Add(physical.File);
+            }
+            if (physical.ReservedExtentPages.Count > 0)
+            {
+                _sessionReservedExtent[physical.File] = [.. physical.ReservedExtentPages];
             }
             IReadOnlyList<uint> releasedAtClose = physical.ReleasedAtClose;
             if (releasedAtClose.Count > 0)
@@ -1533,6 +1575,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     {
                         pages.Add(page);
                     }
+                }
+                if (allowJet4Mdb && Jet4MdbHeader(physical.File))
+                {
+                    _jet4MdbCloseCommit.Add(physical.File);
                 }
             }
         }
@@ -2856,7 +2902,37 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(file))
         {
             op.Abandon();
-            return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+        }
+        if (physical.ReservedExtentPages.Count > 0 || physical.ConsumedReservedPages.Count > 0)
+        {
+            if (_frames.Count > 0)
+            {
+                op.Abandon();
+                return new AcceptOutcome(false, null, MutationOpen.Publication, "taking or consuming a session page-1 extent reservation inside BeginTrans is not recorded (r-q37-valrule-put)");
+            }
+            if (physical.ReservedExtentPages.Count > 0 && HasActiveExtentReservation(file))
+            {
+                op.Abandon();
+                return new AcceptOutcome(false, null, MutationOpen.Publication, "taking a second session page-1 extent reservation before Close is not recorded (r-q37-valrule-put)");
+            }
+            if (physical.ConsumedReservedPages.Count > 0)
+            {
+                if (!_sessionReservedExtent.TryGetValue(file, out List<uint>? available)
+                    || physical.ConsumedReservedPages.Count > available.Count)
+                {
+                    op.Abandon();
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation that is not active or has fewer pages remaining is not recorded (r-q37-valrule-put)");
+                }
+                for (int ci = 0; ci < physical.ConsumedReservedPages.Count; ci++)
+                {
+                    if (available[ci] != physical.ConsumedReservedPages[ci])
+                    {
+                        op.Abandon();
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, $"consumed reserved page {physical.ConsumedReservedPages[ci]} does not match the session's next reserved page {available[ci]} (r-q37-valrule-put)");
+                    }
+                }
+            }
         }
         LockResource[] footprint = [.. physical.Footprint];
         if (footprint.Length > 0 && Lock(file, footprint, ChangeLifetime).Conflict is { } conflict)
@@ -2943,6 +3019,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _jet4MdbCloseCommit.Remove(cache);
             _jet4MdbRollbackPending.Remove(cache);
             _reservedExtent.Remove(cache);
+            _sessionReservedExtent.Remove(cache);
             _rollbackExtentPending.Remove(cache);
             _pendingGroup2AllocatedPages.Remove(cache);
             cache.UnregisterRollbackExtentOwner(Locker);
