@@ -364,7 +364,8 @@ is summarised in [qualification-report.md](qualification-report.md).
   apart, ACE 16.0.20527.20196 and 16.0.20625.20044) exactly 160 bytes differ, all derived from the creation date as
   the ACCDB image's are: page 0 decoded `0x42..0x6A`, the integer day truncated (`46350.960005` gives `46350`) as ten
   u32LE; page 0 decoded `0x72..0x7A`, the creation date; page 17 DateCreate and DateUpdate of the 8 MSysObjects rows,
-  all equal to it; and the Owner (page 17) and MSysACEs SID (page 18) words under the date's 2-byte SID keystream.
+  equal to each other and to it, or 1 ms later where the system clock ticked during CreateDatabase (eng-langid-only
+  a1 from row 1, a2 from row 0: ACE reads the clock again, 537t's replay); and the Owner (page 17) and MSysACEs SID (page 18) words under the date's 2-byte SID keystream.
   The header mask over `0x18..0x98` and the SID keystream are the ACCDB ones. Against the 42-page ACCDB image: page 0
   carries `Standard Jet DB` and version byte `0x01`; page 1 frees pages 19 to 511; MSysObjects holds the first 8 of
   the ACCDB rows (no MSysComplexType tables; page 2 counts 8, index leaves on pages 7 and 8), MSysACEs the 16
