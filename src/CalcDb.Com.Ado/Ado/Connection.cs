@@ -318,7 +318,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         string fullPath,
         int effectiveMode,
         int engineType,
-        int lockingMode,
+        int? lockingMode,
         Dictionary<string, OwnedVariant> openInitValues)
     {
         _shared = shared;
@@ -359,7 +359,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 
     public int EngineType { get; }
 
-    public int LockingMode { get; }
+    public int? LockingMode { get; }
 
     public Dictionary<string, OwnedVariant> OpenInitValues { get; }
 
@@ -836,7 +836,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (IsOpen)
         {
             AdoOpenSession s = _session!;
-            return BuildOpenConnectionString(_pinned!.Value.Name, s.DataSource, s.EffectiveMode, s.EngineType, s.LockingMode, s.OpenInitValues);
+            if (s.LockingMode is not int lockingMode)
+            {
+                return NotImplemented("Connection.ConnectionString while open on a Jet 4 MDB with Mode=16 (Jet OLEDB:Database Locking Mode is not recorded)");
+            }
+            return BuildOpenConnectionString(_pinned!.Value.Name, s.DataSource, s.EffectiveMode, s.EngineType, lockingMode, s.OpenInitValues);
         }
         return _connectionString is { } text ? Text(text) : CallResult.OfOwnedBstr(0);
     }
@@ -965,6 +969,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return CallResult.Fail(ReadOnlyPropertyFailure("ADODB.Connection", Decl.Iid, publishesErrorInfo: true));
     }
 
+    private const string UnrecordedMdbOpenPropertiesReason =
+        "Connection.Properties while open on a Jet 4 MDB with Mode=16 (open property inventory and Jet OLEDB:Database Locking Mode are not recorded)";
+
     /// <summary>
     /// Properties: same COM identity across closed (31) -> open (101) -> closed (31). Reading Properties while closed
     /// pins an admitted ACE provider; non-ACE routes return NotModelled.AdoProvider without pinning.
@@ -973,6 +980,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         if (IsOpen)
         {
+            if (_session!.LockingMode is null)
+            {
+                return NotImplemented(UnrecordedMdbOpenPropertiesReason);
+            }
             return Object(_properties ??= CreateProperties(BuildOpenSlots()));
         }
         EffectiveProvider effective = Effective();
@@ -1006,7 +1017,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private PropertySlot[] BuildOpenSlots()
     {
         AdoOpenSession s = _session!;
-        return AceProperties.CreateOpen(s.OpenInitValues, s.DataSource, s.EffectiveMode, s.EngineType, s.LockingMode);
+        return AceProperties.CreateOpen(s.OpenInitValues, s.DataSource, s.EffectiveMode, s.EngineType, s.LockingMode!.Value);
     }
 
     /// <summary>
@@ -1390,16 +1401,21 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
 
             int engineType = profile.IsAce ? 6 : 5;
-            int lockingMode;
+            int? lockingMode;
             if (!profile.IsAce)
             {
-                if (effectiveMode != 1 || lockingModeExplicit)
+                if (lockingModeExplicit || (effectiveMode != 1 && !(effectiveMode == 16 && defaultMode)))
                 {
                     AdoFilePool.CancelAcquire(shared);
                     DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1 without explicit Database Locking Mode is recorded)");
+                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1 and default Mode=16 without explicit Database Locking Mode are recorded)");
                 }
-                lockingMode = 0;
+                // r-oledb-odbc/prop-connection-inventory records Database Locking Mode=0 for Jet 4 MDB Mode=1.
+                // Default Mode=16 opens on Jet 4 MDB are recorded in r-q30-sql-check/mdb-sat-ado-exec,
+                // r-q31-sql-check-2/mdb-null-ado-exec, r-q34-ddl-sweep/create-one-long-mdb-ado,
+                // r-fix-fmt-sort/sort3-comp-mdb, and r-oledb-odbc/create-mdb; none read open ConnectionString
+                // or open Properties, so LockingMode stays null and those open reads refuse by name.
+                lockingMode = effectiveMode == 1 ? 0 : null;
             }
             else if (lockingModeExplicit)
             {
@@ -1421,7 +1437,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
             SetInitValue(initValues, "Data Source", OwnedVariant.FromText(dataSource));
             SetInitValue(initValues, "Mode", OwnedVariant.FromInt32(effectiveMode));
             SetInitValue(initValues, "Jet OLEDB:Engine Type", OwnedVariant.FromInt32(engineType));
-            SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(lockingMode));
+            if (lockingMode is int knownLockingMode)
+            {
+                SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(knownLockingMode));
+            }
 
             _session = new AdoOpenSession(
                 shared,
@@ -1433,7 +1452,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
             _connectionStringFromFailedOpen = false;
             _connectionString = null;
             ErrorsCollection.Clear();
-            _properties?.MarkStale(BuildOpenSlots);
+            if (lockingMode is not null)
+            {
+                _properties?.MarkStale(BuildOpenSlots);
+            }
+            else
+            {
+                _properties?.MarkUnrecorded(UnrecordedMdbOpenPropertiesReason);
+            }
             return CallResult.Nothing;
         }
         catch

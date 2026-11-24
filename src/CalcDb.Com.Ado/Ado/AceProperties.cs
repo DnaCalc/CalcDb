@@ -415,6 +415,7 @@ internal sealed class PropertiesObject : AdoObject
     private PropertyObject?[] _wrappers;
     private string[] _names;
     private Func<PropertySlot[]>? _pendingFactory;
+    private string? _pendingRefusal;
     private bool _invalid;
 
     public PropertiesObject(
@@ -438,7 +439,21 @@ internal sealed class PropertiesObject : AdoObject
     /// wrappers until the collection itself is next touched (r-oledb-odbc/prop-jet-options j9/j10;
     /// r-fix-wire-ado/ado-open-provider-property-ace-first).
     /// </summary>
-    public void MarkStale(Func<PropertySlot[]> nextSlots) => _pendingFactory = nextSlots;
+    public void MarkStale(Func<PropertySlot[]> nextSlots)
+    {
+        _pendingRefusal = null;
+        _pendingFactory = nextSlots;
+    }
+
+    /// <summary>
+    /// Schedule an unrecorded phase where touching <c>Properties</c> (<c>Count</c>, <c>Item</c>, <c>Refresh</c>)
+    /// refuses by name until the next <see cref="MarkStale"/> transition (e.g. Jet 4 MDB opened with Mode=16).
+    /// </summary>
+    public void MarkUnrecorded(string reason)
+    {
+        _pendingFactory = null;
+        _pendingRefusal = reason;
+    }
 
     /// <summary>
     /// Invalidate this Properties collection and all held Property wrappers (0x800A0D5C, IErrorInfo absent) when the
@@ -452,6 +467,7 @@ internal sealed class PropertiesObject : AdoObject
         }
         _invalid = true;
         _pendingFactory = null;
+        _pendingRefusal = null;
         InvalidateAndReleaseWrappers();
         DisposeSlots();
         _slots = [];
@@ -487,6 +503,10 @@ internal sealed class PropertiesObject : AdoObject
         {
             return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
         }
+        if (_pendingRefusal is { } refusal)
+        {
+            return NotImplemented(refusal);
+        }
         EnsureFresh();
         if (_mode == PropertiesMode.ClientRecordsetPartial)
         {
@@ -501,6 +521,10 @@ internal sealed class PropertiesObject : AdoObject
         {
             return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
         }
+        if (_pendingRefusal is { } refusal)
+        {
+            return NotImplemented(refusal);
+        }
         if (_mode != PropertiesMode.Connection)
         {
             return NotImplemented("Recordset/Command.Properties.Refresh (not recorded)");
@@ -514,6 +538,10 @@ internal sealed class PropertiesObject : AdoObject
         if (_invalid)
         {
             return Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false);
+        }
+        if (_pendingRefusal is { } refusal)
+        {
+            return NotImplemented(refusal);
         }
         EnsureFresh();
         if (_mode == PropertiesMode.ClientRecordsetPartial)
