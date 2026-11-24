@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using CalcDb.Format;
 using CalcDb.Values;
 
@@ -302,7 +300,7 @@ public sealed class MutationSemantics : IDisposable
             {
                 return ([], $"CheckConstraints property on '{tableName}' could not be decoded ({decoded.Failure ?? $"type 0x{matches[0].NativeType:X2} has no text payload"})", false);
             }
-            if (!TryParseCheckConstraints(decoded.Text, out lvPairs, out string? parseError))
+            if (!CheckConstraintsPayload.TryDecode(decoded.Text, out lvPairs, out string? parseError))
             {
                 return ([], $"CheckConstraints property on '{tableName}' has an unrecorded format: {parseError}", false);
             }
@@ -404,57 +402,9 @@ public sealed class MutationSemantics : IDisposable
     }
 
     /// <summary>
-    /// Parses the MR2 <c>CheckConstraints</c> memo payload: NUL-separated <c>(name, expression)</c> pairs terminated by
-    /// an extra NUL (<c>"CK_Req_V\0V &gt;= 0\0\0"</c> in <c>r-oledb-odbc-v2-accdb.accdb</c>, <c>r-oledb-odbc-v2-mdb.mdb</c>,
-    /// <c>r-oledb-odbc-accdb.accdb</c>, <c>r-oledb-odbc-mdb.mdb</c>).
-    /// </summary>
-    internal static bool TryParseCheckConstraints(string payload, out List<(string Name, string Expression)> pairs, out string? error)
-    {
-        pairs = [];
-        if (payload.Length < 4 || !payload.EndsWith("\0\0", StringComparison.Ordinal))
-        {
-            error = "payload is not double-NUL terminated";
-            return false;
-        }
-        string[] tokens = payload[..^2].Split('\0');
-        if (tokens.Length == 0 || (tokens.Length & 1) != 0)
-        {
-            error = $"expected non-empty (name, expression) pairs, found {tokens.Length} NUL-delimited tokens";
-            return false;
-        }
-        for (int i = 0; i < tokens.Length; i += 2)
-        {
-            string name = tokens[i];
-            string expr = tokens[i + 1];
-            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(expr))
-            {
-                error = $"pair {i / 2} has an empty constraint name or expression";
-                return false;
-            }
-            pairs.Add((name, expr));
-        }
-        error = null;
-        return true;
-    }
-
-    private static readonly HashSet<string> DisallowedCheckKeywords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "SELECT", "FROM", "WHERE", "EXISTS", "IN", "BETWEEN", "LIKE", "IS", "NULL", "AND", "OR", "NOT", "XOR", "EQV", "IMP", "MOD", "TRUE", "FALSE",
-    };
-
-    /// <summary>
-    /// Admits only the recorded CHECK expression shapes:
-    /// <list type="bullet">
-    /// <item>A bare <c>Long</c> column on the left or right compared with <c>&gt;=</c>, <c>&gt;</c>, <c>&lt;=</c>,
-    /// <c>&lt;</c>, <c>=</c>, or <c>&lt;&gt;</c> against a signed 32-bit integer literal
+    /// Admits only the recorded CHECK expression shapes using the shared <see cref="CheckConstraintExpression"/> parser
     /// (<c>r-oledb-odbc/update-errors</c>, <c>r-q-cat-txn-lock/ii11-ado-check-constraint</c>,
-    /// <c>r-q30-sql-check/op-eq-*</c>, <c>op-le-*</c>, <c>op-ne-*</c>, <c>op-ge-neg-*</c>, <c>op-rhs-*</c>).</item>
-    /// <item>A bare <c>Text</c> column on the left compared with <c>&lt;&gt;</c> against a single-quoted string literal
-    /// (<c>r-q30-sql-check/op-text-ne-sat</c>, <c>op-text-ne-upper</c>, <c>op-text-ne-viol</c>).</item>
-    /// </list>
-    /// Refuses every other operator/literal sign combination, other column types, other literal types, empty/escaped/
-    /// trailing-space/non-ASCII Text literals, parenthesized/bracketed forms, multi-column comparisons, compound
-    /// predicates, function calls, and subqueries so they stay refused by name.
+    /// <c>r-q30-sql-check/op-*</c>).
     /// </summary>
     internal static bool TryMatchSingleColumnComparison(
         TableDefinition table,
@@ -463,104 +413,38 @@ public sealed class MutationSemantics : IDisposable
         out string? reason)
     {
         column = null;
-        ReadOnlySpan<char> span = expression.AsSpan().Trim();
-        if (span.IsEmpty)
-        {
-            reason = "CHECK expression is empty";
-            return false;
-        }
-
-        // Case 1: non-negative 32-bit integer literal on the left, <=, bare Long column on the right
-        // (r-q30-sql-check/op-rhs-sat, op-rhs-viol). Negative left literals and other operators stay refused.
-        if (span[0] == '-')
-        {
-            reason = "CHECK expression with a negative integer literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
-            return false;
-        }
-        if (char.IsAsciiDigit(span[0]))
-        {
-            int i = 0;
-            if (!TryReadSignedInt32(span, ref i, out _, out reason))
-            {
-                return false;
-            }
-            SkipWhitespace(span, ref i);
-            if (!TryReadComparisonOp(span, ref i, out ReadOnlySpan<char> lhsOp, out reason))
-            {
-                return false;
-            }
-            if (!lhsOp.SequenceEqual("<="))
-            {
-                reason = $"CHECK operator '{lhsOp}' with a literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
-                return false;
-            }
-            SkipWhitespace(span, ref i);
-            if (!TryReadBareIdentifier(span, ref i, out string rhsColName, out reason))
-            {
-                return false;
-            }
-            if (i != span.Length)
-            {
-                reason = "only a single-column comparison against a non-negative integer literal is recorded";
-                return false;
-            }
-            if (!TryResolveColumn(table, rhsColName, out ColumnDescriptor? rhsCol, out reason))
-            {
-                return false;
-            }
-            if (rhsCol!.TypeCode != NativeTypes.Long)
-            {
-                reason = $"CHECK column '{rhsCol.Name}' has type 0x{rhsCol.TypeCode:X2}; only Long (0x04) columns are recorded on the right of a comparison";
-                return false;
-            }
-            column = rhsCol;
-            reason = null;
-            return true;
-        }
-
-        // Case 2: bare column on the left (Long vs non-negative int32 with >=, >, <=, <, =, <>; Long >= negative int32;
-        // or Text <> non-empty ASCII string literal without trailing spaces or doubled quotes).
-        if (!(char.IsLetter(span[0]) || span[0] == '_'))
-        {
-            reason = "only a bare Long column compared against a recorded integer literal, or a bare Text column compared with <> against a non-empty ASCII string literal, is recorded";
-            return false;
-        }
-
-        int pos = 0;
-        if (!TryReadBareIdentifier(span, ref pos, out string columnName, out reason))
+        if (!CheckConstraintExpression.TryParse(expression, out CheckConstraintExpression? parsed, out reason))
         {
             return false;
         }
-        SkipWhitespace(span, ref pos);
-        if (!TryReadComparisonOp(span, ref pos, out ReadOnlySpan<char> op, out reason))
-        {
-            return false;
-        }
-        SkipWhitespace(span, ref pos);
-        if (pos >= span.Length)
-        {
-            reason = "CHECK expression is missing its right-hand operand";
-            return false;
-        }
-        if (!TryResolveColumn(table, columnName, out ColumnDescriptor? matchedCol, out reason))
+        if (!TryResolveColumn(table, parsed!.ColumnName, out ColumnDescriptor? matchedCol, out reason))
         {
             return false;
         }
 
-        if (matchedCol!.TypeCode == NativeTypes.Long)
+        if (parsed.LiteralKind == CheckLiteralKind.Long)
         {
-            if (!TryReadSignedInt32(span, ref pos, out bool isNegative, out reason))
+            if (matchedCol!.TypeCode != NativeTypes.Long)
             {
+                reason = $"CHECK column '{matchedCol.Name}' has type 0x{matchedCol.TypeCode:X2}; only Long (0x04) columns are recorded with integer literals";
                 return false;
             }
-            if (pos != span.Length)
+            if (parsed.LiteralOnLeft)
             {
-                reason = "only a bare Long column compared against a 32-bit integer literal is recorded";
-                return false;
+                if (parsed.IsNegativeLiteral)
+                {
+                    reason = "CHECK expression with a negative integer literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
+                    return false;
+                }
+                if (parsed.Op != CheckComparisonOp.Ge)
+                {
+                    reason = $"CHECK operator with a literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
+                    return false;
+                }
             }
-            if (isNegative && !op.SequenceEqual(">="))
+            else if (parsed.IsNegativeLiteral && parsed.Op != CheckComparisonOp.Ge)
             {
-                reason = $"CHECK operator '{op}' with a negative integer literal on Long column '{matchedCol.Name}' is not recorded (only '>=' is recorded, r-q30-sql-check/op-ge-neg-*)";
+                reason = $"CHECK operator '{CheckConstraintExpression.OpText(parsed.Op)}' with a negative integer literal on Long column '{matchedCol.Name}' is not recorded (only '>=' is recorded, r-q30-sql-check/op-ge-neg-*)";
                 return false;
             }
             column = matchedCol;
@@ -568,175 +452,38 @@ public sealed class MutationSemantics : IDisposable
             return true;
         }
 
-        if (matchedCol.TypeCode == NativeTypes.Text)
+        if (matchedCol!.TypeCode != NativeTypes.Text)
         {
-            if (!op.SequenceEqual("<>"))
-            {
-                reason = $"CHECK operator '{op}' on Text column '{matchedCol.Name}' is not recorded (only <> against a non-empty ASCII string literal is recorded)";
-                return false;
-            }
-            if (!TryReadSingleQuotedAsciiString(span, ref pos, out reason))
-            {
-                return false;
-            }
-            if (pos != span.Length)
-            {
-                reason = "only a bare Text column compared with <> against a non-empty ASCII string literal is recorded";
-                return false;
-            }
-            column = matchedCol;
-            reason = null;
-            return true;
-        }
-
-        reason = $"CHECK column '{matchedCol.Name}' has type 0x{matchedCol.TypeCode:X2}; only Long (0x04) and Text (0x0A, <>) columns are recorded";
-        return false;
-    }
-
-    private static void SkipWhitespace(ReadOnlySpan<char> span, ref int i)
-    {
-        while (i < span.Length && char.IsWhiteSpace(span[i]))
-        {
-            i++;
-        }
-    }
-
-    private static bool TryReadBareIdentifier(ReadOnlySpan<char> span, ref int i, out string name, out string? reason)
-    {
-        name = "";
-        if (i >= span.Length || !(char.IsLetter(span[i]) || span[i] == '_'))
-        {
-            reason = "CHECK expression expected a bare column identifier";
+            reason = $"CHECK column '{matchedCol.Name}' has type 0x{matchedCol.TypeCode:X2}; only Text (0x0A, <>) columns are recorded with string literals";
             return false;
         }
-        int start = i;
-        i++;
-        while (i < span.Length && (char.IsLetterOrDigit(span[i]) || span[i] == '_'))
+        string textLit = parsed.TextValue!;
+        if (parsed.HasDoubledQuote)
         {
-            i++;
-        }
-        string ident = span[start..i].ToString();
-        if (DisallowedCheckKeywords.Contains(ident))
-        {
-            reason = $"CHECK expression uses keyword '{ident}'; only a bare single-column comparison against a literal is recorded";
+            reason = "CHECK Text comparison with doubled-quote string literal is not recorded";
             return false;
         }
-        name = ident;
-        reason = null;
-        return true;
-    }
-
-    private static bool TryReadComparisonOp(ReadOnlySpan<char> span, ref int i, out ReadOnlySpan<char> op, out string? reason)
-    {
-        op = default;
-        if (i >= span.Length)
+        if (textLit.Length == 0)
         {
-            reason = "CHECK expression is missing a comparison operator";
+            reason = "CHECK Text comparison with empty string literal '' is not recorded";
             return false;
         }
-        int start = i;
-        if (span[i] == '>')
+        if (textLit[^1] == ' ')
         {
-            i++;
-            if (i < span.Length && span[i] == '=')
-            {
-                i++;
-            }
-        }
-        else if (span[i] == '<')
-        {
-            i++;
-            if (i < span.Length && span[i] is '=' or '>')
-            {
-                i++;
-            }
-        }
-        else if (span[i] == '=')
-        {
-            i++;
-        }
-        else
-        {
-            reason = $"CHECK expression character '{span[i]}': only comparison operators >=, >, <=, <, =, and <> are recorded";
+            reason = "CHECK Text comparison with trailing space in string literal is not recorded";
             return false;
         }
-        op = span[start..i];
-        reason = null;
-        return true;
-    }
-
-    private static bool TryReadSignedInt32(ReadOnlySpan<char> span, ref int i, out bool isNegative, out string? reason)
-    {
-        int start = i;
-        isNegative = false;
-        if (i < span.Length && span[i] == '-')
+        foreach (char ch in textLit)
         {
-            isNegative = true;
-            i++;
-        }
-        int digitsStart = i;
-        while (i < span.Length && char.IsAsciiDigit(span[i]))
-        {
-            i++;
-        }
-        if (i == digitsStart)
-        {
-            reason = "CHECK integer operand must be a signed 32-bit integer literal";
-            return false;
-        }
-        if (!int.TryParse(span[start..i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int parsed))
-        {
-            reason = $"CHECK integer literal '{span[start..i]}' is outside the signed 32-bit integer range";
-            return false;
-        }
-        isNegative = isNegative || parsed < 0;
-        reason = null;
-        return true;
-    }
-
-    private static bool TryReadSingleQuotedAsciiString(ReadOnlySpan<char> span, ref int i, out string? reason)
-    {
-        if (i >= span.Length || span[i] != '\'')
-        {
-            reason = "CHECK Text comparison right-hand operand must be a single-quoted string literal";
-            return false;
-        }
-        i++;
-        int contentStart = i;
-        while (i < span.Length)
-        {
-            char ch = span[i];
-            if (ch == '\'')
-            {
-                if (i + 1 < span.Length && span[i + 1] == '\'')
-                {
-                    reason = "CHECK Text comparison with doubled-quote string literal is not recorded";
-                    return false;
-                }
-                ReadOnlySpan<char> content = span[contentStart..i];
-                if (content.IsEmpty)
-                {
-                    reason = "CHECK Text comparison with empty string literal '' is not recorded";
-                    return false;
-                }
-                if (content[^1] == ' ')
-                {
-                    reason = "CHECK Text comparison with trailing space in string literal is not recorded";
-                    return false;
-                }
-                i++;
-                reason = null;
-                return true;
-            }
             if (ch < 0x20 || ch > 0x7E)
             {
                 reason = "CHECK Text comparison with non-ASCII or control character in string literal is not recorded";
                 return false;
             }
-            i++;
         }
-        reason = "CHECK Text comparison has an unterminated single-quoted string literal";
-        return false;
+        column = matchedCol;
+        reason = null;
+        return true;
     }
 
     private static bool TryResolveColumn(TableDefinition table, string columnName, out ColumnDescriptor? column, out string? reason)
