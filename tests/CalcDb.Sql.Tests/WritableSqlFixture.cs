@@ -199,7 +199,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         return new IndexNavigator(SourceOf(workspace), D, index, table.FirstPage);
     }
 
-    private readonly Dictionary<string, (PropertyBlob Blob, CatalogCheckConstraint[] Catalog)> _syntheticChecks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (StoredProperty CheckProp, CatalogCheckConstraint[] Catalog)> _syntheticChecks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Attach matching synthetic <c>LvProp CheckConstraints</c> and <c>MSysObjects Type = 9</c> metadata to a table
@@ -215,11 +215,9 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         }
         sb.Append('\0');
         var prop = new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, System.Text.Encoding.Unicode.GetBytes(sb.ToString()));
-        byte[] encoded = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ObjectValues, "", [prop])]);
-        PropertyBlob? blob = PropertyBlob.Read(encoded, out string? fail);
-        Assert.Null(fail);
         CatalogCheckConstraint[] catalog = [.. constraints.Select((c, idx) => new CatalogCheckConstraint(c.Name, c.Expression, Id: unchecked((int)(0x80000005u + (uint)idx))))];
-        _syntheticChecks[key] = (blob!, catalog);
+        _syntheticChecks[key] = (prop, catalog);
+        _tables.Remove(key);
         if (_editContexts.Remove(key, out TableEditContext? old))
         {
             old.Semantics.Dispose();
@@ -256,9 +254,32 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
             }
         }
         IReadOnlyList<CatalogCheckConstraint> catalogChecks = CheckConstraintCatalog.ForTable(_checkConstraints, entry.Name);
-        if (_syntheticChecks.TryGetValue(key, out (PropertyBlob Blob, CatalogCheckConstraint[] Catalog) synthetic))
+        if (_syntheticChecks.TryGetValue(key, out (StoredProperty CheckProp, CatalogCheckConstraint[] Catalog) synthetic))
         {
-            blob = synthetic.Blob;
+            List<PropertyMap> maps = [];
+            bool mergedObj = false;
+            if (blob is not null)
+            {
+                foreach (PropertyMap map in blob.Maps)
+                {
+                    if (map.Kind == PropertySectionKind.ObjectValues)
+                    {
+                        List<StoredProperty> props = [.. map.Properties.Where(p => !string.Equals(p.Name, "CheckConstraints", StringComparison.OrdinalIgnoreCase)), synthetic.CheckProp];
+                        maps.Add(new PropertyMap(PropertySectionKind.ObjectValues, map.MapName, props));
+                        mergedObj = true;
+                    }
+                    else
+                    {
+                        maps.Add(map);
+                    }
+                }
+            }
+            if (!mergedObj)
+            {
+                maps.Insert(0, new PropertyMap(PropertySectionKind.ObjectValues, "", [synthetic.CheckProp]));
+            }
+            blob = PropertyBlob.Read(PropertyBlob.Encode(maps), out string? mergeFail);
+            Assert.Null(mergeFail);
             catalogChecks = synthetic.Catalog;
         }
         MutationSemantics semantics = MutationSemantics.Compile(

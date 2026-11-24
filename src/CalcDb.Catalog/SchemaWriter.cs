@@ -1955,11 +1955,11 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp has form {oldPlan.Form} is not recorded");
             }
-            if (!TryDecodeCheckConstraintPairs(existingProp.Payload, out List<(string Name, string Expression)>? existingPairs, out string? pairsFail))
+            if (!CheckConstraintsPayload.TryDecode(existingProp.Payload, out List<(string Name, string Expression)> existingPairs, out string? pairsFail))
             {
                 return new SchemaRefusal(null, $"table '{entry.Name}' existing CheckConstraints property: {pairsFail}");
             }
-            foreach ((string existingPairName, _) in existingPairs!)
+            foreach ((string existingPairName, _) in existingPairs)
             {
                 switch (FieldNameLookupClashOf(existingPairName, constraintName, _sortOrder, out string? pairUndecided))
                 {
@@ -1973,8 +1973,7 @@ public sealed class SchemaWriter
         }
 
         pairs.Add((constraintName, parsedExpr.Expression));
-        string joined = string.Join('\0', pairs.SelectMany(pair => new[] { pair.Name, pair.Expression })) + "\0\0";
-        byte[] payloadBytes = System.Text.Encoding.Unicode.GetBytes(joined);
+        byte[] payloadBytes = CheckConstraintsPayload.Encode(pairs);
         newPropMaps =
         [
             new PropertyMap(
@@ -2104,41 +2103,6 @@ public sealed class SchemaWriter
             bytes[2 + i] = (byte)ch;
         }
         encoded = bytes;
-        return true;
-    }
-
-    private static bool TryDecodeCheckConstraintPairs(byte[] payload, out List<(string Name, string Expression)>? pairs, out string? failure)
-    {
-        pairs = null;
-        failure = null;
-        if (payload.Length < 4 || (payload.Length & 1) != 0)
-        {
-            failure = $"payload length {payload.Length} is not an even UTF-16LE byte count >= 4";
-            return false;
-        }
-        string text = System.Text.Encoding.Unicode.GetString(payload);
-        if (!text.EndsWith("\0\0", StringComparison.Ordinal))
-        {
-            failure = "payload is not double-NUL terminated";
-            return false;
-        }
-        string[] parts = text[..^2].Split('\0');
-        if (parts.Length < 2 || (parts.Length & 1) != 0)
-        {
-            failure = $"payload contains {parts.Length} NUL-separated string(s), expected an even non-zero count";
-            return false;
-        }
-        var result = new List<(string, string)>(parts.Length / 2);
-        for (int i = 0; i < parts.Length; i += 2)
-        {
-            if (string.IsNullOrWhiteSpace(parts[i]) || string.IsNullOrWhiteSpace(parts[i + 1]))
-            {
-                failure = $"pair {i / 2} has an empty name or expression";
-                return false;
-            }
-            result.Add((parts[i], parts[i + 1]));
-        }
-        pairs = result;
         return true;
     }
 

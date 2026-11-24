@@ -205,7 +205,7 @@ public static unsafe class ActionExecutor
         {
             ActionOutcome outcome = plan.Kind switch
             {
-                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues, allowMdbCheckInsert: source == ActionErrorSource.Ado),
+                ActionKind.InsertValues => ExecuteInsertValues(plan, database, failOnError, paramValues, source, isInsertValues: true),
                 ActionKind.InsertSelect => ExecuteInsertSelect(plan, database, failOnError, paramValues, source),
                 ActionKind.Update => ExecuteUpdate(plan, database, failOnError, paramValues, source),
                 ActionKind.Delete => ExecuteDelete(plan, database, failOnError, paramValues),
@@ -234,31 +234,53 @@ public static unsafe class ActionExecutor
         ISqlActionDatabase database,
         bool failOnError,
         NativeVariant[] paramValues,
-        bool allowMdbCheckInsert)
+        ActionErrorSource errorSource,
+        bool isInsertValues)
     {
         if (!OpenTarget(plan, database, out TableEditContext? editContext, out TableCursor? cursor, out SqlFailure? openFailure))
         {
             return ActionOutcome.Fail(openFailure!);
         }
+        bool allowMdbCheckInsert = isInsertValues && errorSource is ActionErrorSource.Ado or ActionErrorSource.Database;
+        bool allowDaoExplicitAutoCheckViol = false;
         if (editContext!.Semantics.HasCheckConstraints && editContext.Semantics.AutoNumber is { } autoCol)
         {
+            bool explicitAuto = plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal);
+            // r-q31-sql-check-2/autonum-viol-dao-nofail, autonum-viol-dao-nofail-identity: DAO Database.Execute
+            // INSERT ... VALUES without dbFailOnError on a generated AutoNumber + CHECK table skips the violating row,
+            // consumes the AutoNumber, and exposes it as @@IDENTITY.
             if (!failOnError)
             {
-                cursor!.Dispose();
-                string names = FormatCheckConstraintNames(editContext.Semantics);
-                return ActionOutcome.Fail(SqlFailure.Open(
-                    SqlPhase.Execute,
-                    "NotModelled.Edit.Rule",
-                    $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT without dbFailOnError on AutoNumber column '{autoCol.Name}' is not recorded"));
+                bool allowedNoFail = isInsertValues && errorSource == ActionErrorSource.Database && !explicitAuto;
+                if (!allowedNoFail)
+                {
+                    cursor!.Dispose();
+                    string names = FormatCheckConstraintNames(editContext.Semantics);
+                    return ActionOutcome.Fail(SqlFailure.Open(
+                        SqlPhase.Execute,
+                        "NotModelled.Edit.Rule",
+                        $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT without dbFailOnError on AutoNumber column '{autoCol.Name}' is recorded only for DAO Database.Execute INSERT ... VALUES with a generated AutoNumber (r-q31-sql-check-2/autonum-viol-dao-nofail)"));
+                }
             }
-            if (plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal))
+            // r-q31-sql-check-2/autonum-explicit-viol-dao, autonum-explicit-below-viol-dao: DAO Database.Execute
+            // INSERT ... VALUES with dbFailOnError supplying an explicit AutoNumber that violates CHECK fails 3317 and
+            // advances TableDef offset 20 by +1 (the drawn ticket, never the explicit value). ADO, QueryDef, BeginTrans,
+            // FROM-less INSERT ... SELECT, and satisfying explicit AutoNumber writes stay refused (qualified.md Open).
+            if (explicitAuto)
             {
-                cursor!.Dispose();
-                string names = FormatCheckConstraintNames(editContext.Semantics);
-                return ActionOutcome.Fail(SqlFailure.Open(
-                    SqlPhase.Execute,
-                    "NotModelled.Edit.Rule",
-                    $"CHECK constraint {names} on {editContext.Semantics.TableName}: explicit AutoNumber assignment on '{autoCol.Name}' is not recorded"));
+                allowDaoExplicitAutoCheckViol = isInsertValues
+                    && errorSource == ActionErrorSource.Database
+                    && failOnError
+                    && database.Workspace.Depth == 0;
+                if (!allowDaoExplicitAutoCheckViol)
+                {
+                    cursor!.Dispose();
+                    string names = FormatCheckConstraintNames(editContext.Semantics);
+                    return ActionOutcome.Fail(SqlFailure.Open(
+                        SqlPhase.Execute,
+                        "NotModelled.Edit.Rule",
+                        $"CHECK constraint {names} on {editContext.Semantics.TableName}: explicit AutoNumber assignment on '{autoCol.Name}' is recorded only for autocommit DAO Database.Execute INSERT ... VALUES with dbFailOnError violating CHECK (r-q31-sql-check-2/autonum-explicit-viol-dao)"));
+                }
             }
         }
         using (cursor!)
@@ -266,6 +288,7 @@ public static unsafe class ActionExecutor
         {
             ConflictSource = MutationErrorSource.Database,
             AllowMdbCheckInsert = allowMdbCheckInsert,
+            AllowDaoExplicitAutoNumberCheckViolation = allowDaoExplicitAutoCheckViol,
         })
         {
             var evalRow = new ActionRowContext(null, paramValues);
@@ -304,12 +327,30 @@ public static unsafe class ActionExecutor
                 }
 
                 long? beforeCounter = editContext!.Counter?.Last;
-                return InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted)
-                    is { } rowFail
-                    ? ActionOutcome.Fail(rowFail)
-                    : ActionOutcome.Ok(
-                        inserted ? 1 : 0,
-                        inserted && editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
+                SqlFailure? rowFail = InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted);
+                if (rowFail is not null)
+                {
+                    if (rowFail.IsNotModelled
+                        && editContext.Semantics.HasCheckConstraints
+                        && !frame.LastUpdatePersistedCheckAutoNumber
+                        && beforeCounter.HasValue
+                        && editContext.Counter is { Increment: 1 } ctr
+                        && ctr.Last != beforeCounter.Value)
+                    {
+                        ctr.Reseed(beforeCounter.Value);
+                    }
+                    return ActionOutcome.Fail(rowFail);
+                }
+                bool skippedCheckAutoConsumed = !inserted
+                    && !failOnError
+                    && isInsertValues
+                    && errorSource == ActionErrorSource.Database
+                    && editContext.Semantics.HasCheckConstraints
+                    && editContext.Semantics.AutoNumber is not null
+                    && frame.LastUpdatePersistedCheckAutoNumber;
+                return ActionOutcome.Ok(
+                    inserted ? 1 : 0,
+                    (inserted || skippedCheckAutoConsumed) && editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
             }
             finally
             {
@@ -328,10 +369,11 @@ public static unsafe class ActionExecutor
         ActionErrorSource errorSource)
     {
         // FROM-less constant SELECT (e.g. INSERT INTO U (ID, K) SELECT 602, 'y', r-def-expr-sql/sql-insert-values-forms)
-        // evaluates like a single-row VALUES insert, except Jet 4 MDB CHECK admission stays restricted to INSERT VALUES.
+        // evaluates like a single-row VALUES insert, except Jet 4 MDB CHECK and AutoNumber+CHECK nofail/explicit
+        // admission stay restricted to INSERT VALUES.
         if (plan.SourceSelect is null)
         {
-            return ExecuteInsertValues(plan, database, failOnError, paramValues, allowMdbCheckInsert: false);
+            return ExecuteInsertValues(plan, database, failOnError, paramValues, errorSource, isInsertValues: false);
         }
 
         // Materialize all source rows before mutating the target so self-insert (INSERT INTO T SELECT * FROM T) is
@@ -403,15 +445,6 @@ public static unsafe class ActionExecutor
 
             if (editContext!.Semantics.HasCheckConstraints)
             {
-                if ((failOnError || errorSource == ActionErrorSource.Ado) && sourceRows.Count > 1)
-                {
-                    cursor!.Dispose();
-                    string names = FormatCheckConstraintNames(editContext.Semantics);
-                    return ActionOutcome.Fail(SqlFailure.Open(
-                        SqlPhase.Execute,
-                        "NotModelled.Edit.Rule",
-                        $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row INSERT ... SELECT with dbFailOnError or through ADO is not recorded"));
-                }
                 if (editContext.Semantics.AutoNumber is { } autoCol
                     && (!failOnError || sourceRows.Count > 1 || plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal)))
                 {
@@ -421,6 +454,29 @@ public static unsafe class ActionExecutor
                         SqlPhase.Execute,
                         "NotModelled.Edit.Rule",
                         $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT ... SELECT without dbFailOnError, with multiple rows, or with explicit AutoNumber assignment on '{autoCol.Name}' is not recorded"));
+                }
+                if ((failOnError || errorSource == ActionErrorSource.Ado) && sourceRows.Count > 1)
+                {
+                    // r-q31-sql-check-2/multi-ins-dao-fail, multi-ins-ado-exec: multi-row INSERT ... SELECT with
+                    // dbFailOnError or through ADO on a CHECK table is recorded only for an empty ACCDB table with no
+                    // data pages, no AutoNumber, outside BeginTrans (qualified.md Open: table already having rows or a
+                    // data page, MDB multi-row statements, BeginTrans).
+                    bool allowedMultiIns = errorSource is ActionErrorSource.Database or ActionErrorSource.Ado
+                        && failOnError
+                        && database.Workspace.Depth == 0
+                        && editContext.Semantics.AutoNumber is null
+                        && editContext.Writer is { } chkWriter
+                        && chkWriter.IsVerifiedAccdb(database.Workspace.OverlayOf(chkWriter.File))
+                        && chkWriter.IsEmptyWithoutDataPages(database.Workspace.OverlayOf(chkWriter.File));
+                    if (!allowedMultiIns)
+                    {
+                        cursor!.Dispose();
+                        string names = FormatCheckConstraintNames(editContext.Semantics);
+                        return ActionOutcome.Fail(SqlFailure.Open(
+                            SqlPhase.Execute,
+                            "NotModelled.Edit.Rule",
+                            $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row INSERT ... SELECT with dbFailOnError or through ADO is recorded only on an empty ACCDB table with no data pages and no AutoNumber outside BeginTrans (r-q31-sql-check-2/multi-ins-dao-fail, multi-ins-ado-exec)"));
+                    }
                 }
             }
 
@@ -597,25 +653,40 @@ public static unsafe class ActionExecutor
 
         if (candidates.Count > 1 && editContext!.Semantics.HasCheckConstraints)
         {
-            cursor!.Dispose();
-            string names = FormatCheckConstraintNames(editContext.Semantics);
-            return ActionOutcome.Fail(SqlFailure.Open(
-                SqlPhase.Execute,
-                "NotModelled.Edit.Rule",
-                $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row UPDATE on a CHECK table is not recorded"));
+            // r-q31-sql-check-2/multi-upd-*, multi-upd-3row-*: multi-row UPDATE on a CHECK table is recorded on ACCDB
+            // outside BeginTrans without an AutoNumber column (DAO with/without dbFailOnError and ADO Execute).
+            // Open: multi-row UPDATE inside BeginTrans, Jet 4 MDB multi-row statements, AutoNumber + CHECK.
+            bool allowedMultiUpd = errorSource is ActionErrorSource.Database or ActionErrorSource.Ado
+                && database.Workspace.Depth == 0
+                && editContext.Semantics.AutoNumber is null
+                && editContext.Writer is { } updWriter
+                && updWriter.IsVerifiedAccdb(database.Workspace.OverlayOf(updWriter.File));
+            if (!allowedMultiUpd)
+            {
+                cursor!.Dispose();
+                string names = FormatCheckConstraintNames(editContext.Semantics);
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    "NotModelled.Edit.Rule",
+                    $"CHECK constraint {names} on {editContext.Semantics.TableName}: multi-row UPDATE on a CHECK table is recorded only on ACCDB outside BeginTrans without an AutoNumber column (r-q31-sql-check-2/multi-upd-*)"));
+            }
         }
 
         // R-SQL-2 SQL-ACT-FAIL / R-TXN-1 TXN-STMT:
         // UPDATE with dbFailOnError stops at the failing candidate and KEEPS earlier changed rows (RecordsAffected 0):
         // r-sql-2-3/act-fail-unique, act-fail-validation, act-fail-conversion, r-q-expr-sql/fail-late-candidate,
-        // r-txn-1/stmt-expression-fail-d1. Without dbFailOnError, constraint/lock failures skip the row and continue,
-        // while RHS expression/conversion failures store Null and do not count the row (act-fail-conversion,
-        // r-txn-1b/implicit-expression-nofail).
+        // r-txn-1/stmt-expression-fail-d1, r-q31-sql-check-2/multi-upd-dao-fail, multi-upd-3row-dao-fail,
+        // multi-upd-ado-exec, multi-upd-3row-ado-exec. Without dbFailOnError, constraint/lock failures skip the row and
+        // continue (multi-upd-dao-nofail, multi-upd-3row-dao-nofail), while RHS expression/conversion failures store
+        // Null and do not count the row (act-fail-conversion, r-txn-1b/implicit-expression-nofail).
         using (cursor!)
         using (var frame = new EditFrame(editContext!, cursor!, database.Workspace)
         {
             ConflictSource = MutationErrorSource.Database,
-            AllowAdoCheckNullUpdate = errorSource == ActionErrorSource.Ado,
+            AllowAdoCheckNullUpdate = errorSource == ActionErrorSource.Ado
+                && candidates.Count == 1
+                && database.Workspace.Depth == 0
+                && editContext!.Semantics.HasCheckConstraints,
         })
         {
             var evalRow = new ActionRowContext(cursor, paramValues);

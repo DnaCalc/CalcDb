@@ -185,7 +185,13 @@ public sealed class ExplicitFrame
             return;
         }
         uint value = mark.Reseed || mark.IsBeyond(existing.Value) ? mark.Value : existing.Value;
-        ConsumedAutoNumbers[key] = new AutoNumberMark(value, mark.Increment, existing.Reseed || mark.Reseed, existing.Explicit || mark.Explicit, existing.Unrecorded ?? mark.Unrecorded);
+        ConsumedAutoNumbers[key] = new AutoNumberMark(
+            value,
+            mark.Increment,
+            existing.Reseed || mark.Reseed,
+            existing.Explicit || mark.Explicit,
+            existing.Unrecorded ?? mark.Unrecorded,
+            existing.CheckConstraintRollbackOnly || mark.CheckConstraintRollbackOnly);
     }
 
     /// <summary>
@@ -226,7 +232,13 @@ public sealed class ExplicitFrame
 /// refuse with <see cref="MutationOpen.CounterWrite"/>, and other unrecorded unit-increment ACCDB cases succeed
 /// writing nothing (keeping the in-memory counter consumed).
 /// </summary>
-internal readonly record struct AutoNumberMark(uint Value, int Increment, bool Reseed, bool Explicit, string? Unrecorded)
+internal readonly record struct AutoNumberMark(
+    uint Value,
+    int Increment,
+    bool Reseed,
+    bool Explicit,
+    string? Unrecorded,
+    bool CheckConstraintRollbackOnly = false)
 {
     /// <summary>Whether <see cref="Value"/> lies beyond <paramref name="stored"/> in the increment's direction.</summary>
     public bool IsBeyond(uint stored) =>
@@ -462,6 +474,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private int _statementExternalDepth;
     private bool _statementHasOwnLevel;
     private int? _statementRefusal;
+    private bool _statementRefusalIsCheckConstraint;
     private ResolutionOutcome? _statementFailure;
     private int _statementPendingStart;
     private int _unwrittenPendingCount;
@@ -887,6 +900,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         FormatDescriptor d = FormatDescriptor.Jet4Family;
         foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
         {
+            if (mark.CheckConstraintRollbackOnly)
+            {
+                return new ResolutionOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CommitTrans after a CHECK-refused recordset AddNew on TableDef page {tdefPage} inside BeginTrans is not recorded (qualified.md R-CAT-1 II-07 Open)");
+            }
             uint current;
             if (_participants.TryGetValue(cache, out FileParticipant? participant) && participant.Overlay.ChangedPages.Contains(tdefPage))
             {
@@ -1202,12 +1222,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// empty table taking a new page) while refusing unrecorded non-1 increment (<see cref="MutationOpen.AutoNumberIncrement"/>)
     /// and unrecorded Jet 4 MDB (<see cref="MutationOpen.CounterWrite"/>) Rollbacks before acting.
     /// </summary>
-    internal void RecordConsumedAutoNumber(PageCache cache, uint tableDefPage, uint value, int increment, bool reseed, string? unrecorded, bool isExplicit = false)
+    internal void RecordConsumedAutoNumber(
+        PageCache cache,
+        uint tableDefPage,
+        uint value,
+        int increment,
+        bool reseed,
+        string? unrecorded,
+        bool isExplicit = false,
+        bool checkConstraintRollbackOnly = false)
     {
         if (_frames.Count > 0)
         {
             ExplicitFrame top = _frames[^1];
-            top.RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, isExplicit, unrecorded));
+            top.RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, isExplicit, unrecorded, checkConstraintRollbackOnly));
             if (_statement is null)
             {
                 top.HasNonInsertSelectWork = true;
@@ -1224,11 +1252,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// (<c>ins-dup-fail-mdb</c>); inside an explicit transaction only ACCDB 3022 (<c>ins-dup-fail-txn</c>) and 3201
     /// (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>, answers only) are admitted.
     /// </summary>
-    internal void NoteStatementRefusal(int number)
+    internal void NoteStatementRefusal(int number, bool isCheckConstraint = false)
     {
         if (_statement is not null)
         {
             _statementRefusal = number;
+            _statementRefusalIsCheckConstraint = isCheckConstraint;
         }
     }
 
@@ -1582,6 +1611,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (pendingEdit && _frames.Count > 1)
         {
             return new ResolutionOutcome(null, MutationOpen.PendingEditAtInnerRollback, "an edit is pending at an inner Rollback");
+        }
+        if (_statement is null && _edits.Exists(e => e.HasPendingCheckAutoNumberInTxn))
+        {
+            return new ResolutionOutcome(
+                null,
+                MutationOpen.Rule,
+                "Rollback without CancelUpdate after a CHECK-refused recordset AddNew inside BeginTrans is not recorded (qualified.md R-CAT-1 II-07 Open)");
         }
         ExplicitFrame top = _frames[^1];
         if (_statement is not null)
@@ -2312,7 +2348,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 : _statementRefusal is MutationError.Duplicate
                     or MutationError.RelatedRecordRequired
                     or MutationError.Required
-                    or MutationError.RuleWithText;
+                    or MutationError.RuleWithText
+                    || (_statementRefusal == MutationError.RuleWithoutText
+                        && _statementRefusalIsCheckConstraint
+                        && isAccdbOrHeaderless
+                        && tookPage
+                        && top.Changes.Count > 0);
         unrecorded ??= !isRecordedRefusal
             ? (_statementRefusal is int number
                 ? (top.Changes.Count > 0
@@ -2383,6 +2424,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementExternalDepth = 0;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
@@ -2448,6 +2490,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementExternalDepth = _frames.Count;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
         _statementPendingStart = _frames.Count == 0 ? _pending.Count : 0;
         if (_frames.Count > 0)
@@ -2476,6 +2519,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         ResolutionOutcome? stmtFailure = _statementFailure;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementPendingStart = 0;
         PageCache? group2File = _statementRollbackGroup2File;
         _statementRollbackGroup2File = null;
@@ -2525,6 +2569,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementHasOwnLevel = false;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementRollbackGroup2File = null;
         _pendingGroup2AllocatedPages.Clear();
         int pendingStart = _statementPendingStart;
