@@ -863,6 +863,71 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
+    /// DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> put on a stored table's field (W-08, task 9dvt;
+    /// qualified.md <c>r-q37</c>): validates <c>ValidationRule</c> before touching the catalog, publishes the rewritten
+    /// <c>LvProp</c> through <see cref="SchemaWriter.SetFieldValidationProperty"/>, reloads the catalog and edit contexts,
+    /// and refreshes the held <see cref="TableDefObject"/> and <see cref="DefinitionFieldObject"/>.
+    /// </summary>
+    internal CallResult SetFieldValidationProperty(
+        TableDefObject tableDef,
+        DefinitionFieldObject field,
+        ColumnDescriptor column,
+        FieldValidationProperty property,
+        string value)
+    {
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put on a read-only Database (qualified.md r-q37 Open)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put inside a transaction (qualified.md r-q37 Open)"));
+        }
+        if (Hold(tableDef.Name) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put on '{tableDef.Name}' while a recordset of it is open (qualified.md r-q37 Open)"));
+        }
+        if (tableDef.Definition is not { } def)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put when the TableDef cannot be read"));
+        }
+        if (property == FieldValidationProperty.ValidationRule
+            && FieldValidationRuleValidator.Validate(tableDef.Name, def, column, value, CreateExpressionContext(ExpressionUse.ValidationRule)) is { } validationFailure)
+        {
+            return CallResult.Fail(validationFailure);
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.SetFieldValidationProperty(
+            workspace,
+            tableDef.Name,
+            column.Name,
+            property,
+            value,
+            SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            tableDef.Refresh();
+            field.InvalidateProperties();
+        }
+        if (outcome.Refused is { } refused)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.{property} put: " + refused.NotWritten));
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
     /// A catalog change of this session was published: the extent grows to what it allocated, the catalog is read again
     /// from the committed images, and the one TableDefs collection lists its members again (r-q15-ddl-open/lv-rewrite-
     /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
