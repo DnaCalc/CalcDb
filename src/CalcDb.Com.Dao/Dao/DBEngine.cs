@@ -198,13 +198,13 @@ internal sealed unsafe class DBEngineObject : DaoObject
     /// <summary>
     /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
     /// DBEngine.CommitTrans Option (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 74, 78) and
-    /// DBEngine.CreateDatabase Name/Locale (p0/p1: r-q35-byref-args/dao-eng-createdatabase calls 7, 11, 15, 19,
-    /// 23, 27, 31, 35). CreateDatabase Option (p2) ByRef stays refused by name in WorkspaceObject.ValidateCreateOption.
+    /// DBEngine.CreateDatabase Name/Locale (p0/p1, ACCDB only: r-q35-byref-args/dao-eng-createdatabase calls 7, 11,
+    /// 15, 19, 23, 27, 31, 35). CreateDatabase Option (p2) ByRef and Jet 4 MDB (option 64) ByRef stay refused by name.
     /// </summary>
     protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
     {
         ("CommitTrans", 0) => !(Engine.Touched && Engine.DefaultWorkspace.HasOpenMdbDatabase),
-        ("CreateDatabase", 0 or 1) => true,
+        ("CreateDatabase", 0 or 1) => !WorkspaceObject.IsJet4MdbOption(args),
         _ => false,
     };
 
@@ -422,16 +422,27 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>Whether any currently open database in this Workspace is Jet 4 MDB (used to keep ACCDB-only ByRef rules off MDB).</summary>
     internal bool HasOpenMdbDatabase => _databases.Any(static d => !d.Closed && d.Profile.Format == FileFormat.Jet4);
 
+    /// <summary>True when a CreateDatabase call passes Option = VT_I4 64 (dbVersion40 / Jet 4 MDB).</summary>
+    internal static bool IsJet4MdbOption(ReadOnlySpan<nint> args)
+    {
+        if (args.Length <= 2 || args[2] == 0)
+        {
+            return false;
+        }
+        var v = Args.Cell(args[2]);
+        return (VarType)v->Vt == VarType.I4 && (int)v->Int64 == 64;
+    }
+
     /// <summary>
     /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
     /// Workspace.CommitTrans Options (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 10-62) and
-    /// Workspace.CreateDatabase Name/Connect (p0/p1: r-q35-byref-args/dao-eng-createdatabase calls 39, 43, 47, 51).
-    /// CreateDatabase Option (p2) ByRef stays refused by name in ValidateCreateOption.
+    /// Workspace.CreateDatabase Name/Connect (p0/p1, ACCDB only: r-q35-byref-args/dao-eng-createdatabase calls 39, 43,
+    /// 47, 51). CreateDatabase Option (p2) ByRef and Jet 4 MDB (option 64) ByRef stay refused by name.
     /// </summary>
     protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
     {
         ("CommitTrans", 0) => !HasOpenMdbDatabase,
-        ("CreateDatabase", 0 or 1) => true,
+        ("CreateDatabase", 0 or 1) => !IsJet4MdbOption(args),
         _ => false,
     };
 
@@ -611,8 +622,11 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// CreateDatabase(Name, Locale/Connect, Option): the shared operation of DBEngine and Workspace (source
     /// DAO.Workspace; R-CAT-1 CAT-NEW, R-DAO-1 DAO-CREATE, R-LOCK-1 EX-CREATE, W-07/new-database-image).
     /// Supports ACCDB 2007 (<c>dbVersion120 = 128</c> or omitted) with <c>dbLangGeneral</c> (<c>;LANGID=0x0409</c>,
-    /// optional <c>CP=1252</c>, optional <c>COUNTRY=0</c>). Recorded ACE errors return ACE's exact error numbers and
-    /// texts; valid-in-ACE-but-out-of-stretch forms return named <c>NotModelled</c> refusals.
+    /// optional <c>CP=1252</c>, optional <c>COUNTRY=0</c>) and Jet 4 MDB (<c>dbVersion40 = 64</c>, <c>VT_I4</c> only;
+    /// <c>r-q38-mdb-new-image</c>, <c>r-fmt-1/create-mdb-empty</c>, <c>r-cat-1/create-mdb-empty</c>,
+    /// <c>r-cat-1/create-accdb-ext-v40</c>) with the two recorded locale spellings
+    /// (<c>;LANGID=0x0409;CP=1252;COUNTRY=0</c> and <c>;LANGID=0x0409</c>). Recorded ACE errors return ACE's exact
+    /// error numbers and texts; valid-in-ACE-but-out-of-stretch forms return named <c>NotModelled</c> refusals.
     /// </summary>
     public CallResult CreateDatabase(ReadOnlySpan<nint> args)
     {
@@ -634,17 +648,30 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("CreateDatabase with a non-text Locale argument"));
         }
 
-        if (ValidateCreateLocale(locale) is { } localeFailure)
+        if (ValidateCreateLocale(locale, out bool hasCodePage, out bool hasCountry) is { } localeFailure)
         {
             return localeFailure;
         }
 
-        if (ValidateCreateOption(args.Length > 2 ? args[2] : 0) is { } optionFailure)
+        if (ValidateCreateOption(args.Length > 2 ? args[2] : 0, out FileFormat format) is { } optionFailure)
         {
             return optionFailure;
         }
 
-        CallResult result = DatabaseObject.Create(this, name, NewDatabaseRequest.AccdbGeneral(), out DatabaseObject? database);
+        // Jet 4 MDB is recorded only with ';LANGID=0x0409;CP=1252;COUNTRY=0' (eng-general-full, ws-general-full,
+        // r-fmt-1/create-mdb-empty, r-cat-1/create-mdb-empty, r-cat-1/create-accdb-ext-v40) and ';LANGID=0x0409'
+        // (eng-langid-only). Partial spellings such as ';LANGID=0x0409;CP=1252' are recorded for ACCDB only.
+        if (format == FileFormat.Jet4 && hasCodePage != hasCountry)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.CreateLocale",
+                $"CreateDatabase with Jet 4 MDB locale '{locale}': only ';LANGID=0x0409;CP=1252;COUNTRY=0' and ';LANGID=0x0409' are recorded"));
+        }
+
+        NewDatabaseRequest request = format == FileFormat.Jet4
+            ? NewDatabaseRequest.Jet4MdbGeneral()
+            : NewDatabaseRequest.AccdbGeneral();
+        CallResult result = DatabaseObject.Create(this, name, request, out DatabaseObject? database);
         if (database is not null)
         {
             _databases.Add(database);
@@ -663,8 +690,11 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         return arg != 0 && Args.TypeOf(arg) == VarType.Bstr ? "" : null;
     }
 
-    private CallResult? ValidateCreateLocale(string locale)
+    private CallResult? ValidateCreateLocale(string locale, out bool hasCodePage, out bool hasCountry)
     {
+        hasCodePage = false;
+        hasCountry = false;
+
         // r-sort-3/create-locale-spellings: "" -> 3001, missing leading ';' -> 3170.
         if (locale.Length == 0)
         {
@@ -729,6 +759,8 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         }
         if (langId == 0x0409 && (codePage is null or 1252) && (country is null or 0))
         {
+            hasCodePage = codePage is not null;
+            hasCountry = country is not null;
             return null;
         }
         return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with locale '{locale}': only dbLangGeneral (;LANGID=0x0409, optional CP=1252, optional COUNTRY=0) is implemented"));
@@ -743,8 +775,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number);
     }
 
-    private CallResult? ValidateCreateOption(nint optionArg)
+    private CallResult? ValidateCreateOption(nint optionArg, out FileFormat format)
     {
+        format = FileFormat.Ace2007;
         if (optionArg == 0)
         {
             return null; // Omitted or Missing -> dbVersion120 (Ace2007)
@@ -766,15 +799,35 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             return Fail(3421, DaoErrors.ConversionError); // r-wire/opt-createdatabase (o3): VT_NULL -> 3421 DAO.Workspace
         }
         int? option = Args.Int32(optionArg, omitted: 128);
-        return option switch
+        switch (option)
         {
-            128 => null, // dbVersion120 (Ace2007)
-            2 => Fail(3001, DaoErrors.InvalidArgument), // r-q-cat-txn-lock/cat-new-argument-forms: dbEncrypt alone -> 3001
-            64 or 192 => CallResult.Fail(Failure.NotModelled("NotModelled.CreateJet4Mdb", $"CreateDatabase option {option} (Jet 4 MDB): only ACCDB 2007 (dbVersion120 = 128 or omitted) is implemented")),
-            256 => CallResult.Fail(Failure.NotModelled("NotModelled.CreateAce2010", "CreateDatabase option 256 (ACE 2010): only ACCDB 2007 (dbVersion120 = 128 or omitted) is implemented")),
-            null => CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", "CreateDatabase with a non-integer Option argument")),
-            _ => CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", $"CreateDatabase option {option}: only dbVersion120 (128) or omitted is implemented")),
-        };
+            case 128:
+                format = FileFormat.Ace2007;
+                return null; // dbVersion120 (Ace2007)
+            case 64 when vt == VarType.I4:
+                format = FileFormat.Jet4;
+                return null; // dbVersion40 (Jet 4 MDB; r-q38-mdb-new-image)
+            case 64:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CreateDatabaseArgumentType",
+                    $"CreateDatabase Option 64 with {vt} argument (only VT_I4 64 is recorded for Jet 4 MDB)"));
+            case 2:
+                return Fail(3001, DaoErrors.InvalidArgument); // r-q-cat-txn-lock/cat-new-argument-forms: dbEncrypt alone -> 3001
+            case 192:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CreateJet4Mdb",
+                    "CreateDatabase option 192 (dbVersion40 | dbVersion120): only option 64 (Jet 4 MDB) and option 128/omitted (ACCDB 2007) are implemented"));
+            case 256:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CreateAce2010",
+                    "CreateDatabase option 256 (ACE 2010): only option 64 (Jet 4 MDB) and option 128/omitted (ACCDB 2007) are implemented"));
+            case null:
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", "CreateDatabase with a non-integer Option argument"));
+            default:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CreateOption",
+                    $"CreateDatabase option {option}: only dbVersion40 (64) and dbVersion120 (128 or omitted) are implemented"));
+        }
     }
 
     public void Forget(DatabaseObject database) => _databases.Remove(database);

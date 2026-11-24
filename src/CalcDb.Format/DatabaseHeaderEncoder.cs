@@ -10,7 +10,8 @@ public static class DatabaseHeaderEncoder
 {
     /// <summary>
     /// Decoded page-0 offsets <c>[0x0018..0x003C)</c> (inside the masked region): observed constant bytes in every
-    /// native ACE 2007 (<c>dbVersion120</c>) empty database image, not yet independently decoded to named fields.
+    /// native ACE 2007 (<c>dbVersion120</c>) and Jet 4 MDB (<c>dbVersion40</c>, <c>r-q38-mdb-new-image</c>) empty
+    /// database image, not yet independently decoded to named fields.
     /// </summary>
     private static readonly (int Offset, byte Value)[] UnconfirmedHeaderVersionBytes =
     [
@@ -30,7 +31,7 @@ public static class DatabaseHeaderEncoder
     public const int PasswordOffset = 0x0042;
     public const int PasswordBytes = 40;
 
-    /// <summary>Decoded offset of the u32LE engine build marker (<c>4518 = 0x11A6</c> in observed ACE 2007 empty files).</summary>
+    /// <summary>Decoded offset of the u32LE engine build marker (<c>4518 = 0x11A6</c> in observed ACE 2007 and Jet 4 MDB empty files).</summary>
     public const int EngineBuildOffset = 0x006A;
     public const uint Ace2007EngineBuild = 4518;
 
@@ -38,8 +39,8 @@ public static class DatabaseHeaderEncoder
     public const int CreationDateOffset = 0x0072;
 
     /// <summary>
-    /// Unmasked offset <c>[0x0098..0x009A)</c>: observed constant <c>0x0654</c> in every native ACE 2007 empty database
-    /// image, not yet independently decoded to a named field.
+    /// Unmasked offset <c>[0x0098..0x009A)</c>: observed constant <c>0x0654</c> in every native ACE 2007 and Jet 4 MDB
+    /// (<c>r-q38-mdb-new-image</c>) empty database image, not yet independently decoded to a named field.
     /// </summary>
     public const int UnconfirmedPostMaskWordOffset = 0x0098;
     public const ushort UnconfirmedPostMaskWord = 0x0654;
@@ -58,21 +59,30 @@ public static class DatabaseHeaderEncoder
     public const int SidKeyRegionBytes = 80;
 
     /// <summary>
-    /// Encode page 0 of a new unencrypted ACE 2007 (<c>dbVersion120</c>, version code 2) database and output the 2-byte
-    /// RC4 SID keystream derived from the decoded header (<c>MSysObjects.Owner</c> and <c>MSysACEs.SID</c> XOR mask).
+    /// Encode page 0 of a new unencrypted Jet 4 MDB (<see cref="FileFormat.Jet4"/>, <c>dbVersion40</c>, version code 1,
+    /// <c>r-q38-mdb-new-image</c>) or ACE 2007 ACCDB (<see cref="FileFormat.Ace2007"/>, <c>dbVersion120</c>, version
+    /// code 2) database and output the 2-byte RC4 SID keystream derived from the decoded header (<c>MSysObjects.Owner</c>
+    /// and <c>MSysACEs.SID</c> XOR mask).
     /// </summary>
     /// <remarks>
     /// Per-run bytes on page 0 are solely <paramref name="creationDateBits"/> at decoded <c>[0x0072..0x007A)</c> and
     /// the creation-day password mask (<c>(uint)(int)oaDate</c> repeated 10 times) at decoded <c>[0x0042..0x006A)</c>.
+    /// Jet 4 MDB differs from ACE 2007 ACCDB on page 0 solely in the signature (<c>Standard Jet DB\0</c> vs
+    /// <c>Standard ACE DB\0</c>) and version byte (<c>0x01</c> vs <c>0x02</c> at offset 20).
     /// </remarks>
-    public static void EncodeAccdb2007(
+    public static void Encode(
         Span<byte> page,
+        FileFormat format,
         TextSortOrder sortOrder,
         ushort codePage,
         ulong creationDateBits,
         FormatDescriptor d,
         Span<byte> sidKeystream)
     {
+        if (format is not (FileFormat.Jet4 or FileFormat.Ace2007))
+        {
+            throw new NotSupportedException($"DatabaseHeaderEncoder supports {FileFormat.Jet4} and {FileFormat.Ace2007}, not {format}.");
+        }
         if (page.Length != d.PageSize)
         {
             throw new ArgumentException($"Header page must be {d.PageSize} bytes, got {page.Length}.", nameof(page));
@@ -86,8 +96,9 @@ public static class DatabaseHeaderEncoder
 
         // Unmasked prefix [0x0000..0x0018)
         h.MagicBytes.CopyTo(page);
-        h.AceSignature.CopyTo(page[h.SignatureOffset..]);
-        h.Version.Write(page, 2); // Ace2007
+        ReadOnlySpan<byte> signature = format == FileFormat.Jet4 ? h.JetSignature : h.AceSignature;
+        signature.CopyTo(page[h.SignatureOffset..]);
+        h.Version.Write(page, format == FileFormat.Jet4 ? 1u : 2u);
 
         // Decoded contents of masked region [0x0018..0x0098)
         foreach ((int offset, byte value) in UnconfirmedHeaderVersionBytes)
@@ -132,6 +143,19 @@ public static class DatabaseHeaderEncoder
             page[off + 1] = 0x01;
         }
     }
+
+    /// <summary>
+    /// Encode page 0 of a new unencrypted ACE 2007 (<c>dbVersion120</c>, version code 2) database and output the 2-byte
+    /// RC4 SID keystream derived from the decoded header (<c>MSysObjects.Owner</c> and <c>MSysACEs.SID</c> XOR mask).
+    /// </summary>
+    public static void EncodeAccdb2007(
+        Span<byte> page,
+        TextSortOrder sortOrder,
+        ushort codePage,
+        ulong creationDateBits,
+        FormatDescriptor d,
+        Span<byte> sidKeystream) =>
+        Encode(page, FileFormat.Ace2007, sortOrder, codePage, creationDateBits, d, sidKeystream);
 
     /// <summary>
     /// Derive the RC4 keystream used to XOR-mask the 2-byte built-in SIDs in <c>MSysObjects.Owner</c> and

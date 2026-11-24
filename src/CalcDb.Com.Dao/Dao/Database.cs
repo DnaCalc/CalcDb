@@ -275,7 +275,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// Create a new database file atomically under exclusive admission (R-LOCK-1 EX-CREATE, R-CAT-1 CAT-NEW,
     /// W-07/new-database-image), write the synthesized image through <see cref="NativeProgram"/> /
     /// <see cref="NativeProgramExecutor"/>, and return the open exclusive <see cref="DatabaseObject"/> with no
-    /// <c>.laccdb</c> lock file. An existing destination is refused with DAO 3204 without touching its bytes.
+    /// <c>.laccdb</c> or <c>.ldb</c> lock file. An existing destination is refused with DAO 3204 without touching its bytes.
     /// </summary>
     public static CallResult Create(WorkspaceObject workspace, string name, NewDatabaseRequest request, out DatabaseObject? database)
     {

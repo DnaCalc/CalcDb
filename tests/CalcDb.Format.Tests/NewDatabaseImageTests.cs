@@ -48,6 +48,49 @@ public sealed class NewDatabaseImageTests
     }
 
     [Fact]
+    public void DatabaseHeaderEncoder_reproduces_Jet4_MDB_page_0_and_SID_keystream_exactly()
+    {
+        // r-fmt-1/create-mdb-empty (r-fmt-1-mdb-empty)
+        const string fmtMdbEmptySha = "6b0a3d10ba22784f2e52995246efb394d3303b9a1019434f68a4e318aa503369";
+        byte[] ace = NativeFixtureTests.Store().ReadAll(fmtMdbEmptySha);
+        byte[] aceDecoded0 = HeaderMask.Decode(ace.AsSpan(0, D.PageSize), D);
+        ulong creationDateBits = BinaryPrimitives.ReadUInt64LittleEndian(aceDecoded0.AsSpan(DatabaseHeaderEncoder.CreationDateOffset, 8));
+
+        byte[] page0 = new byte[D.PageSize];
+        Span<byte> sidKeystream = stackalloc byte[2];
+        var general = new TextSortOrder(1033, 0, 0);
+        DatabaseHeaderEncoder.Encode(page0, FileFormat.Jet4, general, codePage: 1252, creationDateBits, D, sidKeystream);
+
+        Assert.Equal(ace.AsSpan(0, D.PageSize).ToArray(), page0);
+
+        Assert.Equal(ProfileRefusal.None, ProfileSelector.Select(page0, out FileProfile? profile, D));
+        Assert.Equal(FileFormat.Jet4, profile!.Format);
+        DatabaseHeader parsed = DatabaseHeader.Decode(page0, D);
+        Assert.Equal(general, parsed.SortOrder);
+        Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(page0));
+
+        // Verify the derived 2-byte SID keystream unmasks ACE's MSysObjects.Owner slot 0 to built-in Engine (02 03).
+        InspectionReport report = Inspector.Inspect(ace);
+        TableDefinition msysObj = report.TableDefs.Single(t => t.FirstPage == 2);
+        ColumnDescriptor ownerCol = msysObj.Columns.Single(c => c.Name == "Owner");
+        ReadOnlySpan<byte> pg17 = ace.AsSpan(17 * D.PageSize, D.PageSize);
+        SlotView slot0 = DataPages.CheckedSlot(pg17, 0, D, out _)!.Value;
+        Assert.True(RowEnvelope.TryOpen(pg17[slot0.Start..slot0.End], D, out RowEnvelope env, out _));
+        FieldRead owner = env.ReadField(ownerCol, msysObj.KnownFixedEnd(env.ColumnCount, D));
+        ReadOnlySpan<byte> ownerBytes = pg17.Slice(slot0.Start + owner.Start, owner.End - owner.Start);
+        Assert.Equal(2, ownerBytes.Length);
+        Assert.Equal((byte)0x02, (byte)(ownerBytes[0] ^ sidKeystream[0]));
+        Assert.Equal((byte)0x03, (byte)(ownerBytes[1] ^ sidKeystream[1]));
+
+        Assert.Throws<NotSupportedException>(() =>
+        {
+            Span<byte> p = stackalloc byte[D.PageSize];
+            Span<byte> k = stackalloc byte[2];
+            DatabaseHeaderEncoder.Encode(p, FileFormat.Ace2010, general, codePage: 1252, creationDateBits, D, k);
+        });
+    }
+
+    [Fact]
     public void HeaderMask_Encode_and_Decode_round_trip()
     {
         byte[] decoded = new byte[D.PageSize];
