@@ -11,7 +11,11 @@ persistent check worktree and gave code writers worktrees of their own.
    writers. A writer that still meets a byte no record decides stops and reports (AGENTS.md, Sub-sessions).
 2. **Brief.** The projects or files the child owns, its build limits, the book rows, the records it relies on, and
    whether it starts a roscli daemon (a writer that refactors or traces code across projects does; a prober or a
-   one-file fix does not: AGENTS.md, C# navigation and edits).
+   one-file fix does not: AGENTS.md, C# navigation and edits). Ownership follows where the change lands, not the files
+   the task names: before the brief the organizer follows the named members one hop to the code that does the work
+   (rg, or roscli `nav.find_invocations`) and the bytes the records change to the project that writes them, and starts
+   the writer only when no running writer holds those projects (2026-11-24: 9dvt needed Format and Isam for the page-1
+   reservation its records show, x8vx needed Isam's statement rollback; both stopped, and x8vx then waited for 9dvt).
 3. **Write.** A code writer in a writer slot (`CalcDb-w1`, `CalcDb-w2`; AGENTS.md, Repository), a prober in a CodeAlta
    worktree of its own (`alta session create --worktree`), each on a branch `alta/<name>`. The child
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
@@ -73,7 +77,10 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - Review as gate 4 says: over about 300 lines, your own read-only Neon reviewer (`alta session create --title "Review
   <topic>" --model-ref antigravity-acp:gemini-4-neon@high --no-sub-sessions` in your worktree); under it, the
   organizer's.
-- End with the child's report above, nothing else.
+- End with the child's report above, nothing else. The report, or a stop, is your last message: stop the roscli daemon
+  and let your jobs end before you write it, and if anything comes after it (a job's end), repeat the whole report as
+  your last message. CodeAlta forwards only the last message of a run (2026-11-24: the 9dvt and x8vx stops were
+  followed by a daemon job's end, and only the one-line answer to it arrived).
 
 The solution filters `CalcDb.Isam.slnf`, `CalcDb.Sql.slnf`, `CalcDb.Com.slnf` and `CalcDb.Oracle.slnf` each hold an
 area's projects, everything they reference and the area's tests: a child builds, and loads into an editor or a Roslyn

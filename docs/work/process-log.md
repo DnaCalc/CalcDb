@@ -1349,3 +1349,59 @@ recovered at 17:15: sqkg went back to not started.
 
 Successor: CalcDb organizer 14, session 01a20e84-7dc9-7cf4-bd8f-34c7e945b0ba, started beside 01a20b62 (`--no-parent`).
 Organizer 13 has no running child and forwards nothing.
+
+## 2026-11-24 - Organizer 14 (01a20e84): process round on the owner's call
+
+Window 17:05 to 20:50 UTC: Antigravity started agents again at the first try (17:07); sqkg, the r-q37-valrule-put
+round and 7mxt landed, each passing its landing check at the first run and losing nothing in the core compare (474 of
+1360 throughout; their gains are in wide-set folders). 9dvt is in review, x8vx waits for it.
+
+**Lost reports: found the mechanism.** Both stops of this window (9dvt at 18:35, x8vx at 19:46) reached the organizer
+only as a one-line answer that referred to a report "above". The x8vx events show why: the child stopped its roscli
+daemon (19:45:25), the daemon job's end came back into the same run as a message (19:45:30), the child wrote its report
+(event 647) and then answered the job's end (event 650, 7 s later); CodeAlta forwards only the last message of a run.
+Organizer 13's two lost answers this morning fit the same pattern (both writers ended with a daemon stop). Changed: the
+standard brief makes the report the last message (stop the daemon and let jobs end first; repeat the whole report if
+anything comes after it). Recovering a lost one: `alta session events <id> --include assistant --fields
+sequenceNumber,text` and take the long message before the last.
+
+**Ownership stops: two of two stretches.** 9dvt needed Format (PropertyBlobs Names) and Isam (the page-1 reservation)
+for bytes its own ready-gate records show; x8vx needed Isam because the statement rollback publishes Group 1 before
+ActionExecutor returns, and AbortStatement does nothing inside an outer BeginTrans. Both stops were right and cheap (18
+and 16 minutes), but widening 9dvt into Isam then made x8vx wait. The briefs listed the files the tasks named, not
+where the change lands. Changed: gate 2 has the organizer follow the named members one hop and the recorded bytes to
+the project that writes them before it assigns ownership and starts a writer.
+
+**Organizer calls per landing: about 30, above the line.** 107 calls and 35 turns for 3 landings, 3 writer starts and
+2 stops. About 20 turns were wake-ups for a child's interim "waiting for job X" answer: each turn a child ends while
+its job runs reaches the parent, and `alta session send` and `create` have no option to filter it. Of the calls, about
+10 were the organizer's own fumbles (alta argument names, finding `calcdb-oracle show`; AGENTS.md now says where the
+runner is and how `show --record` reads a retained record), about 9 the two lost reports. For CodeAlta (The Plan §2.1,
+for the owner to pass on if wanted): a parent notification only when the child's run ends with none of its own jobs
+running, or all of a run's messages forwarded rather than the last.
+
+**Kept as they are.** The ready gate paid at once: r-q37 (46 minutes, 42 questions, every page kept) decided the bytes
+9dvt writes, and the organizer's spot check found one generalization in its note (a 65-byte inline boundary no record
+shows; the note states 64 inline and 66 LVAL). The writer's own reviewer caught what it should: 7mxt's five findings
+narrowed two rules beyond the records (Switch-only Double, CInt/CLng-only negation folds), and 9dvt's first finding is
+a refused recorded case. Self-check reruns for a child's own new tests (7mxt 2, 9dvt 3) were compile errors that fail
+in the first minute; no rule added.
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 86% (17,743 of 20,545, since 2026-11-23 22:46) | below two thirds over a day |
+| Landings checked; passed on the first run | 49; 73% (this window 3 of 3) | below 70% |
+| Landing check duration (median of 75 runs) | 267 s (`c68k`) | above 3 min |
+| Compare baselines | core 474 to 474 (sqkg-1, r-q37-1, 7mxt-1); nothing lost | any loss nobody can explain |
+| Organizer tool calls per landing | about 30 (107 for 3 landings) | above about 15 |
+| Reviewer findings per 1,000 lines | 7mxt 5 on about 930; sqkg 165 lines, organizer only | above about 3 |
+| Rules found wrong after landing | 0; one generalization caught before (r-q37 note) | more than one a day |
+| Children stopped waiting for a record; for ownership | 0; 2 | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land -Finish`) | above 5 min |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 14 (Opus) | about 225 | 107 |
+| sqkg writer (01a20e86) / 7mxt writer (01a20e88) | 30 / 124 | 125 / 338 |
+| r-q37 prober (01a20e8a) / 9dvt writer (01a20ec6, running) | 46 / 127 | 180 / 404 |
+| x8vx writer (01a20f0a, waiting) / reviewers 7mxt (01a20ec7), 9dvt (01a20f15) | 16 / 26 / 27 | 91 / 140 / 148 |
