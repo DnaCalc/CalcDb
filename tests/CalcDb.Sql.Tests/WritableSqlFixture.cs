@@ -220,6 +220,7 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         Assert.Null(fail);
         CatalogCheckConstraint[] catalog = [.. constraints.Select((c, idx) => new CatalogCheckConstraint(c.Name, c.Expression, Id: unchecked((int)(0x80000005u + (uint)idx))))];
         _syntheticChecks[key] = (blob!, catalog);
+        _tables.Remove(key);
         if (_editContexts.Remove(key, out TableEditContext? old))
         {
             old.Semantics.Dispose();

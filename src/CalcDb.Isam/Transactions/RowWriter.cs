@@ -609,6 +609,20 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     }
 
     /// <summary>
+    /// Whether the table currently has zero rows (<see cref="LiveRowCount"/> == 0) and zero owned data pages in its
+    /// usage map as seen through <paramref name="seen"/>. Returns <see langword="false"/> if the usage map cannot be read.
+    /// </summary>
+    public bool IsEmptyWithoutDataPages(PrivateOverlay? seen = null)
+    {
+        if (LiveRowCount(seen) != 0)
+        {
+            return false;
+        }
+        IReadOnlyList<uint>? owned = UsageMaps.Pages(Seen(seen), _d, _table.OwnedMap, ExtentOf(seen), out TraversalFailure? ownedFailure);
+        return ownedFailure is null && owned is { Count: 0 };
+    }
+
+    /// <summary>
     /// Materialize Null values in ordinary Yes/No columns as <see langword="false"/> (mask bit 0) before row and index
     /// compilation (R-FMT-2 Ordinary Boolean; evidence/r-fmt-2-pres-1/bool-ladder, evidence/r-expr-locale/invoke-1031,
     /// evidence/r-ado-1b/edit-update-args). Non-Null mismatched kinds stay unnormalized so the compiler refuses them.
@@ -701,6 +715,20 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 if (present)
                 {
+                    // R-FMT-2 / R-CAT-1 II-07 (evidence/r-q30-sql-check/null-upd-ado-exec,
+                    // evidence/r-q31-sql-check-2/null-upd-text-table-ado): an in-place autocommit ACCDB SQL UPDATE
+                    // setting an unindexed fixed Long column to Null clears only its null-mask bit and leaves the
+                    // 4-byte fixed slot bytes untouched (recordset Edit, RewrittenRow, indexed columns, explicit
+                    // transactions, non-Long fixed types, and MDB stay refused).
+                    if (inStatement
+                        && !inExplicitTransaction
+                        && c.TypeCode == NativeTypes.Long
+                        && IsVerifiedAccdb(seen)
+                        && !semantics.Indexes.Any(ix => ix.Columns.Any(ic => ic.Ordinal == c.Ordinal)))
+                    {
+                        edits.Add(new PageEdit(row.Data.Page, new BitDelta(maskByte, 0, bit), PageRole.Data));
+                        continue;
+                    }
                     return NotWritten($"fixed field {c.Name} becomes Null: the bytes ACE leaves in a Null fixed field are not observed");
                 }
                 continue;

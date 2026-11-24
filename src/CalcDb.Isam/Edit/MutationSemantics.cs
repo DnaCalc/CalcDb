@@ -402,9 +402,9 @@ public sealed class MutationSemantics : IDisposable
     }
 
     /// <summary>
-    /// Admits only the recorded CHECK expression shapes using the shared <see cref="CheckConstraintExpression"/> parser
+    /// Admits the recorded CHECK expression shapes using the shared <see cref="CheckConstraintExpression"/> parser
     /// (<c>r-oledb-odbc/update-errors</c>, <c>r-q-cat-txn-lock/ii11-ado-check-constraint</c>,
-    /// <c>r-q30-sql-check/op-*</c>).
+    /// <c>r-q30-sql-check/op-*</c>, <c>r-q31-sql-check-2/lit-*</c>).
     /// </summary>
     internal static bool TryMatchSingleColumnComparison(
         TableDefinition table,
@@ -429,24 +429,6 @@ public sealed class MutationSemantics : IDisposable
                 reason = $"CHECK column '{matchedCol.Name}' has type 0x{matchedCol.TypeCode:X2}; only Long (0x04) columns are recorded with integer literals";
                 return false;
             }
-            if (parsed.LiteralOnLeft)
-            {
-                if (parsed.IsNegativeLiteral)
-                {
-                    reason = "CHECK expression with a negative integer literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
-                    return false;
-                }
-                if (parsed.Op != CheckComparisonOp.Ge)
-                {
-                    reason = $"CHECK operator with a literal on the left is not recorded (only non-negative '<=' is recorded, r-q30-sql-check/op-rhs-*)";
-                    return false;
-                }
-            }
-            else if (parsed.IsNegativeLiteral && parsed.Op != CheckComparisonOp.Ge)
-            {
-                reason = $"CHECK operator '{CheckConstraintExpression.OpText(parsed.Op)}' with a negative integer literal on Long column '{matchedCol.Name}' is not recorded (only '>=' is recorded, r-q30-sql-check/op-ge-neg-*)";
-                return false;
-            }
             column = matchedCol;
             reason = null;
             return true;
@@ -456,30 +438,6 @@ public sealed class MutationSemantics : IDisposable
         {
             reason = $"CHECK column '{matchedCol.Name}' has type 0x{matchedCol.TypeCode:X2}; only Text (0x0A, <>) columns are recorded with string literals";
             return false;
-        }
-        string textLit = parsed.TextValue!;
-        if (parsed.HasDoubledQuote)
-        {
-            reason = "CHECK Text comparison with doubled-quote string literal is not recorded";
-            return false;
-        }
-        if (textLit.Length == 0)
-        {
-            reason = "CHECK Text comparison with empty string literal '' is not recorded";
-            return false;
-        }
-        if (textLit[^1] == ' ')
-        {
-            reason = "CHECK Text comparison with trailing space in string literal is not recorded";
-            return false;
-        }
-        foreach (char ch in textLit)
-        {
-            if (ch < 0x20 || ch > 0x7E)
-            {
-                reason = "CHECK Text comparison with non-ASCII or control character in string literal is not recorded";
-                return false;
-            }
         }
         column = matchedCol;
         reason = null;

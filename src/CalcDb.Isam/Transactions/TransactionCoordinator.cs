@@ -462,6 +462,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private int _statementExternalDepth;
     private bool _statementHasOwnLevel;
     private int? _statementRefusal;
+    private bool _statementRefusalIsCheckConstraint;
     private ResolutionOutcome? _statementFailure;
     private int _statementPendingStart;
     private int _unwrittenPendingCount;
@@ -1224,11 +1225,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// (<c>ins-dup-fail-mdb</c>); inside an explicit transaction only ACCDB 3022 (<c>ins-dup-fail-txn</c>) and 3201
     /// (<c>evidence/r-txn-1/stmt-fk-counter-fail-d1</c>, answers only) are admitted.
     /// </summary>
-    internal void NoteStatementRefusal(int number)
+    internal void NoteStatementRefusal(int number, bool isCheckConstraint = false)
     {
         if (_statement is not null)
         {
             _statementRefusal = number;
+            _statementRefusalIsCheckConstraint = isCheckConstraint;
         }
     }
 
@@ -2312,7 +2314,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 : _statementRefusal is MutationError.Duplicate
                     or MutationError.RelatedRecordRequired
                     or MutationError.Required
-                    or MutationError.RuleWithText;
+                    or MutationError.RuleWithText
+                    || (_statementRefusal == MutationError.RuleWithoutText
+                        && _statementRefusalIsCheckConstraint
+                        && isAccdbOrHeaderless
+                        && tookPage
+                        && top.Changes.Count > 0);
         unrecorded ??= !isRecordedRefusal
             ? (_statementRefusal is int number
                 ? (top.Changes.Count > 0
@@ -2383,6 +2390,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementExternalDepth = 0;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
         ReleaseLocks(LockLifetime.Transaction);
         ReleaseParticipants();
@@ -2448,6 +2456,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementExternalDepth = _frames.Count;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementFailure = null;
         _statementPendingStart = _frames.Count == 0 ? _pending.Count : 0;
         if (_frames.Count > 0)
@@ -2476,6 +2485,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         ResolutionOutcome? stmtFailure = _statementFailure;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementPendingStart = 0;
         PageCache? group2File = _statementRollbackGroup2File;
         _statementRollbackGroup2File = null;
@@ -2525,6 +2535,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementHasOwnLevel = false;
         _statementFailure = null;
         _statementRefusal = null;
+        _statementRefusalIsCheckConstraint = false;
         _statementRollbackGroup2File = null;
         _pendingGroup2AllocatedPages.Clear();
         int pendingStart = _statementPendingStart;

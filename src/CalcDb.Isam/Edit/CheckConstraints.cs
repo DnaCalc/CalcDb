@@ -44,10 +44,7 @@ public sealed record CheckConstraintExpression(
     CheckComparisonOp Op,
     CheckLiteralKind LiteralKind,
     int LongValue = 0,
-    string? TextValue = null,
-    bool LiteralOnLeft = false,
-    bool IsNegativeLiteral = false,
-    bool HasDoubledQuote = false)
+    string? TextValue = null)
 {
     private static readonly HashSet<string> DisallowedKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -109,9 +106,7 @@ public sealed record CheckConstraintExpression(
                 rhsCol,
                 Flip(lhsOp),
                 CheckLiteralKind.Long,
-                LongValue: lhsInt,
-                LiteralOnLeft: true,
-                IsNegativeLiteral: isNegative);
+                LongValue: lhsInt);
             reason = null;
             return true;
         }
@@ -146,7 +141,7 @@ public sealed record CheckConstraintExpression(
                 reason = $"CHECK operator '{OpText(op)}' on a Text column is not recorded (only '<>' is recorded, r-q30-sql-check/op-text-ne-sat, r-q31-sql-check-2/lit-text-empty-sat)";
                 return false;
             }
-            if (!TryReadStringLiteral(span, ref pos, out string lit, out bool hasDoubledQuote, out reason))
+            if (!TryReadStringLiteral(span, ref pos, out string lit, out reason))
             {
                 return false;
             }
@@ -162,9 +157,9 @@ public sealed record CheckConstraintExpression(
             }
             foreach (char ch in lit)
             {
-                if (ch != ' ' && char.IsWhiteSpace(ch))
+                if (char.IsControl(ch) || (ch != ' ' && char.IsWhiteSpace(ch)))
                 {
-                    reason = $"non-ASCII or control whitespace U+{(int)ch:X4} in a Text CHECK literal is not recorded (only trailing ASCII spaces are recorded, r-q31-sql-check-2/lit-text-trail-lit)";
+                    reason = $"non-ASCII or control whitespace/character U+{(int)ch:X4} in a Text CHECK literal is not recorded (only trailing ASCII spaces are recorded, r-q31-sql-check-2/lit-text-trail-lit)";
                     return false;
                 }
             }
@@ -173,20 +168,17 @@ public sealed record CheckConstraintExpression(
                 lhsCol,
                 op,
                 CheckLiteralKind.Text,
-                TextValue: lit,
-                HasDoubledQuote: hasDoubledQuote);
+                TextValue: lit);
             reason = null;
             return true;
         }
 
         if (span[pos] == '-' || char.IsAsciiDigit(span[pos]))
         {
-            bool isNegative = span[pos] == '-';
             if (!TryReadSignedInt32(span, ref pos, out int rhsInt, out reason))
             {
                 return false;
             }
-            isNegative = isNegative || rhsInt < 0;
             if (pos != span.Length)
             {
                 reason = "only a single-column comparison against a 32-bit integer or Latin-1 string literal is recorded for ADD CONSTRAINT CHECK";
@@ -197,8 +189,7 @@ public sealed record CheckConstraintExpression(
                 lhsCol,
                 op,
                 CheckLiteralKind.Long,
-                LongValue: rhsInt,
-                IsNegativeLiteral: isNegative);
+                LongValue: rhsInt);
             reason = null;
             return true;
         }
@@ -314,10 +305,9 @@ public sealed record CheckConstraintExpression(
         return true;
     }
 
-    private static bool TryReadStringLiteral(ReadOnlySpan<char> span, ref int i, out string value, out bool hasDoubledQuote, out string? reason)
+    private static bool TryReadStringLiteral(ReadOnlySpan<char> span, ref int i, out string value, out string? reason)
     {
         value = "";
-        hasDoubledQuote = false;
         if (i >= span.Length || span[i] != '\'')
         {
             reason = "expected a single-quoted string literal in CHECK expression";
@@ -332,7 +322,6 @@ public sealed record CheckConstraintExpression(
                 if (i + 1 < span.Length && span[i + 1] == '\'')
                 {
                     sb.Append('\'');
-                    hasDoubledQuote = true;
                     i += 2;
                     continue;
                 }
