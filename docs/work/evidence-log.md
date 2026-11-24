@@ -8,9 +8,17 @@ question; a "ReturnedFailure" record is an ACE error answer, not a failed test. 
 behaviour counts as qualified (c) only through a note in [qualified.md](qualified.md), and nothing here claims
 CalcDb compatibility (d).
 
-Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20196, ACEDAO.DLL
+Environment for all records up to 2026-11-23: Windows 11 x64, Office C2R x64 16.0.20527.20196, ACEDAO.DLL
 16.0.20527.20196 (ACEERR 16.0.20527.20016, ACEINTL 16.0.20326.20022), caller `native-idispatch/x64`
 (.NET 11, raw IDispatch, one STA per process), user locale 7177, ANSI code page 1252.
+
+**ACE build change (2026-11-23, between about 07:20 and 23:33 UTC; The Plan §8.1).** Office updated itself: records
+from then on name ACEDAO.DLL 16.0.20625.20044 (mso.dll 16.0.20625.20108), first r-fmt-1/create-accdb-calculated,
+-bigint and -datetime2 a2 (the clock-field repeats of task 6qw5) and the 20 records of r-q35-byref-args (task 3m35).
+No behaviour has differed so far: the three r-fmt-1 a2 answers equal their 16.0.20527.20196 a1 outside ACE's clock
+fields, and r-q35's by-value baselines, asked on the old build, answer as its ByRef forms do on the new one. Each
+record names its build (OR-IDENT); a difference between the two builds is recorded beside the behaviour it concerns,
+naming both records.
 
 ## Night of 2026-11-17
 

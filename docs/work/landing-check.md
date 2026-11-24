@@ -16,8 +16,8 @@ persistent check worktree and gave code writers worktrees of their own.
    worktree of its own (`alta session create --worktree`), each on a branch `alta/<name>`. The child
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
    `-Filter` while it fixes its own new tests) until it passes, commits on its branch, and ends with the report below.
-4. **Review.** Every rule against a record that shows the very case it names, and every changed test assertion against
-   its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). The writer starts the
+4. **Review.** Every rule against a record that shows the very case it names, every new refusal against the records of
+   the case it refuses (a refused recorded case is a regression), and every changed test assertion against its record, in a session other than the writer's (Neon by default; AGENTS.md, Sub-sessions). The writer starts the
    reviewer itself as a read-only sub-session once its self-check passes, applies or declines each finding, and
    reports the dispositions; the organizer checks them. The reviewer traces the callers of every changed member with
    roscli (`nav.find_invocations` on the member's position for its callers, `nav.find_implementations` for an
@@ -58,6 +58,10 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - Every rule cites the record (folder/question, call, page and offset) that shows its very case. A byte or a value no
   record decides: stop and report it, or refuse it by name and list it under Open; never guess. Tests replay the
   record's kept pages or calls.
+- A new refusal is checked like a rule: search evidence/ and qualified.md for the case it refuses (`rg` over the member
+  and the argument form) before refusing it. Refusing a recorded case is a regression (ptrj, 2026-11-24, refused the
+  ByRef Move and Seek that r-q2-cursor-dao/byref-dao-move-seek records and qualified.md states; its reviewer and the
+  organizer checked only what it admitted).
 - One of everything: extend the writer, reader or helper that exists; never add a second one.
 - Start a roscli daemon only when the brief says so, and stop it before you end.
 - Do not touch the bookkeeping files (register.md, qualified.md, book-proposals.md, compare-baseline*.tsv,

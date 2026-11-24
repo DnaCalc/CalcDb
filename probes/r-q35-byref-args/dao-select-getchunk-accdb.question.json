@@ -1,0 +1,90 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q35-byref-args/dao-select-getchunk-accdb",
+  "bookRefs": ["R-ORACLE-1", "OR-WIRE", "R-STRING-1", "STR-BYREF", "W-08"],
+  "description": "Card R-ORACLE-1 OR-WIRE (3m35): ByRef forms of DAO SELECT Field.GetChunk(Offset, Bytes) on ACCDB (same fixture and setup as r-q32-dao-select-lv/q3-lv-getchunk-args-accdb, row ID 3: FMemo='abcdefghij', FOle=16 bytes a0..af). Varies one argument at a time across every VarType admitted by value: p0 Offset (I4 0, I2 2, Bool False/True, R8 0.5/1.5, BSTR '2'/'abc' as VT_BYREF|<T> and VT_BYREF|VT_VARIANT; Empty and Null as VT_BYREF|VT_VARIANT; with p1 by-value I4 4) and p1 Bytes (I4 4, UI1 3, R8 2.5/2^32, BSTR '3'/'abc' as VT_BYREF|<T> and VT_BYREF|VT_VARIANT; Empty and Null as VT_BYREF|VT_VARIANT; with p0 by-value I4 0), plus FOle spot checks and DBEngine.Errors after Null. Asks whether each ByRef form answers identically to its by-value form (value, HRESULT, EXCEPINFO, IErrorInfo, puArgErr, writeback).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q32-accdb.accdb",
+      "sha256": "55b55055cb8bcf929f6a3b29450ed0545dcb638b14d5b2a4134ac9f15588b0d0",
+      "length": 196608,
+      "provenance": "r-q32-dao-select-lv.create-accdb.8824e38fef.a1 qk1-8824e38fefc052646e65d875fc618064498a8c90056c010febf573f2e4ae94c0 output:r-q32-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db",
+      "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }]
+    },
+    {
+      "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rs",
+      "args": [{ "type": "bstr", "text": "SELECT ID, FMemo, FOle, FLong FROM T WHERE ID = 3" }, { "type": "i4", "value": 2 }]
+    },
+    { "op": "invoke", "target": "rs", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fl" },
+    { "op": "invoke", "target": "fl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "FMemo" }], "bind": "fMemo" },
+    { "op": "invoke", "target": "fl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "FOle" }], "bind": "fOle" },
+
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i4", "value": 0 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i4", "value": 0 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i2", "value": 2 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i2", "value": 2 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bool", "value": false } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bool", "value": false } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bool", "value": true } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bool", "value": true } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "r8", "bits": "3fe0000000000000" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "r8", "bits": "3fe0000000000000" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "r8", "bits": "3ff8000000000000" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "r8", "bits": "3ff8000000000000" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "2" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "2" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "abc" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "abc" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "empty" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "null" } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "en" },
+    { "op": "forEachItem", "target": "en", "bind": "err", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "err", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "err", "member": "Description", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "release", "target": "en" },
+
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "i4", "value": 4 } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "i4", "value": 4 } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "ui1", "value": 3 } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "ui1", "value": 3 } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "r8", "bits": "4004000000000000" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "r8", "bits": "4004000000000000" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "r8", "bits": "41f0000000000000" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "r8", "bits": "41f0000000000000" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "3" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "3" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "abc" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "abc" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "empty" } }] },
+    { "op": "invoke", "target": "fMemo", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "null" } }] },
+
+    { "op": "invoke", "target": "fOle", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "i4", "value": 0 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fOle", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "i4", "value": 0 } }, { "type": "i4", "value": 4 }] },
+    { "op": "invoke", "target": "fOle", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": true, "inner": { "type": "i4", "value": 4 } }] },
+    { "op": "invoke", "target": "fOle", "member": "GetChunk", "kind": "method", "args": [{ "type": "i4", "value": 0 }, { "type": "byref", "typed": false, "inner": { "type": "i4", "value": 4 } }] },
+    { "op": "invoke", "target": "fOle", "member": "GetChunk", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "null" } }, { "type": "i4", "value": 4 }] },
+
+    { "op": "release", "target": "fOle" },
+    { "op": "release", "target": "fMemo" },
+    { "op": "release", "target": "fl" },
+    { "op": "invoke", "target": "rs", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
