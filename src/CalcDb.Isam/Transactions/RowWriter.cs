@@ -916,8 +916,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 continue;
             }
-            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled: lvIndex == spilledInlineIndex);
-            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, edits, out string? lvFailure) is not { } reference)
+            bool spilled = lvIndex == spilledInlineIndex;
+            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled);
+            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, edits, out string? lvFailure, spilled: spilled) is not { } reference)
             {
                 return NotWritten($"field {c.Name}: {lvFailure}");
             }
@@ -1909,9 +1910,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 continue;
             }
-            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled: lvIndex == spilledInlineIndex);
+            bool spilled = lvIndex == spilledInlineIndex;
+            byte[] externalPayload = ExternalLongValuePayload(c, prepared, spilled);
             int allocatedBefore = allocator.AllocatedCount;
-            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, longValueEdits, out failure, clearedFreeLvalPages) is not { } reference)
+            if (PlaceExternalLongValue(c, externalPayload, allocator, seen, longValueEdits, out failure, clearedFreeLvalPages, spilled) is not { } reference)
             {
                 failure = $"field {c.Name}: {failure}";
                 return null;
@@ -2170,11 +2172,19 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
             {
-                if (c.TypeCode != NativeTypes.Memo || rawLength > LongValuePlan.SingleRowPayloadMax)
+                if (c.TypeCode != NativeTypes.Memo)
                 {
-                    failure = c.TypeCode == NativeTypes.Memo
-                        ? "writing a chained Memo long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)"
-                        : "writing an OLE long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
+                    failure = "writing an OLE long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
+                    return null;
+                }
+                if (rawLength > LongValuePlan.SingleRowPayloadMax)
+                {
+                    failure = "writing a chained Memo long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
+                    return null;
+                }
+                if (!isInlineCandidate && payload!.Length < rawLength)
+                {
+                    failure = "writing a compressed single-page Memo long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
                     return null;
                 }
             }
@@ -2220,6 +2230,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// Refused by name (the notes' Open items): two or more LV free-map pages both having room
     /// (<c>lv-two-free-lower-looser-*</c> disproves both first-fit and best-fit), walking past a full first LV
     /// free-map page, a single-row page left with 179..263 free bytes, and a column without long-value maps.
+    /// On Jet 4 MDB, only an uncompressed single-row Memo onto an empty LV free map leaving &gt;= 264 free bytes is
+    /// recorded (<c>evidence/r-q36-publication-bytes/feff-content-mdb-dao</c>); all other external MDB LVAL writes are
+    /// refused by name.
     /// </summary>
     private byte[]? PlaceExternalLongValue(
         ColumnDescriptor c,
@@ -2228,11 +2241,25 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         PrivateOverlay? seen,
         List<PageEdit> edits,
         out string? failure,
-        HashSet<uint>? clearedFreeLvalPages = null)
+        HashSet<uint>? clearedFreeLvalPages = null,
+        bool spilled = false)
     {
         if (_table.LongValueMaps.FirstOrDefault(m => m.PhysicalNumber == c.PhysicalNumber) is not { } maps)
         {
             failure = "the TableDef names no long-value maps for the column";
+            return null;
+        }
+        bool isAccdb = true;
+        using (PagePin? page0 = Seen(seen).Pin(0).Pin)
+        {
+            if (page0 is not null)
+            {
+                isAccdb = DatabaseHeader.IsAccdb(page0.Bytes, _d);
+            }
+        }
+        if (!isAccdb && spilled)
+        {
+            failure = "spilling an inline Memo long value onto an LVAL page in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
             return null;
         }
         if (payload.Length <= LongValuePlan.SingleRowPayloadMax)
@@ -2259,6 +2286,16 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                         withRoom.Add((candidate, freeBytes));
                     }
                 }
+            }
+            if (!isAccdb && lvalFree.Count > 0)
+            {
+                failure = "appending to or reusing an existing long-value free-map page in an MDB file is not recorded (R-FMT-2 LV form selection Open; evidence/r-q36-publication-bytes/feff-content-mdb-dao records empty LV free map only)";
+                return null;
+            }
+            if (!isAccdb && _d.PageSize - _d.DataPage.SlotBase - needed < LvalFreeMapStaysAtOrAbove)
+            {
+                failure = $"writing a {payload.Length}-byte single-page Memo long value in an MDB file (leaving fewer than {LvalFreeMapStaysAtOrAbove} free bytes) is not recorded (R-FMT-2 LV form selection Open)";
+                return null;
             }
             if (withRoom.Count >= 2)
             {

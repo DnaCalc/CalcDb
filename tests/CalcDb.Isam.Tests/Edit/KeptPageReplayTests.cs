@@ -2773,12 +2773,19 @@ public sealed class KeptPageReplayTests
             Assert.Contains("overflows its data page", r.Detail);
         }
 
-        // 8. MDB file: writing a chained Memo long value, removing a single-row LV, and removing an inline LV (before
-        // early return) all refuse by name (inline and single-page Memo writes are lifted by R-FMT-2 r-q36).
+        // 8. MDB file: appending a single-page Memo onto an existing LV free-map page, writing a chained Memo,
+        // removing a single-row LV, and removing an inline LV (before early return) all refuse by name
+        // (only inline Memo and uncompressed single-page Memo onto an empty LV free map are recorded by R-FMT-2 r-q36).
         {
             byte[] mdbPage0 = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(Jet4MdbFixture).AsSpan(0, D.PageSize).ToArray();
             byte[] img = SeedGrowthOpen("lv-op-single-larger");
             mdbPage0.CopyTo(img, 0);
+            using var sAppend = new Session(img);
+            UpdateOutcome rAppend = TryInsertLv(sAppend, 4, memo: true, 100);
+            Assert.False(rAppend.Succeeded);
+            Assert.Equal(MutationOpen.Publication, rAppend.Open);
+            Assert.Contains("MDB", rAppend.Detail);
+
             using var sWrite = new Session(img);
             UpdateOutcome rWrite = TryInsertLv(sWrite, 4, memo: true, 4000);
             Assert.False(rWrite.Succeeded);

@@ -266,8 +266,6 @@ public sealed class FileParticipant : IDisposable
 
     public PrivateOverlay Overlay { get; }
 
-    internal bool CommitCounterApplied { get; set; }
-
     /// <summary>Apply an accepted page delta in the open scope (II-03 §5.1 BeginPageEdit through the overlay).</summary>
     public EditResult Edit(ulong page, IPageDelta delta) => Overlay.Edit(page, delta);
 
@@ -1440,21 +1438,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             PageBracket? bracket = null;
             if (incrementPage0)
             {
-                bool page0HasCatalogEdit = roles.TryGetValue(0UL, out PageRole existingP0Role) && existingP0Role != PageRole.NativeState;
-                if (!p.CommitCounterApplied && (!p.Overlay.ChangedPages.Contains(0UL) || page0HasCatalogEdit))
+                if (!p.Overlay.ChangedPages.Contains(0UL))
                 {
                     EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, allowJet4Mdb));
                     if (!p0Edit.Succeeded)
                     {
                         return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
                     }
-                    p.CommitCounterApplied = true;
                 }
-                if (!page0HasCatalogEdit)
-                {
-                    roles[0] = PageRole.NativeState;
-                    bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
-                }
+                roles[0] = PageRole.NativeState;
+                bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
             }
             ulong publishedExtent = p.Cache.KnownExtentPages;
             foreach (ulong page in p.Overlay.ChangedPages)

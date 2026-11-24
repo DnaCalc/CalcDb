@@ -1657,9 +1657,10 @@ public sealed class DdlTests
     [Fact]
     public void R_q36_setup_ddl_forms_execute_and_refuse_unrecorded_variants()
     {
-        // evidence/r-q36-publication-bytes/create-feff-*, create-nullfix-*, create-nullfix-ext-accdb:
-        // ADO WITH COMPRESSION (ACCDB + MDB), ADO DECIMAL(p, s) / bare DECIMAL (ACCDB + MDB),
-        // and SQL BIGINT + DATETIME2 on ACCDB (upgrading page 0 version byte 0x14 to 0x06).
+        // evidence/r-q36-publication-bytes/create-feff-*, create-nullfix-*:
+        // ADO WITH COMPRESSION (ACCDB + MDB, nullable unconstrained Text/Memo),
+        // ADO DECIMAL(p, s) (ACCDB + MDB) and bare DECIMAL (ACCDB only; MDB refuses by name),
+        // and SQL BIGINT / DATETIME2 stay refused as NotModelled.DdlBigIntOrDateTime2 until MSysObjects.LvProp is modelled.
         byte[] accdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
         byte[] mdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyMdbSha);
 
@@ -1667,7 +1668,7 @@ public sealed class DdlTests
         {
             using var db = new WritableSqlFixture(fixture);
 
-            // 1. ADO WITH COMPRESSION on Text and Memo sets ExtendedFlags = 0x01; DAO route keeps 3290.
+            // 1. ADO WITH COMPRESSION on nullable, unconstrained Text and Memo sets ExtendedFlags = 0x01; DAO route keeps 3290.
             AssertAceError(db, "CREATE TABLE DaoComp (T TEXT(255) WITH COMPRESSION)", 3290);
             ActionOutcome compOk = ActionExecutor.Execute(
                 "CREATE TABLE TC (ID LONG CONSTRAINT PK_TC PRIMARY KEY, T TEXT(255) WITH COMPRESSION, M MEMO WITH COMPRESSION)",
@@ -1679,15 +1680,18 @@ public sealed class DdlTests
             Assert.Equal((byte)0x01, tc.Columns.Single(c => c.Name == "M").ExtendedFlags);
             Assert.Equal((byte)0x00, tc.Columns.Single(c => c.Name == "ID").ExtendedFlags);
 
-            // WITH COMPRESSION on non-Text/Memo refuses by name.
+            // WITH COMPRESSION on non-Text/Memo or combined with NOT NULL / UNIQUE refuses by name.
             AssertNotModelled(db, "CREATE TABLE CompBad (N LONG WITH COMPRESSION)", "NotModelled.DdlWithCompression", ActionErrorSource.Ado);
+            AssertNotModelled(db, "CREATE TABLE CompNN (T TEXT(255) WITH COMPRESSION NOT NULL)", "NotModelled.DdlWithCompression", ActionErrorSource.Ado);
+            AssertNotModelled(db, "CREATE TABLE CompUq (ID LONG CONSTRAINT PK_CU PRIMARY KEY, T TEXT(255) WITH COMPRESSION CONSTRAINT UQ_CU UNIQUE)", "NotModelled.DdlWithCompression", ActionErrorSource.Ado);
+            AssertNotModelled(db, "CREATE TABLE CompTblUq (ID LONG CONSTRAINT PK_CTU PRIMARY KEY, T TEXT(255) WITH COMPRESSION, CONSTRAINT UQ_CTU UNIQUE (T))", "NotModelled.DdlWithCompression", ActionErrorSource.Ado);
 
-            // 2. ADO DECIMAL(18, 2) and bare DECIMAL work on both ACCDB and MDB; single-arg DECIMAL(18) refuses by name; DAO keeps 3292.
+            // 2. ADO DECIMAL(18, 2) works on both ACCDB and MDB; bare DECIMAL works on ACCDB and refuses by name on MDB; single-arg DECIMAL(18) refuses by name; DAO keeps 3292.
             AssertAceError(db, "CREATE TABLE DaoDec (D DECIMAL(18, 2))", 3292);
-            ActionOutcome decOk = ActionExecutor.Execute(
-                "CREATE TABLE DecT (ID LONG CONSTRAINT PK_DT PRIMARY KEY, D DECIMAL(18, 2), B DECIMAL)",
-                db,
-                source: ActionErrorSource.Ado);
+            string decSql = isMdb
+                ? "CREATE TABLE DecT (ID LONG CONSTRAINT PK_DT PRIMARY KEY, D DECIMAL(18, 2))"
+                : "CREATE TABLE DecT (ID LONG CONSTRAINT PK_DT PRIMARY KEY, D DECIMAL(18, 2), B DECIMAL)";
+            ActionOutcome decOk = ActionExecutor.Execute(decSql, db, source: ActionErrorSource.Ado);
             Assert.True(decOk.Succeeded, $"{label} ADO DECIMAL failed: {decOk.Failure}");
             TableDefinition decT = db.Table("DecT")!;
             ColumnDescriptor dCol = decT.Columns.Single(c => c.Name == "D");
@@ -1695,38 +1699,23 @@ public sealed class DdlTests
             Assert.True(dCol.IsFixed);
             Assert.Equal(17, dCol.Length);
             Assert.Equal(18u | (2u << 8), dCol.TypeInfo);
-            ColumnDescriptor bCol = decT.Columns.Single(c => c.Name == "B");
-            Assert.Equal(18u, bCol.TypeInfo);
-
-            AssertNotModelled(db, "CREATE TABLE Dec1 (D DECIMAL(18))", "NotModelled.DdlDecimalSingleArg", ActionErrorSource.Ado);
-
-            // 3. SQL BIGINT + DATETIME2 succeeds on ACCDB (bumping page 0 byte 0x14 to 0x06) and refuses on MDB.
             if (isMdb)
             {
-                AssertNotModelled(
-                    db,
-                    "CREATE TABLE ExtTypes (ID LONG CONSTRAINT PK_ET PRIMARY KEY, FBig BIGINT, FDt2 DATETIME2, S TEXT(50))",
-                    "NotModelled.SchemaWriter");
+                AssertNotModelled(db, "CREATE TABLE DecBare (B DECIMAL)", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
             }
             else
             {
-                ActionOutcome extOut = ActionExecutor.Execute(
-                    "CREATE TABLE ExtTypes (ID LONG CONSTRAINT PK_ET PRIMARY KEY, FBig BIGINT, FDt2 DATETIME2, S TEXT(50))",
-                    db);
-                Assert.True(extOut.Succeeded, $"ACCDB ExtTypes failed: {extOut.Failure}");
-                TableDefinition extT = db.Table("ExtTypes")!;
-                ColumnDescriptor fBig = extT.Columns.Single(c => c.Name == "FBig");
-                Assert.Equal(NativeTypes.BigInt, fBig.TypeCode);
-                Assert.False(fBig.IsFixed);
-                Assert.Equal(8, fBig.Length);
-                ColumnDescriptor fDt2 = extT.Columns.Single(c => c.Name == "FDt2");
-                Assert.Equal(NativeTypes.ExtendedDateTime, fDt2.TypeCode);
-                Assert.True(fDt2.IsFixed);
-                Assert.Equal(42, fDt2.Length);
-                Assert.Equal(0x00000009u, fDt2.TypeInfo);
-                byte[] after = db.Image.Snapshot();
-                Assert.Equal((byte)0x06, after[D.Header.Version.Offset]);
+                ColumnDescriptor bCol = decT.Columns.Single(c => c.Name == "B");
+                Assert.Equal(18u, bCol.TypeInfo);
             }
+
+            AssertNotModelled(db, "CREATE TABLE Dec1 (D DECIMAL(18))", "NotModelled.DdlDecimalSingleArg", ActionErrorSource.Ado);
+
+            // 3. SQL BIGINT / DATETIME2 CREATE TABLE stays refused by name on both ACCDB and MDB until MSysObjects.LvProp (FCMin*Ver) is modelled.
+            AssertNotModelled(
+                db,
+                "CREATE TABLE ExtTypes (ID LONG CONSTRAINT PK_ET PRIMARY KEY, FBig BIGINT, FDt2 DATETIME2, S TEXT(50))",
+                "NotModelled.DdlBigIntOrDateTime2");
         }
     }
 

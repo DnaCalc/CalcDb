@@ -255,6 +255,11 @@ public static class RowEncoder
             }
         }
         int maskBytes = (c + 7) / 8;
+        if (v == 0 && d.Row.FixedBase != 2)
+        {
+            failure = "encoding a row with no variable columns in a non-Jet4/ACE12 dialect (Jet 3) is not recorded (R-FMT-2 r-q36)";
+            return false;
+        }
         // R-FMT-2 r-q36 (evidence/r-q36-publication-bytes/zf-*): when V == 0, at least 4 bytes precede the null mask
         // (max(0, 2 - fixedSize) zero pad bytes); when V > 0, no pad sits before the variable area.
         long eod = v == 0 ? Math.Max(fixedEnd, d.Row.FixedBase + 2) : fixedEnd + variableBytes;

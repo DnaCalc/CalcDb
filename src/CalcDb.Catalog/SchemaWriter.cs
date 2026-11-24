@@ -41,16 +41,15 @@ public enum NewFieldType : byte
     Memo,
     Guid,
     Decimal,
-    BigInt,
-    DateTime2,
 }
 
 /// <summary>
 /// A field of a new table (II-11 §28 field descriptor; DAO CreateField): its name, type, optional size
 /// (characters for Text; bytes for Binary/VarBinary), optional Counter <c>(Seed, Increment)</c>, Decimal
-/// <c>(Precision, Scale)</c>, <c>Required</c> (<c>NOT NULL</c> on SQL/ADO: evidence/r-q15-ddl-open/lv-sql-notnull-*,
-/// evidence/r-q34-ddl-sweep/nn-*), and <c>UnicodeCompression</c> (ADO <c>WITH COMPRESSION</c> on Text/Memo:
-/// evidence/r-q36-publication-bytes/create-feff-*).
+/// <c>(Precision, Scale)</c> (with <c>ImplicitDecimalPrecision</c> marking bare <c>DECIMAL</c> recorded only on
+/// ACCDB), <c>Required</c> (<c>NOT NULL</c> on SQL/ADO: evidence/r-q15-ddl-open/lv-sql-notnull-*,
+/// evidence/r-q34-ddl-sweep/nn-*), and <c>UnicodeCompression</c> (ADO <c>WITH COMPRESSION</c> on nullable unindexed
+/// Text/Memo: evidence/r-q36-publication-bytes/create-feff-*).
 /// </summary>
 public sealed record NewField(
     string Name,
@@ -61,7 +60,8 @@ public sealed record NewField(
     byte Precision = 0,
     byte Scale = 0,
     bool Required = false,
-    bool UnicodeCompression = false);
+    bool UnicodeCompression = false,
+    bool ImplicitDecimalPrecision = false);
 
 /// <summary>
 /// An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, its option flags
@@ -349,9 +349,9 @@ public sealed class SchemaWriter
                 }
                 requiredFields.Add(f);
             }
-            if (f.UnicodeCompression && (request.Route != SchemaRoute.Ado || f.Type is not (NewFieldType.Text or NewFieldType.Memo)))
+            if (f.UnicodeCompression && (request.Route != SchemaRoute.Ado || f.Type is not (NewFieldType.Text or NewFieldType.Memo) || f.Required))
             {
-                return new SchemaRefusal(null, $"WITH COMPRESSION on {request.Route} {f.Type} field {f.Name}: recorded only for ADO Text and Memo (evidence/r-q36-publication-bytes/create-feff-*)");
+                return new SchemaRefusal(null, $"WITH COMPRESSION on {request.Route} {f.Type} field {f.Name}{(f.Required ? " (Required)" : "")}: recorded only for nullable ADO Text and Memo (evidence/r-q36-publication-bytes/create-feff-*)");
             }
             switch (f.Type)
             {
@@ -409,28 +409,15 @@ public sealed class SchemaWriter
                     {
                         return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao, r-q36-publication-bytes/create-nullfix-mdb)");
                     }
+                    if (isJet4Mdb && f.ImplicitDecimalPrecision)
+                    {
+                        return new SchemaRefusal(null, $"bare DECIMAL on field {f.Name} in a Jet 4 MDB is not recorded (r-q21-ddl-types/col-decimal-ado-bare records ACCDB only; r-q36-publication-bytes/create-nullfix-mdb records explicit DECIMAL(18, 2))");
+                    }
                     if (f.Precision is < 1 or > 28 || f.Scale > f.Precision)
                     {
-                        return new SchemaRefusal(null, $"Decimal field {f.Name}({f.Precision}, {f.Scale}): precision/scale outside 1..28 / 0..precision are not probed in r-q21-ddl-types");
+                        return new SchemaRefusal(null, $"Decimal field {f.Name}({f.Precision}, {f.Scale}): precision/scale outside 1..28 / 0..precision (ACE 3700/3701 in evidence/r-q-wire/dec-ddl-precision-limits) is not lowered");
                     }
                     fixedBytes += 17;
-                    break;
-                case NewFieldType.BigInt:
-                    if (isJet4Mdb || request.Route != SchemaRoute.Sql)
-                    {
-                        return new SchemaRefusal(null, $"BigInt field {f.Name} on {(isJet4Mdb ? "Jet 4 MDB" : request.Route.ToString())}: recorded only on ACCDB SQL route (evidence/r-q36-publication-bytes/create-nullfix-ext-accdb)");
-                    }
-                    if (!request.Fields.Any(x => x.Type == NewFieldType.DateTime2) && (PinCopy(0) is not { } headerPage || _d.Header.Version.Read(headerPage) < 5))
-                    {
-                        return new SchemaRefusal(null, $"BigInt field {f.Name} without DateTime2 on ACCDB version < 5: page-0 v5 header upgrade is not recorded in kept pages");
-                    }
-                    break;
-                case NewFieldType.DateTime2:
-                    if (isJet4Mdb || request.Route != SchemaRoute.Sql)
-                    {
-                        return new SchemaRefusal(null, $"DateTime2 field {f.Name} on {(isJet4Mdb ? "Jet 4 MDB" : request.Route.ToString())}: recorded only on ACCDB SQL route (evidence/r-q36-publication-bytes/create-nullfix-ext-accdb)");
-                    }
-                    fixedBytes += 42;
                     break;
                 case NewFieldType.Memo:
                 case NewFieldType.Ole:
@@ -539,6 +526,10 @@ public sealed class SchemaWriter
                     if (request.Fields[uqIdx].Required)
                     {
                         return new SchemaRefusal(null, $"NOT NULL on UNIQUE column {request.Fields[uqIdx].Name} is not recorded (evidence/r-q34-ddl-sweep)");
+                    }
+                    if (request.Fields[uqIdx].UnicodeCompression)
+                    {
+                        return new SchemaRefusal(null, $"WITH COMPRESSION on UNIQUE column {request.Fields[uqIdx].Name} is not recorded (evidence/r-q36-publication-bytes/create-feff-*)");
                     }
                     if (uqIdx > lastIndexedIdx)
                     {
@@ -1369,15 +1360,6 @@ public sealed class SchemaWriter
         if (PinCopy(0) is not { } page0)
         {
             return NotWritten("page 0 could not be read for the SID keystream");
-        }
-        if (request.Fields.Any(f => f.Type == NewFieldType.DateTime2) && _d.Header.Version.Read(page0) < 6)
-        {
-            // evidence/r-q36-publication-bytes/create-nullfix-ext-accdb (page 0 byte 0x14): creating a DATETIME2
-            // table on an ACCDB < v6 upgrades the file format version byte to 0x06 (Access 2019+).
-            if (!work.Apply(new PageEdit(0, new BytePatch(_d.Header.Version.Offset, [0x06]), PageRole.Catalog)))
-            {
-                return work.NotWritten();
-            }
         }
         byte[] keystream = DefaultAdminSecurity.Keystream(page0, _d);
         TableDefinition objects = _catalog.ObjectTable;
@@ -3474,16 +3456,6 @@ public sealed class SchemaWriter
                     fixedOffset += 17;
                     break;
                 }
-                case NewFieldType.BigInt:
-                    // ACCDB SQL BIGINT: variable 8 bytes, TypeCode 0x13, flags 0x02 (evidence/r-q36-publication-bytes/create-nullfix-ext-accdb).
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.BigInt, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
-                    variables++;
-                    break;
-                case NewFieldType.DateTime2:
-                    // ACCDB SQL DATETIME2: fixed 42 bytes, TypeCode 0x14, TypeInfo 0x00000009, flags 0x03 (evidence/r-q36-publication-bytes/create-nullfix-ext-accdb).
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, (ushort)i, variables, (ushort)i, 0x00000009u, FixedColumnFlags, 0x00, fixedOffset, 42));
-                    fixedOffset += 42;
-                    break;
                 default:
                     throw new InvalidOperationException($"Unchecked field type {f.Type}.");
             }
@@ -3519,8 +3491,6 @@ public sealed class SchemaWriter
         NewFieldType.Memo => NativeTypes.Memo,
         NewFieldType.Guid => NativeTypes.Guid,
         NewFieldType.Decimal => NativeTypes.Numeric,
-        NewFieldType.BigInt => NativeTypes.BigInt,
-        NewFieldType.DateTime2 => NativeTypes.ExtendedDateTime,
         _ => 0,
     };
 

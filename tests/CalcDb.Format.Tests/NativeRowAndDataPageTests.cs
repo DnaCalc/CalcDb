@@ -236,10 +236,12 @@ public sealed class NativeRowAndDataPageTests
         Assert.False(RowEncoder.TryEncode(dropped, [EncodedField.OfBytes(new byte[4])], D, out _, out string? droppedErr));
         Assert.Contains("dropped-column", droppedErr);
 
-        // V == 0, fixedSize == 0 (Yes/No-only B1): 2 pad bytes before mask (zf-bool-cols-accdb-dao).
+        // V == 0, fixedSize == 0 (Yes/No-only B1): 2 pad bytes before mask (zf-bool-cols-accdb-dao); Jet 3 stays refused.
         TableDefinition b1 = MakeTable(maxColumns: 1, variableColumns: 0, columns: [BoolCol("b1", 0)]);
         Assert.True(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], D, out byte[]? b1Row, out string? b1Err), b1Err);
         Assert.Equal("0100000000", Convert.ToHexStringLower(b1Row!));
+        Assert.False(RowEncoder.TryEncode(b1, [EncodedField.OfBoolean(false)], FormatDescriptor.Jet3, out _, out string? jet3Err));
+        Assert.Contains("Jet 3", jet3Err);
 
         // V == 0, fixedSize == 1 (F1B9: 1 Byte + 8 Yes/No): 1 pad byte before mask (zf-fixed1-disc-accdb-dao page 53).
         TableDefinition f1b9 = MakeTable(
