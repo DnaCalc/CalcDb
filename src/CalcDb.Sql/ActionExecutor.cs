@@ -32,12 +32,13 @@ public interface ISqlActionDatabase : ISqlDatabase
     TableCursor? OpenCursor(TableDefinition table, out string? failure);
 }
 
-/// <summary>Whether an action ran via DAO <c>Database.Execute</c>, DAO <c>QueryDef.Execute</c>, or ADO <c>Connection.Execute</c>.</summary>
+/// <summary>Whether an action ran via DAO <c>Database.Execute</c>, DAO <c>QueryDef.Execute</c>, ADO <c>Connection.Execute</c>, or ADO <c>Command.Execute</c>.</summary>
 public enum ActionErrorSource : byte
 {
     Database,
     QueryDef,
     Ado,
+    AdoCommand,
 }
 
 /// <summary>
@@ -200,6 +201,7 @@ public static unsafe class ActionExecutor
         }
 
         bool failOnError = (options & DbFailOnError) != 0;
+        int externalDepth = database.Workspace.Depth;
         // R-TXN-1 TXN-STMT (task sjws): the statement publishes once, at its end, what it changed, also the rows before a
         // failure; inside a BeginTrans level its changes join the level. When a failure is unmodelled or the caller
         // refuses to answer it, abort the statement cleanly so nothing is written or left staged.
@@ -223,7 +225,7 @@ public static unsafe class ActionExecutor
                 }
                 if (fail.IsNotModelled)
                 {
-                    if (database.Workspace.Depth == 0)
+                    if (externalDepth == 0)
                     {
                         statement.Abort();
                     }
@@ -556,18 +558,28 @@ public static unsafe class ActionExecutor
                                     // targeting a generated AutoNumber consumes that row's ticket and rolls back the statement
                                     // writing the reached TableDef counters.
                                     UpdateOutcome convSide = frame.RecordStatementConversionFailure(3464);
-                                    if (txnStarted)
-                                    {
-                                        database.Workspace.Rollback();
-                                        txnStarted = false;
-                                    }
                                     if (convSide.Open != MutationOpen.None)
                                     {
+                                        txnStarted = false;
                                         return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit." + convSide.Open, convSide.Detail ?? convSide.Open.ToString()));
                                     }
                                     if (convSide.Error is { } sideErr)
                                     {
-                                        return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, sideErr.Number, sideErr.Describe()));
+                                        SqlFailure sideFail = SqlFailure.Ace(SqlPhase.Execute, sideErr.Number, sideErr.Describe());
+                                        if (txnStarted)
+                                        {
+                                            if (CallerAcceptsFailure(sideFail, acceptsFailure))
+                                            {
+                                                database.Workspace.Rollback();
+                                            }
+                                            txnStarted = false;
+                                        }
+                                        return ActionOutcome.Fail(sideFail);
+                                    }
+                                    if (txnStarted)
+                                    {
+                                        database.Workspace.Rollback();
+                                        txnStarted = false;
                                     }
                                     return ActionOutcome.Fail(convFail);
                                 }
@@ -1360,7 +1372,7 @@ public static unsafe class ActionExecutor
                 {
                     ReadOnlySpan<char> units = Bstrs.Chars(textVar.Pointer);
                     int maxUnits = column.TypeCode == NativeTypes.Text ? column.Length / 2 : units.Length;
-                    if (column.TypeCode == NativeTypes.Text && errorSource == ActionErrorSource.Ado && units.Length > maxUnits)
+                    if (column.TypeCode == NativeTypes.Text && errorSource is ActionErrorSource.Ado or ActionErrorSource.AdoCommand && units.Length > maxUnits)
                     {
                         failure = SqlFailure.Ace(
                             SqlPhase.Execute,

@@ -1243,11 +1243,19 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                             Call(cn, "Execute", "DROP TABLE Items", Missing, 1),
                             unchecked((int)0x80004005), 5003281, "3281", -68813851);
 
-                        // Also verify Command.Execute answers 3314 and 3464 with the same IID_ICommand tuple.
+                        // Also verify Command.Execute answers 3201, 3464, and 3163 (no silent truncation) on non-CHECK tables with the same IID_ICommand tuple.
+                        AssertProviderError(
+                            cn,
+                            RunCommandExecute(cn, "INSERT INTO Child (ID, TID) VALUES (9, 999)"),
+                            unchecked((int)0x80004005), 5003000, "3201", -535037517);
                         AssertProviderError(
                             cn,
                             RunCommandExecute(cn, "INSERT INTO Items (Code, L) VALUES ('x8', 'abc')"),
                             unchecked((int)0x80040E07), 5003071, "3464", -539888598);
+                        AssertProviderError(
+                            cn,
+                            RunCommandExecute(cn, "INSERT INTO Items (Code) VALUES ('this-code-is-too-long')"),
+                            unchecked((int)0x80040E57), 5003163, "3163", -68551703);
                     }
                     finally
                     {
@@ -1292,6 +1300,21 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Release(cn);
                     }
                     Assert.Equal(beforeErrBase, File.ReadAllBytes(dbErrBase));
+
+                    // Verify Command.Execute also maps 3314 on a non-CHECK Required table (P.Req).
+                    nint cnReqCmd = OpenAceConnection(dbErrBase);
+                    try
+                    {
+                        AssertProviderError(
+                            cnReqCmd,
+                            RunCommandExecute(cnReqCmd, "INSERT INTO P (ID) VALUES (99)"),
+                            unchecked((int)0x80004005), 5003000, "3314", -541331061);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnReqCmd, "Close").Failure);
+                        Release(cnReqCmd);
+                    }
                 }
 
                 // 3. Multi-row UPDATE hitting unmapped 3316 on row 2 aborts row 1 too (Connection.Execute + Command.Execute).
@@ -1325,15 +1348,22 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Assert.Null(Call(db, "Execute", "CREATE TABLE Src (V LONG)").Failure);
                         Assert.Null(Call(db, "Execute", "INSERT INTO Src (V) VALUES (10)").Failure);
                         Assert.Null(Call(db, "Execute", "INSERT INTO Src (V) VALUES (-5)").Failure);
-                        nint tdefs = (nint)Get(db, "TableDefs")!;
-                        nint td = (nint)Get(tdefs, "Item", "AutoVr")!;
-                        nint flds = (nint)Get(td, "Fields")!;
-                        nint fld = (nint)Get(flds, "Item", "V")!;
-                        Assert.Null(Put(fld, "ValidationRule", "> 0").Failure);
-                        Release(fld);
-                        Release(flds);
-                        Release(td);
-                        Release(tdefs);
+                        nint tdefs = 0, td = 0, flds = 0, fld = 0;
+                        try
+                        {
+                            tdefs = (nint)Get(db, "TableDefs")!;
+                            td = (nint)Get(tdefs, "Item", "AutoVr")!;
+                            flds = (nint)Get(td, "Fields")!;
+                            fld = (nint)Get(flds, "Item", "V")!;
+                            Assert.Null(Put(fld, "ValidationRule", "> 0").Failure);
+                        }
+                        finally
+                        {
+                            if (fld != 0) Release(fld);
+                            if (flds != 0) Release(flds);
+                            if (td != 0) Release(td);
+                            if (tdefs != 0) Release(tdefs);
+                        }
                     }
                     finally
                     {
@@ -1366,20 +1396,21 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Outcome sel = Call(cnSat, "Execute", "SELECT ID, V FROM AutoVr");
                         Assert.Null(sel.Failure);
                         nint rs = (nint)sel.Value!;
+                        nint fields = 0, f0 = 0, f1 = 0;
                         try
                         {
-                            nint fields = (nint)Get(rs, "Fields")!;
-                            nint f0 = (nint)Get(fields, "Item", 0)!;
-                            nint f1 = (nint)Get(fields, "Item", 1)!;
+                            fields = (nint)Get(rs, "Fields")!;
+                            f0 = (nint)Get(fields, "Item", 0)!;
+                            f1 = (nint)Get(fields, "Item", 1)!;
                             Assert.Equal(1, Get(f0, "Value"));
                             Assert.Equal(42, Get(f1, "Value"));
-                            Release(f1);
-                            Release(f0);
-                            Release(fields);
                             Assert.Null(Call(rs, "Close").Failure);
                         }
                         finally
                         {
+                            if (f1 != 0) Release(f1);
+                            if (f0 != 0) Release(f0);
+                            if (fields != 0) Release(fields);
                             Release(rs);
                         }
                     }
@@ -1418,23 +1449,37 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
 
                         Outcome checkT = Call(cnOuter, "Execute", "SELECT V FROM T WHERE ID = 1");
                         nint rsT = (nint)checkT.Value!;
-                        nint fieldsT = (nint)Get(rsT, "Fields")!;
-                        nint fT = (nint)Get(fieldsT, "Item", 0)!;
-                        Assert.Equal(77, Get(fT, "Value"));
-                        Release(fT);
-                        Release(fieldsT);
-                        Assert.Null(Call(rsT, "Close").Failure);
-                        Release(rsT);
+                        nint fieldsT = 0, fT = 0;
+                        try
+                        {
+                            fieldsT = (nint)Get(rsT, "Fields")!;
+                            fT = (nint)Get(fieldsT, "Item", 0)!;
+                            Assert.Equal(77, Get(fT, "Value"));
+                            Assert.Null(Call(rsT, "Close").Failure);
+                        }
+                        finally
+                        {
+                            if (fT != 0) Release(fT);
+                            if (fieldsT != 0) Release(fieldsT);
+                            Release(rsT);
+                        }
 
                         Outcome checkT2 = Call(cnOuter, "Execute", "SELECT W FROM T2 WHERE ID = 1");
                         nint rsT2 = (nint)checkT2.Value!;
-                        nint fieldsT2 = (nint)Get(rsT2, "Fields")!;
-                        nint fT2 = (nint)Get(fieldsT2, "Item", 0)!;
-                        Assert.Equal(30, Get(fT2, "Value"));
-                        Release(fT2);
-                        Release(fieldsT2);
-                        Assert.Null(Call(rsT2, "Close").Failure);
-                        Release(rsT2);
+                        nint fieldsT2 = 0, fT2 = 0;
+                        try
+                        {
+                            fieldsT2 = (nint)Get(rsT2, "Fields")!;
+                            fT2 = (nint)Get(fieldsT2, "Item", 0)!;
+                            Assert.Equal(30, Get(fT2, "Value"));
+                            Assert.Null(Call(rsT2, "Close").Failure);
+                        }
+                        finally
+                        {
+                            if (fT2 != 0) Release(fT2);
+                            if (fieldsT2 != 0) Release(fieldsT2);
+                            Release(rsT2);
+                        }
                     }
                     finally
                     {

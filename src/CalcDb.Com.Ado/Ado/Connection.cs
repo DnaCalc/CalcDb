@@ -1931,13 +1931,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
 
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        // Pass ActionErrorSource.Ado only for ad-hoc Connection.Execute; never pass ActionErrorSource.Database from ADO.
+        // Pass ActionErrorSource.Ado for ad-hoc Connection.Execute and ActionErrorSource.AdoCommand for Command.Execute;
+        // never pass ActionErrorSource.Database from ADO.
         ActionOutcome outcome = ActionExecutor.Execute(
             sql,
             session.Sql,
             128,
             null,
-            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.QueryDef,
+            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.AdoCommand,
             acceptsFailure: f => TryMapFailure(f, out _) is not null);
         if (outcome.Failure is { } sqlFailure)
         {

@@ -726,6 +726,77 @@ public sealed class ActionExecutionTests
             Assert.Equal(origT2Row1, txnDb.ReadSelect("SELECT W FROM T2 WHERE ID = 1")[0][0].Integer);
             Assert.NotEqual("77", origRow1);
         }
+
+        // Inside outer BeginTrans: refused INSERT ... SELECT into an empty AutoNumber table (taking a new page and
+        // advancing AutoNumberCounter) restores the counter and discards GlobalMap activity; outer CommitTrans keeps
+        // only the outer edit, and a subsequent accepted INSERT into the empty table receives ID = 1.
+        using (var txnAutoDb = new WritableSqlFixture(ActAccdb))
+        {
+            Assert.True(ActionExecutor.Execute(
+                "CREATE TABLE AutoNew (ID COUNTER CONSTRAINT PK_AutoNew PRIMARY KEY, K LONG CONSTRAINT UQ_AutoNew UNIQUE)",
+                txnAutoDb,
+                options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE AutoSrc (N LONG, K LONG)", txnAutoDb, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO AutoSrc (N, K) VALUES (1, 10)", txnAutoDb, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO AutoSrc (N, K) VALUES (2, 10)", txnAutoDb, options: 128).Succeeded);
+            if (txnAutoDb.Workspace.NeedsCloseCommit(txnAutoDb.Cache))
+            {
+                Assert.Equal(MutationOpen.None, txnAutoDb.Workspace.PublishCloseCommit(txnAutoDb.Cache).Open);
+            }
+
+            Assert.Null(txnAutoDb.Workspace.BeginTrans());
+            Assert.True(ActionExecutor.Execute("UPDATE T SET V = 88 WHERE ID = 1", txnAutoDb, options: 128).Succeeded);
+
+            ActionOutcome refusedNewPage = ActionExecutor.Execute(
+                "INSERT INTO AutoNew (K) SELECT K FROM AutoSrc ORDER BY N",
+                txnAutoDb,
+                options: 128,
+                acceptsFailure: _ => false);
+            Assert.False(refusedNewPage.Succeeded);
+            Assert.Equal(MutationError.Duplicate, refusedNewPage.Failure!.Number);
+            Assert.Equal(1, txnAutoDb.Workspace.Depth);
+            Assert.Equal(0, txnAutoDb.EditContext("AutoNew", out _)!.Counter!.Last);
+            Assert.False(txnAutoDb.Workspace.HasGlobalMapActivity(txnAutoDb.Cache));
+
+            ResolutionOutcome committed = txnAutoDb.Workspace.CommitTrans();
+            Assert.True(committed.Succeeded, committed.ToString());
+            Assert.False(txnAutoDb.Workspace.NeedsCloseCommit(txnAutoDb.Cache));
+            Assert.Equal("88", txnAutoDb.ReadSelect("SELECT V FROM T WHERE ID = 1")[0][0].Integer);
+
+            Assert.True(ActionExecutor.Execute("INSERT INTO AutoNew (K) VALUES (10)", txnAutoDb, options: 128).Succeeded);
+            Assert.Equal("1", txnAutoDb.ReadSelect("SELECT ID FROM AutoNew")[0][0].Integer);
+        }
+
+        // Accepted failure whose RollbackStatementFrame refuses with a NotModelled limitation (non-1 AutoNumber increment)
+        // restores in-memory AutoNumberCounter.Last so the next accepted INSERT does not skip an ID.
+        using (var stepDb = new WritableSqlFixture(ActAccdb))
+        {
+            Assert.True(ActionExecutor.Execute(
+                "CREATE TABLE StepAuto (ID COUNTER(100, 5) CONSTRAINT PK_StepAuto PRIMARY KEY, K LONG CONSTRAINT UQ_StepAuto UNIQUE)",
+                stepDb,
+                options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE StepSrc (N LONG, K LONG)", stepDb, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO StepSrc (N, K) VALUES (1, 10)", stepDb, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO StepSrc (N, K) VALUES (2, 10)", stepDb, options: 128).Succeeded);
+            if (stepDb.Workspace.NeedsCloseCommit(stepDb.Cache))
+            {
+                Assert.Equal(MutationOpen.None, stepDb.Workspace.PublishCloseCommit(stepDb.Cache).Open);
+            }
+            byte[] beforeStep = stepDb.Image.Snapshot();
+
+            ActionOutcome refusedLimitation = ActionExecutor.Execute(
+                "INSERT INTO StepAuto (K) SELECT K FROM StepSrc ORDER BY N",
+                stepDb,
+                options: 128);
+            Assert.False(refusedLimitation.Succeeded);
+            Assert.True(refusedLimitation.Failure!.IsNotModelled, refusedLimitation.Failure.ToString());
+            Assert.Equal("NotModelled.Edit.CounterWrite", refusedLimitation.Failure.NotModelled);
+            Assert.Equal(beforeStep, stepDb.Image.Snapshot());
+            Assert.Equal(95, stepDb.EditContext("StepAuto", out _)!.Counter!.Last);
+
+            Assert.True(ActionExecutor.Execute("INSERT INTO StepAuto (K) VALUES (10)", stepDb, options: 128).Succeeded);
+            Assert.Equal("100", stepDb.ReadSelect("SELECT ID FROM StepAuto")[0][0].Integer);
+        }
     }
 
     [Fact]

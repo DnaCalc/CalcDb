@@ -2147,6 +2147,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (limitation is not null)
             {
                 top.RestoreExplicitCounters();
+                RestoreStatementCounters(_statementInitialCounters);
                 _statementFailure = limitation;
                 return new ResolutionOutcome(ResolvedChanges: resolved);
             }
@@ -2163,6 +2164,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     if (!edited.Succeeded)
                     {
                         top.RestoreExplicitCounters();
+                        RestoreStatementCounters(_statementInitialCounters);
                         _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"TableDef page {tdefPage} could not take the counters the statement reached: {edited.Failure} {edited.Detail}");
                         return new ResolutionOutcome(ResolvedChanges: resolved);
                     }
@@ -2177,6 +2179,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         if (!mapEdit.Succeeded)
                         {
                             top.RestoreExplicitCounters();
+                            RestoreStatementCounters(_statementInitialCounters);
                             _statementFailure = new ResolutionOutcome(null, MutationOpen.Publication, $"page {globalMapPage} could not join the counters' commit: {mapEdit.Failure} {mapEdit.Detail}");
                             return new ResolutionOutcome(ResolvedChanges: resolved);
                         }
@@ -2210,6 +2213,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (limitation is not null)
         {
             top.RestoreExplicitCounters();
+            RestoreStatementCounters(_statementInitialCounters);
             _statementFailure = limitation;
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
@@ -2256,6 +2260,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 if (err1 is not null || open1 != MutationOpen.None)
                 {
                     top.RestoreExplicitCounters();
+                    if (!_unresolved.Contains(counters.File))
+                    {
+                        RestoreStatementCounters(_statementInitialCounters);
+                    }
                     _statementFailure = new ResolutionOutcome(err1, open1, detail1);
                     return new ResolutionOutcome(ResolvedChanges: resolved);
                 }
@@ -2827,13 +2835,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
 
-        if (initialCounters is not null)
-        {
-            foreach ((AutoNumberCounter counter, long originalLast) in initialCounters)
-            {
-                counter.Restore(originalLast);
-            }
-        }
+        RestoreStatementCounters(initialCounters);
 
         _sideEffectRoles.Clear();
         if (savedSideEffectRoles is not null)
@@ -2864,15 +2866,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return;
         }
 
-        if (pendingStart == 0)
-        {
-            _pending.Clear();
-            ClearAcceptedIndex();
-            ReleaseParticipants();
-            ReleaseLocks(LockLifetime.UntilPublished);
-            ReleaseLocks(LockLifetime.Transaction);
-            return;
-        }
         if (pendingStart < _pending.Count)
         {
             for (int i = pendingStart; i < _pending.Count; i++)
@@ -2886,6 +2879,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _pending.RemoveRange(pendingStart, _pending.Count - pendingStart);
         }
         ReleaseStatementLocks(statementLocks);
+    }
+
+    private static void RestoreStatementCounters(Dictionary<AutoNumberCounter, long>? counters)
+    {
+        if (counters is null)
+        {
+            return;
+        }
+        foreach ((AutoNumberCounter counter, long originalLast) in counters)
+        {
+            counter.Restore(originalLast);
+        }
     }
 
     private void ConvertStatementLocks(LockLifetime from, LockLifetime to)
@@ -2918,6 +2923,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         foreach (((PageCache file, ulong page, LockLifetime lifetime), int count) in locks)
         {
+            if (lifetime == LockLifetime.UntilPublished && _unresolved.Contains(file))
+            {
+                continue;
+            }
             LockResource resource = new(page, LockPurpose.DataPage);
             for (int i = 0; i < count; i++)
             {
