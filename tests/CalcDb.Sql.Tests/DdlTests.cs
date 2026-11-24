@@ -1147,6 +1147,13 @@ public sealed class DdlTests
         AssertAceError(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", 3289);
         AssertNotModelled(db, "CREATE TABLE Fk (n LONG, CONSTRAINT FK_N FOREIGN KEY (n) REFERENCES T (id))", "NotModelled.DdlForeignKey");
         Assert.Equal(before, db.Image.Snapshot());
+
+        // Finding 4c: WITH IGNORE NULL on a populated table whose indexed column is NULL in every row (0 entries) refuses without writing.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE AllNull (id LONG CONSTRAINT PK_AN PRIMARY KEY, k LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO AllNull (id, k) VALUES (1, NULL)", db).Succeeded);
+        byte[] beforeAllNull = db.Image.Snapshot();
+        AssertNotModelled(db, "CREATE INDEX IX_AN ON AllNull (k) WITH IGNORE NULL", "NotModelled.SchemaAccept.Publication");
+        Assert.Equal(beforeAllNull, db.Image.Snapshot());
     }
 
     private sealed class AlternateSortDatabase(WritableSqlFixture inner, uint lcid, CalcDb.Values.Scalar.TextCollation? databaseOrder) : ISqlActionDatabase

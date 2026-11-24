@@ -1379,7 +1379,7 @@ public sealed class SchemaWriterTests
             Assert.False(inTx.PublishedAny);
             Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
             Assert.Null(session.Workspace.Rollback().Error);
-            // Create a table on MDB, then verify CreateIndex inside BeginTrans, DAO CreateIndex, and DropTable stay refused by name,
+            // Create a table on MDB, then verify CreateIndex inside BeginTrans, DAO/ADO CreateIndex, and DropTable stay refused by name,
             // while SQL CreateIndex on MDB outside BeginTrans is now admitted (ddl2, evidence/r-q34-ddl-sweep/ix-cat1b-chain-mdb-dao, uqix-*-mdb-dao).
             session.Create(new("T", [Long("n")], SchemaRoute.Sql), 1, 1);
             Assert.Null(session.Workspace.BeginTrans());
@@ -1389,6 +1389,10 @@ public sealed class SchemaWriterTests
             Assert.Contains("BeginTrans", ixInTx.Refused?.NotWritten);
             Assert.Null(session.Workspace.Rollback().Error);
             Assert.NotNull(session.Writer().CreateIndex(session.Workspace, new("T", new("IX_DAO", ["n"], PrimaryKey: false), SchemaRoute.Dao), 2).Refused?.NotWritten);
+            SchemaOutcome ixAdo = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_ADO", ["n"], PrimaryKey: false), SchemaRoute.Ado), 2);
+            Assert.False(ixAdo.Succeeded);
+            Assert.False(ixAdo.PublishedAny);
+            Assert.Contains("ADO", ixAdo.Refused?.NotWritten);
             session.CreateIndex(new("T", new("IX_T", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2);
             Assert.NotNull(session.Writer().DropTable(session.Workspace, new("T", SchemaRoute.Sql)).Refused?.NotWritten);
         }
@@ -1601,30 +1605,79 @@ public sealed class SchemaWriterTests
     }
 
     [Fact]
-    public void CreateIndex_on_table_with_memo_and_pk_appends_map_slot_after_lval_maps()
+    public void CreateIndex_and_CreateTable_unrecorded_neighbours_refuse_without_writing()
     {
-        using var session = new Session(Fixture());
-        session.Create(
-            new("T", [Long("ID"), Long("K"), new("M", NewFieldType.Memo)], SchemaRoute.Sql, [new("PK_T", ["ID"], PrimaryKey: true)]),
-            1,
-            1);
-        session.CreateIndex(new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql), 2);
-        session.Close();
+        // Finding 6: CREATE TABLE with 2 inline indexes refuses non-[A-Za-z0-9_] index names (FMT1-INDEX-ENUM).
+        using (var session = new Session(Fixture()))
+        {
+            byte[] before = session.File.Snapshot();
+            SchemaRefusal? dashUq = session.Writer().Check(new(
+                "T",
+                [Long("ID"), new("K", NewFieldType.Text, Size: 20)],
+                SchemaRoute.Sql,
+                [new("PK_T", ["ID"], PrimaryKey: true), new("UQ-Dash", ["K"], PrimaryKey: false, Unique: true)]));
+            Assert.NotNull(dashUq);
+            Assert.Null(dashUq.Value.Error);
+            Assert.Contains("FMT1-INDEX-ENUM", dashUq.Value.NotWritten);
+            Assert.Equal(before, session.File.Snapshot());
+        }
 
-        CatalogSnapshot catalog = CatalogBootstrap.Open(session.Cache, D, session.Pages, out _)!;
-        uint tPage = (uint)catalog.Entries.Single(e => e.Name == "T").Id;
-        using PagePin pin = session.Cache.Pin(tPage).Pin!;
-        TableDefSegmentView view = TableDefSegmentView.Open(tPage, p => p == tPage ? pin.Bytes.ToArray() : null, D, 4, out _)!;
-        TableDefinition def = TableDefDecoder.Decode(view, tPage, D, out _)!;
+        // Finding 3 & 4a: ACCDB CREATE INDEX inside BeginTrans (empty, indexed, ADO) and on LVAL + existing index refuse with 0 bytes written.
+        using (var session = new Session(Fixture()))
+        {
+            session.Create(
+                new("T", [Long("ID"), Long("K"), new("M", NewFieldType.Memo)], SchemaRoute.Sql, [new("PK_T", ["ID"], PrimaryKey: true)]),
+                1,
+                1);
+            session.Create(new("E", [Long("ID"), Long("K")], SchemaRoute.Sql), 1, 1);
+            byte[] before = session.File.Snapshot();
 
-        // Slots 0/1 = table owned/free, 2 = PK_T, 3/4 = Memo LVAL owned/free, 5 = IX_K.
-        Assert.Equal(2, def.PhysicalIndexes.Count);
-        Assert.Equal(2u, def.PhysicalIndexes[0].OwnedMap.Row);
-        Assert.Single(def.LongValueMaps);
-        Assert.Equal(3u, def.LongValueMaps[0].OwnedMap.Row);
-        Assert.Equal(4u, def.LongValueMaps[0].FreeMap.Row);
-        Assert.Equal(5u, def.PhysicalIndexes[1].OwnedMap.Row);
-        Assert.Equal(["IX_K", "PK_T"], def.LogicalIndexes.Select(l => l.Name).ToArray());
+            // LVAL column + existing index is unrecorded (r-q21-ddl-types/ix-on-table-with-memo has 0 existing indexes).
+            SchemaOutcome memoWithPk = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql), 2);
+            Assert.False(memoWithPk.Succeeded);
+            Assert.False(memoWithPk.PublishedAny);
+            Assert.Contains("LVAL", memoWithPk.Refused?.NotWritten);
+            Assert.Equal(before, session.File.Snapshot());
+
+            // ACCDB empty table (0-index SQL, 0-index ADO, and indexed SQL) inside BeginTrans refuses with 0 bytes written.
+            Assert.Null(session.Workspace.BeginTrans());
+            foreach (CreateIndexRequest req in new CreateIndexRequest[]
+            {
+                new("E", new("IX_SQL", ["K"], PrimaryKey: false), SchemaRoute.Sql),
+                new("E", new("IX_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado),
+                new("T", new("IX_PK", ["K"], PrimaryKey: false), SchemaRoute.Sql),
+            })
+            {
+                SchemaOutcome inTx = session.Writer().CreateIndex(session.Workspace, req, 2);
+                Assert.False(inTx.Succeeded);
+                Assert.False(inTx.PublishedAny);
+                Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
+            }
+            Assert.Null(session.Workspace.Rollback().Error);
+            Assert.Equal(before, session.File.Snapshot());
+        }
+
+        // Finding 4b: Populated Jet 4 MDB refuses PRIMARY, IGNORE NULL, DISALLOW NULL, and DESC (and ADO route) with 0 bytes written.
+        byte[] mdbPopImage = Kept.AfterSetupImage("ix-nonuq-rows-nopk-mdb-dao");
+        using (var session = new Session(mdbPopImage))
+        {
+            CreateIndexRequest[] mdbRefused =
+            [
+                new("T", new("IX_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado),
+                new("T", new("PK_ID", ["ID"], PrimaryKey: true, Unique: true), SchemaRoute.Sql),
+                new("T", new("IX_IGN", ["K"], PrimaryKey: false, IgnoreNull: true), SchemaRoute.Sql),
+                new("T", new("IX_DIS", ["K"], PrimaryKey: false, DisallowNull: true), SchemaRoute.Sql),
+                new("T", new("IX_DESC", ["K"], PrimaryKey: false, Descending: [true]), SchemaRoute.Sql),
+            ];
+            foreach (CreateIndexRequest req in mdbRefused)
+            {
+                SchemaOutcome outcome = session.Writer().CreateIndex(session.Workspace, req, 2);
+                Assert.False(outcome.Succeeded, $"{req.Index.Name} should refuse on populated MDB");
+                Assert.False(outcome.PublishedAny, $"{req.Index.Name} should not publish");
+                Assert.NotNull(outcome.Refused?.NotWritten);
+                Assert.Equal(mdbPopImage, session.File.Snapshot());
+            }
+        }
     }
 
     [Fact]
@@ -1663,6 +1716,13 @@ public sealed class SchemaWriterTests
         byte[] nullImage = Kept.AfterSetupImage("ix-cat1b-rows-chain-accdb-dao");
         using (var session = new Session(nullImage))
         {
+            // Finding 4c: UNIQUE + WITH IGNORE NULL on a populated table refuses by name with 0 bytes written.
+            SchemaOutcome uqIgn = session.Writer().CreateIndex(session.Workspace, new("TI", new("UK_C_IGN", ["C"], PrimaryKey: false, Unique: true, IgnoreNull: true), SchemaRoute.Sql), 2);
+            Assert.False(uqIgn.Succeeded);
+            Assert.False(uqIgn.PublishedAny);
+            Assert.Contains("IGNORE NULL", uqIgn.Refused?.NotWritten);
+            Assert.Equal(nullImage, session.File.Snapshot());
+
             // Existing NULL on PRIMARY, DISALLOW NULL, plain non-IGNORE NULL, and UNIQUE non-IGNORE NULL refuses by name.
             NewIndex[] nullRefused =
             [

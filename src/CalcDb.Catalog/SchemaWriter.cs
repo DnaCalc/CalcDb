@@ -840,13 +840,17 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(file, default, _pageCount);
         }
-        if (isJet4Mdb && workspace.Depth > 0)
+        if (workspace.Depth > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a Jet 4 MDB inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/*-mdb-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX inside BeginTrans is not recorded (evidence/r-q11-ddl-closure, r-q21-ddl-types, r-q34-ddl-sweep)"), default, _pageCount);
         }
         if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX on {request.Route} route (only SQL and ADO CREATE INDEX are recorded: r-q11, r-q21-ddl-types, r-q34-ddl-sweep)"), default, _pageCount);
+        }
+        if (isJet4Mdb && request.Route == SchemaRoute.Ado)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a Jet 4 MDB via ADO is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/*-mdb-dao)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } entry)
         {
@@ -864,9 +868,19 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(existingRefusal, default, _pageCount);
         }
-        if (table.RowCount > 0 && workspace.Depth > 0)
+        if (table.LongValueMaps.Count > 0 && (table.PhysicalIndexes.Count > 0 || table.RowCount > 0))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a populated table inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a table with LVAL column(s) and existing indexes or rows is not recorded (only an empty unindexed Memo table is recorded: evidence/r-q21-ddl-types/ix-on-table-with-memo)"), default, _pageCount);
+        }
+        if (isJet4Mdb && table.RowCount > 0
+            && (request.Index.PrimaryKey || request.Index.IgnoreNull || request.Index.DisallowNull
+                || (request.Index.Descending is not null && request.Index.Descending.Any(d => d))))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX with PRIMARY, IGNORE NULL, DISALLOW NULL or DESC on a populated Jet 4 MDB table is not recorded (evidence/r-q34-ddl-sweep/*-mdb-dao)"), default, _pageCount);
+        }
+        if (table.RowCount > 0 && request.Index.IgnoreNull && request.Index.Unique)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE UNIQUE INDEX ... WITH IGNORE NULL on a populated table is not recorded (evidence/r-q21-ddl-types/ix-unique-ignore-null is empty; evidence/r-q34-ddl-sweep/ix-cat1b-rows-chain-accdb-dao is non-unique)"), default, _pageCount);
         }
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
@@ -1461,24 +1475,35 @@ public sealed class SchemaWriter
             return NotWritten($"{entry.Name}'s map page holds {mapRowCount} maps (expected {expectedMapRows} covering table owned/free, {table.PhysicalIndexes.Count} index(es) and {table.LongValueMaps.Count} LVAL column(s), below {MaxSinglePageMaps}: r-q11, r-q21, r-q34-ddl-sweep)");
         }
         byte mapSlot = (byte)expectedMapRows;
+        if (_d.DataPage.Owner.Read(mapPage) != 0)
+        {
+            return NotWritten($"{entry.Name}'s map page {table.OwnedMap.Page} has owner {_d.DataPage.Owner.Read(mapPage)}, expected 0");
+        }
+        byte[] mapDryRun = mapPage.ToArray();
+        if (!DataPages.TryAppendRow(mapDryRun, MapDeclaration.EncodeInline(0, [0], _d), _d, out byte drySlot, out string? mapAppendFailure)
+            || drySlot != mapSlot)
+        {
+            return NotWritten($"{entry.Name}'s map page {table.OwnedMap.Page} cannot append map slot {mapSlot}: {mapAppendFailure ?? $"landed at slot {drySlot}"}");
+        }
         if (!BuildIndexLeaf(table, index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out string? buildFailure))
         {
             return NotWritten(buildFailure);
         }
         TableDefSpec sizedSpec = WithIndex(spec, index, new RowLocator(table.OwnedMap.Page, mapSlot), 0, entryCount, uniqueEntryCount);
+        int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
         int encodedLen = EncodedTableDefLength(sizedSpec);
-        if (encodedLen > _d.PageSize)
+        if (encodedLen > maxSinglePage)
         {
-            return NotWritten($"{entry.Name}'s TableDef with index {index.Name} needs {encodedLen} bytes, exceeding one {_d.PageSize}-byte page (multi-page TableDef is not recorded)");
+            return NotWritten($"{entry.Name}'s TableDef with index {index.Name} needs {encodedLen} bytes, exceeding one single-page TableDef ({maxSinglePage} bytes; multi-page TableDef is not recorded)");
         }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
         if (work.Allocate(allocator) is not { } leaf)
         {
             return work.NotWritten();
         }
-        if (leaf >= 512)
+        if (leaf >= InlineMapPageLimit)
         {
-            return NotWritten($"allocated index leaf page {leaf} exceeds single-page inline map range (< 512)");
+            return NotWritten($"allocated index leaf page {leaf} exceeds single-page inline map range (< {InlineMapPageLimit})");
         }
         extent = allocator.ExtentPages;
         byte[] tdef = new byte[_d.PageSize];
@@ -1606,6 +1631,11 @@ public sealed class SchemaWriter
         if (scannedRows != table.RowCount)
         {
             failure = $"table scan read {scannedRows} live rows but TableDef.RowCount is {table.RowCount}";
+            return false;
+        }
+        if (index.IgnoreNull && entryCount == 0)
+        {
+            failure = $"{index.Name}: WITH IGNORE NULL on a populated table where every row is Null (0 entries) is not recorded (evidence/r-q34-ddl-sweep/ix-cat1b-rows-chain-accdb-dao has 2 non-Null entries)";
             return false;
         }
         uniqueEntryCount = (uint)seenKeys.Count;
@@ -2087,7 +2117,7 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// ACCDB is admitted for all recorded catalog changes; Jet 4 MDB is admitted only when <paramref name="allowJet4Mdb"/>
-    /// is true (SQL/ADO CREATE TABLE and CREATE INDEX: evidence/r-q11-ddl-closure/mdb-create-one-long,
+    /// is true (SQL/ADO CREATE TABLE and SQL CREATE INDEX: evidence/r-q11-ddl-closure/mdb-create-one-long,
     /// evidence/r-q34-ddl-sweep/*-mdb-*).
     /// </summary>
     private SchemaRefusal? FileRefusal(bool allowJet4Mdb = false) => FileRefusal(allowJet4Mdb, out _);
@@ -2109,9 +2139,9 @@ public sealed class SchemaWriter
             isJet4Mdb = true;
             return allowJet4Mdb
                 ? null
-                : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE and CREATE INDEX are recorded: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/*-mdb-*)");
+                : new SchemaRefusal(null, "a catalog change in a Jet 4 MDB (only SQL/ADO CREATE TABLE and SQL CREATE INDEX are recorded: evidence/r-q11-ddl-closure/mdb-create-one-long, evidence/r-q34-ddl-sweep/*-mdb-*)");
         }
-        return new SchemaRefusal(null, "a catalog change in a non-ACCDB file (only ACCDB and Jet 4 MDB SQL/ADO CREATE TABLE and CREATE INDEX are recorded)");
+        return new SchemaRefusal(null, "a catalog change in a non-ACCDB file (only ACCDB and Jet 4 MDB SQL/ADO CREATE TABLE and SQL CREATE INDEX are recorded)");
     }
 
     private bool IsJet4Mdb(ReadOnlySpan<byte> page0) =>
