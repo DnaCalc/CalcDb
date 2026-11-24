@@ -1,0 +1,82 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q35-byref-args/dao-eng-createdatabase",
+  "bookRefs": ["R-ORACLE-1", "OR-WIRE", "R-STRING-1", "STR-BYREF", "R-DAO-1", "R-FMT-1"],
+  "description": "Card R-ORACLE-1 OR-WIRE (3m35): ByRef forms of DAO DBEngine.CreateDatabase(Name, Locale, Option) p0/p1 and Workspace.CreateDatabase(Name, Connect, Option) p0/p1 (same setup as r-wire/opt-createdatabase, distinct new ACCDB files in work dir). Varies one argument at a time across every VarType admitted by value: DBEngine p0 Name as outputPath (VT_BYREF|VT_BSTR, VT_BYREF|VT_VARIANT); DBEngine p1 Locale as BSTR ';LANGID=0x0409;CP=1252;COUNTRY=0', BSTR '' (both typed and variant ByRef), Empty and Null (VT_BYREF|VT_VARIANT) with Option=128; Workspace p0 Name as outputPath (typed and variant ByRef); Workspace p1 Connect as BSTR ';LANGID=0x0409;CP=1252;COUNTRY=0' (typed and variant ByRef). Reads Database.Version, Close and release after each. Asks whether each ByRef form answers identically to its by-value form.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "Workspaces", "kind": "propertyGet", "args": [], "bind": "wss" },
+    { "op": "invoke", "target": "wss", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "i4", "value": 0 }], "bind": "ws" },
+    { "op": "release", "target": "wss" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d0", "args": [{ "type": "byref", "typed": true, "inner": { "type": "outputPath", "fileName": "b0.accdb" } }, { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" }] },
+    { "op": "invoke", "target": "d0", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d0", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d0" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d1", "args": [{ "type": "byref", "typed": false, "inner": { "type": "outputPath", "fileName": "b1.accdb" } }, { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" }] },
+    { "op": "invoke", "target": "d1", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d1" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d2", "args": [{ "type": "outputPath", "fileName": "b2.accdb" }, { "type": "byref", "typed": true, "inner": { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d2", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d2" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d3", "args": [{ "type": "outputPath", "fileName": "b3.accdb" }, { "type": "byref", "typed": false, "inner": { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d3", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d3" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d4", "args": [{ "type": "outputPath", "fileName": "b4.accdb" }, { "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d4", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d4", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d4" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d5", "args": [{ "type": "outputPath", "fileName": "b5.accdb" }, { "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d5", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d5", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d5" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d6", "args": [{ "type": "outputPath", "fileName": "b6.accdb" }, { "type": "byref", "typed": false, "inner": { "type": "empty" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d6", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d6", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d6" },
+
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "d7", "args": [{ "type": "outputPath", "fileName": "b7.accdb" }, { "type": "byref", "typed": false, "inner": { "type": "null" } }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "d7", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d7", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d7" },
+
+    { "op": "invoke", "target": "ws", "member": "CreateDatabase", "kind": "method", "bind": "d8", "args": [{ "type": "byref", "typed": true, "inner": { "type": "outputPath", "fileName": "b8.accdb" } }, { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" }] },
+    { "op": "invoke", "target": "d8", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d8", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d8" },
+
+    { "op": "invoke", "target": "ws", "member": "CreateDatabase", "kind": "method", "bind": "d9", "args": [{ "type": "byref", "typed": false, "inner": { "type": "outputPath", "fileName": "b9.accdb" } }, { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" }] },
+    { "op": "invoke", "target": "d9", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d9", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d9" },
+
+    { "op": "invoke", "target": "ws", "member": "CreateDatabase", "kind": "method", "bind": "d10", "args": [{ "type": "outputPath", "fileName": "b10.accdb" }, { "type": "byref", "typed": true, "inner": { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" } }] },
+    { "op": "invoke", "target": "d10", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d10", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d10" },
+
+    { "op": "invoke", "target": "ws", "member": "CreateDatabase", "kind": "method", "bind": "d11", "args": [{ "type": "outputPath", "fileName": "b11.accdb" }, { "type": "byref", "typed": false, "inner": { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" } }] },
+    { "op": "invoke", "target": "d11", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "d11", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "d11" },
+
+    { "op": "release", "target": "ws" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
