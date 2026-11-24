@@ -2703,7 +2703,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
                 {
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a chain-freeing UPDATE's page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
                 }
             }
             // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
@@ -3171,7 +3171,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 IncrementCount(_unpublishedGlobalMapActivity, physical.File);
             }
-            if (physical.HasReservedExtent)
+            if (physical.HasReservedExtent || physical.ReservedExtentPages.Count > 0)
             {
                 IncrementCount(_unpublishedReservedExtent, physical.File);
             }
@@ -3205,7 +3205,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 DecrementCount(_unpublishedGlobalMapActivity, physical.File);
             }
-            if (physical.HasReservedExtent)
+            if (physical.HasReservedExtent || physical.ReservedExtentPages.Count > 0)
             {
                 DecrementCount(_unpublishedReservedExtent, physical.File);
             }

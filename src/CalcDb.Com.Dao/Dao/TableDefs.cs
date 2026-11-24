@@ -557,14 +557,24 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
-    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, Foundation.VarType sourceType) =>
-        member.Kind == InvokeKind.PropertyPut && member.Name is "ValidationRule" or "ValidationText"
-            && sourceType is not (Foundation.VarType.Bstr or Foundation.VarType.Null)
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, Foundation.VarType sourceType)
+    {
+        if (member.Kind != InvokeKind.PropertyPut || member.Name is not ("ValidationRule" or "ValidationText"))
+        {
+            return null;
+        }
+        if (sourceType != Foundation.VarType.Bstr && (Invalid || _table is null))
+        {
+            return Failure.NotImplemented($"Field.{member.Name} put of variant type {sourceType} on a closed or index Field (qualified.md r-q37 Open)");
+        }
+        return sourceType is not (Foundation.VarType.Bstr or Foundation.VarType.Null)
             ? Failure.NotImplemented($"Field.{member.Name} put of variant type {sourceType} (qualified.md r-q37 Open)")
             : null;
+    }
 
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
         member.Kind == InvokeKind.PropertyPut && member.Name is "ValidationRule" or "ValidationText"
+            && !Invalid && _table is not null
             && conversion.Reason == ArgumentConversionReason.TypeMismatch
             && conversion.SourceType == Foundation.VarType.Null
             ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true }
@@ -592,7 +602,7 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     /// </summary>
     private CallResult PutValidationProperty(FieldValidationProperty property, nint valueArg) => OfTable(t =>
     {
-        Foundation.VarType vt = Args.TypeOf(valueArg) & ~Foundation.VarType.ByRef;
+        Foundation.VarType vt = Args.TypeOf(valueArg);
         if (vt == Foundation.VarType.Null)
         {
             return Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);

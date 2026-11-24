@@ -180,4 +180,113 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal(FailureKind.NotImplemented, chainedReplace.Failure!.Kind);
         Assert.Null(Method(db3, "Close").Failure);
     }
+
+    [Fact]
+    public void Dispatch_invoke_hooks_and_validation_rule_edge_cases_match_records()
+    {
+        string path = Path.Combine(_dir, "val-edges.accdb");
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db = Recover<DatabaseObject>(Method(eng, "CreateDatabase", path, DbLangGeneral, DbVersion120));
+        Assert.Null(Method(db, "Execute", "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG, W LONG, S TEXT(40))", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "CREATE INDEX IX_T_S ON T (S)", DbFailOnError).Failure);
+        DefinitionCollection tds = Recover<DefinitionCollection>(Get(db, "TableDefs"));
+        TableDefObject td = Recover<TableDefObject>(Get(tds, "Item", "T"));
+        DefinitionCollection fields = Recover<DefinitionCollection>(Get(td, "Fields"));
+        DefinitionFieldObject fv = Recover<DefinitionFieldObject>(Get(fields, "Item", "V"));
+        DefinitionFieldObject fs = Recover<DefinitionFieldObject>(Get(fields, "Item", "S"));
+
+        // r-expr-1/mut-validation-rules call 211: constant expression "1/0" is accepted.
+        Assert.Null(Put(fv, "ValidationRule", "1/0").Failure);
+        Assert.Equal("1/0\0", TextOf(Get(fv, "ValidationRule")));
+
+        // r-expr-1/mut-validation-rules call 236: standalone-unknown function fails DAO 3388 (no IErrorInfo).
+        CallResult badFn = Put(fv, "ValidationRule", "CVErr(5)");
+        Assert.Equal(unchecked((int)0x800A0D3C), badFn.Failure!.Scode);
+        Assert.Equal("DAO.Field", badFn.Failure.Source);
+        Assert.Equal("Unknown function 'CVErr' in validation expression or default value on 'T.V'.", badFn.Failure.Description);
+        Assert.Equal("jeterr40.chm", badFn.Failure.HelpFile);
+        Assert.Equal(5003388, badFn.Failure.HelpContext);
+        Assert.False(badFn.Failure.PublishesErrorInfo);
+
+        // ExpressionUse.ValidationRule allows Like on an indexed Text field (unlike Query's NotModelled.IndexedLike).
+        Assert.Null(Put(fs, "ValidationRule", "Like 'A*'").Failure);
+
+        // Unrecorded syntax error (unclosed paren) and single-other-column reference refuse by name rather than guessing 3320/3783.
+        Assert.Equal(FailureKind.NotImplemented, Put(fv, "ValidationRule", "[V] > (10").Failure!.Kind);
+        Assert.Equal(FailureKind.NotImplemented, Put(fv, "ValidationRule", "[W] > 10").Failure!.Kind);
+
+        // IDispatch::Invoke path: VT_NULL -> 3421 with IErrorInfo; VT_I4 -> E_NOTIMPL refusal.
+        (int hrNull, ExcepInfo exNull, bool hasEiNull) = InvokePut(fv, "ValidationRule", new NativeVariant { Vt = (ushort)VarType.Null });
+        Assert.Equal(HResults.DISP_E_EXCEPTION, hrNull);
+        Assert.Equal(unchecked((int)0x800A0D5D), exNull.Scode);
+        Assert.True(hasEiNull);
+        FreeExcep(exNull);
+
+        (int hrInt, ExcepInfo exInt, _) = InvokePut(fv, "ValidationText", new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 7 });
+        Assert.Equal(HResults.DISP_E_EXCEPTION, hrInt);
+        Assert.Equal(HResults.E_NOTIMPL, exInt.Scode);
+        FreeExcep(exInt);
+
+        // Closed Database field: VT_BSTR reports 3420 via Live; VT_NULL refuses by name instead of raising 3421 before Live.
+        Assert.Null(Method(db, "Close").Failure);
+        nint bstr = Marshal.StringToBSTR("> 1");
+        try
+        {
+            (int hrClosedBstr, ExcepInfo exClosedBstr, _) = InvokePut(fv, "ValidationRule", new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr });
+            Assert.Equal(HResults.DISP_E_EXCEPTION, hrClosedBstr);
+            Assert.Equal(unchecked((int)0x800A0D5C), exClosedBstr.Scode);
+            FreeExcep(exClosedBstr);
+        }
+        finally
+        {
+            Marshal.FreeBSTR(bstr);
+        }
+
+        (int hrClosedNull, ExcepInfo exClosedNull, _) = InvokePut(fv, "ValidationRule", new NativeVariant { Vt = (ushort)VarType.Null });
+        Assert.Equal(HResults.DISP_E_EXCEPTION, hrClosedNull);
+        Assert.Equal(HResults.E_NOTIMPL, exClosedNull.Scode);
+        FreeExcep(exClosedNull);
+    }
+
+    private static (int Hr, ExcepInfo Excep, bool HasErrorInfo) InvokePut(DispatchObject target, string member, NativeVariant value)
+    {
+        if (NativeRoute.GetErrorInfo(0, out nint stale) == 0 && stale != 0)
+        {
+            Marshal.Release(stale);
+        }
+        int propPutId = -3;
+        DispParams dp = new()
+        {
+            Args = (nint)(&value),
+            ArgCount = 1,
+            NamedArgs = (nint)(&propPutId),
+            NamedArgCount = 1,
+        };
+        NativeVariant result = default;
+        ExcepInfo excep = default;
+        uint argError = 0;
+        int hr = target.Invoke(target.Declaration.Member(member, InvokeKind.PropertyPut).MemberId, (ushort)InvokeKind.PropertyPut, &dp, &result, &excep, &argError);
+        bool hasErrorInfo = NativeRoute.GetErrorInfo(0, out nint errorInfo) == 0 && errorInfo != 0;
+        if (hasErrorInfo)
+        {
+            Marshal.Release(errorInfo);
+        }
+        return (hr, excep, hasErrorInfo);
+    }
+
+    private static void FreeExcep(ExcepInfo excep)
+    {
+        if (excep.Source != 0)
+        {
+            Marshal.FreeBSTR(excep.Source);
+        }
+        if (excep.Description != 0)
+        {
+            Marshal.FreeBSTR(excep.Description);
+        }
+        if (excep.HelpFile != 0)
+        {
+            Marshal.FreeBSTR(excep.HelpFile);
+        }
+    }
 }

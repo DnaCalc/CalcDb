@@ -893,7 +893,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put when the TableDef cannot be read"));
         }
         if (property == FieldValidationProperty.ValidationRule
-            && FieldValidationRuleValidator.Validate(def, column, value, CreateExpressionContext(ExpressionUse.Query)) is { } validationFailure)
+            && FieldValidationRuleValidator.Validate(tableDef.Name, def, column, value, CreateExpressionContext(ExpressionUse.ValidationRule)) is { } validationFailure)
         {
             return CallResult.Fail(validationFailure);
         }
