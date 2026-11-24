@@ -1,0 +1,58 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/create-zerofixed-accdb",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Create ACCDB fixture for Group 2 (tables with no non-Boolean fixed storage): Boolean-only (B1, B8, B9, B17, B25, B33, B41), variable-only (V1, V2, VM, VBin, VOle), mixed Boolean+variable (BV, VB, BV9), plus 1-byte and 2-byte fixed controls (F1, F2). Keeps whole file after creation.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q36-zerofixed-accdb.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B1 (b1 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B8 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B9 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B17 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO, b10 YESNO, b11 YESNO, b12 YESNO, b13 YESNO, b14 YESNO, b15 YESNO, b16 YESNO, b17 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B25 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO, b10 YESNO, b11 YESNO, b12 YESNO, b13 YESNO, b14 YESNO, b15 YESNO, b16 YESNO, b17 YESNO, b18 YESNO, b19 YESNO, b20 YESNO, b21 YESNO, b22 YESNO, b23 YESNO, b24 YESNO, b25 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B33 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO, b10 YESNO, b11 YESNO, b12 YESNO, b13 YESNO, b14 YESNO, b15 YESNO, b16 YESNO, b17 YESNO, b18 YESNO, b19 YESNO, b20 YESNO, b21 YESNO, b22 YESNO, b23 YESNO, b24 YESNO, b25 YESNO, b26 YESNO, b27 YESNO, b28 YESNO, b29 YESNO, b30 YESNO, b31 YESNO, b32 YESNO, b33 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B41 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO, b10 YESNO, b11 YESNO, b12 YESNO, b13 YESNO, b14 YESNO, b15 YESNO, b16 YESNO, b17 YESNO, b18 YESNO, b19 YESNO, b20 YESNO, b21 YESNO, b22 YESNO, b23 YESNO, b24 YESNO, b25 YESNO, b26 YESNO, b27 YESNO, b28 YESNO, b29 YESNO, b30 YESNO, b31 YESNO, b32 YESNO, b33 YESNO, b34 YESNO, b35 YESNO, b36 YESNO, b37 YESNO, b38 YESNO, b39 YESNO, b40 YESNO, b41 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE V1 (s TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE V2 (s1 TEXT(50), s2 TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE VM (m MEMO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE VBin (b BINARY(10))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE VOle (o LONGBINARY)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE BV (b1 YESNO, s TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE VB (s TEXT(50), b1 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE BV9 (b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO, b9 YESNO, s TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F1 (x BYTE)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F2 (x SHORT)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q36-zerofixed-accdb.accdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}

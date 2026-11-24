@@ -1,0 +1,61 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/zf-accdb-ado",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 2 (ACCDB ADO): inserts via ADODB.Connection.Execute into zero-fixed tables B1, B9, B17, V1, BV and 1-byte fixed control F1. Keeps whole file before and after insert.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-zerofixed-accdb.accdb",
+      "sha256": "21318312816a30c0a80827b81117ca8b7876f8b62e4f4c95f5f6dd571a29252b",
+      "length": 311296,
+      "provenance": "r-q36-publication-bytes.create-zerofixed-accdb.1dce931bec.a1 qk1-1dce931bec47a6139a878343397b2ea25e4c149cb3a1841d8b96e5122543a4a5 output:r-q36-zerofixed-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps" },
+    { "op": "invoke", "target": "ps", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds" },
+    { "op": "invoke", "target": "ds", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "ds" },
+    { "op": "release", "target": "ps" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B9 (b1, b9) VALUES (True, True)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B17 (b1, b17) VALUES (True, True)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES (NULL)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES ('')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES ('a')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO BV VALUES (False, NULL)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO BV VALUES (True, 'a')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1 VALUES (90)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+
+    { "op": "observeFiles", "label": "after-insert", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" }
+  ]
+}

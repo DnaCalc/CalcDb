@@ -1,0 +1,59 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/feff-sql-accdb-ado",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 1 (ACCDB ADO SQL INSERT): leading U+FEFF + 0, 3, 4, 5 ASCII and 3 euro into TU (uncompressed) and TC (WITH COMPRESSION) via cn.Execute SQL literals. Keeps whole file before and after write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-feff-accdb.accdb",
+      "sha256": "547e8279f34fd30a6f8a51f68d1209bb6aba1180937c8535c4ad5fea9a48ce2c",
+      "length": 208896,
+      "provenance": "r-q36-publication-bytes.create-feff-accdb.0159460915.a1 qk1-01594609154970242e96939f11e0d8afc3da570d7e0793d49f6a98b5b8360141 output:r-q36-feff-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps" },
+    { "op": "invoke", "target": "ps", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds" },
+    { "op": "invoke", "target": "ds", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "ds" },
+    { "op": "release", "target": "ps" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, T, M) VALUES (1, '\uFEFF', '\uFEFF')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, T, M) VALUES (4, '\uFEFFxxx', '\uFEFFxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, T, M) VALUES (5, '\uFEFFxxxx', '\uFEFFxxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, T, M) VALUES (6, '\uFEFFxxxxx', '\uFEFFxxxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, T, M) VALUES (7, '\uFEFF\u20AC\u20AC\u20AC', '\uFEFF\u20AC\u20AC\u20AC')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, T, M) VALUES (1, '\uFEFF', '\uFEFF')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, T, M) VALUES (4, '\uFEFFxxx', '\uFEFFxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, T, M) VALUES (5, '\uFEFFxxxx', '\uFEFFxxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, T, M) VALUES (6, '\uFEFFxxxxx', '\uFEFFxxxxx')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, T, M) VALUES (7, '\uFEFF\u20AC\u20AC\u20AC', '\uFEFF\u20AC\u20AC\u20AC')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-write", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" }
+  ]
+}

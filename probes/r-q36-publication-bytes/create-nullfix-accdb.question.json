@@ -1,0 +1,69 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/create-nullfix-accdb",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Create ACCDB 2007 fixture for Group 3 (fixed field becoming Null on update): seeded tables AllTypes (Byte, Short, Long, Single, Double, Currency, DateTime, GUID, Decimal(18,2), Text), PosFirst, PosLastOnly, SingleFixed, TrailDec, TrailDecVar. Keeps whole file after creation.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q36-nullfix-accdb.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps" },
+    { "op": "invoke", "target": "ps", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "ds" },
+    { "op": "invoke", "target": "ds", "member": "Value", "kind": "propertyPut", "args": [{ "type": "outputPath", "fileName": "r-q36-nullfix-accdb.accdb" }] },
+    { "op": "release", "target": "ds" },
+    { "op": "release", "target": "ps" },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE AllTypes (ID LONG CONSTRAINT PK_AT PRIMARY KEY, FByte BYTE, FShort SHORT, FLong LONG, FSingle SINGLE, FDouble DOUBLE, FCurr CURRENCY, FDate DATETIME, FGuid GUID, FDec DECIMAL(18,2), S TEXT(50))" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO AllTypes VALUES (1, 90, 4660, 305419896, 1.5, 3.25, 123.45, #2026-11-24 12:30:00#, '{11223344-5566-7788-99AA-BBCCDDEEFF00}', 12345.67, 'hello')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO AllTypes VALUES (2, 90, 4660, 305419896, 1.5, 3.25, 123.45, #2026-11-24 12:30:00#, '{11223344-5566-7788-99AA-BBCCDDEEFF00}', 12345.67, 'hello')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO AllTypes VALUES (3, 90, 4660, 305419896, 1.5, 3.25, 123.45, #2026-11-24 12:30:00#, '{11223344-5566-7788-99AA-BBCCDDEEFF00}', 12345.67, 'longer string value here')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO AllTypes VALUES (4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'hello')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE PosFirst (A LONG, B LONG, S TEXT(50))" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO PosFirst VALUES (111, 222, 'hi')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO PosFirst VALUES (333, 444, 'hi')" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE PosLastOnly (ID LONG CONSTRAINT PK_PLO PRIMARY KEY, V LONG)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO PosLastOnly VALUES (1, 777)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE SingleFixed (A LONG)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO SingleFixed VALUES (555)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE TrailDec (ID LONG CONSTRAINT PK_TD PRIMARY KEY, V LONG, D DECIMAL(18,2))" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TrailDec VALUES (1, 100, 99.95)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TrailDec VALUES (2, 200, NULL)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE TrailDecVar (ID LONG CONSTRAINT PK_TDV PRIMARY KEY, S TEXT(50), D DECIMAL(18,2))" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TrailDecVar VALUES (1, 'hi', 99.95)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TrailDecVar VALUES (2, 'hi', NULL)" }, { "type": "missing" }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q36-nullfix-accdb.accdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}

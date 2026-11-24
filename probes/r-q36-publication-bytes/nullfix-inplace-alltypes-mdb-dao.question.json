@@ -1,0 +1,61 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/nullfix-inplace-alltypes-mdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 3 (Jet 4 MDB DAO SQL in-place): UPDATE fixed columns to NULL in place on AllTypes (all 9 fixed types), PosFirst, PosLastOnly, SingleFixed, TrailDec, TrailDecVar. Keeps whole file before and after each phase.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-nullfix-mdb.mdb",
+      "sha256": "8fae31a32155dc63984bc50f45e0d84bdce56bf65e4b81c76b56565534ce753a",
+      "length": 167936,
+      "provenance": "r-q36-publication-bytes.create-nullfix-mdb.50be26ebd3.a1 qk1-50be26ebd35a82d8bd159994cf7f8d315308ba3e3465aabc0ef51f898812c7fd output:r-q36-nullfix-mdb.mdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db1" },
+    { "op": "invoke", "target": "db1", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE AllTypes SET FByte=NULL, FShort=NULL, FLong=NULL, FSingle=NULL, FDouble=NULL, FCurr=NULL, FDate=NULL, FGuid=NULL, FDec=NULL WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db1" },
+    { "op": "observeFiles", "label": "after-alltypes", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE PosFirst SET A=NULL WHERE B=222" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE PosLastOnly SET V=NULL WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE SingleFixed SET A=NULL" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE TrailDec SET D=NULL WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE TrailDecVar SET D=NULL WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db2" },
+    { "op": "observeFiles", "label": "after-positions", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" },
+
+    { "op": "release", "target": "eng" }
+  ]
+}
