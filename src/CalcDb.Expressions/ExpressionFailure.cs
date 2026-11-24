@@ -78,6 +78,12 @@ public static class ExpressionMessages
     /// </summary>
     public const string WrongArgumentCount = "Wrong number of arguments used with function in expression.";
 
+    /// <summary>
+    /// Nesting or argument-list complexity limit in a query (3075: r-expr-1b/cond-iif-forms 20 nested IIf;
+    /// r-expr-1b/cond-switch-choose-forms Switch with 40 arguments, Choose with 101 arguments).
+    /// </summary>
+    public const string ExpressionTooComplex = "Expression too complex in expression.";
+
     /// <summary>3085 for a function standalone ACE lacks, in a query (qualified.md "function availability": Nz, CVErr, Eval).</summary>
     public static string UndefinedFunction(string name) => $"Undefined function '{name}' in expression.";
 
