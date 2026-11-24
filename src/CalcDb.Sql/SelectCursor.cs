@@ -102,6 +102,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private readonly OccurrenceStore<ResultRow> _store;
     private readonly PositionState<int> _position;
     private readonly NativeVariant[] _constants;
+    private readonly NativeVariant[] _projected;
     private readonly int?[] _types;
     private readonly string?[] _typeOpen;
     private readonly SqlFailure?[] _readFailures;
@@ -128,6 +129,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         _nullExtended = new bool[readers.Length];
         _parameters = prepared.Parameters;
         _constants = prepared.Constants;
+        _projected = new NativeVariant[plan.ColumnList.Count];
         _types = prepared.Types;
         _typeOpen = prepared.TypeOpen;
         _readFailures = prepared.ReadFailures;
@@ -447,14 +449,72 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
         }
         Stand(row);
-        BoundExpression program = _plan.ColumnList[column].Program;
+        ResultColumn col = _plan.ColumnList[column];
+        BoundExpression program = col.Program;
         if (!program.Evaluate(this))
         {
             ExpressionFailure f = program.LastFailure!;
             failure = SqlFailure.Of(f, SqlPhase.Read, _plan.Source, 0, _plan.Source.Length);
             return false;
         }
+        if (col.Origin == ColumnOrigin.Expression)
+        {
+            if (TryProjectValue(program.Value, _types[column], _plan.Context, out NativeVariant projected, out SqlFailure? projFailure))
+            {
+                SelectValues.Clear(ref _projected[column]);
+                _projected[column] = projected;
+                value = _projected[column];
+                return true;
+            }
+            if (projFailure is not null)
+            {
+                failure = projFailure;
+                return false;
+            }
+        }
         value = program.Value;
+        return true;
+    }
+
+    /// <summary>
+    /// Converts a non-Null projected expression value to the column's static DAO Field.Type where its inner VarType
+    /// differs (qualified.md "the DAO Field.Type of a projected column": e.g. IIf(True, 1, 'a') projects VT_I4 as
+    /// VT_BSTR "1", Switch(1 = 1, 1.5) projects VT_DECIMAL as VT_R8 1.5, CSng(1) projects VT_R4 as VT_R8 1).
+    /// Returns false when no conversion was needed (caller uses <paramref name="source"/> directly) or on failure
+    /// (with <paramref name="failure"/> set); returns true with an owned <paramref name="converted"/> on conversion.
+    /// </summary>
+    private static bool TryProjectValue(in NativeVariant source, int? fieldType, ExpressionContext context, out NativeVariant converted, out SqlFailure? failure)
+    {
+        converted = default;
+        failure = null;
+        if (fieldType is not int ft || source.Vt is (ushort)VarType.Null or (ushort)VarType.Empty)
+        {
+            return false;
+        }
+        (VarType target, ScalarOperation op) = ft switch
+        {
+            3 => (VarType.I2, ScalarOperation.CInt),
+            4 => (VarType.I4, ScalarOperation.CLng),
+            5 => (VarType.Currency, ScalarOperation.CCur),
+            7 => (VarType.R8, ScalarOperation.CDbl),
+            8 => (VarType.Date, ScalarOperation.CDate),
+            10 => (VarType.Bstr, ScalarOperation.CStr),
+            _ => (VarType.Empty, default),
+        };
+        if (target == VarType.Empty || source.Vt == (ushort)target)
+        {
+            return false;
+        }
+        ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(op, 0, OperandContract.Expression), source, context);
+        if (!r.Succeeded)
+        {
+            ScalarFailure f = r.Failure;
+            failure = f.Kind == ScalarFailureKind.NotModelled
+                ? SqlFailure.Open(SqlPhase.Read, $"NotModelled.{f.Case}", f.Describe())
+                : SqlFailure.Ace(SqlPhase.Read, f.Number, AceError.Describe(f.Number));
+            return false;
+        }
+        converted = r.Value;
         return true;
     }
 
@@ -502,6 +562,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         for (int i = 0; i < _constants.Length; i++)
         {
             SelectValues.Clear(ref _constants[i]);
+        }
+        for (int i = 0; i < _projected.Length; i++)
+        {
+            SelectValues.Clear(ref _projected[i]);
         }
         ClearSlots(_slots);
         ClearSlots(_derivedSlots);
@@ -762,7 +826,26 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         continue;
                     }
                 }
-                _constants[i] = Copy(c.Program.Value);
+                if (c.Origin == ColumnOrigin.Expression)
+                {
+                    if (TryProjectValue(c.Program.Value, types[i], plan.Context, out NativeVariant projected, out SqlFailure? projFailure))
+                    {
+                        _constants[i] = projected;
+                    }
+                    else if (projFailure is not null)
+                    {
+                        reads[i] = projFailure;
+                        continue;
+                    }
+                    else
+                    {
+                        _constants[i] = Copy(c.Program.Value);
+                    }
+                }
+                else
+                {
+                    _constants[i] = Copy(c.Program.Value);
+                }
                 if (c.TypeRule == ColumnTypeRule.NullAtOpen && (_constants[i].Vt == (ushort)VarType.Null || c.NonNullType is not null))
                 {
                     // qualified.md "the DAO Field.Type of a projected column": a Null-literal operator whose value is Null is
@@ -1436,6 +1519,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             if (root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply }
                 && root.Left!.Kind is SyntaxKind.Call or SyntaxKind.Literal && root.Right!.Kind is SyntaxKind.Call or SyntaxKind.Literal)
             {
+                read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                return null;
+            }
+            if (root is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left.Kind: SyntaxKind.Call or SyntaxKind.Literal })
+            {
+                // r-expr-1b/arith-overflow-promotion (#176/#183 -CInt(-32768), #200/#207 -CLng(-2147483648)):
+                // unary minus over a Call or Literal that widens under Folding does not fit its static Integer/Long column and fails 6 at read.
                 read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
                 return null;
             }
