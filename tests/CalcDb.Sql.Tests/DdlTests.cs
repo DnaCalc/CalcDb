@@ -1258,7 +1258,7 @@ public sealed class DdlTests
     public void Alter_table_add_check_constraint_via_ado_is_enforced_and_refuses_unrecorded_shapes()
     {
         using var db = new WritableSqlFixture(EmptyAccdbSha);
-        Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG)", db, source: ActionErrorSource.Ado).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG, S TEXT(20))", db, source: ActionErrorSource.Ado).Succeeded);
         Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD CONSTRAINT CK_MIN CHECK (V >= 0)", db, source: ActionErrorSource.Ado).Succeeded);
 
         // Valid values (positive, zero, NULL) succeed; violating value fails ACE 3317 under dbFailOnError (128).
@@ -1267,16 +1267,21 @@ public sealed class DdlTests
         Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (3, NULL)", db).Succeeded);
         AssertAceError(db, "INSERT INTO T (ID, V) VALUES (4, -1)", 3317, options: 128);
 
-        // Adding a second CHECK constraint updates the same LVAL page and enforces both.
-        Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD CONSTRAINT CK_MAX CHECK (V <= 100)", db, source: ActionErrorSource.Ado).Succeeded);
-        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (5, 100)", db).Succeeded);
-        AssertAceError(db, "INSERT INTO T (ID, V) VALUES (6, 101)", 3317, options: 128);
+        // Adding a second CHECK constraint over an existing violating row (ID=1 has V=10; r-q-cat-txn-lock/ii11-ado-check-constraint)
+        // succeeds, leaves the existing row stored, and enforces both CHECKs on later writes.
+        Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD CONSTRAINT CK_MAX CHECK (V < 5)", db, source: ActionErrorSource.Ado).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (5, 4)", db).Succeeded);
+        AssertAceError(db, "INSERT INTO T (ID, V) VALUES (6, 5)", 3317, options: 128);
 
         // Unrecorded CHECK neighbours refuse by name without writing.
         byte[] beforeRefusals = db.Image.Snapshot();
         AssertNotModelled(db, "ALTER TABLE T ADD CHECK (V > 0)", "NotModelled.DdlUnnamedCheckConstraint", ActionErrorSource.Ado);
         AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_COMP CHECK (V > 0 AND V < 10)", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
         AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_MISS CHECK (Nope > 0)", "NotModelled.DdlCheckUnknownColumn", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_TEQ CHECK (S = 'x')", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_TLEAD CHECK (S <> ' x')", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_TNBSP CHECK (S <> 'x\u00A0')", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT CK_NLHS CHECK (-3 < V)", "NotModelled.DdlCheckExpression", ActionErrorSource.Ado);
         Assert.Equal(beforeRefusals, db.Image.Snapshot());
 
         // CHECK on a table whose LvProp already holds column NOT NULL property refuses by name without writing.

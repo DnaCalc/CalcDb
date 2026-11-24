@@ -991,12 +991,30 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, $"CHECK constraint '{request.ConstraintName}' Connect field ({connectPayload.Length} bytes) exceeds inline LVAL limit ({LongValuePlan.InlinePayloadMax}): external MSysObjects.Connect is not recorded"), default, _pageCount);
         }
 
-        if (PrepareCheckConstraintState(entry, table, checkedCol, request.ConstraintName, parsedExpr, out int nextId, out PropertyMap[] newPropMaps) is { } checkRefusal)
+        if (PrepareCheckConstraintState(entry, request.ConstraintName, parsedExpr, out int nextId, out PropertyMap[] newPropMaps, out bool updatesExistingLvProp) is { } checkRefusal)
         {
             return new SchemaOutcome(checkRefusal, default, _pageCount);
         }
 
         int publicationsBefore = workspace.Publications.Count;
+        if (updatesExistingLvProp && !workspace.NeedsCloseCommit(_cache))
+        {
+            if (isJet4Mdb)
+            {
+                return new SchemaOutcome(
+                    new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on Jet 4 MDB table '{entry.Name}' adding a subsequent CHECK in a fresh session (updating an existing LVAL page without allocating a new page) is not recorded (only ACCDB is recorded, r-q34-ddl-sweep/alt-check-two-accdb-ado; same-session Jet 4 MDB two-CHECK after CREATE/first CHECK is recorded, r-q31-sql-check-2/mdb-two-checks-za)"),
+                    default,
+                    _pageCount);
+            }
+            if (publicationsBefore > 0)
+            {
+                return new SchemaOutcome(
+                    new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' adding a subsequent CHECK in a session that already published a non-allocating write (without a pending Close commit) is not recorded (r-q34-ddl-sweep/alt-check-two-accdb-ado records a fresh session only)"),
+                    default,
+                    _pageCount);
+            }
+        }
+
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -1013,7 +1031,8 @@ public sealed class SchemaWriter
                 dateUpdateBits,
                 out extent),
             allowJet4Mdb: isJet4Mdb);
-        if (!isJet4Mdb
+        if (updatesExistingLvProp
+            && !isJet4Mdb
             && workspace.Publisher is not null
             && Published(accepted)
             && !workspace.NeedsCloseCommit(_cache)
@@ -1597,15 +1616,15 @@ public sealed class SchemaWriter
 
     private SchemaRefusal? PrepareCheckConstraintState(
         CatalogEntry entry,
-        TableDefinition table,
-        ColumnDescriptor checkedCol,
         string constraintName,
         CheckConstraintExpression parsedExpr,
         out int nextId,
-        out PropertyMap[] newPropMaps)
+        out PropertyMap[] newPropMaps,
+        out bool updatesExistingLvProp)
     {
         nextId = int.MinValue;
         newPropMaps = [];
+        updatesExistingLvProp = false;
 
         if (CheckConstraintCatalog.Read(_cache, _d, _catalog, _pageCount, out string? ccFailure) is not { } existingChecks)
         {
@@ -1823,6 +1842,7 @@ public sealed class SchemaWriter
         }
         else
         {
+            updatesExistingLvProp = true;
             uint oldPage = oldPlan.First.Page;
             byte oldSlot = oldPlan.First.Row;
             byte[]? oldPageCopy = PinCopy(oldPage);
@@ -1848,42 +1868,9 @@ public sealed class SchemaWriter
             }
         }
 
-        // Validate every existing row on a populated table (alt-check-rows-accdb-ado, alt-check-rows-mdb-ado).
-        if (table.RowCount > 0)
-        {
-            SortDescriptor? sort = parsedExpr.LiteralKind == CheckLiteralKind.Text ? GeneralLegacySort() : null;
-            List<TraversalFailure> tableScanFailures = [];
-            uint scannedRows = 0;
-            foreach (RowView row in RowResolver.Scan(_cache, _d, table, _pageCount, tableScanFailures))
-            {
-                using (row)
-                {
-                    scannedRows++;
-                    NativeValue val = FieldDecoder.Read(row, table, checkedCol, _cache, _d);
-                    if (val.Kind == NativeKind.Failed)
-                    {
-                        return new SchemaRefusal(null, $"table '{entry.Name}' row {row.Root} column '{checkedCol.Name}': {val.Failure}");
-                    }
-                    if (!parsedExpr.TryEvaluate(val, sort, out bool satisfied, out string? evalFail))
-                    {
-                        return new SchemaRefusal(null, $"CHECK constraint '{constraintName}' on row {row.Root}: {evalFail}");
-                    }
-                    if (!satisfied)
-                    {
-                        return new SchemaRefusal(null, $"existing row {row.Root} of table '{entry.Name}' violates CHECK constraint '{constraintName}': post-failure bytes and error number on ALTER TABLE ADD CONSTRAINT CHECK are not recorded");
-                    }
-                }
-            }
-            if (tableScanFailures.Count > 0)
-            {
-                return new SchemaRefusal(null, $"table '{entry.Name}' scan: " + string.Join("; ", tableScanFailures.Select(f => $"{f.At}: {f.Predicate}")));
-            }
-            if (scannedRows != table.RowCount)
-            {
-                return new SchemaRefusal(null, $"table '{entry.Name}' scan read {scannedRows} live rows but TableDef.RowCount is {table.RowCount}");
-            }
-        }
-
+        // ACE does not validate existing rows on ALTER TABLE ADD CONSTRAINT CHECK (r-q-cat-txn-lock/ii11-ado-check-constraint:
+        // CK_V2 CHECK (V < 20) succeeds over existing V = 25, leaving the existing row stored and enforcing on later writes;
+        // r-q34-ddl-sweep/alt-check-rows-accdb-ado and alt-check-rows-mdb-ado write the same catalog changes as empty tables).
         return null;
     }
 
@@ -1943,7 +1930,7 @@ public sealed class SchemaWriter
         var result = new List<(string, string)>(parts.Length / 2);
         for (int i = 0; i < parts.Length; i += 2)
         {
-            if (parts[i].Length == 0 || parts[i + 1].Length == 0)
+            if (string.IsNullOrWhiteSpace(parts[i]) || string.IsNullOrWhiteSpace(parts[i + 1]))
             {
                 failure = $"pair {i / 2} has an empty name or expression";
                 return false;

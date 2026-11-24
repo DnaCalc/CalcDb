@@ -267,11 +267,21 @@ public enum CheckLiteralKind : byte
 }
 
 /// <summary>
-/// Single-column SQL <c>CHECK</c> constraint expression parser and evaluator shared by <c>DdlBinder</c> and
-/// <see cref="SchemaWriter.AddCheckConstraint"/> (evidence/r-q34-ddl-sweep/alt-check-*, r-q30-sql-check, r-q31-sql-check-2).
-/// Admits a bare column compared via <c>=</c>, <c>&lt;&gt;</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c>
-/// against a signed 32-bit integer literal (column on left or right) or a single-quoted Latin-1 string literal (column
-/// on left); refuses every other shape by name.
+/// Single-column SQL <c>CHECK</c> constraint expression parser shared by <c>DdlBinder</c> and
+/// <see cref="SchemaWriter.AddCheckConstraint"/> (evidence/r-q34-ddl-sweep/alt-check-*, r-q30-sql-check/op-*,
+/// r-q31-sql-check-2/lit-*).
+/// Admits only the recorded shapes:
+/// <list type="bullet">
+/// <item>A bare <c>Long</c> column on the left compared via <c>=</c>, <c>&lt;&gt;</c>, <c>&lt;</c>, <c>&lt;=</c>,
+/// <c>&gt;</c>, or <c>&gt;=</c> against a signed 32-bit integer literal.</item>
+/// <item>A non-negative 32-bit integer literal on the left compared via <c>=</c>, <c>&lt;&gt;</c>, <c>&lt;</c>,
+/// <c>&lt;=</c>, <c>&gt;</c>, or <c>&gt;=</c> against a bare <c>Long</c> column, or a negative 32-bit integer literal
+/// on the left compared via <c>&lt;=</c> (<c>r-q31-sql-check-2/lit-lhs-neg-le-sat</c>).</item>
+/// <item>A bare <c>Text</c> column on the left compared via <c>&lt;&gt;</c> against a single-quoted Latin-1 string
+/// literal with no leading ASCII space and no non-space/non-ASCII whitespace (<c>r-q30-sql-check/op-text-ne-sat</c>,
+/// <c>r-q31-sql-check-2/lit-text-*</c>).</item>
+/// </list>
+/// Refuses every other shape by name.
 /// </summary>
 public sealed record CheckConstraintExpression(
     string Expression,
@@ -309,6 +319,7 @@ public sealed record CheckConstraintExpression(
         // Case 1: signed 32-bit integer literal on the left, comparison op, bare column on the right.
         if (span[0] == '-' || char.IsAsciiDigit(span[0]))
         {
+            bool isNegative = span[0] == '-';
             int i = 0;
             if (!TryReadSignedInt32(span, ref i, out int lhsInt, out reason))
             {
@@ -317,6 +328,11 @@ public sealed record CheckConstraintExpression(
             SkipWhitespace(span, ref i);
             if (!TryReadComparisonOp(span, ref i, out CheckComparisonOp lhsOp, out reason))
             {
+                return false;
+            }
+            if (isNegative && lhsOp != CheckComparisonOp.Le)
+            {
+                reason = $"CHECK operator '{OpText(lhsOp)}' with a negative integer literal on the left is not recorded (only '<=' is recorded, r-q31-sql-check-2/lit-lhs-neg-le-sat)";
                 return false;
             }
             SkipWhitespace(span, ref i);
@@ -359,6 +375,11 @@ public sealed record CheckConstraintExpression(
 
         if (span[pos] == '\'')
         {
+            if (op != CheckComparisonOp.Ne)
+            {
+                reason = $"CHECK operator '{OpText(op)}' on a Text column is not recorded (only '<>' is recorded, r-q30-sql-check/op-text-ne-sat, r-q31-sql-check-2/lit-text-empty-sat)";
+                return false;
+            }
             if (!TryReadStringLiteral(span, ref pos, out string lit, out reason))
             {
                 return false;
@@ -367,6 +388,19 @@ public sealed record CheckConstraintExpression(
             {
                 reason = "only a single-column comparison against a 32-bit integer or Latin-1 string literal is recorded for ADD CONSTRAINT CHECK";
                 return false;
+            }
+            if (lit.Length > 0 && lit[0] == ' ')
+            {
+                reason = "leading spaces in a Text CHECK literal are not recorded (only trailing ASCII spaces are recorded, r-q31-sql-check-2/lit-text-trail-lit)";
+                return false;
+            }
+            foreach (char ch in lit)
+            {
+                if (ch != ' ' && char.IsWhiteSpace(ch))
+                {
+                    reason = $"non-ASCII or control whitespace U+{(int)ch:X4} in a Text CHECK literal is not recorded (only trailing ASCII spaces are recorded, r-q31-sql-check-2/lit-text-trail-lit)";
+                    return false;
+                }
             }
             parsed = new CheckConstraintExpression(trimmed, lhsCol, op, CheckLiteralKind.Text, TextValue: lit);
             reason = null;
@@ -393,51 +427,15 @@ public sealed record CheckConstraintExpression(
         return false;
     }
 
-    /// <summary>Evaluate this CHECK constraint against one stored column value (SQL NULL satisfies CHECK).</summary>
-    public bool TryEvaluate(in NativeValue value, SortDescriptor? sortOrder, out bool satisfied, out string? reason)
+    private static string OpText(CheckComparisonOp op) => op switch
     {
-        satisfied = false;
-        reason = null;
-        if (value.Kind == NativeKind.Null)
-        {
-            satisfied = true;
-            return true;
-        }
-        if (LiteralKind == CheckLiteralKind.Long)
-        {
-            if (value.Kind != NativeKind.Long)
-            {
-                reason = $"CHECK on Long column encountered {value.Kind} value";
-                return false;
-            }
-            int v = (int)value.Integer;
-            satisfied = CompareResult(v.CompareTo(LongValue), Op);
-            return true;
-        }
-        if (value.Kind != NativeKind.Text)
-        {
-            reason = $"CHECK on Text column encountered {value.Kind} value";
-            return false;
-        }
-        if (sortOrder is null)
-        {
-            reason = "CHECK on Text column requires General Legacy (1033/0) sort order";
-            return false;
-        }
-        int cmp = TextOrder.Compare(sortOrder, (value.Text ?? "").TrimEnd(' '), (TextValue ?? "").TrimEnd(' '));
-        satisfied = CompareResult(cmp, Op);
-        return true;
-    }
-
-    private static bool CompareResult(int cmp, CheckComparisonOp op) => op switch
-    {
-        CheckComparisonOp.Eq => cmp == 0,
-        CheckComparisonOp.Ne => cmp != 0,
-        CheckComparisonOp.Lt => cmp < 0,
-        CheckComparisonOp.Le => cmp <= 0,
-        CheckComparisonOp.Gt => cmp > 0,
-        CheckComparisonOp.Ge => cmp >= 0,
-        _ => false,
+        CheckComparisonOp.Eq => "=",
+        CheckComparisonOp.Ne => "<>",
+        CheckComparisonOp.Lt => "<",
+        CheckComparisonOp.Le => "<=",
+        CheckComparisonOp.Gt => ">",
+        CheckComparisonOp.Ge => ">=",
+        _ => op.ToString(),
     };
 
     private static CheckComparisonOp Flip(CheckComparisonOp op) => op switch

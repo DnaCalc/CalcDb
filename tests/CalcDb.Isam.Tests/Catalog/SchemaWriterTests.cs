@@ -1886,13 +1886,17 @@ public sealed class SchemaWriterTests
             Assert.False(existingColProp.PublishedAny);
             Assert.Contains("LvProp", existingColProp.Refused?.NotWritten);
 
-            // Expressions outside the single-column comparison subset refuse without writing.
+            // Expressions outside the recorded single-column comparison subset refuse without writing.
             foreach ((string col, string expr) in new[]
             {
                 ("V", "V > 0 AND V < 10"),
                 ("V", "ID < V"),
                 ("V", "V = 'a'"),
                 ("S", "S <> '\u20AC'"),
+                ("S", "S = 'x'"),
+                ("S", "S <> ' x'"),
+                ("S", "S <> 'x\u00A0'"),
+                ("V", "-3 < V"),
             })
             {
                 SchemaOutcome badExpr = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_BAD", col, expr, SchemaRoute.Ado), 2, 2);
@@ -1913,16 +1917,53 @@ public sealed class SchemaWriterTests
             Assert.Equal(afterFirst, session.File.Snapshot());
         }
 
-        // Populated table with an existing row violating the CHECK refuses without writing.
+        // r-q-cat-txn-lock/ii11-ado-check-constraint: ACE does not validate existing rows on ADD CONSTRAINT CHECK
+        // (CK_V2 CHECK (V < 20) succeeds over existing V = 25).
         byte[] popImage = Kept.AfterSetupImage("alt-check-rows-accdb-ado");
         using (var session = new Session(popImage))
         {
-            // Rows have V in {20, 10, 30}; V >= 25 fails on rows 1 and 2.
-            SchemaOutcome violated = session.Writer().AddCheckConstraint(session.Workspace, new("T", "CK_HIGH", "V", "V >= 25", SchemaRoute.Ado), 2, 2);
-            Assert.False(violated.Succeeded);
-            Assert.False(violated.PublishedAny);
-            Assert.Contains("violates CHECK constraint", violated.Refused?.NotWritten);
-            Assert.Equal(popImage, session.File.Snapshot());
+            // Rows have V in {20, 10, 30}; V >= 25 does not hold for V = 20 and V = 10, yet ADD CONSTRAINT succeeds.
+            session.AddCheckConstraint(new("T", "CK_HIGH", "V", "V >= 25", SchemaRoute.Ado), 2, 2);
+            session.Close();
+
+            CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? catFail)!;
+            Assert.Null(catFail);
+            IReadOnlyList<CheckConstraintCatalogEntry>? checks = CheckConstraintCatalog.Read(session.Cache, D, cat, session.Pages, out string? readFail);
+            Assert.Null(readFail);
+            CheckConstraintCatalogEntry added = Assert.Single(checks!, c => c.Name == "CK_HIGH");
+            Assert.Equal("V >= 25", added.Expression);
+        }
+
+        // Fresh-session Jet 4 MDB adding a second CHECK on an existing LVAL page is not recorded and refuses without writing.
+        byte[] mdbWithOneCheck;
+        using (var setupMdb = new Session(Kept.AfterSetupImage("alt-check-empty-mdb-ado")))
+        {
+            setupMdb.AddCheckConstraint(new("T", "CK_A", "V", "V >= 0", SchemaRoute.Ado), 2, 2);
+            setupMdb.Close();
+            mdbWithOneCheck = setupMdb.File.Snapshot();
+        }
+        using (var freshMdb = new Session(mdbWithOneCheck))
+        {
+            SchemaOutcome mdbSecond = freshMdb.Writer().AddCheckConstraint(freshMdb.Workspace, new("T", "CK_B", "V", "V <= 100", SchemaRoute.Ado), 3, 3);
+            Assert.False(mdbSecond.Succeeded);
+            Assert.False(mdbSecond.PublishedAny);
+            Assert.Contains("Jet 4 MDB", mdbSecond.Refused?.NotWritten);
+            Assert.Equal(mdbWithOneCheck, freshMdb.File.Snapshot());
+        }
+
+        // Fresh-session ACCDB adding a second CHECK after an earlier non-allocating publication (without a pending Close commit)
+        // is not recorded and refuses without writing.
+        byte[] accdbWithOneCheck = Kept.AfterSetupImage("alt-check-two-accdb-ado");
+        using (var afterDmlAccdb = new Session(accdbWithOneCheck))
+        {
+            Assert.Equal(MutationOpen.None, afterDmlAccdb.Workspace.PublishCounterCommit(afterDmlAccdb.Cache).Open);
+            Assert.False(afterDmlAccdb.Workspace.NeedsCloseCommit(afterDmlAccdb.Cache));
+            byte[] beforeSecond = afterDmlAccdb.File.Snapshot();
+            SchemaOutcome secondAfterDml = afterDmlAccdb.Writer().AddCheckConstraint(afterDmlAccdb.Workspace, new("T", "CK_B", "V", "V <= 100", SchemaRoute.Ado), 3, 3);
+            Assert.False(secondAfterDml.Succeeded);
+            Assert.False(secondAfterDml.PublishedAny);
+            Assert.Contains("non-allocating", secondAfterDml.Refused?.NotWritten);
+            Assert.Equal(beforeSecond, afterDmlAccdb.File.Snapshot());
         }
     }
 }
