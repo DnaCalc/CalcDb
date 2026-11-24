@@ -102,8 +102,10 @@ It checks out master as committed and then:
   changed project; every test project when the build files, `evidence/` or `probes/` changed. `-Tests` adds more.
 - **publishes CalcDb.Com** only when a source of its project closure changed since the last publish there (a hash in
   `artifacts/native`). The Com tests, the candidate check and the snapshot use the published module.
-- **runs the tests** with a trx logger (failed tests named, replay counters summed) and the **candidate check** of each
-  `-Questions` folder from the check worktree, whose `evidence/` holds the change's records.
+- **runs the selected test projects** concurrently (up to `-MaxParallelTests`, 3 by default, longest first: `Isam`,
+  `Sql`, then the rest) with `--no-build` and a trx logger (one trx and console log per project, failed tests named,
+  replay counters summed), and the **candidate check** of each `-Questions` folder from the check worktree, whose
+  `evidence/` holds the change's records.
 - with `-Snapshot`, **copies the runner, worker, native deployment and `probes/compare-set*.json`** to
   `%LOCALAPPDATA%\CalcDb\compare-bin\<topic>` and prints the compare command. It keeps the ten newest snapshots.
 - keeps the logs of the 40 newest runs in `%TEMP%\calcdb-land-out`, and appends one line per run to
