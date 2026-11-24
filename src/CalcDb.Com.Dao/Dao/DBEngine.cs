@@ -198,13 +198,14 @@ internal sealed unsafe class DBEngineObject : DaoObject
     /// <summary>
     /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
     /// DBEngine.CommitTrans Option (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 74, 78) and
-    /// DBEngine.CreateDatabase Name/Locale (p0/p1, ACCDB only: r-q35-byref-args/dao-eng-createdatabase calls 7, 11,
-    /// 15, 19, 23, 27, 31, 35). CreateDatabase Option (p2) ByRef and Jet 4 MDB (option 64) ByRef stay refused by name.
+    /// DBEngine.CreateDatabase Name/Locale (p0/p1, ACCDB with omitted/Missing/Empty/VT_I4 128 Option only:
+    /// r-q35-byref-args/dao-eng-createdatabase calls 7, 11, 15, 19, 23, 27, 31, 35). CreateDatabase Option (p2) ByRef
+    /// and every non-ACCDB Option (Jet 4 MDB option 64, non-VT_I4 64, 192, 66, 256, 32, etc.) keep ByRef refused by name.
     /// </summary>
     protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
     {
         ("CommitTrans", 0) => !(Engine.Touched && Engine.DefaultWorkspace.HasOpenMdbDatabase),
-        ("CreateDatabase", 0 or 1) => !WorkspaceObject.IsJet4MdbOption(args),
+        ("CreateDatabase", 0 or 1) => WorkspaceObject.IsRecordedAccdbByRefOption(args),
         _ => false,
     };
 
@@ -422,27 +423,38 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>Whether any currently open database in this Workspace is Jet 4 MDB (used to keep ACCDB-only ByRef rules off MDB).</summary>
     internal bool HasOpenMdbDatabase => _databases.Any(static d => !d.Closed && d.Profile.Format == FileFormat.Jet4);
 
-    /// <summary>True when a CreateDatabase call passes Option = VT_I4 64 (dbVersion40 / Jet 4 MDB).</summary>
-    internal static bool IsJet4MdbOption(ReadOnlySpan<nint> args)
+    /// <summary>
+    /// True only when a CreateDatabase call passes an Option form recorded for ACCDB ByRef Name/Locale
+    /// (omitted, DISP_E_PARAMNOTFOUND missing, VT_EMPTY, or VT_I4 128; r-q35-byref-args/dao-eng-createdatabase).
+    /// Every other Option form (Jet 4 MDB option 64, non-VT_I4 64, 192, 66, 256, 32, ByRef Option, etc.) keeps ByRef
+    /// Name/Locale refused by name before argument coercion runs.
+    /// </summary>
+    internal static bool IsRecordedAccdbByRefOption(ReadOnlySpan<nint> args)
     {
         if (args.Length <= 2 || args[2] == 0)
         {
-            return false;
+            return true;
         }
         var v = Args.Cell(args[2]);
-        return (VarType)v->Vt == VarType.I4 && (int)v->Int64 == 64;
+        if (TypedCall.IsMissing(v))
+        {
+            return true;
+        }
+        VarType vt = (VarType)v->Vt;
+        return vt == VarType.Empty || (vt == VarType.I4 && (int)v->Int64 == 128);
     }
 
     /// <summary>
     /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
     /// Workspace.CommitTrans Options (p0, ACCDB only: r-q35-byref-args/dao-ws-committrans calls 10-62) and
-    /// Workspace.CreateDatabase Name/Connect (p0/p1, ACCDB only: r-q35-byref-args/dao-eng-createdatabase calls 39, 43,
-    /// 47, 51). CreateDatabase Option (p2) ByRef and Jet 4 MDB (option 64) ByRef stay refused by name.
+    /// Workspace.CreateDatabase Name/Connect (p0/p1, ACCDB with omitted/Missing/Empty/VT_I4 128 Option only:
+    /// r-q35-byref-args/dao-eng-createdatabase calls 39, 43, 47, 51). CreateDatabase Option (p2) ByRef and every
+    /// non-ACCDB Option (Jet 4 MDB option 64, non-VT_I4 64, 192, 66, 256, 32, etc.) keep ByRef refused by name.
     /// </summary>
     protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) => (member.Name, parameter) switch
     {
         ("CommitTrans", 0) => !HasOpenMdbDatabase,
-        ("CreateDatabase", 0 or 1) => !IsJet4MdbOption(args),
+        ("CreateDatabase", 0 or 1) => IsRecordedAccdbByRefOption(args),
         _ => false,
     };
 

@@ -389,7 +389,7 @@ public sealed unsafe class DaoCreateDatabaseTests : IDisposable
             (eng, "eng-full.mdb", DbLangGeneral),
             (eng, "eng-langid-only.mdb", ";LANGID=0x0409"),
             (ws, "ws-full.mdb", DbLangGeneral),
-            (ws, "ws-langid-only.mdb", ";LANGID=0x0409"),
+            (ws, "ws-langid-only.mdb", ";LANGID=0x0409"), // shared WorkspaceObject.CreateDatabase route
             (eng, "accdb-ext-v40.accdb", DbLangGeneral),
         ];
 
@@ -406,7 +406,9 @@ public sealed unsafe class DaoCreateDatabaseTests : IDisposable
             Assert.Equal(77824, new FileInfo(path).Length);
         }
 
-        // Recorded error cases still hold with Option = 64.
+        // Front-end/OS error paths (recorded on ACCDB in r-cat-1/create-accdb-existing-destination,
+        // r-cat-1/create-accdb-in-transaction, r-dao-1-err-1/create-workspace-route, and
+        // r-sort-3/create-locale-spellings) also hold through the shared CreateDatabase path with Option = 64.
         string existing = TempPath("already.mdb");
         byte[] sentinel = [9, 8, 7, 6];
         File.WriteAllBytes(existing, sentinel);
