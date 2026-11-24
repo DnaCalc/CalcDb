@@ -8,7 +8,7 @@
     "R-OLEDB-1",
     "W-05"
   ],
-  "description": "ACCDB table T (ID LONG PK, V LONG) with CK_V CHECK (V > -3) (negative constant on right, >) added via ADO in setup session. Statement session runs ADO Connection.Execute 'INSERT INTO T (ID, V) VALUES (1, -2)' (satisfying boundary), reads ByRef RecordsAffected and Connection.Errors, keeps pages 0-1 and 42+, and reads stored rows.",
+  "description": "ACCDB table T (ID LONG PK, V LONG) with CK_V CHECK (V > -3) (negative constant on right, >) added via ADO in setup session. Statement session runs ADO Connection.Execute 'INSERT INTO T (ID, V) VALUES (1, -2)' (satisfying boundary), reads ByRef RecordsAffected and Connection.Errors, keeps the whole file after setup, after statement, and after Close, and reads stored rows.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [
@@ -44,8 +44,7 @@
     { "op": "release", "target": "cn0" },
     { "op": "observeFiles", "label": "after-setup", "keep": false, "pageSize": 4096 },
     { "op": "nativeOpen", "bind": "pg-setup", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
-    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 8192, "keep": true },
-    { "op": "nativeRead", "handle": "pg-setup", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeRead", "handle": "pg-setup", "offset": 0, "count": 188416, "keep": true },
     { "op": "nativeClose", "handle": "pg-setup" },
     { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
     { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
@@ -72,8 +71,7 @@
     { "op": "release", "target": "cn" },
     { "op": "observeFiles", "label": "after-statement", "keep": false, "pageSize": 4096 },
     { "op": "nativeOpen", "bind": "pg-stmt", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
-    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 8192, "keep": true },
-    { "op": "nativeRead", "handle": "pg-stmt", "offset": 172032, "count": 65536, "keep": true },
+    { "op": "nativeRead", "handle": "pg-stmt", "offset": 0, "count": 192512, "keep": true },
     { "op": "nativeClose", "handle": "pg-stmt" },
     { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
     { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "db" },
@@ -96,6 +94,9 @@
     { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
     { "op": "release", "target": "db" },
     { "op": "release", "target": "eng" },
-    { "op": "observeFiles", "label": "after-close", "keep": false }
+    { "op": "observeFiles", "label": "after-close", "keep": false },
+    { "op": "nativeOpen", "bind": "pg-close", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg-close", "offset": 0, "count": 192512, "keep": true },
+    { "op": "nativeClose", "handle": "pg-close" }
   ]
 }
