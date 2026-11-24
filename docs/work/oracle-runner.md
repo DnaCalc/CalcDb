@@ -144,16 +144,21 @@ tooling revision and the candidate module's hash once, so all its attempts answe
 their own pipe and log handles (launches are serialized), and records and cached content are created by a rename that
 never replaces.
 
-**The comparison rule (`calls.trace@11`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
+**The comparison rule (`calls.trace@12`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
 relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
-is an accepted difference, counted apart. `calls.trace@11` compares the call trace and file observations and does not
+is an accepted difference, counted apart. `calls.trace@12` compares the call trace and file observations and does not
 compare `etw:file-io`. Revision 8 adds `ace-clock-fields` (task c4rv), revision 10 extends it to deleted/vacated rows and
-kept `nativeRead` pages (task 4t24), and revision 11 extends it to the Jet 4 and ACE 2010/2016/2019 profiles (task 6qw5).
+kept `nativeRead` pages (task 4t24), revision 11 extends it to the Jet 4 and ACE 2010/2016/2019 profiles (task 6qw5), and
+revision 12 extends kept-read reconstruction to direct full-file assembly and post-release file observations (task q3mv).
 ACE writes its clock into every file it creates or changes, so two ACE runs of one question give different files. Where
 the SHA-256 of a file observation differs and both files' bytes can be found (ACE's from the retained content store, or
-reconstructed from an adjacent kept `nativeRead` block overlaid onto the earlier retained input or the other side's
-verified file and accepted only when its SHA-256 equals the recorded file hash; CalcDb's from its own attempt, each
-checked against its hash), the files are compared byte for byte outside the clock fields each file's own structure locates
+reconstructed from the capture's kept `nativeRead` pages — assembled directly when the slices cover the entire file with
+no base file required, or overlaid onto the earlier retained input or the other side's verified file — found in an
+adjacent `HandleEvent` block or forward across only `ReleaseEvent`s and intervening `FilesEvent`s recording the exact same
+relative path, length and SHA-256, as in `r-q38-mdb-new-image/eng-general-full`, `r-q38-mdb-new-image/eng-langid-only` and
+`r-q38-mdb-new-image/ws-general-full`, and accepted only when its SHA-256 equals the recorded file hash; CalcDb's from its
+own attempt or the same reconstruction, each checked against its hash), the files are compared byte for byte outside the
+clock fields each file's own structure locates
 ([AceClockFields](../../src/CalcDb.Corpus/AceClockFields.cs), Jet 4 and ACE 2007/2010/2016/2019 profiles). The same rule
 applies to kept page-aligned `nativeRead` slices (`HandleEvent` reads), using either the verified full-file maps or a
 per-capture `PageClockContext` built from that capture's own kept pages and retained input (for example
@@ -171,10 +176,13 @@ differed is a note on a Matched comparison; this is ACE's nondeterminism, not an
 and unrecognized/refused profiles stay strict and name the refusal in the comparison note. Any other byte (including
 non-clock bytes in deleted or vacated rows, vacated MSysObjects copies on ACE 2016 or ACE 2019, deleted MSysObjects rows
 or chained long-value stamps outside ACE 2007, free-gap bytes, unkept pages whose difference breaks SHA-256
-reconstruction, sub-page `nativeRead` slices, or non-MSysObjects pages), or a file whose bytes cannot be found or
-reconstructed still differs, the last with a note. `calcdb-oracle file-compare (--expected F --actual F | --attempts A,B
-| --repeats [--match REGEX])` shows the rule on two files, two attempts, or each native attempt in the store against the
-one before.
+reconstruction, sub-page `nativeRead` slices, or non-MSysObjects pages), kept `nativeRead` pages separated from the file
+observation by a non-release event or a `FilesEvent` where the file changed or is absent, kept pages that do not cover the
+whole file when no base file verifies (named in the note as `kept nativeRead pages do not cover the file`), kept pages
+whose assembled bytes do not hash to the recorded SHA-256 (named in the note as `kept nativeRead pages do not verify
+against the recorded SHA-256`), or a file whose bytes cannot be found or reconstructed still differs, the last with a
+note. `calcdb-oracle file-compare (--expected F --actual F | --attempts A,B | --repeats [--match REGEX])` shows the rule
+on two files, two attempts, or each native attempt in the store against the one before.
 
 **The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch once over the questions
 of every folder of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset; `--parallel N` as
@@ -272,7 +280,7 @@ the attempt, as for the plain `show`.
 
 A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
 file-I/O recorder on ACE attempts: every create, read, write and flush on the attempt's files, with offsets and sizes,
-becomes the artifact `etw:file-io`. Because `calls.trace@11` does not compare `etw:file-io`, candidate runs
+becomes the artifact `etw:file-io`. Because `calls.trace@12` does not compare `etw:file-io`, candidate runs
 (`windows-x64-calcdb-local`) skip the ETW recorder, write `Sealer.CandidateEtwSkippedStatus`
 (`skipped on candidate run (calls.trace@9 does not compare etw:file-io)`, kept verbatim for compatibility with sealed
 attempts) to `artifacts/etw-status.txt`, record the omission by name on `manifest.OmittedChannels` (and as artifact `etw:status`),
