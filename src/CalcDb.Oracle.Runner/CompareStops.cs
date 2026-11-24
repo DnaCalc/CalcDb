@@ -21,6 +21,7 @@ internal static class CompareStops
     internal const string AceErrorStop = "(ace-error)";
     internal const string ValueDiffStop = "(value-diff)";
     internal const string FileDiffStop = "(file-diff)";
+    internal const string NoDetail = "(no detail)";
 
     private const string NotModelledPrefix = "NotModelled.";
     private const string NotImplementedPrefix = "CalcDb has not implemented ";
@@ -31,13 +32,27 @@ internal static class CompareStops
     private static readonly SearchValues<char> NotModelledDelimiters = SearchValues.Create(": \t\r\n");
     private static readonly SearchValues<char> NotImplementedDelimiters = SearchValues.Create(" \t\r\n:(");
 
-    internal sealed record QuestionStop(string Folder, string CaseId, string Status, string Stop, string? AttemptId);
+    internal sealed record QuestionStop(string Folder, string CaseId, string Status, string Stop, string? AttemptId, string? Detail = null);
 
     internal sealed record StopRow(string Stop, int Questions, int Folders, string Example);
 
     internal sealed record FolderStopRow(string Stop, int Questions, string Example);
 
     internal sealed record FolderBreakdown(string Folder, int NonMatching, IReadOnlyList<FolderStopRow> Rows);
+
+    internal sealed record DetailRow(string Detail, int Questions, int Folders, string Example);
+
+    internal sealed record FolderDetailRow(string Detail, int Questions, string Example);
+
+    internal sealed record FolderDetailBreakdown(string Folder, int Questions, IReadOnlyList<FolderDetailRow> Rows);
+
+    internal sealed record DetailReport(
+        CompareSet.Run Run,
+        string Stop,
+        int Questions,
+        int Folders,
+        IReadOnlyList<DetailRow> Rows,
+        IReadOnlyList<FolderDetailBreakdown> ByFolder);
 
     internal sealed record Report(
         CompareSet.Run Run,
@@ -180,6 +195,124 @@ internal static class CompareStops
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Group every question of <paramref name="report"/> whose first stop equals <paramref name="stopName"/> by the
+    /// refusal's detail text (from EXCEPINFO or IErrorInfo description, with any leading <c>"&lt;stop&gt;:"</c> prefix
+    /// trimmed), sorted by question count descending.
+    /// </summary>
+    public static DetailReport GroupByDetail(Report report, string stopName)
+    {
+        List<QuestionStop> matching = [.. report.Stops.Where(s => string.Equals(s.Stop, stopName, StringComparison.Ordinal))];
+        int folderCount = matching.Select(s => s.Folder).Distinct(StringComparer.Ordinal).Count();
+
+        List<DetailRow> rows =
+        [
+            .. matching
+                .GroupBy(s => NormalizeDetail(stopName, s.Detail), StringComparer.Ordinal)
+                .Select(g => new DetailRow(
+                    g.Key,
+                    g.Count(),
+                    g.Select(x => x.Folder).Distinct(StringComparer.Ordinal).Count(),
+                    g.Select(x => x.CaseId).Order(StringComparer.Ordinal).First()))
+                .OrderByDescending(r => r.Questions)
+                .ThenByDescending(r => r.Folders)
+                .ThenBy(r => r.Detail, StringComparer.Ordinal),
+        ];
+
+        List<FolderDetailBreakdown> byFolder =
+        [
+            .. matching
+                .GroupBy(s => s.Folder, StringComparer.Ordinal)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(fg => new FolderDetailBreakdown(
+                    fg.Key,
+                    fg.Count(),
+                    [
+                        .. fg.GroupBy(s => NormalizeDetail(stopName, s.Detail), StringComparer.Ordinal)
+                            .Select(dg => new FolderDetailRow(
+                                dg.Key,
+                                dg.Count(),
+                                dg.Select(x => x.CaseId).Order(StringComparer.Ordinal).First()))
+                            .OrderByDescending(r => r.Questions)
+                            .ThenBy(r => r.Detail, StringComparer.Ordinal),
+                    ])),
+        ];
+
+        return new DetailReport(report.Run, stopName, matching.Count, folderCount, rows, byFolder);
+    }
+
+    /// <summary>Render a <c>--detail &lt;stop&gt;</c> table, optionally followed by the per-folder breakdown.</summary>
+    public static string RenderDetail(DetailReport detail, bool byFolder)
+    {
+        var sb = new StringBuilder();
+        CompareSet.Run run = detail.Run;
+        sb.Append(CultureInfo.InvariantCulture,
+            $"compare-stops {run.Name} ({run.Source}, {run.Rule}, {run.At.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}): "
+            + $"{detail.Questions} questions stopped at {detail.Stop} ({detail.Folders} folders)\n");
+
+        if (detail.Rows.Count == 0)
+        {
+            sb.Append("no matching questions\n");
+            return sb.ToString();
+        }
+
+        int qWidth = Math.Max("questions".Length, detail.Questions.ToString(CultureInfo.InvariantCulture).Length);
+        int fWidth = Math.Max("folders".Length, detail.Folders.ToString(CultureInfo.InvariantCulture).Length);
+        int exWidth = Math.Max("example".Length, Math.Max("TOTAL".Length, detail.Rows.Max(r => r.Example.Length)));
+
+        sb.Append(CultureInfo.InvariantCulture, $"{"questions".PadLeft(qWidth)}  {"folders".PadLeft(fWidth)}  {"example".PadRight(exWidth)}  detail\n");
+        sb.Append('-', qWidth).Append("  ").Append('-', fWidth).Append("  ").Append('-', exWidth).Append("  ").Append('-', 6).Append('\n');
+        foreach (DetailRow row in detail.Rows)
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"{row.Questions.ToString(CultureInfo.InvariantCulture).PadLeft(qWidth)}  {row.Folders.ToString(CultureInfo.InvariantCulture).PadLeft(fWidth)}  {row.Example.PadRight(exWidth)}  {row.Detail}\n");
+        }
+        sb.Append(CultureInfo.InvariantCulture,
+            $"{detail.Questions.ToString(CultureInfo.InvariantCulture).PadLeft(qWidth)}  {detail.Folders.ToString(CultureInfo.InvariantCulture).PadLeft(fWidth)}  TOTAL\n");
+
+        if (byFolder)
+        {
+            sb.Append("\nby folder:\n");
+            foreach (FolderDetailBreakdown folder in detail.ByFolder)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"{folder.Folder} ({folder.Questions} questions):\n");
+                int fq = Math.Max(1, folder.Rows.Max(r => r.Questions.ToString(CultureInfo.InvariantCulture).Length));
+                int fex = Math.Max(7, folder.Rows.Max(r => r.Example.Length));
+                foreach (FolderDetailRow row in folder.Rows)
+                {
+                    sb.Append(CultureInfo.InvariantCulture,
+                        $"  {row.Questions.ToString(CultureInfo.InvariantCulture).PadLeft(fq)}  {row.Example.PadRight(fex)}  {row.Detail}\n");
+                }
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    internal static string NormalizeDetail(string stop, string? rawDetail)
+    {
+        if (string.IsNullOrWhiteSpace(rawDetail))
+        {
+            return NoDetail;
+        }
+        string singleLine = rawDetail.Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        if (singleLine.Length == 0)
+        {
+            return NoDetail;
+        }
+        if (singleLine.StartsWith(stop, StringComparison.Ordinal)
+            && singleLine.Length > stop.Length
+            && singleLine[stop.Length] == ':')
+        {
+            string trimmed = singleLine[(stop.Length + 1)..].Trim();
+            return trimmed.Length > 0 ? trimmed : NoDetail;
+        }
+        return singleLine;
+    }
+
     private static QuestionStop ClassifyEntry(
         JobStore store,
         CompareSet.Run run,
@@ -214,15 +347,16 @@ internal static class CompareStops
         }
 
         List<InvokeStopProjection> invokes = ReadCaptureInvokesUntil(capturePath, parsed.ProgramPath, parsed.Kind == "call");
-        string stop = ClassifyFromInvokes(parsed, invokes);
-        return new QuestionStop(entry.Folder, entry.CaseId, entry.Status, stop, attemptId);
+        (string stop, string? detail) = ClassifyFromInvokes(parsed, invokes);
+        return new QuestionStop(entry.Folder, entry.CaseId, entry.Status, stop, attemptId, detail);
     }
 
     /// <summary>
     /// Classify a mismatched question from the parsed first difference and the candidate's projected <c>invoke</c>
-    /// events at or before the first difference's program path.
+    /// events at or before the first difference's program path, returning the stop name and the EXCEPINFO/IErrorInfo
+    /// description (if any) that produced it.
     /// </summary>
-    internal static string ClassifyFromInvokes(ParsedFirstDifference parsed, IReadOnlyList<InvokeStopProjection> invokes)
+    internal static (string Stop, string? Detail) ClassifyFromInvokes(ParsedFirstDifference parsed, IReadOnlyList<InvokeStopProjection> invokes)
     {
         InvokeStopProjection? atTarget = null;
         for (int i = 0; i < invokes.Count; i++)
@@ -237,26 +371,26 @@ internal static class CompareStops
             // an earlier ACE-shaped error that preceded the first difference matched ACE and is ignored here.
             if (ev.IsFailed && TryClassifyCalcDbRefusal(ev) is { } priorRefusal)
             {
-                return priorRefusal;
+                return (priorRefusal, FirstNonEmpty(ev.ExcepDescription, ev.ErrorInfoDescription));
             }
         }
 
         if (atTarget is { IsFailed: true } failingAt)
         {
-            return TryClassifyCalcDbRefusal(failingAt) ?? AceErrorStop;
+            return (TryClassifyCalcDbRefusal(failingAt) ?? AceErrorStop, FirstNonEmpty(failingAt.ExcepDescription, failingAt.ErrorInfoDescription));
         }
 
         if (parsed.Kind == "call")
         {
-            return IsErrorChannelField(parsed.FieldPath) ? AceErrorStop : ValueDiffStop;
+            return (IsErrorChannelField(parsed.FieldPath) ? AceErrorStop : ValueDiffStop, null);
         }
         if (parsed.Kind == "files")
         {
-            return FileDiffStop;
+            return (FileDiffStop, null);
         }
 
         string kindLabel = string.IsNullOrEmpty(parsed.Kind) ? "unknown" : parsed.Kind;
-        return $"(unclassified:{kindLabel})";
+        return ($"(unclassified:{kindLabel})", null);
     }
 
     /// <summary>
@@ -850,11 +984,13 @@ internal static class CompareStops
 
 internal static partial class Program
 {
-    private static readonly string[] CompareStopsOptions = ["name", "store", "by-folder"];
+    private static readonly string[] CompareStopsOptions = ["name", "store", "by-folder", "detail"];
 
     /// <summary>
-    /// <c>compare-stops --name RUN [--store DIR] [--by-folder]</c>: count the refusal or failure behind each
-    /// non-matching question's first stop over a finished <c>compare-set</c> run without running any oracle or candidate.
+    /// <c>compare-stops --name RUN [--store DIR] [--by-folder] [--detail STOP]</c>: count the refusal or failure
+    /// behind each non-matching question's first stop over a finished <c>compare-set</c> run without running any
+    /// oracle or candidate. With <c>--detail STOP</c>, group the questions whose first stop is <c>STOP</c> by
+    /// their EXCEPINFO/IErrorInfo description.
     /// </summary>
     private static int CompareStopsCommand(JobStore store, Options options, string repo)
     {
@@ -864,10 +1000,19 @@ internal static partial class Program
             return 2;
         }
         string name = options.Require("name");
+        string? detailStop = options.Has("detail") ? options.Require("detail") : null;
         string runsDir = Path.Combine(store.Root, "compare-sets");
         CompareSet.Run run = ResolveRun(name, repo, runsDir) ?? throw new ArgumentException($"--name {name}: no such run.");
         CompareStops.Report report = CompareStops.Analyze(store, run);
-        Console.Write(CompareStops.Render(report, options.Has("by-folder")));
+        if (detailStop is not null)
+        {
+            CompareStops.DetailReport detail = CompareStops.GroupByDetail(report, detailStop);
+            Console.Write(CompareStops.RenderDetail(detail, options.Has("by-folder")));
+        }
+        else
+        {
+            Console.Write(CompareStops.Render(report, options.Has("by-folder")));
+        }
         return 0;
     }
 }
