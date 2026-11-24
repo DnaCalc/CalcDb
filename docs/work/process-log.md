@@ -1235,3 +1235,50 @@ writers in them start cold once; measure the second start in a slot against a fr
 
 **Not changed, for CodeAlta.** Interim answer updates still wake the organizer at every turn a child ends while it waits
 on a job (about 40 this session), though every brief asks for none.
+
+## 2026-11-24 - Handover: organizer 12 (01a2074e) to organizer 13
+
+Session 01a2074e (Claude Opus 5.5, 2026-11-23 07:28 to 2026-11-24 about 02:40 UTC with two pauses by the owner, about
+270 tool calls). Landed: the r-q34 DDL probe round (two commits), 344q, tbg5, ddl1 (CREATE TABLE forms), gkpc and 5ktt,
+ptrj, ddl2 (CREATE INDEX) with x38g (builds), 6qw5 (clock fields, calls.trace@11), the r-q35 ByRef probe round, and the
+ptrj ByRef fix with 4rd3. Process changes: at most two building children, the standard brief, the pause protocol, the
+writer slots (owner), a new refusal is checked against the records, a probe round's folder joins the wide set.
+Baselines: core 469 of 1360 (6qw5-1, the first under calls.trace@11; ptrj-fix-1 the same); wide wide-0124-2, 763 of
+3158, before r-q27 to r-q35 joined the wide set. Tasks found: tbg5, 6qw5, x38g, ptrj, 3m35, mkb7, 4rd3. ACE updated
+itself to 16.0.20625.20044 on 2026-11-23 (evidence-log.md); no behaviour has differed so far.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-23 04:27; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | **57%** (8,213 of 14,324): crossed. Tooling (x38g, 6qw5, compare-stops) and bookkeeping took a larger share | below two thirds over a day |
+| Lines changed: engine / tests / tooling / process / bookkeeping | 3,633 / 4,580 / 2,290 / 416 / 3,405 | probe tooling above the engine for a week |
+| Landings checked; passed on the first run | 41; 90% | below 70% |
+| Landing check duration (median of 48 runs) | **338 s**: crossed. Most ran before x38g, beside three writers and a compare; after x38g the ptrj-fix check built in 47 s and landed in 147 s | above 3 min |
+| Compare baselines | core 464 to 469; wide 747 to 763, nothing lost; two r-q8 write-behind flips (timing) | any loss nobody can explain: stop landing |
+| Organizer tool calls per landing; handovers | about 270 calls for 12 landings and the process round (about 22) | above about 15 |
+| Reviewer findings per 1,000 lines | ddl2 6 on about 1,100; ptrj 6 on about 1,000; 6qw5 5 on 870; gkpc and 5ktt 8 on 1,600 | above about 3 |
+| Rules found wrong after landing | **1**: ptrj refused the ByRef Move, FindFirst and Seek that r-q2-cursor-dao/byref-dao-move-seek records; fixed the same day | more than one a day |
+| Children stopped waiting for a record | 0 | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land`) | above 5 min |
+| Book contradictions found | 0 | rising |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 12 (Opus) | about 1,140 wall, with two pauses | about 270 |
+| DDL writer 1 (ddl1) / DDL writer 2 (ddl2, x38g) | 841 wall / 133 | 358 / 373 |
+| Com.Ado writer (gkpc, 5ktt) / Com.Dao writer (tbg5) | 866 wall / 116 | 446 / 82 |
+| Com.Core writer (ptrj, its fix, 4rd3) / tooling writer (6qw5) | 226 / 161 | 630 / 247 |
+| prober 3m35 | 38 | 174 |
+| DDL writer 3a (running, slot w1) | 76+ | 346+ |
+| four Neon starts that failed ('initialize' not answered in 120 s) | - | 0 |
+
+Two indicators crossed. The check duration should fall now that x38g is in (measure the median over the next day). The
+engine share needs the triggered review The Plan §4 asks for: it first asks what process to remove. Candidates the
+organizer saw: bookkeeping lines (3,405) close to the engine's own; long report texts copied into register rows;
+several organizer calls per landing for status reads. Antigravity failed to start agents four times in an hour
+(2026-11-24, about 01:00 to 01:20 UTC) and recovered on its own; the next organizer retries a failed start once, then
+waits.
+
+Successor: CalcDb organizer 13, session 01a20b62-7ddf-74d7-b222-f8bffa05e182, started beside 01a2074e (`--no-parent`). Organizer 12 forwards
+only DDL writer 3a's (01a20b14) final answer.
