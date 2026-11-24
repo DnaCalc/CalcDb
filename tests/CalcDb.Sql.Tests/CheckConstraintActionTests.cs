@@ -575,12 +575,12 @@ public sealed class CheckConstraintActionTests
     }
 
     [Fact]
-    public void FixedLongNullUpdate_RefusesNonCheckTable_UncheckedColumn_AndMultiRowAdoUpdate()
+    public void FixedLongNullUpdate_SucceedsPreservingBytesOnNonCheckAndUnchecked_RefusesMultiRowCheckedAdoUpdate()
     {
-        // Finding 4: in-place fixed Long -> NULL is gated to single-row autocommit ADO UPDATE of a checked column on
-        // a CHECK table (qualified.md Open: non-CHECK, unchecked column, and multi-row ADO UPDATE stay refused).
+        // r-q36 lifts fixed-to-Null publication (clear mask bit, keep old fixed bytes in place; nullfix-types-*,
+        // nullfix-var-accdb-dao, nullfix-ado-accdb). Multi-row ADO UPDATE on a checked column stays refused by CHECK name.
 
-        // 1. Non-CHECK ACCDB table: ADO UPDATE setting Long = NULL refuses with zero bytes written.
+        // 1. Non-CHECK ACCDB table: ADO UPDATE setting Long = NULL succeeds, clearing only the null-mask bit on the data page.
         {
             using var db = new WritableSqlFixture(EmptyAccdbSha);
             Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG)", db, options: 128).Succeeded);
@@ -588,12 +588,15 @@ public sealed class CheckConstraintActionTests
 
             byte[] before = db.Image.Snapshot();
             ActionOutcome outcome = ActionExecutor.Execute("UPDATE T SET V = NULL WHERE ID = 1", db, options: 128, source: ActionErrorSource.Ado);
-            Assert.False(outcome.Succeeded);
-            Assert.Equal("NotModelled.Edit.Publication", outcome.Failure!.NotModelled);
-            Assert.Equal(before, db.Image.Snapshot());
+            Assert.True(outcome.Succeeded, outcome.Failure?.Message);
+            Assert.Equal(1, outcome.RecordsAffected);
+            List<(int Page, int Offset, byte Before, byte After)> dataDiffs = DiffBytes(before, db.Image.Snapshot()).Where(d => d.Page != 0).ToList();
+            Assert.Single(dataDiffs);
+            Assert.Equal(0x03, dataDiffs[0].Before);
+            Assert.Equal(0x01, dataDiffs[0].After);
         }
 
-        // 2. CHECK table, unchecked Long column W: ADO UPDATE setting W = NULL refuses with zero bytes written.
+        // 2. CHECK table, unchecked Long column W: ADO UPDATE setting W = NULL succeeds, clearing only W's null-mask bit.
         {
             using var db = new WritableSqlFixture(EmptyAccdbSha);
             Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W LONG)", db, options: 128).Succeeded);
@@ -602,9 +605,12 @@ public sealed class CheckConstraintActionTests
 
             byte[] before = db.Image.Snapshot();
             ActionOutcome outcome = ActionExecutor.Execute("UPDATE T SET W = NULL WHERE ID = 1", db, options: 128, source: ActionErrorSource.Ado);
-            Assert.False(outcome.Succeeded);
-            Assert.Equal("NotModelled.Edit.Publication", outcome.Failure!.NotModelled);
-            Assert.Equal(before, db.Image.Snapshot());
+            Assert.True(outcome.Succeeded, outcome.Failure?.Message);
+            Assert.Equal(1, outcome.RecordsAffected);
+            List<(int Page, int Offset, byte Before, byte After)> dataDiffs = DiffBytes(before, db.Image.Snapshot()).Where(d => d.Page != 0).ToList();
+            Assert.Single(dataDiffs);
+            Assert.Equal(0x07, dataDiffs[0].Before);
+            Assert.Equal(0x03, dataDiffs[0].After);
         }
 
         // 3. CHECK table, multi-row ADO UPDATE setting checked Long column V = NULL refuses by CHECK name with zero bytes written.

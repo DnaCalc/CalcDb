@@ -32,12 +32,13 @@ public enum DdlTypeKind : byte
     VarBinary,
     LongBinary,
     Numeric,
+    Decimal,
     BigInt,
     DateTime2,
 }
 
-/// <summary>A parsed column data type with optional Text/Binary length or Counter (seed, increment).</summary>
-public sealed record DdlDataType(DdlTypeKind Kind, int? Size = null, int? Seed = null, int? Increment = null);
+/// <summary>A parsed column data type with optional Text/Binary length, Counter (seed, increment), or ADO Decimal (precision, scale).</summary>
+public sealed record DdlDataType(DdlTypeKind Kind, int? Size = null, int? Seed = null, int? Increment = null, int? Precision = null, int? Scale = null);
 
 /// <summary>Column nullability clause (<c>NULL</c>, <c>NOT NULL</c>, or omitted).</summary>
 public enum DdlNullability : byte
@@ -69,7 +70,8 @@ public sealed record DdlColumnDef(
     string Name,
     DdlDataType DataType,
     DdlNullability Nullability,
-    IReadOnlyList<DdlColumnConstraint> Constraints);
+    IReadOnlyList<DdlColumnConstraint> Constraints,
+    bool WithCompression = false);
 
 /// <summary>A table-level constraint in <c>CREATE TABLE</c> or <c>ALTER TABLE ADD</c>.</summary>
 public sealed record DdlTableConstraint(
@@ -691,6 +693,7 @@ public static class DdlParser
 
             DdlNullability nullability = DdlNullability.Unspecified;
             var constraints = new List<DdlColumnConstraint>();
+            bool withCompression = false;
 
             while (!AtEnd() && !IsSymbol(',') && !IsSymbol(')') && !IsSymbol(';'))
             {
@@ -746,6 +749,18 @@ public static class DdlParser
                     constraints.Add(cc);
                     continue;
                 }
+                if (allowAdoCheck && !isAlter && TakeWord("WITH"))
+                {
+                    // evidence/r-q36-publication-bytes/create-feff-accdb, create-feff-mdb:
+                    // ADO CREATE TABLE accepts WITH COMPRESSION on Text and Memo columns (sets ExtendedFlags = 0x01).
+                    if (withCompression || !TakeWord("COMPRESSION"))
+                    {
+                        failure = Syntax(3290, SqlMessages.CreateTableSyntaxError);
+                        return null;
+                    }
+                    withCompression = true;
+                    continue;
+                }
                 if (allowAdoCheck && IsWord("CHECK"))
                 {
                     if (!isAlter)
@@ -763,7 +778,7 @@ public static class DdlParser
                     return null;
                 }
 
-                // Unsupported column modifiers (DEFAULT, WITH COMPRESSION, CHECK, COLLATE, COMMENT, AUTO_INCREMENT,
+                // Unsupported column modifiers (DEFAULT, WITH COMPRESSION on DAO, CHECK, COLLATE, COMMENT, AUTO_INCREMENT,
                 // IDENTITY, UNSIGNED, GENERATED, UNICODE, BINARY VARYING) or missing comma between columns:
                 // 3290 in CREATE TABLE (ddl-column-clauses, ddl-type-names-accdb), 3293 in ALTER TABLE (ddl-alter-column-forms).
                 failure = Syntax(isAlter ? 3293 : 3290, isAlter ? SqlMessages.AlterTableSyntaxError : SqlMessages.CreateTableSyntaxError);
@@ -771,7 +786,7 @@ public static class DdlParser
             }
 
             failure = null;
-            return new DdlColumnDef(colName, dataType, nullability, constraints);
+            return new DdlColumnDef(colName, dataType, nullability, constraints, withCompression);
         }
 
         private DdlDataType? ParseDataType(bool isAlter, out SqlFailure? failure)
@@ -785,6 +800,40 @@ public static class DdlParser
                 : Syntax(3290, SqlMessages.CreateTableSyntaxError);
 
             string? word = PeekWord();
+            if (word is not null && allowAdoCheck && !isAlter && string.Equals(word, "DECIMAL", StringComparison.OrdinalIgnoreCase))
+            {
+                // evidence/r-q21-ddl-types/col-decimal-ado*, evidence/r-q36-publication-bytes/create-nullfix-*:
+                // ADO CREATE TABLE accepts DECIMAL and DECIMAL(precision, scale); DAO ANSI-89 keeps failing 3292.
+                _p += word.Length;
+                if (TakeSymbol('('))
+                {
+                    if (!TryReadNonNegativeInt(out int precision))
+                    {
+                        failure = InvalidType();
+                        return null;
+                    }
+                    int? scale = null;
+                    if (TakeSymbol(','))
+                    {
+                        if (!TryReadNonNegativeInt(out int s))
+                        {
+                            failure = InvalidType();
+                            return null;
+                        }
+                        scale = s;
+                    }
+                    if (!TakeSymbol(')'))
+                    {
+                        failure = InvalidType();
+                        return null;
+                    }
+                    failure = null;
+                    return new DdlDataType(DdlTypeKind.Decimal, Precision: precision, Scale: scale);
+                }
+                failure = null;
+                return new DdlDataType(DdlTypeKind.Decimal);
+            }
+
             if (word is null || !TypeKeywords.TryGetValue(word, out DdlTypeKind kind))
             {
                 failure = InvalidType();

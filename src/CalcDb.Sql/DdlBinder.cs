@@ -218,6 +218,8 @@ public static class DdlBinder
         var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns, bool OnDeleteCascade)>();
 
         TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
+        bool hasDateTime2 = stmt.Columns.Any(c => c.DataType.Kind == DdlTypeKind.DateTime2);
+        bool allowExtendedTypes = route == SchemaRoute.Sql && hasDateTime2;
         foreach (DdlColumnDef col in stmt.Columns)
         {
             if (!IsValidObjectName(col.Name))
@@ -236,7 +238,7 @@ public static class DdlBinder
             }
             columns.Add(col);
             colNames.Add(col.Name);
-            if (ValidateDataType(col.Name, col.DataType, ref counterCount) is { } typeErr)
+            if (ValidateDataType(col.Name, col.DataType, ref counterCount, allowExtendedTypes) is { } typeErr)
             {
                 return Fail(typeErr, out failure);
             }
@@ -371,6 +373,10 @@ public static class DdlBinder
                 // evidence/r-q34-ddl-sweep/nn-* records NOT NULL on LONG, TEXT, and MEMO only.
                 return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on {col.DataType.Kind} column '{col.Name}' is not recorded (evidence/r-q34-ddl-sweep/nn-long-accdb-dao, nn-text-accdb-dao, nn-memo-accdb-dao)"), out failure);
             }
+            if (col.WithCompression && (route != SchemaRoute.Ado || col.DataType.Kind is not (DdlTypeKind.Text or DdlTypeKind.Memo)))
+            {
+                return Fail(BindOpen("NotModelled.DdlWithCompression", $"WITH COMPRESSION on {route} {col.DataType.Kind} column '{col.Name}' is recorded only for ADO Text and Memo (evidence/r-q36-publication-bytes/create-feff-*)"), out failure);
+            }
             switch (col.DataType.Kind)
             {
                 case DdlTypeKind.YesNo:
@@ -449,7 +455,7 @@ public static class DdlBinder
                         // r-def-expr-sql/ddl-type-names-accdb accepts TEXT(0); SchemaWriter requires 1..255.
                         return Fail(BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on column '{col.Name}' is not modelled in SchemaWriter"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Text, size, Required: required));
+                    fields.Add(new NewField(col.Name, NewFieldType.Text, size, Required: required, UnicodeCompression: col.WithCompression));
                     break;
                 }
                 case DdlTypeKind.Memo:
@@ -457,7 +463,7 @@ public static class DdlBinder
                     {
                         firstLvalIdx = i;
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Memo, Required: required));
+                    fields.Add(new NewField(col.Name, NewFieldType.Memo, Required: required, UnicodeCompression: col.WithCompression));
                     break;
                 case DdlTypeKind.LongBinary:
                     if (firstLvalIdx < 0)
@@ -468,6 +474,42 @@ public static class DdlBinder
                     break;
                 case DdlTypeKind.Guid:
                     fields.Add(new NewField(col.Name, NewFieldType.Guid));
+                    break;
+                case DdlTypeKind.Decimal:
+                {
+                    if (route != SchemaRoute.Ado)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlFieldType", $"CREATE TABLE column '{col.Name}' type Decimal is recorded only on the ADO route"), out failure);
+                    }
+                    int precision;
+                    int scale;
+                    if (col.DataType.Precision is null)
+                    {
+                        // r-q21-ddl-types/col-decimal-ado-bare: bare DECIMAL defaults to (18, 0).
+                        precision = 18;
+                        scale = 0;
+                    }
+                    else if (col.DataType.Scale is not int s)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlDecimalSingleArg", $"single-argument DECIMAL({col.DataType.Precision}) on column '{col.Name}' is not probed in r-q21-ddl-types"), out failure);
+                    }
+                    else
+                    {
+                        precision = col.DataType.Precision.Value;
+                        scale = s;
+                    }
+                    if (precision is < 1 or > 28 || scale < 0 || scale > precision)
+                    {
+                        return Fail(BindOpen("NotModelled.DdlDecimalPrecision", $"DECIMAL({precision}, {scale}) on column '{col.Name}' is outside 1..28 / 0..precision"), out failure);
+                    }
+                    fields.Add(new NewField(col.Name, NewFieldType.Decimal, Precision: (byte)precision, Scale: (byte)scale));
+                    break;
+                }
+                case DdlTypeKind.BigInt:
+                    fields.Add(new NewField(col.Name, NewFieldType.BigInt));
+                    break;
+                case DdlTypeKind.DateTime2:
+                    fields.Add(new NewField(col.Name, NewFieldType.DateTime2));
                     break;
                 default:
                     return Fail(BindOpen("NotModelled.DdlFieldType", $"CREATE TABLE column '{col.Name}' type {col.DataType.Kind} is not modelled in SchemaWriter"), out failure);
@@ -737,11 +779,13 @@ public static class DdlBinder
         return true;
     }
 
-    private static SqlFailure? ValidateDataType(string colName, DdlDataType dataType, ref int counterCount)
+    private static SqlFailure? ValidateDataType(string colName, DdlDataType dataType, ref int counterCount, bool allowExtendedTypes = false)
     {
-        if (dataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2)
+        if (dataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2 && !allowExtendedTypes)
         {
             // r-def-expr-sql/ddl-type-names-accdb Dt69/Dt70 succeed in ACCDB (3001 is MDB only); storage depends on database feature flags.
+            // evidence/r-q36-publication-bytes/create-nullfix-ext-accdb records BIGINT + DATETIME2 on ACCDB SQL (bumping page 0 version to 0x06);
+            // BIGINT without DATETIME2 (v5 bump) and ALTER TABLE remain refused by name.
             return BindOpen("NotModelled.DdlBigIntOrDateTime2", $"{dataType.Kind} availability depends on database feature flags, not yet modelled");
         }
         if (dataType.Kind == DdlTypeKind.Counter)

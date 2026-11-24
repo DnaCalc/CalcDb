@@ -105,6 +105,52 @@ public static class TextCodec
         return true;
     }
 
+    /// <summary>
+    /// Whether raw UTF-16LE bytes <paramref name="utf16Le"/> would be compressed under <paramref name="policy"/>
+    /// (R-FMT-2 r-q36, <c>evidence/r-q36-publication-bytes/feff-ascii-*</c>, <c>feff-content-*</c>). Used without
+    /// allocating when ACE's SQL query engine round-trips an uncompressed Text field whose stored UTF-16LE bytes start
+    /// with <c>FF FE</c> through a compressed-Text buffer.
+    /// </summary>
+    public static bool WillCompressUtf16Le(ReadOnlySpan<byte> utf16Le, TextCompressionPolicy policy)
+    {
+        if (policy == TextCompressionPolicy.Uncompressed || utf16Le.IsEmpty || (utf16Le.Length & 1) != 0)
+        {
+            return false;
+        }
+        int len = 2; // leading FF FE marker, starts in 1-byte (compressed) mode
+        bool compressed = true;
+        for (int i = 0; i < utf16Le.Length; i += 2)
+        {
+            byte lo = utf16Le[i];
+            byte hi = utf16Le[i + 1];
+            if (lo == 0)
+            {
+                return false;
+            }
+            if (hi == 0)
+            {
+                if (!compressed)
+                {
+                    len++;
+                    compressed = true;
+                }
+                len++;
+            }
+            else
+            {
+                if (compressed)
+                {
+                    len++;
+                    compressed = false;
+                }
+                len += 2;
+            }
+        }
+        return policy == TextCompressionPolicy.CompressIfNotLonger
+            ? len <= utf16Le.Length
+            : len < utf16Le.Length;
+    }
+
     private static bool TryMeasureCompressed(ReadOnlySpan<char> text, out int compressedLen)
     {
         int len = 2; // leading FF FE marker, starts in 1-byte (compressed) mode

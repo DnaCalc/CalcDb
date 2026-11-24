@@ -149,6 +149,7 @@ internal sealed class RowBinding : IDisposable
     // again without locating and checking them again; it still builds its result directly from them.
     private TextLocation[]? _texts;
     private long _generation = 1; // never 0, the generation of an empty entry
+    private bool _queryTextRoundTrip;
 
     private readonly record struct TextLocation(long Generation, Range At, TextShape Shape);
 
@@ -158,6 +159,20 @@ internal sealed class RowBinding : IDisposable
         _d = d;
         _table = table;
         _hold = new SourceHold(source);
+    }
+
+    /// <summary>Whether SQL query text round-trip applies to uncompressed Text columns starting with <c>FF FE</c>.</summary>
+    public bool QueryTextRoundTrip
+    {
+        get => _queryTextRoundTrip;
+        set
+        {
+            if (_queryTextRoundTrip != value)
+            {
+                _queryTextRoundTrip = value;
+                Unbind();
+            }
+        }
     }
 
     /// <summary>Rebind page reads to a new page source, unbinding any currently bound row (task hm8k).</summary>
@@ -177,7 +192,7 @@ internal sealed class RowBinding : IDisposable
         {
             return unbound;
         }
-        NativeValue value = FieldDecoder.Read(_bound!.Value, _table, column, _source, _d);
+        NativeValue value = FieldDecoder.Read(_bound!.Value, _table, column, _source, _d, queryTextRoundTrip: _queryTextRoundTrip);
         CostCounters.Current.FieldDecodes++;
         return FieldResult.Of(value);
     }
@@ -195,7 +210,7 @@ internal sealed class RowBinding : IDisposable
             return new TextFieldRead(row.Body[held.At], held.Shape);
         }
         CostCounters.Current.FieldDecodes++;
-        TextFieldRead read = FieldDecoder.ReadText(row, _table, column, _source, _d, out Range? location);
+        TextFieldRead read = FieldDecoder.ReadText(row, _table, column, _source, _d, out Range? location, queryTextRoundTrip: _queryTextRoundTrip);
         if (location is { } at)
         {
             (_texts ??= new TextLocation[_table.Columns.Count])[column.Ordinal] = new TextLocation(_generation, at, read.Shape);

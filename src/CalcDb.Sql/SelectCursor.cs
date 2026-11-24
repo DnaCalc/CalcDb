@@ -291,6 +291,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
                 return null;
             }
+            reader.QueryTextRoundTrip = true;
             readers[s] = reader;
         }
         var preparing = new Preparer(plan, readers, kind, values, database, observableColumns);

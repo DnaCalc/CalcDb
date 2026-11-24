@@ -257,13 +257,20 @@ public static class FieldDecoder
     /// Whether ACE's reader interprets a leading <c>FF FE</c> as the compressed-text marker for <paramref name="column"/>
     /// (R-FMT-2 r-q36, <c>evidence/r-q36-publication-bytes/feff-*</c>, <c>r-q-wire/feff-accdb-dao-put-refetch</c>):
     /// compressed Text (<c>ExtendedFlags &amp; 0x01</c>), inline Memo (always), and compressed single-page LVAL Memo
-    /// (<c>ExtendedFlags &amp; 0x01</c>); uncompressed Text, uncompressed single-page LVAL Memo, and chained LVAL Memo
-    /// decode verbatim UTF-16LE.
+    /// (<c>ExtendedFlags &amp; 0x01</c>); uncompressed single-page LVAL Memo and chained LVAL Memo decode verbatim
+    /// UTF-16LE. On direct table reads (<paramref name="queryTextRoundTrip"/> false), uncompressed Text also decodes
+    /// verbatim UTF-16LE (<c>feff-accdb-dao-put-refetch</c> #151..#305); on SQL SELECT reads
+    /// (<paramref name="queryTextRoundTrip"/> true), ACE round-trips uncompressed Text through a compressed-Text buffer,
+    /// so a leading <c>FF FE</c> decodes as compressed whenever <see cref="TextCodec.WillCompressUtf16Le"/> is false
+    /// (<c>feff-ascii-*</c> TU, <c>feff-content-*</c> TU, <c>feff-accdb-dao-put-refetch</c> #316/#724).
     /// </summary>
-    private static bool AllowCompressedText(ColumnDescriptor column, LongValueForm? memoForm = null) =>
+    private static bool AllowCompressedText(ColumnDescriptor column, ReadOnlySpan<byte> bytes, LongValueForm? memoForm = null, bool queryTextRoundTrip = false) =>
         column.TypeCode switch
         {
-            NativeTypes.Text => (column.ExtendedFlags & 0x01) != 0,
+            NativeTypes.Text when (column.ExtendedFlags & 0x01) != 0 => true,
+            NativeTypes.Text when queryTextRoundTrip && bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE =>
+                !TextCodec.WillCompressUtf16Le(bytes, TextCompressionPolicy.CompressIfNotLonger),
+            NativeTypes.Text => false,
             NativeTypes.Memo => memoForm switch
             {
                 LongValueForm.Inline => true,
@@ -336,21 +343,21 @@ public static class FieldDecoder
     /// view's page (Text) or the assembled long value (Memo), checked and measured but not decoded. Null and failures
     /// are those of <see cref="Read"/>; any other column reads as <see cref="Read"/>.
     /// </summary>
-    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget) =>
-        ReadText(row, table, column, cache, d, out _, longValueBudget);
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget, bool queryTextRoundTrip = false) =>
+        ReadText(row, table, column, cache, d, out _, longValueBudget, queryTextRoundTrip);
 
     /// <summary>
-    /// As <see cref="ReadText(RowView, TableDefinition, ColumnDescriptor, PageSource, FormatDescriptor, long)"/>; for an
+    /// As <see cref="ReadText(RowView, TableDefinition, ColumnDescriptor, PageSource, FormatDescriptor, long, bool)"/>; for an
     /// in-row Text field, <paramref name="location"/> is where its checked bytes lie in the row body, so a holder of the
     /// row can borrow them again without locating them again.
     /// </summary>
-    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget)
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget, bool queryTextRoundTrip = false)
     {
         location = null;
         // A calculated Text or Memo is wrapped (II-04 §5.6): it is decoded whole, not borrowed.
         if (column.TypeCode is not (NativeTypes.Text or NativeTypes.Memo) || ScalarCodecs.IsCalculated(column, d.Payload))
         {
-            return new TextFieldRead(FieldResult.Of(Read(row, table, column, cache, d, longValueBudget)));
+            return new TextFieldRead(FieldResult.Of(Read(row, table, column, cache, d, longValueBudget, queryTextRoundTrip)));
         }
         if (!Locate(row, table, column, d, out ReadOnlySpan<byte> bytes, out NativeValue value, out Range at))
         {
@@ -365,11 +372,11 @@ public static class FieldDecoder
                 return new TextFieldRead(FieldResult.Of(NativeValue.Fail(failure!)));
             }
             bytes = payload;
-            allowCompressed = AllowCompressedText(column, form);
+            allowCompressed = AllowCompressedText(column, bytes, form, queryTextRoundTrip);
         }
         else
         {
-            allowCompressed = AllowCompressedText(column);
+            allowCompressed = AllowCompressedText(column, bytes, queryTextRoundTrip: queryTextRoundTrip);
         }
         TextShape shape = TextCodec.Measure(bytes, allowCompressed: allowCompressed);
         if (!shape.Succeeded)
@@ -381,7 +388,7 @@ public static class FieldDecoder
         return new TextFieldRead(bytes, shape);
     }
 
-    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget)
+    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageSource cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget, bool queryTextRoundTrip = false)
     {
         if (!Locate(row, table, column, d, out ReadOnlySpan<byte> bytes, out NativeValue located))
         {
@@ -402,12 +409,12 @@ public static class FieldDecoder
                 }
                 if (column.TypeCode == NativeTypes.Memo)
                 {
-                    return DecodeText(payload, AllowCompressedText(column, form));
+                    return DecodeText(payload, AllowCompressedText(column, payload, form, queryTextRoundTrip));
                 }
                 return new NativeValue(NativeKind.LongBinary) { Bytes = payload };
             }
             default:
-                return Decode(bytes, column.TypeCode, column.NumericScale, d, AllowCompressedText(column));
+                return Decode(bytes, column.TypeCode, column.NumericScale, d, AllowCompressedText(column, bytes, queryTextRoundTrip: queryTextRoundTrip));
         }
     }
 

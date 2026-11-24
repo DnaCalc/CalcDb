@@ -36,6 +36,17 @@ public sealed class RowReader : IRecordCursor
     /// <summary>The root the reader stands on, or null.</summary>
     public RowId? Current { get; private set; }
 
+    /// <summary>
+    /// When true, applies ACE's SQL query text round-trip on uncompressed Text columns whose stored UTF-16LE bytes
+    /// start with <c>FF FE</c> (R-FMT-2 r-q36, <c>evidence/r-q36-publication-bytes/feff-ascii-*</c>,
+    /// <c>feff-content-*</c>, <c>r-q-wire/feff-accdb-dao-put-refetch</c> #316/#724 vs #151..#305).
+    /// </summary>
+    public bool QueryTextRoundTrip
+    {
+        get => _row.QueryTextRoundTrip;
+        set => _row.QueryTextRoundTrip = value;
+    }
+
     /// <summary>Stand on <paramref name="root"/> (null: no row); the previous row's binding is released.</summary>
     public void Position(RowId? root)
     {

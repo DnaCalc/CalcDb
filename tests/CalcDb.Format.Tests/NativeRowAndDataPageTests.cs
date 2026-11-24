@@ -680,6 +680,41 @@ public sealed class NativeRowAndDataPageTests
         Assert.Contains("LVAL", notLvalErr);
     }
 
+    [Fact]
+    public void WillCompressUtf16Le_matches_TryEncode_compression_decision()
+    {
+        Assert.False(TextCodec.WillCompressUtf16Le([], TextCompressionPolicy.CompressIfNotLonger));
+        Assert.False(TextCodec.WillCompressUtf16Le([0xFF, 0xFE, 0x78], TextCompressionPolicy.CompressIfNotLonger));
+        Assert.False(TextCodec.WillCompressUtf16Le([0x78, 0x00, 0x78, 0x00, 0x78, 0x00], TextCompressionPolicy.Uncompressed));
+
+        string[] cases =
+        [
+            "\ufeff",
+            "\ufeffx",
+            "\ufeffxx",
+            "\ufeffxxx",
+            "\ufeffxxxx",
+            "\ufeffbom",
+            "\ufefféééé",
+            "\ufeffa\0b",
+            "\ufeffxxxx\0yyyy",
+            "\ufeff" + new string('€', 32),
+            "\ufeff" + new string('x', 100),
+            "ab",
+            "abc",
+        ];
+        foreach (string text in cases)
+        {
+            byte[] utf16 = System.Text.Encoding.Unicode.GetBytes(text);
+            foreach (TextCompressionPolicy policy in new[] { TextCompressionPolicy.CompressIfNotLonger, TextCompressionPolicy.CompressIfShorter })
+            {
+                Assert.True(TextCodec.TryEncode(text, policy, out byte[]? encoded, out string? err), err);
+                bool encodedCompressed = !encoded!.AsSpan().SequenceEqual(utf16);
+                Assert.Equal(encodedCompressed, TextCodec.WillCompressUtf16Le(utf16, policy));
+            }
+        }
+    }
+
     private static byte[] EmptyDataPage(uint owner)
     {
         byte[] page = new byte[D.PageSize];
