@@ -1,0 +1,71 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/zf-bool-cols-accdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 2 (ACCDB DAO): Boolean-only tables across mask-byte boundaries (B1, B8, B9, B17, B25, B33, B41) plus 1-byte and 2-byte fixed controls (F1, F2). Inserts 2 rows per table, keeps whole file before and after insert, then updates and deletes/reinserts on B1 and keeps whole file after edit.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-zerofixed-accdb.accdb",
+      "sha256": "21318312816a30c0a80827b81117ca8b7876f8b62e4f4c95f5f6dd571a29252b",
+      "length": 311296,
+      "provenance": "r-q36-publication-bytes.create-zerofixed-accdb.1dce931bec.a1 qk1-1dce931bec47a6139a878343397b2ea25e4c149cb3a1841d8b96e5122543a4a5 output:r-q36-zerofixed-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B8 (b1, b8) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B8 (b2, b4) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B9 (b1, b9) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B9 (b2) VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B17 (b1, b17) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B25 (b1, b25) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B33 (b1, b33) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B41 (b1, b41) VALUES (True, True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1 VALUES (90)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1 VALUES (NULL)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F2 VALUES (4660)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F2 VALUES (NULL)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+
+    { "op": "observeFiles", "label": "after-insert", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE B1 SET b1 = True WHERE b1 = False" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db2" },
+    { "op": "release", "target": "eng" },
+
+    { "op": "observeFiles", "label": "after-edit", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" }
+  ]
+}

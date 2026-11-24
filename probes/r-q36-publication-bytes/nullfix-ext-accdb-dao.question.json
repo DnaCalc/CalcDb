@@ -1,0 +1,59 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/nullfix-ext-accdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 3 (ACCDB Ace2019 v06 extended fixed types BIGINT and DATETIME2): DAO SQL UPDATE to NULL in place (ID=1), then rewrite-grow on non-null row (ID=2), stale-null row (ID=1), and inserted-null row (ID=3). Keeps whole file before and after each phase.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-nullfix-ext-accdb.accdb",
+      "sha256": "5c7c2dec97e50e560830f2ee78fdc85256ae428b99f326af25945aedead03dfd",
+      "length": 192512,
+      "provenance": "r-q36-publication-bytes.create-nullfix-ext-accdb.2f5c9199b9.a1 qk1-2f5c9199b9ed2aa15c4759eb0b5652d371189cb43d1f8cfd43dad2d37d4ad3a7 output:r-q36-nullfix-ext-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db1" },
+    { "op": "invoke", "target": "db1", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE ExtTypes SET FBig=NULL, FDt2=NULL WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db1" },
+    { "op": "observeFiles", "label": "after-inplace", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE ExtTypes SET FBig=NULL, FDt2=NULL, S='longer string forcing rewrite on row 2' WHERE ID=2" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE ExtTypes SET S='longer string forcing rewrite on stale-null row 1' WHERE ID=1" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE ExtTypes SET S='longer string forcing rewrite on inserted-null row 3' WHERE ID=3" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db2" },
+    { "op": "observeFiles", "label": "after-rewrite", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" },
+
+    { "op": "release", "target": "eng" }
+  ]
+}

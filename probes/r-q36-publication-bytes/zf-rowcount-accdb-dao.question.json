@@ -1,0 +1,72 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/zf-rowcount-accdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 2 (ACCDB DAO): row-count progression on B1 (1, 3, 8 rows across sessions) and V1 (1, 2, 3 rows). Keeps whole file before, after-1, after-3, and after-8.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-zerofixed-accdb.accdb",
+      "sha256": "21318312816a30c0a80827b81117ca8b7876f8b62e4f4c95f5f6dd571a29252b",
+      "length": 311296,
+      "provenance": "r-q36-publication-bytes.create-zerofixed-accdb.1dce931bec.a1 qk1-1dce931bec47a6139a878343397b2ea25e4c149cb3a1841d8b96e5122543a4a5 output:r-q36-zerofixed-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db1" },
+    { "op": "invoke", "target": "db1", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db1", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES ('a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db1" },
+    { "op": "observeFiles", "label": "after-1", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES (NULL)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db2" },
+    { "op": "observeFiles", "label": "after-3", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db3" },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1 VALUES (True)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO V1 VALUES ('bb')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db3", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db3" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-8", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg3", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg3", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg3" }
+  ]
+}

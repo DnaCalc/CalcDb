@@ -1,0 +1,73 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/feff-memo-lval-accdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 1 (ACCDB DAO Memo LVAL): leading U+FEFF in Memo crossing inline (64B), single-LVAL, and chained-LVAL boundaries in TU (uncompressed) and TC (WITH COMPRESSION): 31x, 32x, 58x, 59x, 255x, 2000 euro (chained uncompressible), 4000x (chained compressible). Keeps whole file before and after write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q36-feff-accdb.accdb",
+      "sha256": "547e8279f34fd30a6f8a51f68d1209bb6aba1180937c8535c4ad5fea9a48ce2c",
+      "length": 208896,
+      "provenance": "r-q36-publication-bytes.create-feff-accdb.0159460915.a1 qk1-01594609154970242e96939f11e0d8afc3da570d7e0793d49f6a98b5b8360141 output:r-q36-feff-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (1, ChrW(65279) & String(31, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (2, ChrW(65279) & String(32, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (3, ChrW(65279) & String(58, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (4, ChrW(65279) & String(59, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (5, ChrW(65279) & String(255, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (6, ChrW(65279) & String(2000, ChrW(8364)))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TU (ID, M) VALUES (7, ChrW(65279) & String(4000, 'x'))" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (1, ChrW(65279) & String(31, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (2, ChrW(65279) & String(32, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (3, ChrW(65279) & String(58, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (4, ChrW(65279) & String(59, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (5, ChrW(65279) & String(255, 'x'))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (6, ChrW(65279) & String(2000, ChrW(8364)))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO TC (ID, M) VALUES (7, ChrW(65279) & String(4000, 'x'))" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-write", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 1048576, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "dbr" },
+    { "op": "invoke", "target": "dbr", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "SELECT ID, Len(M) AS LM, AscW(Left(M,1)) AS M1, AscW(Mid(M,2,1)) AS M2 FROM TU ORDER BY ID" }, { "type": "i4", "value": 4 }], "bind": "q1" },
+    { "op": "invoke", "target": "q1", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 20 }] },
+    { "op": "invoke", "target": "q1", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "q1" },
+    { "op": "invoke", "target": "dbr", "member": "OpenRecordset", "kind": "method", "args": [{ "type": "bstr", "text": "SELECT ID, Len(M) AS LM, AscW(Left(M,1)) AS M1, AscW(Mid(M,2,1)) AS M2 FROM TC ORDER BY ID" }, { "type": "i4", "value": 4 }], "bind": "q2" },
+    { "op": "invoke", "target": "q2", "member": "GetRows", "kind": "method", "args": [{ "type": "i4", "value": 20 }] },
+    { "op": "invoke", "target": "q2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "q2" },
+    { "op": "invoke", "target": "dbr", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "dbr" },
+    { "op": "release", "target": "eng" }
+  ]
+}

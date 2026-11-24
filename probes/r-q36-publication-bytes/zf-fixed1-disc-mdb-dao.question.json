@@ -1,0 +1,71 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q36-publication-bytes/zf-fixed1-disc-mdb-dao",
+  "bookRefs": [
+    "W-05",
+    "R-FMT-2",
+    "II-04"
+  ],
+  "description": "Group 2 discriminator (Jet 4 MDB DAO): resolves exact row padding boundary on 1-byte and 3-byte fixed tables (F1V: fixedSize=1 v=1; F1B9: fixedSize=1 v=0 mask=2B; F3: fixedSize=3 v=0; F1U: 1-byte fixed updated to NULL; B1U: zero-fixed Bool updated True->False). Keeps whole file before and after update.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "zf-fixed1-disc.mdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 64 }
+      ],
+      "bind": "db"
+    },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F1V (x BYTE, s TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F1B9 (x BYTE, b1 YESNO, b2 YESNO, b3 YESNO, b4 YESNO, b5 YESNO, b6 YESNO, b7 YESNO, b8 YESNO)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F3 (x BYTE, y SHORT)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE F1U (x BYTE)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE B1U (b1 YESNO)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1V VALUES (90, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1V VALUES (90, NULL)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1V VALUES (NULL, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1V VALUES (NULL, NULL)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1B9 VALUES (90, True, False, True, False, True, False, True, False)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1B9 VALUES (NULL, False, False, False, False, False, False, False, False)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F3 VALUES (90, 4660)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F3 VALUES (NULL, NULL)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO F1U VALUES (90)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO B1U VALUES (True)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-insert", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "work:zf-fixed1-disc.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "outputPath", "fileName": "zf-fixed1-disc.mdb" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE F1U SET x = NULL" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "UPDATE B1U SET b1 = False" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db2" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-update", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "work:zf-fixed1-disc.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 524288, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" }
+  ]
+}
