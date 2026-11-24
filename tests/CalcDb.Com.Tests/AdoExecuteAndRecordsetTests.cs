@@ -1208,54 +1208,67 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                     Assert.Contains("NotModelled.AdoProviderError", outcome.Failure.Value.Description);
                 }
 
-                // 1. Five recorded ADO action/DDL error tuples (r-oledb-odbc/error-record-channels, r-q2-expr-sql/act-ado-failure-lane).
+                // 1. Five recorded Connection.Execute action/DDL error tuples (r-oledb-odbc/error-record-channels,
+                //    r-q2-expr-sql/act-ado-failure-lane), plus Command.Execute refusing each kind by name with a clean abort.
                 {
+                    // Command.Execute has no retained record for 3201, 3464, over-long Text (3163), or 3281 (DROP TABLE):
+                    // each refuses by name and leaves the database file byte-identical.
+                    byte[] beforeMappedCmd = File.ReadAllBytes(dbMapped);
+                    nint cnCmd = OpenAceConnection(dbMapped);
+                    try
+                    {
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cnCmd, "INSERT INTO Child (ID, TID) VALUES (9, 999)"));
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cnCmd, "INSERT INTO Items (Code, L) VALUES ('x8', 'abc')"));
+
+                        Outcome textOverflowCmd = RunCommandExecute(cnCmd, "INSERT INTO Items (Code) VALUES ('this-code-is-too-long')");
+                        Assert.NotNull(textOverflowCmd.Failure);
+                        Assert.Equal(HResults.E_NOTIMPL, textOverflowCmd.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandTextOverflow", textOverflowCmd.Failure.Value.Description);
+
+                        Outcome dropCmd = RunCommandExecute(cnCmd, "DROP TABLE Items");
+                        Assert.NotNull(dropCmd.Failure);
+                        Assert.Equal(HResults.E_NOTIMPL, dropCmd.Failure!.Value.Scode);
+                        Assert.Contains("Command.Execute", dropCmd.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnCmd, "Close").Failure);
+                        Release(cnCmd);
+                    }
+                    Assert.Equal(beforeMappedCmd, File.ReadAllBytes(dbMapped));
+
                     nint cn = OpenAceConnection(dbMapped);
                     try
                     {
-                        // 3201 (FK child insert violation)
+                        // 3201 (FK child insert violation on Connection.Execute)
                         AssertProviderError(
                             cn,
                             Call(cn, "Execute", "INSERT INTO Child (ID, TID) VALUES (9, 999)", Missing, 1),
                             unchecked((int)0x80004005), 5003000, "3201", -535037517);
 
-                        // 3314 (Required field violation)
+                        // 3314 (Required field violation on Connection.Execute)
                         AssertProviderError(
                             cn,
                             Call(cn, "Execute", "INSERT INTO Req (ID) VALUES (7)", Missing, 1),
                             unchecked((int)0x80004005), 5003000, "3314", -541331061);
 
-                        // 3464 (Data type mismatch)
+                        // 3464 (Data type mismatch on Connection.Execute)
                         AssertProviderError(
                             cn,
                             Call(cn, "Execute", "INSERT INTO Items (Code, L) VALUES ('x9', 'abc')", Missing, 1),
                             unchecked((int)0x80040E07), 5003071, "3464", -539888598);
 
-                        // 3163 (Field too small)
+                        // 3163 (Field too small on Connection.Execute)
                         AssertProviderError(
                             cn,
                             Call(cn, "Execute", "INSERT INTO Items (Code) VALUES ('this-code-is-too-long')", Missing, 1),
                             unchecked((int)0x80040E57), 5003163, "3163", -68551703);
 
-                        // 3281 (Cannot delete table participating in relationships)
+                        // 3281 (Cannot delete table participating in relationships on Connection.Execute)
                         AssertProviderError(
                             cn,
                             Call(cn, "Execute", "DROP TABLE Items", Missing, 1),
                             unchecked((int)0x80004005), 5003281, "3281", -68813851);
-
-                        // Also verify Command.Execute answers 3201, 3464, and 3163 (no silent truncation) on non-CHECK tables with the same IID_ICommand tuple.
-                        AssertProviderError(
-                            cn,
-                            RunCommandExecute(cn, "INSERT INTO Child (ID, TID) VALUES (9, 999)"),
-                            unchecked((int)0x80004005), 5003000, "3201", -535037517);
-                        AssertProviderError(
-                            cn,
-                            RunCommandExecute(cn, "INSERT INTO Items (Code, L) VALUES ('x8', 'abc')"),
-                            unchecked((int)0x80040E07), 5003071, "3464", -539888598);
-                        AssertProviderError(
-                            cn,
-                            RunCommandExecute(cn, "INSERT INTO Items (Code) VALUES ('this-code-is-too-long')"),
-                            unchecked((int)0x80040E57), 5003163, "3163", -68551703);
                     }
                     finally
                     {
@@ -1266,12 +1279,15 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
 
                 // 2. Unmapped ACE failures on Connection.Execute and Command.Execute leave the file byte-identical:
                 //    3316 (field & table ValidationRule with text), 3315 (AllowZeroLength=False), 3058 (Null in PK),
-                //    11 (division by zero), 6 (overflow).
+                //    11 (division by zero), 6 (overflow), plus 3314 on Command.Execute (no retained Command record).
                 {
                     byte[] beforeErrBase = File.ReadAllBytes(dbErrBase);
                     nint cn = OpenAceConnection(dbErrBase);
                     try
                     {
+                        // 3314 Required field on Command.Execute (non-CHECK table P.Req) refuses by name via clean abort.
+                        AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO P (ID) VALUES (99)"));
+
                         // 3316 field & table ValidationRule (Connection.Execute + Command.Execute)
                         AssertUnmappedProviderRefusal(Call(cn, "Execute", "INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)", Missing, 1));
                         AssertUnmappedProviderRefusal(RunCommandExecute(cn, "INSERT INTO VR (ID, Pv, A, B2) VALUES (10, -1, 1, 2)"));
@@ -1300,21 +1316,6 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Release(cn);
                     }
                     Assert.Equal(beforeErrBase, File.ReadAllBytes(dbErrBase));
-
-                    // Verify Command.Execute also maps 3314 on a non-CHECK Required table (P.Req).
-                    nint cnReqCmd = OpenAceConnection(dbErrBase);
-                    try
-                    {
-                        AssertProviderError(
-                            cnReqCmd,
-                            RunCommandExecute(cnReqCmd, "INSERT INTO P (ID) VALUES (99)"),
-                            unchecked((int)0x80004005), 5003000, "3314", -541331061);
-                    }
-                    finally
-                    {
-                        Assert.Null(Call(cnReqCmd, "Close").Failure);
-                        Release(cnReqCmd);
-                    }
                 }
 
                 // 3. Multi-row UPDATE hitting unmapped 3316 on row 2 aborts row 1 too (Connection.Execute + Command.Execute).

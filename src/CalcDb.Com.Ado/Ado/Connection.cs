@@ -1927,7 +1927,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 out unmodelled,
                 sql,
                 allowAdoCheckViolation,
-                isActionOrDdl: true);
+                isConnectionExecuteAction: allowAdoConnectionExecute);
         }
 
         // ADO executes action statements atomically (like DAO dbFailOnError = 128).

@@ -1222,8 +1222,9 @@ public static unsafe class ActionExecutor
     /// <item><b>Long</b> (<c>r-q-wire/int-sql-literal-long</c>, <c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-sql-2-3/act-fail-conversion</c>):
     /// banker's-rounded via <c>CLng</c>; overflow or non-numeric text fails <b>3464</b> (<c>Data type mismatch in criteria expression.</c>).</item>
     /// <item><b>Text</b> (<c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-oledb-odbc/error-record-channels</c>):
-    /// converts via <c>CStr</c>; DAO SQL silently truncates to <c>column.Length / 2</c> UTF-16 units, while ADO
-    /// <c>Connection.Execute</c> fails <b>3163</b> (<c>The field is too small...</c>).</item>
+    /// converts via <c>CStr</c>; DAO SQL silently truncates to <c>column.Length / 2</c> UTF-16 units, ADO
+    /// <c>Connection.Execute</c> fails <b>3163</b> (<c>The field is too small...</c>), and ADO
+    /// <c>Command.Execute</c> refuses by name (<c>NotModelled.AdoCommandTextOverflow</c>).</item>
     /// </list>
     /// The returned <paramref name="converted"/> owns any allocated BSTR and must be cleared with <see cref="SelectValues.Clear"/>.
     /// </summary>
@@ -1372,13 +1373,24 @@ public static unsafe class ActionExecutor
                 {
                     ReadOnlySpan<char> units = Bstrs.Chars(textVar.Pointer);
                     int maxUnits = column.TypeCode == NativeTypes.Text ? column.Length / 2 : units.Length;
-                    if (column.TypeCode == NativeTypes.Text && errorSource is ActionErrorSource.Ado or ActionErrorSource.AdoCommand && units.Length > maxUnits)
+                    if (column.TypeCode == NativeTypes.Text && units.Length > maxUnits)
                     {
-                        failure = SqlFailure.Ace(
-                            SqlPhase.Execute,
-                            MutationError.FieldTooSmall,
-                            new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field).Describe());
-                        return false;
+                        if (errorSource == ActionErrorSource.Ado)
+                        {
+                            failure = SqlFailure.Ace(
+                                SqlPhase.Execute,
+                                MutationError.FieldTooSmall,
+                                new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field).Describe());
+                            return false;
+                        }
+                        if (errorSource == ActionErrorSource.AdoCommand)
+                        {
+                            failure = SqlFailure.Open(
+                                SqlPhase.Execute,
+                                "NotModelled.AdoCommandTextOverflow",
+                                $"Command.Execute text value length ({units.Length}) exceeds column '{column.Name}' width ({maxUnits}); neither 3163 nor truncation is recorded on Command.Execute");
+                            return false;
+                        }
                     }
                     int keep = Math.Min(units.Length, maxUnits);
                     if (ownsTextVar && keep == units.Length)
