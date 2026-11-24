@@ -25,7 +25,7 @@ public sealed record PhysicalIndexSpec(
     uint EntryCount = 0,
     uint UniqueEntryCount = 0);
 
-/// <summary>Logical index specification for <see cref="TableDefEncoder.Encode"/>.</summary>
+/// <summary>Logical index specification for <see cref="TableDefEncoder.Encode"/> (bytes [21..23) default to 0x04/0x04 on non-FK indexes; FK indexes write 0x00/0x00 or 0x00/0x01 for ON DELETE CASCADE; evidence/r-q34-ddl-sweep/fk-*).</summary>
 public sealed record LogicalIndexSpec(
     string Name,
     uint LogicalNumber,
@@ -33,7 +33,9 @@ public sealed record LogicalIndexSpec(
     byte IndexType,
     byte RelatedTableType = 0,
     uint RelatedIndex = 0xFFFFFFFFu,
-    uint RelatedTable = 0);
+    uint RelatedTable = 0,
+    byte UpdateAction = 0x04,
+    byte DeleteAction = 0x04);
 
 /// <summary>Trailing LVAL (Memo/OLE) column usage-map entry in a TableDef stream.</summary>
 public sealed record LvalColumnMapSpec(ushort PhysicalNumber, RowLocator OwnedMap, RowLocator FreeMap);
@@ -72,9 +74,6 @@ public static class TableDefEncoder
 
     /// <summary>Unconfirmed ACE 2007 constant <c>0x00000783</c> observed at every 52-byte physical index block <c>[0..4)</c>.</summary>
     public const uint UnconfirmedPhysicalIndexMarker = 0x00000783u;
-
-    /// <summary>Unconfirmed ACE 2007 constant <c>0x0404</c> observed at every 28-byte logical index block <c>[21..23)</c>.</summary>
-    public const ushort UnconfirmedLogicalIndexMarker = 0x0404;
 
     /// <summary>Two-byte TableDef stream terminator (<c>FF FF</c>) after trailing LVAL column maps.</summary>
     public const ushort StreamTerminator = 0xFFFF;
@@ -179,7 +178,8 @@ public static class TableDefEncoder
             ix.RelatedTableType.Write(block, log.RelatedTableType);
             ix.RelatedIndex.Write(block, log.RelatedIndex);
             ix.RelatedTable.Write(block, log.RelatedTable);
-            BinaryPrimitives.WriteUInt16LittleEndian(block[21..], UnconfirmedLogicalIndexMarker);
+            block[21] = log.UpdateAction;
+            block[22] = log.DeleteAction;
             ix.IndexType.Write(block, log.IndexType);
             pos += ix.LogicalBlockBytes;
         }
@@ -239,7 +239,7 @@ public static class TableDefEncoder
             FreeMap: t.FreeMap,
             Columns: [.. t.Columns.Select(c => new ColumnSpec(c.Name, c.TypeCode, (ushort)c.PhysicalNumber, (ushort)c.VariableIndex, (ushort)c.ColumnId, c.TypeInfo, c.Flags, c.ExtendedFlags, (ushort)c.FixedOffset, (ushort)c.Length))],
             PhysicalIndexes: [.. t.PhysicalIndexes.Select(p => new PhysicalIndexSpec(p.Columns, p.OwnedMap, p.RootPage, p.Flags, p.EntryCount, p.UniqueEntryCount))],
-            LogicalIndexes: [.. t.LogicalIndexes.Select(l => new LogicalIndexSpec(l.Name, (uint)l.Number, (uint)l.PhysicalNumber, l.IndexType, l.RelatedTableType, l.RelatedIndex, l.RelatedTable))],
+            LogicalIndexes: [.. t.LogicalIndexes.Select(l => new LogicalIndexSpec(l.Name, (uint)l.Number, (uint)l.PhysicalNumber, l.IndexType, l.RelatedTableType, l.RelatedIndex, l.RelatedTable, l.UpdateAction, l.DeleteAction))],
             LvalColumnMaps: [.. t.LongValueMaps],
             AutoNumberIncrement: t.AutoNumberIncrement);
     }

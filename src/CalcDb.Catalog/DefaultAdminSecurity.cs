@@ -26,6 +26,14 @@ public static class DefaultAdminSecurity
     /// </summary>
     public static IReadOnlyList<(byte[] Sid, int Acm)> NewTableAces { get; } = [([0x03, 0x01], 0x000F00FE), ([0x02, 0x01], 0x000FFEFF)];
 
+    /// <summary>
+    /// The MSysACEs rows of a relationship (MSysObjects Type 8, ParentId 0x0F000003) the default Admin creates, in slot
+    /// order: Admin with 0x000F00FE, then Users with 0x000FFFFF, neither inheritable
+    /// (evidence/r-q34-ddl-sweep/fk-inline-accdb-dao page 41 slots 40 and 41; fk-inline-mdb-dao page 18 slots 20 and 21).
+    /// Matches the Relationships container's two inheritable grants with Admins replaced by Admin.
+    /// </summary>
+    public static IReadOnlyList<(byte[] Sid, int Acm)> NewRelationshipAces { get; } = [([0x03, 0x01], 0x000F00FE), ([0x02, 0x01], 0x000FFFFF)];
+
     /// <summary>The stored form of a built-in SID under the file's keystream.</summary>
     public static byte[] Mask(ReadOnlySpan<byte> plaintextSid, ReadOnlySpan<byte> keystream) =>
         [(byte)(plaintextSid[0] ^ keystream[0]), (byte)(plaintextSid[1] ^ keystream[1])];

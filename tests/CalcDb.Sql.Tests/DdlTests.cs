@@ -715,7 +715,8 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE LvalBeforePk (m MEMO, id LONG CONSTRAINT PK_Lbp PRIMARY KEY)", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE LvalBetween (id LONG CONSTRAINT PK_Lb PRIMARY KEY, m MEMO, s TEXT(10) CONSTRAINT UX_Lb UNIQUE)", "NotModelled.DdlLvalWithInlineConstraint");
         AssertNotModelled(db, "CREATE TABLE PkText (s TEXT(10) CONSTRAINT PK_Txt PRIMARY KEY)", "NotModelled.DdlPrimaryKeyShape");
-        AssertNotModelled(db, "CREATE TABLE PkMulti (a LONG, b LONG, CONSTRAINT PK_M PRIMARY KEY (a, b))", "NotModelled.DdlPrimaryKeyShape");
+        AssertNotModelled(db, "CREATE TABLE PkMulti (a LONG, b LONG, c LONG, CONSTRAINT PK_M PRIMARY KEY (a, b, c))", "NotModelled.DdlPrimaryKeyShape");
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Pk2 (a LONG, b LONG, CONSTRAINT PK_2 PRIMARY KEY (a, b))", db).Succeeded);
         AssertNotModelled(db, "CREATE TABLE PkU (a LONG PRIMARY KEY)", "NotModelled.DdlUnnamedPrimaryKey");
 
         Assert.True(ActionExecutor.Execute("CREATE TABLE P (a LONG CONSTRAINT PK_P PRIMARY KEY)", db).Succeeded);
@@ -1152,7 +1153,8 @@ public sealed class DdlTests
         AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT FK_T FOREIGN KEY (id) REFERENCES T (id)", "NotModelled.DdlForeignKey");
         AssertAceError(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", 3289);
         AssertAceError(db, "ALTER TABLE T ADD CONSTRAINT CK_N CHECK (id > 0)", 3289);
-        AssertNotModelled(db, "CREATE TABLE Ck (n LONG CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
+        AssertAceError(db, "CREATE TABLE Ck (n LONG CHECK (n > 0))", 3292, ActionErrorSource.Ado);
+        AssertAceError(db, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", 3292, ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
@@ -1218,6 +1220,9 @@ public sealed class DdlTests
         { "alt-check-rows-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
         { "alt-check-rows-mdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_V CHECK (V >= 0)" },
         { "alt-check-two-accdb-ado", true, "ALTER TABLE T ADD CONSTRAINT CK_B CHECK (V <= 100)" },
+        { "alt-fk-empty-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID)" },
+        { "alt-fk-empty-mdb-dao", false, "ALTER TABLE T ADD CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID)" },
+        { "alt-fk-rows-accdb-dao", false, "ALTER TABLE T ADD CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID)" },
     };
 
     [Theory]
@@ -1237,7 +1242,159 @@ public sealed class DdlTests
         {
             Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
         }
-        AssertAsAce(kept, startImage, db.Image.Snapshot());
+        IReadOnlyList<(long Page, int Start, int Length)>? clockSpans = question.StartsWith("alt-fk-", StringComparison.Ordinal)
+            ? ForeignKeyClockSpans(db, ace, "P", "T", "FK_T_P", updated)
+            : null;
+        AssertAsAce(kept, startImage, db.Image.Snapshot(), clockSpans);
+    }
+
+    /// <summary>All 9 succeeding CREATE TABLE FOREIGN KEY records of evidence/r-q34-ddl-sweep (fk-*).</summary>
+    public static TheoryData<string, bool, string> RQ34CreateTableForeignKeySqlCases() => new()
+    {
+        { "fk-inline-accdb-dao", false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT FK_T_P REFERENCES P(ID), S TEXT(50))" },
+        { "fk-inline-accdb-ado", true, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT FK_T_P REFERENCES P(ID), S TEXT(50))" },
+        { "fk-inline-mdb-dao", false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT FK_T_P REFERENCES P(ID), S TEXT(50))" },
+        { "fk-inline-mdb-ado", true, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG CONSTRAINT FK_T_P REFERENCES P(ID), S TEXT(50))" },
+        { "fk-table-1col-accdb-dao", false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID))" },
+        { "fk-table-1col-mdb-dao", false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID))" },
+        { "fk-table-2col-accdb-dao", false, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, P1 LONG, P2 LONG, CONSTRAINT FK_T_P FOREIGN KEY (P1, P2) REFERENCES P(ID1, ID2))" },
+        { "fk-cascade-accdb-ado", true, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE)" },
+        { "fk-cascade-mdb-ado", true, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE)" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableForeignKeySqlCases))]
+    public void R_q34_ddl_sweep_create_table_foreign_key_sql_matches_ACE_pages(string question, bool isAdo, string sql)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (ulong created, _) = AceDates(ace, "T");
+
+        using var db = new WritableSqlFixture((byte[])startImage.Clone()) { DateBitsProvider = () => created };
+        ActionOutcome outcome = ActionExecutor.Execute(sql, db, source: isAdo ? ActionErrorSource.Ado : ActionErrorSource.Database);
+        Assert.True(outcome.Succeeded, $"{question} ({sql}): {outcome.Failure}");
+        Assert.Equal(0, outcome.RecordsAffected);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        }
+        IReadOnlyList<(long Page, int Start, int Length)> clockSpans = ForeignKeyClockSpans(db, ace, "P", "T", "FK_T_P", created);
+        AssertAsAce(kept, startImage, db.Image.Snapshot(), clockSpans);
+    }
+
+    private static List<(long Page, int Start, int Length)> ForeignKeyClockSpans(
+        WritableSqlFixture db,
+        byte[] ace,
+        string parentTableName,
+        string childTableName,
+        string relationshipName,
+        ulong referenceDateBits)
+    {
+        CatalogSnapshot cat = CatalogBootstrap.Open(db.Cache, D, db.PageCount, out CatalogFailure? catFail)!;
+        Assert.Null(catFail);
+        int dateCreateFixed = D.Row.FixedBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateCreate").FixedOffset;
+        int dateUpdateFixed = D.Row.FixedBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+        DateTime refTime = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(referenceDateBits));
+
+        List<(long Page, int Start, int Length)> spans = [];
+        void AddDateSpan(CatalogEntry entry, int colFixedOffset)
+        {
+            using PagePin pin = db.Cache.Pin(entry.Root.Page).Pin!;
+            SlotView slot = DataPages.CheckedSlot(pin.Bytes, entry.Root.Row, D, out _)!.Value;
+            int off = slot.Start + colFixedOffset;
+            ulong aceBits = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + off);
+            TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceBits)) - refTime;
+            Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"MSysObjects '{entry.Name}' timestamp differed by {delta}");
+            spans.Add((entry.Root.Page, off, 8));
+        }
+
+        CatalogEntry parentEntry = cat.Entries.Single(e => e.Name == parentTableName && e.ParentId == cat.TablesContainer);
+        CatalogEntry childEntry = cat.Entries.Single(e => e.Name == childTableName && e.ParentId == cat.TablesContainer);
+        CatalogEntry relEntry = cat.Entries.Single(e => e.Name == relationshipName && e.Type == 8);
+        AddDateSpan(parentEntry, dateUpdateFixed);
+        AddDateSpan(childEntry, dateUpdateFixed);
+        AddDateSpan(relEntry, dateCreateFixed);
+        AddDateSpan(relEntry, dateUpdateFixed);
+        return spans;
+    }
+
+    [Theory]
+    [InlineData("fk-cascade-accdb-dao")]
+    [InlineData("fk-cascade-mdb-dao")]
+    public void R_q34_ddl_sweep_create_table_fk_cascade_dao_fails_3289_and_writes_nothing(string question)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+
+        using var db = new WritableSqlFixture((byte[])startImage.Clone());
+        AssertAceError(db, "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, K LONG, CONSTRAINT FK_T_P FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE)", 3289, ActionErrorSource.Database);
+        Assert.False(db.Workspace.NeedsCloseCommit(db.Cache));
+        byte[] after = db.Image.Snapshot();
+        Assert.Equal(startImage, after);
+        AssertAsAce(kept, startImage, after);
+    }
+
+    [Fact]
+    public void ForeignKey_and_ado_unnamed_inline_check_sql_enforcement_and_refusals()
+    {
+        using var db = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE P (ID LONG CONSTRAINT PKP PRIMARY KEY)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO P (ID) VALUES (10)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE C (ID LONG CONSTRAINT PKC PRIMARY KEY, K LONG, CONSTRAINT FK_C_P FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE)", db, source: ActionErrorSource.Ado).Succeeded);
+
+        // Referential integrity is live after DDL: valid child row succeeds, orphan fails 3201, parent delete cascades.
+        Assert.True(ActionExecutor.Execute("INSERT INTO C (ID, K) VALUES (1, 10)", db, options: 128).Succeeded);
+        AssertAceError(db, "INSERT INTO C (ID, K) VALUES (2, 99)", 3201, options: 128);
+        ActionOutcome delParent = ActionExecutor.Execute("DELETE FROM P WHERE ID = 10", db, options: 128);
+        Assert.True(delParent.Succeeded, $"{delParent.Failure}");
+        Assert.Equal(1, delParent.RecordsAffected);
+        Assert.Equal(0u, db.Table("C")!.RowCount);
+
+        // Unnamed inline CHECK in CREATE TABLE: ADO fails ACE 3292 ("Syntax error in field definition.", ii11-ado-check-constraint seq 23);
+        // DAO fails ACE 3290 ("Syntax error in CREATE TABLE statement."). Both write 0 bytes.
+        byte[] beforeErrors = db.Image.Snapshot();
+        ActionOutcome adoCheck3292 = ActionExecutor.Execute("CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", db, source: ActionErrorSource.Ado);
+        Assert.False(adoCheck3292.Succeeded);
+        Assert.NotNull(adoCheck3292.Failure);
+        Assert.False(adoCheck3292.Failure!.IsNotModelled);
+        Assert.Equal(3292, adoCheck3292.Failure.Number);
+        Assert.Equal(SqlMessages.FieldDefinitionSyntaxError, adoCheck3292.Failure.Message);
+        AssertAceError(db, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", 3290, ActionErrorSource.Database);
+
+        // Unrecorded FK actions: DAO fails 3289; ADO refuses by name (NotModelled.DdlForeignKeyAction).
+        foreach (string action in new[] { "ON UPDATE CASCADE", "ON DELETE SET NULL", "ON DELETE NO ACTION", "ON DELETE SET DEFAULT", "ON DELETE RESTRICT" })
+        {
+            string sql = $"CREATE TABLE BadAct (ID LONG CONSTRAINT PKB PRIMARY KEY, K LONG, CONSTRAINT FK_B FOREIGN KEY (K) REFERENCES P(ID) {action})";
+            AssertAceError(db, sql, 3289, ActionErrorSource.Database);
+            AssertNotModelled(db, sql, "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
+        }
+        AssertNotModelled(db, "CREATE TABLE BadBoth (ID LONG CONSTRAINT PKB PRIMARY KEY, K LONG, CONSTRAINT FK_B FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE ON UPDATE CASCADE)", "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
+        Assert.Equal(beforeErrors, db.Image.Snapshot());
+
+        // ALTER TABLE ADD CONSTRAINT FOREIGN KEY ... ON DELETE CASCADE, second FK to same/other parent, self-ref,
+        // 1-to-1 PK/UNIQUE-overlapping FK, Counter child FK, ADO ALTER FK, held parent table, and DROP CONSTRAINT refuse by name.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE P2 (ID LONG CONSTRAINT PKP2 PRIMARY KEY)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T2 (ID LONG CONSTRAINT PKT2 PRIMARY KEY, K LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE TAuto (ID COUNTER CONSTRAINT PKTA PRIMARY KEY, K LONG)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE TUq (ID LONG CONSTRAINT PKTU PRIMARY KEY, U LONG CONSTRAINT UQ_TU UNIQUE)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO T2 (ID, K) VALUES (1, 999)", db).Succeeded);
+        byte[] beforeRefusals = db.Image.Snapshot();
+
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_C FOREIGN KEY (K) REFERENCES P2(ID) ON DELETE CASCADE", "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_ADO FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.DdlForeignKey", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE OneToOne (ID LONG CONSTRAINT PK_O PRIMARY KEY, CONSTRAINT FK_O FOREIGN KEY (ID) REFERENCES P2(ID))", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_PK FOREIGN KEY (ID) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE TUq ADD CONSTRAINT FK_TU_U FOREIGN KEY (U) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE TAuto ADD CONSTRAINT FK_TA_ID FOREIGN KEY (ID) REFERENCES P2(ID)", "NotModelled.DdlForeignKey");
+        var lockedParent = new LockedTableDatabase(db, "P2");
+        AssertNotModelled(lockedParent, "CREATE TABLE CHeld (ID LONG CONSTRAINT PKCH PRIMARY KEY, K LONG CONSTRAINT FK_CH REFERENCES P2(ID))", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(lockedParent, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_HELD FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.DdlTableInUsePrecedence");
+        AssertNotModelled(db, "CREATE TABLE C2 (ID LONG CONSTRAINT PKC2 PRIMARY KEY, K LONG CONSTRAINT FK_C2_P REFERENCES P(ID))", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "CREATE TABLE SelfT (ID LONG CONSTRAINT PKS PRIMARY KEY, K LONG CONSTRAINT FK_SELF REFERENCES SelfT(ID))", "NotModelled.DdlForeignKey");
+        AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_P2 FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.SchemaWriter");
+        AssertNotModelled(db, "ALTER TABLE C DROP CONSTRAINT FK_C_P", "NotModelled.DdlAlterTable");
+        Assert.Equal(beforeRefusals, db.Image.Snapshot());
     }
 
     [Fact]

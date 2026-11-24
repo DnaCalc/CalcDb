@@ -167,6 +167,14 @@ public sealed class SchemaWriterTests
             return outcome;
         }
 
+        public SchemaOutcome AddForeignKey(AddForeignKeyRequest request, ulong created, ulong updated)
+        {
+            SchemaOutcome outcome = Writer().AddForeignKey(Workspace, request, created, updated);
+            Assert.True(outcome.Succeeded, $"{outcome.Refused} {outcome.Accepted}");
+            Pages = outcome.ExtentPages;
+            return outcome;
+        }
+
         /// <summary>Database.Close of a session: publishes a closing commit only when pages are queued for release.</summary>
         public void Close()
         {
@@ -1964,6 +1972,381 @@ public sealed class SchemaWriterTests
             Assert.False(secondAfterDml.PublishedAny);
             Assert.Contains("non-allocating", secondAfterDml.Refused?.NotWritten);
             Assert.Equal(beforeSecond, afterDmlAccdb.File.Snapshot());
+        }
+    }
+
+    /// <summary>All 9 succeeding CREATE TABLE FOREIGN KEY records of evidence/r-q34-ddl-sweep (fk-*).</summary>
+    public static TheoryData<string, CreateTableRequest> RQ34CreateTableForeignKeyCases() => new()
+    {
+        {
+            "fk-inline-accdb-dao",
+            new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Sql,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-inline-accdb-ado",
+            new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Ado,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-inline-mdb-dao",
+            new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Sql,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-inline-mdb-ado",
+            new("T", [Long("ID"), Long("K"), Text("S", 50)], SchemaRoute.Ado,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-table-1col-accdb-dao",
+            new("T", [Long("ID"), Long("K")], SchemaRoute.Sql,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-table-1col-mdb-dao",
+            new("T", [Long("ID"), Long("K")], SchemaRoute.Sql,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]))
+        },
+        {
+            "fk-table-2col-accdb-dao",
+            new("T", [Long("ID"), Long("P1"), Long("P2")], SchemaRoute.Sql,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["P1", "P2"], "P", ["ID1", "ID2"]))
+        },
+        {
+            "fk-cascade-accdb-ado",
+            new("T", [Long("ID"), Long("K")], SchemaRoute.Ado,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"], OnDeleteCascade: true))
+        },
+        {
+            "fk-cascade-mdb-ado",
+            new("T", [Long("ID"), Long("K")], SchemaRoute.Ado,
+                [new("PK", ["ID"], PrimaryKey: true)],
+                new NewForeignKey("FK_T_P", ["K"], "P", ["ID"], OnDeleteCascade: true))
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34CreateTableForeignKeyCases))]
+    public void R_q34_ddl_sweep_create_table_foreign_key_writes_ACE_pages_and_roundtrips_RelationshipCatalog(
+        string question,
+        CreateTableRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (ulong created, ulong updated) = AceDates(ace, request.Name);
+
+        using var session = new Session(startImage);
+        session.Create(request, created, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+        List<(long Page, int Start, int Length)> clockSpans = ForeignKeyClockSpans(session, ace, request.ForeignKey!.ReferencedTable, request.Name, request.ForeignKey.Name, updated);
+        AssertAsAce(kept, startImage, ours, clockSpans);
+
+        VerifyWrittenRelationship(session, request.Name, request.ForeignKey!);
+    }
+
+    [Fact]
+    public void R_q34_ddl_sweep_create_table_2col_primary_key_setup_writes_ACE_pages()
+    {
+        byte[] aceSetup = Kept.AfterSetupImage("fk-table-2col-accdb-dao");
+        (ulong created, ulong updated) = AceDates(aceSetup, "P");
+
+        using var session = new Session(Fixture());
+        session.Create(new("P", [Long("ID1"), Long("ID2")], SchemaRoute.Sql, [new("PKP", ["ID1", "ID2"], PrimaryKey: true)]), created, updated);
+        session.Close();
+        Assert.Equal(aceSetup, session.File.Snapshot());
+    }
+
+    /// <summary>All 3 ALTER TABLE ADD CONSTRAINT FOREIGN KEY records of evidence/r-q34-ddl-sweep (alt-fk-*).</summary>
+    public static TheoryData<string, AddForeignKeyRequest> RQ34AlterForeignKeyCases() => new()
+    {
+        { "alt-fk-empty-accdb-dao", new("T", new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]), SchemaRoute.Sql) },
+        { "alt-fk-empty-mdb-dao", new("T", new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]), SchemaRoute.Sql) },
+        { "alt-fk-rows-accdb-dao", new("T", new NewForeignKey("FK_T_P", ["K"], "P", ["ID"]), SchemaRoute.Sql) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ34AlterForeignKeyCases))]
+    public void R_q34_ddl_sweep_alter_table_foreign_key_writes_ACE_pages_and_roundtrips_RelationshipCatalog(
+        string question,
+        AddForeignKeyRequest request)
+    {
+        Kept kept = Kept.Of(question, "r-q34-ddl-sweep");
+        byte[] startImage = Kept.AfterSetupImage(question);
+        byte[] ace = kept.AceImage(startImage);
+        (_, ulong updated) = AceDates(ace, request.Table);
+
+        using var session = new Session(startImage);
+        session.AddForeignKey(request, updated, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+        List<(long Page, int Start, int Length)> clockSpans = ForeignKeyClockSpans(session, ace, request.ForeignKey.ReferencedTable, request.Table, request.ForeignKey.Name, updated);
+        AssertAsAce(kept, startImage, ours, clockSpans);
+
+        VerifyWrittenRelationship(session, request.Table, request.ForeignKey);
+    }
+
+    /// <summary>
+    /// ACE stamps MSysObjects DateCreate/DateUpdate in separate wall-clock reads across the child table, relationship
+    /// object, and parent table during one FK DDL statement (e.g. P.DateUpdate advancing by 1 ULP after T/FK_T_P).
+    /// Returns only those exact 8-byte DateCreate/DateUpdate spans after checking each ACE timestamp is within 5s.
+    /// </summary>
+    private static List<(long Page, int Start, int Length)> ForeignKeyClockSpans(
+        Session session,
+        byte[] ace,
+        string parentTableName,
+        string childTableName,
+        string relationshipName,
+        ulong referenceDateBits)
+    {
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? catFail)!;
+        Assert.Null(catFail);
+        int dateCreateFixed = D.Row.FixedBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateCreate").FixedOffset;
+        int dateUpdateFixed = D.Row.FixedBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+        DateTime refTime = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(referenceDateBits));
+
+        List<(long Page, int Start, int Length)> spans = [];
+        void AddDateSpan(CatalogEntry entry, int colFixedOffset)
+        {
+            using PagePin pin = session.Cache.Pin(entry.Root.Page).Pin!;
+            SlotView slot = DataPages.CheckedSlot(pin.Bytes, entry.Root.Row, D, out _)!.Value;
+            int off = slot.Start + colFixedOffset;
+            ulong aceBits = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + off);
+            TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceBits)) - refTime;
+            Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"MSysObjects '{entry.Name}' timestamp differed by {delta}");
+            spans.Add((entry.Root.Page, off, 8));
+        }
+
+        CatalogEntry parentEntry = cat.Entries.Single(e => e.Name == parentTableName && e.ParentId == cat.TablesContainer);
+        CatalogEntry childEntry = cat.Entries.Single(e => e.Name == childTableName && e.ParentId == cat.TablesContainer);
+        CatalogEntry relEntry = cat.Entries.Single(e => e.Name == relationshipName && e.Type == 8);
+        AddDateSpan(parentEntry, dateUpdateFixed);
+        AddDateSpan(childEntry, dateUpdateFixed);
+        AddDateSpan(relEntry, dateCreateFixed);
+        AddDateSpan(relEntry, dateUpdateFixed);
+        return spans;
+    }
+
+    private static void VerifyWrittenRelationship(Session session, string childTableName, NewForeignKey fk)
+    {
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? catFail)!;
+        Assert.Null(catFail);
+        IReadOnlyList<Relationship>? rels = RelationshipCatalog.Read(session.Cache, D, cat, session.Pages, out string? relFail);
+        Assert.Null(relFail);
+        Assert.NotNull(rels);
+        Relationship rel = Assert.Single(rels!, r => r.Name == fk.Name);
+        Assert.Equal(fk.ReferencedTable, rel.Table);
+        Assert.Equal(childTableName, rel.ForeignTable);
+        Assert.Equal(fk.OnDeleteCascade ? 0x00001000 : 0, rel.Attributes);
+        Assert.Equal(fk.Fields.Count, rel.Columns.Count);
+        for (int i = 0; i < fk.Fields.Count; i++)
+        {
+            Assert.Equal(fk.ReferencedFields[i], rel.Columns[i].Referenced);
+            Assert.Equal(fk.Fields[i], rel.Columns[i].Foreign);
+        }
+
+        // Verify logical index UpdateAction/DeleteAction bytes on both parent ".rB" and child FK index.
+        CatalogEntry parentEntry = cat.Entries.Single(e => e.Name == fk.ReferencedTable && e.ParentId == cat.TablesContainer);
+        CatalogEntry childEntry = cat.Entries.Single(e => e.Name == childTableName && e.ParentId == cat.TablesContainer);
+        TableDefinition parentTable = DecodeSinglePageTableDef(session, (uint)parentEntry.Id);
+        TableDefinition childTable = DecodeSinglePageTableDef(session, (uint)childEntry.Id);
+        LogicalIndex parentRelIdx = Assert.Single(parentTable.LogicalIndexes, li => li.Name == ".rB");
+        LogicalIndex childFkIdx = Assert.Single(childTable.LogicalIndexes, li => li.Name == fk.Name);
+        byte expectedDeleteAction = fk.OnDeleteCascade ? (byte)0x01 : (byte)0x00;
+        Assert.Equal((byte)0x00, parentRelIdx.UpdateAction);
+        Assert.Equal(expectedDeleteAction, parentRelIdx.DeleteAction);
+        Assert.Equal((byte)0x00, childFkIdx.UpdateAction);
+        Assert.Equal(expectedDeleteAction, childFkIdx.DeleteAction);
+    }
+
+    private static TableDefinition DecodeSinglePageTableDef(Session session, uint rootPage)
+    {
+        using PagePin pin = session.Cache.Pin(rootPage).Pin!;
+        TableDefSegmentView view = TableDefSegmentView.Open(rootPage, p => p == rootPage ? pin.Bytes.ToArray() : null, D, 4, out _)!;
+        return TableDefDecoder.Decode(view, rootPage, D, out _)!;
+    }
+
+    [Fact]
+    public void ForeignKey_unrecorded_neighbours_refuse_without_writing()
+    {
+        using (var session = new Session(Fixture()))
+        {
+            session.Create(new("P", [Long("ID"), Long("U")], SchemaRoute.Sql,
+                [new("PK_P", ["ID"], PrimaryKey: true), new("UQ_P", ["U"], PrimaryKey: false, Unique: true)]), 1, 1);
+            session.Create(new("T", [Long("ID"), Long("K"), Text("S", 20)], SchemaRoute.Sql,
+                [new("PK_T", ["ID"], PrimaryKey: true)]), 1, 1);
+            byte[] before = session.File.Snapshot();
+
+            // ON DELETE CASCADE refused on non-ADO CREATE TABLE and on ALTER TABLE ADD CONSTRAINT.
+            foreach (SchemaRoute route in new[] { SchemaRoute.Sql, SchemaRoute.Dao })
+            {
+                SchemaOutcome nonAdoCascade = session.Writer().CreateTable(
+                    session.Workspace,
+                    new("C1", [Long("ID"), Long("K")], route, [new("PK_C1", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_C1", ["K"], "P", ["ID"], OnDeleteCascade: true)),
+                    2, 2);
+                Assert.False(nonAdoCascade.Succeeded);
+                Assert.False(nonAdoCascade.PublishedAny);
+                Assert.NotNull(nonAdoCascade.Refused?.NotWritten);
+            }
+            SchemaOutcome alterCascade = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_TC", ["K"], "P", ["ID"], OnDeleteCascade: true), SchemaRoute.Ado),
+                2, 2);
+            Assert.False(alterCascade.Succeeded);
+            Assert.False(alterCascade.PublishedAny);
+            Assert.NotNull(alterCascade.Refused?.NotWritten);
+
+            // Self-reference refused on both CREATE TABLE and ALTER TABLE.
+            SchemaOutcome selfCreate = session.Writer().CreateTable(
+                session.Workspace,
+                new("S1", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK_S1", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_S1", ["K"], "S1", ["ID"])),
+                2, 2);
+            Assert.False(selfCreate.Succeeded);
+            Assert.False(selfCreate.PublishedAny);
+            SchemaOutcome selfAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_TS", ["K"], "T", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(selfAlter.Succeeded);
+            Assert.False(selfAlter.PublishedAny);
+
+            // Non-Long FK column, non-PK UNIQUE parent target, 0-PK child CREATE TABLE, and duplicate name on child refuse without writing.
+            SchemaOutcome textFk = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_TXT", ["S"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(textFk.Succeeded);
+            SchemaOutcome nonPkTarget = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_UQ", ["K"], "P", ["U"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(nonPkTarget.Succeeded);
+            SchemaOutcome noPkChild = session.Writer().CreateTable(
+                session.Workspace,
+                new("NoPk", [Long("K")], SchemaRoute.Sql, ForeignKey: new NewForeignKey("FK_NP", ["K"], "P", ["ID"])),
+                2, 2);
+            Assert.False(noPkChild.Succeeded);
+            SchemaOutcome dupChildIdx = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("PK_T", ["K"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(dupChildIdx.Succeeded);
+
+            // Gate 4 Findings #1, #3, #4: 1-to-1 PK/UNIQUE-overlapping FK, Counter child FK on ALTER, ADO ALTER FK,
+            // 0-PK child on ALTER, and 2-col ALTER FK all refuse without writing.
+            SchemaOutcome oneToOneCreate = session.Writer().CreateTable(
+                session.Workspace,
+                new("OneToOne", [Long("ID")], SchemaRoute.Sql, [new("PK_O", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_O", ["ID"], "P", ["ID"])),
+                2, 2);
+            Assert.False(oneToOneCreate.Succeeded);
+            Assert.Contains("1-to-1", oneToOneCreate.Refused?.NotWritten);
+            SchemaOutcome oneToOneAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_PK", ["ID"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(oneToOneAlter.Succeeded);
+            Assert.Contains("1-to-1", oneToOneAlter.Refused?.NotWritten);
+            SchemaOutcome adoAlterFk = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_ADO", ["K"], "P", ["ID"]), SchemaRoute.Ado),
+                2, 2);
+            Assert.False(adoAlterFk.Succeeded);
+            Assert.Contains("DAO/SQL", adoAlterFk.Refused?.NotWritten);
+
+            // Inside BeginTrans refuses without writing.
+            Assert.Null(session.Workspace.BeginTrans());
+            SchemaOutcome inTxCreate = session.Writer().CreateTable(
+                session.Workspace,
+                new("TxC", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK_TXC", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_TXC", ["K"], "P", ["ID"])),
+                2, 2);
+            Assert.False(inTxCreate.Succeeded);
+            Assert.Contains("BeginTrans", inTxCreate.Refused?.NotWritten);
+            SchemaOutcome inTxAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_TXA", ["K"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(inTxAlter.Succeeded);
+            Assert.Contains("BeginTrans", inTxAlter.Refused?.NotWritten);
+            Assert.Null(session.Workspace.Rollback().Error);
+
+            Assert.Equal(before, session.File.Snapshot());
+
+            // Child table with Counter column, UNIQUE index, 0-PK, or 2-col FK on ALTER TABLE refuse without writing.
+            session.Create(new("P2", [Long("ID")], SchemaRoute.Sql, [new("PK_P2", ["ID"], PrimaryKey: true)]), 2, 2);
+            session.Create(new("T_NoPk", [Long("K")], SchemaRoute.Sql), 2, 2);
+            session.Create(new("T_Auto", [new("ID", NewFieldType.Counter), Long("K")], SchemaRoute.Sql, [new("PK_TA", ["ID"], PrimaryKey: true)]), 2, 2);
+            session.Create(new("T_Uq", [Long("ID"), Long("U")], SchemaRoute.Sql, [new("PK_TU", ["ID"], PrimaryKey: true), new("UQ_TU", ["U"], PrimaryKey: false, Unique: true)]), 2, 2);
+            byte[] beforeExtraAlter = session.File.Snapshot();
+
+            SchemaOutcome noPkAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_NoPk", new NewForeignKey("FK_NP_A", ["K"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(noPkAlter.Succeeded);
+            Assert.Contains("single-column PRIMARY KEY", noPkAlter.Refused?.NotWritten);
+
+            SchemaOutcome autoAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_Auto", new NewForeignKey("FK_AUTO", ["ID"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(autoAlter.Succeeded);
+            Assert.Contains("Counter", autoAlter.Refused?.NotWritten);
+
+            SchemaOutcome uqAlter = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T_Uq", new NewForeignKey("FK_UQ_CHILD", ["U"], "P", ["ID"]), SchemaRoute.Sql),
+                2, 2);
+            Assert.False(uqAlter.Succeeded);
+            Assert.Contains("1-to-1", uqAlter.Refused?.NotWritten);
+
+            Assert.Equal(beforeExtraAlter, session.File.Snapshot());
+
+            // Adding a second FK referencing the same parent or a second distinct parent (existing negative MSysObjects.Id) refuses without writing.
+            session.Create(new("C1", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK_C1", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_C1_P", ["K"], "P", ["ID"])), 2, 2);
+            byte[] afterFirstFk = session.File.Snapshot();
+            SchemaOutcome secondFkSameParent = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_P2", ["K"], "P", ["ID"]), SchemaRoute.Sql),
+                3, 3);
+            Assert.False(secondFkSameParent.Succeeded);
+            Assert.False(secondFkSameParent.PublishedAny);
+            Assert.Contains("already has relationship", secondFkSameParent.Refused?.NotWritten);
+
+            SchemaOutcome secondFkOtherParent = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_P2B", ["K"], "P2", ["ID"]), SchemaRoute.Sql),
+                3, 3);
+            Assert.False(secondFkOtherParent.Succeeded);
+            Assert.False(secondFkOtherParent.PublishedAny);
+            Assert.Contains("negative-Id", secondFkOtherParent.Refused?.NotWritten);
+            Assert.Equal(afterFirstFk, session.File.Snapshot());
+        }
+
+        // Populated child table with orphan rows (T holds K in {20, 10}, while P_Empty has no rows) refuses ALTER TABLE ADD CONSTRAINT FOREIGN KEY without writing.
+        byte[] popStart = Kept.AfterSetupImage("alt-fk-rows-accdb-dao");
+        using (var session = new Session(popStart))
+        {
+            session.Create(new("P_Empty", [Long("ID")], SchemaRoute.Sql, [new("PKPE", ["ID"], PrimaryKey: true)]), 2, 2);
+            byte[] beforeOrphanFk = session.File.Snapshot();
+
+            SchemaOutcome orphanRefusal = session.Writer().AddForeignKey(
+                session.Workspace,
+                new("T", new NewForeignKey("FK_T_PE", ["K"], "P_Empty", ["ID"]), SchemaRoute.Sql),
+                3, 3);
+            Assert.False(orphanRefusal.Succeeded);
+            Assert.False(orphanRefusal.PublishedAny);
+            Assert.Contains("no matching row", orphanRefusal.Refused?.NotWritten);
+            Assert.Equal(beforeOrphanFk, session.File.Snapshot());
         }
     }
 }
