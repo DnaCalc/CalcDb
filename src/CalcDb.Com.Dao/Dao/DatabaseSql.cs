@@ -358,6 +358,10 @@ internal static class ActionRoute
         {
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
         }
+        if (CheckConstraintRefusal(database, plan.TargetName, "QueryDef.Execute") is { } checkRefused)
+        {
+            return checkRefused;
+        }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;
         CallResult result = Published(database, caller, outcome, plan.Kind is ActionKind.InsertValues or ActionKind.InsertSelect, ref state);
@@ -371,9 +375,10 @@ internal static class ActionRoute
     /// <summary>
     /// A saved query run by Execute: a row-returning one is 3065 before any parameter is asked for (r-cat-1b/qd-execute-
     /// on-row-returning); a pass-through one would go to its ODBC source and is named; the others run their SQL as ACE
-    /// renders it (QuerySql, CAT-Q).
+    /// renders it (QuerySql, CAT-Q) with <see cref="ActionErrorSource.QueryDef"/> and refuse CHECK-constrained targets
+    /// before <see cref="ActionExecutor.Execute"/> runs so nothing is written.
     /// </summary>
-    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
+    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ref RecordsAffectedState recordsAffected)
     {
         if (query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union)
         {
@@ -385,21 +390,56 @@ internal static class ActionRoute
             return CallResult.Fail(Failure.NotModelled("NotModelled.ExecutePassThrough", $"Execute of the {query.Family?.ToString() ?? "unclassified"} query '{query.Name}'"));
         }
         RenderedSql sql = QuerySql.Render(query);
-        return sql.Text is { } text
-            ? Execute(database, caller, text, options, values, source, ref recordsAffected)
-            : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
+        if (sql.Text is not { } text)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
+        }
+        return ExecuteSavedSql(database, caller, text, options, values, ref recordsAffected);
+    }
+
+    internal static CallResult ExecuteSavedSql(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ref RecordsAffectedState recordsAffected)
+    {
+        if (database.SchemaFailure is { } stale)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
+        }
+        using ActionSyntax? parsed = ActionParser.Parse(sql, out _);
+        if (parsed is not null)
+        {
+            string routeName = caller is QueryDefObject ? "QueryDef.Execute" : "Database.Execute of a saved query";
+            if (CheckConstraintRefusal(database, parsed.TargetName, routeName) is { } checkRefused)
+            {
+                return checkRefused;
+            }
+        }
+        return Execute(database, caller, sql, options, values, ActionErrorSource.QueryDef, ref recordsAffected);
     }
 
     /// <summary>QueryDef overload forwarding to <see cref="RecordsAffectedState"/> (a saved QueryDef runs one query family).</summary>
-    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref int recordsAffected)
+    public static CallResult ExecuteSaved(DatabaseObject database, DaoObject caller, SavedQuery query, int options, IReadOnlyList<NativeVariant?>? values, ref int recordsAffected)
     {
         RecordsAffectedState state = default;
-        CallResult result = ExecuteSaved(database, caller, query, options, values, source, ref state);
+        CallResult result = ExecuteSaved(database, caller, query, options, values, ref state);
         if (result.Failure?.Kind != FailureKind.NotModelled)
         {
             recordsAffected = state.Current;
         }
         return result;
+    }
+
+    private static CallResult? CheckConstraintRefusal(DatabaseObject database, string targetName, string routeName)
+    {
+        TableEditContext? editContext = database.Sql.EditContext(targetName, out _);
+        if (editContext is null || !editContext.Semantics.HasCheckConstraints)
+        {
+            return null;
+        }
+        string names = editContext.Semantics.CheckConstraints.Count > 0
+            ? string.Join(", ", editContext.Semantics.CheckConstraints.Select(c => $"'{c.Name}'"))
+            : "(unparsed)";
+        return CallResult.Fail(Failure.NotModelled(
+            "NotModelled.Edit.Rule",
+            $"CHECK constraint {names} on {editContext.Semantics.TableName}: {routeName} has no retained ACE record"));
     }
 
     /// <summary>A bind failure of a QueryDef's action plan, published as Execute would publish it.</summary>

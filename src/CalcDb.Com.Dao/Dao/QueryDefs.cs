@@ -203,7 +203,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return ActionRoute.Failed(Database, this, failure, ref _recordsAffected);
         }
-        return ActionRoute.ExecuteSaved(Database, this, _query, options, null, ActionErrorSource.QueryDef, ref _recordsAffected);
+        return ActionRoute.ExecuteSaved(Database, this, _query, options, null, ref _recordsAffected);
     }
 
     /// <summary>A built-in the blob stores (flag 01: ODBCTimeout, MaxRecords), else the value ACE shows for an unset one.</summary>

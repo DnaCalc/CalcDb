@@ -681,7 +681,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, sql, StringComparison.OrdinalIgnoreCase)) is { } saved)
         {
-            return ActionRoute.ExecuteSaved(this, this, saved, options, null, ActionErrorSource.Database, ref _recordsAffected);
+            return ActionRoute.ExecuteSaved(this, this, saved, options, null, ref _recordsAffected);
         }
         return ActionRoute.Execute(this, this, sql, options, null, ActionErrorSource.Database, ref _recordsAffected);
     }
