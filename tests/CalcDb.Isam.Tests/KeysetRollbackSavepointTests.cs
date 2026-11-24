@@ -28,7 +28,7 @@ public sealed class KeysetRollbackSavepointTests
         public DynasetRig(string fixtureSha)
         {
             File = new ReplayFixture(fixtureSha);
-            Ws = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler() };
+            Ws = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         }
 
         public ReplayFixture File { get; }

@@ -51,7 +51,7 @@ public sealed class BulkUpdateScalingTests(ITestOutputHelper output)
                 7177,
                 hasRelationships: false,
                 new TableFootprints(_cache, D, table, _image.PageCount));
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler() };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         }
 
         public PageCache Cache => _cache;
@@ -279,7 +279,7 @@ public sealed class BulkUpdateScalingTests(ITestOutputHelper output)
         var cache = new PageCache(file, file.Incarnation, D.PageSize, 64);
         using MutationSemantics tableA = MinimalSemantics("A");
         using MutationSemantics tableB = MinimalSemantics("B");
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
 
         Assert.Null(ws.BeginTrans());
         for (int i = 0; i < 1_000; i++)
@@ -329,6 +329,7 @@ public sealed class BulkUpdateScalingTests(ITestOutputHelper output)
         {
             Publisher = new SyntheticTarget(cache, file),
             Scheduler = new CountingScheduler(),
+            Clock = static () => TimeSpan.Zero,
         };
 
         var r1 = new RowId(2, 1);
@@ -465,7 +466,7 @@ public sealed class BulkUpdateScalingTests(ITestOutputHelper output)
         using var file = new MemoryDatabaseFile(image, D.PageSize);
         var cache = new PageCache(file, file.Incarnation, D.PageSize, 64);
         using MutationSemantics tableA = MinimalSemantics("A");
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Scheduler = new CountingScheduler() };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
 
         var r1 = new RowId(2, 1);
         var r2 = new RowId(2, 2);

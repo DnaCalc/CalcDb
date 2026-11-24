@@ -343,12 +343,28 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
+    private bool IsMdb => Database.Profile.Format == FileFormat.Jet4;
+
+    /// <summary>
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value on ACCDB for
+    /// Move(Rows), FindFirst(Criteria), Seek(Comparison) (r-q2-cursor-dao/byref-dao-move-seek calls 9, 26, 46),
+    /// PercentPosition put (r-q35-byref-args/dao-rs-percentposition), and FindLast/FindNext/FindPrevious(Criteria)
+    /// (r-q35-byref-args/dao-rs-findlast). MDB ByRef forms are not recorded and stay refused by name.
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        !IsMdb && parameter == 0 && (
+            member.Name is "Move" or "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" or "Seek"
+            || (member.Name == "PercentPosition" && member.Kind == InvokeKind.PropertyPut));
+
     /// <summary>
     /// Refuse unrecorded source VarTypes before IDispatch coercion for members whose records probe only a specific subset:
-    /// Move (r-cursor-1b/move-argument-forms), PercentPosition (r-cursor-1b/percent-assign), Seek comparison
-    /// (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek), FindFirst/FindNext criteria
-    /// (r-cursor-1b/find-expression-forms, r-wire/opt-find-criteria), and FindLast/FindPrevious criteria
-    /// (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends).
+    /// Move (r-cursor-1b/move-argument-forms; ByRef: r-q2-cursor-dao/byref-dao-move-seek call 9), PercentPosition
+    /// (r-cursor-1b/percent-assign; ByRef: r-q35-byref-args/dao-rs-percentposition), Seek comparison
+    /// (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek; ByRef: r-q2-cursor-dao/byref-dao-move-seek call 46),
+    /// FindFirst/FindNext criteria (r-cursor-1b/find-expression-forms, r-wire/opt-find-criteria; ByRef:
+    /// r-q2-cursor-dao/byref-dao-move-seek call 26, r-q35-byref-args/dao-rs-findlast), and FindLast/FindPrevious
+    /// criteria (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends; ByRef:
+    /// r-q35-byref-args/dao-rs-findlast).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
@@ -450,10 +466,21 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         for (int i = 0; i < keys.Length; i++)
         {
             ColumnDescriptor? column = table.KeyColumn(i);
+            // Key1 (p1) admits one-level ByRef (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) as by-value on ACCDB
+            // (r-q2-cursor-dao/byref-dao-move-seek call 46); MDB, nested ByRef and ByRef on Key2..Key13 are refused by name.
+            NativeVariant* rawKey = Args.Cell(args[1 + i]);
+            NativeVariant keyCell = i == 0 && !IsMdb ? ByRefValues.Dereference(rawKey) : *rawKey;
+            if (((VarType)keyCell.Vt & VarType.ByRef) != 0
+                || (((VarType)rawKey->Vt & VarType.ByRef) != 0 && TypedCall.IsMissing(&keyCell)))
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.SeekKeyArgumentType",
+                    $"Recordset.Seek Key{i + 1} with {(VarType)rawKey->Vt} argument (only by-value, or ACCDB one-level ByRef on Key1, is recorded)"));
+            }
             KeyArgumentFailure failure = KeyArgumentFailure.NotEncoded;
             SeekKey? key = column is null ? null
-                : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, args[1 + i], out failure)
-                : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out failure);
+                : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, &keyCell, out failure)
+                : SeekKeyOf(&keyCell, column.TypeCode, out failure);
             if (key is null)
             {
                 return failure switch
@@ -509,24 +536,23 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// that key, which grows once to the longest key seen; another type converts to a BSTR as VariantChangeType does, or
     /// fails with 3421.
     /// </summary>
-    private SeekKey? SeekTextKeyOf(int ordinal, nint arg, out KeyArgumentFailure failure)
+    private SeekKey? SeekTextKeyOf(int ordinal, NativeVariant* v, out KeyArgumentFailure failure)
     {
         failure = KeyArgumentFailure.None;
-        NativeVariant* v = Args.Cell(arg);
-        VarType vt = (VarType)v->Vt & ~VarType.ByRef;
+        VarType vt = (VarType)v->Vt;
         if (vt is VarType.Null or VarType.Empty)
         {
             return new SeekKey(KeyValue.Null);
         }
         ReadOnlySpan<char> units;
         string? convertedText = null;
-        if (Args.TypeOf(arg) == VarType.Bstr)
+        if (vt == VarType.Bstr)
         {
             units = v->Pointer == 0 ? default : Bstrs.Chars(v->Pointer);
         }
         else
         {
-            convertedText = Args.Text(arg);
+            convertedText = Args.Text((nint)v);
             if (convertedText is null)
             {
                 failure = KeyArgumentFailure.Conversion;
@@ -555,7 +581,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private static SeekKey? SeekKeyOf(NativeVariant* v, byte type, out KeyArgumentFailure failure)
     {
         failure = KeyArgumentFailure.None;
-        VarType vt = (VarType)v->Vt & ~VarType.ByRef;
+        VarType vt = (VarType)v->Vt;
         if (vt is VarType.Null or VarType.Empty)
         {
             if (type == NativeTypes.Boolean)

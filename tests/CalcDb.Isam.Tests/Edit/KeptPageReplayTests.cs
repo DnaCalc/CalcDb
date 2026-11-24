@@ -41,7 +41,7 @@ public sealed class KeptPageReplayTests
         {
             File = new MemoryDatabaseFile(image, D.PageSize);
             Cache = new PageCache(File, File.Incarnation, D.PageSize, 256);
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler() };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         }
 
         /// <summary>One table-type AddNew of <paramref name="values"/> into <paramref name="t"/>, a TableDef read from its page (no catalog row).</summary>
@@ -646,7 +646,7 @@ public sealed class KeptPageReplayTests
     {
         private readonly List<IDisposable> _owned = [];
 
-        public TransactionCoordinator Ws { get; } = new(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler() };
+        public TransactionCoordinator Ws { get; } = new(new LockerId(1)) { Publisher = file, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
 
         public (EditFrame Frame, TableCursor Cursor, TableDefinition Table) OpenTable(string table)
         {
@@ -1021,7 +1021,7 @@ public sealed class KeptPageReplayTests
         // 3. Emptying a data page in an MDB file.
         using (var mdb = new ReplayFixture(Jet4MdbFixture))
         {
-            using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdb, Scheduler = new CountingScheduler() };
+            using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdb, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
             (TableDefinition t, TableEditContext ctx) = mdb.Table("Lv")!.Value;
             using var cursor = (PopulationCursor)mdb.Open(t, 2)!;
             using var frame = new EditFrame(ctx, cursor, ws);

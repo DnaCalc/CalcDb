@@ -215,6 +215,20 @@ internal static class AdoFilePool
     private static readonly object Gate = new();
     private static readonly Dictionary<string, SharedComSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
 
+    public static bool TryGetFormat(string fullPath, out FileFormat format)
+    {
+        lock (Gate)
+        {
+            if (Sessions.TryGetValue(fullPath, out SharedComSession? shared))
+            {
+                format = shared.Core.Profile.Format;
+                return true;
+            }
+            format = default;
+            return false;
+        }
+    }
+
     public static SharedComSession? AcquireExisting(string fullPath)
     {
         lock (Gate)
@@ -584,18 +598,111 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private AdoErrorsObject ErrorsCollection => _errors ??= new AdoErrorsObject();
 
     /// <summary>
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for
+    /// Connection.Open ConnectionString/UserID/Password/Options (p0-p3) on ACCDB (r-q35-byref-args/ado-conn-open).
+    /// MDB ByRef forms are not recorded and stay refused by name.
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        member.Name == "Open" && parameter is >= 0 and <= 3 && !IsTargetMdb(args.Length > 0 ? args[0] : 0);
+
+    private bool IsTargetMdb(nint openArg0)
+    {
+        if (_session is { } open && open.Profile.Format == FileFormat.Jet4)
+        {
+            return true;
+        }
+        string? openText = null;
+        if (openArg0 != 0)
+        {
+            NativeVariant* raw0 = Args.Cell(openArg0);
+            NativeVariant deref0 = ((VarType)raw0->Vt & VarType.ByRef) != 0 ? ByRefValues.Dereference(raw0) : *raw0;
+            if ((VarType)deref0.Vt == VarType.Bstr)
+            {
+                openText = Args.Text((nint)(&deref0));
+            }
+        }
+        string? dataSource = null;
+        string sourceText = openText ?? _connectionString ?? "";
+        if (sourceText.Length > 0)
+        {
+            ConnectionText parsed = ConnectionText.Parse(sourceText);
+            if (parsed.Keys.Count == 1 && !parsed.Keys[0].HasEquals)
+            {
+                dataSource = parsed.Keys[0].Key;
+            }
+            else
+            {
+                foreach (ConnectionKey key in parsed.Keys)
+                {
+                    if (key.HasEquals && string.Equals(key.Key, "Data Source", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dataSource = key.Value;
+                    }
+                }
+            }
+        }
+        if (string.IsNullOrEmpty(dataSource) && _properties is not null)
+        {
+            foreach (PropertySlot slot in _properties.ReadSlotsForOpen())
+            {
+                if (slot.Descriptor.Name == "Data Source" && slot.Modified)
+                {
+                    dataSource = ReadText(slot.Value);
+                    break;
+                }
+            }
+        }
+        if (string.IsNullOrEmpty(dataSource))
+        {
+            return false;
+        }
+        string full;
+        try
+        {
+            full = Path.GetFullPath(dataSource);
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return dataSource.EndsWith(".mdb", StringComparison.OrdinalIgnoreCase);
+        }
+        if (AdoFilePool.TryGetFormat(full, out FileFormat pooledFormat))
+        {
+            return pooledFormat == FileFormat.Jet4;
+        }
+        if (File.Exists(full) && SessionFile.OpenReader(full, out _) is { } file)
+        {
+            try
+            {
+                byte[] headerBytes = new byte[4096];
+                if (file.GetExtent() >= (ulong)headerBytes.Length
+                    && file.ReadAt(0, headerBytes).Status == TransferStatus.Complete
+                    && ProfileSelector.Select(headerBytes, out FileProfile? profile) == ProfileRefusal.None
+                    && profile is not null)
+                {
+                    return profile.Format == FileFormat.Jet4;
+                }
+            }
+            finally
+            {
+                file.Dispose();
+            }
+        }
+        return full.EndsWith(".mdb", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Refuse unrecorded scalar VarTypes on Connection.Open before IDispatch coercion: across evidence only
-    /// ConnectionString (BSTR), UserID/Password (BSTR or Null, r-ado-1b/conn-open-args), and Options (by-value I4,
-    /// r-ado-1b/conn-open-args seq 77, 94) are recorded.
+    /// ConnectionString (BSTR), UserID/Password (BSTR or Null, r-ado-1b/conn-open-args), and Options (I4,
+    /// r-ado-1b/conn-open-args seq 77, 94) are recorded (ByRef on ACCDB: r-q35-byref-args/ado-conn-open).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
         ("Open", 0) when sourceType != VarType.Bstr =>
-            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open ConnectionString with {sourceType} argument (only BSTR is recorded)"),
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open ConnectionString with {sourceType} argument (only BSTR and ACCDB ByRef BSTR are recorded)"),
         ("Open", 1 or 2) when sourceType is not (VarType.Bstr or VarType.Null) =>
-            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open parameter {parameter} with {sourceType} argument (only BSTR and Null are recorded)"),
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open parameter {parameter} with {sourceType} argument (only BSTR, Null and ACCDB ByRef forms are recorded)"),
         ("Open", 3) when sourceType != VarType.I4 =>
-            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open Options with {sourceType} argument (only by-value I4 is recorded)"),
+            Failure.NotModelled("NotModelled.AdoConnectionOpenArgumentType", $"Connection.Open Options with {sourceType} argument (only I4 and ACCDB ByRef I4 are recorded)"),
         _ => null,
     };
 
