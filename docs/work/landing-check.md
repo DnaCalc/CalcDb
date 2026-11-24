@@ -121,7 +121,7 @@ the checked commit onto the new master (`Merge <branch> (<Name>)`, never a rebas
 without checking again; any other move refuses and names the moved paths. With `-Compare` it then runs the core compare
 from the snapshot once the check worktree is free, so one job checks, lands and compares and its result is the
 compare's verdicts. With `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline
-and loses nothing (`Lost` 0, no flagged timing boundary, no `RuleChange` loss), the script copies the run's TSV to
+and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), the script copies the run's TSV to
 `docs/work/compare-baseline.tsv`, commits only that file (`W-01 (compare): core baseline <run>, N of M (<topic>)`) and
 pushes while still holding `compare-store.compare-lock` (a `docs/work/` move, so a landing beside it merges over it),
 then cleans up the child's place without forcing: detaching a writer slot (`CalcDb-w1`, `CalcDb-w2`) at `master` or

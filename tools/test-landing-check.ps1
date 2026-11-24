@@ -53,6 +53,9 @@ try {
     $r = Read-CompareResult (Make-CompareLines 469 1360 468 1360 @("Lost (1):", "  r-a/q1: Matched -> Mismatched"))
     Assert ((-not $r.Clean) -and $r.Lost -eq 1 -and $r.StopReason -match 'Lost 1') "Read-CompareResult stops on Lost"
 
+    $r = Read-CompareResult (Make-CompareLines 469 1360 468 1359 @("Removed (1):", "  r-a/q1: was Matched"))
+    Assert ((-not $r.Clean) -and $r.Removed -eq 1 -and $r.StopReason -match 'Removed 1') "Read-CompareResult stops on Removed"
+
     $r = Read-CompareResult (Make-CompareLines 469 1360 468 1360 @("timing boundary (counted in TOTAL, not in gained/lost): 1", "  r-q8/t: Matched -> Mismatched"))
     Assert ((-not $r.Clean) -and $r.TimingBoundary -eq 1 -and $r.StopReason -match 'timing boundary 1') "Read-CompareResult stops on timing boundary"
 
@@ -91,6 +94,7 @@ try {
     Assert (Test-WriterSlot $repo $slot) "Test-WriterSlot matches CalcDb-w1"
     Assert (-not (Test-WriterSlot $repo $wt)) "Test-WriterSlot rejects joyful-probe-1234"
     Assert (-not (Test-WriterSlot $repo (Join-Path $root "CalcDb-check"))) "Test-WriterSlot rejects CalcDb-check"
+    Assert (-not (Test-WriterSlot $repo (Join-Path $root "other\CalcDb-w1"))) "Test-WriterSlot rejects CalcDb-w1 under a different parent"
 
     # T1: Fast-forward when master did not move
     $base = (Git-Ok $repo @('rev-parse', 'master')).Trim()
@@ -281,6 +285,57 @@ try {
     $resDet = Invoke-LandMerge $repo $headBefore $headBefore 'alta/unm1' 'det'
     Assert ((-not $resDet.Ok) -and $resDet.Message -match 'expected master') "T12: detached integration checkout refuses -Land"
     Git-Ok $repo @('switch', '-q', 'master') | Out-Null
+
+    # T13: Pre-existing MERGE_HEAD -> Invoke-LandMerge refuses without aborting it
+    $mBase = (Git-Ok $repo @('rev-parse', 'master')).Trim()
+    Git-Ok $slot @('switch', '-q', '-c', 'alta/premerge', 'master') | Out-Null
+    Set-Content (Join-Path $slot "src\code.txt") "v13"
+    Git-Ok $slot @('commit', '-q', '-am', 'premerge branch') | Out-Null
+    $mCand = (Git-Ok $slot @('rev-parse', 'HEAD')).Trim()
+    Git-Ok $repo @('merge', '--no-ff', '--no-commit', '-q', $mCand) | Out-Null
+    $resPm = Invoke-LandMerge $repo $mBase $mCand 'alta/premerge' 'premerge'
+    git -C $repo rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    Assert ((-not $resPm.Ok) -and $resPm.Message -match 'merge in progress' -and ($LASTEXITCODE -eq 0)) "T13: pre-existing MERGE_HEAD refused and not aborted"
+    Git-Ok $repo @('merge', '--abort') | Out-Null
+
+    # T14: Dirty docs/work/compare-baseline.tsv -> Invoke-FinishLanding stops without overwriting it
+    Set-Content (Join-Path $repo "docs\work\compare-baseline.tsv") "local-edit"
+    $finDirtyBase = Invoke-FinishLanding $repo 'alta/unm1' 'unm1' 'db-1' $land4.Landed $tsv4 0 (Make-CompareLines 472 1360 472 1360)
+    Assert ($finDirtyBase.ExitCode -eq 1 -and $finDirtyBase.Message -match 'uncommitted changes' -and (Get-Content (Join-Path $repo "docs\work\compare-baseline.tsv") -Raw).Trim() -eq 'local-edit') "T14: dirty compare-baseline.tsv blocks -Finish without overwriting"
+    Git-Ok $repo @('checkout', '--', 'docs/work/compare-baseline.tsv') | Out-Null
+
+    # T15: Writer slot reassigned to another branch during compare -> -Finish deletes merged branch, leaves slot on new branch
+    $base15 = (Git-Ok $repo @('rev-parse', 'master')).Trim()
+    Git-Ok $slot @('switch', '-q', '-c', 'alta/reass1', 'master') | Out-Null
+    Set-Content (Join-Path $slot "src\code.txt") "v15"
+    Git-Ok $slot @('commit', '-q', '-am', 'reass1 work') | Out-Null
+    $cand15 = (Git-Ok $slot @('rev-parse', 'HEAD')).Trim()
+    $land15 = Invoke-LandMerge $repo $base15 $cand15 'alta/reass1' 'reass1'
+    Git-Ok $slot @('switch', '-q', '-c', 'alta/reass2', 'master') | Out-Null
+    $tsv15 = Join-Path $root "reass1-1.tsv"
+    Set-Content $tsv15 "# calcdb compare-set run`n# name`treass1-1`n"
+    $fin15 = Invoke-FinishLanding $repo 'alta/reass1' 'reass1' 'reass1-1' $land15.Landed $tsv15 0 (Make-CompareLines 472 1360 473 1360)
+    $slotBranch15 = (Git-Ok $slot @('symbolic-ref', '--short', 'HEAD')).Trim()
+    git -C $repo show-ref --verify --quiet 'refs/heads/alta/reass1' 2>&1 | Out-Null
+    Assert ($fin15.ExitCode -eq 0 -and $slotBranch15 -eq 'alta/reass2' -and ($LASTEXITCODE -ne 0)) "T15: reassigned writer slot untouched while merged branch deleted"
+
+    # T16: Non-ancestor master move -> Invoke-LandMerge refuses
+    $resNonAnc = Invoke-LandMerge $repo $mCand $mCand 'alta/premerge' 'nonanc'
+    Assert ((-not $resNonAnc.Ok) -and $resNonAnc.Message -match 'not a descendant') "T16: non-ancestor checked base refused"
+
+    # T17: -Finish push failure stops and skips worktree/branch cleanup
+    $base17 = (Git-Ok $repo @('rev-parse', 'master')).Trim()
+    Git-Ok $slot @('switch', '-q', '-c', 'alta/pushfail', 'master') | Out-Null
+    Set-Content (Join-Path $slot "src\code.txt") "v17"
+    Git-Ok $slot @('commit', '-q', '-am', 'pushfail work') | Out-Null
+    $cand17 = (Git-Ok $slot @('rev-parse', 'HEAD')).Trim()
+    $land17 = Invoke-LandMerge $repo $base17 $cand17 'alta/pushfail' 'pushfail'
+    Git-Ok $repo @('remote', 'set-url', 'origin', (Join-Path $root 'missing-origin.git')) | Out-Null
+    $tsv17 = Join-Path $root "pushfail-1.tsv"
+    Set-Content $tsv17 "# calcdb compare-set run`n# name`tpushfail-1`n"
+    $fin17 = Invoke-FinishLanding $repo 'alta/pushfail' 'pushfail' 'pushfail-1' $land17.Landed $tsv17 0 (Make-CompareLines 473 1360 474 1360)
+    $slotBranch17 = (Git-Ok $slot @('symbolic-ref', '--short', 'HEAD')).Trim()
+    Assert ($fin17.ExitCode -eq 1 -and $fin17.Message -match 'push failed; cleanup skipped' -and $slotBranch17 -eq 'alta/pushfail') "T17: -Finish push failure skips cleanup and keeps slot on branch"
 } finally {
     if (Test-Path $root) { Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue }
 }

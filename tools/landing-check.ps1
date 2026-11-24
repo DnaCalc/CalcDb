@@ -64,8 +64,13 @@ function Get-BranchWorktree([string] $Repo, [string] $Branch) {
 }
 
 function Test-WriterSlot([string] $Repo, [string] $WorktreePath) {
-    $repoLeaf = Split-Path ($Repo.TrimEnd('\', '/')) -Leaf
-    $treeLeaf = Split-Path ($WorktreePath.TrimEnd('\', '/')) -Leaf
+    $repoClean = $Repo.TrimEnd('\', '/')
+    $treeClean = $WorktreePath.TrimEnd('\', '/')
+    $repoParent = [IO.Path]::GetFullPath((Split-Path $repoClean -Parent)).TrimEnd('\')
+    $treeParent = [IO.Path]::GetFullPath((Split-Path $treeClean -Parent)).TrimEnd('\')
+    if ($repoParent -ine $treeParent) { return $false }
+    $repoLeaf = Split-Path $repoClean -Leaf
+    $treeLeaf = Split-Path $treeClean -Leaf
     $treeLeaf -match "^$([regex]::Escape($repoLeaf))-w\d+$"
 }
 
@@ -78,6 +83,14 @@ function Invoke-LandMerge([string] $Repo, [string] $Base, [string] $Candidate, [
         return [pscustomobject]@{
             Ok = $false; Landed = $null; MergedOverBookkeeping = $false
             Message = "LAND REFUSED (integration checkout is on '$("$headRef".Trim())', expected master)"
+            Details = @()
+        }
+    }
+    git -C $Repo rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (integration checkout has a merge in progress)"
             Details = @()
         }
     }
@@ -97,7 +110,11 @@ function Invoke-LandMerge([string] $Repo, [string] $Base, [string] $Candidate, [
     }
     git -C $Repo merge-base --is-ancestor $Base $masterNow 2>&1 | Out-Null
     $isAncestor = ($LASTEXITCODE -eq 0)
-    $moved = @(git -C $Repo -c core.quotepath=false diff --name-only --no-renames $Base $masterNow | Where-Object { $_ })
+    $movedRaw = @(git -C $Repo -c core.quotepath=false diff --name-only --no-renames $Base $masterNow 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (git diff failed inspecting master move)"; Details = $movedRaw }
+    }
+    $moved = @($movedRaw | Where-Object { $_ })
     if (-not $isAncestor) {
         return [pscustomobject]@{
             Ok = $false; Landed = $null; MergedOverBookkeeping = $false
@@ -115,7 +132,11 @@ function Invoke-LandMerge([string] $Repo, [string] $Base, [string] $Candidate, [
             Details = $shown
         }
     }
-    $staged = @(git -C $Repo -c core.quotepath=false diff --cached --name-only | Where-Object { $_ })
+    $stagedRaw = @(git -C $Repo -c core.quotepath=false diff --cached --name-only 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (git diff --cached failed inspecting integration checkout)"; Details = $stagedRaw }
+    }
+    $staged = @($stagedRaw | Where-Object { $_ })
     if ($staged.Count -gt 0) {
         return [pscustomobject]@{
             Ok = $false; Landed = $null; MergedOverBookkeeping = $false
@@ -152,22 +173,24 @@ function Invoke-LandMerge([string] $Repo, [string] $Base, [string] $Candidate, [
 }
 
 # Parse compare-set's own RenderDiff output (src/CalcDb.Corpus/CompareSet.cs) instead of reparsing the TSV.
-# Any Lost, flagged timing boundary, or RuleChange regression (-N > 0) stops -Finish.
+# Any Lost, Removed, flagged timing boundary, or RuleChange regression (-N > 0) stops -Finish.
 function Read-CompareResult([string[]] $Lines) {
     $diffStart = -1
     for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
-        if ($Lines[$i] -match '^against ') { $diffStart = $i; break }
+        if ($Lines[$i] -match '^against \S+ \([^,]+, [^)]+\)\s*$') { $diffStart = $i; break }
     }
     if ($diffStart -lt 0) {
-        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = 0; TimingBoundary = 0; RuleLost = 0; StopReason = "no baseline diff ('against ...') in compare output" }
+        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = 0; Removed = 0; TimingBoundary = 0; RuleLost = 0; StopReason = "no baseline diff ('against ...') in compare output" }
     }
-    $good = $null; $total = $null; $lost = 0; $timing = 0; $ruleLost = 0
+    $good = $null; $total = $null; $lost = 0; $removed = 0; $timing = 0; $ruleLost = 0
     for ($i = $diffStart; $i -lt $Lines.Count; $i++) {
         $line = $Lines[$i]
         if ($line -match '^\s+TOTAL\s+(\d+)/(\d+)\s+->\s+(\d+)/(\d+)\s+\(matched or accepted / questions\)\s*$') {
             $good = [int] $Matches[3]; $total = [int] $Matches[4]
         } elseif ($line -match '^Lost \((\d+)\):\s*$') {
             $lost = [int] $Matches[1]
+        } elseif ($line -match '^Removed \((\d+)\):\s*$') {
+            $removed = [int] $Matches[1]
         } elseif ($line -match '^timing boundary \(counted in TOTAL, not in gained/lost\): (\d+)\s*$') {
             $timing = [int] $Matches[1]
         } elseif ($line -match '^RuleChange \((\d+); \+(\d+)/-(\d+), counted in TOTAL, not in gained/lost\):\s*$') {
@@ -175,15 +198,16 @@ function Read-CompareResult([string[]] $Lines) {
         }
     }
     if ($null -eq $good -or $null -eq $total) {
-        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = $lost; TimingBoundary = $timing; RuleLost = $ruleLost; StopReason = "missing TOTAL diff line in compare output" }
+        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = $lost; Removed = $removed; TimingBoundary = $timing; RuleLost = $ruleLost; StopReason = "missing TOTAL diff line in compare output" }
     }
     $reasons = [System.Collections.Generic.List[string]]::new()
     if ($lost -gt 0) { $reasons.Add("Lost $lost") }
+    if ($removed -gt 0) { $reasons.Add("Removed $removed") }
     if ($timing -gt 0) { $reasons.Add("timing boundary $timing") }
     if ($ruleLost -gt 0) { $reasons.Add("RuleChange -$ruleLost") }
     [pscustomobject]@{
         Clean = ($reasons.Count -eq 0); Good = $good; Total = $total
-        Lost = $lost; TimingBoundary = $timing; RuleLost = $ruleLost
+        Lost = $lost; Removed = $removed; TimingBoundary = $timing; RuleLost = $ruleLost
         StopReason = ($reasons -join ', ')
     }
 }
@@ -213,7 +237,11 @@ function Invoke-FinishLanding(
     }
     $baselineRel = "docs/work/compare-baseline.tsv"
     $baselineFull = Join-Path $Repo "docs\work\compare-baseline.tsv"
-    $dirtyBaseline = @(git -C $Repo status --porcelain -- $baselineRel | Where-Object { $_ })
+    $dirtyBaselineRaw = @(git -C $Repo status --porcelain -- $baselineRel 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: git status failed for $baselineRel; baseline and worktree left to the organizer"; Details = $dirtyBaselineRaw }
+    }
+    $dirtyBaseline = @($dirtyBaselineRaw | Where-Object { $_ })
     if ($dirtyBaseline.Count -gt 0) {
         return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: $baselineRel has uncommitted changes; baseline and worktree left to the organizer"; Details = $dirtyBaseline }
     }
@@ -695,7 +723,7 @@ try {
             "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
             "           (if master moved meanwhile, run the check again)"
         }
-        if (-not ($Finish -and $failed -eq 0)) {
+        if ($failed -eq 0 -and -not $Finish) {
             if ($tree -and (Test-WriterSlot $repo $tree)) { "  then:    git -C $tree switch --detach master; git branch -d $Branch (once the child's session has ended)" }
             elseif ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
             else { "  then:    git branch -d $Branch" }
