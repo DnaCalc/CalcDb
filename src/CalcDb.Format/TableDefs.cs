@@ -201,8 +201,8 @@ public sealed record PhysicalIndex(int Number, IReadOnlyList<IndexColumn> Column
     public bool Required(IndexDescriptorRules r) => (Flags & r.RequiredFlag) != 0;
 }
 
-/// <summary>A logical (public) index (II-05 §1.3): its name, numbers, the physical tree it uses and its relationship fields.</summary>
-public sealed record LogicalIndex(string Name, int Number, int PhysicalNumber, byte IndexType, byte RelatedTableType, uint RelatedIndex, uint RelatedTable);
+/// <summary>A logical (public) index (II-05 §1.3): its name, numbers, the physical tree it uses, its relationship fields, and referential action bytes [21..23) (0x04/0x04 on non-FK indexes, 0x00/0x00 on plain FK, 0x00/0x01 on ON DELETE CASCADE; evidence/r-q34-ddl-sweep/fk-*).</summary>
+public sealed record LogicalIndex(string Name, int Number, int PhysicalNumber, byte IndexType, byte RelatedTableType, uint RelatedIndex, uint RelatedTable, byte UpdateAction = 0x04, byte DeleteAction = 0x04);
 
 /// <summary>A decoded TableDef: header counts, map locators, the columns with names and the indexes.</summary>
 public sealed record TableDefinition
@@ -477,7 +477,7 @@ public static class TableDefDecoder
         {
             byte[] b = raw[i];
             var index = new LogicalIndex(names[i], (int)r.LogicalNumber.Read(b), (int)r.PhysicalNumber.Read(b), (byte)r.IndexType.Read(b),
-                (byte)r.RelatedTableType.Read(b), (uint)r.RelatedIndex.Read(b), (uint)r.RelatedTable.Read(b));
+                (byte)r.RelatedTableType.Read(b), (uint)r.RelatedIndex.Read(b), (uint)r.RelatedTable.Read(b), b[21], b[22]);
             if (physical.All(p => p.Number != index.PhysicalNumber))
             {
                 failure = $"logical index '{index.Name}' names physical index {index.PhysicalNumber} of {realIndexes}";

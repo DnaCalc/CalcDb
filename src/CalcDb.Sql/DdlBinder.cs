@@ -52,6 +52,7 @@ public enum BoundDdlKind : byte
     CreateIndex,
     DropTable,
     AddCheckConstraint,
+    AddForeignKey,
 }
 
 /// <summary>
@@ -66,7 +67,8 @@ public sealed record BoundDdl(
     CreateTableRequest? CreateTable = null,
     CreateIndexRequest? CreateIndex = null,
     DropTableRequest? DropTable = null,
-    AddCheckConstraintRequest? AddCheckConstraint = null);
+    AddCheckConstraintRequest? AddCheckConstraint = null,
+    AddForeignKeyRequest? AddForeignKey = null);
 
 /// <summary>
 /// Access SQL DDL binder (W-07/native-metadata-write stretch 2; II-11 §28): validates ACE's recorded bind rules and
@@ -213,7 +215,7 @@ public static class DdlBinder
         var primaryKeys = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var uniqueConstraints = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var uniqueIsInline = new List<bool>();
-        var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns)>();
+        var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns, bool OnDeleteCascade)>();
 
         TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
         foreach (DdlColumnDef col in stmt.Columns)
@@ -264,7 +266,7 @@ public static class DdlBinder
                 else if (cc.Kind == DdlConstraintKind.ForeignKey)
                 {
                     deferredInlineFks.Add((col, cc));
-                    foreignKeys.Add((cc.Name, [col.Name], cc.RefTable!, cc.RefColumns));
+                    foreignKeys.Add((cc.Name, [col.Name], cc.RefTable!, cc.RefColumns, cc.OnDeleteCascade));
                     totalIndexes++;
                 }
             }
@@ -320,7 +322,7 @@ public static class DdlBinder
             }
             else if (tc.Kind == DdlConstraintKind.ForeignKey)
             {
-                foreignKeys.Add((tc.Name, tc.Columns, tc.RefTable!, tc.RefColumns));
+                foreignKeys.Add((tc.Name, tc.Columns, tc.RefTable!, tc.RefColumns, tc.OnDeleteCascade));
             }
             totalIndexes++;
         }
@@ -472,11 +474,6 @@ public static class DdlBinder
             }
         }
 
-        if (foreignKeys.Count > 0)
-        {
-            return Fail(BindOpen("NotModelled.DdlForeignKey", "FOREIGN KEY constraints are not modelled in SchemaWriter"), out failure);
-        }
-
         List<NewIndex>? indexes = null;
         if (primaryKeys.Count == 1)
         {
@@ -485,25 +482,43 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlUnnamedPrimaryKey", "unnamed PRIMARY KEY constraint index name/bytes are not modelled in SchemaWriter"), out failure);
             }
-            if (pkCols.Count != 1)
+            if (pkCols.Count is < 1 or > 2)
             {
-                return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", "multi-column PRIMARY KEY is not modelled in SchemaWriter"), out failure);
+                return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY with {pkCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/fk-table-2col-accdb-dao records 1-2 columns)"), out failure);
             }
-            if (!TryResolveFieldName(pkCols[0], colNames, sortOrder, out int pkIdx, out SqlFailure? pkUndecided) || pkIdx < 0)
+            if (pkCols.Count > 1 && (uniqueConstraints.Count > 0 || firstLvalIdx >= 0 || foreignKeys.Count > 0))
             {
-                return Fail(pkUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(pkCols[0])), out failure);
+                return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", "2-column PRIMARY KEY combined with UNIQUE, FOREIGN KEY, or Memo/LongBinary columns is not modelled in SchemaWriter"), out failure);
             }
-            DdlColumnDef pkCol = columns[pkIdx];
-            if (pkCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Counter))
+            var pkBoundCols = new List<string>(pkCols.Count);
+            int firstPkIdx = -1;
+            int lastIndexedIdx = -1;
+            foreach (string pkColName in pkCols)
             {
-                return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY on {pkCol.DataType.Kind} column '{pkCol.Name}' is not modelled in SchemaWriter"), out failure);
+                if (!TryResolveFieldName(pkColName, colNames, sortOrder, out int pkIdx, out SqlFailure? pkUndecided) || pkIdx < 0)
+                {
+                    return Fail(pkUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(pkColName)), out failure);
+                }
+                DdlColumnDef pkCol = columns[pkIdx];
+                if (pkCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Counter))
+                {
+                    return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY on {pkCol.DataType.Kind} column '{pkCol.Name}' is not modelled in SchemaWriter"), out failure);
+                }
+                if (pkCol.Nullability == DdlNullability.NotNull)
+                {
+                    return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                }
+                pkBoundCols.Add(pkCol.Name);
+                if (firstPkIdx < 0)
+                {
+                    firstPkIdx = pkIdx;
+                }
+                if (pkIdx > lastIndexedIdx)
+                {
+                    lastIndexedIdx = pkIdx;
+                }
             }
-            if (pkCol.Nullability == DdlNullability.NotNull)
-            {
-                return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
-            }
-            indexes = [new NewIndex(pkName, [pkCol.Name], PrimaryKey: true)];
-            int lastIndexedIdx = pkIdx;
+            indexes = [new NewIndex(pkName, pkBoundCols, PrimaryKey: true)];
 
             if (uniqueConstraints.Count > 0)
             {
@@ -531,7 +546,7 @@ public static class DdlBinder
                         return Fail(uqUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(uqColName)), out failure);
                     }
                     DdlColumnDef uqCol = columns[uqIdx];
-                    if (uqCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text) || uqIdx <= pkIdx)
+                    if (uqCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text) || uqIdx <= firstPkIdx)
                     {
                         return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE on {uqCol.DataType.Kind} column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/uq-* and lval-pk-uq-alltypes-* record Long/Text columns after PRIMARY KEY)"), out failure);
                     }
@@ -576,8 +591,136 @@ public static class DdlBinder
             return Fail(BindOpen("NotModelled.DdlUniqueConstraint", "UNIQUE constraints without a PRIMARY KEY are not modelled in SchemaWriter"), out failure);
         }
 
+        NewForeignKey? foreignKey = null;
+        if (foreignKeys.Count > 0)
+        {
+            if (foreignKeys.Count > 1)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "multiple FOREIGN KEY constraints in one CREATE TABLE are not modelled in SchemaWriter"), out failure);
+            }
+            if (primaryKeys.Count != 1 || indexes is null)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE with FOREIGN KEY without a PRIMARY KEY is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+            }
+            if (uniqueConstraints.Count > 0)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with UNIQUE is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+            }
+            if (firstLvalIdx >= 0)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with Memo/LongBinary columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+            }
+            if (stmt.Columns.Any(c => c.Nullability == DdlNullability.NotNull))
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with NOT NULL columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+            }
+
+            (string? fkName, IReadOnlyList<string> fkCols, string refTableName, IReadOnlyList<string>? refCols, bool onDeleteCascade) = foreignKeys[0];
+            if (fkName is null)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "unnamed FOREIGN KEY constraint is not modelled in SchemaWriter"), out failure);
+            }
+            if (onDeleteCascade && route != SchemaRoute.Ado)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKeyAction", "ON DELETE CASCADE is recorded only on the ADO route (evidence/r-q34-ddl-sweep/fk-cascade-*-ado)"), out failure);
+            }
+            if (NamesEqual(stmt.TableName, refTableName))
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "self-referencing FOREIGN KEY is not modelled in SchemaWriter"), out failure);
+            }
+            if (fkCols.Count is < 1 or > 2)
+            {
+                return Fail(BindOpen("NotModelled.DdlForeignKey", $"FOREIGN KEY with {fkCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/fk-* records 1-2 columns)"), out failure);
+            }
+            var fkBoundCols = new List<string>(fkCols.Count);
+            foreach (string fkColName in fkCols)
+            {
+                if (!TryResolveFieldName(fkColName, colNames, sortOrder, out int fkIdx, out SqlFailure? fkUndecided) || fkIdx < 0)
+                {
+                    return Fail(fkUndecided ?? BindAce(3409, SqlMessages.InvalidIndexOrRelationField(fkColName)), out failure);
+                }
+                DdlColumnDef fkCol = columns[fkIdx];
+                if (fkCol.DataType.Kind != DdlTypeKind.Long)
+                {
+                    return Fail(BindOpen("NotModelled.DdlForeignKey", $"FOREIGN KEY on {fkCol.DataType.Kind} column '{fkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/fk-* records Long columns only)"), out failure);
+                }
+                fkBoundCols.Add(fkCol.Name);
+            }
+            switch (SchemaWriter.FieldNameLookupClashOf(indexes[0].Name, fkName, sortOrder, out string? fkClashUndecided))
+            {
+                case FieldNameClash.Duplicate:
+                    return Fail(BindOpen("NotModelled.DdlForeignKey", $"FOREIGN KEY '{fkName}' clashes with PRIMARY KEY '{indexes[0].Name}' (duplicate constraint names in CREATE TABLE are not recorded)"), out failure);
+                case FieldNameClash.Undecided:
+                    return Fail(BindOpen("NotModelled.DdlFieldNamePair", fkClashUndecided!), out failure);
+            }
+            if (!TryResolveReferencedColumns(database, sortOrder, refTableName, refCols, out List<string>? refBoundCols, out SqlFailure? refFailure))
+            {
+                return Fail(refFailure!, out failure);
+            }
+            foreignKey = new NewForeignKey(fkName, fkBoundCols, refTableName, refBoundCols!, onDeleteCascade);
+        }
+
         failure = null;
-        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, route, indexes));
+        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, route, indexes, foreignKey));
+    }
+
+    private static bool TryResolveReferencedColumns(
+        ISqlDatabase database,
+        TextSortOrder? sortOrder,
+        string refTableName,
+        IReadOnlyList<string>? refColumns,
+        out List<string>? resolvedColumns,
+        out SqlFailure? failure)
+    {
+        resolvedColumns = null;
+        failure = null;
+        TableDefinition? refTable = FindTable(database, refTableName);
+        if (refTable is null)
+        {
+            failure = BindAce(3371, SqlMessages.CannotFindTableOrConstraint);
+            return false;
+        }
+        if (refColumns is null)
+        {
+            LogicalIndex? pkLogical = refTable.LogicalIndexes.FirstOrDefault(li => li.IndexType == D.IndexDescriptor.PrimaryKeyType);
+            PhysicalIndex? pkPhys = pkLogical is null ? null : refTable.PhysicalIndexes.FirstOrDefault(pi => pi.Number == pkLogical.PhysicalNumber);
+            if (pkPhys is null)
+            {
+                failure = BindAce(3609, SqlMessages.NoUniqueReferencedIndex);
+                return false;
+            }
+            var cols = new List<string>(pkPhys.Columns.Count);
+            foreach (IndexColumn ic in pkPhys.Columns)
+            {
+                ColumnDescriptor? c = refTable.Columns.FirstOrDefault(col => col.PhysicalNumber == ic.PhysicalNumber);
+                if (c is null)
+                {
+                    failure = BindAce(3609, SqlMessages.NoUniqueReferencedIndex);
+                    return false;
+                }
+                cols.Add(c.Name);
+            }
+            resolvedColumns = cols;
+            return true;
+        }
+        IReadOnlyList<string> refColNames = [.. refTable.Columns.Select(col => col.Name)];
+        var explicitCols = new List<string>(refColumns.Count);
+        foreach (string rc in refColumns)
+        {
+            if (!TryResolveFieldName(rc, refColNames, sortOrder, out int rcIdx, out SqlFailure? rcUndecided))
+            {
+                failure = rcUndecided;
+                return false;
+            }
+            if (rcIdx < 0)
+            {
+                failure = BindAce(3409, SqlMessages.InvalidIndexOrRelationField(rc));
+                return false;
+            }
+            explicitCols.Add(refTable.Columns[rcIdx].Name);
+        }
+        resolvedColumns = explicitCols;
+        return true;
     }
 
     private static SqlFailure? ValidateDataType(string colName, DdlDataType dataType, ref int counterCount)
@@ -1280,7 +1423,51 @@ public static class DdlBinder
                     {
                         return BindAce(3626, SqlMessages.TooManyIndexes(stmt.TableName));
                     }
-                    return BindOpen("NotModelled.DdlForeignKey", "ALTER TABLE ADD CONSTRAINT FOREIGN KEY is not modelled in SchemaWriter");
+                    if (tc.OnDeleteCascade)
+                    {
+                        return BindOpen("NotModelled.DdlForeignKeyAction", "ALTER TABLE ADD CONSTRAINT FOREIGN KEY ... ON DELETE CASCADE is not recorded (evidence/r-q34-ddl-sweep/fk-cascade-* records CREATE TABLE via ADO only)");
+                    }
+                    if (tc.Name is null)
+                    {
+                        return BindOpen("NotModelled.DdlUnnamedConstraint", "unnamed FOREIGN KEY constraint in ALTER TABLE is not modelled in SchemaWriter");
+                    }
+                    if (NamesEqual(stmt.TableName, tc.RefTable!))
+                    {
+                        return BindOpen("NotModelled.DdlForeignKey", "self-referencing FOREIGN KEY in ALTER TABLE is not modelled in SchemaWriter");
+                    }
+                    foreach (LogicalIndex existingIdx in table.LogicalIndexes)
+                    {
+                        switch (SchemaWriter.FieldNameLookupClashOf(existingIdx.Name, tc.Name, sortOrder, out string? clashUndecided))
+                        {
+                            case FieldNameClash.Duplicate:
+                                return BindOpen("NotModelled.DdlDuplicateConstraintName", $"constraint '{tc.Name}' clashes with existing index '{existingIdx.Name}' on table '{stmt.TableName}'");
+                            case FieldNameClash.Undecided:
+                                return BindOpen("NotModelled.DdlFieldNamePair", clashUndecided!);
+                        }
+                    }
+                    if (boundCols.Count is < 1 or > 2)
+                    {
+                        return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY with {boundCols.Count} columns is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records 1-2 Long columns)");
+                    }
+                    foreach (ColumnDescriptor col in boundCols)
+                    {
+                        if (col.TypeCode != NativeTypes.Long)
+                        {
+                            return BindOpen("NotModelled.DdlForeignKey", $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (evidence/r-q34-ddl-sweep/alt-fk-* records Long columns only)");
+                        }
+                    }
+                    if (!TryResolveReferencedColumns(database, sortOrder, tc.RefTable!, tc.RefColumns, out List<string>? refBoundCols, out SqlFailure? refFailure))
+                    {
+                        return refFailure!;
+                    }
+                    boundPlan = new BoundDdl(
+                        stmt,
+                        BoundDdlKind.AddForeignKey,
+                        AddForeignKey: new AddForeignKeyRequest(
+                            stmt.TableName,
+                            new NewForeignKey(tc.Name, [.. boundCols.Select(c => c.Name)], tc.RefTable!, refBoundCols!),
+                            route));
+                    return null;
                 }
                 if (table.LogicalIndexes.Count >= 32)
                 {
@@ -1528,9 +1715,9 @@ public static class DdlExecutor
             // Unpublished schema changes live in the Workspace overlay, which CatalogBootstrap.Open does not yet read.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "DDL inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
         }
-        if (plan.Kind is BoundDdlKind.CreateTable or BoundDdlKind.CreateIndex or BoundDdlKind.AddCheckConstraint && schemaDb.PageCount >= 510)
+        if (plan.Kind is BoundDdlKind.CreateTable or BoundDdlKind.CreateIndex or BoundDdlKind.AddCheckConstraint or BoundDdlKind.AddForeignKey && schemaDb.PageCount >= 510)
         {
-            // SchemaWriter.CompileCreateTable/CreateIndex/AddCheckConstraint encodes inline maps with basePage=0 (MapPages.Initialize), which
+            // SchemaWriter.CompileCreateTable/CreateIndex/AddCheckConstraint/AddForeignKey encodes inline maps with basePage=0 (MapPages.Initialize), which
             // only admits page numbers < 512 (CalcDb.Format/IndexPages.cs EncodeInline). Refuse honestly instead of throwing.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriterInlineMapRange", $"file has {schemaDb.PageCount} pages; SchemaWriter's inline map encoder only handles pages < 512"));
         }
@@ -1546,6 +1733,7 @@ public static class DdlExecutor
             BoundDdlKind.CreateIndex => writer.CreateIndex(database.Workspace, plan.CreateIndex!, schemaDb.NowDateBits()),
             BoundDdlKind.DropTable => writer.DropTable(database.Workspace, plan.DropTable!),
             BoundDdlKind.AddCheckConstraint => writer.AddCheckConstraint(database.Workspace, plan.AddCheckConstraint!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
+            BoundDdlKind.AddForeignKey => writer.AddForeignKey(database.Workspace, plan.AddForeignKey!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
@@ -1567,7 +1755,7 @@ public static class DdlExecutor
                 string msg = errNum switch
                 {
                     3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
-                    3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? ""),
+                    3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? plan.AddForeignKey?.ForeignKey.Name ?? ""),
                     _ => $"ACE schema error {errNum}",
                 };
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, msg));

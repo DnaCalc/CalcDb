@@ -56,12 +56,13 @@ public enum DdlConstraintKind : byte
     Check,
 }
 
-/// <summary>A column-level constraint (<c>[CONSTRAINT name] PRIMARY KEY | UNIQUE | REFERENCES t [(c, …)]</c>).</summary>
+/// <summary>A column-level constraint (<c>[CONSTRAINT name] PRIMARY KEY | UNIQUE | REFERENCES t [(c, …)] [ON DELETE CASCADE]</c>).</summary>
 public sealed record DdlColumnConstraint(
     string? Name,
     DdlConstraintKind Kind,
     string? RefTable = null,
-    IReadOnlyList<string>? RefColumns = null);
+    IReadOnlyList<string>? RefColumns = null,
+    bool OnDeleteCascade = false);
 
 /// <summary>One column definition in <c>CREATE TABLE</c> or <c>ALTER TABLE ADD</c>.</summary>
 public sealed record DdlColumnDef(
@@ -77,7 +78,8 @@ public sealed record DdlTableConstraint(
     IReadOnlyList<string> Columns,
     string? RefTable = null,
     IReadOnlyList<string>? RefColumns = null,
-    string? CheckExpression = null);
+    string? CheckExpression = null,
+    bool OnDeleteCascade = false);
 
 /// <summary>One key column in <c>CREATE [UNIQUE] INDEX … (col [ASC|DESC], …)</c>.</summary>
 public sealed record DdlIndexColumn(string Name, bool Descending);
@@ -746,12 +748,18 @@ public static class DdlParser
                 }
                 if (allowAdoCheck && IsWord("CHECK"))
                 {
-                    // CHECK inside CREATE TABLE (or ALTER TABLE ADD COLUMN) via ADO is not recorded; DAO keeps 3290/3293.
+                    if (!isAlter)
+                    {
+                        // evidence/r-q-cat-txn-lock/ii11-ado-check-constraint seq 23:
+                        // CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0)) -> scode 0x80040E14, helpContext 5003292
+                        // (ACE 3292 "Syntax error in field definition."). Named inline and table-level CHECK in CREATE TABLE
+                        // remain refused by name (NotModelled.DdlCreateTableCheck).
+                        failure = Syntax(3292, SqlMessages.FieldDefinitionSyntaxError);
+                        return null;
+                    }
                     failure = Open(
-                        isAlter ? "NotModelled.DdlAlterColumnCheck" : "NotModelled.DdlCreateTableCheck",
-                        isAlter
-                            ? "column-level CHECK constraint in ALTER TABLE ADD COLUMN via ADO is not modelled"
-                            : "CHECK constraint inside CREATE TABLE via ADO is not modelled");
+                        "NotModelled.DdlAlterColumnCheck",
+                        "column-level CHECK constraint in ALTER TABLE ADD COLUMN via ADO is not modelled");
                     return null;
                 }
 
@@ -862,11 +870,11 @@ public static class DdlParser
             }
             if (TakeWord("REFERENCES"))
             {
-                if (!ParseReferencesTarget(out string? refTable, out List<string>? refCols, out failure))
+                if (!ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out failure))
                 {
                     return null;
                 }
-                return new DdlColumnConstraint(name, DdlConstraintKind.ForeignKey, refTable, refCols);
+                return new DdlColumnConstraint(name, DdlConstraintKind.ForeignKey, refTable, refCols, onDeleteCascade);
             }
             if (allowAdoCheck && IsWord("CHECK"))
             {
@@ -920,12 +928,12 @@ public static class DdlParser
                     failure ??= Syntax(3289, SqlMessages.ConstraintSyntaxError);
                     return null;
                 }
-                if (!TakeWord("REFERENCES") || !ParseReferencesTarget(out string? refTable, out List<string>? refCols, out failure))
+                if (!TakeWord("REFERENCES") || !ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out failure))
                 {
                     failure ??= Syntax(3289, SqlMessages.ConstraintSyntaxError);
                     return null;
                 }
-                return new DdlTableConstraint(name, DdlConstraintKind.ForeignKey, cols!, refTable, refCols);
+                return new DdlTableConstraint(name, DdlConstraintKind.ForeignKey, cols!, refTable, refCols, OnDeleteCascade: onDeleteCascade);
             }
             if (TakeWord("CHECK"))
             {
@@ -1084,10 +1092,11 @@ public static class DdlParser
             return true;
         }
 
-        private bool ParseReferencesTarget(out string? refTable, out List<string>? refCols, out SqlFailure? failure)
+        private bool ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out SqlFailure? failure)
         {
             refTable = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? reservedFail);
             refCols = null;
+            onDeleteCascade = false;
             if (refTable is null)
             {
                 failure = reservedFail ?? Syntax(3289, SqlMessages.ConstraintSyntaxError);
@@ -1100,11 +1109,30 @@ public static class DdlParser
                     return false;
                 }
             }
-            // ON DELETE / ON UPDATE actions fail 3289 in DAO ANSI-89 mode (r-def-expr-sql/ddl-fk-actions).
             if (IsWord("ON"))
             {
-                failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
-                return false;
+                if (!allowAdoCheck)
+                {
+                    // ON DELETE / ON UPDATE actions fail 3289 in DAO ANSI-89 mode
+                    // (r-def-expr-sql/ddl-fk-actions; evidence/r-q34-ddl-sweep/fk-cascade-*-dao).
+                    failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
+                    return false;
+                }
+                TakeWord("ON");
+                if (TakeWord("DELETE") && TakeWord("CASCADE"))
+                {
+                    if (IsWord("ON"))
+                    {
+                        failure = Open("NotModelled.DdlForeignKeyAction", "combining ON DELETE CASCADE with another ON referential action is not recorded");
+                        return false;
+                    }
+                    onDeleteCascade = true;
+                }
+                else
+                {
+                    failure = Open("NotModelled.DdlForeignKeyAction", "FOREIGN KEY referential action other than ADO ON DELETE CASCADE is not recorded (ON UPDATE CASCADE, SET NULL, NO ACTION, SET DEFAULT, RESTRICT)");
+                    return false;
+                }
             }
             failure = null;
             return true;
