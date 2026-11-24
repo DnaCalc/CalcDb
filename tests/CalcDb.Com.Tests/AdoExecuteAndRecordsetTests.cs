@@ -794,7 +794,7 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         "CK_Req_V",
                         "Req");
 
-                    // Command.Execute hitting 3317 has no retained ADO record -> NotModelled.AdoProviderError.
+                    // Command.Execute on a CHECK table refuses before ActionExecutor.Execute runs -> NotModelled.AdoCommandCheckConstraint.
                     nint cmd = New(OwnCommand);
                     try
                     {
@@ -804,7 +804,7 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Outcome cmdOut = Call(cmd, "Execute", Missing, Missing, 129);
                         Assert.NotNull(cmdOut.Failure);
                         Assert.Equal(HResults.E_NOTIMPL, cmdOut.Failure!.Value.Scode);
-                        Assert.Contains("NotModelled.AdoProviderError", cmdOut.Failure.Value.Description);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", cmdOut.Failure.Value.Description);
                     }
                     finally
                     {
@@ -820,6 +820,279 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                 {
                     Assert.Null(Call(cnReq, "Close").Failure);
                     Release(cnReq);
+                }
+            }
+            catch (Exception e)
+            {
+                failure = e;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        try
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+        catch
+        {
+        }
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    /// <summary>
+    /// W-08/W-09 (hmxw): Every ADO execute route that refuses does so BEFORE ActionExecutor.Execute writes, leaving
+    /// the database file byte-identical on disk after Close:
+    /// (1) Command.Execute on a CHECK table (single-row violating/satisfying, multi-row UPDATE, explicit/generated
+    ///     AutoNumber + CHECK), while recorded Command.Execute routes (dup 3022) still match;
+    /// (2) Connection.Execute of a saved action query (bare name, EXEC, adCmdStoredProc), while saved SELECT still runs;
+    /// (3) Connection.Execute with unsupported ByRef RecordsAffected (VT_BYREF|VT_I2) and unrecorded CHECK DELETE,
+    ///     while recorded ByRef I4 and ad-hoc CHECK routes still match.
+    /// </summary>
+    [Fact]
+    public void CalcDb_ADO_refused_execute_routes_write_nothing_and_recorded_routes_match()
+    {
+        Assert.True(File.Exists(PublishedModule), $"publish first: dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native ({PublishedModule} is missing)");
+
+        const string OledbV2AccdbFixture = "3616122cce29bd4b057713e17102cbcde53bad9f8f4f28fb479849313e87615e";  // r-oledb-odbc-v2-accdb.accdb
+        const string Sql23ActAccdbFixture = "a9991effea1dc52b7f857ef9a05a68573df00212d4f79e3ff2c21c01c8f674cd"; // r-sql-2-3-act-accdb.accdb
+        const string EmptyAccdbFixture = "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559";    // r-fmt-1-accdb-empty.accdb
+
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string tempDir = Path.Combine(Path.GetTempPath(), $"calcdb-ado-hmxw-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        string dbReq = CopyFixture(store, OledbV2AccdbFixture, tempDir, "req-cmd.accdb");
+        string dbAuto = CopyFixture(store, EmptyAccdbFixture, tempDir, "auto-check.accdb");
+        string dbSaved = CopyFixture(store, Sql23ActAccdbFixture, tempDir, "saved-action.accdb");
+        string dbByRef = CopyFixture(store, OledbV2AccdbFixture, tempDir, "byref-check.accdb");
+
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var scope = new Scope(Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Own.manifest"));
+
+                static Outcome RunCommandExecute(nint cn, string sql)
+                {
+                    nint cmd = New(OwnCommand);
+                    try
+                    {
+                        Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cn)).Failure);
+                        Assert.Null(Put(cmd, "CommandType", 1).Failure);
+                        Assert.Null(Put(cmd, "CommandText", sql).Failure);
+                        return Call(cmd, "Execute", Missing, Missing, 129);
+                    }
+                    finally
+                    {
+                        Release(cmd);
+                    }
+                }
+
+                // 1a. Command.Execute on CHECK table Req (single-row violating/satisfying + multi-row UPDATE):
+                // Seed a 2nd row first so a multi-row UPDATE would otherwise modify row 1 before failing row 2.
+                {
+                    nint cnSetup = OpenAceConnection(dbReq);
+                    try
+                    {
+                        Assert.Null(Call(cnSetup, "Execute", "INSERT INTO Req (ID, R, V) VALUES (2, 'r2', 20)", Missing, 129).Failure);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnSetup, "Close").Failure);
+                        Release(cnSetup);
+                    }
+
+                    byte[] beforeReq = File.ReadAllBytes(dbReq);
+                    nint cn = OpenAceConnection(dbReq);
+                    try
+                    {
+                        Outcome violIns = RunCommandExecute(cn, "INSERT INTO Req (ID, R, V) VALUES (8, 'r', -5)");
+                        Assert.Equal(HResults.E_NOTIMPL, violIns.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", violIns.Failure.Value.Description);
+
+                        Outcome satIns = RunCommandExecute(cn, "INSERT INTO Req (ID, R, V) VALUES (8, 'r', 5)");
+                        Assert.Equal(HResults.E_NOTIMPL, satIns.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", satIns.Failure.Value.Description);
+
+                        Outcome multiUpd = RunCommandExecute(cn, "UPDATE Req SET V = IIf(ID = 1, 99, -5)");
+                        Assert.Equal(HResults.E_NOTIMPL, multiUpd.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", multiUpd.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeReq, File.ReadAllBytes(dbReq));
+
+                    // Recorded Command.Execute route (r-oledb-odbc/error-retained-lifetime #14: dup 3022 on Items) still matches.
+                    nint cnRec = OpenAceConnection(dbReq);
+                    try
+                    {
+                        Outcome dup = RunCommandExecute(cnRec, "INSERT INTO Items (Code) VALUES ('a1')");
+                        Assert.NotNull(dup.Failure);
+                        Assert.Equal(unchecked((int)0x80004005), dup.Failure!.Value.Scode);
+                        Assert.Equal(IidCommand, dup.Failure.Value.InfoGuid);
+                        nint errs = (nint)Get(cnRec, "Errors")!;
+                        try
+                        {
+                            Assert.Equal(1, Get(errs, "Count"));
+                            nint err0 = (nint)Get(errs, "Item", 0)!;
+                            try
+                            {
+                                Assert.Equal("3022", Get(err0, "SQLState"));
+                                Assert.Equal(-105121349, Get(err0, "NativeError"));
+                            }
+                            finally
+                            {
+                                Release(err0);
+                            }
+                        }
+                        finally
+                        {
+                            Release(errs);
+                        }
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnRec, "Close").Failure);
+                        Release(cnRec);
+                    }
+                }
+
+                // 1b. Command.Execute on AutoNumber + CHECK table (explicit and generated AutoNumber must not advance TableDef offset 20).
+                {
+                    nint cnSetup = OpenAceConnection(dbAuto);
+                    try
+                    {
+                        Assert.Null(Call(cnSetup, "Execute", "CREATE TABLE AutoChk (ID COUNTER CONSTRAINT PK_AutoChk PRIMARY KEY, V LONG)", Missing, 129).Failure);
+                        Assert.Null(Call(cnSetup, "Execute", "ALTER TABLE AutoChk ADD CONSTRAINT CK_AutoChk_V CHECK (V >= 0)", Missing, 129).Failure);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnSetup, "Close").Failure);
+                        Release(cnSetup);
+                    }
+
+                    byte[] beforeAuto = File.ReadAllBytes(dbAuto);
+                    nint cn = OpenAceConnection(dbAuto);
+                    try
+                    {
+                        Outcome explicitAuto = RunCommandExecute(cn, "INSERT INTO AutoChk (ID, V) VALUES (10, -1)");
+                        Assert.Equal(HResults.E_NOTIMPL, explicitAuto.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", explicitAuto.Failure.Value.Description);
+
+                        Outcome generatedAuto = RunCommandExecute(cn, "INSERT INTO AutoChk (V) VALUES (-1)");
+                        Assert.Equal(HResults.E_NOTIMPL, generatedAuto.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCommandCheckConstraint", generatedAuto.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeAuto, File.ReadAllBytes(dbAuto));
+                }
+
+                // 2. Connection.Execute of a saved action query (bare name, EXEC, adCmdStoredProc) refuses before ActionExecutor runs.
+                {
+                    byte[] beforeSaved = File.ReadAllBytes(dbSaved);
+                    nint cn = OpenAceConnection(dbSaved);
+                    try
+                    {
+                        Outcome bare = Call(cn, "Execute", "QUpd");
+                        Assert.Equal(HResults.E_NOTIMPL, bare.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoSavedActionQuery", bare.Failure.Value.Description);
+
+                        Outcome exec = Call(cn, "Execute", "EXEC QUpd");
+                        Assert.Equal(HResults.E_NOTIMPL, exec.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoSavedActionQuery", exec.Failure.Value.Description);
+
+                        Outcome sp = Call(cn, "Execute", "QUpd", Missing, 4);
+                        Assert.Equal(HResults.E_NOTIMPL, sp.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoSavedActionQuery", sp.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeSaved, File.ReadAllBytes(dbSaved));
+
+                    // Recorded saved SELECT route (QSel on r-oledb-odbc-v2-accdb.accdb) still returns rows.
+                    nint cnSel = OpenAceConnection(dbByRef);
+                    try
+                    {
+                        Outcome sel = Call(cnSel, "Execute", "QSel");
+                        Assert.Null(sel.Failure);
+                        nint rs = Assert.IsType<nint>(sel.Value);
+                        try
+                        {
+                            Assert.Equal(1, Get(rs, "State"));
+                            Assert.Equal(false, Get(rs, "EOF"));
+                            Assert.Null(Call(rs, "Close").Failure);
+                        }
+                        finally
+                        {
+                            Release(rs);
+                        }
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnSel, "Close").Failure);
+                        Release(cnSel);
+                    }
+                }
+
+                // 3. Connection.Execute with unsupported ByRef RecordsAffected (VT_BYREF|VT_I2) and unrecorded CHECK DELETE write nothing.
+                {
+                    byte[] beforeByRef = File.ReadAllBytes(dbByRef);
+                    nint cn = OpenAceConnection(dbByRef);
+                    try
+                    {
+                        short unsupportedTarget = -7;
+                        NativeVariant byRefI2 = new() { Vt = (ushort)(VarType.ByRef | VarType.I2), Pointer = (nint)(&unsupportedTarget) };
+                        Outcome badByRef = InvokeExecuteRaw(cn, "UPDATE Req SET V = 50 WHERE ID = 1", byRefI2, 1);
+                        Assert.Equal(HResults.E_NOTIMPL, badByRef.Failure!.Value.Scode);
+                        Assert.Contains("RecordsAffected ByRef of I2", badByRef.Failure.Value.Description);
+                        Assert.Equal((short)-7, unsupportedTarget);
+
+                        Outcome checkDel = Call(cn, "Execute", "DELETE FROM Req WHERE ID = 1", Missing, 1);
+                        Assert.Equal(HResults.E_NOTIMPL, checkDel.Failure!.Value.Scode);
+                        Assert.Contains("NotModelled.AdoCheckConstraintAction", checkDel.Failure.Value.Description);
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cn, "Close").Failure);
+                        Release(cn);
+                    }
+                    Assert.Equal(beforeByRef, File.ReadAllBytes(dbByRef));
+
+                    // Recorded ByRef I4 Connection.Execute still succeeds and writes back RecordsAffected.
+                    nint cnOk = OpenAceConnection(dbByRef);
+                    try
+                    {
+                        int affected = -1;
+                        Outcome ok = ExecuteWithByRefI4(cnOk, "UPDATE Req SET V = 50 WHERE ID = 1", &affected);
+                        Assert.Null(ok.Failure);
+                        Assert.Equal(1, affected);
+                        if (ok.Value is nint rs && rs != 0)
+                        {
+                            Release(rs);
+                        }
+                    }
+                    finally
+                    {
+                        Assert.Null(Call(cnOk, "Close").Failure);
+                        Release(cnOk);
+                    }
                 }
             }
             catch (Exception e)
