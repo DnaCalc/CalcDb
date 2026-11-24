@@ -649,7 +649,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// earlier change of the level or statement can have moved the row in its page or replaced another entry of a leaf
     /// (an Edit of a row this Workspace changed is refused before, PrivateRow).
     /// </summary>
-    public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null, bool inStatement = false, bool inExplicitTransaction = false, bool hasPriorGlobalMapActivity = false)
+    public CompiledChange Compile(MutationSemantics semantics, RowId root, IReadOnlyList<NativeValue> values, PrivateOverlay? seen = null, bool inStatement = false, bool inExplicitTransaction = false, bool hasPriorGlobalMapActivity = false, bool allowFixedLongNull = false)
     {
         values = NormalizeMaskBooleans(values);
         using RowView? resolved = RowResolver.Resolve(Seen(seen), _d, root, out TraversalFailure? failure);
@@ -716,14 +716,18 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                 if (present)
                 {
                     // R-FMT-2 / R-CAT-1 II-07 (evidence/r-q30-sql-check/null-upd-ado-exec,
-                    // evidence/r-q31-sql-check-2/null-upd-text-table-ado): an in-place autocommit ACCDB SQL UPDATE
-                    // setting an unindexed fixed Long column to Null clears only its null-mask bit and leaves the
-                    // 4-byte fixed slot bytes untouched (recordset Edit, RewrittenRow, indexed columns, explicit
-                    // transactions, non-Long fixed types, and MDB stay refused).
-                    if (inStatement
+                    // evidence/r-q31-sql-check-2/null-upd-text-table-ado): a single-row autocommit ADO ACCDB SQL
+                    // UPDATE setting an unindexed checked fixed Long column to Null clears only its null-mask bit and
+                    // leaves the 4-byte fixed slot bytes untouched (non-CHECK tables, unchecked columns, DAO/QueryDef,
+                    // multi-row UPDATE, recordset Edit, RewrittenRow, indexed columns, explicit transactions, non-Long
+                    // fixed types, and MDB stay refused).
+                    if (allowFixedLongNull
+                        && inStatement
                         && !inExplicitTransaction
                         && c.TypeCode == NativeTypes.Long
                         && IsVerifiedAccdb(seen)
+                        && semantics.HasCheckConstraints
+                        && semantics.CheckConstraints.Any(ck => ck.Column is { } col && col.Ordinal == c.Ordinal)
                         && !semantics.Indexes.Any(ix => ix.Columns.Any(ic => ic.Ordinal == c.Ordinal)))
                     {
                         edits.Add(new PageEdit(row.Data.Page, new BitDelta(maskByte, 0, bit), PageRole.Data));

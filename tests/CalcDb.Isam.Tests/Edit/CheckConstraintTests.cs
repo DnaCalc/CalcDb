@@ -739,6 +739,20 @@ public sealed class CheckConstraintTests
         Assert.Equal(MutationOpen.CheckOrder, mdbAndReq.Open);
         Assert.True(mdbAdoRsFrame.CancelUpdate().Succeeded);
 
+        // Open: table-type (TableCursor) DAO recordset on MDB refuses by name with zero bytes written.
+        byte[] beforeMdbTableCursor = mdbFixture.Image.Snapshot();
+        var mdbTableCursorFrame = new EditFrame(mdbCtx, mdbFixture.Open(mdbTable, 1)!, ws);
+        Assert.True(mdbTableCursorFrame.AddNew().Succeeded);
+        Assert.True(AssignLong(mdbTableCursorFrame, id, 3).Succeeded);
+        Assert.True(AssignText(mdbTableCursorFrame, r, "r3").Succeeded);
+        Assert.True(AssignLong(mdbTableCursorFrame, v, -1).Succeeded);
+        UpdateOutcome mdbTableCursorViol = mdbTableCursorFrame.Update();
+        Assert.Equal(MutationOpen.Rule, mdbTableCursorViol.Open);
+        Assert.Contains("CK_Req_V", mdbTableCursorViol.Detail);
+        Assert.Contains("MDB", mdbTableCursorViol.Detail);
+        Assert.True(mdbTableCursorFrame.CancelUpdate().Succeeded);
+        Assert.Equal(beforeMdbTableCursor, mdbFixture.Image.Snapshot());
+
         // evidence/r-q31-sql-check-2/mdb-dao-rs-viol, mdb-dao-rs-sat: DAO dynaset AddNew on MDB enforces CHECK (3317,
         // 0 pages changed on violation) and admits satisfying rows; Required (3314) beats CHECK.
         byte[] beforeDaoRsViol = mdbFixture.Image.Snapshot();
@@ -1052,12 +1066,14 @@ public sealed class CheckConstraintTests
             ws.Rollback();
         }
         Assert.Equal(initialImage, fixture.Image.Snapshot());
+        Assert.Equal(initialAuto, ctx.Counter!.Last);
 
         // 2. evidence/r-q30-sql-check/autonum-viol-dao-rs (ISAM EditFrame level):
         //    Violating DAO recordset AddNew+Update fails 3317, persists TableDef offset 20 (+1) and page 0 offset 3586 (+1),
         //    keeps EditMode = AddNew until CancelUpdate, and leaves RowCount unchanged.
         Assert.True(daoFrame.AddNew().Succeeded);
         long issuedBeforeViol = daoFrame.Read(idCol).Value.Integer;
+        Assert.Equal(initialAuto + 1, issuedBeforeViol);
         Assert.True(AssignText(daoFrame, codeCol, "chk1").Succeeded);
         Assert.True(AssignText(daoFrame, tCol, "x").Succeeded);
         UpdateOutcome daoViol = daoFrame.Update();
@@ -1134,7 +1150,7 @@ public sealed class CheckConstraintTests
         Assert.Contains("ID", upd.Detail);
         Assert.True(adoFrame.CancelUpdate().Succeeded);
 
-        // 6. Open: explicit AutoNumber assignment on SQL INSERT refuses in Assign with zero bytes written.
+        // 6. Open: explicit AutoNumber assignment on SQL INSERT refuses in Assign with zero bytes written and counter restored.
         var sqlFrame = new EditFrame(ctx, fixture.Open(kTable, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
         byte[] beforeExplicitSql = fixture.Image.Snapshot();
         using (StatementScope stmt = ws.BeginStatement())
@@ -1148,6 +1164,7 @@ public sealed class CheckConstraintTests
             stmt.Abort();
         }
         Assert.Equal(beforeExplicitSql, fixture.Image.Snapshot());
+        Assert.Equal(autoAfterDaoSat, ctx.Counter!.Last);
     }
 
     [Fact]
@@ -1207,6 +1224,7 @@ public sealed class CheckConstraintTests
             Assert.True(ws.Rollback().Succeeded);
         }
         Assert.Equal(imageBefore, fixture.Image.Snapshot());
+        Assert.Equal(autoBefore, ctx.Counter!.Last);
 
         // Open: DAO dynaset AddNew -> satisfying Update inside BeginTrans refuses with 0 bytes written.
         Assert.Null(ws.BeginTrans());
@@ -1226,11 +1244,30 @@ public sealed class CheckConstraintTests
             Assert.True(ws.Rollback().Succeeded);
         }
         Assert.Equal(imageBefore, fixture.Image.Snapshot());
+        Assert.Equal(autoBefore, ctx.Counter!.Last);
 
-        // Recorded: BeginTrans -> DAO dynaset AddNew -> violating Update (3317) -> CancelUpdate -> Rollback.
+        // Open (Finding 2): table-type (TableCursor) DAO recordset AddNew inside BeginTrans refuses immediately with 0 bytes written.
+        var tableCursorFrame = new EditFrame(ctx, fixture.Open(kTable, 1)!, ws);
+        Assert.Null(ws.BeginTrans());
+        try
+        {
+            EditOutcome tableAdd = tableCursorFrame.AddNew();
+            Assert.Equal(MutationOpen.Rule, tableAdd.Open);
+            Assert.Contains("CK_K_T", tableAdd.Detail);
+        }
+        finally
+        {
+            Assert.True(ws.Rollback().Succeeded);
+        }
+        Assert.Equal(imageBefore, fixture.Image.Snapshot());
+        Assert.Equal(autoBefore, ctx.Counter!.Last);
+
+        // Recorded: BeginTrans -> DAO dynaset AddNew -> violating Update (3317) -> CancelUpdate -> Rollback,
+        // while keeping Rollback without CancelUpdate, dirty BeginTrans, and CommitTrans refused by name.
         Assert.Null(ws.BeginTrans());
         Assert.True(daoFrame.AddNew().Succeeded);
         long issuedId = daoFrame.Read(idCol).Value.Integer;
+        Assert.Equal(autoBefore + 1, issuedId);
         Assert.Equal(imageBefore, fixture.Image.Snapshot());
         Assert.True(AssignText(daoFrame, codeCol, "v1").Succeeded);
         Assert.True(AssignText(daoFrame, tCol, "x").Succeeded);
@@ -1240,8 +1277,34 @@ public sealed class CheckConstraintTests
         Assert.Equal("CK_K_T", viol.Error?.Argument);
         Assert.Equal(EditMode.AddNew, daoFrame.Mode);
         Assert.Equal(imageBefore, fixture.Image.Snapshot());
+
+        // Open (Finding 2): Rollback without CancelUpdate refuses by name with zero bytes written.
+        ResolutionOutcome rbWithoutCancel = ws.Rollback();
+        Assert.False(rbWithoutCancel.Succeeded);
+        Assert.Equal(MutationOpen.Rule, rbWithoutCancel.Open);
+        Assert.Contains("CancelUpdate", rbWithoutCancel.Detail);
+        Assert.Equal(1, ws.Depth);
+        Assert.Equal(EditMode.AddNew, daoFrame.Mode);
+        Assert.Equal(imageBefore, fixture.Image.Snapshot());
+
         Assert.True(daoFrame.CancelUpdate().Succeeded);
         Assert.Equal(EditMode.None, daoFrame.Mode);
+        Assert.Equal(imageBefore, fixture.Image.Snapshot());
+
+        // Open (Finding 2): second AddNew in the now-dirty BeginTrans refuses by name without advancing Counter.Last.
+        EditOutcome dirtyAdd = daoFrame.AddNew();
+        Assert.False(dirtyAdd.Succeeded);
+        Assert.Equal(MutationOpen.Rule, dirtyAdd.Open);
+        Assert.Contains("CK_K_T", dirtyAdd.Detail);
+        Assert.Equal(issuedId, ctx.Counter!.Last);
+        Assert.Equal(imageBefore, fixture.Image.Snapshot());
+
+        // Open (Finding 2): CommitTrans after CHECK-refused AddNew refuses by name with zero bytes written.
+        ResolutionOutcome commitRefused = ws.CommitTrans();
+        Assert.False(commitRefused.Succeeded);
+        Assert.Equal(MutationOpen.Rule, commitRefused.Open);
+        Assert.Contains("CommitTrans", commitRefused.Detail);
+        Assert.Equal(1, ws.Depth);
         Assert.Equal(imageBefore, fixture.Image.Snapshot());
 
         ResolutionOutcome rb = ws.Rollback();
@@ -1249,9 +1312,9 @@ public sealed class CheckConstraintTests
 
         (int rowsAfter, int autoAfter) = ReadTableDefCounts(fixture, kTable.FirstPage);
         Assert.Equal(rowsBefore, rowsAfter);
+        Assert.Equal(autoBefore + 1, autoAfter);
         Assert.Equal((int)issuedId, autoAfter);
         Assert.Equal(page0Before + 1, ReadPage0CommitCounter(fixture));
-        Assert.True(autoAfter > autoBefore);
 
         // Next insert outside BeginTrans gets issuedId + 1.
         Assert.True(daoFrame.AddNew().Succeeded);

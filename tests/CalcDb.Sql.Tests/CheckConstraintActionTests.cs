@@ -527,6 +527,103 @@ public sealed class CheckConstraintActionTests
         }
     }
 
+    [Fact]
+    public void AutoNumberCheck_NotModelledRefusalRestoresCounter_AndNonCheckSkippedErrorReturnsNullIdentity()
+    {
+        // Finding 3: NotModelled refusal during generated-AutoNumber CHECK INSERT ... VALUES (e.g. leading-space text
+        // literal in CHECK) must restore in-memory Counter.Last so the next valid insert gets ID = 1, not 2.
+        {
+            using var db = new WritableSqlFixture(EmptyAccdbSha);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID COUNTER, S TEXT(20))", db, options: 128).Succeeded);
+            db.SetSyntheticCheckConstraints("T", ("CK_S", "S <> 'x'"));
+
+            byte[] beforeRefusal = db.Image.Snapshot();
+            ActionOutcome refused = ActionExecutor.Execute("INSERT INTO T (S) VALUES (' x')", db, options: 128);
+            Assert.False(refused.Succeeded);
+            Assert.Equal("NotModelled.Edit.Rule", refused.Failure!.NotModelled);
+            Assert.Equal(beforeRefusal, db.Image.Snapshot());
+
+            ActionOutcome valid = ActionExecutor.Execute("INSERT INTO T (S) VALUES ('ok')", db, options: 128);
+            Assert.True(valid.Succeeded, valid.Failure?.Message);
+            Assert.Equal(1L, valid.LastIdentity);
+        }
+
+        // Finding 5: non-CHECK skipped error (Required 3314) under options = 0 on an AutoNumber+CHECK table must NOT
+        // persist TableDef offset 20, bump page 0, or return a non-null LastIdentity.
+        {
+            using var db = new WritableSqlFixture(EmptyAccdbSha);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID COUNTER, R TEXT(20) NOT NULL, V LONG)", db, options: 128).Succeeded);
+            db.SetSyntheticCheckConstraints("T", ("CK_V", "V >= 0"));
+            TableDefinition tDef = db.Table("T")!;
+            byte[] beforeSkip = db.Image.Snapshot();
+            uint page0Before = ReadPage0CommitCounter(db);
+
+            // Confirm Required (3314) wins over CHECK (3317) on this table.
+            ActionOutcome failReq = ActionExecutor.Execute("INSERT INTO T (V) VALUES (-1)", db, options: 128);
+            Assert.False(failReq.Succeeded);
+            Assert.Equal(3314, failReq.Failure!.Number);
+            Assert.Equal(beforeSkip, db.Image.Snapshot());
+
+            ActionOutcome skippedReq = ActionExecutor.Execute("INSERT INTO T (V) VALUES (-1)", db, options: 0);
+            Assert.True(skippedReq.Succeeded, skippedReq.Failure?.Message);
+            Assert.Equal(0, skippedReq.RecordsAffected);
+            Assert.Null(skippedReq.LastIdentity);
+            Assert.Equal(beforeSkip, db.Image.Snapshot());
+            Assert.Equal(page0Before, ReadPage0CommitCounter(db));
+            Assert.Equal((0, 0), ReadTableDefCounts(db, tDef.FirstPage));
+        }
+    }
+
+    [Fact]
+    public void FixedLongNullUpdate_RefusesNonCheckTable_UncheckedColumn_AndMultiRowAdoUpdate()
+    {
+        // Finding 4: in-place fixed Long -> NULL is gated to single-row autocommit ADO UPDATE of a checked column on
+        // a CHECK table (qualified.md Open: non-CHECK, unchecked column, and multi-row ADO UPDATE stay refused).
+
+        // 1. Non-CHECK ACCDB table: ADO UPDATE setting Long = NULL refuses with zero bytes written.
+        {
+            using var db = new WritableSqlFixture(EmptyAccdbSha);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG)", db, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (1, 10)", db, options: 128).Succeeded);
+
+            byte[] before = db.Image.Snapshot();
+            ActionOutcome outcome = ActionExecutor.Execute("UPDATE T SET V = NULL WHERE ID = 1", db, options: 128, source: ActionErrorSource.Ado);
+            Assert.False(outcome.Succeeded);
+            Assert.Equal("NotModelled.Edit.Publication", outcome.Failure!.NotModelled);
+            Assert.Equal(before, db.Image.Snapshot());
+        }
+
+        // 2. CHECK table, unchecked Long column W: ADO UPDATE setting W = NULL refuses with zero bytes written.
+        {
+            using var db = new WritableSqlFixture(EmptyAccdbSha);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W LONG)", db, options: 128).Succeeded);
+            db.SetSyntheticCheckConstraints("T", ("CK_V", "V >= 0"));
+            Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V, W) VALUES (1, 10, 20)", db, options: 128).Succeeded);
+
+            byte[] before = db.Image.Snapshot();
+            ActionOutcome outcome = ActionExecutor.Execute("UPDATE T SET W = NULL WHERE ID = 1", db, options: 128, source: ActionErrorSource.Ado);
+            Assert.False(outcome.Succeeded);
+            Assert.Equal("NotModelled.Edit.Publication", outcome.Failure!.NotModelled);
+            Assert.Equal(before, db.Image.Snapshot());
+        }
+
+        // 3. CHECK table, multi-row ADO UPDATE setting checked Long column V = NULL refuses by CHECK name with zero bytes written.
+        {
+            using var db = new WritableSqlFixture(EmptyAccdbSha);
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG)", db, options: 128).Succeeded);
+            db.SetSyntheticCheckConstraints("T", ("CK_V", "V >= 0"));
+            Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (1, 10)", db, options: 128).Succeeded);
+            Assert.True(ActionExecutor.Execute("INSERT INTO T (ID, V) VALUES (2, 20)", db, options: 128).Succeeded);
+
+            byte[] before = db.Image.Snapshot();
+            ActionOutcome outcome = ActionExecutor.Execute("UPDATE T SET V = NULL", db, options: 128, source: ActionErrorSource.Ado);
+            Assert.False(outcome.Succeeded);
+            Assert.Equal("NotModelled.Edit.Rule", outcome.Failure!.NotModelled);
+            Assert.Contains("CK_V", outcome.Failure.Message);
+            Assert.Equal(before, db.Image.Snapshot());
+        }
+    }
+
     private static uint ReadPage0CommitCounter(WritableSqlFixture db)
     {
         using PagePin pin = db.Cache.Pin(0).Pin!;

@@ -331,7 +331,8 @@ public static unsafe class ActionExecutor
                 if (rowFail is not null)
                 {
                     if (rowFail.IsNotModelled
-                        && allowDaoExplicitAutoCheckViol
+                        && editContext.Semantics.HasCheckConstraints
+                        && !frame.LastUpdatePersistedCheckAutoNumber
                         && beforeCounter.HasValue
                         && editContext.Counter is { Increment: 1 } ctr
                         && ctr.Last != beforeCounter.Value)
@@ -345,7 +346,8 @@ public static unsafe class ActionExecutor
                     && isInsertValues
                     && errorSource == ActionErrorSource.Database
                     && editContext.Semantics.HasCheckConstraints
-                    && editContext.Semantics.AutoNumber is not null;
+                    && editContext.Semantics.AutoNumber is not null
+                    && frame.LastUpdatePersistedCheckAutoNumber;
                 return ActionOutcome.Ok(
                     inserted ? 1 : 0,
                     (inserted || skippedCheckAutoConsumed) && editContext.Counter is { } c && c.Last != beforeCounter ? c.Last : null);
@@ -681,7 +683,10 @@ public static unsafe class ActionExecutor
         using (var frame = new EditFrame(editContext!, cursor!, database.Workspace)
         {
             ConflictSource = MutationErrorSource.Database,
-            AllowAdoCheckNullUpdate = errorSource == ActionErrorSource.Ado,
+            AllowAdoCheckNullUpdate = errorSource == ActionErrorSource.Ado
+                && candidates.Count == 1
+                && database.Workspace.Depth == 0
+                && editContext!.Semantics.HasCheckConstraints,
         })
         {
             var evalRow = new ActionRowContext(cursor, paramValues);

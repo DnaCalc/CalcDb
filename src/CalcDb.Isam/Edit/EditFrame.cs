@@ -193,6 +193,7 @@ public sealed class EditFrame : IDisposable
     private long? _counterBeforeAddNew;
     private bool _autoNumberPersisted;
     private bool _addedInExplicitTransaction;
+    private bool _hadNotModelledRefusal;
     private int _deferredRowCount;
     private readonly List<int> _deferredDecrements = [];
 
@@ -230,9 +231,10 @@ public sealed class EditFrame : IDisposable
     public bool AllowMdbCheckInsert { get; init; }
 
     /// <summary>
-    /// Whether an ad-hoc ADO <c>Connection.Execute</c> <c>UPDATE</c> may assign <c>NULL</c> to a checked <c>Long</c>
-    /// column (<c>evidence/r-q30-sql-check/null-upd-ado-exec</c>, <c>evidence/r-q31-sql-check-2/null-upd-text-table-ado</c>).
-    /// DAO and recordset updates setting a checked column to <c>NULL</c> stay refused.
+    /// Whether an ad-hoc single-row autocommit ADO <c>Connection.Execute</c> <c>UPDATE</c> may assign <c>NULL</c> to a
+    /// checked unindexed fixed <c>Long</c> column (<c>evidence/r-q30-sql-check/null-upd-ado-exec</c>,
+    /// <c>evidence/r-q31-sql-check-2/null-upd-text-table-ado</c>). DAO, multi-row, and recordset updates setting a
+    /// checked column to <c>NULL</c> stay refused.
     /// </summary>
     public bool AllowAdoCheckNullUpdate { get; init; }
 
@@ -244,6 +246,25 @@ public sealed class EditFrame : IDisposable
     /// explicit AutoNumber writes stay refused.
     /// </summary>
     public bool AllowDaoExplicitAutoNumberCheckViolation { get; init; }
+
+    /// <summary>
+    /// Whether the most recent <see cref="Update"/> persisted a CHECK-refused (3317) AutoNumber advance via
+    /// <see cref="TransactionCoordinator.RecordStatementSideEffect"/> (used by <c>ActionExecutor</c> to expose
+    /// <c>LastIdentity</c> only when CheckStage actually consumed and persisted the ticket under <c>options: 0</c>).
+    /// </summary>
+    public bool LastUpdatePersistedCheckAutoNumber { get; private set; }
+
+    /// <summary>
+    /// Whether this frame holds a pending <see cref="EditMode.AddNew"/> whose CHECK-refused AutoNumber inside
+    /// <c>BeginTrans</c> was recorded and awaits <see cref="CancelUpdate"/> before <c>Rollback</c>
+    /// (<c>evidence/r-q31-sql-check-2/autonum-rs-viol-txn-rollback</c>).
+    /// </summary>
+    internal bool HasPendingCheckAutoNumberInTxn =>
+        Mode == EditMode.AddNew
+        && _addedInExplicitTransaction
+        && _autoNumberPersisted
+        && _table.Semantics.HasCheckConstraints
+        && _table.Semantics.AutoNumber is not null;
 
     public EditMode Mode { get; private set; }
 
@@ -325,6 +346,9 @@ public sealed class EditFrame : IDisposable
         }
         _conflictReported = false;
         _originals = originals;
+        RestoreCounterAfterNotModelled();
+        _hadNotModelledRefusal = false;
+        LastUpdatePersistedCheckAutoNumber = false;
         ReleaseTicket();
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -449,6 +473,8 @@ public sealed class EditFrame : IDisposable
         _counterBeforeAddNew = counterBeforeAddNew;
         _autoNumberPersisted = false;
         _addedInExplicitTransaction = _workspace.InExplicitTransaction;
+        _hadNotModelledRefusal = false;
+        LastUpdatePersistedCheckAutoNumber = false;
         // A new row's landing page is chosen by its physical compiler (W-05/growth-structural-closure), so AddNew locks nothing here.
         ReleaseEditLock();
         _originals = null;
@@ -503,12 +529,14 @@ public sealed class EditFrame : IDisposable
             && _table.Semantics.HasCheckConstraints
             && !(AllowDaoExplicitAutoNumberCheckViolation && _workspace.InStatement && _workspace.Depth == 0))
         {
+            _hadNotModelledRefusal = true;
             return EditOutcome.NotModelled(
                 MutationOpen.Rule,
                 $"CHECK constraint {DescribeCheckConstraints(_table.Semantics)} on {_table.Semantics.TableName}: explicit assignment to AutoNumber column '{column.Name}' on a CHECK table is not recorded");
         }
         if (column.IsAutoNumber && Mode == EditMode.AddNew && _table.Counter is { Increment: not 1 } c)
         {
+            _hadNotModelledRefusal = true;
             return EditOutcome.NotModelled(
                 MutationOpen.AutoNumberIncrement,
                 $"an explicit AutoNumber value under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
@@ -520,6 +548,7 @@ public sealed class EditFrame : IDisposable
         }
         if (converted.Open != MutationOpen.None)
         {
+            _hadNotModelledRefusal = true;
             return EditOutcome.NotModelled(converted.Open, $"{value.Type} into {_table.Semantics.Columns[column.Ordinal].QualifiedName}");
         }
         if (_validateOnSet[column.Ordinal] && _table.Semantics.Columns[column.Ordinal].Rule is { } rule)
@@ -529,6 +558,10 @@ public sealed class EditFrame : IDisposable
             _candidate.Provisional(-1, default);
             if (!checkedRule.Succeeded)
             {
+                if (checkedRule.Open != MutationOpen.None)
+                {
+                    _hadNotModelledRefusal = true;
+                }
                 return checkedRule;
             }
         }
@@ -548,6 +581,17 @@ public sealed class EditFrame : IDisposable
     /// <paramref name="type"/> must be dbUpdateRegular (1) and <paramref name="force"/> False, else 3001 (update-arguments).
     /// </summary>
     public UpdateOutcome Update(int type = 1, bool force = false)
+    {
+        LastUpdatePersistedCheckAutoNumber = false;
+        UpdateOutcome outcome = UpdateCore(type, force);
+        if (outcome.Open != MutationOpen.None)
+        {
+            _hadNotModelledRefusal = true;
+        }
+        return outcome;
+    }
+
+    private UpdateOutcome UpdateCore(int type, bool force)
     {
         if (!Updatable)
         {
@@ -1005,6 +1049,10 @@ public sealed class EditFrame : IDisposable
                     {
                         return new UpdateOutcome(null, advOpen, advDetail);
                     }
+                    if (winningStage == CheckStage)
+                    {
+                        LastUpdatePersistedCheckAutoNumber = true;
+                    }
                 }
             }
             else if (Mode == EditMode.AddNew
@@ -1053,9 +1101,13 @@ public sealed class EditFrame : IDisposable
             else if (Mode == EditMode.AddNew
                 && !_workspace.InStatement
                 && ConflictSource == MutationErrorSource.Recordset
+                && _cursor is PopulationCursor { ForwardOnly: false }
                 && _addedInExplicitTransaction
                 && _workspace.InExplicitTransaction
                 && _workspace.Depth == 1
+                && _workspace.Frames[0].Changes.Count == 0
+                && _workspace.Frames[0].StatementCount == 0
+                && _workspace.Frames[0].ConsumedAutoNumbers is not { Count: > 0 }
                 && winningStage == CheckStage
                 && failure.Error?.Number == MutationError.RuleWithoutText
                 && !_autoNumberPersisted
@@ -1063,14 +1115,23 @@ public sealed class EditFrame : IDisposable
                 && !_cells[txnRsAuto.Ordinal].Assigned
                 && _table.Counter is { Increment: 1 }
                 && _table.Writer is { } txnRsWriter
+                && _workspace.OverlayOf(txnRsWriter.File) is null
                 && _workspace.Publisher is not null
                 && _ticket is { Value: >= int.MinValue and <= int.MaxValue } txnTicket
-                && txnRsWriter.IsVerifiedAccdb(_workspace.OverlayOf(txnRsWriter.File)))
+                && txnRsWriter.IsVerifiedAccdb(null))
             {
                 // evidence/r-q31-sql-check-2/autonum-rs-viol-txn-rollback: a DAO dynaset AddNew refused 3317 inside
                 // BeginTrans records the consumed unit-increment AutoNumber so CancelUpdate + Rollback persists
-                // TableDef offset 20 (+1) and ACCDB page 0 offset 3586 (+1).
-                _workspace.RecordConsumedAutoNumber(txnRsWriter.File, s.Table.FirstPage, unchecked((uint)(int)txnTicket.Value), 1, reseed: false, unrecorded: null);
+                // TableDef offset 20 (+1) and ACCDB page 0 offset 3586 (+1). CommitTrans and Rollback without
+                // CancelUpdate stay refused by name (qualified.md R-CAT-1 II-07 Open).
+                _workspace.RecordConsumedAutoNumber(
+                    txnRsWriter.File,
+                    s.Table.FirstPage,
+                    unchecked((uint)(int)txnTicket.Value),
+                    1,
+                    reseed: false,
+                    unrecorded: null,
+                    checkConstraintRollbackOnly: true);
                 _autoNumberPersisted = true;
             }
             // The refusal the statement's Rollback decides by, and the refused row's ticket consumed in the level
@@ -1159,7 +1220,8 @@ public sealed class EditFrame : IDisposable
                 _workspace.OverlayOf(editWriter.File),
                 inStatement: _workspace.InStatement,
                 inExplicitTransaction: _workspace.Depth > 0,
-                hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(editWriter.File));
+                hasPriorGlobalMapActivity: _workspace.HasGlobalMapActivity(editWriter.File),
+                allowFixedLongNull: AllowAdoCheckNullUpdate);
         }
         else if (mode == EditMode.AddNew && _table.Writer is { } insertWriter)
         {
@@ -1746,10 +1808,12 @@ public sealed class EditFrame : IDisposable
             && _ticket is not null
             && _table.Writer is not null)
         {
+            _hadNotModelledRefusal = true;
             return EditOutcome.NotModelled(
                 MutationOpen.Rule,
                 $"CHECK constraint {DescribeCheckConstraints(_table.Semantics)} on {_table.Semantics.TableName}: CancelUpdate after AddNew without a CHECK-failing Update on AutoNumber column '{autoCol.Name}' is not recorded");
         }
+        RestoreCounterAfterNotModelled();
         ReleaseTicket();
         Clear();
         return EditOutcome.Ok;
@@ -1763,6 +1827,7 @@ public sealed class EditFrame : IDisposable
     {
         if (Mode != EditMode.None)
         {
+            RestoreCounterAfterNotModelled();
             ReleaseTicket();
             Clear();
         }
@@ -2105,12 +2170,18 @@ public sealed class EditFrame : IDisposable
         {
             return $"CHECK constraint {names} on {s.TableName}: ADO recordset AddNew on a table with AutoNumber column '{autoCol.Name}' and a CHECK constraint is not recorded";
         }
-        // evidence/r-q31-sql-check-2/autonum-rs-viol-txn-rollback: DAO dynaset AddNew inside outer BeginTrans
+        // evidence/r-q31-sql-check-2/autonum-rs-viol-txn-rollback: DAO dynaset AddNew inside a clean outer BeginTrans
         // is recorded when Update violates CHECK (3317), followed by CancelUpdate and Rollback.
         bool allowedTxnRs = !_workspace.InStatement
             && ConflictSource == MutationErrorSource.Recordset
+            && _cursor is PopulationCursor { ForwardOnly: false }
             && _workspace.InExplicitTransaction
             && _workspace.Depth == 1
+            && _workspace.Frames[0].Changes.Count == 0
+            && _workspace.Frames[0].StatementCount == 0
+            && _workspace.Frames[0].ConsumedAutoNumbers is not { Count: > 0 }
+            && _table.Writer is { } txnCheckWriter
+            && _workspace.OverlayOf(txnCheckWriter.File) is null
             && (!requireAddedInTxn || _addedInExplicitTransaction);
         if (_workspace.InExplicitTransaction && !allowedTxnRs)
         {
@@ -2157,8 +2228,12 @@ public sealed class EditFrame : IDisposable
         bool allowTxnRsAutoCheckViol = _workspace.InExplicitTransaction
             && _addedInExplicitTransaction
             && _workspace.Depth == 1
+            && _workspace.Frames[0].Changes.Count == 0
+            && _workspace.Frames[0].StatementCount == 0
+            && _workspace.Frames[0].ConsumedAutoNumbers is not { Count: > 0 }
             && !_workspace.InStatement
             && ConflictSource == MutationErrorSource.Recordset
+            && _cursor is PopulationCursor { ForwardOnly: false }
             && Mode == EditMode.AddNew
             && s.AutoNumber is not null;
         if (_workspace.InExplicitTransaction && !allowTxnRsAutoCheckViol)
@@ -2196,14 +2271,14 @@ public sealed class EditFrame : IDisposable
             // r-q30-sql-check/mdb-sat-ado-exec, mdb-viol-ado-exec; r-q31-sql-check-2/mdb-* (11 questions):
             // Jet 4 MDB CHECK enforcement is recorded for single-row autocommit INSERT ... VALUES (ADO & DAO,
             // with/without dbFailOnError, Null, Text <>, two CHECKs, Required 3314 and field ValidationRule 3316)
-            // and DAO recordset AddNew without a TableDef validation rule. MDB multi-row statements, MDB UPDATE/Edit,
-            // MDB AutoNumber + CHECK, and MDB ADO recordsets remain Open.
+            // and DAO dynaset AddNew without a TableDef validation rule. MDB multi-row statements, MDB UPDATE/Edit,
+            // MDB table-type recordsets, MDB AutoNumber + CHECK, and MDB ADO recordsets remain Open.
             bool allowedMdb = Mode == EditMode.AddNew
                 && _workspace.Depth == 0
                 && _table.Writer.IsJet4Mdb(overlay)
                 && s.TableRule is null
                 && ((_workspace.InStatement && AllowMdbCheckInsert)
-                    || (!_workspace.InStatement && ConflictSource == MutationErrorSource.Recordset));
+                    || (!_workspace.InStatement && ConflictSource == MutationErrorSource.Recordset && _cursor is PopulationCursor { ForwardOnly: false }));
             if (!allowedMdb)
             {
                 return new UpdateOutcome(
@@ -2618,6 +2693,20 @@ public sealed class EditFrame : IDisposable
         return false;
     }
 
+    private void RestoreCounterAfterNotModelled()
+    {
+        if (_hadNotModelledRefusal
+            && !_autoNumberPersisted
+            && _table.Semantics.HasCheckConstraints
+            && _counterBeforeAddNew is long savedBefore
+            && _ticket is not null
+            && _table.Counter is { Increment: 1 } ctr
+            && ctr.Last == _ticket.Value)
+        {
+            ctr.Reseed(savedBefore);
+        }
+    }
+
     private void ReleaseTicket()
     {
         if (_ticket is not null)
@@ -2637,6 +2726,7 @@ public sealed class EditFrame : IDisposable
         _counterBeforeAddNew = null;
         _autoNumberPersisted = false;
         _addedInExplicitTransaction = false;
+        _hadNotModelledRefusal = false;
         ReleaseEditLock();
         Mode = EditMode.None;
     }

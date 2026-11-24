@@ -185,7 +185,13 @@ public sealed class ExplicitFrame
             return;
         }
         uint value = mark.Reseed || mark.IsBeyond(existing.Value) ? mark.Value : existing.Value;
-        ConsumedAutoNumbers[key] = new AutoNumberMark(value, mark.Increment, existing.Reseed || mark.Reseed, existing.Explicit || mark.Explicit, existing.Unrecorded ?? mark.Unrecorded);
+        ConsumedAutoNumbers[key] = new AutoNumberMark(
+            value,
+            mark.Increment,
+            existing.Reseed || mark.Reseed,
+            existing.Explicit || mark.Explicit,
+            existing.Unrecorded ?? mark.Unrecorded,
+            existing.CheckConstraintRollbackOnly || mark.CheckConstraintRollbackOnly);
     }
 
     /// <summary>
@@ -226,7 +232,13 @@ public sealed class ExplicitFrame
 /// refuse with <see cref="MutationOpen.CounterWrite"/>, and other unrecorded unit-increment ACCDB cases succeed
 /// writing nothing (keeping the in-memory counter consumed).
 /// </summary>
-internal readonly record struct AutoNumberMark(uint Value, int Increment, bool Reseed, bool Explicit, string? Unrecorded)
+internal readonly record struct AutoNumberMark(
+    uint Value,
+    int Increment,
+    bool Reseed,
+    bool Explicit,
+    string? Unrecorded,
+    bool CheckConstraintRollbackOnly = false)
 {
     /// <summary>Whether <see cref="Value"/> lies beyond <paramref name="stored"/> in the increment's direction.</summary>
     public bool IsBeyond(uint stored) =>
@@ -888,6 +900,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         FormatDescriptor d = FormatDescriptor.Jet4Family;
         foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
         {
+            if (mark.CheckConstraintRollbackOnly)
+            {
+                return new ResolutionOutcome(
+                    null,
+                    MutationOpen.Rule,
+                    $"CommitTrans after a CHECK-refused recordset AddNew on TableDef page {tdefPage} inside BeginTrans is not recorded (qualified.md R-CAT-1 II-07 Open)");
+            }
             uint current;
             if (_participants.TryGetValue(cache, out FileParticipant? participant) && participant.Overlay.ChangedPages.Contains(tdefPage))
             {
@@ -1203,12 +1222,20 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// empty table taking a new page) while refusing unrecorded non-1 increment (<see cref="MutationOpen.AutoNumberIncrement"/>)
     /// and unrecorded Jet 4 MDB (<see cref="MutationOpen.CounterWrite"/>) Rollbacks before acting.
     /// </summary>
-    internal void RecordConsumedAutoNumber(PageCache cache, uint tableDefPage, uint value, int increment, bool reseed, string? unrecorded, bool isExplicit = false)
+    internal void RecordConsumedAutoNumber(
+        PageCache cache,
+        uint tableDefPage,
+        uint value,
+        int increment,
+        bool reseed,
+        string? unrecorded,
+        bool isExplicit = false,
+        bool checkConstraintRollbackOnly = false)
     {
         if (_frames.Count > 0)
         {
             ExplicitFrame top = _frames[^1];
-            top.RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, isExplicit, unrecorded));
+            top.RecordAutoNumber(cache, tableDefPage, new AutoNumberMark(value, increment, reseed, isExplicit, unrecorded, checkConstraintRollbackOnly));
             if (_statement is null)
             {
                 top.HasNonInsertSelectWork = true;
@@ -1584,6 +1611,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (pendingEdit && _frames.Count > 1)
         {
             return new ResolutionOutcome(null, MutationOpen.PendingEditAtInnerRollback, "an edit is pending at an inner Rollback");
+        }
+        if (_statement is null && _edits.Exists(e => e.HasPendingCheckAutoNumberInTxn))
+        {
+            return new ResolutionOutcome(
+                null,
+                MutationOpen.Rule,
+                "Rollback without CancelUpdate after a CHECK-refused recordset AddNew inside BeginTrans is not recorded (qualified.md R-CAT-1 II-07 Open)");
         }
         ExplicitFrame top = _frames[^1];
         if (_statement is not null)
