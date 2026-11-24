@@ -1,0 +1,50 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q37-valrule-put/create-plain-mdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-P",
+    "II-06",
+    "W-08"
+  ],
+  "description": "Create Jet 4 MDB fixture with table T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W TEXT(50)) and no LvProp blob. Keeps whole file after creation.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q37-plain-mdb.mdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 64 }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke", "target": "db", "member": "Execute", "kind": "method",
+      "args": [
+        { "type": "bstr", "text": "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W TEXT(50))" },
+        { "type": "i4", "value": 128 }
+      ]
+    },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q37-plain-mdb.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 131072, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}

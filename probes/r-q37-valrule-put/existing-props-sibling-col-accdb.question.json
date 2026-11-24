@@ -1,0 +1,44 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q37-valrule-put/existing-props-sibling-col-accdb",
+  "bookRefs": ["R-CAT-1", "CAT-P", "II-06", "W-08"],
+  "description": "ACCDB table T where V already has Description and Format: put W.ValidationRule = \"<> ''\" on sibling column W to observe multi-column MR2 ColumnValues ordering.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-props-accdb.accdb",
+      "sha256": "d48d70496a9558d99a010792456ee05208f3c019d853c64818df5f513ca11a47",
+      "length": 188416,
+      "provenance": "r-q37-valrule-put.create-props-accdb.384c697c93.a1 qk1-384c697c931a0eb6ea15a33786ff292812325c363ad3621c4664bdf0d55b7128 output:r-q37-props-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 262144, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "T" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fs" },
+    { "op": "invoke", "target": "fs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "fw" },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> ''" }] },
+    { "op": "release", "target": "fw" },
+    { "op": "release", "target": "fs" },
+    { "op": "release", "target": "td" },
+    { "op": "release", "target": "tds" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 262144, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+    { "op": "release", "target": "eng" }
+  ]
+}

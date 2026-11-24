@@ -1,0 +1,68 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q37-valrule-put/create-props-accdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-P",
+    "II-06",
+    "W-08"
+  ],
+  "description": "Create ACCDB fixture with table T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W TEXT(50)) where V already has Description ('Value column') and Format ('#,##0') properties. Keeps whole file after creation.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    {
+      "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method",
+      "args": [
+        { "type": "outputPath", "fileName": "r-q37-props-accdb.accdb" },
+        { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+        { "type": "i4", "value": 128 }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke", "target": "db", "member": "Execute", "kind": "method",
+      "args": [
+        { "type": "bstr", "text": "CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY, V LONG, W TEXT(50))" },
+        { "type": "i4", "value": 128 }
+      ]
+    },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "T" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fs" },
+    { "op": "invoke", "target": "fs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "fv" },
+    { "op": "invoke", "target": "fv", "member": "CreateProperty", "kind": "method", "args": [{ "type": "bstr", "text": "Description" }, { "type": "i4", "value": 10 }, { "type": "bstr", "text": "Value column" }], "bind": "pd" },
+    { "op": "invoke", "target": "fv", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps1" },
+    { "op": "invoke", "target": "ps1", "member": "Append", "kind": "method", "args": [{ "type": "object", "name": "pd" }] },
+    { "op": "release", "target": "ps1" },
+    { "op": "release", "target": "pd" },
+    { "op": "invoke", "target": "fv", "member": "CreateProperty", "kind": "method", "args": [{ "type": "bstr", "text": "Format" }, { "type": "i4", "value": 10 }, { "type": "bstr", "text": "#,##0" }], "bind": "pf" },
+    { "op": "invoke", "target": "fv", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "ps2" },
+    { "op": "invoke", "target": "ps2", "member": "Append", "kind": "method", "args": [{ "type": "object", "name": "pf" }] },
+    { "op": "release", "target": "ps2" },
+    { "op": "release", "target": "pf" },
+    { "op": "release", "target": "fv" },
+    { "op": "release", "target": "fs" },
+    { "op": "release", "target": "td" },
+    { "op": "release", "target": "tds" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-create", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q37-props-accdb.accdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 262144, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}
