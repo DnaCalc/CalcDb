@@ -58,7 +58,9 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - **Counts before** come from the baselines, not from a build of master: a folder's rows in
   [compare-baseline-wide.tsv](compare-baseline-wide.tsv) (or compare-baseline.tsv for the core set). Counts after come
   from your self-check's `-Questions`.
-- Build only the solution filter the brief names. Run every check, test or candidate run that may take more than half a
+- Build only the solution filter the brief names. Before a full self-check, build the test projects you changed and run
+  your new tests (`dotnet test <project> --no-build --filter ...`) until they pass: x8vx started six self-checks for
+  compile errors in its own tests (2026-11-24). Run every check, test or candidate run that may take more than half a
   minute as an `alta job`; never wait for one in a shell call. Send no interim status while a job runs: end your turn
   and the job brings you back.
 - Every rule cites the record (folder/question, call, page and offset) that shows its very case. A byte or a value no

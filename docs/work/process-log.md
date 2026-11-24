@@ -1385,7 +1385,8 @@ running, or all of a run's messages forwarded rather than the last.
 shows; the note states 64 inline and 66 LVAL). The writer's own reviewer caught what it should: 7mxt's five findings
 narrowed two rules beyond the records (Switch-only Double, CInt/CLng-only negation folds), and 9dvt's first finding is
 a refused recorded case. Self-check reruns for a child's own new tests (7mxt 2, 9dvt 3) were compile errors that fail
-in the first minute; no rule added.
+in the first minute; no rule added then. Later the same night x8vx started six for the same reason, so the standard
+brief now has the child build and run its new tests before a full self-check.
 
 | Indicator | Value | Review when |
 | --- | --- | --- |
