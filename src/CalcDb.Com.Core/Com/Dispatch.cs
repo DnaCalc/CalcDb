@@ -152,8 +152,17 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
     protected virtual Failure? ArgumentCountFailure(MemberDecl member) => null;
 
     /// <summary>
+    /// Whether a declared scalar parameter admits one-level by-reference forms (<c>VT_BYREF|T</c> and
+    /// <c>VT_BYREF|VT_VARIANT</c> holding a value of a type admitted by value), dereferencing before
+    /// <see cref="ScalarArgumentRefusal"/> and coercion (R-ERR-1 ERR-BIND). False by default so unrecorded ByRef
+    /// forms stay refused by name.
+    /// </summary>
+    protected virtual bool AdmitsByRefScalarArgument(MemberDecl member, int parameter) => false;
+
+    /// <summary>
     /// A named refusal for a passed, non-Missing declared scalar argument inspected with its original
-    /// <paramref name="sourceType"/> (including ByRef flags) before VariantChangeTypeEx runs, or null to proceed.
+    /// <paramref name="sourceType"/> (including ByRef flags unless <see cref="AdmitsByRefScalarArgument"/> dereferenced
+    /// one level) before VariantChangeTypeEx runs, or null to proceed.
     /// Members whose records cover only a subset of source VarTypes use this to refuse unrecorded VarTypes by name
     /// instead of letting dispatch coerce them silently.
     /// </summary>
@@ -416,15 +425,25 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
                 // Declared scalar parameters are inspected before coercion and coerced under the session LCID (R-EXPR-1 EXPR-LOCALE: never Invoke's lcid or the thread's).
                 if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt)
                 {
-                    VarType sourceType = (VarType)((NativeVariant*)args[k])->Vt;
+                    NativeVariant* raw = (NativeVariant*)args[k];
+                    VarType rawType = (VarType)raw->Vt;
+                    NativeVariant deref = default;
+                    NativeVariant* source = raw;
+                    VarType sourceType = rawType;
+                    if ((rawType & VarType.ByRef) != 0 && AdmitsByRefScalarArgument(member, k))
+                    {
+                        deref = ByRefValues.Dereference(raw);
+                        source = &deref;
+                        sourceType = (VarType)deref.Vt;
+                    }
                     if (ScalarArgumentRefusal(member, k, sourceType) is { } refused)
                     {
                         OnFailure(refused);
                         return ErrorPublication.ToExcepInfo(refused, info);
                     }
-                    if (sourceType != vt)
+                    if (rawType != vt)
                     {
-                        OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
+                        OwnedVariant? c = OwnedVariant.ChangeType(source, vt, SessionLocale.Lcid, CoercionFlags(member, k), out int hr);
                         if (c is null)
                         {
                             if (ArgumentConversionFailure(member, ArgumentConversion.FromHResult(k, sourceType, hr)) is { } conversion)

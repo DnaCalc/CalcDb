@@ -20,6 +20,7 @@ namespace CalcDb.Com.Tests;
 public sealed unsafe class DispatchScalarCoercionTests : IDisposable
 {
     private const string RQ32Accdb = "55b55055cb8bcf929f6a3b29450ed0545dcb638b14d5b2a4134ac9f15588b0d0";
+    private const string RQ2CursorAccdb = "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2";
 
     private readonly HostBinding _binding = new(0xDA0_947F, Standalone: true, 0, 0, 0, 0, 0);
     private readonly EngineState _engine;
@@ -135,10 +136,17 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
 
         int byRefI4 = 1;
         float byRefR4 = 50f;
+        double byRefDate = 1.0;
+        double byRefDouble = 1.0;
+        NativeVariant innerDate = RawDate(1.0);
+        NativeVariant innerDouble = RawDouble(1.0);
+        NativeVariant nestedByRefI4 = RawByRef(VarType.I4, (nint)(&byRefI4));
         nint byRefBstr = Marshal.StringToBSTR("ID = 1");
+        NativeVariant nestedByRefBstr = RawByRef(VarType.Bstr, (nint)(&byRefBstr));
         try
         {
-            // Move (r-cursor-1b/move-argument-forms): unrecorded VarTypes and unrecorded overflow refused; Null -> 3421, Missing -> 3001.
+            // Move (r-cursor-1b/move-argument-forms; ByRef of admitted types: r-q2-cursor-dao/byref-dao-move-seek call 9):
+            // unrecorded VarTypes (by value or ByRef), nested ByRef, and unrecorded overflow refused; Null -> 3421, Missing -> 3001.
             foreach (NativeVariant bad in new[]
             {
                 RawSingle(1.0f),
@@ -146,7 +154,9 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
                 RawDate(1.0),
                 RawDecimal(1m),
                 RawInt64(1L),
-                RawByRef(VarType.I4, (nint)(&byRefI4)),
+                RawByRef(VarType.Date, (nint)(&byRefDate)),
+                RawByRef(VarType.Variant, (nint)(&innerDate)),
+                RawByRef(VarType.Variant, (nint)(&nestedByRefI4)),
             })
             {
                 AssertInvokeNotModelled(rs, "Move", InvokeKind.Method, "NotModelled.MoveArgumentType", bad);
@@ -155,7 +165,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             AssertInvokeDaoError(rs, "Move", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
             AssertInvokeDaoError(rs, "Move", InvokeKind.Method, 3001, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawMissing());
 
-            // PercentPosition put (r-cursor-1b/percent-assign): unrecorded VarTypes and unrecorded overflow refused; Null -> 3421.
+            // PercentPosition put (r-cursor-1b/percent-assign): unrecorded VarTypes (including ByRef) and unrecorded overflow refused; Null -> 3421.
             foreach (NativeVariant bad in new[]
             {
                 RawInt16(50),
@@ -170,12 +180,15 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             AssertInvokeNotModelled(rs, "PercentPosition", InvokeKind.PropertyPut, "NotModelled.RecordsetArgumentConversion", RawDouble(1e39));
             AssertInvokeDaoError(rs, "PercentPosition", InvokeKind.PropertyPut, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
 
-            // Seek p0 (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek): unrecorded VarTypes refused; Null -> 3421, Missing -> 3001.
+            // Seek p0 (r-cursor-1b/seek-operator-spelling, r-wire/opt-seek; ByRef of admitted types: r-q2-cursor-dao/byref-dao-move-seek call 46):
+            // unrecorded VarTypes (by value or ByRef) and nested ByRef refused; Null -> 3421, Missing -> 3001.
             foreach (NativeVariant bad in new[]
             {
                 RawDouble(1.0),
                 RawDate(1.0),
-                RawByRef(VarType.Bstr, (nint)(&byRefBstr)),
+                RawByRef(VarType.R8, (nint)(&byRefDouble)),
+                RawByRef(VarType.Variant, (nint)(&innerDouble)),
+                RawByRef(VarType.Variant, (nint)(&nestedByRefBstr)),
             })
             {
                 AssertInvokeNotModelled(rs, "Seek", InvokeKind.Method, "NotModelled.SeekComparisonType", bad, RawInt32(1));
@@ -183,18 +196,22 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             AssertInvokeDaoError(rs, "Seek", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 1u, RawNull(), RawInt32(1));
             AssertInvokeDaoError(rs, "Seek", InvokeKind.Method, 3001, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 1u, RawMissing(), RawInt32(1));
 
-            // FindFirst/FindNext p0 (r-cursor-1b/find-expression-forms): unrecorded VarTypes refused; Null -> 3421.
+            // FindFirst/FindNext p0 (r-cursor-1b/find-expression-forms; FindFirst ByRef: r-q2-cursor-dao/byref-dao-move-seek call 26):
+            // unrecorded VarTypes refused on both; ByRef Bstr still refused on FindNext, and unadmitted/nested ByRef refused on FindFirst.
             foreach (NativeVariant bad in new[]
             {
                 RawSingle(1.0f),
                 RawDate(1.0),
                 RawDecimal(1m),
-                RawByRef(VarType.Bstr, (nint)(&byRefBstr)),
+                RawByRef(VarType.Date, (nint)(&byRefDate)),
+                RawByRef(VarType.Variant, (nint)(&innerDate)),
+                RawByRef(VarType.Variant, (nint)(&nestedByRefBstr)),
             })
             {
                 AssertInvokeNotModelled(rs, "FindFirst", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
                 AssertInvokeNotModelled(rs, "FindNext", InvokeKind.Method, "NotModelled.FindCriteriaType", bad);
             }
+            AssertInvokeNotModelled(rs, "FindNext", InvokeKind.Method, "NotModelled.FindCriteriaType", RawByRef(VarType.Bstr, (nint)(&byRefBstr)));
             AssertInvokeDaoError(rs, "FindFirst", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u, RawNull());
 
             // FindLast/FindPrevious p0 (r-wire/opt-find-criteria seq 47, 50, 53, 56; r-cursor-1b/find-empty-and-ends): only Bstr and Null are recorded.
@@ -219,6 +236,90 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         }
 
         Ok(Method(rs, "Close"));
+    }
+
+    [Fact]
+    public void Dao_Recordset_ByRef_arguments_follow_by_value_rules_for_recorded_Move_GetRows_FindFirst_and_Seek()
+    {
+        // r-q2-cursor-dao/byref-dao-move-seek: calls 9 (Move ByRef Variant I4 2), 15 (GetRows typed ByRef I4 2),
+        // 26 (FindFirst typed ByRef BSTR 'ID = 5'), and 46 (Seek typed ByRef BSTR '=', ByRef Variant I4 3).
+        DatabaseObject db = OpenFixture(RQ2CursorAccdb, ".accdb");
+        DaoRecordsetObject rs = Recover<DaoRecordsetObject>(Ok(Method(db, "OpenRecordset", "T", 2)));
+        DaoRecordsetObject rt = Recover<DaoRecordsetObject>(Ok(Method(db, "OpenRecordset", "T", 1)));
+        Ok(Call(rt, "Index", InvokeKind.PropertyPut, "PK_T"));
+
+        NativeVariant moveVar = RawInt32(2);
+        int moveTyped = 1;
+        int getRowsTyped = 2;
+        NativeVariant nullVar = RawNull();
+        nint findBstr = Marshal.StringToBSTR("ID = 5");
+        nint findVarBstr = Marshal.StringToBSTR("ID = 3");
+        NativeVariant findVar = new() { Vt = (ushort)VarType.Bstr, Pointer = findVarBstr };
+        nint eqBstr = Marshal.StringToBSTR("=");
+        nint geBstr = Marshal.StringToBSTR(">=");
+        NativeVariant geVar = new() { Vt = (ushort)VarType.Bstr, Pointer = geBstr };
+        NativeVariant seekKeyVar = RawInt32(3);
+        int seekKeyTyped = 4;
+        NativeVariant nestedKey = RawByRef(VarType.I4, (nint)(&seekKeyTyped));
+        try
+        {
+            // Call 9: rs.Move(ByRef Variant I4 2) lands on ID 3 and leaves caller's Variant unchanged.
+            AssertInvokeOk(rs, "Move", InvokeKind.Method, RawByRef(VarType.Variant, (nint)(&moveVar)));
+            Assert.Equal((ushort)VarType.I4, moveVar.Vt);
+            Assert.Equal(2, (int)moveVar.Int64);
+            Assert.Equal(3, ReadIntField(rs, "ID"));
+
+            // Call 15: rs.GetRows(typed ByRef I4 2) reads 2 rows (IDs 3, 4), lands on ID 5, leaves variable 2.
+            Assert.Equal(VarType.Array | VarType.Variant, AssertInvokeOk(rs, "GetRows", InvokeKind.Method, RawByRef(VarType.I4, (nint)(&getRowsTyped))));
+            Assert.Equal(2, getRowsTyped);
+            Assert.Equal(5, ReadIntField(rs, "ID"));
+
+            // Typed ByRef Move(1) advances to ID 6; ByRef Variant Null fails 3421 as by value.
+            AssertInvokeOk(rs, "Move", InvokeKind.Method, RawByRef(VarType.I4, (nint)(&moveTyped)));
+            Assert.Equal(1, moveTyped);
+            Assert.Equal(6, ReadIntField(rs, "ID"));
+            AssertInvokeDaoError(rs, "Move", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u,
+                RawByRef(VarType.Variant, (nint)(&nullVar)));
+
+            // Call 26: rs.FindFirst(typed ByRef BSTR 'ID = 5') finds ID 5, leaves BSTR unchanged; ByRef Variant BSTR works; ByRef Variant Null -> 3421.
+            AssertInvokeOk(rs, "FindFirst", InvokeKind.Method, RawByRef(VarType.Bstr, (nint)(&findBstr)));
+            Assert.Equal("ID = 5", Marshal.PtrToStringBSTR(findBstr));
+            Assert.Equal(5, ReadIntField(rs, "ID"));
+            AssertInvokeOk(rs, "FindFirst", InvokeKind.Method, RawByRef(VarType.Variant, (nint)(&findVar)));
+            Assert.Equal(3, ReadIntField(rs, "ID"));
+            AssertInvokeDaoError(rs, "FindFirst", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 0u,
+                RawByRef(VarType.Variant, (nint)(&nullVar)));
+
+            // Call 46: rt.Seek(typed ByRef BSTR '=', ByRef Variant I4 3) lands on ID 3 and leaves both ByRef values unchanged.
+            AssertInvokeOk(rt, "Seek", InvokeKind.Method,
+                RawByRef(VarType.Bstr, (nint)(&eqBstr)),
+                RawByRef(VarType.Variant, (nint)(&seekKeyVar)));
+            Assert.Equal("=", Marshal.PtrToStringBSTR(eqBstr));
+            Assert.Equal((ushort)VarType.I4, seekKeyVar.Vt);
+            Assert.Equal(3, (int)seekKeyVar.Int64);
+            Assert.Equal(3, ReadIntField(rt, "ID"));
+
+            // Also works with ByRef Variant comparison + typed ByRef Key1; ByRef Variant Null comparison -> 3421; nested ByRef Key1 refused.
+            AssertInvokeOk(rt, "Seek", InvokeKind.Method,
+                RawByRef(VarType.Variant, (nint)(&geVar)),
+                RawByRef(VarType.I4, (nint)(&seekKeyTyped)));
+            Assert.Equal(4, seekKeyTyped);
+            Assert.Equal(4, ReadIntField(rt, "ID"));
+            AssertInvokeDaoError(rt, "Seek", InvokeKind.Method, 3421, "DAO.Recordset", publishesErrorInfo: true, expectedArgErr: 1u,
+                RawByRef(VarType.Variant, (nint)(&nullVar)), RawInt32(1));
+            AssertInvokeNotModelled(rt, "Seek", InvokeKind.Method, "NotModelled.SeekKeyArgumentType",
+                RawBstr("="), RawByRef(VarType.Variant, (nint)(&nestedKey)));
+        }
+        finally
+        {
+            Marshal.FreeBSTR(findBstr);
+            Marshal.FreeBSTR(findVarBstr);
+            Marshal.FreeBSTR(eqBstr);
+            Marshal.FreeBSTR(geBstr);
+        }
+
+        Ok(Method(rs, "Close"));
+        Ok(Method(rt, "Close"));
     }
 
     [Fact]
@@ -484,7 +585,49 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
         }
     }
 
+    private int ReadIntField(DaoRecordsetObject rs, string name)
+    {
+        FieldsObject fields = Recover<FieldsObject>(Ok(Get(rs, "Fields")));
+        FieldObject field = Recover<FieldObject>(Ok(Get(fields, "Item", name)));
+        CallResult value = Ok(Get(field, "Value"));
+        Assert.True(value.HasScalar && (VarType)value.Scalar.Vt == VarType.I4);
+        return (int)value.Scalar.Int64;
+    }
+
+    [DllImport("oleaut32.dll")]
+    private static extern int VariantClear(NativeVariant* pvarg);
+
+    private static VarType AssertInvokeOk(
+        DispatchObject target,
+        string member,
+        InvokeKind kind,
+        params NativeVariant[] args)
+    {
+        (int hr, ExcepInfo excep, _, _, NativeVariant result) = InvokeRawWithResult(target, member, kind, args);
+        try
+        {
+            Assert.Equal(HResults.S_OK, hr);
+            return (VarType)result.Vt;
+        }
+        finally
+        {
+            _ = VariantClear(&result);
+            FreeExcep(excep);
+        }
+    }
+
     private static (int Hr, ExcepInfo Excep, uint ArgError, bool HasErrorInfo) InvokeRaw(
+        DispatchObject target,
+        string member,
+        InvokeKind kind,
+        NativeVariant[] args)
+    {
+        (int hr, ExcepInfo excep, uint argError, bool hasErrorInfo, NativeVariant result) = InvokeRawWithResult(target, member, kind, args);
+        _ = VariantClear(&result);
+        return (hr, excep, argError, hasErrorInfo);
+    }
+
+    private static (int Hr, ExcepInfo Excep, uint ArgError, bool HasErrorInfo, NativeVariant Result) InvokeRawWithResult(
         DispatchObject target,
         string member,
         InvokeKind kind,
@@ -518,7 +661,7 @@ public sealed unsafe class DispatchScalarCoercionTests : IDisposable
             {
                 Marshal.Release(errorInfo);
             }
-            return (hr, excep, argError, hasErrorInfo);
+            return (hr, excep, argError, hasErrorInfo, result);
         }
         finally
         {
