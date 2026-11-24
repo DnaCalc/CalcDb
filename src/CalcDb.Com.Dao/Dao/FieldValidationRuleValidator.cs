@@ -1,5 +1,3 @@
-using System.Text;
-
 using CalcDb.Com.Com;
 using CalcDb.Expressions;
 using CalcDb.Format;
@@ -13,6 +11,8 @@ namespace CalcDb.Com.Dao;
 /// <c>errors-only-nochange-accdb</c>):
 /// <list type="bullet">
 /// <item>Empty text (<c>""</c>) clears the rule.</item>
+/// <item>Source expansion is delegated to <see cref="ExpressionRuleBinder.ExpandFieldRule"/> so put validation and
+/// enforcement share one expansion; unrecorded multi-clause or parenthesized implied-operand forms refuse by name.</item>
 /// <item>Multi-column rules (such as <c>[V] &lt; [W]</c>) fail DAO 3783 (<c>0x800A0EC7</c>, no help file,
 /// <c>HelpContext = -1</c>, no <c>IErrorInfo</c>); a rule naming a single other column is refused by name.</item>
 /// <item>Missing-operator syntax errors (such as <c>&gt;</c>, <c>[B] &gt;</c>) fail DAO 3320 (<c>0x800A0CF8</c>,
@@ -43,8 +43,12 @@ internal static class FieldValidationRuleValidator
             return Failure.NotImplemented("Field.ValidationRule put of whitespace-only text (not recorded in r-q37-valrule-put)");
         }
 
-        string fieldToken = "[" + column.Name + "]";
-        string source = ExpandRule(trimmed, fieldToken);
+        string source = ExpressionRuleBinder.ExpandFieldRule(trimmed, column.Name, out FieldRuleForm form);
+        if (form == FieldRuleForm.UnrecordedMultiClause)
+        {
+            return Failure.NotImplemented(
+                "Field.ValidationRule put of an unrecorded multi-clause or parenthesized implied-operand form (only single implied clauses and top-level And-joined '<>' clauses are recorded in r-q37-valrule-put)");
+        }
 
         using ExpressionSyntax syntax = ExpressionSyntax.Parse(source);
         if (syntax.Root is null)
@@ -150,218 +154,5 @@ internal static class FieldValidationRuleValidator
             }
         }
         return null;
-    }
-
-    private static string ExpandRule(string trimmed, string fieldToken)
-    {
-        using (ExpressionSyntax direct = ExpressionSyntax.Parse(trimmed))
-        {
-            if (direct.Root is not null)
-            {
-                return direct.Root.Kind == SyntaxKind.Literal
-                    ? $"{fieldToken} = ({trimmed})"
-                    : trimmed;
-            }
-        }
-
-        // Access field-level ValidationRule allows implied-operand comparison clauses joined by top-level And/Or
-        // (e.g. "> 10", "Like 'A*'", "<> 'aaa' And <> 'bbb'"). Expand each top-level clause starting with a
-        // comparison operator by prepending the field token.
-        var sb = new StringBuilder(trimmed.Length + fieldToken.Length * 4);
-        int i = 0;
-        int depth = 0;
-        bool clauseStart = true;
-        bool pendingBetweenAnd = false;
-
-        while (i < trimmed.Length)
-        {
-            char ch = trimmed[i];
-            if (char.IsWhiteSpace(ch))
-            {
-                sb.Append(ch);
-                i++;
-                continue;
-            }
-
-            if (clauseStart && depth == 0)
-            {
-                clauseStart = false;
-                if (StartsWithImpliedOperator(trimmed, i, out bool isBetween))
-                {
-                    sb.Append(fieldToken);
-                    sb.Append(' ');
-                    if (isBetween)
-                    {
-                        pendingBetweenAnd = true;
-                    }
-                }
-            }
-
-            if (ch is '\'' or '"')
-            {
-                int start = i++;
-                while (i < trimmed.Length)
-                {
-                    if (trimmed[i] == ch)
-                    {
-                        i++;
-                        if (i < trimmed.Length && trimmed[i] == ch)
-                        {
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                    i++;
-                }
-                sb.Append(trimmed, start, i - start);
-                continue;
-            }
-            if (ch == '#')
-            {
-                int start = i++;
-                while (i < trimmed.Length && trimmed[i] != '#')
-                {
-                    i++;
-                }
-                if (i < trimmed.Length)
-                {
-                    i++;
-                }
-                sb.Append(trimmed, start, i - start);
-                continue;
-            }
-            if (ch == '[')
-            {
-                int start = i++;
-                while (i < trimmed.Length && trimmed[i] != ']')
-                {
-                    i++;
-                }
-                if (i < trimmed.Length)
-                {
-                    i++;
-                }
-                sb.Append(trimmed, start, i - start);
-                continue;
-            }
-            if (ch == '(')
-            {
-                depth++;
-                sb.Append(ch);
-                i++;
-                continue;
-            }
-            if (ch == ')')
-            {
-                if (depth > 0)
-                {
-                    depth--;
-                }
-                sb.Append(ch);
-                i++;
-                continue;
-            }
-
-            if (char.IsLetter(ch) || ch == '_')
-            {
-                int start = i++;
-                while (i < trimmed.Length && (char.IsLetterOrDigit(trimmed[i]) || trimmed[i] == '_'))
-                {
-                    i++;
-                }
-                ReadOnlySpan<char> word = trimmed.AsSpan(start, i - start);
-                sb.Append(word);
-                if (depth == 0)
-                {
-                    if (word.Equals("Between", StringComparison.OrdinalIgnoreCase))
-                    {
-                        pendingBetweenAnd = true;
-                    }
-                    else if (word.Equals("And", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (pendingBetweenAnd)
-                        {
-                            pendingBetweenAnd = false;
-                        }
-                        else
-                        {
-                            clauseStart = true;
-                        }
-                    }
-                    else if (word.Equals("Or", StringComparison.OrdinalIgnoreCase))
-                    {
-                        pendingBetweenAnd = false;
-                        clauseStart = true;
-                    }
-                }
-                continue;
-            }
-
-            sb.Append(ch);
-            i++;
-        }
-
-        return sb.ToString();
-    }
-
-    private static bool StartsWithImpliedOperator(string text, int index, out bool isBetween)
-    {
-        isBetween = false;
-        if (index >= text.Length)
-        {
-            return false;
-        }
-        char ch = text[index];
-        if (ch is '=' or '<' or '>')
-        {
-            return true;
-        }
-        if (!char.IsLetter(ch))
-        {
-            return false;
-        }
-        int end = index;
-        while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_'))
-        {
-            end++;
-        }
-        ReadOnlySpan<char> word = text.AsSpan(index, end - index);
-        if (word.Equals("Like", StringComparison.OrdinalIgnoreCase)
-            || word.Equals("Is", StringComparison.OrdinalIgnoreCase)
-            || word.Equals("In", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-        if (word.Equals("Between", StringComparison.OrdinalIgnoreCase))
-        {
-            isBetween = true;
-            return true;
-        }
-        if (word.Equals("Not", StringComparison.OrdinalIgnoreCase))
-        {
-            int next = end;
-            while (next < text.Length && char.IsWhiteSpace(text[next]))
-            {
-                next++;
-            }
-            int nextEnd = next;
-            while (nextEnd < text.Length && (char.IsLetterOrDigit(text[nextEnd]) || text[nextEnd] == '_'))
-            {
-                nextEnd++;
-            }
-            ReadOnlySpan<char> second = text.AsSpan(next, nextEnd - next);
-            if (second.Equals("Like", StringComparison.OrdinalIgnoreCase)
-                || second.Equals("In", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            if (second.Equals("Between", StringComparison.OrdinalIgnoreCase))
-            {
-                isBetween = true;
-                return true;
-            }
-        }
-        return false;
     }
 }

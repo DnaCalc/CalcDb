@@ -248,6 +248,55 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         FreeExcep(exClosedNull);
     }
 
+    [Fact]
+    public void Multi_clause_implied_rules_match_r_q37_put_and_refuse_unrecorded_forms_and_enforcement()
+    {
+        string path = Path.Combine(_dir, "val-multiclause.accdb");
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db = Recover<DatabaseObject>(Method(eng, "CreateDatabase", path, DbLangGeneral, DbVersion120));
+        Assert.Null(Method(db, "Execute", "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG, S TEXT(40))", DbFailOnError).Failure);
+        TableDefObject td = Recover<TableDefObject>(Get(Recover<DefinitionCollection>(Get(db, "TableDefs")), "Item", "T"));
+        DefinitionCollection fields = Recover<DefinitionCollection>(Get(td, "Fields"));
+        DefinitionFieldObject fv = Recover<DefinitionFieldObject>(Get(fields, "Item", "V"));
+        DefinitionFieldObject fs = Recover<DefinitionFieldObject>(Get(fields, "Item", "S"));
+
+        // Unrecorded multi-clause or parenthesized implied-operand forms refuse by name at put (never guessing 3320).
+        foreach (string unrecorded in new[]
+        {
+            "<> 'a' Or <> 'b'",
+            "> 10 And < 100",
+            "(<> 'a') And <> 'b'",
+            "(> 10)",
+            "[S] <> 'a' And <> 'b'",
+            "<> 'a' And [S] <> 'b'",
+            "> 10 Or [V] < 0",
+        })
+        {
+            CallResult putRes = Put(fs, "ValidationRule", unrecorded);
+            Assert.NotNull(putRes.Failure);
+            Assert.Equal(FailureKind.NotImplemented, putRes.Failure!.Kind);
+        }
+
+        // Recorded r-q37 And-joined <> form puts cleanly on empty T, and INSERT refuses by name (NotModelled.FieldRuleMultiClause).
+        Assert.Null(Put(fs, "ValidationRule", "<> 'a' And <> 'b'").Failure);
+        Assert.Equal("<> 'a' And <> 'b'\0", TextOf(Get(fs, "ValidationRule")));
+
+        CallResult insertWithMultiNotEqual = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'c')", DbFailOnError);
+        Assert.NotNull(insertWithMultiNotEqual.Failure);
+        Assert.Equal(FailureKind.NotModelled, insertWithMultiNotEqual.Failure!.Kind);
+        Assert.Contains("NotModelled.FieldRuleMultiClause", insertWithMultiNotEqual.Failure.Description);
+
+        // Clearing S's rule and setting single implied Between on V enforces cleanly on INSERT.
+        Assert.Null(Put(fs, "ValidationRule", "").Failure);
+        Assert.Null(Put(fv, "ValidationRule", "Between 1 And 10").Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'ok')", DbFailOnError).Failure);
+        CallResult outOfRange = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (2, 20, 'ok')", DbFailOnError);
+        Assert.NotNull(outOfRange.Failure);
+        Assert.Equal(3317, outOfRange.Failure!.Scode & 0xFFFF);
+
+        Assert.Null(Method(db, "Close").Failure);
+    }
+
     private static (int Hr, ExcepInfo Excep, bool HasErrorInfo) InvokePut(DispatchObject target, string member, NativeVariant value)
     {
         if (NativeRoute.GetErrorInfo(0, out nint stale) == 0 && stale != 0)
