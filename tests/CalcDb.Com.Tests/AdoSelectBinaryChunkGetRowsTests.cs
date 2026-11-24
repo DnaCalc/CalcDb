@@ -784,7 +784,7 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fid, "GetChunk", 3), "NotModelled.AdoGetChunkFieldType");
                     AssertNotModelled(Call(ftxt, "GetChunk", 3), "NotModelled.AdoGetChunkFieldType");
 
-                    // Raw argument count / type refusals (including Finding 8: VT_BYREF | VT_I4 refused).
+                    // Raw argument count / type refusals (unadmitted ByRef I2 stays refused; ByRef I4 on ACCDB is recorded in r-q35-byref-args/ado-field-getchunk).
                     AssertNotModelled(Call(fb, "GetChunk"), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", 3, 4), "NotModelled.AdoGetChunkArg");
                     AssertNotModelled(Call(fb, "GetChunk", Missing), "NotModelled.AdoGetChunkArg");
@@ -818,7 +818,8 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fm, "GetChunk", 10), "NotModelled.AdoGetChunkMemoNullOrEmpty");
 
                     // Row 4 (Finding 7): Memo non-positive length, Memo first-on-row refusal, Memo full/overread refusal,
-                    // partial Memo after OLE GetChunk (stream-getchunk #37), Memo continuation refusal, and ActualSize after GetChunk.
+                    // partial Memo after OLE GetChunk (stream-getchunk #37; consecutive partial chunk in r-q35-byref-args/ado-field-getchunk),
+                    // continuation reaching end refusal, and ActualSize after GetChunk.
                     Assert.Null(Call(sf, "MoveNext").Failure);
                     AssertNotModelled(Call(fm, "GetChunk", 0), "NotModelled.AdoGetChunkMemoNonPositiveLength");
                     AssertNotModelled(Call(fm, "GetChunk", -1), "NotModelled.AdoGetChunkMemoNonPositiveLength");
@@ -830,7 +831,8 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
                     AssertNotModelled(Call(fm, "GetChunk", 65536), "NotModelled.AdoGetChunkMemoFullOrOverread");
 
                     Assert.Equal(5000, ((string)Call(fm, "GetChunk", 5000).Value!).Length);
-                    AssertNotModelled(Call(fm, "GetChunk", 5000), "NotModelled.AdoGetChunkMemoContinuation");
+                    Assert.Equal(5000, ((string)Call(fm, "GetChunk", 5000).Value!).Length);
+                    AssertNotModelled(Call(fm, "GetChunk", 2000), "NotModelled.AdoGetChunkMemoFullOrOverread");
                     AssertNotModelled(TryGet(fm, "ActualSize"), "NotModelled.AdoActualSizeAfterGetChunk");
 
                     // Advance to EOF -> GetChunk at EOF refused.
@@ -1216,9 +1218,9 @@ public sealed unsafe class AdoSelectBinaryChunkGetRowsTests
     private static void AssertGetChunkByRefRefused(nint field, int value)
     {
         int dispId = GetDispId(field, "GetChunk");
-        int local = value;
+        short local = checked((short)value);
         NativeVariant arg = default;
-        arg.Vt = (ushort)(VarType.ByRef | VarType.I4);
+        arg.Vt = (ushort)(VarType.ByRef | VarType.I2);
         arg.Pointer = (nint)(&local);
         DispParams dp = new() { Args = (nint)(&arg), ArgCount = 1 };
         NativeVariant result = default;

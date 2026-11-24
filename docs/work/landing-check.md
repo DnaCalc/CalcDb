@@ -24,7 +24,9 @@ persistent check worktree and gave code writers worktrees of their own.
    interface, `nav.call_hierarchy` kept shallow), so a rule that reaches further than the brief shows, and lists each
    roscli call with what it decided. A stretch under about 300 lines has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
-6. **Compare.** The core compare set in the background after the landing; the wide set once a day.
+6. **Compare.** The core compare set in the background after the landing; the wide set once a day. A probe round that
+   adds a folder adds it to `probes/compare-set-wide.json` in the organizer's bookkeeping commit after its landing:
+   r-q27 to r-q35 were left out until 2026-11-24, so the wide runs did not count them.
 
 ### The child's report
 
@@ -36,8 +38,8 @@ A child ends with these parts and nothing else:
 - **Tests:** the tests that cite those records, and the result of its last self-check.
 - **Review:** the reviewer's session, its minutes and tool calls, and each finding with its disposition (applied in
   commit X, or declined because Y).
-- **Bookkeeping:** the register row text, qualified.md note or process-log lines it would add. Only the organizer edits
-  those files.
+- **Bookkeeping:** the register row text (its status in one or two sentences: what it admits, with the commit), the
+  qualified.md note or the process-log lines it would add. Only the organizer edits those files.
 - **Open:** the branches of the slice it did not do, and every byte it met that no record decides.
 
 ### The standard brief

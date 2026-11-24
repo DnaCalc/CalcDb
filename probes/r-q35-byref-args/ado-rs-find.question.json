@@ -1,0 +1,119 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q35-byref-args/ado-rs-find",
+  "bookRefs": ["R-ORACLE-1", "OR-WIRE", "R-STRING-1", "STR-BYREF", "R-ADO-1", "ADO-VIEW"],
+  "description": "Card R-ORACLE-1 OR-WIRE (3m35): ByRef forms of ADO Recordset.Find(Criteria, SkipRecords) p0 and p1 on ACCDB (same fixture and setup as r-ado-1b/view-find-client, client static read-only Recordset of SELECT ID, L, S FROM T ORDER BY ID). Varies one argument at a time across every VarType admitted by value: p0 Criteria as BSTR 'L = 20', BSTR '' (each as VT_BYREF|VT_BSTR and VT_BYREF|VT_VARIANT), and Null (VT_BYREF|VT_VARIANT); p1 SkipRecords as I4 0, I4 1, I4 -1 (each as VT_BYREF|VT_I4 and VT_BYREF|VT_VARIANT, with p0 by-value BSTR 'L = 20'). After each Find reads EOF, BOF, AbsolutePosition, ID and cn.Errors, then clears cn.Errors. Asks whether each ByRef form answers identically to its by-value form.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "create", "progId": "ADODB.Connection", "bind": "cn" },
+    { "op": "invoke", "target": "cn", "member": "Provider", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Microsoft.ACE.OLEDB.12.0" }] },
+    { "op": "invoke", "target": "cn", "member": "Properties", "kind": "propertyGet", "args": [], "bind": "cnProps" },
+    { "op": "invoke", "target": "cnProps", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "Data Source" }], "bind": "cnDs" },
+    { "op": "invoke", "target": "cnDs", "member": "Value", "kind": "propertyPut", "args": [{ "type": "inputPath", "role": "main" }] },
+    { "op": "release", "target": "cnDs" },
+    { "op": "release", "target": "cnProps" },
+    { "op": "invoke", "target": "cn", "member": "Mode", "kind": "propertyPut", "args": [{ "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "cn", "member": "Open", "kind": "method", "args": [] },
+    { "op": "create", "progId": "ADODB.Recordset", "bind": "rs" },
+    { "op": "invoke", "target": "rs", "member": "CursorLocation", "kind": "propertyPut", "args": [{ "type": "i4", "value": 3 }] },
+    { "op": "invoke", "target": "rs", "member": "Open", "kind": "method", "args": [{ "type": "bstr", "text": "SELECT ID, L, S FROM T ORDER BY ID" }, { "type": "object", "name": "cn" }, { "type": "i4", "value": 3 }, { "type": "i4", "value": 1 }, { "type": "i4", "value": 1 }] },
+    { "op": "invoke", "target": "rs", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fl" },
+    { "op": "invoke", "target": "fl", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "ID" }], "bind": "fid" },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "L = 20" } }] },
+    { "op": "invoke", "target": "rs", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "L = 20" } }] },
+    { "op": "invoke", "target": "rs", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "byref", "typed": true, "inner": { "type": "bstr", "text": "" } }] },
+    { "op": "invoke", "target": "cn", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ers" },
+    { "op": "forEachItem", "target": "ers", "bind": "er", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "er", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Source", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "invoke", "target": "ers", "member": "Clear", "kind": "method", "args": [] },
+    { "op": "release", "target": "ers" },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "bstr", "text": "" } }] },
+    { "op": "invoke", "target": "cn", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ers" },
+    { "op": "forEachItem", "target": "ers", "bind": "er", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "er", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Source", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "invoke", "target": "ers", "member": "Clear", "kind": "method", "args": [] },
+    { "op": "release", "target": "ers" },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "byref", "typed": false, "inner": { "type": "null" } }] },
+    { "op": "invoke", "target": "cn", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "ers" },
+    { "op": "forEachItem", "target": "ers", "bind": "er", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "er", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "er", "member": "Source", "kind": "propertyGet", "args": [] }
+    ]},
+    { "op": "invoke", "target": "ers", "member": "Clear", "kind": "method", "args": [] },
+    { "op": "release", "target": "ers" },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": true, "inner": { "type": "i4", "value": 0 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": true, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": false, "inner": { "type": "i4", "value": 0 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": false, "inner": { "type": "i4", "value": 1 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": true, "inner": { "type": "i4", "value": -1 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "invoke", "target": "rs", "member": "MoveFirst", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "rs", "member": "Find", "kind": "method", "args": [{ "type": "bstr", "text": "L = 20" }, { "type": "byref", "typed": false, "inner": { "type": "i4", "value": -1 } }] },
+    { "op": "invoke", "target": "rs", "member": "AbsolutePosition", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+
+    { "op": "release", "target": "fid" },
+    { "op": "release", "target": "fl" },
+    { "op": "invoke", "target": "rs", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "rs" },
+    { "op": "invoke", "target": "cn", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "cn" },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}

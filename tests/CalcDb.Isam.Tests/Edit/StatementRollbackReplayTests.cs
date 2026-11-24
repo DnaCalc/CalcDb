@@ -696,7 +696,7 @@ public sealed partial class StatementRollbackReplayTests
         using (var session = new KeptSetupSession(plan.SetupImage, "noan-dup-row2-newpage-live"))
         {
             Assert.Equal(allFree, session.Image.Snapshot().AsSpan(p1ExtentOff, 4).ToArray());
-            using var locker = new TransactionCoordinator(new LockerId(2)) { Publisher = session };
+            using var locker = new TransactionCoordinator(new LockerId(2)) { Publisher = session, Clock = static () => TimeSpan.Zero };
             using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
             {
                 StageFailingNewPageInsert(session, out TableDefinition t);
@@ -1147,7 +1147,7 @@ public sealed partial class StatementRollbackReplayTests
 
         // Second Workspace on the same PageCache: allocating / page-1 writes refuse; page-0-only Close succeeds.
         byte[] beforeOther = session.Image.Snapshot();
-        using (var other = new TransactionCoordinator(new LockerId(2)) { Publisher = session })
+        using (var other = new TransactionCoordinator(new LockerId(2)) { Publisher = session, Clock = static () => TimeSpan.Zero })
         {
             var otherAlloc = new PageAllocator(session.Cache, D, session.Cache.KnownExtentPages);
             Assert.Null(otherAlloc.Allocate(null, out _, out string? allocFail));
@@ -1194,7 +1194,7 @@ public sealed partial class StatementRollbackReplayTests
         Assert.True(tFrame.Update().Succeeded);
         Assert.True(session.Workspace.CommitTrans().Succeeded);
 
-        using (var other2 = new TransactionCoordinator(new LockerId(3)) { Publisher = session })
+        using (var other2 = new TransactionCoordinator(new LockerId(3)) { Publisher = session, Clock = static () => TimeSpan.Zero })
         {
             using TableCursor otherCursor2 = session.OpenCursor(t, other2);
             using var otherFrame2 = new EditFrame(targetCtx, otherCursor2, other2) { ConflictSource = MutationErrorSource.Database };
@@ -1919,7 +1919,7 @@ public sealed partial class StatementRollbackReplayTests
             DatabaseHeader header = DatabaseHeader.Decode(copy.AsSpan(0, D.PageSize), D);
             var exprCtx = new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query);
             _ruleBinder = new ExpressionRuleBinder(exprCtx);
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Clock = static () => TimeSpan.Zero };
 
             uint firstUserPage = ProfileSelector.Select(image.AsSpan(0, D.PageSize), out FileProfile? profile, D) == ProfileRefusal.None && profile!.Format == FileFormat.Jet4 ? 19u : 42u;
             for (uint p = firstUserPage; p < _image.PageCount; p++)

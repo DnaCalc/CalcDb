@@ -1311,8 +1311,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         member.Name == "GetChunk" ? InvalidArgumentCount() : null;
 
     /// <summary>
+    /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value for SELECT
+    /// Field.GetChunk Offset (p0) and Bytes (p1) across ACCDB and MDB (r-q35-byref-args/dao-select-getchunk-accdb,
+    /// dao-select-getchunk-mdb).
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        member.Name == "GetChunk" && parameter is 0 or 1;
+
+    /// <summary>
     /// Refuse unrecorded per-parameter source VarTypes on GetChunk before IDispatch coerces them to VT_I4
-    /// (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb, q3-lv-getchunk-args-mdb).
+    /// (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb, q3-lv-getchunk-args-mdb; ByRef:
+    /// r-q35-byref-args/dao-select-getchunk-accdb, dao-select-getchunk-mdb).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
         member.Name == "GetChunk" && !IsRecordedChunkArgType(parameter, sourceType)

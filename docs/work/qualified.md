@@ -138,7 +138,20 @@ is summarised in [qualification-report.md](qualification-report.md).
   Empty `Parameters` fails `0x800A0E7C` "Parameter object is improperly defined" with an IErrorInfo.
 - **Conditions.** Raw IDispatch; `VT_BYREF|VT_VARIANT` and typed `VT_BYREF` of scalars and BSTR; ACCDB; the value after the call captured by the worker.
 - **Records.** `r-q2-wire/byref-dao-openrecordset-args/`, `byref-dao-put-values/`, `byref-ado-records-affected-counts/`, `byref-ado-command-execute/`; `r-ops/byref-ado-execute-records-affected/`.
-- **Open.** The same variable passed twice (aliases) and other members with output arguments (the harness builds one variable per argument); VBA and managed callers (T).
+- **Also (task 3m35, probe round r-q35-byref-args, ACEDAO 16.0.20625.20044).** The same holds, typed `VT_BYREF|<type>` and
+  `VT_BYREF|VT_VARIANT`, for every type each member admits by value: DAO SELECT `Field.GetChunk` Offset and Bytes (ACCDB
+  and MDB), `Recordset.PercentPosition` put, `FindLast`, `FindNext` and `FindPrevious` Criteria (all four Find methods
+  alike), `Workspace.CommitTrans` and `DBEngine.CommitTrans` Option, `DBEngine.CreateDatabase` and
+  `Workspace.CreateDatabase` Name and Locale; ADO `Connection.Open` ConnectionString, UserID, Password and Options,
+  `Recordset.Sort` put, `Recordset.Find` Criteria and SkipRecords, `Field.GetChunk` Length (server forward-only and client
+  static). The value, the error, the EXCEPINFO, IErrorInfo, the Errors collection and the state equal the by-value
+  answer, `*puArgErr` stays unset and nothing is written back. Records: `r-q35-byref-args/` dao-select-getchunk-accdb,
+  -mdb, dao-rs-percentposition, dao-rs-findlast, dao-ws-committrans, dao-eng-createdatabase, ado-conn-open, ado-rs-sort,
+  ado-rs-find, ado-field-getchunk, each asked twice with identical answers; the by-value records are those of ptrj's
+  report (r-q32 q3-lv-getchunk-args, r-cursor-1b percent-assign, r-txn-1b commit-option-vartypes, r-wire
+  opt-createdatabase, r-ado-1b conn-open-args, view-sort-grammar, view-find-client, r-oledb-odbc stream-getchunk). The
+  organizer read the PercentPosition calls (ByRef 50 and 37.5 give AbsolutePosition 10 and 7, as by value).
+- **Open.** The same variable passed twice (aliases) and other members with output arguments (the harness builds one variable per argument); VBA and managed callers (T); ByRef forms of types a member does not admit by value; CreateDatabase Option and ADO Find SearchDirection and Start by reference; MDB for the members asked on ACCDB only.
 
 ### R-ACT-1 ACT-ABI: named arguments resolve by one `GetIDsOfNames`; skipped optionals, reordering and by-reference named arguments work; an unknown name is DISP_E_UNKNOWNNAME and a repeated one is 3001
 - **Claim.** DAO dispids: `Database.Execute` Query 0, Options 1; `DBEngine.CreateWorkspace` Name 0, UserName 1, Password 2; `DBEngine.CreateDatabase` Name 0, Locale 1, Option 2; `Database.OpenRecordset` Name 0, Type 1, Options 2 (`r-ops`). Named

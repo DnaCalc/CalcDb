@@ -30,8 +30,8 @@ public sealed class PublicationTests
         {
             File = new ReplayFixture(EditFixture);
             Before = File.Image.Snapshot();
-            A = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler() };
-            B = new TransactionCoordinator(new LockerId(2)) { Publisher = File, Scheduler = new CountingScheduler() };
+            A = new TransactionCoordinator(new LockerId(1)) { Publisher = File, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
+            B = new TransactionCoordinator(new LockerId(2)) { Publisher = File, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
         }
 
         public ReplayFixture File { get; }

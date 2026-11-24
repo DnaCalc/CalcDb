@@ -47,7 +47,7 @@ public sealed class TransactionFrameTests
     [Fact]
     public void Depth_and_resolution_errors_follow_TXN_NEST()
     {
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         Assert.Equal(MutationError.NoTransaction, ws.CommitTrans().Error?.Number);
         Assert.Equal(MutationError.NoTransaction, ws.Rollback().Error?.Number);
         for (int i = 1; i <= 7; i++)
@@ -77,7 +77,7 @@ public sealed class TransactionFrameTests
     public void The_two_file_witness_keeps_the_earliest_image(bool innerRollback)
     {
         PageCache a = File(1, 17, 7), b = File(2, 21, 100);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         Assert.Null(ws.BeginTrans());
         Change(ws, a, 17, 9);
         Assert.Null(ws.BeginTrans());
@@ -106,7 +106,7 @@ public sealed class TransactionFrameTests
     public void A_failed_statement_restores_its_own_image_and_keeps_the_level()
     {
         PageCache a = File(1, 17, 7);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         Assert.Null(ws.BeginTrans());
         Change(ws, a, 17, 9);
         Change(ws, a, 17, 11, fail: true);

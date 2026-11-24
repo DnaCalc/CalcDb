@@ -783,9 +783,17 @@ internal sealed unsafe class AdoFieldObject : AdoObject
             ? Failure.NotModelled("NotModelled.AdoGetChunkArg", "Field.GetChunk requires exactly 1 positional I4 argument (not recorded)")
             : null;
 
+    /// <summary>
+    /// By-reference VT_I4 and VT_BYREF|VT_VARIANT(VT_I4) behave as by-value for ADO Field.GetChunk(Length) on ACCDB
+    /// (r-q35-byref-args/ado-field-getchunk: server forward-only and client static). MDB and other cursors stay
+    /// refused by name (here for MDB, and in ReadFieldGetChunk for unrecorded cursors/states).
+    /// </summary>
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        member.Name == "GetChunk" && parameter == 0 && !_fields.Recordset.IsMdb;
+
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
         member.Name == "GetChunk" && sourceType != VarType.I4
-            ? Failure.NotModelled("NotModelled.AdoGetChunkArg", $"Field.GetChunk with argument vt=0x{(ushort)sourceType:X4} (only by-value VT_I4 is recorded)")
+            ? Failure.NotModelled("NotModelled.AdoGetChunkArg", $"Field.GetChunk with argument vt=0x{(ushort)sourceType:X4} (only VT_I4 and ACCDB ByRef VT_I4 are recorded)")
             : null;
 
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>

@@ -287,7 +287,9 @@ try {
             if ($stampTime -lt $globalConfigMax -or $stampTime -lt (Get-Item $projFull).LastWriteTimeUtc) { $canSkipRestore = $false; break }
         }
         $msbuildArgs = @("-m:$MaxCpuCount", "-nr:false")
-        $restoreArgs = if ($canSkipRestore) { @("--no-restore") } else { @() }
+        # @(...) around the if: PowerShell unwraps a one-element array returned by an if, and splatting the bare string
+        # passes dotnet one character per argument (MSB1001; DDL writer 3a, 2026-11-24, in a warm writer slot).
+        $restoreArgs = @(if ($canSkipRestore) { "--no-restore" })
 
         # Machine-wide build lock: only one dotnet build / NativeAOT publish runs on this machine at a time, across
         # every worktree, and with bounded MSBuild nodes (-nr:false) so builds do not thrash RAM or leave resident nodes.

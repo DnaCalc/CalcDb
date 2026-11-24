@@ -72,7 +72,7 @@ public sealed class CheckConstraintTests
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         var adoFrame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
         var daoFrame = new EditFrame(ctx, fixture.Open(table, 2)!, ws);
 
@@ -146,7 +146,7 @@ public sealed class CheckConstraintTests
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         IRecordCursor adoCursor = fixture.Open(table, 2)!;
         Assert.Equal(MoveOutcome.Moved, adoCursor.MoveFirst());
         var adoFrame = new EditFrame(ctx, adoCursor, ws) { ConflictSource = MutationErrorSource.Database };
@@ -223,7 +223,7 @@ public sealed class CheckConstraintTests
     {
         using var fixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition table, TableEditContext ctx) = fixture.Table("Req")!.Value;
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         IRecordCursor cursor = fixture.Open(table, 2)!;
         var frame = new EditFrame(ctx, cursor, ws) { ConflictSource = MutationErrorSource.Database };
 
@@ -264,7 +264,7 @@ public sealed class CheckConstraintTests
         ExpressionRuleBinder binder = MakeBinder(fixture);
         var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
 
         ColumnDescriptor id = Col(table, "ID");
         ColumnDescriptor r = Col(table, "R");
@@ -420,7 +420,7 @@ public sealed class CheckConstraintTests
 
         (string, string)[] pair = [(name, expr)];
         using MutationSemantics sem = MutationSemantics.Compile("Req", table, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         var frame = new EditFrame(new TableEditContext(sem, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
 
         Assert.True(frame.AddNew().Succeeded);
@@ -453,7 +453,7 @@ public sealed class CheckConstraintTests
 
         (string, string)[] pair = [("CK_Text", "R <> 'x'")];
         using MutationSemantics sem = MutationSemantics.Compile("Req", table, BuildCheckBlob(pair), binder, D.IndexDescriptor, ToCatalog(pair));
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         var frame = new EditFrame(new TableEditContext(sem, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
 
         foreach (string badText in new[] { "x", "X" })
@@ -484,7 +484,7 @@ public sealed class CheckConstraintTests
         ExpressionRuleBinder binder = MakeBinder(fixture);
         var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
 
         ColumnDescriptor id = Col(table, "ID");
         ColumnDescriptor r = Col(table, "R");
@@ -587,7 +587,7 @@ public sealed class CheckConstraintTests
         ExpressionRuleBinder binder = MakeBinder(fixture);
         var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
 
         ColumnDescriptor id = Col(table, "ID");
         ColumnDescriptor r = Col(table, "R");
@@ -663,7 +663,7 @@ public sealed class CheckConstraintTests
         ExpressionRuleBinder mdbBinder = MakeBinder(mdbFixture);
         var mdbProbe = new StoredUniqueProbe(mdbFixture.Cache, D, mdbTable, mdbFixture.Image.PageCount);
         var mdbFootprints = new TableFootprints(mdbFixture.Cache, D, mdbTable, mdbFixture.Image.PageCount);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdbFixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = mdbFixture, Clock = static () => TimeSpan.Zero };
 
         ColumnDescriptor id = Col(mdbTable, "ID");
         ColumnDescriptor r = Col(mdbTable, "R");
@@ -825,7 +825,7 @@ public sealed class CheckConstraintTests
         using var accdbFixture = new ReplayFixture(V2AccdbSha);
         (TableDefinition accdbTable, TableEditContext accdbCtx) = accdbFixture.Table("Req")!.Value;
         var noWriterCtx = new TableEditContext(accdbCtx.Semantics, new StoredUniqueProbe(accdbFixture.Cache, D, accdbTable, accdbFixture.Image.PageCount), lcid: 7177);
-        using var ws2 = new TransactionCoordinator(new LockerId(2));
+        using var ws2 = new TransactionCoordinator(new LockerId(2)) { Clock = static () => TimeSpan.Zero };
         var noWriterFrame = new EditFrame(noWriterCtx, accdbFixture.Open(accdbTable, 2)!, ws2) { ConflictSource = MutationErrorSource.Database };
 
         Assert.True(noWriterFrame.AddNew().Succeeded);
@@ -860,7 +860,7 @@ public sealed class CheckConstraintTests
         Assert.True(sem.HasCheckConstraints);
 
         var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture };
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         ColumnDescriptor idCol = Col(kTable, "ID");
         ColumnDescriptor codeCol = Col(kTable, "Code");
         ColumnDescriptor tCol = Col(kTable, "T");
@@ -1003,7 +1003,7 @@ public sealed class CheckConstraintTests
         (TableDefinition table, _) = fixture.Table("Req")!.Value;
         var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
         var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
 
         // Single constraint returning RuleVerdict.Failed -> MutationOpen.Rule (never 3802).
         var failOnlyBinder = new StubRuleBinder(new Dictionary<string, RuleResult>(StringComparer.Ordinal)
@@ -1147,7 +1147,7 @@ public sealed class CheckConstraintTests
         Assert.NotNull(c.NotAdmitted);
 
         var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         var frame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
 
         // Alone -> MutationOpen.Rule naming the constraint.
@@ -1197,7 +1197,7 @@ public sealed class CheckConstraintTests
         Assert.NotNull(sem.CheckConstraintsNotAdmitted);
 
         var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         var frame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
 
         Assert.True(frame.AddNew().Succeeded);
@@ -1241,7 +1241,7 @@ public sealed class CheckConstraintTests
         Assert.Contains(expectedName, sem.CheckConstraintsNotAdmitted);
 
         var ctx = new TableEditContext(sem, probe, lcid: 7177, footprints: footprints);
-        using var ws = new TransactionCoordinator(new LockerId(1));
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Clock = static () => TimeSpan.Zero };
         var frame = new EditFrame(ctx, fixture.Open(table, 2)!, ws) { ConflictSource = MutationErrorSource.Database };
         Assert.True(frame.AddNew().Succeeded);
         Assert.True(AssignLong(frame, Col(table, "ID"), 10).Succeeded);

@@ -339,7 +339,7 @@ public sealed class RelationshipTests(ITestOutputHelper output)
 
         // Peer locker holds a pessimistic lock on Child3 row's data page while ws attempts cascade DELETE ->
         // in-process cascade child lock conflict is refused by name (MutationOpen.Conflict, not 3188).
-        using var peer = new TransactionCoordinator(new LockerId(2)) { Publisher = fixture };
+        using var peer = new TransactionCoordinator(new LockerId(2)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
         (TableDefinition child3Table, TableEditContext child3Ctx) = fixture.Table("Child3")!.Value;
         using IRecordCursor peerCursor = fixture.Open(child3Table, 1)!;
         Assert.Equal(MoveOutcome.Moved, peerCursor.MoveFirst());
@@ -524,7 +524,7 @@ public sealed class RelationshipTests(ITestOutputHelper output)
     }
 
     private static TransactionCoordinator NewWorkspace(ReplayFixture fixture) =>
-        new(new LockerId(1)) { Publisher = fixture };
+        new(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
 
     private static ColumnDescriptor Col(TableDefinition table, string name) =>
         table.Columns.First(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));

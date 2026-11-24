@@ -183,6 +183,7 @@ public sealed class AllocationTests(ITestOutputHelper output)
         {
             Publisher = file,
             Scheduler = new CalcDb.Isam.Tests.Edit.CountingScheduler(),
+            Clock = static () => TimeSpan.Zero,
         };
         (TableDefinition g, CalcDb.Isam.Edit.TableEditContext gCtx) = file.Table("G")!.Value;
         ColumnDescriptor nCol = g.Columns.Single(c => c.Name == "N");
