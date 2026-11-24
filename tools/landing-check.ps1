@@ -12,10 +12,12 @@
 #   pwsh tools/landing-check.ps1 -Name 2qbr -Branch alta/2qbr -Questions probes/r-q-ado-misc -Snapshot
 #   pwsh tools/landing-check.ps1 -Name f8g8 -Files src/CalcDb.Catalog/SchemaWriter.cs,tests/... -Snapshot
 #   pwsh tools/landing-check.ps1 -Name 2qbr-self -InPlace -Solution CalcDb.Com.slnf -Filter FullyQualifiedName~AdoImmediateEditTests
-#   pwsh tools/landing-check.ps1 -Name 4t24 -Branch alta/4t24 -Snapshot -Land -Compare
+#   pwsh tools/landing-check.ps1 -Name 4t24 -Branch alta/4t24 -Snapshot -Land -Compare -Finish
 # With -Land a passing -Branch check fast-forwards the integration checkout's master to the checked commit and pushes;
-# with -Compare it then runs the core compare from the snapshot, after the check worktree is released. One job then
-# checks, lands and compares (process log, 2026-11-22, organizer 10: about 4 organizer calls fewer per landing).
+# if master moved meanwhile only under docs/work/, it merges the checked commit onto master (never a rebase) and pushes.
+# With -Compare it then runs the core compare from the snapshot, after the check worktree is released. With -Finish it
+# records docs/work/compare-baseline.tsv, pushes under the compare lock, and cleans up the child's worktree and branch
+# when nothing is lost (process log, 2026-11-22, organizer 10; task fhqk).
 param(
     [Parameter(Mandatory)] [string] $Name,          # topic of the landing; names the logs and the snapshot
     [string] $Branch = "",                          # a child's branch, merged onto master
@@ -27,8 +29,9 @@ param(
     [string] $Filter = "",                          # dotnet test --filter while iterating; never on a landing run
     [string] $Solution = "CalcDb.slnx",             # with -InPlace, an area's filter (CalcDb.Sql.slnf ...) builds only that area
     [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
-    [switch] $Land,                                 # with -Branch: after a pass, fast-forward master to the checked commit and push
+    [switch] $Land,                                 # with -Branch: after a pass, land on master (ff or merge over docs/work/) and push
     [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
+    [switch] $Finish,                               # with -Land and -Compare: if nothing lost, record baseline, push and clean up
     [int] $MaxCpuCount = 4,                         # MSBuild -m cap (with -nr:false) so builds do not spawn 16 resident nodes
     [int] $LockWaitMinutes = 90)                    # how long a run waits for another run's lock before it gives up
 $ErrorActionPreference = 'Stop'
@@ -42,10 +45,306 @@ if ($Solution -ne "CalcDb.slnx" -and -not $InPlace) { throw "-Solution is for a 
 if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for iterating, not for a landing run with -Snapshot" }
 if ($Land -and (-not $Branch -or $Filter)) { throw "-Land lands a -Branch check that ran every selected test (no -Filter)" }
 if ($Compare -and -not ($Land -and $Snapshot)) { throw "-Compare compares what -Land landed, from the -Snapshot binaries" }
+if ($Finish -and -not ($Land -and $Compare)) { throw "-Finish requires -Land and -Compare" }
 $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 function Step([string] $what) { "[{0,5:n0} s] {1}" -f $sw.Elapsed.TotalSeconds, $what }
 $failed = 0
+
+function Get-BranchWorktree([string] $Repo, [string] $Branch) {
+    $blocks = ((git -C $Repo worktree list --porcelain) -join "`n") -split "`n`n"
+    $want = "branch refs/heads/$Branch"
+    foreach ($b in $blocks) {
+        $lines = $b -split "`n"
+        if ($lines -contains $want) {
+            return (($lines[0] -replace '^worktree ', '').Trim() -replace '/', '\')
+        }
+    }
+    $null
+}
+
+function Test-WriterSlot([string] $Repo, [string] $WorktreePath) {
+    $repoClean = $Repo.TrimEnd('\', '/')
+    $treeClean = $WorktreePath.TrimEnd('\', '/')
+    $repoParent = [IO.Path]::GetFullPath((Split-Path $repoClean -Parent)).TrimEnd('\')
+    $treeParent = [IO.Path]::GetFullPath((Split-Path $treeClean -Parent)).TrimEnd('\')
+    if ($repoParent -ine $treeParent) { return $false }
+    $repoLeaf = Split-Path $repoClean -Leaf
+    $treeLeaf = Split-Path $treeClean -Leaf
+    $treeLeaf -match "^$([regex]::Escape($repoLeaf))-w\d+$"
+}
+
+# Land the checked commit on master in the integration checkout and push (task fhqk). Fast-forwards when master has not
+# moved; if master moved since $Base and every changed path is under docs/work/, merges $Candidate onto the new master
+# (a merge commit, never a rebase, aborting on conflict) and pushes. Any other move refuses and names the paths.
+function Invoke-LandMerge([string] $Repo, [string] $Base, [string] $Candidate, [string] $Branch, [string] $Name) {
+    $headRef = ((git -C $Repo symbolic-ref --short HEAD 2>$null) | Select-Object -First 1)
+    if ("$headRef".Trim() -ne 'master') {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (integration checkout is on '$("$headRef".Trim())', expected master)"
+            Details = @()
+        }
+    }
+    git -C $Repo rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (integration checkout has a merge in progress)"
+            Details = @()
+        }
+    }
+    $merge = @(git -C $Repo merge --ff-only -q $Candidate 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -eq 0) {
+        $landed = (git -C $Repo rev-parse HEAD).Trim()
+        $push = @(git -C $Repo push -q 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+            return [pscustomobject]@{ Ok = $false; Landed = $landed; MergedOverBookkeeping = $false; Message = "landed $($landed.Substring(0, 8)) on master; PUSH FAILED"; Details = $push }
+        }
+        return [pscustomobject]@{ Ok = $true; Landed = $landed; MergedOverBookkeeping = $false; Message = "landed $($landed.Substring(0, 8)) on master and pushed"; Details = @() }
+    }
+
+    $masterNow = (git -C $Repo rev-parse master).Trim()
+    if ($masterNow -eq $Base) {
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (fast-forward failed while master stayed at $($Base.Substring(0, 8)))"; Details = $merge }
+    }
+    git -C $Repo merge-base --is-ancestor $Base $masterNow 2>&1 | Out-Null
+    $isAncestor = ($LASTEXITCODE -eq 0)
+    $movedRaw = @(git -C $Repo -c core.quotepath=false diff --name-only --no-renames $Base $masterNow 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (git diff failed inspecting master move)"; Details = $movedRaw }
+    }
+    $moved = @($movedRaw | Where-Object { $_ })
+    if (-not $isAncestor) {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (master moved to $($masterNow.Substring(0, 8)) and is not a descendant of checked base $($Base.Substring(0, 8)); run the check again)"
+            Details = @($moved | Select-Object -First 30)
+        }
+    }
+    $nonBookkeeping = @($moved | Where-Object { $_ -cnotlike 'docs/work/*' })
+    if ($nonBookkeeping.Count -gt 0) {
+        $shown = @($nonBookkeeping | Select-Object -First 30)
+        if ($nonBookkeeping.Count -gt 30) { $shown += "... and $($nonBookkeeping.Count - 30) more" }
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (master moved outside docs/work/ in $($nonBookkeeping.Count) of $($moved.Count) changed path(s); run the check again)"
+            Details = $shown
+        }
+    }
+    $stagedRaw = @(git -C $Repo -c core.quotepath=false diff --cached --name-only 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (git diff --cached failed inspecting integration checkout)"; Details = $stagedRaw }
+    }
+    $staged = @($stagedRaw | Where-Object { $_ })
+    if ($staged.Count -gt 0) {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $null; MergedOverBookkeeping = $false
+            Message = "LAND REFUSED (integration checkout has staged changes; refusing merge over docs/work/ move)"
+            Details = @($staged | Select-Object -First 30)
+        }
+    }
+    $merge2 = @(git -C $Repo merge --no-ff --no-edit -q -m "Merge $Branch ($Name)" $Candidate 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        git -C $Repo rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $conflicts = @(git -C $Repo -c core.quotepath=false diff --name-only --diff-filter=U | Where-Object { $_ })
+            git -C $Repo merge --abort 2>&1 | Out-Null
+            $details = @($conflicts | ForEach-Object { "conflict: $_" }) + @($moved | ForEach-Object { "master moved: $_" })
+            return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (merge conflict with master after docs/work/ move; merge aborted)"; Details = $details }
+        }
+        $details = @($merge2) + @($moved | ForEach-Object { "master moved: $_" })
+        return [pscustomobject]@{ Ok = $false; Landed = $null; MergedOverBookkeeping = $false; Message = "LAND REFUSED (merge over docs/work/ move failed)"; Details = $details }
+    }
+    $landed = (git -C $Repo rev-parse HEAD).Trim()
+    $push = @(git -C $Repo push -q 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{
+            Ok = $false; Landed = $landed; MergedOverBookkeeping = $true
+            Message = "landed $($landed.Substring(0, 8)) on master (merged checked $($Candidate.Substring(0, 8)) over $($moved.Count) docs/work/ path(s)); PUSH FAILED"
+            Details = $push
+        }
+    }
+    [pscustomobject]@{
+        Ok = $true; Landed = $landed; MergedOverBookkeeping = $true
+        Message = "landed $($landed.Substring(0, 8)) on master (merged checked $($Candidate.Substring(0, 8)) over $($moved.Count) docs/work/ path(s)) and pushed"
+        Details = @()
+    }
+}
+
+# Parse compare-set's own RenderDiff output (src/CalcDb.Corpus/CompareSet.cs) instead of reparsing the TSV.
+# Any Lost, Removed, flagged timing boundary, or RuleChange regression (-N > 0) stops -Finish.
+function Read-CompareResult([string[]] $Lines) {
+    $diffStart = -1
+    for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
+        if ($Lines[$i] -match '^against \S+ \([^,]+, [^)]+\)\s*$') { $diffStart = $i; break }
+    }
+    if ($diffStart -lt 0) {
+        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = 0; Removed = 0; TimingBoundary = 0; RuleLost = 0; StopReason = "no baseline diff ('against ...') in compare output" }
+    }
+    $good = $null; $total = $null; $lost = 0; $removed = 0; $timing = 0; $ruleLost = 0
+    for ($i = $diffStart; $i -lt $Lines.Count; $i++) {
+        $line = $Lines[$i]
+        if ($line -match '^\s+TOTAL\s+(\d+)/(\d+)\s+->\s+(\d+)/(\d+)\s+\(matched or accepted / questions\)\s*$') {
+            $good = [int] $Matches[3]; $total = [int] $Matches[4]
+        } elseif ($line -match '^Lost \((\d+)\):\s*$') {
+            $lost = [int] $Matches[1]
+        } elseif ($line -match '^Removed \((\d+)\):\s*$') {
+            $removed = [int] $Matches[1]
+        } elseif ($line -match '^timing boundary \(counted in TOTAL, not in gained/lost\): (\d+)\s*$') {
+            $timing = [int] $Matches[1]
+        } elseif ($line -match '^RuleChange \((\d+); \+(\d+)/-(\d+), counted in TOTAL, not in gained/lost\):\s*$') {
+            $ruleLost = [int] $Matches[3]
+        }
+    }
+    if ($null -eq $good -or $null -eq $total) {
+        return [pscustomobject]@{ Clean = $false; Good = $null; Total = $null; Lost = $lost; Removed = $removed; TimingBoundary = $timing; RuleLost = $ruleLost; StopReason = "missing TOTAL diff line in compare output" }
+    }
+    $reasons = [System.Collections.Generic.List[string]]::new()
+    if ($lost -gt 0) { $reasons.Add("Lost $lost") }
+    if ($removed -gt 0) { $reasons.Add("Removed $removed") }
+    if ($timing -gt 0) { $reasons.Add("timing boundary $timing") }
+    if ($ruleLost -gt 0) { $reasons.Add("RuleChange -$ruleLost") }
+    [pscustomobject]@{
+        Clean = ($reasons.Count -eq 0); Good = $good; Total = $total
+        Lost = $lost; Removed = $removed; TimingBoundary = $timing; RuleLost = $ruleLost
+        StopReason = ($reasons -join ', ')
+    }
+}
+
+# After a clean core compare under the compare lock: copy TSV to docs/work/compare-baseline.tsv, commit only that file,
+# push, and clean up the child's writer slot or CodeAlta worktree and branch (task fhqk). Never forces cleanup.
+function Invoke-FinishLanding(
+    [string] $Repo, [string] $Branch, [string] $Name, [string] $RunName,
+    [string] $LandedCommit, [string] $RunTsv, [int] $CompareExitCode, [string[]] $CompareLines) {
+    if ($CompareExitCode -ne 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: core compare $RunName exited $CompareExitCode; baseline and worktree left to the organizer"; Details = @() }
+    }
+    $parsed = Read-CompareResult $CompareLines
+    if (-not $parsed.Clean) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: $($parsed.StopReason); baseline and worktree left to the organizer"; Details = @() }
+    }
+    if (-not (Test-Path $RunTsv -PathType Leaf)) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: compare TSV missing ($RunTsv); baseline and worktree left to the organizer"; Details = @() }
+    }
+    $headRef = ((git -C $Repo symbolic-ref --short HEAD 2>$null) | Select-Object -First 1)
+    if ("$headRef".Trim() -ne 'master') {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: integration checkout is on '$("$headRef".Trim())', expected master; baseline and worktree left to the organizer"; Details = @() }
+    }
+    git -C $Repo rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: integration checkout has a merge in progress; baseline and worktree left to the organizer"; Details = @() }
+    }
+    $baselineRel = "docs/work/compare-baseline.tsv"
+    $baselineFull = Join-Path $Repo "docs\work\compare-baseline.tsv"
+    $dirtyBaselineRaw = @(git -C $Repo status --porcelain -- $baselineRel 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: git status failed for $baselineRel; baseline and worktree left to the organizer"; Details = $dirtyBaselineRaw }
+    }
+    $dirtyBaseline = @($dirtyBaselineRaw | Where-Object { $_ })
+    if ($dirtyBaseline.Count -gt 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: $baselineRel has uncommitted changes; baseline and worktree left to the organizer"; Details = $dirtyBaseline }
+    }
+    git -C $Repo ls-files --error-unmatch -- $baselineRel 2>&1 | Out-Null
+    $wasTracked = ($LASTEXITCODE -eq 0)
+    New-Item -ItemType Directory -Force (Split-Path $baselineFull) | Out-Null
+    Copy-Item $RunTsv $baselineFull -Force
+    if (-not $wasTracked) { git -C $Repo add -N -- $baselineRel 2>&1 | Out-Null }
+    $msgFile = Join-Path $env:TEMP "msg-finish-$Name-$PID.txt"
+    $landedShort = if ($LandedCommit.Length -ge 8) { $LandedCommit.Substring(0, 8) } else { $LandedCommit }
+    $msg = "W-01 (compare): core baseline $RunName, $($parsed.Good) of $($parsed.Total) ($Name)`n`nLanded $Branch ($landedShort); recorded by tools/landing-check.ps1 -Finish.`n"
+    try {
+        [IO.File]::WriteAllText($msgFile, $msg, [Text.UTF8Encoding]::new($false))
+        $commitOut = @(git -C $Repo commit --only -q -F $msgFile -- $baselineRel 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+            if ($wasTracked) { git -C $Repo checkout -- $baselineRel 2>&1 | Out-Null }
+            else { git -C $Repo rm --cached -q -- $baselineRel 2>&1 | Out-Null; Remove-Item $baselineFull -Force -ErrorAction SilentlyContinue }
+            return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: baseline commit failed; worktree left to the organizer"; Details = $commitOut }
+        }
+    } finally {
+        if (Test-Path $msgFile) { Remove-Item $msgFile -Force -ErrorAction SilentlyContinue }
+    }
+    $baselineSha = (git -C $Repo rev-parse --short=8 HEAD).Trim()
+    $pushOut = @(git -C $Repo push -q 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: committed baseline $baselineSha ($RunName, $($parsed.Good) of $($parsed.Total)) locally, but push failed; cleanup skipped"; Details = $pushOut }
+    }
+
+    $details = [System.Collections.Generic.List[string]]::new()
+    $tree = Get-BranchWorktree $Repo $Branch
+    git -C $Repo show-ref --verify --quiet "refs/heads/$Branch" 2>&1 | Out-Null
+    $branchExists = ($LASTEXITCODE -eq 0)
+    $branchMerged = $false
+    if ($branchExists) {
+        git -C $Repo merge-base --is-ancestor "refs/heads/$Branch" master 2>&1 | Out-Null
+        $branchMerged = ($LASTEXITCODE -eq 0)
+    }
+    $cleanupNote = ""
+    if ($tree) {
+        $sameAsRepo = ([IO.Path]::GetFullPath($tree).TrimEnd('\') -ieq [IO.Path]::GetFullPath($Repo).TrimEnd('\'))
+        $isSlot = Test-WriterSlot $Repo $tree
+        $kind = if ($isSlot) { "writer slot" } else { "worktree" }
+        if ($sameAsRepo) {
+            $cleanupNote = "cleanup skipped (branch $Branch is checked out in integration checkout)"
+        } elseif (-not (Test-Path $tree)) {
+            $cleanupNote = "cleanup skipped ($kind path missing: $tree; branch $Branch kept)"
+        } else {
+            $dirty = @(git -C $tree status --porcelain 2>&1 | Where-Object { $_ })
+            if ($LASTEXITCODE -ne 0) {
+                foreach ($l in $dirty) { $details.Add("$l") }
+                $cleanupNote = "cleanup skipped (git status failed in $kind $tree; branch $Branch kept)"
+            } elseif ($dirty.Count -gt 0) {
+                $cleanupNote = "cleanup skipped ($kind $tree has $($dirty.Count) uncommitted change(s); branch $Branch kept)"
+            } elseif ($branchExists -and -not $branchMerged) {
+                $cleanupNote = "cleanup skipped (branch $Branch is not merged into master; $kind $tree and branch kept)"
+            } elseif ($isSlot) {
+                $swOut = @(git -C $tree switch --detach master 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -ne 0) {
+                    foreach ($l in $swOut) { $details.Add($l) }
+                    $cleanupNote = "cleanup skipped (git switch --detach master failed in slot $tree; branch $Branch kept)"
+                } else {
+                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+                    if ($LASTEXITCODE -ne 0) {
+                        foreach ($l in $delOut) { $details.Add($l) }
+                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master; branch $Branch kept (git branch -d refused)"
+                    } else {
+                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master, deleted $Branch"
+                    }
+                }
+            } else {
+                $rmOut = @(git -C $Repo worktree remove $tree 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -ne 0) {
+                    foreach ($l in $rmOut) { $details.Add($l) }
+                    $cleanupNote = "cleanup skipped (git worktree remove failed for $tree; branch $Branch kept)"
+                } else {
+                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+                    if ($LASTEXITCODE -ne 0) {
+                        foreach ($l in $delOut) { $details.Add($l) }
+                        $cleanupNote = "removed worktree $tree; branch $Branch kept (git branch -d refused)"
+                    } else {
+                        $cleanupNote = "removed worktree $tree, deleted $Branch"
+                    }
+                }
+            }
+        }
+    } elseif ($branchExists) {
+        $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+            foreach ($l in $delOut) { $details.Add($l) }
+            $cleanupNote = "branch $Branch kept (git branch -d refused)"
+        } else {
+            $cleanupNote = "deleted $Branch (no worktree)"
+        }
+    } else {
+        $cleanupNote = "branch $Branch already absent"
+    }
+
+    [pscustomobject]@{
+        ExitCode = 0
+        Message  = "finish: baseline $RunName ($($parsed.Good) of $($parsed.Total)) committed ($baselineSha) and pushed; $cleanupNote"
+        Details  = $details.ToArray()
+    }
+}
 
 $here = (git rev-parse --show-toplevel).Trim() -replace '/', '\'
 if ($InPlace) {
@@ -61,7 +360,7 @@ if ($InPlace) {
 # One run at a time per worktree: two runs would check out and build over each other. A run that finds the lock held
 # waits its turn (up to -LockWaitMinutes), so landings started together form a queue; master is read only once the
 # lock is held, so each landing is checked on top of the master it lands on.
-function Wait-Lock([string] $path, [string] $what) {
+function Wait-Lock([string] $path, [string] $what, [int] $PollSeconds = 15) {
     $deadline = [DateTime]::UtcNow.AddMinutes($LockWaitMinutes)
     $waited = $false
     while ($true) {
@@ -69,13 +368,14 @@ function Wait-Lock([string] $path, [string] $what) {
         catch {
             if ([DateTime]::UtcNow -ge $deadline) { throw "another $what still holds $path after $LockWaitMinutes min" }
             if (-not $waited) { Step "waiting for the $what that holds $path" | Out-Host; $waited = $true }
-            Start-Sleep -Seconds 15
+            Start-Sleep -Seconds $PollSeconds
         }
     }
     if ($waited) { Step "lock taken: $path" | Out-Host }
     $held
 }
 $lockPath = "$work.landing-lock"
+$repoLockPath = if (-not $InPlace) { "$repo.repo-lock" } else { $null }
 $lock = Wait-Lock $lockPath "landing check"
 if (-not $InPlace) { $base = (git -C $repo rev-parse master).Trim() }
 try {
@@ -103,6 +403,7 @@ try {
             git -C $work merge --abort 2>&1 | Out-Null
             Step "MERGE CONFLICT with master in $(@($conflicts).Count) files:"
             $conflicts | ForEach-Object { "  $_" }
+            if ($Finish) { Step "finish skipped: merge conflict in check worktree; baseline and worktree left to the organizer" }
             exit 1
         }
         $candidate = (git -C $work rev-parse HEAD).Trim()
@@ -299,7 +600,11 @@ try {
         $buildLock = Wait-Lock $buildLockPath "dotnet build"
         try {
             $build = dotnet build $buildTarget @restoreArgs @msbuildArgs -v q -clp:ErrorsOnly 2>&1
-            if ($LASTEXITCODE) { $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"; exit $failed }
+            if ($LASTEXITCODE) {
+                $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"
+                if ($Finish) { Step "finish skipped: build failed; baseline and worktree left to the organizer" }
+                exit $failed
+            }
             Step "built $buildLabel$(if ($canSkipRestore) { ' (no-restore)' } else { '' })"
 
             # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
@@ -402,40 +707,62 @@ try {
 
     if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)"; exit $failed }
     Step "done, $failed failed steps"
+    $landed = $candidate
     if ($failed -eq 0 -and $Branch) {
-        $tree = ((git -C $repo worktree list --porcelain) -join "`n") -split "`n`n" | Where-Object { $_ -match "branch refs/heads/$([regex]::Escape($Branch))(\n|$)" } |
-            ForEach-Object { ($_ -split "`n")[0] -replace '^worktree ', '' }
+        $tree = Get-BranchWorktree $repo $Branch
         if ($Land) {
-            $merge = git -C $repo merge --ff-only -q $candidate 2>&1
-            if ($LASTEXITCODE) { $failed++; Step "LAND REFUSED (master moved meanwhile? run the check again)"; $merge | ForEach-Object { "  $_" } }
-            else {
-                $push = git -C $repo push -q 2>&1
-                if ($LASTEXITCODE) { $failed++; Step "landed $($candidate.Substring(0, 8)) on master; PUSH FAILED"; $push | ForEach-Object { "  $_" } }
-                else { Step "landed $($candidate.Substring(0, 8)) on master and pushed" }
-            }
+            $repoLock = Wait-Lock $repoLockPath "integration checkout" 1
+            try {
+                $landRes = Invoke-LandMerge -Repo $repo -Base $base -Candidate $candidate -Branch $Branch -Name $Name
+            } finally { $repoLock.Dispose(); Remove-Item $repoLockPath -Force -ErrorAction SilentlyContinue }
+            Step $landRes.Message
+            foreach ($d in $landRes.Details) { "  $d" }
+            if ($landRes.Landed) { $landed = $landRes.Landed }
+            if (-not $landRes.Ok) { $failed++ }
         } else {
             "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
             "           (if master moved meanwhile, run the check again)"
         }
-        if ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
-        else { "  then:    git branch -d $Branch" }
+        if ($failed -eq 0 -and -not $Finish) {
+            if ($tree -and (Test-WriterSlot $repo $tree)) { "  then:    git -C $tree switch --detach master; git branch -d $Branch (once the child's session has ended)" }
+            elseif ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
+            else { "  then:    git branch -d $Branch" }
+        }
     } elseif ($failed -eq 0 -and $Files.Count) {
         "  land:    commit exactly the listed files in the integration checkout, then push"
     }
-    if (-not ($Compare -and $failed -eq 0)) { exit $failed }
+    if (-not ($Compare -and $failed -eq 0)) {
+        if ($Finish) { Step "finish skipped: landing did not complete ($failed failed step(s)); baseline and worktree left to the organizer" }
+        exit $failed
+    }
 } finally { $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue }
 
 # The core compare of what landed, from the snapshot, with the check worktree already free for the next landing. Compares
 # share one store, and two at once collide on an attempt the other runner owns (g4tv-ado-2 beside vpfd, 2026-11-23):
-# they queue on a lock of their own.
+# they queue on a lock of their own. -Finish keeps this lock through baseline commit and push so concurrent landings
+# record their baselines in compare order.
 $compareLockPath = "$env:LOCALAPPDATA\CalcDb\compare-store.compare-lock"
 $compareLock = Wait-Lock $compareLockPath "core compare"
 Push-Location $repo
 try {
-    Step "core compare $Name-1 from $snap"
-    & "$snap\runner\calcdb-oracle.exe" compare-set --rerun --name "$Name-1" --against baseline --set "$snap\compare-set.json" `
-        --worker "$snap\worker\CalcDb.Oracle.Worker.exe" --deployment "$snap\native" --store "$env:LOCALAPPDATA\CalcDb\compare-store" 2>&1
+    $runName = "$Name-1"
+    $runTsv = "$env:LOCALAPPDATA\CalcDb\compare-store\compare-sets\$runName.tsv"
+    Step "core compare $runName from $snap"
+    $compareLines = [System.Collections.Generic.List[string]]::new()
+    & "$snap\runner\calcdb-oracle.exe" compare-set --rerun --name $runName --against baseline --set "$snap\compare-set.json" `
+        --worker "$snap\worker\CalcDb.Oracle.Worker.exe" --deployment "$snap\native" --store "$env:LOCALAPPDATA\CalcDb\compare-store" 2>&1 |
+        ForEach-Object { $line = "$_"; $compareLines.Add($line); $line }
     $code = $LASTEXITCODE
-    Step "core compare $Name-1 (exit $code): $env:LOCALAPPDATA\CalcDb\compare-store\compare-sets\$Name-1.tsv"
+    Step "core compare $runName (exit $code): $runTsv"
+    if ($Finish) {
+        $repoLock = Wait-Lock $repoLockPath "integration checkout" 1
+        try {
+            $fin = Invoke-FinishLanding -Repo $repo -Branch $Branch -Name $Name -RunName $runName `
+                -LandedCommit $landed -RunTsv $runTsv -CompareExitCode $code -CompareLines $compareLines.ToArray()
+        } finally { $repoLock.Dispose(); Remove-Item $repoLockPath -Force -ErrorAction SilentlyContinue }
+        foreach ($d in $fin.Details) { "  $d" }
+        Step $fin.Message
+        exit $fin.ExitCode
+    }
     exit $(if ($code) { 1 } else { 0 })
 } finally { Pop-Location; $compareLock.Dispose(); Remove-Item $compareLockPath -Force -ErrorAction SilentlyContinue }

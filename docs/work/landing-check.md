@@ -87,7 +87,7 @@ repository: a detached worktree that only this script uses and that keeps its `b
 The script creates it on its first run (that one build is a full one).
 
 ```
-pwsh tools/landing-check.ps1 -Name <topic> -Branch alta/<name> [-Questions probes/<card>] -Snapshot [-Land [-Compare]]
+pwsh tools/landing-check.ps1 -Name <topic> -Branch alta/<name> [-Questions probes/<card>] -Snapshot [-Land [-Compare [-Finish]]]
 pwsh tools/landing-check.ps1 -Name <topic> -Files a,b,c [-Questions probes/<card>] -Snapshot
 ```
 
@@ -115,15 +115,25 @@ and each reads master only once it holds the lock, so it is checked on top of th
 refused with `-Snapshot`: the run that lands is unfiltered.
 
 **After a passing check.** For a branch, the script prints the landing: `git merge --ff-only <checked commit>` in the
-integration checkout and `git push`. With `-Land` it runs them itself, and with `-Compare` it then runs the core compare
+integration checkout and `git push`. With `-Land` it runs them itself. If `git merge --ff-only` refuses because master
+moved while the check ran and every path changed on master since the checked base is under `docs/work/`, `-Land` merges
+the checked commit onto the new master (`Merge <branch> (<Name>)`, never a rebase, aborting on conflict) and pushes
+without checking again; any other move refuses and names the moved paths. With `-Compare` it then runs the core compare
 from the snapshot once the check worktree is free, so one job checks, lands and compares and its result is the
-compare's verdicts. If master moved meanwhile, the fast-forward refuses and the check runs again. Once
-the child's session has ended, return a writer slot to master (`git -C <slot> switch --detach master`) or remove a
-prober's worktree (`git worktree remove`), and delete the branch (`git branch -d`). For
-a file list, commit exactly those files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and
-push. When two children in the integration checkout edited one file, stage only the landing child's hunks (a copy of
-the file, `git hash-object -w`, `git update-index --cacheinfo`) and check the staged diff. Then update the register row,
-the task, and the bookkeeping lines of the child's report.
+compare's verdicts. With `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline
+and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), the script copies the run's TSV to
+`docs/work/compare-baseline.tsv`, commits only that file (`W-01 (compare): core baseline <run>, N of M (<topic>)`) and
+pushes while still holding `compare-store.compare-lock` (a `docs/work/` move, so a landing beside it merges over it),
+then cleans up the child's place without forcing: detaching a writer slot (`CalcDb-w1`, `CalcDb-w2`) at `master` or
+removing a CodeAlta worktree (`git worktree remove`), and deleting the branch (`git branch -d`), skipping cleanup and
+saying so if the worktree has uncommitted changes or `-d` refuses. Any loss, refused landing or failed compare leaves
+baseline and cleanup to the organizer and prints why in a closing line (exit 1). Without `-Finish`, once the child's
+session has ended, return a writer slot to master (`git -C <slot> switch --detach master`) or remove a prober's
+worktree (`git worktree remove`), and delete the branch (`git branch -d`). For a file list, commit exactly those files
+with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and push. When two children in the integration
+checkout edited one file, stage only the landing child's hunks (a copy of the file, `git hash-object -w`, `git
+update-index --cacheinfo`) and check the staged diff. Then update the register row, the task, and the bookkeeping lines
+of the child's report.
 
 ## The compare tiers
 
