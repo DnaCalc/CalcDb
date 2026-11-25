@@ -61,12 +61,16 @@ public sealed record FormatDescriptor
             SortIdentifier = new("jet4.header.sort_identifier", "header (decoded)", 0x6E, 2, ByteOrder.Little, "Database sort identifier (LANGID), the value of Database.CollatingOrder.", Reference + "; II-03 §1.2; R-FMT-1 FMT1-COLLATING"),
             SortReserved = new("jet4.header.sort_reserved", "header (decoded)", 0x70, 1, ByteOrder.Little, "Sort descriptor byte +2, not interpreted, preserved (zero in every fixture HeaderFieldTests decodes).", Reference + "; II-05 §4"),
             SortVersion = new("jet4.header.sort_version", "header (decoded)", 0x71, 1, ByteOrder.Little, "Signed sort version, the column descriptor's shape (1 General, 0 General - Legacy, -1 General 97); 1 only in the option-256 fixture, 0 in the others decoded.", Reference + "; II-05 §4"),
-            // R-CRASH-1 CRASH-ORDER (evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
-            // evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb):
-            // Jet 4 MDB and ACCDB page-0 commit counter at offset 3586 (0x0E02) is a 2-byte little-endian counter
-            // carrying across 255 into byte 3587 (ACCDB 0x05b5 -> ... -> 0x0940; Jet 4 MDB 0x01fe -> 0x01ff ->
-            // 0x0200 -> 0x0201), bracketed by 2-byte writes at [3586, 3588).
-            CommitCounter = new("jet4.header.commit_counter", "header", 3586, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit), transferred as a 2-byte [3586, 3588) bracket.", "R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter; evidence/r-q10-commit-counter-edits; evidence/r-q19-growth-open/split-uncovered-right-leaf-below; evidence/r-q40-mdb-counter"),
+            // R-FMT-2, R-CRASH-1 CRASH-ORDER (evidence/r-q41-create-session-counter;
+            // evidence/r-q40-mdb-counter/create-first-write-accdb, create-first-write-mdb):
+            // Exclusive sessions (DAO CreateDatabase, DAO OpenDatabase(..., True, False), ADO Mode=12; no .laccdb/.ldb)
+            // step the 2-byte little-endian counter at offset 3584 (0x0E00) as a 2-byte [3584, 3586) bracket and leave
+            // [3586, 3588) untouched. Shared sessions (evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
+            // evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb)
+            // step offset 3586 (0x0E02) as a 2-byte [3586, 3588) bracket and leave [3584, 3586) untouched. Both slots
+            // carry across 255 into the high byte identically on ACCDB and Jet 4 MDB (0x01FF -> 0x0200 -> 0x0201).
+            ExclusiveCommitCounter = new("jet4.header.exclusive_commit_counter", "header", 3584, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB exclusive-session commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit in exclusive sessions with no lock file), transferred as a 2-byte [3584, 3586) bracket.", "R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter; evidence/r-q40-mdb-counter/create-first-write-accdb, create-first-write-mdb"),
+            CommitCounter = new("jet4.header.commit_counter", "header", 3586, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB shared-session commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit in shared sessions), transferred as a 2-byte [3586, 3588) bracket.", "R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter; evidence/r-q10-commit-counter-edits; evidence/r-q19-growth-open/split-uncovered-right-leaf-below; evidence/r-q40-mdb-counter; evidence/r-q41-create-session-counter"),
             CommitCounterBracketBytes = 2,
         },
         DataPage = new DataPageRules
@@ -256,11 +260,19 @@ public sealed record HeaderRules
     public required FieldRule SortReserved { get; init; }
     public required FieldRule SortVersion { get; init; }
 
-    /// <summary>The Jet 4 MDB / ACCDB commit counter at page 0 offset 3586 (R-CRASH-1 CRASH-ORDER) and its 2-byte transfer bracket width.</summary>
+    /// <summary>
+    /// The Jet 4 MDB / ACCDB page-0 commit counters and their 2-byte transfer bracket width (R-FMT-2; R-CRASH-1
+    /// CRASH-ORDER): <see cref="ExclusiveCommitCounter"/> at offset 3584 (<c>0x0E00</c>) for exclusive sessions
+    /// (<c>evidence/r-q41-create-session-counter</c>) and <see cref="CommitCounter"/> at offset 3586 (<c>0x0E02</c>)
+    /// for shared sessions (<c>evidence/r-q8-header-counter</c>, <c>evidence/r-q40-mdb-counter</c>).
+    /// </summary>
+    public required FieldRule ExclusiveCommitCounter { get; init; }
     public required FieldRule CommitCounter { get; init; }
     public required int CommitCounterBracketBytes { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion, CommitCounter];
+    public FieldRule CommitCounterFor(bool exclusive) => exclusive ? ExclusiveCommitCounter : CommitCounter;
+
+    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion, ExclusiveCommitCounter, CommitCounter];
 }
 
 /// <summary>The ordinary data page envelope and slot directory (II-03 §§1.3, 3.3).</summary>

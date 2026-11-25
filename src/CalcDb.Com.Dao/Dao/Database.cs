@@ -78,12 +78,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, SessionFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, bool exclusive, SessionFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
         Name = name;
-        _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated);
+        _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated, exclusive: exclusive);
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -196,6 +196,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// </summary>
     public bool ReadOnly => _session.ReadOnly;
 
+    /// <summary>
+    /// Whether this Database was opened or created exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file), selecting
+    /// page-0 commit counter slot <c>[0x0E00, 0x0E02)</c> (R-FMT-2; R-CRASH-1 CRASH-ORDER;
+    /// evidence/r-q41-create-session-counter).
+    /// </summary>
+    public bool Exclusive => _session.Exclusive;
+
     public WorkspaceObject Workspace => _workspace;
 
     protected override OperationTable Table => Operations;
@@ -272,7 +279,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
             }
         }
-        database = new DatabaseObject(workspace, full, readOnly, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
+        database = new DatabaseObject(workspace, full, readOnly, exclusive, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
         return CallResult.Nothing;
     }
 
@@ -358,7 +365,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented("CreateDatabase catalog bootstrap failed: " + failure));
             }
 
-            database = new DatabaseObject(workspace, full, readOnly: false, file, lockFile: null, cache, profile, DatabaseHeader.Decode(synthesizedPages[0], format), pageCount, catalog);
+            database = new DatabaseObject(workspace, full, readOnly: false, exclusive: true, file, lockFile: null, cache, profile, DatabaseHeader.Decode(synthesizedPages[0], format), pageCount, catalog);
             created = false;
             return CallResult.Nothing;
         }

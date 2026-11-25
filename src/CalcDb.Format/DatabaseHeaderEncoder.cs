@@ -49,8 +49,10 @@ public static class DatabaseHeaderEncoder
     public const int FormatStringOffset = 0x009C;
 
     /// <summary>
-    /// Trailing 512-byte page-0 table starting at <c>0x0E00</c> (which contains <see cref="HeaderRules.CommitCounter"/>
-    /// at offset 3586 = <c>0x0E02</c>): initialized as <c>01 01</c> followed by 255 pairs of <c>00 01</c>.
+    /// Trailing 512-byte page-0 table starting at <c>0x0E00</c> (which contains
+    /// <see cref="HeaderRules.ExclusiveCommitCounter"/> at offset 3584 = <c>0x0E00</c> and
+    /// <see cref="HeaderRules.CommitCounter"/> at offset 3586 = <c>0x0E02</c>): initialized as <c>01 01</c> followed by
+    /// 255 pairs of <c>00 01</c>.
     /// </summary>
     public const int TrailingTableOffset = 0x0E00;
 

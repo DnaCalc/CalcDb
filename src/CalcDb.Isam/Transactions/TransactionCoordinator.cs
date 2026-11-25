@@ -69,6 +69,13 @@ public interface IPublicationTarget
     /// the reason, before any native effect, when it cannot be had.
     /// </summary>
     IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure);
+
+    /// <summary>
+    /// Whether the session owning <paramref name="cache"/> opened or created the database exclusively (no
+    /// <c>.laccdb</c>/<c>.ldb</c> lock file), selecting page-0 commit counter slot <c>[0x0E00, 0x0E02)</c> instead of
+    /// the shared slot <c>[0x0E02, 0x0E04)</c> (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter).
+    /// </summary>
+    bool IsExclusiveSession(PageCache cache) => false;
 }
 
 /// <summary>
@@ -1093,9 +1100,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// Decide whether a publication on <paramref name="cache"/> under <paramref name="mode"/> increments the page-0
-    /// commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter,
-    /// evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter). Unsupported headers and synthetic caches
-    /// without a database header leave page 0 untouched.
+    /// commit counter at offset 3584 (exclusive sessions) or 3586 (shared sessions) (R-FMT-2; R-CRASH-1 CRASH-ORDER;
+    /// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter,
+    /// evidence/r-q41-create-session-counter). Unsupported headers and synthetic caches without a database header
+    /// leave page 0 untouched.
     /// </summary>
     private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out bool trackLazyBurst)
     {
@@ -1135,10 +1143,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (incrementPage0)
         {
-            ulong current = CommitCounterAt(cache);
+            FieldRule rule = CommitCounterRule(cache);
+            ulong current = CommitCounterAt(cache, rule);
             if (current >= ushort.MaxValue)
             {
-                return (MutationOpen.Publication, $"page-0 commit counter at offset 3586 is already {ushort.MaxValue}: wrap past {ushort.MaxValue} is not observed (evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb)");
+                return (MutationOpen.Publication, $"page-0 commit counter at offset {rule.Offset} is already {ushort.MaxValue}: wrap past {ushort.MaxValue} is not observed (evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb, evidence/r-q41-create-session-counter/carry-u16-create-accdb)");
             }
         }
         return (MutationOpen.None, null);
@@ -1250,13 +1259,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             PageBracket? bracket = null;
             if (incrementPage0)
             {
-                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d));
+                bool exclusive = IsExclusive(cache);
+                FieldRule counterRule = d.Header.CommitCounterFor(exclusive);
+                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d, exclusive));
                 if (!p0Edit.Succeeded)
                 {
                     return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
                 }
                 roles[0] = PageRole.NativeState;
-                bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
+                bracket = new PageBracket(0, new PageSpan(counterRule.Offset, counterRule.Offset + d.Header.CommitCounterBracketBytes));
             }
             if (publisher.Writable(cache, overlay.ChangedPages, out string? leaseFailure) is not { } file)
             {
@@ -1344,17 +1355,21 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             && profile!.Format == FileFormat.Jet4;
     }
 
-    /// <summary>Whether <paramref name="cache"/>'s page 0 selects a Jet 4 MDB or ACCDB header carrying the u16LE commit counter at offset 3586.</summary>
+    /// <summary>Whether <paramref name="cache"/>'s page 0 selects a Jet 4 MDB or ACCDB header carrying the u16LE commit counters at offsets 3584 and 3586.</summary>
     private static bool HasCommitCounterHeader(PageCache cache)
     {
         using PagePin? page0 = cache.Pin(0).Pin;
         return page0 is not null && DatabaseHeader.HasCommitCounter(page0.Bytes, FormatDescriptor.Jet4Family);
     }
 
-    private static ulong CommitCounterAt(PageCache cache)
+    private bool IsExclusive(PageCache cache) => Publisher?.IsExclusiveSession(cache) ?? false;
+
+    private FieldRule CommitCounterRule(PageCache cache) => FormatDescriptor.Jet4Family.Header.CommitCounterFor(IsExclusive(cache));
+
+    private static ulong CommitCounterAt(PageCache cache, FieldRule rule)
     {
         using PagePin? page0 = cache.Pin(0).Pin;
-        return page0 is null ? 0 : FormatDescriptor.Jet4Family.Header.CommitCounter.Read(page0.Bytes);
+        return page0 is null ? 0 : rule.Read(page0.Bytes);
     }
 
     /// <summary>
@@ -1581,16 +1596,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             PageBracket? bracket = null;
             if (incrementPage0)
             {
+                bool exclusive = IsExclusive(p.Cache);
+                FieldRule counterRule = d.Header.CommitCounterFor(exclusive);
                 if (!p.Overlay.ChangedPages.Contains(0UL))
                 {
-                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d));
+                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, exclusive));
                     if (!p0Edit.Succeeded)
                     {
                         return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
                     }
                 }
                 roles[0] = PageRole.NativeState;
-                bracket = new PageBracket(0, new PageSpan(d.Header.CommitCounter.Offset, d.Header.CommitCounter.Offset + d.Header.CommitCounterBracketBytes));
+                bracket = new PageBracket(0, new PageSpan(counterRule.Offset, counterRule.Offset + d.Header.CommitCounterBracketBytes));
             }
             ulong publishedExtent = p.Cache.KnownExtentPages;
             foreach (ulong page in p.Overlay.ChangedPages)

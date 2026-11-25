@@ -88,6 +88,23 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
         return null;
     }
 
+    /// <summary>
+    /// Whether the open Database owning <paramref name="cache"/> is an exclusive session (DAO CreateDatabase or
+    /// OpenDatabase with Exclusive=True), selecting page-0 commit counter slot <c>[0x0E00, 0x0E02)</c>
+    /// (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter).
+    /// </summary>
+    public bool IsExclusiveSession(PageCache cache)
+    {
+        foreach (DatabaseObject d in Sessions)
+        {
+            if (ReferenceEquals(d.Cache, cache))
+            {
+                return d.Exclusive;
+            }
+        }
+        return false;
+    }
+
     public HostBinding Binding { get; } = binding;
 
     /// <summary>The latest failure, replacing the earlier one; a success never clears it.</summary>

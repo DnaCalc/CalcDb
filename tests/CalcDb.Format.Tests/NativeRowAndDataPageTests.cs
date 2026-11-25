@@ -633,6 +633,67 @@ public sealed class NativeRowAndDataPageTests
     }
 
     [Fact]
+    public void DatabaseHeader_TryIncrementCommitCounter_selects_exclusive_or_shared_slot_for_accdb_and_jet4_mdb()
+    {
+        // R-FMT-2, R-CRASH-1 (evidence/r-q41-create-session-counter/carry-u16-create-accdb, carry-u16-create-mdb,
+        // excl-open-accdb, excl-open-mdb): exclusive sessions step u16LE [3584, 3586) leaving [3586, 3588) untouched;
+        // shared sessions step u16LE [3586, 3588) leaving [3584, 3586) untouched.
+        Assert.Equal(3584, D.Header.ExclusiveCommitCounter.Offset);
+        Assert.Equal(2, D.Header.ExclusiveCommitCounter.Width);
+        Assert.Equal(3586, D.Header.CommitCounter.Offset);
+        Assert.Same(D.Header.ExclusiveCommitCounter, D.Header.CommitCounterFor(exclusive: true));
+        Assert.Same(D.Header.CommitCounter, D.Header.CommitCounterFor(exclusive: false));
+        Assert.Contains(D.Header.ExclusiveCommitCounter, D.Header.Rules);
+
+        foreach (bool isAccdb in new[] { true, false })
+        {
+            byte[] page0 = new byte[D.PageSize];
+            D.Header.MagicBytes.CopyTo(page0);
+            (isAccdb ? D.Header.AceSignature : D.Header.JetSignature).CopyTo(page0.AsSpan(D.Header.SignatureOffset));
+            D.Header.Version.Write(page0, isAccdb ? 2UL : 1UL);
+            D.Header.ExclusiveCommitCounter.Write(page0, 0x01FE);
+            D.Header.CommitCounter.Write(page0, 0x0100);
+
+            Assert.True(DatabaseHeader.TryIncrementCommitCounter(page0, D, exclusive: true, out string? err), err);
+            Assert.Equal(0x01FFUL, D.Header.ExclusiveCommitCounter.Read(page0));
+            Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(page0));
+
+            Assert.True(DatabaseHeader.TryIncrementCommitCounter(page0, D, exclusive: true, out err), err);
+            Assert.Equal(0x0200UL, D.Header.ExclusiveCommitCounter.Read(page0));
+            Assert.Equal(0x00, page0[3584]);
+            Assert.Equal(0x02, page0[3585]);
+            Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(page0));
+
+            Assert.True(DatabaseHeader.TryIncrementCommitCounter(page0, D, exclusive: true, out err), err);
+            Assert.Equal(0x0201UL, D.Header.ExclusiveCommitCounter.Read(page0));
+            Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(page0));
+
+            // Shared increment leaves exclusive slot untouched
+            Assert.True(DatabaseHeader.TryIncrementCommitCounter(page0, D, exclusive: false, out err), err);
+            Assert.Equal(0x0201UL, D.Header.ExclusiveCommitCounter.Read(page0));
+            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(page0));
+
+            // Refuses overflow past 65,535 at exclusive slot 3584 without modifying either slot
+            D.Header.ExclusiveCommitCounter.Write(page0, ushort.MaxValue);
+            Assert.False(DatabaseHeader.TryIncrementCommitCounter(page0, D, exclusive: true, out string? overflowErr));
+            Assert.Contains("3584", overflowErr);
+            Assert.Contains("65535", overflowErr);
+            Assert.Equal((ulong)ushort.MaxValue, D.Header.ExclusiveCommitCounter.Read(page0));
+            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(page0));
+        }
+
+        // Jet 3 refused without modifying offset 3584
+        byte[] jet3 = new byte[D.PageSize];
+        D.Header.MagicBytes.CopyTo(jet3);
+        D.Header.JetSignature.CopyTo(jet3.AsSpan(D.Header.SignatureOffset));
+        D.Header.Version.Write(jet3, 0);
+        D.Header.ExclusiveCommitCounter.Write(jet3, 0x0101);
+        Assert.False(DatabaseHeader.TryIncrementCommitCounter(jet3, D, exclusive: true, out string? jet3Err));
+        Assert.Contains("Jet3Excluded", jet3Err);
+        Assert.Equal(0x0101UL, D.Header.ExclusiveCommitCounter.Read(jet3));
+    }
+
+    [Fact]
     public void DataPages_TryAppendRow_preserves_multiple_deleted_slots_without_reuse()
     {
         byte[] page = EmptyDataPage(owner: 50);

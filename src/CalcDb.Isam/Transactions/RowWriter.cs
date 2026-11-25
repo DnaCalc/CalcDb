@@ -521,16 +521,18 @@ public sealed class NoOpPageDelta : IPageDelta
 }
 
 /// <summary>
-/// Increment the Jet 4 MDB / ACCDB page-0 commit counter at offset 3586 (u16LE) by 1 (R-CRASH-1 CRASH-ORDER;
-/// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter).
+/// Increment the Jet 4 MDB / ACCDB page-0 commit counter by 1: offset 3584 (<c>0x0E00</c>) for exclusive sessions
+/// (<paramref name="exclusive"/> = <c>true</c>) or offset 3586 (<c>0x0E02</c>) for shared sessions (R-FMT-2; R-CRASH-1
+/// CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter,
+/// evidence/r-q41-create-session-counter).
 /// </summary>
-public sealed class CommitCounterDelta(FormatDescriptor d) : IPageDelta
+public sealed class CommitCounterDelta(FormatDescriptor d, bool exclusive = false) : IPageDelta
 {
     public DeltaFootprint Footprint => DeltaFootprint.None;
 
     public void Apply(Span<byte> decodedPage)
     {
-        if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, out string? failure))
+        if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, exclusive, out string? failure))
         {
             throw new FormatViolationException($"Page 0 commit counter: {failure}");
         }
