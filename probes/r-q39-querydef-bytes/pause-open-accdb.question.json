@@ -1,0 +1,50 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q39-querydef-bytes/pause-open-accdb",
+  "bookRefs": ["R-CAT-1", "CAT-Q", "II-06", "W-07"],
+  "description": "ACCDB empty table T: CreateQueryDef('QUpd', 'UPDATE T SET V = 1, W = ''x'' WHERE ID = 1'), keeping all pages immediately after create, after pause(1200ms), after releasing QueryDef, and after db.Close, to pinpoint when page 4 (MSysQueries TDEF), page 17 (MSysObjects.Flags), and page 0 (+0xE02) flush.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-plain-accdb.accdb",
+      "sha256": "5bd002eaf9f69ab1719d0ebf7e263e6853327f1c42c82f906966dca4854cb0f1",
+      "length": 184320,
+      "provenance": "r-q37-valrule-put.create-plain-accdb.b33bf5b149.a1 qk1-b33bf5b149b418c1a30a0187e3bf8007a04a427e1e3333b49d827f85b10676db output:r-q37-plain-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "CreateQueryDef", "kind": "method", "args": [{ "type": "bstr", "text": "QUpd" }, { "type": "bstr", "text": "UPDATE T SET V = 1, W = 'x' WHERE ID = 1" }], "bind": "qd" },
+    { "op": "observeFiles", "label": "after-create-open", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+    { "op": "pause", "ms": 1200 },
+    { "op": "observeFiles", "label": "after-pause-open", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" },
+    { "op": "release", "target": "qd" },
+    { "op": "observeFiles", "label": "after-release-open", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg3", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg3", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg3" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg4", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg4", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg4" },
+    { "op": "release", "target": "eng" }
+  ]
+}
