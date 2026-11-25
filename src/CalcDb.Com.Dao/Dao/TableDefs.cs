@@ -29,8 +29,9 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// catalog change, so a client that holds it, or fetches it again, sees the new table
     /// (r-q15-ddl-open/lv-rewrite-byte-n: db.TableDefs after the Append is the same object, u6, and Item("T") finds
     /// the new table; r-cat-1/names: Refresh after the Appends, Count 11). Relations stays as last read across SQL
-    /// DDL until Refresh reloads it (r-def-expr-sql/ddl-fk-actions, r-ddl-limits/accdb-fk-alter,
-    /// r-q-cursor-dao/draft-correct-after-failure).
+    /// DDL until Refresh reloads it (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189;
+    /// r-fix-cat-txn/cat-drop-table-in-relation #46-48, #159, #205-207; first fetch after DDL:
+    /// r-ddl-limits/accdb-fk-alter #69-70).
     /// </summary>
     public Func<(IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure)>? Membership { get; init; }
 

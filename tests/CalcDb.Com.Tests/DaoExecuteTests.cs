@@ -390,10 +390,10 @@ public sealed unsafe class DaoExecuteTests : IDisposable
     }
 
     /// <summary>
-    /// W-08 (xmgx): Database.Relations stays stale across SQL FK DDL until Refresh() reloads MSysRelationships,
-    /// matching ACE's DAO collection staleness (r-def-expr-sql/ddl-fk-actions #1365-1367,
-    /// r-def-expr-sql/ddl-drop-and-missing-objects #201-204, r-ddl-limits/accdb-fk-alter,
-    /// r-q-cursor-dao/draft-correct-after-failure #101-127, r-dao-1-err-1/coll-mutation-refresh).
+    /// W-08 (xmgx): Database.Relations stays stale across SQL DDL until Refresh() reloads MSysRelationships
+    /// (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189;
+    /// r-fix-cat-txn/cat-drop-table-in-relation #46-48, #159, #205-207; first fetch after FK DDL:
+    /// r-ddl-limits/accdb-fk-alter #69-70).
     /// </summary>
     [Fact]
     public void Relations_collection_stays_stale_across_SQL_FK_DDL_until_Refresh_reloads_it()

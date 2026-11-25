@@ -992,10 +992,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private void OnCatalogReloaded()
     {
         _tableDefs?.Relist();
-        // _relations is intentionally not relisted here: DAO collections stay stale across SQL DDL until Refresh
-        // (r-def-expr-sql/ddl-fk-actions #1365-1367, r-q-cursor-dao/draft-correct-after-failure #101-127,
-        // r-dao-1-err-1/coll-mutation-refresh). _session.SchemaPublished clears the cached MSysRelationships list so
-        // Relations.Refresh() (or a first fetch of db.Relations after DDL) reads the new Type 8 relationship.
+        // _relations is intentionally not relisted here: a previously fetched Relations stays stale across SQL DDL
+        // until Refresh (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189: Count stays 3 without
+        // Refresh; r-fix-cat-txn/cat-drop-table-in-relation #46-48, #159, #205-207: Refresh updates Count to 2).
+        // _session.SchemaPublished clears the cached MSysRelationships list so Relations.Refresh() (or a first fetch
+        // of db.Relations after DDL, r-ddl-limits/accdb-fk-alter #69-70) reads the updated Type 8 relationships.
         _sql?.Forget();
     }
 
@@ -1037,9 +1038,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>
     /// Relations: MSysRelationships in name order (r-dao-1b/relation-members-each: FK_Grand, RelMain). One collection
     /// per Database; stays as last read across SQL DDL until Refresh reloads it from the current MSysRelationships
-    /// (r-def-expr-sql/ddl-fk-actions #1365-1367, r-def-expr-sql/ddl-drop-and-missing-objects #201-204,
-    /// r-ddl-limits/accdb-fk-alter, r-q-cursor-dao/draft-correct-after-failure #101-127,
-    /// r-dao-1-err-1/coll-mutation-refresh).
+    /// (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189;
+    /// r-fix-cat-txn/cat-drop-table-in-relation #46-48, #159, #205-207), while a first fetch after DDL reads current
+    /// MSysRelationships directly (r-ddl-limits/accdb-fk-alter #69-70).
     /// </summary>
     private CallResult RelationsCollection()
     {
@@ -1062,7 +1063,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         if (Relationships(out string? failure) is not { } read)
         {
-            return ([], static (_, _) => throw new InvalidOperationException(), "Relations when MSysRelationships cannot be read: " + failure);
+            return ([], static (_, _) => throw new InvalidOperationException(), "Relations when " + failure);
         }
         Relationship[] relations = [.. read.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)];
         return ([.. relations.Select(r => r.Name)], (c, i) => new RelationObject(c, relations[i]), null);
