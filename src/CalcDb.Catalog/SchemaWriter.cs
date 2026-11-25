@@ -147,11 +147,12 @@ public sealed record AddForeignKeyRequest(
     NewForeignKey ForeignKey,
     SchemaRoute Route);
 
-/// <summary>A field-level validation property written by DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> puts (W-08; evidence/r-q37-valrule-put).</summary>
+/// <summary>A field-level validation property written by DAO <c>Field.ValidationRule</c>, <c>Field.ValidationText</c>, or <c>Field.AllowZeroLength</c> puts (W-08; evidence/r-q37-valrule-put, evidence/r-q42-field-rule-and).</summary>
 public enum FieldValidationProperty : byte
 {
     ValidationRule,
     ValidationText,
+    AllowZeroLength,
 }
 
 /// <summary>A refusal of a schema request: the DAO error ACE gives (a number), or a change this slice does not write (<see cref="NotWritten"/>).</summary>
@@ -1315,15 +1316,17 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// DAO <c>Field.ValidationRule</c> and <c>Field.ValidationText</c> puts on a stored empty ACCDB or Jet 4 MDB
-    /// table's Long or Text field (W-08, task 9dvt; qualified.md <c>r-q37</c>; <c>evidence/r-q37-valrule-put/</c>):
-    /// updates only the table's <c>MSysObjects</c> row (<c>DateUpdate</c> and <c>LvProp</c>, through the one shared
-    /// <see cref="ApplyObjectProperties"/> writer), page 0's commit counter, and the LVAL / map pages that hold the
-    /// MR2 property blob. Leaving <paramref name="value"/> empty removes the property (and its column section when
-    /// empty) while keeping its name in the MR2 Names section (writing the 40-byte Names-only inline blob when
-    /// <c>LvProp</c> was Null). Unrecorded shapes (65-byte blob, replacing an existing chained <c>LvProp</c>, chained
-    /// <c>LvProp</c> on Jet 4 MDB or spanning three or more pages, non-empty table, non-Long/Text or AutoNumber
-    /// column, shared LVAL page, MSysObjects page split, or inside <c>BeginTrans</c>) are refused by name.
+    /// DAO <c>Field.ValidationRule</c> and <c>Field.ValidationText</c> puts on a stored ACCDB or Jet 4 MDB table's Long
+    /// or Text field (W-08, tasks 9dvt and nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q37-valrule-put/</c>,
+    /// <c>evidence/r-q42-field-rule-and/</c>): updates only the table's <c>MSysObjects</c> row (<c>DateUpdate</c> and
+    /// <c>LvProp</c>, through the one shared <see cref="ApplyObjectProperties"/> writer), page 0's commit counter, and
+    /// the LVAL / map pages that hold the MR2 property blob. Leaving <paramref name="value"/> empty removes the property
+    /// (and its column section when empty) while keeping its name in the MR2 Names section (writing the 40-byte
+    /// Names-only inline blob when <c>LvProp</c> was Null). <c>ValidationText</c> is recorded on both empty and populated
+    /// tables (<c>evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb}</c>); <c>ValidationRule</c> on a populated
+    /// table remains refused by name. Unrecorded shapes (replacing an existing chained <c>LvProp</c>, chained
+    /// <c>LvProp</c> on Jet 4 MDB or spanning three or more pages, non-Long/Text or AutoNumber column, MSysObjects page
+    /// split, or inside <c>BeginTrans</c>) stay refused by name.
     /// </summary>
     public SchemaOutcome SetFieldValidationProperty(
         TransactionCoordinator workspace,
@@ -1334,6 +1337,41 @@ public sealed class SchemaWriter
         ulong dateUpdateBits,
         uint? longValueTicks = null)
     {
+        if (property == FieldValidationProperty.AllowZeroLength)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "Field.AllowZeroLength is a Boolean property; use SetFieldAllowZeroLength"), default, _pageCount);
+        }
+        return SetFieldPropertyCore(workspace, tableName, columnName, property, value, allowZeroLength: null, dateUpdateBits, longValueTicks);
+    }
+
+    /// <summary>
+    /// DAO <c>Field.AllowZeroLength</c> put on a stored empty ACCDB or Jet 4 MDB table's Text field (W-08, task nk97;
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb}</c>, <c>azl-explicit-false-{accdb,mdb}</c>,
+    /// <c>disc-text-forms-{accdb,mdb}</c>): writes the <c>AllowZeroLength</c> Boolean property (<c>0xFF</c> for true,
+    /// <c>0x00</c> for false; flags <c>0x01</c>, native type <c>0x01</c>) into the table's <c>MSysObjects.LvProp</c>
+    /// through the one shared <see cref="ApplyObjectProperties"/> writer (a 65-byte MR2 blob goes to an external
+    /// SingleRow LVAL page, and distinct tables share the free-map <c>MSysObjects.LvProp</c> LVAL page). Non-empty
+    /// tables, non-Text columns, and <c>BeginTrans</c> remain refused by name.
+    /// </summary>
+    public SchemaOutcome SetFieldAllowZeroLength(
+        TransactionCoordinator workspace,
+        string tableName,
+        string columnName,
+        bool allowZeroLength,
+        ulong dateUpdateBits,
+        uint? longValueTicks = null) =>
+        SetFieldPropertyCore(workspace, tableName, columnName, FieldValidationProperty.AllowZeroLength, value: null, allowZeroLength, dateUpdateBits, longValueTicks);
+
+    private SchemaOutcome SetFieldPropertyCore(
+        TransactionCoordinator workspace,
+        string tableName,
+        string columnName,
+        FieldValidationProperty property,
+        string? value,
+        bool? allowZeroLength,
+        ulong dateUpdateBits,
+        uint? longValueTicks)
+    {
         if (FileRefusal(allowJet4Mdb: true, out bool isJet4Mdb) is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
@@ -1342,7 +1380,7 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"setting Field.{property} inside BeginTrans is not recorded (evidence/r-q37-valrule-put)"), default, _pageCount);
         }
-        if (value.Contains('\0'))
+        if (value is not null && value.Contains('\0'))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"setting Field.{property} to a string containing an embedded NUL is not recorded (evidence/r-q37-valrule-put)"), default, _pageCount);
         }
@@ -1354,7 +1392,7 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, tableFailure), default, _pageCount);
         }
-        if (table.RowCount > 0)
+        if (table.RowCount > 0 && property != FieldValidationProperty.ValidationText)
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"setting Field.{property} on non-empty table '{entry.Name}' ({table.RowCount} row(s)) is not recorded (qualified.md r-q37 Open)"), default, _pageCount);
         }
@@ -1364,7 +1402,17 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, colUndecided ?? $"setting Field.{property} on column '{columnName}', which table '{entry.Name}' does not have"), default, _pageCount);
         }
         ColumnDescriptor column = table.Columns[colIdx];
-        if (column.CalculatedResultType is not null || column.IsAutoNumber || column.TypeCode is not (NativeTypes.Long or NativeTypes.Text))
+        if (property == FieldValidationProperty.AllowZeroLength)
+        {
+            if (column.CalculatedResultType is not null || column.IsAutoNumber || column.TypeCode != NativeTypes.Text)
+            {
+                return new SchemaOutcome(
+                    new SchemaRefusal(null, $"setting Field.AllowZeroLength on column '{column.Name}' (native type 0x{column.TypeCode:X2}{(column.IsAutoNumber ? ", AutoNumber" : "")}{(column.CalculatedResultType is not null ? ", calculated" : "")}) is not recorded: evidence/r-q42-field-rule-and records non-AutoNumber Text columns"),
+                    default,
+                    _pageCount);
+            }
+        }
+        else if (column.CalculatedResultType is not null || column.IsAutoNumber || column.TypeCode is not (NativeTypes.Long or NativeTypes.Text))
         {
             return new SchemaOutcome(
                 new SchemaRefusal(null, $"setting Field.{property} on column '{column.Name}' (native type 0x{column.TypeCode:X2}{(column.IsAutoNumber ? ", AutoNumber" : "")}{(column.CalculatedResultType is not null ? ", calculated" : "")}) is not recorded: evidence/r-q37-valrule-put records non-AutoNumber Long and Text columns"),
@@ -1430,7 +1478,12 @@ public sealed class SchemaWriter
             existingBlob = decoded;
         }
 
-        string propName = property == FieldValidationProperty.ValidationRule ? "ValidationRule" : "ValidationText";
+        string propName = property switch
+        {
+            FieldValidationProperty.ValidationRule => "ValidationRule",
+            FieldValidationProperty.ValidationText => "ValidationText",
+            _ => "AllowZeroLength",
+        };
         List<string> names = existingBlob is null ? [] : [.. existingBlob.Names];
         if (!names.Contains(propName, StringComparer.Ordinal))
         {
@@ -1459,7 +1512,7 @@ public sealed class SchemaWriter
             }
         }
 
-        if (value.Length == 0)
+        if (property != FieldValidationProperty.AllowZeroLength && value!.Length == 0)
         {
             if (targetMapIndex >= 0)
             {
@@ -1477,9 +1530,12 @@ public sealed class SchemaWriter
         }
         else
         {
-            StoredProperty newProp = property == FieldValidationProperty.ValidationRule
-                ? new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, System.Text.Encoding.Unicode.GetBytes(value + "\0"))
-                : new StoredProperty("ValidationText", 0x01, NativeTypes.Text, System.Text.Encoding.Unicode.GetBytes(value));
+            StoredProperty newProp = property switch
+            {
+                FieldValidationProperty.ValidationRule => new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, System.Text.Encoding.Unicode.GetBytes(value + "\0")),
+                FieldValidationProperty.ValidationText => new StoredProperty("ValidationText", 0x01, NativeTypes.Text, System.Text.Encoding.Unicode.GetBytes(value!)),
+                _ => new StoredProperty("AllowZeroLength", 0x01, NativeTypes.Boolean, [allowZeroLength!.Value ? (byte)0xFF : (byte)0x00]),
+            };
             if (targetMapIndex >= 0)
             {
                 PropertyMap existing = updatedMaps[targetMapIndex];
@@ -1540,6 +1596,9 @@ public sealed class SchemaWriter
         var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
         List<uint> releasedAtClose = [];
         List<uint> reservedExtentPages = [];
+        // 65-byte MR2 blobs go to an external SingleRow LVAL page (evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb},
+        // azl-explicit-false-{accdb,mdb}); distinct tables share the free-map MSysObjects.LvProp LVAL page
+        // (evidence/r-q42-field-rule-and/disc-num-forms-{accdb,mdb}, disc-text-forms-{accdb,mdb}, edge-forms-{accdb,mdb}).
         if (!ApplyObjectProperties(
             work,
             p.Overlay,
@@ -1552,8 +1611,9 @@ public sealed class SchemaWriter
             useSessionExtentReservation: useSessionExtentReservation,
             allowShrinkToInline: true,
             allowTwoPageChain: allowTwoPageChain,
-            refuse65ByteBlob: true,
+            refuse65ByteBlob: false,
             reservedExtentPages: reservedExtentPages,
+            allowSharedLvalPage: true,
             longValueTicks: longValueTicks))
         {
             return work.NotWritten();

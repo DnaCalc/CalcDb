@@ -2454,7 +2454,7 @@ internal sealed unsafe class FieldObject : DaoObject
     }
 
     /// <summary>The published result of a field read that is not borrowed text.</summary>
-    private static CallResult Published(FieldResult read, ColumnDescriptor column)
+    internal static CallResult Published(FieldResult read, ColumnDescriptor column)
     {
         if (read.Failure == CursorFailure.NoCurrentRecord)
         {

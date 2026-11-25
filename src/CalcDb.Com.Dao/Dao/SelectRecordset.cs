@@ -1,9 +1,11 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam;
+using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Sql;
 using CalcDb.Storage;
@@ -15,9 +17,11 @@ namespace CalcDb.Com.Dao;
 /// A Recordset (Recordset2) over a SELECT's result (W-06/parser-binder-scan; II-11 §1 ExecutionInstance, II-12 §10): the
 /// SQL executor's <see cref="SelectCursor"/>, opened by Database.OpenRecordset with SELECT text or a saved select query,
 /// or by QueryDef.OpenRecordset. Its rows, movement (CUR-POS, CUR-POP), values and updatability (CUR-PROV) are the
-/// cursor's; a value read that fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). It
-/// reads only: the members a result needs beyond Type, Updatable, Bookmarkable, EOF, BOF, RecordCount, the moves,
-/// Fields and Close are named gaps. After Close every member fails 3420 (R-ACT-1 ACT-RETAIN).
+/// cursor's; a value read that fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). Single-
+/// table updatable dynasets at transaction depth 0 support <c>Edit</c>, base-column <c>Field.Value</c> put,
+/// <c>Update</c>, <c>CancelUpdate</c>, and <c>EditMode</c> through the one shared <see cref="EditFrame"/>
+/// (<c>evidence/r-q42-field-rule-and/rule-*</c>). Other edit shapes and members remain named gaps. After Close every
+/// member fails 3420 (R-ACT-1 ACT-RETAIN).
 /// </summary>
 internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecordset
 {
@@ -28,24 +32,30 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
         .Get("Bookmarkable", (self, args) => Live(self, r => r.Bookmarkable()))
         .Get("RecordCount", (self, args) => Live(self, r => r.RecordCount()))
+        .Get("EditMode", (self, args) => Live(self, r => r.EditModeValue()))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
         .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
-        .Method("MoveFirst", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveFirst())))
-        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.Moved(r.Cursor.MoveLast())))
-        .Method("MoveNext", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveNext())))
-        .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
-        .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
+        .Method("MoveFirst", (self, args) => Live(self, r => r.EditPending("MoveFirst") ?? r.Moved(r.Cursor.MoveFirst())))
+        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.EditPending("MoveLast") ?? r.Moved(r.Cursor.MoveLast())))
+        .Method("MoveNext", (self, args) => Live(self, r => r.EditPending("MoveNext") ?? r.Moved(r.Cursor.MoveNext())))
+        .Method("MovePrevious", (self, args) => Live(self, r => r.EditPending("MovePrevious") ?? r.Moved(r.Cursor.MovePrevious())))
+        .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.EditPending("Move") ?? r.Move(rows, start)); })
+        .Method("Edit", (self, args) => Live(self, r => r.Edit()))
+        .Method("Update", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, force = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Update(type, force)); })
+        .Method("CancelUpdate", (self, args) => { nint type = args.Length > 0 ? args[0] : 0; return Live(self, r => r.CancelUpdate(type)); })
         .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return ((SelectRecordsetObject)self).GetRows(count); })
         .Method("Clone", (self, args) => Live(self, r => r.Clone()))
-        .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
+        .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.EditPending("Requery") ?? r.Requery(queryDef)); })
         .Method("Close", (self, args) => Live(self, r => r.Close()))
         .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
-        // A query recordset's edits are not built, so no edit is ever pending: a dynaset's Collect put is 3020 from DAO.Field
-        // without an IErrorInfo (r-def-cursor-dao/recordset-collect-member); the other types are not recorded.
-        .Put("Collect", (self, args) => Live(self, r => r.RecordsetType == 2
-            ? CallResult.Fail(Failure.Dao(3020, "DAO.Field", "Update or CancelUpdate without AddNew or Edit."))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEdit", $"Collect put on a type {r.RecordsetType} query recordset (not recorded)"))));
+        // When no edit is pending, a dynaset's Collect put is 3020 from DAO.Field without an IErrorInfo
+        // (r-def-cursor-dao/recordset-collect-member); Collect put during a pending edit or on other cursor types is not recorded.
+        .Put("Collect", (self, args) => Live(self, r => r._frame is { Mode: not EditMode.None }
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEditCollectPut", "Collect put while an edit is pending on a SELECT recordset (not recorded)"))
+            : r.RecordsetType == 2
+                ? CallResult.Fail(Failure.Dao(3020, "DAO.Field", "Update or CancelUpdate without AddNew or Edit."))
+                : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEdit", $"Collect put on a type {r.RecordsetType} query recordset (not recorded)"))));
 
     /// <summary>
     /// Collect(Item): the value of the column the index names, as Field.Value reads it; an index naming no column (3, -1,
@@ -78,6 +88,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private string? _resolvedOverlayAfterCommit;
     private string? _committedOpenLevel;
     private string? _forwardOnlyResolved;
+    private RowReader? _editReader;
+    private EditFrame? _frame;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
     public SelectRecordsetObject(
@@ -494,6 +506,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return refused;
         }
+        if (EditPending("GetRows") is { } pending)
+        {
+            return pending;
+        }
         if (RecordsetType is not (2 or 4 or 8))
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -775,6 +791,190 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         return CallResult.Nothing;
     }
 
+    internal EditFrame? FrameIfMade => _frame;
+
+    private CallResult? EditPending(string member) => _frame is { Mode: not EditMode.None }
+        ? CallResult.Fail(Failure.NotModelled(
+            "NotModelled.QueryRecordsetEditPending",
+            $"{member} with an edit pending on a SELECT recordset (not recorded)"))
+        : null;
+
+    /// <summary>
+    /// Shared <see cref="EditFrame"/> for single-table updatable SELECT dynasets at transaction depth 0
+    /// (<c>evidence/r-q42-field-rule-and/rule-*</c>): delegates validation, check ordering, and page publication to the
+    /// one ISAM edit frame over a dedicated <see cref="RowReader"/> positioned on the current base row. Unrecorded
+    /// cursor types, multi-table/subquery shapes, read-only opens, and in-transaction edits stay refused by name.
+    /// </summary>
+    internal EditFrame? EditFrameOrRefuse(string member, out CallResult refused)
+    {
+        refused = default;
+        if (RecordsetType != 2)
+        {
+            refused = CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditType",
+                $"{member} on a type {RecordsetType} SELECT recordset (only single-table updatable dynasets are recorded)"));
+            return null;
+        }
+        if (!_isSingleTableRowSelect || Plan.Sources.Count != 1 || Plan.Sources[0].Subquery is not null)
+        {
+            refused = CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditShape",
+                $"{member} on a non-single-table SELECT recordset (not recorded)"));
+            return null;
+        }
+        if (!Cursor.Updatable || Database.ReadOnly)
+        {
+            refused = CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditReadOnly",
+                $"{member} on a non-updatable SELECT dynaset (not recorded)"));
+            return null;
+        }
+        if (Database.Workspace.Transactions.Depth > 0 || _openLevels.Length > 0)
+        {
+            refused = CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditTransaction",
+                $"{member} on a SELECT dynaset inside a transaction (only depth 0 is recorded)"));
+            return null;
+        }
+        if (_frame is { } existing)
+        {
+            return existing;
+        }
+        BoundSource source = Plan.Sources[0];
+        CatalogEntry? entry = Database.Catalog.LocalTables(Database.Format)
+            .FirstOrDefault(e => string.Equals(e.Name, source.TableName, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            refused = CallResult.Fail(Failure.NotImplemented($"{member} on SELECT source '{source.TableName}', which the catalog does not list"));
+            return null;
+        }
+        if (Database.EditContext(entry, out string? contextFailure) is not { } context)
+        {
+            refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' edit semantics cannot be compiled: {contextFailure}"));
+            return null;
+        }
+        if (RowReader.Open(Database.Cache, Database.Format, source.Table, Database.PageCount, out TraversalFailure? openFailure) is not { } reader)
+        {
+            refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' cannot be opened for edit: {openFailure?.Predicate}"));
+            return null;
+        }
+        _editReader = reader;
+        _frame = new EditFrame(context, reader, Database.Workspace.Transactions, updatable: true);
+        return _frame;
+    }
+
+    private CallResult EditModeValue()
+    {
+        if (RecordsetType != 2
+            || !_isSingleTableRowSelect
+            || Plan.Sources.Count != 1
+            || Plan.Sources[0].Subquery is not null
+            || !Cursor.Updatable
+            || Database.ReadOnly
+            || Database.Workspace.Transactions.Depth > 0
+            || _openLevels.Length > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditMode",
+                $"EditMode on a type {RecordsetType} SELECT recordset in this state (not recorded)"));
+        }
+        return Int16((short)(_frame?.Mode ?? EditMode.None));
+    }
+
+    private CallResult Edit()
+    {
+        if (EditFrameOrRefuse("Edit", out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        if (Cursor.Bof || Cursor.Eof)
+        {
+            _editReader!.Position(null);
+            return EditPublication.Of(frame.Edit());
+        }
+        int baseOrdinal = -1;
+        for (int i = 0; i < Cursor.Columns.Count; i++)
+        {
+            if (Cursor.Columns[i] is { Origin: ColumnOrigin.BaseColumn, SourceColumn.SourceIndex: 0 })
+            {
+                baseOrdinal = i;
+                break;
+            }
+        }
+        if (baseOrdinal < 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditNoBaseColumn",
+                "Edit on a SELECT dynaset with no projected base column (not recorded)"));
+        }
+        if (!Cursor.Read(baseOrdinal, out _, out SqlFailure? readFailure))
+        {
+            if (readFailure!.IsNotModelled)
+            {
+                return CallResult.Fail(Failure.NotModelled(readFailure.NotModelled!, readFailure.Message));
+            }
+            if (readFailure.Number == 3021)
+            {
+                _editReader!.Position(null);
+                return EditPublication.Of(frame.Edit());
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditReadFailure",
+                $"Edit on a SELECT dynaset when reading current row failed with ACE {readFailure.Number} ({readFailure.Message}; not recorded)"));
+        }
+        if (((IExpressionRow)Cursor).Source(0) is not RowReader sourceReader || sourceReader.Current is not { } currentRow)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditPosition",
+                "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
+        }
+        _editReader!.Position(currentRow);
+        return EditPublication.Of(frame.Edit());
+    }
+
+    private CallResult Update(nint typeArg, nint forceArg)
+    {
+        if (EditFrameOrRefuse("Update", out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        int type = Args.Int32(typeArg, omitted: 1) ?? 1;
+        bool force = Args.Bool(forceArg, omitted: false) ?? false;
+        UpdateOutcome outcome = frame.Update(type, force);
+        CallResult result = EditPublication.Of(outcome);
+        if (result.Failure is null && frame.Mode == EditMode.None)
+        {
+            if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
+            {
+                Database.Engine.Changes.MarkPublished([change]);
+            }
+            _editReader?.Position(null);
+            if (((IExpressionRow)Cursor).Source(0) is RowReader sourceReader)
+            {
+                sourceReader.Position(null);
+            }
+        }
+        return result;
+    }
+
+    private CallResult CancelUpdate(nint typeArg)
+    {
+        if (Args.Int32(typeArg, omitted: 1) is not 1)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
+        }
+        if (EditFrameOrRefuse("CancelUpdate", out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        CallResult result = EditPublication.Of(frame.CancelUpdate());
+        if (result.Failure is null)
+        {
+            _editReader?.Position(null);
+        }
+        return result;
+    }
+
     private CallResult Close()
     {
         CloseCursor();
@@ -786,6 +986,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     {
         if (!Closed)
         {
+            _frame?.Discard();
+            _frame = null;
+            _editReader?.Dispose();
+            _editReader = null;
             Cursor.Dispose();
             Plan.Dispose();
             _snapshotOverlay?.Dispose();
@@ -930,6 +1134,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("Required", (self, args) => Live(self, f => f.Required()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
+        .Put("Value", (self, args) => ((SelectFieldObject)self).Assign(args[^1]))
         .Get("FieldSize", (self, args) => ((SelectFieldObject)self).FieldSize())
         .Method("GetChunk", (self, args) =>
         {
@@ -1673,12 +1878,54 @@ internal sealed unsafe class SelectFieldObject : DaoObject
 
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
 
+    /// <summary>
+    /// Base-column <c>Field.Value</c> put on a single-table updatable SELECT dynaset (<c>evidence/r-q42-field-rule-and/rule-*</c>):
+    /// delegates through the recordset's shared <see cref="EditFrame"/>; non-base columns and unrecorded cursor shapes refuse by name.
+    /// </summary>
+    private CallResult Assign(nint value)
+    {
+        if (Recordset.Closed)
+        {
+            return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
+        }
+        if (Recordset.TransactionRefusal("Field.Value put") is { } txRefused)
+        {
+            return txRefused;
+        }
+        if (Column.Origin != ColumnOrigin.BaseColumn || Column.SourceColumn is not { SourceIndex: 0 } sc)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryFieldValuePutColumnOrigin",
+                $"Field.Value put on {Column.Origin} column {Column.Name} of a SELECT recordset (only base columns of single-table dynasets are recorded)"));
+        }
+        if (Recordset.EditFrameOrRefuse("Field.Value put", out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
+        return EditPublication.Of(frame.Assign(sc.Column, incoming));
+    }
+
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect, Recordset.GetRows).</summary>
     public static CallResult ReadValue(SelectRecordsetObject recordset, int ordinal, bool fromCollect = false)
     {
         if (recordset.TransactionRefusal("Field.Value") is { } refused)
         {
             return refused;
+        }
+        if (recordset.FrameIfMade is { Mode: not EditMode.None } frame)
+        {
+            if (fromCollect)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEdit", "Recordset.Collect while an edit is pending on a SELECT recordset (not recorded)"));
+            }
+            if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { SourceIndex: 0 } sc })
+            {
+                return FieldObject.Published(frame.Read(sc.Column), sc.Column);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryFieldValueReadDuringEdit",
+                $"Field.Value read of non-base column {recordset.Cursor.Columns[ordinal].Name} while an edit is pending on a SELECT recordset (not recorded)"));
         }
         if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
         {

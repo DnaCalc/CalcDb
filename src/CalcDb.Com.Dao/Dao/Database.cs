@@ -929,17 +929,40 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> put on a stored table's field (W-08, task 9dvt;
-    /// qualified.md <c>r-q37</c>): validates <c>ValidationRule</c> before touching the catalog, publishes the rewritten
-    /// <c>LvProp</c> through <see cref="SchemaWriter.SetFieldValidationProperty"/>, reloads the catalog and edit contexts,
-    /// and refreshes the held <see cref="TableDefObject"/> and <see cref="DefinitionFieldObject"/>.
+    /// DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> put on a stored table's field (W-08, tasks 9dvt
+    /// and nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q42-field-rule-and/</c>): validates <c>ValidationRule</c>
+    /// before touching the catalog, publishes the rewritten <c>LvProp</c> through
+    /// <see cref="SchemaWriter.SetFieldValidationProperty"/>, reloads the catalog and edit contexts, and refreshes the
+    /// held <see cref="TableDefObject"/> and <see cref="DefinitionFieldObject"/>.
     /// </summary>
     internal CallResult SetFieldValidationProperty(
         TableDefObject tableDef,
         DefinitionFieldObject field,
         ColumnDescriptor column,
         FieldValidationProperty property,
-        string value)
+        string value) =>
+        SetFieldPropertyCore(tableDef, field, column, property, textValue: value, allowZeroLength: null);
+
+    /// <summary>
+    /// DAO <c>Field.AllowZeroLength</c> put on a stored empty table's Text field (W-08, task nk97;
+    /// <c>evidence/r-q42-field-rule-and/</c>): publishes the rewritten <c>LvProp</c> through
+    /// <see cref="SchemaWriter.SetFieldAllowZeroLength"/>, reloads the catalog and edit contexts, and refreshes the
+    /// held <see cref="TableDefObject"/> and <see cref="DefinitionFieldObject"/>.
+    /// </summary>
+    internal CallResult SetFieldAllowZeroLength(
+        TableDefObject tableDef,
+        DefinitionFieldObject field,
+        ColumnDescriptor column,
+        bool allowZeroLength) =>
+        SetFieldPropertyCore(tableDef, field, column, FieldValidationProperty.AllowZeroLength, textValue: null, allowZeroLength);
+
+    private CallResult SetFieldPropertyCore(
+        TableDefObject tableDef,
+        DefinitionFieldObject field,
+        ColumnDescriptor column,
+        FieldValidationProperty property,
+        string? textValue,
+        bool? allowZeroLength)
     {
         if (ReadOnly)
         {
@@ -959,7 +982,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put when the TableDef cannot be read"));
         }
         if (property == FieldValidationProperty.ValidationRule
-            && FieldValidationRuleValidator.Validate(tableDef.Name, def, column, value, CreateExpressionContext(ExpressionUse.ValidationRule)) is { } validationFailure)
+            && FieldValidationRuleValidator.Validate(tableDef.Name, def, column, textValue!, CreateExpressionContext(ExpressionUse.ValidationRule)) is { } validationFailure)
         {
             return CallResult.Fail(validationFailure);
         }
@@ -967,13 +990,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put: " + writerFailure));
         }
-        SchemaOutcome outcome = writer.SetFieldValidationProperty(
-            workspace,
-            tableDef.Name,
-            column.Name,
-            property,
-            value,
-            SchemaWriter.DateBits(DateTime.Now));
+        ulong nowBits = SchemaWriter.DateBits(DateTime.Now);
+        SchemaOutcome outcome = property == FieldValidationProperty.AllowZeroLength
+            ? writer.SetFieldAllowZeroLength(workspace, tableDef.Name, column.Name, allowZeroLength!.Value, nowBits)
+            : writer.SetFieldValidationProperty(workspace, tableDef.Name, column.Name, property, textValue!, nowBits);
         if (outcome.PublishedAny)
         {
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
