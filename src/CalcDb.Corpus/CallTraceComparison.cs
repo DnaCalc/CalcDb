@@ -229,20 +229,22 @@ public static class CallTraceComparison
             {
                 yb = ReconstructFromReads(actualEvents, eventIndex, relPath, length, ys, candidateFiles, otherFullFile: null, out yOutcome);
             }
-            if (xb is null && yb is not null)
+            if (xb is null && yb is not null && xOutcome == ReadReconstructionOutcome.IncompleteCoverage)
             {
                 xb = ReconstructFromReads(expectedEvents, eventIndex, relPath, length, xs, oracleFiles, otherFullFile: yb, out xOutcome);
             }
-            if (yb is null && xb is not null)
+            if (yb is null && xb is not null && yOutcome == ReadReconstructionOutcome.IncompleteCoverage)
             {
                 yb = ReconstructFromReads(actualEvents, eventIndex, relPath, length, ys, candidateFiles, otherFullFile: xb, out yOutcome);
             }
             if (xb is null || yb is null)
             {
-                string missing = xb is null && yb is null ? "expected and actual" : xb is null ? "expected" : "actual";
+                bool bothMissing = xb is null && yb is null;
+                string missing = bothMissing ? "expected and actual" : xb is null ? "expected" : "actual";
                 string? detail = DescribeReconstructionFailure(
                     xb is null ? xOutcome : ReadReconstructionOutcome.Reconstructed,
-                    yb is null ? yOutcome : ReadReconstructionOutcome.Reconstructed);
+                    yb is null ? yOutcome : ReadReconstructionOutcome.Reconstructed,
+                    bothMissing);
                 notes.Add(detail is null
                     ? $"{label}: the bytes of the {missing} file are not available; compared by SHA-256"
                     : $"{label}: the bytes of the {missing} file are not available; compared by SHA-256 ({detail})");
@@ -387,7 +389,7 @@ public static class CallTraceComparison
         return null;
     }
 
-    private static string? DescribeReconstructionFailure(ReadReconstructionOutcome expectedOutcome, ReadReconstructionOutcome actualOutcome)
+    private static string? DescribeReconstructionFailure(ReadReconstructionOutcome expectedOutcome, ReadReconstructionOutcome actualOutcome, bool bothMissing)
     {
         static string? Text(ReadReconstructionOutcome o) => o switch
         {
@@ -400,8 +402,8 @@ public static class CallTraceComparison
         return (e, a) switch
         {
             (null, null) => null,
-            ({ } x, null) => x,
-            (null, { } y) => y,
+            ({ } x, null) => bothMissing ? $"expected: {x}; actual: no kept nativeRead pages" : x,
+            (null, { } y) => bothMissing ? $"expected: no kept nativeRead pages; actual: {y}" : y,
             ({ } x, { } y) when x == y => x,
             ({ } x, { } y) => $"expected: {x}; actual: {y}",
         };
@@ -506,7 +508,7 @@ public static class CallTraceComparison
         int pos = filesEventIndex + 1;
         while (pos < events.Length)
         {
-            if (events[pos] is ReleaseEvent or ModulesEvent)
+            if (events[pos] is ReleaseEvent)
             {
                 pos++;
                 continue;

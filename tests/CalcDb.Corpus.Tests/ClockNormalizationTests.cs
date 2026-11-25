@@ -1479,11 +1479,14 @@ public sealed class ClockNormalizationTests
             Events = [.. cap.Events.SelectMany<CaptureEvent, CaptureEvent>(e => e is HandleEvent { Op: "read", Success: true } h ? replace(h) : [e])],
         };
 
-        // (a) Partial coverage (truncated tail: last page omitted, no base file) -> names partial coverage in note.
-        byte[] truncated = oracleBytes[..^4096];
-        Capture oracleTruncated = ReplacePgClose(oracle, h => [h with { BytesRead = truncated.Length, Bytes = Convert.ToHexStringLower(truncated), BytesSha256 = Sha(truncated) }]);
+        // (a) Partial coverage (truncated tail: last page omitted on both sides, no base file) -> names partial coverage in note.
+        static Capture TruncateLastPage(Capture cap) => ReplacePgClose(cap, h =>
+        {
+            byte[] truncated = Convert.FromHexString(h.Bytes!)[..^4096];
+            return [h with { BytesRead = truncated.Length, Bytes = Convert.ToHexStringLower(truncated), BytesSha256 = Sha(truncated) }];
+        });
         ComparisonRecord truncVerdict = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
-            recA.RecordId, oracleTruncated, recB.RecordId, other, candidateModule: null, oracleFiles: null, candidateFiles: null);
+            recA.RecordId, TruncateLastPage(oracle), recB.RecordId, TruncateLastPage(other), candidateModule: null, oracleFiles: null, candidateFiles: null);
         Assert.Equal(ComparisonStatus.Mismatched, truncVerdict.Status);
         Assert.Equal("13 $.files[0].sha256", truncVerdict.FirstDifference!.Path);
         Assert.Contains(truncVerdict.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
@@ -1588,5 +1591,14 @@ public sealed class ClockNormalizationTests
         Assert.Equal("13 $.files[0].sha256", absentBlocked.FirstDifference!.Path);
         Assert.Contains(absentBlocked.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
             && n.EndsWith("are not available; compared by SHA-256", StringComparison.Ordinal));
+
+        // (g) Both sides missing with mixed outcomes (expected ShaMismatch, actual NoReads) qualifies both sides.
+        Capture otherNoKeptBytes = ReplacePgClose(other, h => [h with { Bytes = null }]);
+        ComparisonRecord mixedBothMissing = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleWrongSha, recB.RecordId, otherNoKeptBytes, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, mixedBothMissing.Status);
+        Assert.Equal("13 $.files[0].sha256", mixedBothMissing.FirstDifference!.Path);
+        Assert.Contains(mixedBothMissing.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("expected and actual file are not available; compared by SHA-256 (expected: kept nativeRead pages do not verify against the recorded SHA-256; actual: no kept nativeRead pages)", StringComparison.Ordinal));
     }
 }
