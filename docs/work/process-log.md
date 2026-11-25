@@ -1508,3 +1508,66 @@ Running at handover: the zsfm writer, stretch 1 (01a21213-e1fa, CalcDb-w2, alta/
 
 Successor: CalcDb organizer 16, session 01a21226-245d-7440-b439-a86caf8b2ce1 (`--no-parent`). Organizer 15 forwards
 the zsfm writer's answers and does nothing else.
+
+## 2026-11-25 - Organizer 16 (01a21226): seven landings, a steer against fitted tests, a DNS outage
+
+**Fitted tests.** The prfx writer changed event-sequence assertions five times in a row while iterating, each time to
+what its code produced. The organizer steered it at once: every assertion names its record and equals it, a mismatch
+is fixed in the code, a case no record shows is dropped or refused. Its report then listed each assertion with its
+record, and the organizer checked one (the forward-only first fetch) against the record: equal. A writer that changes
+an assertion during iteration is checked against its record before the landing, not after.
+
+**A test outside the writer's project.** nnnh's self-check on CalcDb.Sql.slnf did not select CalcDb.Com.Tests, which
+held a stale assertion of the refusal nnnh removed; its first report named the failure but left it, as the file was
+outside its ownership. The organizer gave it the file once the writer that held Com had finished. A writer's
+self-check solution filter should select every test project that a landing check will run for its change.
+
+**Two notes corrected from records.** qualified.md TXN-FLUSH-OP said every statement in CreateDatabase's session writes
+synchronously; r-q41's ETW traces show the statement deferred and written by the next Execute, which back-to-back
+statements made look synchronous. ERR-PARTIAL gained no contradiction: r-q42 multirow's kept failing UPDATE is a new
+shape, consistent with the lock case.
+
+**The network.** The zsfm and prfx landings passed their checks and merged, then failed to push (github.com did not
+resolve, about 12:45 to 13:30 UTC); `-Finish` skipped the compare and baseline, which the organizer ran by hand from
+the snapshots, and pushed once the network was back. A landing whose push fails is complete locally: run the printed
+compare, record the baseline, push later.
+
+## 2026-11-25 - Handover: organizer 16 (01a21226) to organizer 17
+
+Session 01a21226 (Claude Opus 5.5, 2026-11-25 10:00 to about 14:50 UTC; 143 tool calls before the handover). Landed:
+zjtz (landing-check follows linked `<Compile Include>`, 739244f7, by the organizer), the r-q41 round (fkn9 ready gate,
+b5270a60), the r-q42 round (nnnh ready gate, 7965e4f2), zsfm stretch 1 (DAO CreateQueryDef, 39cfa691), prfx stretch 1
+(ADO events, e49b6834), fkn9 (exclusive-session counter at 0xE00, 89b050d5), nnnh (implied-operand field rules,
+6864bac8). Core 476 to 491 of 1360 (zsfm-1 478, fkn9-1 491, nnnh-1 491; prfx-1 480 not recorded: the r-q8 400 ms flip,
+matched on a rerun). Tasks found: gp86 (owner's decision), v9dh, nk97.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 16:40; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 90% (16,474 of 18,348) | below two thirds over a day |
+| Landings checked; passed on the first run | 23; 96% (this session 7 of 7) | below 70% |
+| Landing check duration (median of 24 runs) | 274 s | above 3 min |
+| Compare baselines | core 476 to 491 (zsfm-1, fkn9-1, nnnh-1); wide wide-q3mv-1, wide-nnnh-1 running at handover | any loss nobody can explain |
+| Organizer tool calls per landing | about 20 (143 for 7 landings, a steer, a push outage) | above about 15: crossed |
+| Reviewer findings per 1,000 lines | zsfm 9 on 3,218 (2.8); prfx 7 on 2,746 (2.5); fkn9 3 on 811 (3.7); nnnh 5 on 1,145 (4.4) | above about 3: crossed by fkn9 and nnnh |
+| Rules found wrong after landing | 0; one qualified.md sentence corrected from new records (TXN-FLUSH-OP) | more than one a day |
+| Children stopped waiting for a record; for ownership | 0; 0 (nnnh's stale Com test was given to it, not a stop) | more than one per stretch |
+| Merge minutes per landing | under 1, except zsfm and prfx: about 45 until the push after the outage | above 5 min |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 16 (Opus) | about 290 wall | 143 |
+| fkn9 prober (01a2122a-1b7e) / nnnh prober (01a21262-bd44) | 55 / 62 | 226 / 162 |
+| zsfm writer (01a21213-e1fa, from organizer 15) / reviewer (01a21276-0bc6) | 164 / 29 | 566 / 164 |
+| prfx writer (01a2122c-8727) / reviewer (01a21283-7627) | 141 / 22 | 457 / 154 |
+| fkn9 writer (01a212b9-5a08) / reviewer (01a212f0-8f3a) | 85 / 19 | 274 / 137 |
+| nnnh writer (01a212b9-4e2d) / reviewer (01a212eb-5050) | 95 / 20 | 228 / 105 |
+
+Two indicators crossed: organizer 17 runs the triggered process review. Running at handover: only the wide compare
+wide-nnnh-1 (job-9b538f6f, from the nnnh snapshot against wide-q3mv-1), which organizer 16 finishes (records
+compare-baseline-wide.tsv if nothing is lost, else hands the losses over). No writer runs; CalcDb-w1 and CalcDb-w2 are
+free.
+
+Successor: CalcDb organizer 17, session 01a21328-187d-7f04-89ed-a26a67eb8f9d (`--no-parent`). Organizer 16 finishes the wide compare and does
+nothing else.
