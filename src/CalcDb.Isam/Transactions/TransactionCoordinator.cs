@@ -46,15 +46,16 @@ public readonly record struct AcceptOutcome(bool Accepted, MutationError? Error 
 public sealed record PublicationReceipt(int Changes, NativeProgram Program);
 
 /// <summary>
-/// A deferred catalog commit queued by <c>SchemaWriter.CreateQueryDef</c> for ACE's 5th query-creation commit
-/// (evidence/r-q39-querydef-bytes: MSysQueries TableDef RowCount/UniqueEntryCount on page 4 and non-select
-/// MSysObjects.Flags, flushed at the next CreateQueryDef or at Database.Close).
+/// A deferred catalog commit queued by <c>SchemaWriter.CreateQueryDef</c> (5th commit) or
+/// <c>SchemaWriter.UpdateQueryDefSql</c> (close commit) (evidence/r-q39-querydef-bytes: MSysQueries TableDef
+/// RowCount/UniqueEntryCount on page 4 and changed MSysObjects.Flags, flushed at the next CreateQueryDef or at
+/// Database.Close).
 /// </summary>
 public sealed record DeferredCatalogCommit(
     IReadOnlyList<PageEdit> Edits,
     IReadOnlyList<LockResource> Footprint,
     int? PendingQueryObjectId = null,
-    int PendingQueryFlags = 0);
+    int? PendingQueryFlags = null);
 
 /// <summary>
 /// Where a Workspace's publication writes (II-08 §19; W-05/same-width-mutation): the file session's positioned handle
@@ -651,10 +652,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _releaseAtClose.ContainsKey(cache)
         || _deferredCatalogCommit.ContainsKey(cache);
 
-    /// <summary>True when any file on this workspace has a queued CreateQueryDef deferred fifth commit.</summary>
+    /// <summary>True when any file on this workspace has a queued QueryDef deferred catalog commit.</summary>
     public bool HasDeferredCatalogCommit => _deferredCatalogCommit.Count > 0;
 
-    /// <summary>Queue a deferred catalog commit (CreateQueryDef 5th commit) to flush at the next CreateQueryDef or Database.Close.</summary>
+    /// <summary>Queue a QueryDef deferred catalog commit to flush at the next QueryDef mutation or Database.Close.</summary>
     public void SetDeferredCatalogCommit(PageCache cache, DeferredCatalogCommit commit) =>
         _deferredCatalogCommit[cache] = commit;
 
@@ -683,6 +684,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _reservedExtent.Contains(cache)
         || _sessionReservedExtent.ContainsKey(cache)
         || _rollbackExtentPending.Contains(cache)
+        || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
+
+    /// <summary>
+    /// Whether this Workspace has already allocated a page on page 1 or holds an active page-1 extent reservation on
+    /// <paramref name="cache"/>. Unlike <see cref="HasGlobalMapActivity"/>, a deferred-only Close release
+    /// (<c>DeleteQueryDef</c>, <c>DROP TABLE</c>) that never edited page 1 does not block a later <c>CreateQueryDef</c>
+    /// in the same session from taking its 32-page page-1 extent reservation
+    /// (<c>evidence/r-q39-querydef-bytes/delete-then-create-accdb</c>).
+    /// </summary>
+    public bool HasGlobalMapAllocationOrReservation(PageCache cache) =>
+        _allocatedGlobalMap.Contains(cache)
+        || HasActiveExtentReservation(cache)
         || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
 
     private bool HasActiveExtentReservation(PageCache cache) =>
@@ -3009,7 +3022,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (_deferredCatalogCommit.ContainsKey(physical.File))
                 {
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
                 }
             }
             // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
@@ -3187,7 +3200,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (!allowPendingDeferredCatalogCommit && _deferredCatalogCommit.ContainsKey(file))
         {
-            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
@@ -3274,7 +3287,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (_deferredCatalogCommit.ContainsKey(cache))
         {
-            return (MutationOpen.Publication, "a counter commit while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return (MutationOpen.Publication, "a counter commit while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         (MutationOpen open, string? detail) = PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
         return error is { } refused ? (MutationOpen.Publication, $"the counter commit: {refused.Describe()}") : (open, detail);

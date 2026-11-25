@@ -52,6 +52,9 @@ public sealed record QueryParameter(string Name, short NativeType, int? TextSize
 /// <summary>A compiled saved-query definition ready for <see cref="SchemaWriter.CreateQueryDef"/>.</summary>
 public sealed record CreateQueryDefRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows);
 
+/// <summary>A compiled saved-query SQL replacement ready for <see cref="SchemaWriter.UpdateQueryDefSql"/>.</summary>
+public sealed record UpdateQueryDefSqlRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows);
+
 /// <summary>
 /// A saved query (II-06 §8): its catalog row and its role rows in encounter order. <see cref="OrderingFailure"/> is set
 /// when the rows' Order bytes are not nondecreasing per attribute in encounter order: the encounter-order profile
