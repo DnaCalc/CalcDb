@@ -1645,3 +1645,23 @@ State: the nk97 DAO writer completes its part in CalcDb-w1 on `alta/nk97-dao` (t
 after nk97's DAO part, which also holds Catalog), nk97's Values part (ready gate first) and Isam part, prfx's later
 stretches, the rest of 537t, pjs2 (the harness flake that holds the wide baseline). Waiting for the owner: gp86 (the
 book keeps the writer lease at share zero; an accepted difference in the comparison rule needs the owner's approval).
+
+## 2026-11-26 - Handover to Antigravity Swarm Coordinator
+
+Handover from CodeAlta Organizer 17 (`01a21328`) after `nk97-dao` landed on `master` (`6ccdf4d7`). Operating under
+Antigravity `swarm` (balancing Claude Opus/Sonnet and Gemini Neon quotas) with ~15% daily effort on process reflection
+and `RoslynSkills` (`C:\Work\RoslynSkills`) performance/MCP improvements.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-25 00:09, 92 commits):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 88% (15,778 of 17,888) | below two thirds over a day |
+| Landings checked; passed on the first run | 18; 94% | below 70% |
+| Landing check duration (median of 19 runs) | 233 s | above 3 min |
+| Compare baselines | core 491/1,360 (`zsfm-2-1`; `nk97-dao-1` running); wide `wide-q3mv-1` 1,093/3,586 (held at 1,220/3,721 by `pjs2`) | any loss nobody can explain |
+| Leftover exports; compare snapshots | 0; 10 | more than 5 leftover exports |
+
+Wave 1 dispatched across disjoint boundaries: `pjs2` (`CalcDb-w1`, Claude Opus), `v9dh` (`CalcDb-w2`, Gemini Neon),
+`r-q43` ready-gate evidence audit + probe round (`CalcDb-probe`, Gemini Neon), and `RoslynSkills` hot index/MCP/client
+speedup (`C:\Work\RoslynSkills`, Claude Sonnet).

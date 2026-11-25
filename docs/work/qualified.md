@@ -1440,6 +1440,13 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Open**: `ValidateOnSet`; ADO Recordset.Update and Command.Execute; a failing multi-row UPDATE inside BeginTrans
   and other multi-row shapes; other sort orders and field types (Date, Currency, Yes/No, Double, Memo); a rule put on a
   table whose rows violate it.
+- **Implemented & verified against `r-q42` and `r-q37` (`nk97-dao`, `6ccdf4d7`)**: `Field.AllowZeroLength` (`VT_BOOL` on
+  empty Text columns, stored as `flags = 0x01, type = 0x01, 0xFF/0x00`), populated-table non-empty
+  `Field.ValidationText` (Text/Long, TableDef page untouched), 65-byte MR2 blob placement and shared SingleRow LVAL
+  page reuse (`qd-sql-*-in-mdb` + `r-q42`), `Field.ValidationRule` per-object readback NUL tracking (first read returns
+  stored NUL-terminated bytes; subsequent non-empty put returns text without NUL while disk keeps NUL, `r-cat-1/field-rules`),
+  same-column 3315-beats-3316 (`azl-explicit-false-*`), and depth-0 single-table SELECT dynaset edit lifecycle
+  (`rule-and2-ne-*`, `r-err-1b/asg-update-without-edit` 3020).
 
 ### R-CAT-1 CAT-Q r-q39 (W-07/saved-definition, task zsfm): the bytes of a saved QueryDef
 
