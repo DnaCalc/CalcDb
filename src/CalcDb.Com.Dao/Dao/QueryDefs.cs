@@ -184,7 +184,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
         if (_mode == QueryDefMode.Temporary)
         {
-            return EffectiveFamily is { } tf ? Int16((int)tf) : Int16(0);
+            // r-cat-1/temporary-querydef records Type = 0 for a temporary SELECT; non-SELECT temporary Type is not recorded.
+            return EffectiveFamily == QueryFamily.Select
+                ? Int16(0)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.TemporaryQueryDefNonSelectType", "QueryDef.Type on a temporary non-SELECT QueryDef (not recorded)"));
         }
         return _query!.Family is { } f
             ? Int16((int)f)

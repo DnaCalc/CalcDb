@@ -49,6 +49,14 @@ public sealed unsafe class DaoCreateQueryDefTests : IDisposable
         }
     }
 
+    private void ReleaseHeld(nint ptr)
+    {
+        int idx = _held.LastIndexOf(ptr);
+        Assert.True(idx >= 0, "Expected COM pointer to be tracked in _held.");
+        _held.RemoveAt(idx);
+        Marshal.Release(ptr);
+    }
+
     private sealed record DispatchArg(nint Pointer);
 
     private DBEngineObject CreateEngine()
@@ -318,10 +326,31 @@ public sealed unsafe class DaoCreateQueryDefTests : IDisposable
         DispatchObject rsSp = Recover<DispatchObject>(Method(db, "OpenRecordset", "QSp", DbOpenSnapshot));
         Assert.Null(Method(rsSp, "Close").Failure);
 
-        // Invalid name -> 3125 DAO.QueryDefs (r-dao-1-err-1/err-invalid-names).
+        // Invalid name -> 3125 DAO.QueryDefs (r-dao-1-err-1/err-invalid-names: punctuation and control chars < 0x20).
         CallResult badName = Method(db, "CreateQueryDef", "bad!name", "SELECT ID FROM T");
         Assert.Equal(3125, badName.Failure!.Scode & 0xFFFF);
         Assert.Equal("DAO.QueryDefs", badName.Failure.Source);
+
+        CallResult badCtrl = Method(db, "CreateQueryDef", "bad\tname", "SELECT ID FROM T");
+        Assert.Equal(3125, badCtrl.Failure!.Scode & 0xFFFF);
+        Assert.Equal("DAO.QueryDefs", badCtrl.Failure.Source);
+
+        // Name > 64 chars, 1-arg CreateQueryDef(name), and temporary non-SELECT Type refuse by name (F6, F8).
+        CallResult longName = Method(db, "CreateQueryDef", new string('Q', 65), "SELECT ID FROM T");
+        Assert.Equal(unchecked((int)0x80004001), longName.Failure!.Scode);
+
+        CallResult oneArgNamed = Method(db, "CreateQueryDef", "QNoSql");
+        Assert.Equal(unchecked((int)0x80004001), oneArgNamed.Failure!.Scode);
+
+        QueryDefObject tempUpd = Recover<QueryDefObject>(Method(db, "CreateQueryDef", "", "UPDATE T SET V = 1"));
+        CallResult tempUpdType = Get(tempUpd, "Type");
+        Assert.Equal(unchecked((int)0x80004001), tempUpdType.Failure!.Scode);
+
+        // NFC/NFD + trailing-space collision -> 3012 DAO.QueryDefs (r-cat-1/names, r-fix-expr-sql/querydef-name-space-then-plain).
+        Assert.Null(Method(db, "CreateQueryDef", "Q\u00E9 ", "SELECT ID FROM T").Failure);
+        CallResult dupComposed = Method(db, "CreateQueryDef", "Qe\u0301", "SELECT ID FROM T");
+        Assert.Equal(3012, dupComposed.Failure!.Scode & 0xFFFF);
+        Assert.Equal("DAO.QueryDefs", dupComposed.Failure.Source);
 
         // Syntax errors -> 3129 / 3142 / 3075 from DAO.QueryDefs (r-cat-1b/qd-create-invalid-sql).
         CallResult badLead = Method(db, "CreateQueryDef", "QBad1", "SELEC ID FROM T");
@@ -356,5 +385,51 @@ public sealed unsafe class DaoCreateQueryDefTests : IDisposable
         Assert.Equal(unchecked((int)0x80004001), joinRefused.Failure!.Scode);
 
         Assert.Null(Method(db, "Close").Failure);
+    }
+
+    [Fact]
+    public void CreateQueryDef_before_reading_QueryDefs_preserves_identity_and_session_type_and_guards_interleaved_writes()
+    {
+        (DBEngineObject eng, DatabaseObject db, string path) = CreateSeededDb("identity-and-deferred.accdb");
+        Assert.Null(Method(db, "Close").Failure);
+
+        // Reopen fresh without touching db.QueryDefs before CreateQueryDef (F1).
+        DatabaseObject db2 = Recover<DatabaseObject>(Method(eng, "OpenDatabase", path, false, false));
+        (QueryDefObject created, nint createdPtr) = RecoverWithPtr<QueryDefObject>(Method(db2, "CreateQueryDef", "QUpd", "UPDATE T SET V = V + 1 WHERE ID = 1"));
+        Assert.Equal(0, IntOf(Get(created, "Type")));
+
+        DefinitionCollection qdfs = Recover<DefinitionCollection>(Get(db2, "QueryDefs"));
+        (QueryDefObject looked, nint lookedPtr) = RecoverWithPtr<QueryDefObject>(Get(qdfs, "Item", "QUpd"));
+        Assert.Same(created, looked);
+        Assert.Equal(createdPtr, lookedPtr);
+        Assert.Equal(0, IntOf(Get(looked, "Type")));
+
+        // Release both refs to QUpd; re-fetching in the same session still reports Type = 0 (r-cat-1b/qd-view-update).
+        ReleaseHeld(lookedPtr);
+        ReleaseHeld(createdPtr);
+        QueryDefObject refetched = Recover<QueryDefObject>(Get(qdfs, "Item", "QUpd"));
+        Assert.Equal(0, IntOf(Get(refetched, "Type")));
+
+        // While the deferred 5th commit is pending, BeginTrans and interleaved DML/DDL writes refuse cleanly (F5).
+        CallResult beginTrans = Method(eng, "BeginTrans");
+        Assert.NotNull(beginTrans.Failure);
+        Assert.Equal(unchecked((int)0x80004001), beginTrans.Failure!.Scode);
+
+        CallResult dml = Method(db2, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", DbFailOnError);
+        Assert.NotNull(dml.Failure);
+        Assert.Equal(unchecked((int)0x80004001), dml.Failure!.Scode);
+
+        CallResult ddl = Method(db2, "Execute", "CREATE TABLE U (ID LONG)", DbFailOnError);
+        Assert.NotNull(ddl.Failure);
+        Assert.Equal(unchecked((int)0x80004001), ddl.Failure!.Scode);
+
+        Assert.Null(Method(db2, "Close").Failure);
+
+        // After Close + reopen, Type reads 48 (dbQAction / Update) and Execute runs the saved query (also with trailing space).
+        DatabaseObject db3 = Recover<DatabaseObject>(Method(eng, "OpenDatabase", path, false, false));
+        DefinitionCollection qdfs3 = Recover<DefinitionCollection>(Get(db3, "QueryDefs"));
+        Assert.Equal(48, IntOf(Get(Recover<QueryDefObject>(Get(qdfs3, "Item", "QUpd")), "Type")));
+        Assert.Null(Method(db3, "Execute", "QUpd ", DbFailOnError).Failure);
+        Assert.Null(Method(db3, "Close").Failure);
     }
 }

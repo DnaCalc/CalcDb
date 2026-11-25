@@ -65,6 +65,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private QueryCatalog? _queries;
     private string? _queriesFailure;
     private List<string>? _queryOrder;
+    private readonly HashSet<int> _sessionCreatedQueryIds = [];
 
     /// <summary>
     /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
@@ -683,7 +684,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 ? CallResult.Fail(Failure.NotModelled("NotModelled.ExecuteParameterSelect", "Database.Execute of a SELECT with a PARAMETERS clause: 3061 or 3065 is not recorded"))
                 : Affected(Fail(3065, SelectRoute.CannotExecuteSelect));
         }
-        if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, sql, StringComparison.OrdinalIgnoreCase)) is { } saved)
+        string trimmedQueryName = sql.TrimEnd(' ');
+        if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name.TrimEnd(' '), trimmedQueryName, StringComparison.OrdinalIgnoreCase)) is { } saved)
         {
             return ActionRoute.ExecuteSaved(this, this, saved, options, null, ref _recordsAffected);
         }
@@ -1038,12 +1040,23 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// </summary>
     private CallResult QueryDefsCollection()
     {
+        if (EnsureQueryDefsCollection(out string? failure) is not { } queryDefs)
+        {
+            return CallResult.Fail(Failure.NotImplemented(failure!));
+        }
+        return Object(queryDefs);
+    }
+
+    private DefinitionCollection? EnsureQueryDefsCollection(out string? failure)
+    {
+        failure = null;
         if (_queryDefs is null)
         {
-            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? failure) = QueryDefsMembership();
-            if (failure is not null)
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? memberFailure) = QueryDefsMembership();
+            if (memberFailure is not null)
             {
-                return CallResult.Fail(Failure.NotImplemented(failure));
+                failure = memberFailure;
+                return null;
             }
             _queryOrder = [.. names];
             _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, names, make, holdsDatabase: false)
@@ -1054,7 +1067,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 ClosedSource = "DAO.Database",
             };
         }
-        return Object(_queryDefs);
+        return _queryDefs;
     }
 
     private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) QueryDefsMembership()
@@ -1094,7 +1107,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             ordered = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
         }
-        return ([.. ordered.Select(q => q.Name)], (c, i) => new QueryDefObject(c, ordered[i]), null);
+        return ([.. ordered.Select(q => q.Name)], (c, i) => new QueryDefObject(c, this, ordered[i], createdInSession: _sessionCreatedQueryIds.Contains(ordered[i].Entry.Id)), null);
     }
 
     /// <summary>
@@ -1133,6 +1146,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
             CallResult tempResult = Object(temp);
             temp.Release();
             return tempResult;
+        }
+
+        if (sqlOmitted)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CreateQueryDefOmittedSql", "Database.CreateQueryDef(name) with omitted SQLText (not recorded)"));
         }
 
         CallResult persist = PersistQueryDef(name, sql, connect: null, existingDraft: null, out QueryDefObject? saved);
@@ -1187,11 +1205,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 ? CallResult.Fail(Failure.Dao(3125, "DAO.QueryDefs", DaoErrors.InvalidName(name)))
                 : CallResult.Fail(Failure.NotImplemented("CreateQueryDef / QueryDefs.Append with an empty name (not recorded)"));
         }
-        // Check duplicate name in TablesContainer (tables or queries, case-insensitive, trailing spaces ignored:
+        if (name.Length > 64)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefNameOver64", "CreateQueryDef with a name longer than 64 characters (not recorded for QueryDef)"));
+        }
+        // Check duplicate name in TablesContainer (tables or queries, trailing spaces ignored, FormC composed, case-insensitive:
         // r-dao-1-err-1/draft-querydef [16]-[22], r-cat-1/names [204]/[210], r-fix-expr-sql/querydef-name-space-then-plain [43]).
-        string trimmed = name.TrimEnd(' ');
-        if (Catalog.Entries.Any(e => e.ParentId == Catalog.TablesContainer
-            && string.Equals(e.Name.TrimEnd(' '), trimmed, StringComparison.OrdinalIgnoreCase)))
+        if (Catalog.Entries.Any(e => e.ParentId == Catalog.TablesContainer && SchemaWriter.TablesContainerNamesEqual(e.Name, name)))
         {
             return CallResult.Fail(Failure.Dao(3012, "DAO.QueryDefs", DaoErrors.ObjectExists(name)));
         }
@@ -1245,11 +1265,19 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("CreateQueryDef published the query, but it could not be read back from MSysQueries: " + _queriesFailure));
         }
 
-        if (_queryOrder is not null && !_queryOrder.Contains(savedQuery.Name, StringComparer.OrdinalIgnoreCase))
+        _sessionCreatedQueryIds.Add(savedQuery.Entry.Id);
+        if (_queryDefs is null)
         {
-            _queryOrder.Add(savedQuery.Name);
+            EnsureQueryDefsCollection(out _);
         }
-        _queryDefs?.Relist();
+        else
+        {
+            if (_queryOrder is not null && !_queryOrder.Contains(savedQuery.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                _queryOrder.Add(savedQuery.Name);
+            }
+            _queryDefs.Relist();
+        }
 
         if (existingDraft is not null)
         {

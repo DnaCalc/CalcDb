@@ -85,7 +85,15 @@ public sealed class QueryDefBytesReplayTests
         Assert.Equal(compiled.Family, saved.Family);
         RenderedSql rendered = QuerySql.Render(saved);
         Assert.Null(rendered.NotModelled);
-        Assert.False(string.IsNullOrWhiteSpace(rendered.Text));
+        if (ReadRecordedSql(question) is { } recordedSql)
+        {
+            Assert.Equal(recordedSql, rendered.Text);
+        }
+        else
+        {
+            // expr-len-32-accdb, expr-len-33-accdb, long-expr-mdb do not reopen to read qdr.SQL; check the WHERE literal round-trip.
+            Assert.Contains("WHERE W = 'aaa", rendered.Text, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
@@ -165,8 +173,12 @@ public sealed class QueryDefBytesReplayTests
         AssertImageEqual($"{question} (after-close)", aceClose, db.Image.Snapshot());
     }
 
+    /// <summary>
+    /// Oracle-fixture invariant check for <c>r-q39-querydef-bytes/temp-querydef-accdb</c>: confirms ACE itself wrote
+    /// zero bytes open or closed (DAO-side zero-byte verification lives in <c>DaoCreateQueryDefTests</c>).
+    /// </summary>
     [Fact]
-    public void Temp_querydef_record_changes_no_bytes()
+    public void Temp_querydef_oracle_record_changes_no_bytes()
     {
         Dictionary<string, byte[]> snaps = ReadSnapshots("temp-querydef-accdb");
         AssertImageEqual("temp-querydef-accdb (open)", snaps["pg0"], snaps["pg1"]);
@@ -187,6 +199,14 @@ public sealed class QueryDefBytesReplayTests
     [InlineData("PARAMETERS pV Long; UPDATE T SET V = pV WHERE ID = 1", "NotModelled.QueryDefActionParameters")]
     [InlineData("TRANSFORM Count(ID) SELECT V FROM T GROUP BY V PIVOT W IN ('a','b')", "NotModelled.QueryDefPivotIn")]
     [InlineData("DROP TABLE T", "NotModelled.QueryDefDdlStatement")]
+    [InlineData("SELECT ID FROM T ORDER BY ID DESC", "NotModelled.QueryDefOrderByShape")]
+    [InlineData("SELECT ID, V FROM T ORDER BY ID, V", "NotModelled.QueryDefOrderByShape")]
+    [InlineData("SELECT [A] AS [My Col] FROM T", "NotModelled.QueryDefDelimitedIdentifier")]
+    [InlineData("SELECT ID FROM [My Table]", "NotModelled.QueryDefDelimitedIdentifier")]
+    [InlineData("SELECT * FROM T WHERE ID > 1", "NotModelled.QueryDefStarWithClauses")]
+    [InlineData("PARAMETERS pName Text(10), pId Long; SELECT ID FROM T WHERE ID = pId", "NotModelled.QueryDefParameterOrder")]
+    [InlineData("TRANSFORM Count(ID) SELECT V FROM T GROUP BY V PIVOT W", "NotModelled.QueryDefCrosstabUnaliasedTransform")]
+    [InlineData("TRANSFORM Count(ID) AS C SELECT V FROM T GROUP BY V, W PIVOT W", "NotModelled.QueryDefCrosstabClause")]
     public void Undecided_shapes_refuse_by_name(string sql, string expectedNotModelled)
     {
         QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(sql);
@@ -194,6 +214,25 @@ public sealed class QueryDefBytesReplayTests
         Assert.NotNull(compiled.Failure);
         Assert.True(compiled.Failure!.IsNotModelled);
         Assert.Equal(expectedNotModelled, compiled.Failure.NotModelled);
+    }
+
+    private static string? ReadRecordedSql(string question)
+    {
+        string folder = Path.Combine(SqlFixture.Root(), "evidence", "r-q39-querydef-bytes", question);
+        string record = Directory.GetFiles(folder, "*.a1.json").Single();
+        using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(record));
+        foreach (JsonElement ev in doc.RootElement.GetProperty("capture").GetProperty("events").EnumerateArray())
+        {
+            if (ev.TryGetProperty("event", out JsonElement kind) && kind.ValueKind == JsonValueKind.String && kind.GetString() == "invoke"
+                && ev.TryGetProperty("target", out JsonElement target) && target.ValueKind == JsonValueKind.String && target.GetString() == "qdr"
+                && ev.TryGetProperty("member", out JsonElement member) && member.ValueKind == JsonValueKind.String && member.GetString() == "SQL"
+                && ev.TryGetProperty("result", out JsonElement result)
+                && result.TryGetProperty("text", out JsonElement text) && text.ValueKind == JsonValueKind.String)
+            {
+                return text.GetString();
+            }
+        }
+        return null;
     }
 
     private static Dictionary<string, byte[]> ReadSnapshots(string question)

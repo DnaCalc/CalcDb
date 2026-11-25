@@ -286,8 +286,31 @@ public sealed class SchemaWriter
     /// decomposed <c>Té</c>, and <c>Té</c>/<c>TÉ</c>, are one name; <c>Tä</c> and <c>Té</c> are two (r-cat-1/names).
     /// Field names follow <see cref="FieldNameClashOf"/>.
     /// </summary>
-    public static bool IsValidName(string name) =>
-        name.Length > 0 && name[0] != ' ' && name.IndexOfAny(['.', '!', '[', ']', '`']) < 0;
+    public static bool IsValidName(string name)
+    {
+        if (name.Length == 0 || name[0] == ' ')
+        {
+            return false;
+        }
+        foreach (char c in name)
+        {
+            if (c < 0x20 || c is '.' or '!' or '[' or ']' or '`')
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// True when two TablesContainer object names collide under ACE's naming rule: trailing ASCII spaces stripped,
+    /// Unicode FormC composed, case-insensitive (r-cat-1/names, r-fix-expr-sql/querydef-name-space-then-plain).
+    /// </summary>
+    public static bool TablesContainerNamesEqual(string left, string right) =>
+        string.Equals(
+            left.TrimEnd(' ').Normalize(System.Text.NormalizationForm.FormC),
+            right.TrimEnd(' ').Normalize(System.Text.NormalizationForm.FormC),
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>OLE Automation DATE bits of a local clock reading, as MSysObjects stores DateCreate and DateUpdate.</summary>
     public static ulong DateBits(DateTime local) => BitConverter.DoubleToUInt64Bits(local.ToOADate());
@@ -1583,7 +1606,11 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(3125, null), default, _pageCount);
         }
-        if (FindTable(request.Name) is not null)
+        if (request.Name.Length > 64)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO CreateQueryDef with a name longer than 64 characters is not recorded (r-dao-1-err-1/err-invalid-names only records TableDef)"), default, _pageCount);
+        }
+        if (_catalog.Entries.Any(e => e.ParentId == _catalog.TablesContainer && TablesContainerNamesEqual(e.Name, request.Name)))
         {
             return new SchemaOutcome(new SchemaRefusal(3012, null), default, _pageCount);
         }
@@ -1638,7 +1665,8 @@ public sealed class SchemaWriter
                 useSessionExtentReservation,
                 priorDeferred,
                 out objectRow,
-                out extent));
+                out extent),
+            allowPendingDeferredCatalogCommit: true);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -2491,9 +2519,9 @@ public sealed class SchemaWriter
                         reusedLvalPage = candidate;
                         reusedSlot = appendedSlot;
                     }
-                    else if (lvalFree.Count > 1)
+                    else if (lvalFree.Count > 0)
                     {
-                        work.Fail($"MSysObjects.LvProp LVAL free map holds {lvalFree.Count} full pages: walking past multiple full MSysObjects.LvProp LVAL pages is not recorded");
+                        work.Fail($"MSysObjects.LvProp LVAL free map holds {lvalFree.Count} full page(s): walking past a full MSysObjects.LvProp LVAL page is not recorded");
                         return false;
                     }
                 }

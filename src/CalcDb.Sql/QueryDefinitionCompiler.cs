@@ -212,6 +212,10 @@ public static class QueryDefinitionCompiler
         bool isBareStar = select.Items is [{ Star: true, StarSource: null }];
         if (isBareStar)
         {
+            if (select.Parameters.Count > 0 || select.Where is not null || select.OrderBy.Count > 0)
+            {
+                return Open("NotModelled.QueryDefStarWithClauses", "CreateQueryDef of SELECT * with PARAMETERS/WHERE/ORDER BY (only bare SELECT * FROM T is recorded in r-q39/select-star-*)");
+            }
             // r-q39-querydef-bytes/select-star-accdb and select-star-mdb: [0x00, 0xFF, 0x05(Name1=T), 0x03(Flag=1)].
             b.Add(QueryAttributes.Source, name1: tableName);
             b.Add(QueryAttributes.Options, flag: OptionStar);
@@ -225,6 +229,10 @@ public static class QueryDefinitionCompiler
             // r-q39-querydef-bytes/select-cols-accdb, select-where-order-*, select-params-*: Output(0x06)* then Source(0x05).
             foreach (SelectItem item in select.Items)
             {
+                if (ValidatePlainIdentifier(item.Alias, "output alias") is { } aliasRefusal)
+                {
+                    return aliasRefusal;
+                }
                 b.Add(QueryAttributes.Output, flag: 0, name1: item.Alias, expression: item.Expression!.Text(src));
             }
             b.Add(QueryAttributes.Source, name1: tableName);
@@ -233,6 +241,10 @@ public static class QueryDefinitionCompiler
         if (select.Where is { } where)
         {
             b.Add(QueryAttributes.Where, expression: where.Text(src));
+        }
+        if (ValidateOrderBy(select.OrderBy) is { } orderRefusal)
+        {
+            return orderRefusal;
         }
         foreach (OrderItem order in select.OrderBy)
         {
@@ -260,12 +272,20 @@ public static class QueryDefinitionCompiler
         {
             return sourceRefusal;
         }
+        if (ValidatePlainIdentifier(select.IntoTarget, "INTO target table") is { } intoRefusal)
+        {
+            return intoRefusal;
+        }
 
         // r-q39-querydef-bytes/action-select-into-accdb: [0x00, 0xFF, 0x06*, 0x01(Flag=2, Name1=target), 0x05(Name1=src), 0x08?].
         string src = select.Source;
         var b = new RowBuilder();
         foreach (SelectItem item in select.Items)
         {
+            if (ValidatePlainIdentifier(item.Alias, "output alias") is { } aliasRefusal)
+            {
+                return aliasRefusal;
+            }
             b.Add(QueryAttributes.Output, flag: 0, name1: item.Alias, expression: item.Expression!.Text(src));
         }
         b.Add(QueryAttributes.Type, flag: TypeMakeTable, name1: select.IntoTarget);
@@ -345,6 +365,10 @@ public static class QueryDefinitionCompiler
         {
             return Open("NotModelled.QueryDefTargetAlias", $"CreateQueryDef of {action.Kind} with aliased target table (undecided in r-q39)");
         }
+        if (ValidatePlainIdentifier(action.TargetName, "target table") is { } targetRefusal)
+        {
+            return targetRefusal;
+        }
 
         string src = action.Source;
         var b = new RowBuilder();
@@ -360,6 +384,10 @@ public static class QueryDefinitionCompiler
                 b.Add(QueryAttributes.Source, name1: action.TargetName);
                 foreach (SetAssignment a in action.Assignments)
                 {
+                    if (ValidatePlainIdentifier(a.Column, "SET column") is { } colRefusal)
+                    {
+                        return colRefusal;
+                    }
                     b.Add(QueryAttributes.Output, flag: 0, name2: a.Column, expression: a.Value.Text(src));
                 }
                 if (action.Where is { } updWhere)
@@ -387,6 +415,10 @@ public static class QueryDefinitionCompiler
                 b.Add(QueryAttributes.Type, flag: TypeAppend, name1: action.TargetName);
                 for (int i = 0; i < action.TargetColumns.Count; i++)
                 {
+                    if (ValidatePlainIdentifier(action.TargetColumns[i], "INSERT target column") is { } colRefusal)
+                    {
+                        return colRefusal;
+                    }
                     b.Add(QueryAttributes.Output, flag: AppendValuesFlag, name2: action.TargetColumns[i], expression: action.Values[i].Text(src));
                 }
                 return QueryDefinitionCompilation.Ok(QueryFamily.Append, b.Build());
@@ -413,6 +445,10 @@ public static class QueryDefinitionCompiler
                 b.Add(QueryAttributes.Type, flag: TypeAppend, name1: action.TargetName);
                 for (int i = 0; i < action.TargetColumns.Count; i++)
                 {
+                    if (ValidatePlainIdentifier(action.TargetColumns[i], "INSERT target column") is { } colRefusal)
+                    {
+                        return colRefusal;
+                    }
                     b.Add(QueryAttributes.Output, flag: 0, name2: action.TargetColumns[i], expression: sourceSelect.Items[i].Expression!.Text(src));
                 }
                 b.Add(QueryAttributes.Source, name1: sourceTable);
@@ -447,9 +483,17 @@ public static class QueryDefinitionCompiler
         {
             return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (undecided in r-q39)");
         }
-        if (select.Predicate != SelectPredicate.All || select.Top is not null || select.Having is not null || select.OrderBy.Count > 0 || select.GroupBy.Count == 0)
+        if (select.Predicate != SelectPredicate.All || select.Top is not null || select.Having is not null || select.OrderBy.Count > 0 || select.GroupBy.Count != 1)
         {
-            return Open("NotModelled.QueryDefCrosstabClause", "CreateQueryDef of a crosstab with DISTINCT/TOP/HAVING/ORDER BY or without GROUP BY (undecided in r-q39)");
+            return Open("NotModelled.QueryDefCrosstabClause", "CreateQueryDef of a crosstab with DISTINCT/TOP/HAVING/ORDER BY or GROUP BY count other than 1 (only single-term GROUP BY is recorded in r-q39/crosstab-accdb)");
+        }
+        if (string.IsNullOrEmpty(xtab.TransformAlias))
+        {
+            return Open("NotModelled.QueryDefCrosstabUnaliasedTransform", "CreateQueryDef of a crosstab without an AS alias on TRANSFORM (only aliased TRANSFORM is recorded in r-q39/crosstab-accdb)");
+        }
+        if (ValidatePlainIdentifier(xtab.TransformAlias, "TRANSFORM alias") is { } xtabAliasRefusal)
+        {
+            return xtabAliasRefusal;
         }
         if (select.Items.Any(static i => i.Star))
         {
@@ -461,13 +505,17 @@ public static class QueryDefinitionCompiler
         }
 
         // r-q39-querydef-bytes/crosstab-accdb:
-        // [0x00, 0xFF, 0x01(6), 0x06(0, Name1=alias, Expr=transform), 0x06(2, Expr=rowHeader)*, 0x05(T), 0x08?, 0x09(2, Expr=group)*, 0x09(1, Expr=pivot), 0x06(1, Expr=pivot)].
+        // [0x00, 0xFF, 0x01(6), 0x06(0, Name1=alias, Expr=transform), 0x06(2, Expr=rowHeader)*, 0x05(T), 0x08?, 0x09(2, Expr=group), 0x09(1, Expr=pivot), 0x06(1, Expr=pivot)].
         string src = select.Source;
         var b = new RowBuilder();
         b.Add(QueryAttributes.Type, flag: TypeCrosstab);
         b.Add(QueryAttributes.Output, flag: 0, name1: xtab.TransformAlias, expression: xtab.Transform.Text(src));
         foreach (SelectItem item in select.Items)
         {
+            if (ValidatePlainIdentifier(item.Alias, "crosstab row-header alias") is { } itemAliasRefusal)
+            {
+                return itemAliasRefusal;
+            }
             b.Add(QueryAttributes.Output, flag: CrosstabGroupFlag, name1: item.Alias, expression: item.Expression!.Text(src));
         }
         b.Add(QueryAttributes.Source, name1: tableName);
@@ -512,6 +560,10 @@ public static class QueryDefinitionCompiler
         switch (select.From[0])
         {
             case NamedSource { Alias: null } named:
+                if (ValidatePlainIdentifier(named.Name, "FROM source") is { } nameRefusal)
+                {
+                    return nameRefusal;
+                }
                 tableName = named.Name;
                 return null;
             case NamedSource aliased:
@@ -525,19 +577,70 @@ public static class QueryDefinitionCompiler
         }
     }
 
+    private static QueryDefinitionCompilation? ValidateOrderBy(IReadOnlyList<OrderItem> orderBy)
+    {
+        // Only single ASC (r-cat-1/querydefs QOneOrdered, r-cat-1b/qd-view-select) and two-term DESC, ASC
+        // (r-q39-querydef-bytes/select-where-order-accdb/mdb, r-cat-1/querydefs QOrder) are recorded and rendered by QuerySql.
+        return orderBy.Count switch
+        {
+            0 => null,
+            1 when !orderBy[0].Descending => null,
+            2 when orderBy[0].Descending && !orderBy[1].Descending => null,
+            _ => Open("NotModelled.QueryDefOrderByShape", "CreateQueryDef with an ORDER BY shape other than single ASC or two-term DESC, ASC (not recorded in r-q39 / QuerySql)"),
+        };
+    }
+
     private static QueryDefinitionCompilation? ValidateParameters(IReadOnlyList<ParameterDeclaration> parameters)
     {
+        bool seenText = false;
         foreach (ParameterDeclaration p in parameters)
         {
+            if (ValidatePlainIdentifier(p.Name, "parameter name") is { } nameRefusal)
+            {
+                return nameRefusal;
+            }
             if (p.DaoType == NativeTypes.Long && p.TextSize is null)
             {
+                if (seenText)
+                {
+                    return Open("NotModelled.QueryDefParameterOrder", "CreateQueryDef PARAMETERS with Long after Text(n) (LvExtra stickiness after Text(n) is only recorded for non-parameter rows in r-q39/select-params-*)");
+                }
                 continue;
             }
             if (p.DaoType == NativeTypes.Text && p.TextSize is > 0)
             {
+                seenText = true;
                 continue;
             }
             return Open("NotModelled.QueryDefParameterType", $"CreateQueryDef PARAMETERS type {p.DaoType} (size {p.TextSize?.ToString() ?? "none"}): only Long and Text(n) are recorded in r-q39/select-params-*");
+        }
+        return null;
+    }
+
+    private static readonly HashSet<string> ReservedSqlKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "SELECT", "FROM", "WHERE", "ORDER", "GROUP", "BY", "HAVING", "AS", "INTO", "SET", "VALUES",
+        "UNION", "ALL", "DISTINCT", "DISTINCTROW", "TOP", "PARAMETERS", "TRANSFORM", "PIVOT", "IN",
+        "ON", "JOIN", "INNER", "LEFT", "RIGHT", "UPDATE", "DELETE", "INSERT", "CREATE", "ALTER",
+        "DROP", "TABLE", "WITH", "AND", "OR", "NOT", "IS", "NULL", "LIKE", "BETWEEN", "TRUE", "FALSE",
+    };
+
+    private static QueryDefinitionCompilation? ValidatePlainIdentifier(string? name, string role)
+    {
+        if (name is null)
+        {
+            return null;
+        }
+        if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_') || ReservedSqlKeywords.Contains(name))
+        {
+            return Open("NotModelled.QueryDefDelimitedIdentifier", $"CreateQueryDef {role} '{name}' requires delimiter bracketing (MSysQueries Name1/Name2 bracketing is not recorded in r-q39)");
+        }
+        foreach (char c in name)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_'))
+            {
+                return Open("NotModelled.QueryDefDelimitedIdentifier", $"CreateQueryDef {role} '{name}' requires delimiter bracketing (MSysQueries Name1/Name2 bracketing is not recorded in r-q39)");
+            }
         }
         return null;
     }

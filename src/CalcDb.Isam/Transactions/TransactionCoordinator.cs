@@ -644,6 +644,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _releaseAtClose.ContainsKey(cache)
         || _deferredCatalogCommit.ContainsKey(cache);
 
+    /// <summary>True when any file on this workspace has a queued CreateQueryDef deferred fifth commit.</summary>
+    public bool HasDeferredCatalogCommit => _deferredCatalogCommit.Count > 0;
+
     /// <summary>Queue a deferred catalog commit (CreateQueryDef 5th commit) to flush at the next CreateQueryDef or Database.Close.</summary>
     public void SetDeferredCatalogCommit(PageCache cache, DeferredCatalogCommit commit) =>
         _deferredCatalogCommit[cache] = commit;
@@ -2987,6 +2990,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
                 }
+                if (_deferredCatalogCommit.ContainsKey(physical.File))
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+                }
             }
             // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
             // is atomic (on failure the overlay is unchanged), so defer applying it until either a second change or an
@@ -3150,7 +3157,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public AcceptOutcome AcceptSchemaChange(
         PageCache file,
         MutationSemantics catalogTable,
-        Func<FileParticipant, CompiledChange> compile)
+        Func<FileParticipant, CompiledChange> compile,
+        bool allowPendingDeferredCatalogCommit = false)
     {
         if (_unresolved.Contains(file))
         {
@@ -3159,6 +3167,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_jet4MdbRollbackPending.Contains(file))
         {
             return new AcceptOutcome(false, null, MutationOpen.Publication, PendingJet4MdbRollbackWriteDetail);
+        }
+        if (!allowPendingDeferredCatalogCommit && _deferredCatalogCommit.ContainsKey(file))
+        {
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
@@ -3242,6 +3254,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_participants.ContainsKey(cache))
         {
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them");
+        }
+        if (_deferredCatalogCommit.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "a counter commit while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         (MutationOpen open, string? detail) = PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
         return error is { } refused ? (MutationOpen.Publication, $"the counter commit: {refused.Describe()}") : (open, detail);
