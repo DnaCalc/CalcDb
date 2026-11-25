@@ -38,9 +38,14 @@ $commits = @(git -C $repo log --since="$Since" --format=%h).Count
 # Landing checks: the first run of each name decides the first-pass rate; filtered runs are iterations, not landings.
 $ledger = Join-Path $env:LOCALAPPDATA "CalcDb\landing-runs.tsv"
 $runs = if (Test-Path $ledger) { @(Import-Csv $ledger -Delimiter "`t" | Where-Object { [DateTime] $_.utc -ge ([DateTime] $Since).ToUniversalTime() -and $_.filtered -eq 'False' }) } else { @() }
-$names = @($runs | Group-Object name)
+# A landing is a run in the check worktree (mode branch or files); a child's -InPlace self-checks are its own
+# iterations and are counted apart (2026-11-25: their reruns had pulled the landing rate below its line).
+$landingRuns = @($runs | Where-Object mode -ne 'inplace')
+$selfRuns = @($runs | Where-Object mode -eq 'inplace')
+$names = @($landingRuns | Group-Object name)
 $firstPass = @($names | Where-Object { ($_.Group | Sort-Object utc | Select-Object -First 1).failed -eq '0' }).Count
-$secs = @($runs | ForEach-Object { [int] $_.seconds } | Sort-Object)
+$selfFailed = @($selfRuns | Where-Object failed -ne '0').Count
+$secs = @($landingRuns | ForEach-Object { [int] $_.seconds } | Sort-Object)
 $median = if ($secs.Count) { $secs[[int] [Math]::Floor($secs.Count / 2)] } else { $null }
 
 # Compare baselines recorded in the window ("baseline NAME, N of M" in the commit subject).
@@ -62,6 +67,7 @@ function Pct($x) { "{0:P0}" -f $x }
 "| Lines changed: engine / tests / tooling (of it probes) / process / bookkeeping | $($lines.engine) / $($lines.tests) / $($lines.tooling) ($($lines.probeTool)) / $($lines.process) / $($lines.bookkeeping); baseline copies $($lines.generated) | probe tooling above the engine for a week |"
 "| Evidence and probe files changed | $evidenceFiles | - |"
 "| Landings checked; passed on the first run | $($names.Count); $(if ($names.Count) { Pct ($firstPass / $names.Count) } else { '-' }) | below 70% |"
+"| Children's self-checks; failed | $($selfRuns.Count); $selfFailed | - |"
 "| Landing check duration (median of $($secs.Count) runs) | $(if ($null -ne $median) { "$median s" } else { '-' }) | above 3 min |"
 "| Compare baselines (first, last) | $(if ($baselines.Count) { "$($baselines[0]); $($baselines[-1])" } else { '-' }) | any loss nobody can explain: stop landing |"
 "| Register rows | $($status -join ', ') | - |"

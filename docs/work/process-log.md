@@ -1406,3 +1406,47 @@ brief now has the child build and run its new tests before a full self-check.
 | sqkg writer (01a20e86) / 7mxt writer (01a20e88) | 30 / 124 | 125 / 338 |
 | r-q37 prober (01a20e8a) / 9dvt writer (01a20ec6, running) | 46 / 127 | 180 / 404 |
 | x8vx writer (01a20f0a, waiting) / reviewers 7mxt (01a20ec7), 9dvt (01a20f15) | 16 / 26 / 27 | 91 / 140 / 148 |
+
+## 2026-11-25 - Handover: organizer 14 (01a20e84) to organizer 15
+
+Session 01a20e84 (Claude Opus 5.5, 2026-11-24 17:05 to 2026-11-25 about 00:40 UTC, about 275 tool calls in this
+runtime). Landed: sqkg (ADO open of a Jet 4 MDB), the r-q37 round (ValidationRule puts), 7mxt (SqlBinder literal and
+function Field.Type), the r-q38 round (empty Jet 4 MDB), 9dvt (DAO ValidationRule puts, one field-rule expansion),
+537t's Jet 4 MDB half, x8vx (a refused action writes nothing, depth 0 and inside BeginTrans), q3mv (calls.trace@12:
+files rebuilt from kept pages); the process round (1daa9f84) and the self-check rule (9e9ec477). Core baseline 474 to
+476 of 1360 (q3mv-1); 537t-1 not recorded (the `mhzd` r-q8 flips, matched on a rerun). Tasks found: nnnh, q3mv.
+
+`tools/process-indicators.ps1` now counts landings (runs in the check worktree) apart from a child's -InPlace
+self-checks: with both together the first-run rate read 69%, below its line, while every branch landing of the window
+passed its check at the first run.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 02:24; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 90% (20,335 of 22,501) | below two thirds over a day |
+| Landings checked; passed on the first run | 25; 96% (this session 8 of 8) | below 70% |
+| Children's self-checks; failed | 58; 26 (x8vx 7 runs, mostly compile errors in its own tests; brief rule 9e9ec477) | - |
+| Landing check duration (median of 25 landings) | 276 s, with publish and the -Land merge (`c68k` ran tests concurrently) | above 3 min |
+| Compare baselines | core 474 to 476; wide: wide-q3mv-1 running at handover | any loss nobody can explain |
+| Organizer tool calls per landing | about 30 (275 for 8 landings, 2 stops, a process round) | above about 15 |
+| Reviewer findings per 1,000 lines | 7mxt 5 on 930; 9dvt 6 on 1,750; x8vx 5 on 1,400; 537t 2 on 690; q3mv 4 on 490 | above about 3 |
+| Rules found wrong after landing | 0; caught before landing by the organizer: r-q37's 65-byte boundary, 9dvt's two rule expansions, x8vx's Command.Execute answers (its reviewer's), r-q38's "all dates equal" (537t's replay) | more than one a day |
+| Children stopped waiting for a record; for ownership | 0; 2 (9dvt, x8vx) | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land -Finish`) | above 5 min |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 14 (Opus) | about 450 wall | about 275 |
+| sqkg (01a20e86) / 7mxt (01a20e88) / 9dvt (01a20ec6) writers | 30 / 124 / 181 | 125 / 338 / 460 |
+| x8vx (01a20f0a) / 537t (01a20f84) / q3mv (01a20fd1) writers | 238 / 64 / 57 | 443 / 180 / 127 |
+| r-q37 (01a20e8a) / r-q38 (01a20f53) probers | 46 / 25 | 180 / 83 |
+| reviewers 7mxt, 9dvt, x8vx, 537t, q3mv | 26 / 27 / 21 / 15 / 10 | 140 / 148 / 131 / 93 / 46 |
+
+Organizer calls per landing and reviewer findings per 1,000 lines stay above their lines, as in organizers 12 and 13's
+windows; the landing check is above 3 minutes. The weekly review (The Plan 4) should take all three: about 20 of this
+session's turns were wake-ups for a child's interim answer (a CodeAlta proposal for the owner is in the process round
+above), and every large stretch had one or two rules beyond its records, caught before landing.
+
+Successor: CalcDb organizer 15, session 01a21018-8797-7e2a-a83d-e809e872a3d4, started beside 01a20e84 (`--no-parent`). Organizer 14 finishes the wide
+compare wide-q3mv-1 (records compare-baseline-wide.tsv if nothing is lost) and forwards nothing else.
