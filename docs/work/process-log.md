@@ -1613,11 +1613,12 @@ Landed: zsfm stretch 2 (saved QueryDef.SQL put and QueryDefs.Delete, merge f84d5
 (2b138d0c), nothing lost, 11 questions moved further; wide baseline still wide-q3mv-1 (wide-nnnh-1 not recorded,
 `pjs2`). The triggered process review is above. The owner stopped the work for a move to another harness: the nk97
 DAO writer (01a2142d-fc99) was aborted after 13 minutes with its worktree clean, its roscli daemon stopped, CalcDb-w1
-detached at master and `alta/nk97-dao` deleted. **`alta session abort` did not stop it:** a new run of the writer
-went on for about 25 minutes and wrote 11 files (about 900 lines) into the detached slot, then cancelled its own test
-job and asked what to do. The organizer kept the work as commit 3ff649d3 on `alta/nk97-dao` (unbuilt, untested,
-unreviewed, not landed) and detached the slot again. After an abort, check the child's later runs and its worktree
-before cleaning up (for the owner to pass on to CodeAlta if wanted).
+detached at master and `alta/nk97-dao` deleted. The abort stopped that run, but the owner was also talking to the writer directly, and
+its message at 19:49 started a new run that wrote 11 files (about 900 lines) into the detached slot; the organizer
+saw it only from the writer's answer and took it for a run the abort missed. The work was kept as commit 3ff649d3 on
+`alta/nk97-dao`, and at 20:23 the owner told the writer to complete it: the organizer steered it back onto its branch.
+Before cleaning up a child, read its user messages (`alta session events --kind user.message`): the owner may be
+steering it.
 
 Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 21:41):
 
@@ -1639,9 +1640,8 @@ Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 21:41):
 | zsfm-2 writer (01a213cc-9f16) / reviewer (01a213fc-6f4e) | 110 / 12 | 284 / 94 |
 | nk97 DAO writer (01a2142d-fc99), aborted | 13 | 76 |
 
-State at the stop: nothing runs; master pushed; CalcDb-w1 and CalcDb-w2 detached at master; one `alta/*` branch,
-`alta/nk97-dao` (3ff649d3, the unbuilt nk97 work); no roscli daemon. Next in register order: the nk97 DAO part (ready,
-briefed as its row says; start from 3ff649d3 or master), then v9dh (Catalog, Isam;
+State: the nk97 DAO writer completes its part in CalcDb-w1 on `alta/nk97-dao` (the owner's call, 20:23); organizer
+17 lands it. CalcDb-w2 detached at master. Next in register order after it: then v9dh (Catalog, Isam;
 after nk97's DAO part, which also holds Catalog), nk97's Values part (ready gate first) and Isam part, prfx's later
 stretches, the rest of 537t, pjs2 (the harness flake that holds the wide baseline). Waiting for the owner: gp86 (the
 book keeps the writer lease at share zero; an accepted difference in the comparison rule needs the owner's approval).
