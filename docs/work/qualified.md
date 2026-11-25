@@ -1402,6 +1402,44 @@ is summarised in [qualification-report.md](qualification-report.md).
   of three or more pages; an LVAL page shared with another live row; an MSysObjects page without room for the inline
   blob; the length limits of the rule and the text; a table with rows; TableDef-level rules, a draft field before
   Append, other variant types; why the chained replacement allocated page 48 and not 47; the counter's width and wrap.
+  Enforcement of the rules put: r-q42 below.
+
+### R-EXPR-1 EXPR-MUTATION r-q42 (W-06, task nnnh): a field rule with implied operands is enforced clause by clause, and a failing write changes no page
+
+- **Claim**:
+  - *Grammar.* In a `Field.ValidationRule`, each clause that starts with an operator (`=`, `<>`, `<`, `<=`, `>`,
+    `>=`, `Between`, `In`, `Like`, `Is [Not] Null`) takes the field as its left operand, inside `And`, `Or`, `Xor`,
+    `Eqv`, `Imp`, parentheses and `Not`; a bare literal there means `[Field] = literal` (`Not 'a'` is `Not = 'a'`); an
+    explicit `[Field]` clause mixes with implied ones. Comparisons chain to the left (`<> 'a' = False` is `([W] <> 'a')
+    = False`). Text compares without case under General. Null passes every rule except `Is Not Null`; `''` passes
+    `<>` and `Not` rules and fails `=`, range, `Between` and `In` rules (AllowZeroLength put True).
+  - *Puts refused*: dangling or malformed syntax 3320; another column or an aggregate 3783; a subquery 3420. A
+    `TableDef.ValidationRule` with an implied operand is refused 3320. `And <> 5` on a Long is accepted at the put and
+    fails every INSERT with 3802.
+  - *Enforcement, the same on all 10 core forms, INSERT and UPDATE, ACCDB and Jet 4 MDB:*
+
+| Route | Pass | Fail, no ValidationText | Fail, ValidationText set |
+| --- | --- | --- | --- |
+| DAO `Execute` with 128 | RecordsAffected 1 | 3317 (default text naming rule and `T.col`), RecordsAffected 0 | 3316 with the text |
+| DAO `Execute` without 128 | RecordsAffected 1 | no error, RecordsAffected 0 | the same |
+| DAO dynaset AddNew/Edit + Update | EditMode 0 | 3317, EditMode stays 2 or 1, CancelUpdate succeeds | 3316, the same |
+| ADO `Connection.Execute` | RecordsAffected 1 | 0x80004005, SQLState `3316`, NativeError -541462135, the default text; RecordsAffected stays -1 | the same, with the text |
+
+  - A failing single-row write changes no page; a passing INSERT changes pages 0, 42, 44, 46 (MDB 0, 19, 21, 23) of
+    the r-q37 plain fixture, an UPDATE 0 and 46 (MDB 0 and 23).
+  - *AllowZeroLength.* After an explicit DAO put of False, `''` fails 3315 before the rule is checked; on a DDL TEXT
+    column with no put, DAO reads AllowZeroLength False, yet `''` reaches the rule (azl-false-order).
+  - *Several rows* (one shape, multirow): an `INSERT ... SELECT` with failing rows inserts none with 128 or through ADO
+    and the passing ones without 128; `UPDATE T SET W = IIf(ID = 3, 'b', 'ok')` with 128 fails 3317, RecordsAffected
+    0, and keeps row 1 updated (page 50 changed), as ERR-PARTIAL's lock refusal keeps the earlier rows.
+- **Conditions**: copies of the r-q37 plain fixtures; DAO and ADO (Microsoft.ACE.OLEDB.12.0) in one process; the
+  pages a write may change kept before and after each write.
+- **Records**: `evidence/r-q42-field-rule-and/` (36 records: 10 `rule-*` pairs over the four routes, put-forms,
+  put-refusals, disc-text-forms, disc-num-forms, edge-forms, azl-false-order, azl-explicit-false, multirow). The
+  organizer read multirow-accdb calls 54 to 104.
+- **Open**: `ValidateOnSet`; ADO Recordset.Update and Command.Execute; a failing multi-row UPDATE inside BeginTrans
+  and other multi-row shapes; other sort orders and field types (Date, Currency, Yes/No, Double, Memo); a rule put on a
+  table whose rows violate it.
 
 ### R-CAT-1 CAT-Q r-q39 (W-07/saved-definition, task zsfm): the bytes of a saved QueryDef
 
