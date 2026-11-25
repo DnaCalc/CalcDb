@@ -1462,3 +1462,49 @@ probers' notes against their kept pages before landing. Cause outside CalcDb: th
 ended (for the owner to pass on to CodeAlta if wanted). Changed: AGENTS.md (Sub-sessions) has the organizer keep a
 30-minute repeating reminder while a child or a landing job runs, checking its own queue and the children; the brief
 rule "set one reminder when children may take several minutes" was there and not followed.
+
+**A compare under memory pressure.** tpjw-1's core compare took 1 h 53 min instead of about 8 (07:07 to 09:00): 4.3 GB
+of 32 GB free and about 17,000 pages/s, most of it the owner's own applications, with a whole-solution self-check and a
+reviewer's roscli daemon beside it. It lost nothing. Briefs since then say "one build or test job at a time".
+
+**Two of the organizer's own errors.** A job command with nested `pwsh -Command "..."` quoting expanded its `$a` and
+`$LASTEXITCODE` in the outer shell (cancelled, rerun from a script file); a landing check given `-Questions
+probes/r-q-cat-txn-lock` failed its candidate step on the folder's crash questions, which the compare sets list as not
+comparable (the writer had checked that folder through compare-set-wide.json). Relanded without it.
+
+## 2026-11-25 - Handover: organizer 15 (01a21018) to organizer 16
+
+Session 01a21018 (Claude Opus 5.5, 2026-11-25 00:26 to about 10:05 UTC, of which about 5 h idle behind the stalled
+queue; 139 tool calls). Landed: the r-q40 round (3vkh ready gate, 294e134b), the r-q39 round (zsfm ready gate,
+c8d87cbf), xmgx (FK DDL COM follow-ups, 26439711), tpjw (calls.trace@13, 0b321bb9), 3vkh (the Jet 4 MDB counter,
+7eac9f1f), k65r (the worker's FileObserver race, 766d5045; w7dm with it). Core 476 of 1360 throughout (xmgx-1, tpjw-1,
+3vkh-1, k65r-1, nothing lost); the gains are in wide-set folders (r-ddl-limits +10, r-q34 +7, r-q36 +6, r-q29 +2).
+Tasks found: tpjw (done), fkn9, zjtz.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 11:59; session rows from `alta session report`):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 90% (15,239 of 16,964) | below two thirds over a day |
+| Landings checked; passed on the first run | 18; 94% (this session 5 of 6: xmgx's first run failed on the organizer's `-Questions`) | below 70% |
+| Landing check duration (median of 19 runs) | 267 s | above 3 min |
+| Compare baselines | core 476 to 476 (xmgx-1, tpjw-1, 3vkh-1, k65r-1); wide wide-q3mv-1 1093 of 3586 (organizer 14) | any loss nobody can explain |
+| Organizer tool calls per landing | about 23 (139 for 6 landings, 2 stops recovered, a stalled queue) | above about 15 |
+| Reviewer findings per 1,000 lines | xmgx 2 on 465; 3vkh 2 on 1,166; k65r 4 on 477; tpjw 260 lines, organizer only | above about 3 |
+| Rules found wrong after landing | 0; one generalization accepted and named (tpjw: the Flags-free match on ACE 2010) | more than one a day |
+| Children stopped waiting for a record; for ownership | 0; 0 (gate 2 traced each writer's projects first; 3vkh before zsfm because both reach Isam and Catalog) | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land -Finish`) | above 5 min |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 15 (Opus) | about 580 wall, about 270 active | 139 |
+| zsfm prober (01a2101c-feb9) / 3vkh prober (01a2101c-ff1b) | 42 / 36 | 166 / 140 |
+| xmgx writer (01a2101c-2574) / reviewer (01a2104b-1948) | 83 / 19 | 217 / 129 |
+| 3vkh writer (01a2115e-a714) / reviewer (01a211e8-f040) | 178 / 22 | 266 / 162 |
+| tpjw writer (01a2116c-9f9f) / k65r writer (01a211ee-48b0) / k65r reviewer (01a2120e-c044) | 27 / 47 / 6 | 93 / 150 / 31 |
+
+Running at handover: the zsfm writer, stretch 1 (01a21213-e1fa, CalcDb-w2, alta/zsfm, started 09:40), a child of
+01a21018: organizer 15 forwards its report to organizer 16, who reviews and lands it. CalcDb-w1 is free.
+
+Successor: CalcDb organizer 16, session 01a21226-245d-7440-b439-a86caf8b2ce1 (`--no-parent`). Organizer 15 forwards
+the zsfm writer's answers and does nothing else.
