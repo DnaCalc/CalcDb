@@ -458,13 +458,12 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
         // evidence/r-q42-field-rule-and/rule-and2-ne-mdb rows 395-401, 415-422, 436-443);
         // Update without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
         // (evidence/r-err-1b/asg-update-without-edit rows 5, 10, 32);
-        // CancelUpdate without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
-        // (evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain rows 115, 133-137, 148);
+        // CancelUpdate without Edit on a depth-0 SELECT dynaset is unrecorded and refuses by name;
         // AddNew and Delete stay refused.
         Ok(Method(rs, "Edit"));
         Ok(Method(rs, "CancelUpdate"));
         AssertDaoError(Method(rs, "Update"), 3020, "DAO.Recordset");
-        AssertDaoError(Method(rs, "CancelUpdate"), 3020, "DAO.Recordset");
+        AssertNotModelled(Method(rs, "CancelUpdate"), "NotModelled.QueryRecordsetCancelUpdateNoEdit");
         foreach (string method in (string[])["AddNew", "Delete"])
         {
             CallResult result = Method(rs, method);

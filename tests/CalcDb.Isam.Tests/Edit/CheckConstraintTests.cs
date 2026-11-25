@@ -468,6 +468,28 @@ public sealed class CheckConstraintTests
         UpdateOutcome zeroVsTextless = frameTextless.Update();
         Assert.Equal(MutationOpen.CheckOrder, zeroVsTextless.Open);
         Assert.True(frameTextless.CancelUpdate().Succeeded);
+
+        // Unrecorded cross-column pair: AllowZeroLength = False (3315) on R vs Field.ValidationRule with ValidationText (3316) on V stays CheckOrder.
+        byte[] encodedCrossCol = PropertyBlob.Encode([
+            new PropertyMap(PropertySectionKind.ColumnValues, "R", [
+                new StoredProperty("AllowZeroLength", 0x01, NativeTypes.Boolean, [0x00]),
+            ]),
+            new PropertyMap(PropertySectionKind.ColumnValues, "V", [
+                new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("> 10\0")),
+                new StoredProperty("ValidationText", 0x01, NativeTypes.Text, Encoding.Unicode.GetBytes("V must exceed 10")),
+            ]),
+        ]);
+        PropertyBlob blobCrossCol = PropertyBlob.Read(encodedCrossCol, out string? failCrossCol)!;
+        Assert.Null(failCrossCol);
+        using MutationSemantics semCrossCol = MutationSemantics.Compile("Req", table, blobCrossCol, binder, D.IndexDescriptor);
+        var frameCrossCol = new EditFrame(new TableEditContext(semCrossCol, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameCrossCol.AddNew().Succeeded);
+        Assert.True(AssignLong(frameCrossCol, id, 32).Succeeded);
+        Assert.True(AssignText(frameCrossCol, r, "").Succeeded);
+        Assert.True(AssignLong(frameCrossCol, v, 5).Succeeded);
+        UpdateOutcome crossColOrder = frameCrossCol.Update();
+        Assert.Equal(MutationOpen.CheckOrder, crossColOrder.Open);
+        Assert.True(frameCrossCol.CancelUpdate().Succeeded);
     }
 
     [Theory]

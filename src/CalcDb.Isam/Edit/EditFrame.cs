@@ -644,11 +644,12 @@ public sealed class EditFrame : IDisposable
         // chain decides when every other failing class comes after it in the chain, and parent 3200 decides over 3022;
         // any other combination is named, as is a failing check at depth 6 or 7, where the order of 3003 against the
         // checks is not recorded.
-        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(), FieldRuleChecks(), TableRuleCheck(), CheckConstraintCheck(), default, default, default];
+        Span<UpdateOutcome> stages = [RequiredCheck(), ZeroLengthCheck(out int zeroLengthColumn), FieldRuleChecks(out int fieldRuleColumn), TableRuleCheck(), CheckConstraintCheck(), default, default, default];
         (stages[5], stages[6], int? refusingPhysical, bool refusingIsPrimary) = IndexChecks();
         IReadOnlyList<CascadeStep>? cascades = null;
         stages[7] = RelationshipUpdateCheck(out cascades);
-        UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary, out int winningStage);
+        bool sameZeroLengthAndFieldRuleColumn = zeroLengthColumn >= 0 && zeroLengthColumn == fieldRuleColumn;
+        UpdateOutcome? decided = Decide(stages, Mode == EditMode.Edit && refusingIsPrimary, sameZeroLengthAndFieldRuleColumn, out int winningStage);
         if (decided is { } failure)
         {
             if (!failure.Succeeded && _workspace.Depth > TransactionCoordinator.MaxWriteDepth)
@@ -1979,7 +1980,7 @@ public sealed class EditFrame : IDisposable
     private const int RequiredStage = 0, ZeroLengthStage = 1, FieldRuleStage = 2, CheckStage = 4, UniqueStage = 6, RelationshipStage = 7;
 
     /// <summary>The outcome the stages decide (see <see cref="Update"/>), or null when every check passed.</summary>
-    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision, out int winningStage)
+    private static UpdateOutcome? Decide(ReadOnlySpan<UpdateOutcome> stages, bool parentKeyPkCollision, bool sameZeroLengthAndFieldRuleColumn, out int winningStage)
     {
         winningStage = -1;
         int failing = 0, first = -1;
@@ -2013,9 +2014,11 @@ public sealed class EditFrame : IDisposable
             return stages[RelationshipStage];
         }
         // evidence/r-q42-field-rule-and/azl-explicit-false-accdb and azl-explicit-false-mdb (rows 23, 34, 52):
-        // explicit AllowZeroLength = False (3315) beats Field.ValidationRule with ValidationText (3316) when '' violates both.
+        // explicit AllowZeroLength = False (3315) beats Field.ValidationRule with ValidationText (3316) when '' on the
+        // same column violates both. Cross-column ordering stays MutationOpen.CheckOrder.
         if (failing == 2
             && first == ZeroLengthStage
+            && sameZeroLengthAndFieldRuleColumn
             && stages[ZeroLengthStage].Error?.Number == MutationError.ZeroLength
             && stages[FieldRuleStage].Error?.Number == MutationError.RuleWithText)
         {
@@ -2073,8 +2076,9 @@ public sealed class EditFrame : IDisposable
     // admit "" for Required False and True, Text and Memo (evidence/r-sql-2-3/act-ins-defaults seq 11-12 [R.Z] and 31-32
     // [R.Req]; evidence/r-q-cursor-dao/edit-required-memo-addnew seq 56-67 [Rm.Mm];
     // evidence/r-def-expr-sql/str-unique-index-acceptance [U.K]; evidence/r-fix-fmt-sort/fmt2-var-null-empty-ladder [T.N]).
-    private UpdateOutcome ZeroLengthCheck()
+    private UpdateOutcome ZeroLengthCheck(out int failingColumn)
     {
+        failingColumn = -1;
         MutationSemantics s = _table.Semantics;
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -2083,6 +2087,7 @@ public sealed class EditFrame : IDisposable
                 && c.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo
                 && CandidateValue(i) is { Kind: NativeKind.Text, Text.Length: 0 })
             {
+                failingColumn = i;
                 return Fail(MutationError.ZeroLength, c.QualifiedName);
             }
         }
@@ -2142,8 +2147,9 @@ public sealed class EditFrame : IDisposable
         return null;
     }
 
-    private UpdateOutcome FieldRuleChecks()
+    private UpdateOutcome FieldRuleChecks(out int failingColumn)
     {
+        failingColumn = -1;
         MutationSemantics s = _table.Semantics;
         for (int i = 0; i < _cells.Length; i++)
         {
@@ -2152,6 +2158,7 @@ public sealed class EditFrame : IDisposable
                 EditOutcome r = Check(rule, s.Columns[i].QualifiedName, MutationErrorSource.Recordset);
                 if (!r.Succeeded)
                 {
+                    failingColumn = i;
                     return new UpdateOutcome(r.Error, r.Open, r.Detail);
                 }
             }

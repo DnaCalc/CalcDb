@@ -421,6 +421,14 @@ internal sealed unsafe class TableDefObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a system table (not recorded)"));
         }
+        if (_owner.Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put inside BeginTrans (not recorded)"));
+        }
+        if (Definition is not { } definition || definition.RowCount > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a populated or unreadable table (not recorded)"));
+        }
         Foundation.VarType vt = Args.TypeOf(valueArg);
         if (vt != Foundation.VarType.Bstr)
         {
@@ -682,6 +690,7 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private readonly IndexColumn? _indexColumn;
     private readonly int _ordinal;
     private PropertiesObject? _properties;
+    private bool _validationRuleRead;
     private string? _validationRuleOverride;
 
     /// <param name="table">The TableDef of a TableDef field; null for an index field, whose further members are not yet built.</param>
@@ -749,14 +758,21 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private CallResult Stored(string name, CallResult unset) => OfTable(t => ColumnFacts.Stored(t.Blob, _column, name, unset));
 
     /// <summary>
-    /// <c>Field.ValidationRule</c> get: a fresh read from disk or the first put when the property was previously absent
-    /// reads the stored NUL-terminated Memo bytes (<c>r-q37-valrule-put/rule-alone-*</c>, <c>replace-rule-same-session-accdb</c>,
-    /// <c>r-q42-field-rule-and/put-forms-*</c> calls 16→17 and 68→69, <c>edge-forms-*</c> calls 62→63 and 70→71);
-    /// a re-put replacing an already-present rule on the same <see cref="DefinitionFieldObject"/> returns the written text
-    /// without a trailing NUL (<c>r-q42-field-rule-and/put-forms-*</c> calls 18→19..88→89), while disk bytes keep the NUL.
+    /// <c>Field.ValidationRule</c> get: a read on a <see cref="DefinitionFieldObject"/> that has not yet been read returns
+    /// the stored NUL-terminated Memo bytes (<c>evidence/r-q37-valrule-put/rule-alone-accdb</c>,
+    /// <c>evidence/r-q37-valrule-put/rule-alone-mdb</c>, <c>evidence/r-q37-valrule-put/replace-rule-same-session-accdb</c>,
+    /// <c>evidence/r-q42-field-rule-and/put-forms-accdb</c> and <c>put-forms-mdb</c> rows 16-17, 68-69,
+    /// <c>evidence/r-q42-field-rule-and/edge-forms-accdb</c> and <c>edge-forms-mdb</c> rows 62-63, 70-71);
+    /// once <c>ValidationRule</c> has been read on this COM object, a subsequent non-empty put returns the written text
+    /// without a trailing NUL (<c>evidence/r-cat-1/field-rules</c> rows 16, 25-26, 106;
+    /// <c>evidence/r-expr-1/mut-validation-rules</c> rows 16, 18, 36, 38;
+    /// <c>evidence/r-q42-field-rule-and/put-forms-accdb</c> and <c>put-forms-mdb</c> rows 18-19..88-89), while disk bytes keep the NUL.
     /// </summary>
     private CallResult GetValidationRule() => OfTable(t =>
-        _validationRuleOverride is not null ? Text(_validationRuleOverride) : ColumnFacts.Stored(t.Blob, _column, "ValidationRule", Text("")));
+    {
+        _validationRuleRead = true;
+        return _validationRuleOverride is not null ? Text(_validationRuleOverride) : ColumnFacts.Stored(t.Blob, _column, "ValidationRule", Text(""));
+    });
 
     /// <summary>
     /// Write <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> on a stored table's field (W-08, tasks 9dvt and
@@ -775,12 +791,10 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put of variant type {vt} (qualified.md r-q37 Open)"));
         }
         string text = Args.Text(valueArg) ?? "";
-        bool hadRule = property == FieldValidationProperty.ValidationRule
-            && ColumnMap(t)?.Properties.Any(p => p.Name == "ValidationRule") == true;
         CallResult result = _owner.Database.SetFieldValidationProperty(t, this, _column, property, text);
         if (result.Failure is null && property == FieldValidationProperty.ValidationRule)
         {
-            _validationRuleOverride = text.Length == 0 || !hadRule ? null : text;
+            _validationRuleOverride = text.Length == 0 || !_validationRuleRead ? null : text;
         }
         return result;
     });

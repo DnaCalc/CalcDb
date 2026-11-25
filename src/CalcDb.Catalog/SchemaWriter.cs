@@ -1395,9 +1395,9 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, tableFailure), default, _pageCount);
         }
-        if (table.RowCount > 0 && property != FieldValidationProperty.ValidationText)
+        if (table.RowCount > 0 && (property != FieldValidationProperty.ValidationText || string.IsNullOrEmpty(value)))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"setting Field.{property} on non-empty table '{entry.Name}' ({table.RowCount} row(s)) is not recorded (qualified.md r-q37 Open)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"setting Field.{property} to '{value ?? allowZeroLength?.ToString()}' on non-empty table '{entry.Name}' ({table.RowCount} row(s)) is not recorded (only non-empty ValidationText on populated tables is recorded in evidence/r-q42-field-rule-and/rule-and2-ne-accdb)"), default, _pageCount);
         }
         string[] colNames = [.. table.Columns.Select(c => c.Name)];
         if (!TryMatchFieldName(columnName, colNames, out int colIdx, out string? colUndecided) || colIdx < 0)
@@ -1600,9 +1600,10 @@ public sealed class SchemaWriter
         List<uint> releasedAtClose = [];
         List<uint> reservedExtentPages = [];
         // 65-byte MR2 blobs go to an external SingleRow LVAL page (evidence/r-q42-field-rule-and/rule-and2-ne-accdb,
-        // rule-and2-ne-mdb, azl-explicit-false-accdb, azl-explicit-false-mdb); distinct tables share the free-map
-        // MSysObjects.LvProp LVAL page (evidence/r-q42-field-rule-and/disc-num-forms-accdb, disc-num-forms-mdb,
-        // disc-text-forms-accdb, disc-text-forms-mdb, edge-forms-accdb, edge-forms-mdb).
+        // rule-and2-ne-mdb, azl-explicit-false-accdb, azl-explicit-false-mdb); distinct catalog objects share the
+        // single free-map MSysObjects.LvProp LVAL page (kept-page proof in evidence/r-q39-querydef-bytes; confirmed for
+        // tables by final page counts and byte-identical non-clock pages in evidence/r-q42-field-rule-and/disc-num-forms-accdb,
+        // disc-num-forms-mdb, disc-text-forms-accdb, disc-text-forms-mdb, edge-forms-accdb, edge-forms-mdb).
         if (!ApplyObjectProperties(
             work,
             p.Overlay,

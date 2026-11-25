@@ -287,11 +287,10 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.NotNull(unrecordedNeg.Failure);
         Assert.Equal(FailureKind.NotImplemented, unrecordedNeg.Failure!.Kind);
 
-        // Re-putting on fs when ValidationRule is already present returns the text without trailing NUL
-        // (evidence/r-q42-field-rule-and/put-forms-accdb row 17 vs row 19 and rows 21..67; put-forms-mdb rows 17, 19);
-        // first put on fv keeps trailing NUL (put-forms-accdb row 69, put-forms-mdb row 69).
+        // First ValidationRule read on fs (after puts with no intervening Get) reads the stored NUL-terminated Memo bytes
+        // (r-q42-field-rule-and/put-forms-accdb rows 16-17, 68-69; put-forms-mdb rows 16-17, 68-69).
         Assert.Null(Put(fs, "ValidationRule", "<> 'a' And <> 'b'").Failure);
-        Assert.Equal("<> 'a' And <> 'b'", TextOf(Get(fs, "ValidationRule")));
+        Assert.Equal("<> 'a' And <> 'b'\0", TextOf(Get(fs, "ValidationRule")));
         Assert.Null(Put(fv, "ValidationRule", "Between 1 And 10").Failure);
         Assert.Equal("Between 1 And 10\0", TextOf(Get(fv, "ValidationRule")));
 
@@ -328,10 +327,12 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Null(Method(db, "Execute", "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG, W TEXT(50))", DbFailOnError).Failure);
         TableDefObject td = Recover<TableDefObject>(Get(Recover<DefinitionCollection>(Get(db, "TableDefs")), "Item", "T"));
         DefinitionCollection fields = Recover<DefinitionCollection>(Get(td, "Fields"));
+        DefinitionFieldObject fv = Recover<DefinitionFieldObject>(Get(fields, "Item", "V"));
         DefinitionFieldObject fw = Recover<DefinitionFieldObject>(Get(fields, "Item", "W"));
 
         // TableDef.ValidationRule implied-subject forms fail DAO 3320 from DAO.TableDef without IErrorInfo
-        // (evidence/r-q42-field-rule-and/edge-forms-accdb rows 7-8, edge-forms-mdb rows 7-8); valid table rule stays refused by name.
+        // (evidence/r-q42-field-rule-and/edge-forms-accdb rows 7-8, edge-forms-mdb rows 7-8); valid table rules and
+        // non-implied syntax errors stay refused by name.
         foreach (string implied in new[] { "<> 'a' And <> 'b'", "<> 'a'" })
         {
             CallResult tdFail = Put(td, "ValidationRule", implied);
@@ -343,9 +344,11 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
             Assert.False(tdFail.Failure.PublishesErrorInfo);
         }
         Assert.Equal(FailureKind.NotImplemented, Put(td, "ValidationRule", "[V] > 0").Failure!.Kind);
+        Assert.Equal(FailureKind.NotImplemented, Put(td, "ValidationRule", "[V] >").Failure!.Kind);
 
-        // Unclosed leading paren on implied-operand Field.ValidationRule fails DAO 3320
-        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 58, put-refusals-mdb row 58).
+        // Unclosed leading paren on implied-operand `(<> ...` fails DAO 3320
+        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 58, put-refusals-mdb row 58);
+        // other unrecorded leading-paren shapes stay refused by name.
         CallResult paren = Put(fw, "ValidationRule", "(<> 'a'");
         Assert.Equal(unchecked((int)0x800A0CF8), paren.Failure!.Scode);
         Assert.Equal("DAO.Field", paren.Failure.Source);
@@ -353,9 +356,11 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal("jeterr40.chm", paren.Failure.HelpFile);
         Assert.Equal(5003320, paren.Failure.HelpContext);
         Assert.False(paren.Failure.PublishesErrorInfo);
+        Assert.Equal(FailureKind.NotImplemented, Put(fv, "ValidationRule", "(> 5").Failure!.Kind);
 
-        // Subquery fails DAO 3420 without invalidating the Field object
-        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 72, put-refusals-mdb row 72).
+        // `In (SELECT ...)` subquery fails DAO 3420 without invalidating the Field object
+        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 72, put-refusals-mdb row 72);
+        // scalar subqueries stay NotModelled.Subquery.
         CallResult subq = Put(fw, "ValidationRule", "In (SELECT W FROM T)");
         Assert.Equal(unchecked((int)0x800A0D5C), subq.Failure!.Scode);
         Assert.Equal("DAO.Field", subq.Failure.Source);
@@ -364,10 +369,11 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal(5003420, subq.Failure.HelpContext);
         Assert.False(subq.Failure.PublishesErrorInfo);
         Assert.Equal("W", TextOf(Get(fw, "Name")));
+        Assert.Equal(FailureKind.NotModelled, Put(fw, "ValidationRule", "= (SELECT 1)").Failure!.Kind);
 
-        // Multi-column aggregate fails DAO 3783 (no helpFile, helpContext -1, no IErrorInfo:
+        // Multi-column Sum aggregate fails DAO 3783 (no helpFile, helpContext -1, no IErrorInfo:
         // evidence/r-q42-field-rule-and/put-refusals-accdb row 73, put-refusals-mdb row 73),
-        // while single-column aggregate stays NotModelled.Function.
+        // while single-column Sum and other unmodelled functions stay NotModelled.Function.
         CallResult multiAgg = Put(fw, "ValidationRule", "> Sum([V])");
         Assert.Equal(unchecked((int)0x800A0EC7), multiAgg.Failure!.Scode);
         Assert.Equal("DAO.Field", multiAgg.Failure.Source);
@@ -376,26 +382,30 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal(-1, multiAgg.Failure.HelpContext);
         Assert.False(multiAgg.Failure.PublishesErrorInfo);
 
-        CallResult singleAgg = Put(fw, "ValidationRule", "> Sum([W])");
-        Assert.Equal(FailureKind.NotModelled, singleAgg.Failure!.Kind);
+        Assert.Equal(FailureKind.NotModelled, Put(fw, "ValidationRule", "> Sum([W])").Failure!.Kind);
+        Assert.Equal(FailureKind.NotModelled, Put(fw, "ValidationRule", "> Avg([V])").Failure!.Kind);
 
-        // ValidationRule getter lifecycle: first put -> trailing NUL; re-put -> no trailing NUL;
-        // clear -> ""; put after clear -> trailing NUL; reopen -> trailing NUL from disk.
+        // ValidationRule getter lifecycle:
+        // 1. First read after put -> trailing NUL; subsequent re-put -> no trailing NUL; clear -> ""
+        //    (evidence/r-q42-field-rule-and/put-forms-accdb rows 16-19, put-forms-mdb rows 16-19;
+        //    evidence/r-expr-1/mut-validation-rules rows 16, 18, 36, 38; evidence/r-q37-valrule-put/remove-rule-only-accdb).
         Assert.Null(Put(fw, "ValidationRule", "<> 'a'").Failure);
         Assert.Equal("<> 'a'\0", TextOf(Get(fw, "ValidationRule")));
         Assert.Null(Put(fw, "ValidationRule", "<> 'b'").Failure);
         Assert.Equal("<> 'b'", TextOf(Get(fw, "ValidationRule")));
         Assert.Null(Put(fw, "ValidationRule", "").Failure);
         Assert.Equal("", TextOf(Get(fw, "ValidationRule")));
-        Assert.Null(Put(fw, "ValidationRule", "<> 'c'").Failure);
-        Assert.Equal("<> 'c'\0", TextOf(Get(fw, "ValidationRule")));
-        Assert.Null(Put(fw, "ValidationRule", "<> 'd'").Failure);
-        Assert.Equal("<> 'd'", TextOf(Get(fw, "ValidationRule")));
+
+        // 2. Read-empty first, then put -> no trailing NUL on same COM object; reopen -> trailing NUL from disk
+        //    (evidence/r-cat-1/field-rules rows 16, 25-26, 106).
+        Assert.Equal("", TextOf(Get(fv, "ValidationRule")));
+        Assert.Null(Put(fv, "ValidationRule", "> 100").Failure);
+        Assert.Equal("> 100", TextOf(Get(fv, "ValidationRule")));
         Assert.Null(Method(db, "Close").Failure);
 
         DatabaseObject db2 = Recover<DatabaseObject>(Method(eng, "OpenDatabase", path, false, false));
-        DefinitionFieldObject fw2 = Recover<DefinitionFieldObject>(Get(Recover<DefinitionCollection>(Get(Recover<TableDefObject>(Get(Recover<DefinitionCollection>(Get(db2, "TableDefs")), "Item", "T")), "Fields")), "Item", "W"));
-        Assert.Equal("<> 'd'\0", TextOf(Get(fw2, "ValidationRule")));
+        DefinitionFieldObject fv2 = Recover<DefinitionFieldObject>(Get(Recover<DefinitionCollection>(Get(Recover<TableDefObject>(Get(Recover<DefinitionCollection>(Get(db2, "TableDefs")), "Item", "T")), "Fields")), "Item", "V"));
+        Assert.Equal("> 100\0", TextOf(Get(fv2, "ValidationRule")));
         Assert.Null(Method(db2, "Close").Failure);
     }
 
@@ -423,9 +433,15 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         SelectFieldObject rsw = Recover<SelectFieldObject>(Get(Recover<SelectFieldsObject>(Get(rs, "Fields")), "Item", "W"));
         Assert.Equal(0, Get(rs, "EditMode").Scalar.Int64);
 
-        // Violating value fails Update with DAO 3317, keeps EditMode == 1, CancelUpdate restores EditMode == 0.
+        // Unrecorded depth-0 SELECT dynaset states refuse by name: Field.Value put without Edit and CancelUpdate without Edit.
+        Assert.Equal(FailureKind.NotModelled, Put(rsw, "Value", "x").Failure!.Kind);
+        Assert.Equal(FailureKind.NotModelled, Method(rs, "CancelUpdate").Failure!.Kind);
+
+        // Violating value fails Update with DAO 3317, keeps EditMode == 1, CancelUpdate restores EditMode == 0;
+        // nested Edit while EditMode == 1 refuses by name.
         Assert.Null(Method(rs, "Edit").Failure);
         Assert.Equal(1, Get(rs, "EditMode").Scalar.Int64);
+        Assert.Equal(FailureKind.NotModelled, Method(rs, "Edit").Failure!.Kind);
         Assert.Null(Put(rsw, "Value", "a").Failure);
         Assert.Equal("a", TextOf(Get(rsw, "Value")));
         CallResult rej3317 = Method(rs, "Update");
@@ -443,9 +459,10 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal("", TextOf(Get(rsw, "Value")));
         Assert.Null(Method(rs, "Close").Failure);
 
-        // Set ValidationText on populated T and verify SELECT dynaset Edit now raises DAO 3316 with custom text.
+        // Non-empty ValidationText on populated T is admitted while clearing ("") stays refused by name.
         DefinitionFieldObject fw2 = Recover<DefinitionFieldObject>(Get(Recover<DefinitionCollection>(Get(Recover<TableDefObject>(Get(Recover<DefinitionCollection>(Get(db2, "TableDefs")), "Item", "T")), "Fields")), "Item", "W"));
         Assert.Null(Put(fw2, "ValidationText", "W must not be a or b").Failure);
+        Assert.Equal(FailureKind.NotImplemented, Put(fw2, "ValidationText", "").Failure!.Kind);
 
         SelectRecordsetObject rs2 = Recover<SelectRecordsetObject>(Method(db2, "OpenRecordset", "SELECT ID, W FROM T ORDER BY ID", 2));
         SelectFieldObject rsw2 = Recover<SelectFieldObject>(Get(Recover<SelectFieldsObject>(Get(rs2, "Fields")), "Item", "W"));

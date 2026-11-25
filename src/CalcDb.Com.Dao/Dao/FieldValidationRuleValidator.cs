@@ -62,10 +62,11 @@ internal static class FieldValidationRuleValidator
                 "Field.ValidationRule put of an unrecorded multi-clause or parenthesized implied-operand form (only single implied clauses and top-level And-joined '<>' clauses are recorded in r-q37-valrule-put)");
         }
 
-        // Only the implied-operand leading-paren shape `(<> 'a'` is recorded for MissingParenthesis 3320
+        // Only the implied-operand `(<> ...` leading-paren shape is recorded for MissingParenthesis 3320
         // (evidence/r-q42-field-rule-and/put-refusals-accdb row 58, evidence/r-q42-field-rule-and/put-refusals-mdb row 58);
-        // explicit-column forms such as `[V] > (10` stay refused by name.
+        // explicit-column forms such as `[V] > (10` and other leading-paren shapes stay refused by name.
         bool isRecordedUnclosedImpliedParen = trimmed.StartsWith('(')
+            && trimmed[1..].TrimStart().StartsWith("<>", StringComparison.Ordinal)
             && !string.Equals(source, trimmed, StringComparison.Ordinal);
 
         using ExpressionSyntax syntax = ExpressionSyntax.Parse(source);
@@ -76,6 +77,7 @@ internal static class FieldValidationRuleValidator
                 // evidence/r-q42-field-rule-and/put-refusals-accdb row 72, put-refusals-mdb row 72:
                 // `In (SELECT W FROM T)` fails DAO 3420 from DAO.Field without an IErrorInfo while leaving Field live.
                 if (open.NotModelled == "NotModelled.Subquery"
+                    && (trimmed.StartsWith("In ", StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("In(", StringComparison.OrdinalIgnoreCase))
                     && open.Message.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
                 {
                     return Failure.Dao(3420, "DAO.Field", DaoErrors.ObjectInvalid);
@@ -100,8 +102,10 @@ internal static class FieldValidationRuleValidator
             {
                 // evidence/r-q42-field-rule-and/put-refusals-accdb row 73, put-refusals-mdb row 73:
                 // `> Sum([V])` on column W fails DAO 3783 (multiple columns in a column-level CHECK constraint)
-                // before checking aggregate functions.
-                if (bindFailure.NotModelled == "NotModelled.Function" && HasMultipleTableColumns(syntax.Root, table))
+                // before checking aggregate functions. Other uninventoried functions stay NotModelled.Function.
+                if (bindFailure.NotModelled == "NotModelled.Function"
+                    && ContainsCall(syntax.Root, "Sum")
+                    && HasMultipleTableColumns(syntax.Root, table))
                 {
                     return MultipleColumnsFailure();
                 }
@@ -154,8 +158,8 @@ internal static class FieldValidationRuleValidator
     /// DAO <c>TableDef.ValidationRule</c> put refusals recorded in
     /// <c>evidence/r-q42-field-rule-and/edge-forms-accdb</c> and <c>evidence/r-q42-field-rule-and/edge-forms-mdb</c>
     /// (rows 7–8: implied-subject field forms such as <c>"&lt;&gt; 'a' And &lt;&gt; 'b'"</c> and <c>"&lt;&gt; 'a'"</c>
-    /// are not expanded for table-level rules and fail DAO 3320 from <c>DAO.TableDef</c> without an <c>IErrorInfo</c>).
-    /// Valid table-level rules and all other outcomes remain refused by name.
+    /// on an empty table at depth 0 are not expanded for table-level rules and fail DAO 3320 from <c>DAO.TableDef</c>
+    /// without an <c>IErrorInfo</c>). Valid table-level rules and non-implied syntax errors remain refused by name.
     /// </summary>
     public static Failure ValidateTableRuleRefusal(string text)
     {
@@ -165,10 +169,18 @@ internal static class FieldValidationRuleValidator
             using ExpressionSyntax syntax = ExpressionSyntax.Parse(trimmed);
             if (syntax.Root is null && syntax.Failure is { Message: ExpressionMessages.MissingOperator })
             {
-                return Failure.Dao(3320, "DAO.TableDef", SyntaxErrorDescription);
+                string expanded = ExpressionRuleBinder.ExpandFieldRule(trimmed, "__col__", out FieldRuleForm form);
+                if (form != FieldRuleForm.UnrecordedMultiClause && !string.Equals(expanded, trimmed, StringComparison.Ordinal))
+                {
+                    using ExpressionSyntax expandedSyntax = ExpressionSyntax.Parse(expanded);
+                    if (expandedSyntax.Root is not null)
+                    {
+                        return Failure.Dao(3320, "DAO.TableDef", SyntaxErrorDescription);
+                    }
+                }
             }
         }
-        return Failure.NotImplemented("TableDef.ValidationRule put (only missing-operator 3320 refusals are recorded in evidence/r-q42-field-rule-and/edge-forms-accdb and edge-forms-mdb)");
+        return Failure.NotImplemented("TableDef.ValidationRule put (only implied-subject missing-operator 3320 refusals on empty tables are recorded in evidence/r-q42-field-rule-and/edge-forms-accdb and edge-forms-mdb)");
     }
 
     private static Failure MultipleColumnsFailure() => new(
@@ -178,6 +190,30 @@ internal static class FieldValidationRuleValidator
         MultipleColumnsDescription,
         HelpFile: null,
         HelpContext: -1);
+
+    private static bool ContainsCall(SyntaxNode? node, string functionName)
+    {
+        if (node is null)
+        {
+            return false;
+        }
+        if (node.Kind == SyntaxKind.Call && string.Equals(node.Text, functionName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (ContainsCall(node.Left, functionName) || ContainsCall(node.Right, functionName))
+        {
+            return true;
+        }
+        foreach (SyntaxNode item in node.Items)
+        {
+            if (ContainsCall(item, functionName))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private static bool HasMultipleTableColumns(SyntaxNode root, TableDefinition table)
     {
