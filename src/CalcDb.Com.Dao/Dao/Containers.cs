@@ -57,11 +57,20 @@ internal sealed unsafe class ContainerObject : DaoObject
     {
         if (_documents is null)
         {
-            CatalogEntry[] documents = [.. Database.Catalog.Entries.Where(e => e.ParentId == _entry.Id && (e.Flags & DatabaseObject.HiddenFromTableDefs) == 0)
-                .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-            _documents = new DefinitionCollection(DaoTypes.Documents, "DAO.Documents", Database, [.. documents.Select(e => e.Name)], (c, i) => new DocumentObject(c, this, documents[i]));
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, _) = DocumentsMembership();
+            _documents = new DefinitionCollection(DaoTypes.Documents, "DAO.Documents", Database, names, make)
+            {
+                Membership = DocumentsMembership,
+            };
         }
         return _documents;
+    }
+
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) DocumentsMembership()
+    {
+        CatalogEntry[] documents = [.. Database.Catalog.Entries.Where(e => e.ParentId == _entry.Id && (e.Flags & DatabaseObject.HiddenFromTableDefs) == 0)
+            .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+        return ([.. documents.Select(e => e.Name)], (c, i) => new DocumentObject(c, this, documents[i]), null);
     }
 
     public string Name => _entry.Name;

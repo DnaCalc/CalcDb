@@ -731,7 +731,7 @@ public static class SqlParser
             {
                 return pivotFailure;
             }
-            if (TakeWord("IN"))
+            if (pivot!.Syntax.Root is { Kind: SyntaxKind.In, Negated: false } || TakeWord("IN"))
             {
                 hasPivotIn = true;
                 return null;

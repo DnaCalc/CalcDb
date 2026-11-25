@@ -35,6 +35,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
         .Method("CreateTableDef", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, d => d.CreateTableDef(name)); })
         .Get("QueryDefs", (self, args) => Live(self, d => d.QueryDefsCollection()))
+        .Method("CreateQueryDef", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, sql = args.Length > 1 ? args[1] : 0; return Live(self, d => d.CreateQueryDef(name, sql)); })
         .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
         .Get("Relations", (self, args) => Live(self, d => d.RelationsCollection()))
         .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()))
@@ -61,6 +62,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private DefinitionCollection? _relations;
     private PropertiesObject? _properties;
     private DatabaseSql? _sql;
+    private QueryCatalog? _queries;
+    private string? _queriesFailure;
+    private List<string>? _queryOrder;
 
     /// <summary>
     /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
@@ -459,7 +463,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return SelectRoute.Open(this, name, type, options.Value);
             }
-            if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase)) is { } saved)
+            if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name.TrimEnd(' '), name.TrimEnd(' '), StringComparison.OrdinalIgnoreCase)) is { } saved)
             {
                 return OpenSaved(saved, type, options.Value);
             }
@@ -991,6 +995,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     private void OnCatalogReloaded()
     {
+        _queries = null;
+        _queriesFailure = null;
         _tableDefs?.Relist();
         // _relations is intentionally not relisted here: a previously fetched Relations stays stale across SQL DDL
         // until Refresh (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189: Count stays 3 without
@@ -1000,25 +1006,273 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _sql?.Forget();
     }
 
-    /// <summary>The saved queries (II-06 §8), read once per Database at first use; null with the reason when they cannot be.</summary>
-    public QueryCatalog? Queries => _session.Queries;
+    /// <summary>
+    /// The saved queries (II-06 §8), read from the current catalog and overlaid with any pending deferred
+    /// <c>MSysObjects.Flags</c> commit queued in <see cref="TransactionCoordinator"/> so freshly created non-SELECT
+    /// queries expose their true <see cref="QueryFamily"/> before the deferred 5th commit publishes.
+    /// </summary>
+    public QueryCatalog? Queries
+    {
+        get
+        {
+            if (_queries is null && _queriesFailure is null)
+            {
+                QueryCatalog? read = QueryCatalog.Read(Cache, Format, Catalog, PageCount, out _queriesFailure);
+                if (read is not null
+                    && _workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pending)
+                    && pending is { PendingQueryObjectId: int pendingId, PendingQueryFlags: int pendingFlags }
+                    && pendingFlags != 0)
+                {
+                    read = read.WithPendingFamily(pendingId, (QueryFamily)(pendingFlags & 0xF0));
+                }
+                _queries = read;
+            }
+            return _queries;
+        }
+    }
 
     /// <summary>
-    /// QueryDefs: the saved queries in name order, case-insensitively, as ACE lists them (r-cat-1/querydefs: QAlias,
-    /// QAppend, … QUpdate). One collection object per Database.
+    /// QueryDefs: the saved queries in name order at first fetch (r-cat-1/querydefs: QAlias, QAppend, … QUpdate),
+    /// with queries created later in the same session appended at the end (r-dao-1-err-1/draft-querydef [65]-[79]).
+    /// One collection object per Database.
     /// </summary>
     private CallResult QueryDefsCollection()
     {
         if (_queryDefs is null)
         {
-            if (Queries is not { } catalog)
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? failure) = QueryDefsMembership();
+            if (failure is not null)
             {
-                return CallResult.Fail(Failure.NotImplemented("QueryDefs when MSysQueries cannot be read: " + _session.QueriesFailure));
+                return CallResult.Fail(Failure.NotImplemented(failure));
             }
-            SavedQuery[] queries = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
-            _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, [.. queries.Select(q => q.Name)], (c, i) => new QueryDefObject(c, queries[i]), holdsDatabase: false);
+            _queryOrder = [.. names];
+            _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, names, make, holdsDatabase: false)
+            {
+                Appender = static (c, arg) => c.Database.AppendQueryDef(c, arg),
+                Membership = QueryDefsMembership,
+                PreserveHeldByName = true,
+                ClosedSource = "DAO.Database",
+            };
         }
         return Object(_queryDefs);
+    }
+
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) QueryDefsMembership()
+    {
+        if (Queries is not { } catalog)
+        {
+            return ([], static (_, _) => throw new InvalidOperationException(), "QueryDefs when MSysQueries cannot be read: " + _queriesFailure);
+        }
+        SavedQuery[] ordered;
+        if (_queryOrder is { } existingOrder)
+        {
+            var byName = new Dictionary<string, SavedQuery>(catalog.Queries.Count, StringComparer.OrdinalIgnoreCase);
+            foreach (SavedQuery q in catalog.Queries)
+            {
+                byName.TryAdd(q.Name, q);
+            }
+            List<SavedQuery> list = new(catalog.Queries.Count);
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string name in existingOrder)
+            {
+                if (byName.TryGetValue(name, out SavedQuery? q) && seen.Add(q.Name))
+                {
+                    list.Add(q);
+                }
+            }
+            foreach (SavedQuery q in catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                if (seen.Add(q.Name))
+                {
+                    list.Add(q);
+                }
+            }
+            ordered = [.. list];
+            _queryOrder = [.. ordered.Select(q => q.Name)];
+        }
+        else
+        {
+            ordered = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
+        }
+        return ([.. ordered.Select(q => q.Name)], (c, i) => new QueryDefObject(c, ordered[i]), null);
+    }
+
+    /// <summary>
+    /// Database.CreateQueryDef(Name, SQLText) (W-07/saved-definition, stretch 1; qualified.md R-CAT-1 CAT-Q r-q39;
+    /// r-dao-1-err-1/draft-querydef, r-cat-1/temporary-querydef, r-cat-1b/qd-create-invalid-sql):
+    /// omitted Name -> Draft (<c>Name=""</c>, no bytes until <c>QueryDefs.Append</c>);
+    /// empty Name (<c>""</c>) -> Temporary (<c>Name="#Temporary QueryDef#"</c>, no bytes);
+    /// non-empty Name -> compiles SQL, writes catalog + MSysQueries immediately, updates QueryDefs, returns saved QueryDef.
+    /// </summary>
+    private CallResult CreateQueryDef(nint nameArg, nint sqlArg)
+    {
+        bool nameOmitted = IsOmittedVariant(nameArg);
+        bool sqlOmitted = IsOmittedVariant(sqlArg);
+        string sql = "";
+        if (!sqlOmitted && !QueryDefObject.TryReadText(sqlArg, out sql))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+
+        if (nameOmitted)
+        {
+            var draft = new QueryDefObject(this, QueryDefMode.Draft, sql);
+            CallResult draftResult = Object(draft);
+            draft.Release();
+            return draftResult;
+        }
+
+        if (!QueryDefObject.TryReadText(nameArg, out string name))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+
+        if (name.Length == 0)
+        {
+            var temp = new QueryDefObject(this, QueryDefMode.Temporary, sql);
+            CallResult tempResult = Object(temp);
+            temp.Release();
+            return tempResult;
+        }
+
+        CallResult persist = PersistQueryDef(name, sql, connect: null, existingDraft: null, out QueryDefObject? saved);
+        if (persist.Failure is not null)
+        {
+            return persist;
+        }
+        CallResult result = Object(saved!);
+        saved!.Release();
+        return result;
+    }
+
+    /// <summary>
+    /// QueryDefs.Append(Object) (W-07/saved-definition; r-dao-1-err-1/draft-querydef, r-cat-1/temporary-querydef,
+    /// r-q39-querydef-bytes/draft-append-accdb, passthrough-accdb):
+    /// appending a temporary QueryDef fails 3219 from DAO.QueryDefs; appending a draft writes the exact same bytes as
+    /// named CreateQueryDef and transitions that exact COM instance to Saved state.
+    /// </summary>
+    public CallResult AppendQueryDef(DefinitionCollection queryDefs, nint arg)
+    {
+        if (Args.ObjectOf<QueryDefObject>(arg) is not { } qd)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDefs.Append of an argument that is not a CalcDb QueryDef"));
+        }
+        if (qd.Mode == QueryDefMode.Temporary)
+        {
+            // r-dao-1-err-1/draft-querydef [54]-[60], r-cat-1/temporary-querydef [49]: 3219 from DAO.QueryDefs.
+            return queryDefs.Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (qd.Mode == QueryDefMode.Saved)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDefs.Append of an already-saved QueryDef (not recorded)"));
+        }
+        return PersistQueryDef(qd.DraftName, qd.DraftSql, string.IsNullOrEmpty(qd.DraftConnect) ? null : qd.DraftConnect, existingDraft: qd, out _);
+    }
+
+    private CallResult PersistQueryDef(string name, string sql, string? connect, QueryDefObject? existingDraft, out QueryDefObject? created)
+    {
+        created = null;
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateQueryDef on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateQueryDef inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
+        if (!SchemaWriter.IsValidName(name))
+        {
+            return name.Length > 0
+                ? CallResult.Fail(Failure.Dao(3125, "DAO.QueryDefs", DaoErrors.InvalidName(name)))
+                : CallResult.Fail(Failure.NotImplemented("CreateQueryDef / QueryDefs.Append with an empty name (not recorded)"));
+        }
+        // Check duplicate name in TablesContainer (tables or queries, case-insensitive, trailing spaces ignored:
+        // r-dao-1-err-1/draft-querydef [16]-[22], r-cat-1/names [204]/[210], r-fix-expr-sql/querydef-name-space-then-plain [43]).
+        string trimmed = name.TrimEnd(' ');
+        if (Catalog.Entries.Any(e => e.ParentId == Catalog.TablesContainer
+            && string.Equals(e.Name.TrimEnd(' '), trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            return CallResult.Fail(Failure.Dao(3012, "DAO.QueryDefs", DaoErrors.ObjectExists(name)));
+        }
+
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(sql, connect);
+        if (!compiled.Succeeded)
+        {
+            SqlFailure f = compiled.Failure!;
+            return f.IsNotModelled
+                ? CallResult.Fail(Failure.NotModelled(f.NotModelled!, f.Message))
+                : CallResult.Fail(Failure.Dao(f.Number, "DAO.QueryDefs", f.Message));
+        }
+
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateQueryDef: " + writerFailure));
+        }
+
+        ulong nowBits = SchemaWriter.DateBits(DateTime.Now);
+        var request = new CreateQueryDefRequest(name, compiled.Family, compiled.Rows!);
+        SchemaOutcome outcome = writer.CreateQueryDef(workspace, request, nowBits, nowBits, out int createdObjectId);
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3012 => CallResult.Fail(Failure.Dao(3012, "DAO.QueryDefs", DaoErrors.ObjectExists(name))),
+                3125 when name.Length > 0 => CallResult.Fail(Failure.Dao(3125, "DAO.QueryDefs", DaoErrors.InvalidName(name))),
+                _ => CallResult.Fail(Failure.NotImplemented("CreateQueryDef: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
+        {
+            return CallResult.Fail(Failure.NotImplemented(stale));
+        }
+        if (accepted.Error is { } error)
+        {
+            return EditPublication.Published(error);
+        }
+        if (accepted.Open != MutationOpen.None)
+        {
+            return EditPublication.Open(accepted.Open, accepted.Detail);
+        }
+
+        if (Queries?.Queries.FirstOrDefault(q => q.Entry.Id == createdObjectId) is not { } savedQuery)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateQueryDef published the query, but it could not be read back from MSysQueries: " + _queriesFailure));
+        }
+
+        if (_queryOrder is not null && !_queryOrder.Contains(savedQuery.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            _queryOrder.Add(savedQuery.Name);
+        }
+        _queryDefs?.Relist();
+
+        if (existingDraft is not null)
+        {
+            existingDraft.TransitionToSaved(_queryDefs, savedQuery);
+            _queryDefs?.RegisterHeld(savedQuery.Name, existingDraft);
+            created = existingDraft;
+        }
+        else
+        {
+            created = new QueryDefObject(_queryDefs, this, savedQuery, createdInSession: true);
+            _queryDefs?.RegisterHeld(savedQuery.Name, created);
+        }
+        return CallResult.Nothing;
+    }
+
+    private static bool IsOmittedVariant(nint arg)
+    {
+        if (arg == 0)
+        {
+            return true;
+        }
+        CalcDb.Foundation.VarType vt = Args.TypeOf(arg);
+        return vt == CalcDb.Foundation.VarType.Error && unchecked((uint)Args.Cell(arg)->Int64) == 0x80020004u;
     }
 
     /// <summary>Containers: the catalog's container rows under the top-level parent, in name order (DAO-META: Databases, Relationships, Tables).</summary>

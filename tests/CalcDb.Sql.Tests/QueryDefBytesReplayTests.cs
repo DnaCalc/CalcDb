@@ -129,6 +129,73 @@ public sealed class QueryDefBytesReplayTests
         AssertImageEqual($"{question} (after close)", aceClose, db.Image.Snapshot());
     }
 
+    [Theory]
+    [InlineData("draft-append-accdb")]
+    [InlineData("temp-then-named-accdb")]
+    [InlineData("temp-then-named-mdb")]
+    public void Draft_and_temp_then_named_write_no_bytes_until_named_create_then_match_ace_byte_exact(string question)
+    {
+        Dictionary<string, byte[]> snaps = ReadSnapshots(question);
+        byte[] before = snaps["pg0"];
+        byte[] afterNoWrite = snaps["pg1"];
+        byte[] aceOpen = snaps["pg2"];
+        byte[] aceClose = snaps["pg3"];
+
+        // Draft creation / temporary QueryDef changes zero bytes in ACE (r-q39).
+        AssertImageEqual($"{question} (before-write)", before, afterNoWrite);
+
+        (ulong created, ulong vacUpdated, ulong liveUpdated) = ExtractQueryDates(aceOpen, "Q1");
+
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile("SELECT * FROM T");
+        Assert.True(compiled.Succeeded);
+
+        using var db = new WritableSqlFixture(before);
+        SchemaWriter writer = db.OpenSchemaWriter(out _)!;
+        SchemaOutcome outcome = writer.CreateQueryDef(db.Workspace, new CreateQueryDefRequest("Q1", compiled.Family, compiled.Rows!), created, liveUpdated, out int objectId, initialDateUpdateBits: vacUpdated);
+        Assert.True(outcome.Succeeded, $"{question}: CreateQueryDef failed: {outcome.Refused?.NotWritten ?? outcome.Accepted.Detail}");
+        Assert.Equal(int.MinValue, objectId);
+        db.OnSchemaPublished(outcome.ExtentPages);
+
+        AssertImageEqual($"{question} (after-create-open)", aceOpen, db.Image.Snapshot());
+
+        (MutationOpen closeOpen, string? closeDetail) = db.Workspace.PublishCloseCommit(db.Cache);
+        Assert.Equal(MutationOpen.None, closeOpen);
+        Assert.Null(closeDetail);
+
+        AssertImageEqual($"{question} (after-close)", aceClose, db.Image.Snapshot());
+    }
+
+    [Fact]
+    public void Temp_querydef_record_changes_no_bytes()
+    {
+        Dictionary<string, byte[]> snaps = ReadSnapshots("temp-querydef-accdb");
+        AssertImageEqual("temp-querydef-accdb (open)", snaps["pg0"], snaps["pg1"]);
+        AssertImageEqual("temp-querydef-accdb (close)", snaps["pg0"], snaps["pg2"]);
+    }
+
+    [Theory]
+    [InlineData("SELECT DISTINCT ID FROM T", "NotModelled.QueryDefSelectPredicate")]
+    [InlineData("SELECT DISTINCTROW ID FROM T", "NotModelled.QueryDefSelectPredicate")]
+    [InlineData("SELECT TOP 5 ID FROM T", "NotModelled.QueryDefTop")]
+    [InlineData("SELECT ID FROM T GROUP BY ID", "NotModelled.QueryDefGroupBy")]
+    [InlineData("SELECT ID FROM T GROUP BY ID HAVING Count(ID) > 1", "NotModelled.QueryDefGroupBy")]
+    [InlineData("SELECT T.ID FROM T INNER JOIN U ON T.ID = U.ID", "NotModelled.QueryDefJoin")]
+    [InlineData("SELECT ID FROM T, U", "NotModelled.QueryDefMultipleSources")]
+    [InlineData("SELECT ID FROM (SELECT ID FROM T)", "NotModelled.QueryDefSubquery")]
+    [InlineData("SELECT ID FROM T WITH OWNERACCESS OPTION", "NotModelled.QueryDefOwnerAccess")]
+    [InlineData("PARAMETERS pD DateTime; SELECT ID FROM T WHERE D = pD", "NotModelled.QueryDefParameterType")]
+    [InlineData("PARAMETERS pV Long; UPDATE T SET V = pV WHERE ID = 1", "NotModelled.QueryDefActionParameters")]
+    [InlineData("TRANSFORM Count(ID) SELECT V FROM T GROUP BY V PIVOT W IN ('a','b')", "NotModelled.QueryDefPivotIn")]
+    [InlineData("DROP TABLE T", "NotModelled.QueryDefDdlStatement")]
+    public void Undecided_shapes_refuse_by_name(string sql, string expectedNotModelled)
+    {
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(sql);
+        Assert.False(compiled.Succeeded);
+        Assert.NotNull(compiled.Failure);
+        Assert.True(compiled.Failure!.IsNotModelled);
+        Assert.Equal(expectedNotModelled, compiled.Failure.NotModelled);
+    }
+
     private static Dictionary<string, byte[]> ReadSnapshots(string question)
     {
         string folder = Path.Combine(SqlFixture.Root(), "evidence", "r-q39-querydef-bytes", question);

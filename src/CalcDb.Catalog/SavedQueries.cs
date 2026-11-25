@@ -131,6 +131,17 @@ public sealed class QueryCatalog
 
     public IReadOnlyList<QueryRow> Orphans { get; }
 
+    /// <summary>Return a catalog snapshot whose matching query carries its pending deferred <see cref="QueryFamily"/>.</summary>
+    public QueryCatalog WithPendingFamily(int objectId, QueryFamily family)
+    {
+        List<SavedQuery> updated = new(Queries.Count);
+        foreach (SavedQuery q in Queries)
+        {
+            updated.Add(q.Entry.Id == objectId ? q.WithPendingFamily(family) : q);
+        }
+        return new QueryCatalog(updated, Orphans);
+    }
+
     public static QueryCatalog? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, out string? failure)
     {
         CatalogRules rules = d.Catalog;

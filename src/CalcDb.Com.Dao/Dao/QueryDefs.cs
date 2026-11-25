@@ -8,29 +8,40 @@ using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
 
+internal enum QueryDefMode
+{
+    Saved,
+    Draft,
+    Temporary,
+}
+
 /// <summary>
-/// A saved QueryDef of a Database (II-06 §§8–11; R-CAT-1 CAT-Q, qualified), read from its catalog row and MSysQueries
-/// role rows. Name, Type (the masked flag class), SQL (rendered as ACE renders it at open, <see cref="QuerySql"/>),
-/// Connect (the pass-through type row's Name1, else ""), ReturnsRecords (True for every saved family in
-/// r-cat-1/querydefs), Updatable (the session's: True on a read-write open, False read-only; r-fix-cursor-dao/updatable-members-rw),
-/// the dates, the stored ODBCTimeout and MaxRecords, Parameters and Properties. A select query's Parameters, their
-/// values, its Fields before an open and its OpenRecordset come from its SQL bound by the binder (W-06/parser-binder-scan;
-/// qualified.md R-DAO-1 DAO-QUERY, R-SQL-3 SQL-META parameters). Close of a saved QueryDef changes nothing (DAO-LIFE:
-/// its recordsets survive and SQL still reads).
+/// A DAO QueryDef (II-06 §§8–11; R-CAT-1 CAT-Q, R-DAO-1 DAO-QUERY, W-07/saved-definition): saved (read from its
+/// catalog row and MSysQueries role rows, or created via <c>Database.CreateQueryDef(name, sql)</c> /
+/// <c>QueryDefs.Append</c>), draft (<c>CreateQueryDef()</c> before <c>Append</c>), or temporary
+/// (<c>CreateQueryDef("", sql)</c>, <c>#Temporary QueryDef#</c>, writing no bytes). One class serves all three states
+/// so <c>QueryDefs.Append(draft)</c> transitions the same COM instance in place (<c>r-cat-1/temporary-querydef</c>,
+/// <c>r-dao-1-err-1/draft-querydef</c>).
 /// </summary>
 internal sealed unsafe class QueryDefObject : DaoObject
 {
+    public const string TemporaryName = "#Temporary QueryDef#";
+
     private static readonly InterfaceDecl Decl = DaoTypes.QueryDef;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Live(self, q => Text(q._query.Name)))
-        .Get("Type", (self, args) => Live(self, q => q._query.Family is { } f ? Int16((int)f) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryFamily", $"QueryDef.Type of flag class 0x{q._query.FlagClass:X2}"))))
+        .Get("Name", (self, args) => Live(self, q => Text(q.CurrentName)))
+        .Put("Name", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutName(value)); })
+        .Get("Type", (self, args) => Live(self, q => q.ReadType()))
         .Get("SQL", (self, args) => Live(self, q => q.Sql()))
-        .Get("Connect", (self, args) => Live(self, q => Text(q._query.Family == QueryFamily.PassThrough ? q._query.TypeRow?.Name1 ?? "" : "")))
+        .Put("SQL", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutSql(value)); })
+        .Get("Connect", (self, args) => Live(self, q => Text(q.CurrentConnect)))
+        .Put("Connect", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutConnect(value)); })
         .Get("ReturnsRecords", (self, args) => Live(self, q => Bool(true)))
+        .Put("ReturnsRecords", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutReturnsRecords(value)); })
         .Get("Updatable", (self, args) => Live(self, q => Bool(!q.Database.ReadOnly)))
-        .Get("DateCreated", (self, args) => Live(self, q => CatalogDates.Date(q._query.Entry.DateCreateBits)))
-        .Get("LastUpdated", (self, args) => Live(self, q => CatalogDates.Date(q._query.Entry.DateUpdateBits)))
+        .Get("DateCreated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateCreateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "DateCreated on an unsaved QueryDef"))))
+        .Get("LastUpdated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateUpdateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "LastUpdated on an unsaved QueryDef"))))
         .Get("ODBCTimeout", (self, args) => Live(self, q => q.StoredOr("ODBCTimeout", Int16(60))))
         .Get("MaxRecords", (self, args) => Live(self, q => q.StoredOr("MaxRecords", Int32(0))))
         .Get("RecordsAffected", (self, args) => Live(self, q => Int32(q._recordsAffected)))
@@ -44,9 +55,16 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Method("Execute", (self, args) => { nint options = args.Length > 0 ? args[0] : 0; return Live(self, q => q.Execute(options)); })
         .Method("Close", (self, args) => Live(self, q => CallResult.Nothing));
 
-    private readonly DefinitionCollection _owner;
-    private readonly SavedQuery _query;
-    private readonly PropertyMap? _stored;
+    private readonly DatabaseObject _database;
+    private DefinitionCollection? _owner;
+    private QueryDefMode _mode;
+    private SavedQuery? _query;
+    private PropertyMap? _stored;
+    private string? _storedFailure;
+    private string _draftName = "";
+    private string _rawSql = "";
+    private string _connect = "";
+    private bool _createdInSession;
     private DefinitionCollection? _parameters;
     private PropertiesObject? _properties;
     private BoundSelect? _plan;
@@ -56,21 +74,95 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private bool _planMade;
     private NativeVariant?[] _values = [];
 
-    public QueryDefObject(DefinitionCollection owner, SavedQuery query) : base(Decl, Vtable, owner.Engine, "DAO.QueryDef")
+    /// <summary>Wrap an already-saved QueryDef owned by <paramref name="owner"/> (or created in this session).</summary>
+    public QueryDefObject(DefinitionCollection? owner, DatabaseObject database, SavedQuery query, bool createdInSession = false)
+        : base(Decl, Vtable, database.Engine, "DAO.QueryDef")
     {
+        _database = database;
         _owner = owner;
+        _mode = QueryDefMode.Saved;
         _query = query;
-        owner.AddRef();
-        _stored = owner.Database.StoredProperties(query.Entry, out _storedFailure);
+        _createdInSession = createdInSession;
+        if (owner is not null)
+        {
+            owner.AddRef();
+        }
+        else
+        {
+            database.AddRef();
+        }
+        _stored = database.StoredProperties(query.Entry, out _storedFailure);
     }
 
-    private readonly string? _storedFailure;
+    public QueryDefObject(DefinitionCollection owner, SavedQuery query)
+        : this(owner, owner.Database, query, createdInSession: false)
+    {
+    }
 
-    private DatabaseObject Database => _owner.Database;
+    /// <summary>Create an unsaved Draft (<c>CreateQueryDef()</c>) or Temporary (<c>CreateQueryDef("", sql)</c>) QueryDef.</summary>
+    public QueryDefObject(DatabaseObject database, QueryDefMode mode, string sql)
+        : base(Decl, Vtable, database.Engine, "DAO.QueryDef")
+    {
+        if (mode == QueryDefMode.Saved)
+        {
+            throw new ArgumentException("Use the SavedQuery constructor for saved QueryDefs.", nameof(mode));
+        }
+        _database = database;
+        _mode = mode;
+        _rawSql = sql;
+        database.AddRef();
+    }
+
+    public QueryDefMode Mode => _mode;
+
+    public string DraftName => _draftName;
+
+    public string DraftSql => _rawSql;
+
+    public string DraftConnect => _connect;
+
+    private string CurrentName => _mode switch
+    {
+        QueryDefMode.Saved => _query!.Name,
+        QueryDefMode.Draft => _draftName,
+        QueryDefMode.Temporary => TemporaryName,
+        _ => "",
+    };
+
+    private string CurrentConnect => _mode == QueryDefMode.Saved
+        ? (_query!.Family == QueryFamily.PassThrough ? _query.TypeRow?.Name1 ?? "" : "")
+        : _connect;
+
+    private QueryFamily? EffectiveFamily => _mode == QueryDefMode.Saved
+        ? _query!.Family
+        : QueryDefinitionCompiler.ClassifyFamily(_rawSql, _connect);
+
+    private DatabaseObject Database => _database;
 
     public override bool Invalid => Database.Closed;
 
     protected override OperationTable Table => Operations;
+
+    /// <summary>
+    /// Transition a Draft QueryDef to Saved in place when <c>QueryDefs.Append(draft)</c> publishes it, preserving
+    /// COM identity (<c>r-cat-1/temporary-querydef</c> [55]-[58], <c>r-q39-querydef-bytes/draft-append-accdb</c>).
+    /// </summary>
+    public void TransitionToSaved(DefinitionCollection? owner, SavedQuery saved)
+    {
+        _mode = QueryDefMode.Saved;
+        _query = saved;
+        _createdInSession = true;
+        _stored = _database.StoredProperties(saved.Entry, out _storedFailure);
+        _properties?.Release();
+        _properties = null;
+        ResetPlan();
+        if (owner is not null && _owner is null)
+        {
+            owner.AddRef();
+            _owner = owner;
+            _database.Release();
+        }
+    }
 
     private static CallResult Live(ComObject self, Func<QueryDefObject, CallResult> op)
     {
@@ -78,16 +170,156 @@ internal sealed unsafe class QueryDefObject : DaoObject
         return q.Invalid ? q.Fail(3420, DaoErrors.ObjectInvalid) : op(q);
     }
 
-    private CallResult Sql()
+    private CallResult ReadType()
     {
-        RenderedSql sql = QuerySql.Render(_query);
-        return sql.Text is { } text ? Text(text) : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"QueryDef.SQL of '{_query.Name}': {sql.NotModelled}"));
+        // r-cat-1b/qd-view-*, r-fix-cat-txn/qd-view-writable-reopen, r-fix-expr-sql/querydef-create-texts-reopen:
+        // a QueryDef created in the current session reads Type = 0 (dbQSelect) until the database is closed and reopened.
+        if (_mode == QueryDefMode.Saved && _createdInSession)
+        {
+            return Int16(0);
+        }
+        if (_mode == QueryDefMode.Draft)
+        {
+            return Int16(0);
+        }
+        if (_mode == QueryDefMode.Temporary)
+        {
+            return EffectiveFamily is { } tf ? Int16((int)tf) : Int16(0);
+        }
+        return _query!.Family is { } f
+            ? Int16((int)f)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryFamily", $"QueryDef.Type of flag class 0x{_query.FlagClass:X2}"));
     }
 
+    private CallResult PutName(nint value)
+    {
+        if (_mode == QueryDefMode.Temporary)
+        {
+            // r-dao-1-err-1/draft-querydef [52]: setting Name on a temporary QueryDef fails 3219 from DAO.QueryDef.
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (_mode == QueryDefMode.Saved)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefNamePut", "QueryDef.Name put on a saved QueryDef (not in stretch 1 of W-07/saved-definition)"));
+        }
+        if (!TryReadText(value, out string text))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        _draftName = text;
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutSql(nint value)
+    {
+        if (_mode == QueryDefMode.Saved)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefSqlPut", "QueryDef.SQL put on a saved QueryDef (stretch 2 of W-07/saved-definition)"));
+        }
+        if (!TryReadText(value, out string text))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        _rawSql = text;
+        ResetPlan();
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutConnect(nint value)
+    {
+        if (_mode == QueryDefMode.Saved)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefConnectPut", "QueryDef.Connect put on a saved QueryDef (not in stretch 1 of W-07/saved-definition)"));
+        }
+        if (!TryReadText(value, out string text))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        _connect = text;
+        ResetPlan();
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutReturnsRecords(nint value)
+    {
+        if (_mode == QueryDefMode.Saved)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefReturnsRecordsPut", "QueryDef.ReturnsRecords put on a saved QueryDef (not in stretch 1 of W-07/saved-definition)"));
+        }
+        bool? flag = Args.Bool(value, omitted: true);
+        if (flag is null)
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        if (!flag.Value)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefReturnsRecordsFalse", "QueryDef.ReturnsRecords = False (not recorded in r-q39)"));
+        }
+        return CallResult.Nothing;
+    }
+
+    internal static bool TryReadText(nint arg, out string text)
+    {
+        text = "";
+        if (arg == 0)
+        {
+            return true;
+        }
+        VarType vt = Args.TypeOf(arg);
+        if ((vt & ~VarType.ByRef) == VarType.Null)
+        {
+            return false;
+        }
+        if (vt == VarType.Bstr && Args.Cell(arg)->Pointer == 0)
+        {
+            text = "";
+            return true;
+        }
+        if (Args.Text(arg) is { } s)
+        {
+            text = s;
+            return true;
+        }
+        return false;
+    }
+
+    private void ResetPlan()
+    {
+        _parameters?.Release();
+        _parameters = null;
+        for (int i = 0; i < _values.Length; i++)
+        {
+            if (_values[i] is { } value)
+            {
+                SqlParameters.Release(ref value);
+                _values[i] = null;
+            }
+        }
+        _values = [];
+        _plan?.Dispose();
+        _plan = null;
+        _action?.Dispose();
+        _action = null;
+        _planFailure = null;
+        _planMade = false;
+    }
+
+    private CallResult Sql()
+    {
+        if (_mode != QueryDefMode.Saved)
+        {
+            return Text(_rawSql);
+        }
+        RenderedSql sql = QuerySql.Render(_query!);
+        return sql.Text is { } text ? Text(text) : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"QueryDef.SQL of '{_query!.Name}': {sql.NotModelled}"));
+    }
+
+    private string? EffectiveSqlText() => _mode == QueryDefMode.Saved ? QuerySql.Render(_query!).Text : _rawSql;
+
     /// <summary>
-    /// OpenRecordset(Type, Options): the saved query's recordset, as Database.OpenRecordset opens it by name, with this
-    /// QueryDef's parameter values (DAO-QUERY: without values 3061; d1e/query-parameter-values: pId = "2" opens the row 2).
-    /// The cursor keeps copies of the values, so a later assignment does not reach it (EXPR-BIND).
+    /// OpenRecordset(Type, Options): the saved or temporary query's recordset, as Database.OpenRecordset opens it, with
+    /// this QueryDef's parameter values (DAO-QUERY: without values 3061; d1e/query-parameter-values: pId = "2" opens
+    /// row 2; r-cat-1/temporary-querydef, r-fix-wire-ado/param-select-text-fresh).
     /// </summary>
     private CallResult OpenRecordset(nint typeArg, nint optionsArg)
     {
@@ -97,9 +329,22 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.OpenRecordset with a Type or Options argument that is not numeric"));
         }
-        CallResult result = Plan() is not null && QuerySql.Render(_query).Text is { } text
-            ? SelectRoute.Open(Database, text, type, options.Value, _values)
-            : Database.OpenSaved(_query, type, options.Value);
+        CallResult result;
+        if (_mode != QueryDefMode.Saved)
+        {
+            if (EffectiveFamily != QueryFamily.Select)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"QueryDef.OpenRecordset of an unsaved {EffectiveFamily?.ToString() ?? "unclassified"} query"));
+            }
+            Plan();
+            result = SelectRoute.Open(Database, _rawSql, type, options.Value, _values);
+        }
+        else
+        {
+            result = Plan() is not null && QuerySql.Render(_query!).Text is { } text
+                ? SelectRoute.Open(Database, text, type, options.Value, _values)
+                : Database.OpenSaved(_query!, type, options.Value);
+        }
         Opened |= result.Failure is null;
         return result;
     }
@@ -108,19 +353,19 @@ internal sealed unsafe class QueryDefObject : DaoObject
     public bool Opened { get; private set; }
 
     /// <summary>
-    /// The select query's SQL as ACE renders it (QuerySql), bound once (W-06/parser-binder-scan); null for the other
-    /// families, and when the SQL does not render or bind (<see cref="_planFailure"/> holds the binder's failure). A
-    /// delete, update or append query's SQL is bound once too, as its action plan (<see cref="_action"/>, W-07/actions),
-    /// whose parameters its Parameters list and Execute takes (r-cat-1b/qd-execute-param-action).
+    /// The select or action query's SQL bound once (W-06/parser-binder-scan, W-07/actions); works for both Saved
+    /// (rendered via <see cref="QuerySql"/>) and Temporary/Draft (raw SQL) QueryDefs.
     /// </summary>
     public BoundSelect? Plan()
     {
         if (!_planMade)
         {
             _planMade = true;
-            if (_query.Family is QueryFamily.Select or QueryFamily.Delete or QueryFamily.Update or QueryFamily.Append && QuerySql.Render(_query).Text is { } text)
+            QueryFamily? family = EffectiveFamily;
+            if (family is QueryFamily.Select or QueryFamily.Delete or QueryFamily.Update or QueryFamily.Append
+                && EffectiveSqlText() is { Length: > 0 } text)
             {
-                if (_query.Family == QueryFamily.Select)
+                if (family == QueryFamily.Select)
                 {
                     _plan = BoundSelect.Prepare(text, Database.Sql, out _planFailure);
                 }
@@ -158,16 +403,26 @@ internal sealed unsafe class QueryDefObject : DaoObject
     }
 
     /// <summary>
-    /// QueryDef.Fields of a select query before an open: the bound columns (qualified.md SQL-META: readable before any
-    /// value is assigned). The other families, an unbound SQL and Fields after an open are named.
+    /// QueryDef.Fields before an open: bound columns for SELECT (qualified.md SQL-META); empty (Count 0) for
+    /// non-row-returning families (r-cat-1b/qd-view-update, qd-view-passthrough, qd-view-delete, qd-view-append,
+    /// qd-view-make-table, qd-view-ddl).
     /// </summary>
     private CallResult FieldsCollection()
     {
+        QueryFamily? family = EffectiveFamily;
+        if (family is QueryFamily.Update or QueryFamily.Delete or QueryFamily.Append or QueryFamily.MakeTable
+            or QueryFamily.DataDefinition or QueryFamily.PassThrough)
+        {
+            var empty = new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", Database, [], (c, i) => throw new InvalidOperationException("no fields"));
+            CallResult emptyResult = Object(empty);
+            empty.Release();
+            return emptyResult;
+        }
         if (Plan() is null)
         {
             return CallResult.Fail(Failure.NotImplemented(_planFailure is { } f
-                ? $"QueryDef.Fields of '{_query.Name}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
-                : $"QueryDef.Fields of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-06, W-07)"));
+                ? $"QueryDef.Fields of '{CurrentName}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
+                : $"QueryDef.Fields of a {family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-06, W-07)"));
         }
         var fields = new QueryFieldsObject(this);
         CallResult result = Object(fields);
@@ -179,13 +434,12 @@ internal sealed unsafe class QueryDefObject : DaoObject
     /// Execute(Options): a row-returning query (select, crosstab, union) is 3065 from DAO.QueryDef, before any parameter is
     /// asked for (r-cat-1b/qd-execute-on-row-returning: QSel, QXtab, QUni, QParam). A delete, update or append query runs
     /// its bound plan with this QueryDef's parameter values (missing ones: 3061 from DAO.QueryDef,
-    /// r-cat-1b/qd-execute-param-action); the other families run their rendered SQL (<see cref="ActionRoute.ExecuteSaved"/>).
-    /// RecordsAffected counts on the QueryDef only (r-cat-1b/qd-execute-action-saved: QUpd 4, QApp 4, db 0 after each).
-    /// An Options value that does not convert is not recorded on a QueryDef and is named.
+    /// r-cat-1b/qd-execute-param-action; temporary INSERT: r-q-wire/feff-accdb-param).
     /// </summary>
     private CallResult Execute(nint optionsArg)
     {
-        if (_query.Family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union)
+        QueryFamily? family = EffectiveFamily;
+        if (family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union)
         {
             _recordsAffected = 0;
             return Fail(3065, SelectRoute.CannotExecuteSelect);
@@ -203,12 +457,20 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return ActionRoute.Failed(Database, this, failure, ref _recordsAffected);
         }
-        return ActionRoute.ExecuteSaved(Database, this, _query, options, null, ref _recordsAffected);
+        if (_mode == QueryDefMode.Saved)
+        {
+            return ActionRoute.ExecuteSaved(Database, this, _query!, options, null, ref _recordsAffected);
+        }
+        return CallResult.Fail(Failure.NotImplemented($"QueryDef.Execute of an unsaved {family?.ToString() ?? "unclassified"} query"));
     }
 
     /// <summary>A built-in the blob stores (flag 01: ODBCTimeout, MaxRecords), else the value ACE shows for an unset one.</summary>
     private CallResult StoredOr(string name, CallResult unset)
     {
+        if (_mode != QueryDefMode.Saved)
+        {
+            return unset;
+        }
         if (_storedFailure is { } failure)
         {
             return CallResult.Fail(Failure.NotImplemented($"QueryDef.{name} when the property blob cannot be read: {failure}"));
@@ -218,12 +480,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     }
 
     /// <summary>
-    /// Parameters (qualified.md R-DAO-1 DAO-QUERY, R-SQL-3 SQL-META parameters): a select query's are its bound statement's
-    /// (<see cref="BoundSelect.Parameters"/>: the declared ones in declaration order, then the implicit ones in order of
-    /// first use; r-cat-1/querydefs QImplicit: pMin, Type 10); Item finds a name without the brackets it was declared
-    /// with. One name declared with two types fails Count with 3060 from DAO.Parameters (r-sql-1/b-parameters); Item is
-    /// then not recorded. A pass-through query has none (QPass: Count 0). The other families' parameters need a binder
-    /// of their statements (W-07) and are named.
+    /// Parameters (qualified.md R-DAO-1 DAO-QUERY, R-SQL-3 SQL-META parameters): works on both Saved and Temporary
+    /// QueryDefs. Pass-through and DDL queries have none (Count 0).
     /// </summary>
     private DefinitionCollection ParametersCollection()
     {
@@ -231,9 +489,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return _parameters;
         }
-        if (_query.Family == QueryFamily.PassThrough)
+        QueryFamily? family = EffectiveFamily;
+        if (family is QueryFamily.PassThrough or QueryFamily.DataDefinition)
         {
-            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("a pass-through query has no parameters"))
+            return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
                 ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
             };
@@ -245,8 +504,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
             {
                 ClosedSource = "DAO.QueryDef",
                 Gap = _planFailure is { } f
-                    ? $"the Parameters of '{_query.Name}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
-                    : $"the Parameters of a {_query.Family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
+                    ? $"the Parameters of '{CurrentName}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
+                    : $"the Parameters of a {family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
             };
         }
         SqlFailure? declarations = _plan?.ParametersFailure ?? _action?.ParametersFailure;
@@ -271,13 +530,18 @@ internal sealed unsafe class QueryDefObject : DaoObject
     /// </summary>
     private CallResult PropertiesCollection()
     {
+        if (_mode != QueryDefMode.Saved)
+        {
+            _properties ??= new PropertiesObject(this, BuiltInProperties.QueryDef);
+            return Object(_properties);
+        }
         if (_storedFailure is { } failure)
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.Properties when the property blob cannot be read: " + failure));
         }
-        if (Database.InheritsTableProperties(_query))
+        if (Database.InheritsTableProperties(_query!))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.InheritedQueryProperties", $"the table properties '{_query.Name}' inherits (PRES-QUERY-PROPS)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.InheritedQueryProperties", $"the table properties '{_query!.Name}' inherits (PRES-QUERY-PROPS)"));
         }
         _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.QueryDef, _stored));
         return Object(_properties);
@@ -285,20 +549,17 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     protected override void OnFinalRelease()
     {
-        _parameters?.Release();
         _properties?.Release();
-        for (int i = 0; i < _values.Length; i++)
+        ResetPlan();
+        if (_owner is not null)
         {
-            if (_values[i] is { } value)
-            {
-                SqlParameters.Release(ref value);
-                _values[i] = null;
-            }
+            _owner.Released(this);
+            _owner.Release();
         }
-        _plan?.Dispose();
-        _action?.Dispose();
-        _owner.Released(this);
-        _owner.Release();
+        else
+        {
+            _database.Release();
+        }
     }
 }
 
