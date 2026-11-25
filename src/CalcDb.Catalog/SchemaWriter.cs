@@ -343,9 +343,9 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "a table without fields (ACE's refusal through SQL is not recorded)");
         }
-        if (isJet4Mdb && request.Route == SchemaRoute.Dao && request.Fields.Count != 1)
+        if (exclusiveSession && request.Route == SchemaRoute.Dao && request.Fields.Count != 1)
         {
-            return new SchemaRefusal(null, $"DAO TableDefs.Append with {request.Fields.Count} fields in a Jet 4 MDB is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-*mdb records 1 Long field in an exclusive session)");
+            return new SchemaRefusal(null, $"DAO TableDefs.Append with {request.Fields.Count} fields in an exclusive session is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records 1 Long field)");
         }
         for (int i = 1; i < request.Fields.Count; i++)
         {
@@ -670,12 +670,12 @@ public sealed class SchemaWriter
         {
             return daoLvRefusal;
         }
-        if (isJet4Mdb && request.Route == SchemaRoute.Dao)
+        if (exclusiveSession && request.Route == SchemaRoute.Dao)
         {
             byte[] firstBlob = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, request.Fields[0].Name, [DaoFieldRequired])]);
             if (firstBlob.Length > LongValuePlan.InlinePayloadMax)
             {
-                return new SchemaRefusal(null, $"DAO TableDefs.Append in a Jet 4 MDB whose LvProp ({firstBlob.Length} bytes) exceeds the {LongValuePlan.InlinePayloadMax}-byte inline limit is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-*mdb keeps LvProp inline)");
+                return new SchemaRefusal(null, $"DAO TableDefs.Append in an exclusive session whose LvProp ({firstBlob.Length} bytes) exceeds the {LongValuePlan.InlinePayloadMax}-byte inline limit is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* keeps LvProp inline)");
             }
         }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado
@@ -890,6 +890,17 @@ public sealed class SchemaWriter
         if (isJet4Mdb && workspace.Depth > 0)
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE in a Jet 4 MDB inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/*-mdb-* run outside BeginTrans)"), default, _pageCount);
+        }
+        if (request.Route == SchemaRoute.Dao && workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO TableDefs.Append while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
         }
 
         DeferredCatalogCommit? absorbedDeferred = null;
@@ -1802,6 +1813,17 @@ public sealed class SchemaWriter
         }
 
         bool isUnion = request.Family == QueryFamily.Union;
+        if (!isUnion && workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO CreateQueryDef while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
+        }
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
         bool useSessionExtentReservation = !workspace.HasGlobalMapAllocationOrReservation(_cache);
         workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
@@ -1946,6 +1968,17 @@ public sealed class SchemaWriter
         if (SystemTable(_d.Catalog.QueryTableName, out string? queriesFailure) is not { } queries)
         {
             return new SchemaOutcome(new SchemaRefusal(null, queriesFailure), default, _pageCount);
+        }
+        if (workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO QueryDef.SQL put while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
         }
 
         TableDefinition objects = _catalog.ObjectTable;

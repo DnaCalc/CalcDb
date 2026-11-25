@@ -213,6 +213,12 @@ public sealed class EditFrame : IDisposable
 
     public bool Updatable { get; }
 
+    /// <summary>Whether this frame holds deferred Delete TableDef counts awaiting <see cref="Dispose"/> (<c>rs.Close</c>).</summary>
+    internal bool HasDeferredCounts => _deferredRowCount != 0;
+
+    /// <summary>The <see cref="PageCache"/> whose TableDef will receive this frame's deferred Delete counts at <c>rs.Close</c>.</summary>
+    internal PageCache? DeferredCountsFile => _table.Writer?.File;
+
     /// <summary>
     /// DAO LockEdits: True (pessimistic, the default) locks the row's page at Edit; False (optimistic) locks at Update and
     /// refuses 3197 when the stored row changed since Edit read it (qualified.md R-CURSOR-1 CUR-EDIT conflicts).

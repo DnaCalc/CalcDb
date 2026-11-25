@@ -677,18 +677,41 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _releaseAtClose.ContainsKey(cache)
         || _deferredCatalogCommit.ContainsKey(cache);
 
-    /// <summary>True when any file on this workspace has a queued deferred catalog commit.</summary>
-    public bool HasDeferredCatalogCommit => _deferredCatalogCommit.Count > 0;
-
-    /// <summary>Return any queued deferred catalog commit on this workspace (for Workspace-scoped guards such as BeginTrans).</summary>
-    public bool TryGetAnyDeferredCatalogCommit(out DeferredCatalogCommit? commit)
+    /// <summary>
+    /// Report which kinds of deferred catalog commit are currently queued across all caches on this Workspace
+    /// (for deterministic Workspace-scoped guards such as <c>BeginTrans</c>).
+    /// </summary>
+    public bool TryGetPendingDeferredKinds(out bool hasQueryDef, out bool hasTableDefAppend)
     {
+        hasQueryDef = false;
+        hasTableDefAppend = false;
         foreach (DeferredCatalogCommit pending in _deferredCatalogCommit.Values)
         {
-            commit = pending;
-            return true;
+            if (pending.Kind == DeferredCatalogCommitKind.TableDefAppend)
+            {
+                hasTableDefAppend = true;
+            }
+            else
+            {
+                hasQueryDef = true;
+            }
         }
-        commit = null;
+        return hasQueryDef || hasTableDefAppend;
+    }
+
+    /// <summary>
+    /// Whether any live <see cref="EditFrame"/> registered with this Workspace holds deferred Delete TableDef row
+    /// counts on <paramref name="cache"/> awaiting <c>Recordset.Close</c> (<c>evidence/r-q17-growth/retire-rs-delete-au1</c>).
+    /// </summary>
+    public bool HasDeferredDeleteCounts(PageCache cache)
+    {
+        for (int i = 0; i < _edits.Count; i++)
+        {
+            if (_edits[i].HasDeferredCounts && ReferenceEquals(_edits[i].DeferredCountsFile, cache))
+            {
+                return true;
+            }
+        }
         return false;
     }
 

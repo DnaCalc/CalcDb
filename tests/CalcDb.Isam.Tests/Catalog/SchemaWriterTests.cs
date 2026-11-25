@@ -1214,9 +1214,9 @@ public sealed class SchemaWriterTests
     [InlineData(3, 45)]
     public void A_failed_DAO_property_commit_returns_the_published_table_row(int failingPublication, ulong expectedExtent)
     {
-        // A 3-field DAO TableDefs.Append publishes 3 synchronous commits (Commit 1: table + field 1 inline LvProp;
-        // Commit 2: fields 1..2 spilling to LVAL page 44; Commit 3: fields 1..3 on page 44; matching
-        // evidence/r-q28-schema-write-open/dao-fields-4-timing and evidence/r-q15-ddl-open/counter-dao-append-pages).
+        // Synthetic failure-injection test checking partial publication reporting across a 3-field DAO TableDefs.Append's
+        // 3 synchronous commits (N synchronous commits at return per evidence/r-q15-ddl-open/counter-dao-append-pages
+        // and evidence/r-q28-schema-write-open/dao-fields-4-timing; mid-Append failure states are synthetic).
         byte[] fixture = Fixture();
         using var session = new Session(fixture) { RefusePublication = failingPublication };
         SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long("a"), Long("b"), Long("c")], SchemaRoute.Dao), 1, 2);
@@ -2443,12 +2443,32 @@ public sealed class SchemaWriterTests
     [Fact]
     public void Shared_dao_tabledefs_append_at_return_counter_matches_r_q15_and_r_q28()
     {
-        // evidence/r-q15-ddl-open/counter-dao-append-pages: 1 Long field writes +1 at return (0x0101), +2 at Close (0x0103).
+        // evidence/r-q15-ddl-open/counter-dao-append-pages: 1 Long field writes +1 at return (0x0101), +2 at Close (0x0103),
+        // and changes pages {0, 1, 7, 8, 10, 17, 41, 42, 43} (with page 17 already holding the live inline LvProp row).
         byte[] fixture = Fixture();
         using (var s1 = new Session(fixture))
         {
             s1.Create(new CreateTableRequest("T", [Long("n")], SchemaRoute.Dao), 1, 2);
-            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(s1.File.Snapshot()));
+            byte[] atReturn = s1.File.Snapshot();
+            Assert.Equal(44 * D.PageSize, atReturn.Length);
+            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(atReturn));
+            List<uint> changedAtReturn = [];
+            for (uint p = 0; p < 44; p++)
+            {
+                int off = (int)p * D.PageSize;
+                if (p >= 42 || !atReturn.AsSpan(off, D.PageSize).SequenceEqual(fixture.AsSpan(off, D.PageSize)))
+                {
+                    changedAtReturn.Add(p);
+                }
+            }
+            // Pages 2 and 3 (MSysObjects/MSysACEs TDEF counts) are updated by CalcDb's Commit 1 (where ACE leaves them
+            // to Close); every other changed page matches r-q15-ddl-open/counter-dao-append-pages's at-return set.
+            Assert.Equal([0u, 1u, 2u, 3u, 7u, 8u, 10u, 17u, 41u, 42u, 43u], changedAtReturn);
+            CatalogSnapshot cat = CatalogBootstrap.Open(s1.Cache, D, s1.Pages, out CatalogFailure? cf, readProperties: true)!;
+            Assert.Null(cf);
+            CatalogEntry t = cat.Entries.Single(e => e.Name == "T");
+            Assert.Equal(42, t.Id);
+            Assert.NotNull(t.Properties);
             s1.Close();
             Assert.Equal(0x0103UL, D.Header.CommitCounter.Read(s1.File.Snapshot()));
         }
@@ -2469,9 +2489,14 @@ public sealed class SchemaWriterTests
         byte[] accdb = Fixture();
         byte[] mdb = FixtureMdb();
 
-        // 1. Exclusive ACCDB: timing gap [0.50 s, 1.0 s), multi-field/spilling second Append, SQL DDL, and counter commit refuse without writing.
+        // 1. Exclusive ACCDB: first or second multi-field/spilling Append refuses in CheckCore (only 1-Long-field inline
+        //    LvProp is recorded in r-q41-create-session-counter/ddl-tabledefs-append-*); timing gap [0.50 s, 1.0 s),
+        //    SQL DDL, and counter commit refuse without writing.
         using (var excl = new Session(accdb, exclusive: true))
         {
+            Assert.Contains("exclusive session", excl.Writer().Check(new("Multi1", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
+            Assert.Contains("inline limit", excl.Writer().Check(new("Spill1", [Long("nnnnnnnn")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
+
             excl.Create(new CreateTableRequest("T1", [Long("ID")], SchemaRoute.Dao), 1, 1);
             byte[] afterT1 = excl.File.Snapshot();
 
@@ -2484,13 +2509,11 @@ public sealed class SchemaWriterTests
             excl.Now = TimeSpan.FromMilliseconds(100);
             SchemaOutcome multi = excl.Writer().CreateTable(excl.Workspace, new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), 2, 2);
             Assert.False(multi.Succeeded);
-            Assert.Equal(MutationOpen.Publication, multi.Accepted.Open);
-            Assert.Contains("multi-field", multi.Accepted.Detail);
+            Assert.Contains("exclusive session", multi.Refused?.NotWritten);
 
             SchemaOutcome spilling = excl.Writer().CreateTable(excl.Workspace, new("T2", [Long("nnnnnnnn")], SchemaRoute.Dao), 2, 2);
             Assert.False(spilling.Succeeded);
-            Assert.Equal(MutationOpen.Publication, spilling.Accepted.Open);
-            Assert.Contains("LVAL-spilling", spilling.Accepted.Detail);
+            Assert.Contains("inline limit", spilling.Refused?.NotWritten);
 
             SchemaOutcome sqlDdl = excl.Writer().CreateTable(excl.Workspace, new("T3", [Long("ID")], SchemaRoute.Sql), 2, 2);
             Assert.False(sqlDdl.Succeeded);
@@ -2530,7 +2553,7 @@ public sealed class SchemaWriterTests
             SchemaWriter w = exclMdb.Writer();
             Assert.Null(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: true));
             Assert.NotNull(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: false)?.NotWritten);
-            Assert.Contains("Jet 4 MDB", w.Check(new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
+            Assert.Contains("exclusive session", w.Check(new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
             Assert.Contains("inline limit", w.Check(new("T3", [Long("nnnnnnnn")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
         }
     }

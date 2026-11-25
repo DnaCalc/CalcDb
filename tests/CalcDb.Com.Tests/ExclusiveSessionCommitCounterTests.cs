@@ -385,4 +385,53 @@ public sealed unsafe class ExclusiveSessionCommitCounterTests : IDisposable
             Assert.Equal((0x0105UL, 0x0103UL), ReadCounters(npPath));
         }
     }
+
+    [Fact]
+    public void Dao_Delete_then_TableDefs_Append_refuses_before_writing_so_rs_Close_publishes_deferred_counts()
+    {
+        // Gate 4 Finding 1: an open Recordset with a Delete holds deferred TableDef row counts awaiting rs.Close
+        // (evidence/r-q17-growth/retire-rs-delete-au1). TableDefs.Append and CreateQueryDef refuse by name before
+        // writing while deferred Delete counts are pending so rs.Close never silently drops the TableDef row count.
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string path = Path.Combine(_dir, "delete-then-append.accdb");
+        File.WriteAllBytes(path, store.ReadAll(EmptyAccdbFixture));
+
+        DBEngineObject engine = CreateEngine();
+        DatabaseObject setup = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, false)));
+        Ok(Method(setup, "Execute", "CREATE TABLE T (ID LONG)", DbFailOnError));
+        Ok(Method(setup, "Execute", "INSERT INTO T VALUES (1)", DbFailOnError));
+        Ok(Method(setup, "Execute", "INSERT INTO T VALUES (2)", DbFailOnError));
+        Ok(Method(setup, "Close"));
+
+        DatabaseObject db = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, false)));
+        CalcDb.Com.Dao.RecordsetObject rs = Recover<CalcDb.Com.Dao.RecordsetObject>(Ok(Method(db, "OpenRecordset", "T", 2)));
+        Ok(Method(rs, "Delete"));
+        Assert.True(db.Workspace.Transactions.HasDeferredDeleteCounts(db.Cache));
+
+        // TableDefs.Append and CreateQueryDef both refuse cleanly without writing while Delete counts are deferred.
+        CallResult appendRefused = TryAppendLongTable(db, "T2", "ID");
+        Assert.Equal(FailureKind.NotModelled, appendRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.Edit.Publication:", appendRefused.Failure?.Description);
+        Assert.Contains("deferred Delete TableDef counts", appendRefused.Failure?.Description);
+
+        CallResult qdRefused = Method(db, "CreateQueryDef", "Q1", "SELECT ID FROM T");
+        Assert.Equal(FailureKind.NotModelled, qdRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.Edit.Publication:", qdRefused.Failure?.Description);
+        Assert.Contains("deferred Delete TableDef counts", qdRefused.Failure?.Description);
+
+        // rs.Close publishes T's deferred TableDef RowCount decrement (2 -> 1) cleanly; nothing was silently dropped.
+        Ok(Method(rs, "Close"));
+        Assert.False(db.Workspace.Transactions.HasDeferredDeleteCounts(db.Cache));
+        Ok(Method(db, "Close"));
+
+        // Verify T's TableDef page 42 RowCount is 1 (not stale 2) and T2 was not created.
+        byte[] closedBytes = File.ReadAllBytes(path);
+        uint tRowCount = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(closedBytes.AsSpan(42 * D.PageSize + 16, 4));
+        Assert.Equal(1u, tRowCount);
+
+        DatabaseObject verify = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, true)));
+        DefinitionCollection verifyTds = Recover<DefinitionCollection>(Ok(Get(verify, "TableDefs")));
+        Assert.Equal(3265, Call(verifyTds, "Item", InvokeKind.PropertyGet, "T2").Failure?.Number);
+        Ok(Method(verify, "Close"));
+    }
 }
