@@ -1,3 +1,5 @@
+using System.Text;
+
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
 
@@ -147,6 +149,109 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         }
     }
 
+    /// <summary>
+    /// Expands implied left operands and bare literals inside a field-level <c>ValidationRule</c>
+    /// (<c>evidence/r-q42-field-rule-and/</c>, qualified.md <c>R-EXPR-1 EXPR-MUTATION r-q42</c>), using the same lexer
+    /// and operator-precedence grammar as <see cref="Parse"/> without altering regular SQL or TableDef parsing.
+    /// </summary>
+    internal static string ExpandFieldRule(string rule, string field, out FieldRuleForm form)
+    {
+        var parser = new Parser(rule, 0);
+        var edits = new List<SourceEdit>();
+        var state = new FieldRuleState { AllClausesImpliedNotEqual = true };
+        try
+        {
+            if (parser.TryLeadingAndNotEqual(field, edits, ref state))
+            {
+                form = FieldRuleForm.MultiClause;
+                return ApplyEdits(rule, edits);
+            }
+            SyntaxNode root = parser.FieldExpression(field, edits, ref state, out _);
+            parser.ExpectEnd();
+            if (state.HasUnrecordedForm)
+            {
+                form = FieldRuleForm.UnrecordedMultiClause;
+                return rule;
+            }
+            if (edits.Count == 0)
+            {
+                if (!state.HasLogical && !state.HasParen && !state.HasNotPrefix && root.Kind == SyntaxKind.Literal)
+                {
+                    form = FieldRuleForm.Literal;
+                    return $"{field} = ({rule})";
+                }
+                form = FieldRuleForm.Direct;
+                return rule;
+            }
+            if (!state.HasLogical && !state.HasParen && !state.HasNotPrefix)
+            {
+                form = state.AnyLiteralRewrite ? FieldRuleForm.Literal : FieldRuleForm.SingleImplied;
+            }
+            else if (state.HasLogical && !state.HasOtherLogical && !state.HasParen && !state.HasNotPrefix
+                && state.AllClausesImpliedNotEqual && state.ClauseCount >= 2)
+            {
+                form = FieldRuleForm.AndNotEqualImplied;
+            }
+            else
+            {
+                form = FieldRuleForm.MultiClause;
+            }
+            return ApplyEdits(rule, edits);
+        }
+        catch (SyntaxError)
+        {
+            form = FieldRuleForm.Unparsed;
+            return ApplyEdits(rule, edits);
+        }
+        catch (NotModelledSyntax)
+        {
+            form = FieldRuleForm.Unparsed;
+            return ApplyEdits(rule, edits);
+        }
+        finally
+        {
+            parser.FreeTexts();
+        }
+    }
+
+    private readonly record struct SourceEdit(int Start, int Length, string Replacement);
+
+    private struct FieldRuleState
+    {
+        public bool HasParen;
+        public bool HasLogical;
+        public bool HasOtherLogical;
+        public bool HasNotPrefix;
+        public bool AnyLiteralRewrite;
+        public bool AllClausesImpliedNotEqual;
+        public bool HasUnrecordedForm;
+        public int ClauseCount;
+    }
+
+    private static string ApplyEdits(string rule, List<SourceEdit> edits)
+    {
+        if (edits.Count == 0)
+        {
+            return rule;
+        }
+        var sb = new StringBuilder(rule.Length + edits.Count * 16);
+        int pos = 0;
+        foreach (SourceEdit edit in edits)
+        {
+            if (edit.Start > pos)
+            {
+                sb.Append(rule, pos, edit.Start - pos);
+            }
+            sb.Append(edit.Replacement);
+            pos = edit.Start + edit.Length;
+        }
+        if (pos < rule.Length)
+        {
+            sb.Append(rule, pos, rule.Length - pos);
+        }
+        return sb.ToString();
+    }
+
     /// <summary>Free the text literals' BSTRs (a bound expression that keeps them takes them over: <see cref="TakeTexts"/>).</summary>
     public void Dispose()
     {
@@ -197,6 +302,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         };
 
         private int _position = start;
+        private int _lastTokenEnd = start;
         private Token? _peeked;
         private int _depth;
 
@@ -217,21 +323,24 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             return p;
         }
 
-        public ExpressionSyntax Failed(SyntaxError e)
+        public void FreeTexts()
         {
             foreach (nint b in Texts)
             {
                 Bstrs.Free(b);
             }
+            Texts.Clear();
+        }
+
+        public ExpressionSyntax Failed(SyntaxError e)
+        {
+            FreeTexts();
             return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = ErrorPosition }, []);
         }
 
         public ExpressionSyntax Failed(NotModelledSyntax e)
         {
-            foreach (nint b in Texts)
-            {
-                Bstrs.Free(b);
-            }
+            FreeTexts();
             return new ExpressionSyntax(null, ExpressionFailure.Open(ExpressionPhase.Parse, e.Name, e.Message) with { Site = ErrorPosition }, []);
         }
 
@@ -241,6 +350,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         {
             Token t = Peek();
             _peeked = null;
+            _lastTokenEnd = t.Start + t.Length;
             return t;
         }
 
@@ -272,6 +382,221 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 _depth--;
             }
         }
+
+        public bool TryLeadingAndNotEqual(string field, List<SourceEdit> edits, ref FieldRuleState state)
+        {
+            if (!IsKeyword("And"))
+            {
+                return false;
+            }
+            // r-q42-field-rule-and/put-refusals-accdb call 16, disc-text-forms-accdb R20, edge-forms-accdb E6/E7:
+            // sole top-level "And <> <rhs>" parses the leading And as the bare text literal 'And' (so "And <> 5" on Long fails 3802).
+            Token andToken = Next();
+            if (Peek() is not { Kind: TokenKind.Symbol, Text: "<>" })
+            {
+                throw new SyntaxError(ExpressionMessages.MissingOperator);
+            }
+            state.AllClausesImpliedNotEqual = false;
+            state.ClauseCount++;
+            edits.Add(new SourceEdit(andToken.Start, andToken.Length, $"({field} = 'And')"));
+            var synthetic = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = ScalarOperation.Equal, Offset = andToken.Start };
+            ComparisonSuffix(synthetic);
+            if (Peek().Kind != TokenKind.End)
+            {
+                edits.Clear();
+                throw new SyntaxError(ExpressionMessages.MissingOperator);
+            }
+            return true;
+        }
+
+        public SyntaxNode FieldExpression(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral)
+        {
+            Guard();
+            try
+            {
+                return FieldImp(field, edits, ref state, out isBareLiteral);
+            }
+            finally
+            {
+                _depth--;
+            }
+        }
+
+        private SyntaxNode FieldImp(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral) =>
+            FieldLogical(field, edits, ref state, "Imp", ScalarOperation.Imp, isAnd: false, FieldEqv, out isBareLiteral);
+
+        private SyntaxNode FieldEqv(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral) =>
+            FieldLogical(field, edits, ref state, "Eqv", ScalarOperation.Eqv, isAnd: false, FieldXor, out isBareLiteral);
+
+        private SyntaxNode FieldXor(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral) =>
+            FieldLogical(field, edits, ref state, "Xor", ScalarOperation.Xor, isAnd: false, FieldOr, out isBareLiteral);
+
+        private SyntaxNode FieldOr(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral) =>
+            FieldLogical(field, edits, ref state, "Or", ScalarOperation.Or, isAnd: false, FieldAnd, out isBareLiteral);
+
+        private SyntaxNode FieldAnd(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral) =>
+            FieldLogical(field, edits, ref state, "And", ScalarOperation.And, isAnd: true, FieldNot, out isBareLiteral);
+
+        private delegate SyntaxNode FieldLevel(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral);
+
+        private SyntaxNode FieldLogical(
+            string field,
+            List<SourceEdit> edits,
+            ref FieldRuleState state,
+            string word,
+            ScalarOperation operation,
+            bool isAnd,
+            FieldLevel next,
+            out bool isBareLiteral)
+        {
+            SyntaxNode left = next(field, edits, ref state, out isBareLiteral);
+            while (IsKeyword(word))
+            {
+                Token t = Next();
+                state.HasLogical = true;
+                if (!isAnd)
+                {
+                    state.HasOtherLogical = true;
+                    state.AllClausesImpliedNotEqual = false;
+                }
+                isBareLiteral = false;
+                SyntaxNode right = next(field, edits, ref state, out _);
+                left = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = operation, Left = left, Right = right, Offset = t.Start };
+            }
+            return left;
+        }
+
+        private SyntaxNode FieldNot(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral)
+        {
+            if (IsKeyword("Not"))
+            {
+                Token notToken = Next();
+                isBareLiteral = false;
+                state.AllClausesImpliedNotEqual = false;
+                if (IsKeyword("Like") || IsKeyword("In") || IsKeyword("Between"))
+                {
+                    // Implied negated predicate: Not Like / Not In / Not Between (r-q42-field-rule-and/put-forms-accdb, disc-text-forms-accdb R06..R08).
+                    state.ClauseCount++;
+                    edits.Add(new SourceEdit(notToken.Start, 0, field + " "));
+                    var syntheticField = new SyntaxNode { Kind = SyntaxKind.Name, Text = field, Offset = notToken.Start };
+                    SyntaxNode predicate = ParsePredicateAfterNot(syntheticField, notToken.Start);
+                    return ComparisonSuffix(predicate);
+                }
+                state.HasNotPrefix = true;
+                Guard();
+                try
+                {
+                    SyntaxNode operand = FieldNot(field, edits, ref state, out _);
+                    return new SyntaxNode { Kind = SyntaxKind.Unary, Operation = ScalarOperation.Not, Left = operand, Offset = notToken.Start };
+                }
+                finally
+                {
+                    _depth--;
+                }
+            }
+            return FieldClause(field, edits, ref state, out isBareLiteral);
+        }
+
+        private SyntaxNode FieldClause(string field, List<SourceEdit> edits, ref FieldRuleState state, out bool isBareLiteral)
+        {
+            isBareLiteral = false;
+            if (IsSymbol("("))
+            {
+                int savedPosition = _position;
+                int savedLastTokenEnd = _lastTokenEnd;
+                Token? savedPeeked = _peeked;
+                int savedEditCount = edits.Count;
+                int savedTextCount = Texts.Count;
+                FieldRuleState savedState = state;
+
+                Next(); // (
+                SyntaxNode inner = FieldExpression(field, edits, ref state, out bool innerBareLiteral);
+                CloseParenthesis();
+
+                if (IsTighterThanComparison() || (innerBareLiteral && IsComparisonStart()))
+                {
+                    _position = savedPosition;
+                    _lastTokenEnd = savedLastTokenEnd;
+                    _peeked = savedPeeked;
+                    edits.RemoveRange(savedEditCount, edits.Count - savedEditCount);
+                    for (int i = savedTextCount; i < Texts.Count; i++)
+                    {
+                        Bstrs.Free(Texts[i]);
+                    }
+                    Texts.RemoveRange(savedTextCount, Texts.Count - savedTextCount);
+                    state = savedState;
+                }
+                else
+                {
+                    state.HasParen = true;
+                    state.AllClausesImpliedNotEqual = false;
+                    if (IsComparisonStart())
+                    {
+                        return ComparisonSuffix(inner);
+                    }
+                    isBareLiteral = innerBareLiteral;
+                    return inner;
+                }
+            }
+
+            if (IsImpliedComparisonStart())
+            {
+                Token first = Peek();
+                state.ClauseCount++;
+                edits.Add(new SourceEdit(first.Start, 0, field + " "));
+                var syntheticField = new SyntaxNode { Kind = SyntaxKind.Name, Text = field, Offset = first.Start };
+                SyntaxNode result = ComparisonSuffix(syntheticField);
+                if (result is not { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual } || !ReferenceEquals(result.Left, syntheticField))
+                {
+                    state.AllClausesImpliedNotEqual = false;
+                }
+                return result;
+            }
+
+            int clauseStart = Peek().Start;
+            SyntaxNode expr = Comparison();
+            state.ClauseCount++;
+            state.AllClausesImpliedNotEqual = false;
+            if (expr.Kind == SyntaxKind.Literal && expr.Literal is LiteralKind.Number or LiteralKind.Text or LiteralKind.Date)
+            {
+                int len = _lastTokenEnd - clauseStart;
+                state.AnyLiteralRewrite = true;
+                isBareLiteral = true;
+                edits.Add(new SourceEdit(clauseStart, len, $"{field} = ({source.AsSpan(clauseStart, len)})"));
+            }
+            else if (IsNegatedNumericLiteral(expr))
+            {
+                // No ACE record decides bare negative numeric literals (-5, 1 Or -5, Not -5); refuse by name rather than
+                // evaluating -5 as truthy inside a logical clause.
+                isBareLiteral = true;
+                state.HasUnrecordedForm = true;
+            }
+            return expr;
+        }
+
+        private static bool IsNegatedNumericLiteral(SyntaxNode node) =>
+            node is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { } inner }
+            && (inner is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } || IsNegatedNumericLiteral(inner));
+
+        private bool IsTighterThanComparison() =>
+            IsSymbol("&") || IsSymbol("+") || IsSymbol("-") || IsKeyword("Mod")
+            || IsSymbol("\\") || IsSymbol("*") || IsSymbol("/") || IsSymbol("^");
+
+        private bool IsImpliedComparisonStart()
+        {
+            Token t = Peek();
+            if (t.Kind == TokenKind.Symbol && t.Text is "=" or "<>" or "<" or ">" or "<=" or ">=")
+            {
+                return true;
+            }
+            if (t.Kind == TokenKind.Name && t.Text.Equals("ALike", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return IsKeyword("Is") || IsKeyword("Like") || IsKeyword("In") || IsKeyword("Between");
+        }
+
+        private bool IsComparisonStart() => IsImpliedComparisonStart() || IsKeyword("Not");
 
         private SyntaxNode Imp() => LeftAssociative(Eqv, ("Imp", ScalarOperation.Imp));
 
@@ -316,9 +641,10 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             }
         }
 
-        private SyntaxNode Comparison()
+        private SyntaxNode Comparison() => ComparisonSuffix(Concatenation());
+
+        private SyntaxNode ComparisonSuffix(SyntaxNode left)
         {
-            SyntaxNode left = Concatenation();
             while (true)
             {
                 Token t = Peek();
@@ -358,27 +684,23 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     left = new SyntaxNode { Kind = SyntaxKind.IsNull, Left = left, Negated = negated, Offset = t.Start };
                     continue;
                 }
-                bool not = false;
                 if (IsKeyword("Not"))
                 {
                     // x Not Like / Not In / Not Between: the Not belongs to the predicate.
                     Next();
-                    not = true;
-                    if (!IsKeyword("Like") && !IsKeyword("In") && !IsKeyword("Between"))
-                    {
-                        throw new SyntaxError(ExpressionMessages.MissingOperator);
-                    }
+                    left = ParsePredicateAfterNot(left, t.Start);
+                    continue;
                 }
                 if (IsKeyword("Like"))
                 {
                     Next();
-                    left = new SyntaxNode { Kind = SyntaxKind.Like, Left = left, Right = Concatenation(), Negated = not, Offset = t.Start };
+                    left = new SyntaxNode { Kind = SyntaxKind.Like, Left = left, Right = Concatenation(), Negated = false, Offset = t.Start };
                     continue;
                 }
                 if (IsKeyword("In"))
                 {
                     Next();
-                    left = new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = List(), Negated = not, Offset = t.Start };
+                    left = new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = List(), Negated = false, Offset = t.Start };
                     continue;
                 }
                 if (IsKeyword("Between"))
@@ -391,11 +713,38 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     }
                     Next();
                     SyntaxNode high = Concatenation();
-                    left = new SyntaxNode { Kind = SyntaxKind.Between, Left = left, Items = [low, high], Negated = not, Offset = t.Start };
+                    left = new SyntaxNode { Kind = SyntaxKind.Between, Left = left, Items = [low, high], Negated = false, Offset = t.Start };
                     continue;
                 }
                 return left;
             }
+        }
+
+        private SyntaxNode ParsePredicateAfterNot(SyntaxNode left, int offset)
+        {
+            if (IsKeyword("Like"))
+            {
+                Next();
+                return new SyntaxNode { Kind = SyntaxKind.Like, Left = left, Right = Concatenation(), Negated = true, Offset = offset };
+            }
+            if (IsKeyword("In"))
+            {
+                Next();
+                return new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = List(), Negated = true, Offset = offset };
+            }
+            if (IsKeyword("Between"))
+            {
+                Next();
+                SyntaxNode low = Concatenation();
+                if (!IsKeyword("And"))
+                {
+                    throw new SyntaxError(ExpressionMessages.MissingOperator);
+                }
+                Next();
+                SyntaxNode high = Concatenation();
+                return new SyntaxNode { Kind = SyntaxKind.Between, Left = left, Items = [low, high], Negated = true, Offset = offset };
+            }
+            throw new SyntaxError(ExpressionMessages.MissingOperator);
         }
 
         /// <summary>A parenthesized list of one or more expressions (In, and a call's arguments).</summary>

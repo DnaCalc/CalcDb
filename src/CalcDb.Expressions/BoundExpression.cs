@@ -1181,6 +1181,8 @@ public sealed unsafe partial class BoundExpression : IDisposable
             ? new BindError(ExpressionFailure.Ace(ExpressionPhase.Bind, 3075, ExpressionMessages.WrongArgumentCount) with { Site = site, Subject = name })
             : Open("NotModelled.FunctionArity", $"{name} with {arity} arguments in a criteria (ACE's message there is not recorded)");
 
+        private static readonly OperandContract BooleanExpression = new(OperandOrigin.Expression, VarType.Bool);
+
         private Bound Unary(SyntaxNode node, int at)
         {
             if (node.Operation == ScalarOperation.Negate
@@ -1195,7 +1197,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
             }
             Bound operand = Bind(node.Left!, at);
             Program.Add(new Instruction(Op.Unary, 0, Descriptor(node.Operation, node.Offset, 1, operand.Contract, default)));
-            return new Bound(node.Operation == ScalarOperation.Not ? StaticType.Boolean : StaticType.Value, OperandContract.Expression, operand.Depth);
+            bool isNot = node.Operation == ScalarOperation.Not;
+            OperandContract contract = isNot && operand.Contract.Declared == VarType.Bool ? BooleanExpression : OperandContract.Expression;
+            return new Bound(isNot ? StaticType.Boolean : StaticType.Value, contract, operand.Depth);
         }
 
         private Bound Binary(SyntaxNode node, int at)
@@ -1210,8 +1214,12 @@ public sealed unsafe partial class BoundExpression : IDisposable
             Bound left = Bind(node.Left!, at);
             Bound right = Bind(node.Right!, at + 1);
             Program.Add(new Instruction(Op.Binary, 0, Descriptor(node.Operation, node.Offset, 2, left.Contract, right.Contract)));
-            bool predicate = node.Operation is >= ScalarOperation.Equal and <= ScalarOperation.Imp;
-            return new Bound(predicate ? StaticType.Boolean : StaticType.Value, OperandContract.Expression, Math.Max(left.Depth, right.Depth + 1));
+            bool comparison = node.Operation is >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual;
+            bool logical = node.Operation is >= ScalarOperation.And and <= ScalarOperation.Imp;
+            OperandContract contract = comparison || (logical && left.Contract.Declared == VarType.Bool && right.Contract.Declared == VarType.Bool)
+                ? BooleanExpression
+                : OperandContract.Expression;
+            return new Bound(comparison || logical ? StaticType.Boolean : StaticType.Value, contract, Math.Max(left.Depth, right.Depth + 1));
         }
 
         private Bound IsNull(SyntaxNode operand, bool negated, int site, int at)
@@ -1222,7 +1230,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             {
                 Program.Add(new Instruction(Op.Unary, 0, Descriptor(ScalarOperation.Not, site, 1, OperandContract.FunctionResult, default)));
             }
-            return new Bound(StaticType.Boolean, OperandContract.Expression, value.Depth);
+            return new Bound(StaticType.Boolean, BooleanExpression, value.Depth);
         }
 
         private Bound Like(SyntaxNode node, int at)
@@ -1253,7 +1261,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             {
                 Program.Add(new Instruction(Op.Unary, 0, Descriptor(ScalarOperation.Not, node.Offset, 1, OperandContract.Expression, default)));
             }
-            return new Bound(StaticType.Boolean, OperandContract.Expression, depth);
+            return new Bound(StaticType.Boolean, BooleanExpression, depth);
         }
 
         private Bound In(SyntaxNode node, int at)
@@ -1277,7 +1285,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             {
                 Program.Add(new Instruction(Op.Unary, 0, Descriptor(ScalarOperation.Not, node.Offset, 1, OperandContract.Expression, default)));
             }
-            return new Bound(StaticType.Boolean, OperandContract.Expression, depth);
+            return new Bound(StaticType.Boolean, BooleanExpression, depth);
         }
 
         private Bound Between(SyntaxNode node, int at)
@@ -1298,7 +1306,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             {
                 Program.Add(new Instruction(Op.Unary, 0, Descriptor(ScalarOperation.Not, node.Offset, 1, OperandContract.Expression, default)));
             }
-            return new Bound(StaticType.Boolean, OperandContract.Expression, Math.Max(x.Depth, Math.Max(low.Depth + 1, high.Depth + 2)));
+            return new Bound(StaticType.Boolean, BooleanExpression, Math.Max(x.Depth, Math.Max(low.Depth + 1, high.Depth + 2)));
         }
 
         private int _iifDepth;

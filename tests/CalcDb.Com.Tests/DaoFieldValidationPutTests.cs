@@ -260,8 +260,9 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         DefinitionFieldObject fv = Recover<DefinitionFieldObject>(Get(fields, "Item", "V"));
         DefinitionFieldObject fs = Recover<DefinitionFieldObject>(Get(fields, "Item", "S"));
 
-        // Unrecorded multi-clause or parenthesized implied-operand forms refuse by name at put (never guessing 3320).
-        foreach (string unrecorded in new[]
+        // Multi-clause and parenthesized implied-operand forms put cleanly on empty T:
+        // r-q42-field-rule-and/put-forms-accdb calls 21, 47, 49, 53, 55, 67; r-q42-field-rule-and/put-refusals-accdb call 49.
+        foreach (string recorded in new[]
         {
             "<> 'a' Or <> 'b'",
             "> 10 And < 100",
@@ -269,28 +270,44 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
             "(> 10)",
             "[S] <> 'a' And <> 'b'",
             "<> 'a' And [S] <> 'b'",
-            "> 10 Or [V] < 0",
         })
         {
-            CallResult putRes = Put(fs, "ValidationRule", unrecorded);
-            Assert.NotNull(putRes.Failure);
-            Assert.Equal(FailureKind.NotImplemented, putRes.Failure!.Kind);
+            Assert.Null(Put(fs, "ValidationRule", recorded).Failure);
         }
 
-        // Recorded r-q37 And-joined <> form puts cleanly on empty T, and INSERT refuses by name (NotModelled.FieldRuleMultiClause).
+        // Mixed clause referencing another column fails DAO 3783 (r-q42-field-rule-and/put-refusals-accdb calls 38, 42, 59).
+        CallResult otherCol = Put(fs, "ValidationRule", "> 10 Or [V] < 0");
+        Assert.NotNull(otherCol.Failure);
+        Assert.Equal(3783, otherCol.Failure!.Scode & 0xFFFF);
+
+        // Unrecorded bare negative numeric literal still refuses by name at put (never guessing 3320 or truthiness).
+        CallResult unrecordedNeg = Put(fv, "ValidationRule", "1 Or -5");
+        Assert.NotNull(unrecordedNeg.Failure);
+        Assert.Equal(FailureKind.NotImplemented, unrecordedNeg.Failure!.Kind);
+
+        // Recorded And-joined <> form on S and single implied Between on V put cleanly on empty T
+        // (r-q42-field-rule-and/put-forms-accdb calls 17, 73; CalcDb Com.Dao getter still retains trailing NUL on re-put).
         Assert.Null(Put(fs, "ValidationRule", "<> 'a' And <> 'b'").Failure);
         Assert.Equal("<> 'a' And <> 'b'\0", TextOf(Get(fs, "ValidationRule")));
-
-        CallResult insertWithMultiNotEqual = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'c')", DbFailOnError);
-        Assert.NotNull(insertWithMultiNotEqual.Failure);
-        Assert.Equal(FailureKind.NotModelled, insertWithMultiNotEqual.Failure!.Kind);
-        Assert.Contains("NotModelled.FieldRuleMultiClause", insertWithMultiNotEqual.Failure.Description);
-
-        // Clearing S's rule and setting single implied Between on V enforces cleanly on INSERT.
-        Assert.Null(Put(fs, "ValidationRule", "").Failure);
         Assert.Null(Put(fv, "ValidationRule", "Between 1 And 10").Failure);
-        Assert.Null(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'ok')", DbFailOnError).Failure);
-        CallResult outOfRange = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (2, 20, 'ok')", DbFailOnError);
+
+        // Enforcement of <> 'a' And <> 'b' on DAO Execute (128) (r-q42-field-rule-and/rule-and2-ne-accdb calls 22, 33, 47, 61):
+        // 'c' and Null admit; 'a' and 'b' fail DAO 3317.
+        Assert.Null(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'c')", DbFailOnError).Failure);
+
+        CallResult failClause1 = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (2, 5, 'a')", DbFailOnError);
+        Assert.NotNull(failClause1.Failure);
+        Assert.Equal(3317, failClause1.Failure!.Scode & 0xFFFF);
+        Assert.Contains("<> 'a' And <> 'b'", failClause1.Failure.Description);
+
+        CallResult failClause2 = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (3, 5, 'b')", DbFailOnError);
+        Assert.NotNull(failClause2.Failure);
+        Assert.Equal(3317, failClause2.Failure!.Scode & 0xFFFF);
+
+        Assert.Null(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (4, 5, Null)", DbFailOnError).Failure);
+
+        // Single implied Between 1 And 10 on V rejects 20 with DAO 3317.
+        CallResult outOfRange = Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (5, 20, 'ok')", DbFailOnError);
         Assert.NotNull(outOfRange.Failure);
         Assert.Equal(3317, outOfRange.Failure!.Scode & 0xFFFF);
 
