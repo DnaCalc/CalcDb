@@ -521,33 +521,15 @@ public sealed class NoOpPageDelta : IPageDelta
 }
 
 /// <summary>
-/// Increment the page-0 commit counter at offset 3586 by 1 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter,
-/// evidence/r-q10-commit-counter-edits, and for Jet 4 MDB when <paramref name="allowJet4Mdb"/> is set:
-/// evidence/r-q27-autonumber-txn/ins-txn-rb-mdb, ins-dup-fail-mdb).
+/// Increment the Jet 4 MDB / ACCDB page-0 commit counter at offset 3586 (u16LE) by 1 (R-CRASH-1 CRASH-ORDER;
+/// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter).
 /// </summary>
-public sealed class CommitCounterDelta(FormatDescriptor d, bool allowJet4Mdb = false) : IPageDelta
+public sealed class CommitCounterDelta(FormatDescriptor d) : IPageDelta
 {
     public DeltaFootprint Footprint => DeltaFootprint.None;
 
     public void Apply(Span<byte> decodedPage)
     {
-        if (allowJet4Mdb
-            && ProfileSelector.Select(decodedPage, out FileProfile? profile, d) == ProfileRefusal.None
-            && profile!.Format == FileFormat.Jet4)
-        {
-            if (decodedPage.Length != d.PageSize)
-            {
-                throw new FormatViolationException($"Page 0 commit counter: page 0 is {decodedPage.Length} bytes, not {d.PageSize}");
-            }
-            FieldRule rule = d.Header.CommitCounter;
-            ulong current = rule.Read(decodedPage);
-            if ((current & 0xFF) >= byte.MaxValue)
-            {
-                throw new FormatViolationException($"Page 0 commit counter: Jet 4 MDB page 0 commit counter low byte at offset {rule.Offset} is {current & 0xFF}: wrap or carry past 255 is not observed (R-CRASH-1)");
-            }
-            rule.Write(decodedPage, current + 1);
-            return;
-        }
         if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, out string? failure))
         {
             throw new FormatViolationException($"Page 0 commit counter: {failure}");

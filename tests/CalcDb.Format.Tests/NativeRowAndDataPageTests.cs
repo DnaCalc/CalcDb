@@ -570,13 +570,14 @@ public sealed class NativeRowAndDataPageTests
     }
 
     [Fact]
-    public void DatabaseHeader_TryIncrementCommitCounter_increments_accdb_and_refuses_overflow_or_non_accdb()
+    public void DatabaseHeader_TryIncrementCommitCounter_increments_accdb_and_jet4_mdb_and_refuses_overflow_or_unsupported_header()
     {
         byte[] accdb = new byte[D.PageSize];
         D.Header.MagicBytes.CopyTo(accdb);
         D.Header.AceSignature.CopyTo(accdb.AsSpan(D.Header.SignatureOffset));
         D.Header.Version.Write(accdb, 2);
         Assert.True(DatabaseHeader.IsAccdb(accdb, D));
+        Assert.True(DatabaseHeader.HasCommitCounter(accdb, D));
 
         Assert.True(DatabaseHeader.TryIncrementCommitCounter(accdb, D, out string? err), err);
         Assert.Equal(1, accdb[D.Header.CommitCounter.Offset]);
@@ -597,15 +598,38 @@ public sealed class NativeRowAndDataPageTests
         Assert.Contains("65535", overflowErr);
         Assert.Equal((ulong)ushort.MaxValue, D.Header.CommitCounter.Read(accdb));
 
-        // Jet 4 MDB is not ACCDB and is refused without modifying offset 3586
+        // Jet 4 MDB uses the same u16LE counter rule (evidence/r-q40-mdb-counter/carry-u16-mdb: 0x01FE -> 0x01FF -> 0x0200 -> 0x0201)
         byte[] mdb = new byte[D.PageSize];
         D.Header.MagicBytes.CopyTo(mdb);
         D.Header.JetSignature.CopyTo(mdb.AsSpan(D.Header.SignatureOffset));
         D.Header.Version.Write(mdb, 1);
         Assert.False(DatabaseHeader.IsAccdb(mdb, D));
-        Assert.False(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out string? mdbErr));
-        Assert.NotNull(mdbErr);
-        Assert.Equal(0, mdb[D.Header.CommitCounter.Offset]);
+        Assert.True(DatabaseHeader.HasCommitCounter(mdb, D));
+
+        D.Header.CommitCounter.Write(mdb, 0x01FE);
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out err), err);
+        Assert.Equal(0x01FFUL, D.Header.CommitCounter.Read(mdb));
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out err), err);
+        Assert.Equal(0x0200UL, D.Header.CommitCounter.Read(mdb));
+        Assert.Equal(0x00, mdb[D.Header.CommitCounter.Offset]);
+        Assert.Equal(0x02, mdb[D.Header.CommitCounter.Offset + 1]);
+        Assert.True(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out err), err);
+        Assert.Equal(0x0201UL, D.Header.CommitCounter.Read(mdb));
+
+        D.Header.CommitCounter.Write(mdb, ushort.MaxValue);
+        Assert.False(DatabaseHeader.TryIncrementCommitCounter(mdb, D, out string? mdbOverflowErr));
+        Assert.Contains("65535", mdbOverflowErr);
+        Assert.Equal((ulong)ushort.MaxValue, D.Header.CommitCounter.Read(mdb));
+
+        // Jet 3 (version 0) and non-header pages are refused without modifying offset 3586
+        byte[] jet3 = new byte[D.PageSize];
+        D.Header.MagicBytes.CopyTo(jet3);
+        D.Header.JetSignature.CopyTo(jet3.AsSpan(D.Header.SignatureOffset));
+        D.Header.Version.Write(jet3, 0);
+        Assert.False(DatabaseHeader.HasCommitCounter(jet3, D));
+        Assert.False(DatabaseHeader.TryIncrementCommitCounter(jet3, D, out string? jet3Err));
+        Assert.Contains("Jet3Excluded", jet3Err);
+        Assert.Equal(0, jet3[D.Header.CommitCounter.Offset]);
     }
 
     [Fact]

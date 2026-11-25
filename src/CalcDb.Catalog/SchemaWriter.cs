@@ -851,8 +851,7 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, initialUpdateBits, initialLvProp: null, out _, out _, out objectRow, out _, out extent),
-            allowJet4Mdb: isJet4Mdb);
+            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, initialUpdateBits, initialLvProp: null, out _, out _, out objectRow, out _, out extent));
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -1055,8 +1054,7 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent),
-            allowJet4Mdb: isJet4Mdb);
+            p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent));
         return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 
@@ -1173,8 +1171,7 @@ public sealed class SchemaWriter
                 newPropMaps,
                 dateCreateBits,
                 dateUpdateBits,
-                out extent),
-            allowJet4Mdb: isJet4Mdb);
+                out extent));
         if (updatesExistingLvProp
             && !isJet4Mdb
             && workspace.Publisher is not null
@@ -1218,7 +1215,7 @@ public sealed class SchemaWriter
     /// </summary>
     public SchemaOutcome AddForeignKey(TransactionCoordinator workspace, AddForeignKeyRequest request, ulong dateCreateBits, ulong dateUpdateBits)
     {
-        if (FileRefusal(allowJet4Mdb: true, out bool isJet4Mdb) is { } file)
+        if (FileRefusal(allowJet4Mdb: true) is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
         }
@@ -1251,8 +1248,7 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileAddForeignKey(p, childEntry, childTable, request.ForeignKey, prepared!, dateCreateBits, dateUpdateBits, out extent),
-            allowJet4Mdb: isJet4Mdb);
+            p => CompileAddForeignKey(p, childEntry, childTable, request.ForeignKey, prepared!, dateCreateBits, dateUpdateBits, out extent));
         return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 
@@ -1493,8 +1489,7 @@ public sealed class SchemaWriter
                 useSessionExtentReservation,
                 allowTwoPageChain,
                 longValueTicks,
-                out extent),
-            allowJet4Mdb: isJet4Mdb);
+                out extent));
         return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 

@@ -175,10 +175,17 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
         ProfileSelector.Select(storedHeader, out FileProfile? profile, descriptor) == ProfileRefusal.None && profile!.IsAce;
 
     /// <summary>
-    /// Increment the ACCDB page-0 commit counter at <see cref="HeaderRules.CommitCounter"/> (u16LE at [3586, 3588)) by 1
-    /// (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
-    /// evidence/r-q19-growth-open/split-uncovered-right-leaf-below). Refuses non-ACCDB pages and overflow past 65,535
-    /// (wrap past 65,535 is unobserved).
+    /// Whether stored page 0 selects a supported Jet 4 MDB or ACE ACCDB profile carrying the u16LE page-0 commit
+    /// counter at <see cref="HeaderRules.CommitCounter"/> (R-CRASH-1 CRASH-ORDER; evidence/r-q40-mdb-counter).
+    /// </summary>
+    public static bool HasCommitCounter(ReadOnlySpan<byte> storedHeader, FormatDescriptor? descriptor = null) =>
+        ProfileSelector.Select(storedHeader, out _, descriptor) == ProfileRefusal.None;
+
+    /// <summary>
+    /// Increment the Jet 4 MDB / ACCDB page-0 commit counter at <see cref="HeaderRules.CommitCounter"/> (u16LE at
+    /// [3586, 3588)) by 1 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
+    /// evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb). Refuses
+    /// unsupported headers and overflow past 65,535 (wrap past 65,535 is unobserved).
     /// </summary>
     public static bool TryIncrementCommitCounter(Span<byte> page0, FormatDescriptor d, out string? failure)
     {
@@ -188,9 +195,10 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
             failure = $"page 0 is {page0.Length} bytes, not {d.PageSize}";
             return false;
         }
-        if (!IsAccdb(page0, d))
+        ProfileRefusal refusal = ProfileSelector.Select(page0, out _, d);
+        if (refusal != ProfileRefusal.None)
         {
-            failure = "page 0 is not an ACCDB database header (Jet 4 MDB offset 3586 is open)";
+            failure = $"page 0 is not a supported Jet 4 MDB or ACCDB database header ({refusal})";
             return false;
         }
         FieldRule rule = d.Header.CommitCounter;

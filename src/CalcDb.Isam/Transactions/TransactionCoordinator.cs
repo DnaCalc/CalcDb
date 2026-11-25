@@ -8,8 +8,8 @@ using CalcDb.Storage;
 namespace CalcDb.Isam.Transactions;
 
 /// <summary>
-/// How a publication interacts with the ACCDB page-0 commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER;
-/// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits).
+/// How a publication interacts with the Jet 4 MDB / ACCDB page-0 commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER;
+/// evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter).
 /// </summary>
 public enum CommitMode : byte
 {
@@ -515,14 +515,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _pendingGroup2AllocatedPages = [];
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
     private readonly HashSet<PageCache> _pendingCloseCommit = [];
-    private readonly HashSet<PageCache> _jet4MdbCloseCommit = [];
     private readonly HashSet<PageCache> _jet4MdbRollbackPending = [];
     private PageCache? _statementRollbackGroup2File;
     private OperationFrame? _operation;
     private StatementScope? _statement;
     private int _statementChanges;
     private bool _statementHasSideEffect;
-    private bool _statementAllowJet4MdbCommitCounter;
     private int _statementExternalDepth;
     private bool _statementHasOwnLevel;
     private int? _statementRefusal;
@@ -1066,16 +1064,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>
     /// Decide whether a publication on <paramref name="cache"/> under <paramref name="mode"/> increments the page-0
     /// commit counter at offset 3586 (R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter,
-    /// evidence/r-q10-commit-counter-edits, and for Jet 4 MDB immediate commits when <paramref name="allowJet4Mdb"/> is
-    /// set: evidence/r-q27-autonumber-txn/ins-txn-rb-mdb, ins-dup-fail-mdb). Other non-ACCDB files and synthetic caches
+    /// evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter). Unsupported headers and synthetic caches
     /// without a database header leave page 0 untouched.
     /// </summary>
-    private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out bool trackLazyBurst, bool allowJet4Mdb = false)
+    private (MutationOpen Open, string? Detail) DecideCommitCounter(PageCache cache, CommitMode mode, out bool incrementPage0, out bool trackLazyBurst)
     {
         incrementPage0 = false;
         trackLazyBurst = false;
-        bool isAccdb = AccdbHeader(cache) is true;
-        if (!isAccdb && !(allowJet4Mdb && mode == CommitMode.Immediate && Jet4MdbHeader(cache)))
+        if (!HasCommitCounterHeader(cache))
         {
             return (MutationOpen.None, null);
         }
@@ -1110,16 +1106,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (incrementPage0)
         {
             ulong current = CommitCounterAt(cache);
-            if (isAccdb)
+            if (current >= ushort.MaxValue)
             {
-                if (current >= ushort.MaxValue)
-                {
-                    return (MutationOpen.Publication, $"ACCDB page-0 commit counter at offset 3586 is already {ushort.MaxValue}: wrap past {ushort.MaxValue} is not observed (evidence/r-q19-growth-open/split-uncovered-right-leaf-below)");
-                }
-            }
-            else if ((current & 0xFF) >= byte.MaxValue)
-            {
-                return (MutationOpen.Publication, "Jet 4 MDB page-0 commit counter low byte at offset 3586 is already 255: wrap or multi-byte carry is not observed (evidence/r-q27-autonumber-txn/ins-txn-rb-mdb)");
+                return (MutationOpen.Publication, $"page-0 commit counter at offset 3586 is already {ushort.MaxValue}: wrap past {ushort.MaxValue} is not observed (evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb)");
             }
         }
         return (MutationOpen.None, null);
@@ -1159,7 +1148,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         CommitMode mode,
         MutationErrorSource conflictSource,
         out MutationError? error,
-        bool allowJet4Mdb = false,
         bool allowDuringRollbackExtent = false)
     {
         error = null;
@@ -1186,7 +1174,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 return (MutationOpen.Publication, PendingRollbackExtentWriteDetail);
             }
         }
-        (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out bool trackLazyBurst, allowJet4Mdb);
+        (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(cache, mode, out bool incrementPage0, out bool trackLazyBurst);
         if (counterOpen != MutationOpen.None)
         {
             return (counterOpen, counterDetail);
@@ -1232,7 +1220,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             PageBracket? bracket = null;
             if (incrementPage0)
             {
-                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d, allowJet4Mdb));
+                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d));
                 if (!p0Edit.Succeeded)
                 {
                     return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
@@ -1309,7 +1297,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// Whether <paramref name="cache"/>'s page 0 is an ACCDB header: <c>false</c> for an MDB, <c>null</c> for a synthetic
-    /// cache without a database header (neither the ACCDB page-0 counter nor an MDB refusal applies to it).
+    /// cache without a database header.
     /// </summary>
     private static bool? AccdbHeader(PageCache cache)
     {
@@ -1324,6 +1312,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return page0 is not null
             && ProfileSelector.Select(page0.Bytes, out FileProfile? profile, FormatDescriptor.Jet4Family) == ProfileRefusal.None
             && profile!.Format == FileFormat.Jet4;
+    }
+
+    /// <summary>Whether <paramref name="cache"/>'s page 0 selects a Jet 4 MDB or ACCDB header carrying the u16LE commit counter at offset 3586.</summary>
+    private static bool HasCommitCounterHeader(PageCache cache)
+    {
+        using PagePin? page0 = cache.Pin(0).Pin;
+        return page0 is not null && DatabaseHeader.HasCommitCounter(page0.Bytes, FormatDescriptor.Jet4Family);
     }
 
     private static ulong CommitCounterAt(PageCache cache)
@@ -1505,7 +1500,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// native effect leaves the set as it was; one that stops after an effect keeps the attempt as resolution owner
     /// (the cache restricts admission) and is named.
     /// </summary>
-    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode, bool allowJet4Mdb = false)
+    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode)
     {
         if (_unwrittenPendingCount > 0 && _pending.Find(c => c.Physical is null) is { } unwritten)
         {
@@ -1523,7 +1518,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (written.Length == 1 && Publisher is { } publisher)
         {
             FileParticipant p = written[0];
-            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out bool trackLazyBurst, allowJet4Mdb);
+            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out bool trackLazyBurst);
             if (counterOpen != MutationOpen.None)
             {
                 return (counterOpen, counterDetail);
@@ -1558,7 +1553,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 if (!p.Overlay.ChangedPages.Contains(0UL))
                 {
-                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, allowJet4Mdb));
+                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d));
                     if (!p0Edit.Succeeded)
                     {
                         return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
@@ -1626,10 +1621,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 if (e.Page == globalMapPage && e.Delta is BitDelta { Clear: not 0 })
                 {
                     _allocatedGlobalMap.Add(physical.File);
-                    if (allowJet4Mdb && Jet4MdbHeader(physical.File))
-                    {
-                        _jet4MdbCloseCommit.Add(physical.File);
-                    }
                     break;
                 }
             }
@@ -1681,25 +1672,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         pages.Add(page);
                     }
                 }
-                if (allowJet4Mdb && Jet4MdbHeader(physical.File))
-                {
-                    _jet4MdbCloseCommit.Add(physical.File);
-                }
             }
         }
         if (_pendingCloseCommit.Count > 0)
         {
             _allocatedGlobalMap.UnionWith(_pendingCloseCommit);
-            if (allowJet4Mdb)
-            {
-                foreach (PageCache closeCache in _pendingCloseCommit)
-                {
-                    if (Jet4MdbHeader(closeCache))
-                    {
-                        _jet4MdbCloseCommit.Add(closeCache);
-                    }
-                }
-            }
             _pendingCloseCommit.Clear();
         }
         if (_pendingGroup2AllocatedPages.Count > 0)
@@ -1866,8 +1843,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
     }
 
-    /// <summary>The AutoNumber words a Rollback writes: one file, each table's TableDef page and value, whether a new page was taken, and whether Jet 4 MDB page 0 offset 3586 applies.</summary>
-    private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value)> Words, bool TookPage, bool AllowJet4Mdb);
+    /// <summary>The AutoNumber words a Rollback writes: one file, each table's TableDef page and value, and whether a new page was taken.</summary>
+    private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value)> Words, bool TookPage);
 
     /// <summary>
     /// Capture level 2's reached TableDef counters before an inner Rollback from depth 2 to depth 1
@@ -1997,7 +1974,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         PageCache? file = null;
         bool tookPage = false;
-        bool allowJet4Mdb = false;
         List<(uint TableDefPage, uint Value)> words = [];
         foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
         {
@@ -2046,12 +2022,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             file = cache;
             tookPage |= cacheTookPage;
-            allowJet4Mdb |= isJet4Mdb;
             words.Add((tdefPage, mark.Value));
         }
         if (file is not null)
         {
-            write = new RolledBackAutoNumbers(file, words, tookPage, allowJet4Mdb);
+            write = new RolledBackAutoNumbers(file, words, tookPage);
         }
         return null;
     }
@@ -2079,7 +2054,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private ResolutionOutcome WriteRolledBackAutoNumbers(RolledBackAutoNumbers write, int resolvedChanges)
     {
         FormatDescriptor d = FormatDescriptor.Jet4Family;
-        bool page1 = write.TookPage && (AccdbHeader(write.File) is true || write.AllowJet4Mdb);
+        bool page1 = write.TookPage && HasCommitCounterHeader(write.File);
         List<PageEdit> edits = [];
         List<LockResource> footprint = [];
         if (page1)
@@ -2092,7 +2067,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             edits.Add(new PageEdit(tdefPage, new TableDefCountsDelta(0, value, [], d), PageRole.Catalog));
             footprint.Add(new LockResource(tdefPage, LockPurpose.TableDef));
         }
-        (MutationOpen open, string? detail) = PublishNonTransactional(write.File, edits, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? pubError, allowJet4Mdb: write.AllowJet4Mdb);
+        (MutationOpen open, string? detail) = PublishNonTransactional(write.File, edits, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? pubError);
         if (pubError is not null || open != MutationOpen.None)
         {
             return new ResolutionOutcome(pubError, open, detail, resolvedChanges);
@@ -2100,10 +2075,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (page1)
         {
             _allocatedGlobalMap.Add(write.File);
-            if (write.AllowJet4Mdb)
-            {
-                _jet4MdbCloseCommit.Add(write.File);
-            }
         }
         return new ResolutionOutcome(ResolvedChanges: resolvedChanges);
     }
@@ -2224,7 +2195,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         {
             bool isJet4Mdb = Jet4MdbHeader(counters.File);
-            bool page1 = counters.TookPage && (AccdbHeader(counters.File) is true || isJet4Mdb);
+            bool page1 = counters.TookPage && HasCommitCounterHeader(counters.File);
             List<PageEdit> group1Edits = [];
             List<LockResource> group1Footprint = [];
             List<PageEdit> group2Edits = [];
@@ -2256,7 +2227,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             if (counters.HasAutoNumberTarget || page1)
             {
-                (MutationOpen open1, string? detail1) = PublishNonTransactional(counters.File, group1Edits, group1Footprint, CommitMode.Immediate, MutationErrorSource.Database, out MutationError? err1, allowJet4Mdb: isJet4Mdb);
+                (MutationOpen open1, string? detail1) = PublishNonTransactional(counters.File, group1Edits, group1Footprint, CommitMode.Immediate, MutationErrorSource.Database, out MutationError? err1);
                 if (err1 is not null || open1 != MutationOpen.None)
                 {
                     top.RestoreExplicitCounters();
@@ -2278,7 +2249,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 _allocatedGlobalMap.Add(counters.File);
                 if (isJet4Mdb)
                 {
-                    _jet4MdbCloseCommit.Add(counters.File);
                     _jet4MdbRollbackPending.Add(counters.File);
                 }
                 if (counters.ExtentPlan is { } ext)
@@ -2310,7 +2280,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 _statementRollbackGroup2File = counters.File;
             }
-            _statementAllowJet4MdbCommitCounter = isJet4Mdb;
             (MutationOpen open2, string? detail2) = RecordStatementSideEffect(counters.File, group2Edits, group2Footprint, MutationErrorSource.Database, out MutationError? err2, allowJet4Mdb: isJet4Mdb, allowDuringRollbackExtent: page1);
             if (err2 is not null || open2 != MutationOpen.None)
             {
@@ -2581,7 +2550,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementChanges = 0;
         _statementRollbackGroup2File = null;
         _statementHasSideEffect = false;
-        _statementAllowJet4MdbCommitCounter = false;
         _statementExternalDepth = 0;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
@@ -2654,7 +2622,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         _statementChanges = 0;
         _statementHasSideEffect = false;
-        _statementAllowJet4MdbCommitCounter = false;
         _statementExternalDepth = _frames.Count;
         _statementHasOwnLevel = false;
         _statementRefusal = null;
@@ -2696,8 +2663,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statementChanges = 0;
         bool hasSideEffect = _statementHasSideEffect;
         _statementHasSideEffect = false;
-        bool allowJet4Mdb = _statementAllowJet4MdbCommitCounter;
-        _statementAllowJet4MdbCommitCounter = false;
         _statementExternalDepth = 0;
         _statementHasOwnLevel = false;
         ResolutionOutcome? stmtFailure = _statementFailure;
@@ -2735,7 +2700,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (_pending.Count > 0 || (hasSideEffect && _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0)))
         {
-            (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, allowJet4Mdb);
+            (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
             if (open != MutationOpen.None && group2File is not null)
             {
                 // Group 2 did not publish, so the full Group 1 extent (allocated + unused pages) remains in
@@ -2765,7 +2730,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         _statement = null;
         _statementChanges = 0;
         _statementHasSideEffect = false;
-        _statementAllowJet4MdbCommitCounter = false;
         int externalDepth = _statementExternalDepth;
         _statementExternalDepth = 0;
         bool hasOwnLevel = _statementHasOwnLevel;
@@ -3153,14 +3117,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// ones (two rows of one table, a page and the map that allocates it), and returns the whole change for its roles
     /// and lock closure; <paramref name="catalogTable"/> is the catalog table it changes (MSysObjects). A change that
     /// cannot be compiled abandons the frame and accepts nothing. Inside a level the change joins it; outside every level
-    /// the statement publishes at its end as an immediate commit (+1 on the ACCDB or opted-in Jet 4 MDB page-0 counter per
-    /// DDL statement: evidence/r-q11-ddl-closure, evidence/r-q34-ddl-sweep/*-mdb-*).
+    /// the statement publishes at its end as an immediate commit (+1 on the Jet 4 MDB or ACCDB page-0 counter per DDL
+    /// statement: evidence/r-q11-ddl-closure, evidence/r-q34-ddl-sweep/*-mdb-*, evidence/r-q40-mdb-counter).
     /// </summary>
     public AcceptOutcome AcceptSchemaChange(
         PageCache file,
         MutationSemantics catalogTable,
-        Func<FileParticipant, CompiledChange> compile,
-        bool allowJet4Mdb = false)
+        Func<FileParticipant, CompiledChange> compile)
     {
         if (_unresolved.Contains(file))
         {
@@ -3236,16 +3199,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(true);
         }
-        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, allowJet4Mdb);
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
         return new AcceptOutcome(true, null, open, detail);
     }
 
     /// <summary>
-    /// Publish a mid-session commit that changes only the ACCDB page-0 counter (+1, its 2-byte bracket). No production
-    /// path calls it: DAO <c>TableDefs.Append</c> now publishes one catalog change per commit (SchemaWriter.CreateTable),
-    /// and the Isam tests use it to show that a counter-only commit keeps the Close obligation. Does not free
-    /// <see cref="PhysicalChange.ReleasedAtClose"/> pages and keeps <see cref="NeedsCloseCommit"/> intact until
-    /// <see cref="PublishCloseCommit"/> runs. Nothing when the file has no such counter.
+    /// Publish a mid-session commit that changes only the Jet 4 MDB / ACCDB page-0 counter (+1, its 2-byte bracket).
+    /// Used by catalog multi-commit paths (duplicate-create rollback, fresh-session second CHECK) and Isam tests to show
+    /// that a counter-only commit keeps the Close obligation. Does not free <see cref="PhysicalChange.ReleasedAtClose"/>
+    /// pages and keeps <see cref="NeedsCloseCommit"/> intact until <see cref="PublishCloseCommit"/> runs. Nothing when
+    /// the file has no such counter.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCounterCommit(PageCache cache)
     {
@@ -3262,12 +3225,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// sets any <see cref="PhysicalChange.ReleasedAtClose"/> global-map free bits
     /// (<c>evidence/r-q17-growth/retire-delete-au1-read-open</c>, <c>evidence/r-q15-ddl-open/counter-drop-pages</c>,
     /// <c>evidence/r-q20-delete-pages/*</c>, <c>evidence/r-q22-lv-open/lv-free-timing-update-chain-*</c>), increments the
-    /// ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and extent
-    /// reservation state. Mid-session commits (catalog changes such as DAO <c>TableDefs.Append</c>'s per-field commits,
-    /// and <see cref="PublishCounterCommit"/>) keep the Close-commit obligation and pending <see cref="ReleasesAtClose"/> intact.
-    /// Pre-effect failures leave tracking intact without marking <paramref name="cache"/> unresolved so a retry can
-    /// succeed; a failure after a native write marks <paramref name="cache"/> unresolved via
-    /// <see cref="PublicationStep.NeedsResolution"/> without dropping tracking.
+    /// Jet 4 MDB / ACCDB page-0 counter (+1, its 2-byte bracket), and clears the per-cache Close-commit obligation and
+    /// extent reservation state. Mid-session commits (catalog changes such as DAO <c>TableDefs.Append</c>'s per-field
+    /// commits, and <see cref="PublishCounterCommit"/>) keep the Close-commit obligation and pending
+    /// <see cref="ReleasesAtClose"/> intact. Pre-effect failures leave tracking intact without marking
+    /// <paramref name="cache"/> unresolved so a retry can succeed; a failure after a native write marks
+    /// <paramref name="cache"/> unresolved via <see cref="PublicationStep.NeedsResolution"/> without dropping tracking.
     /// </summary>
     public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
     {
@@ -3293,7 +3256,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
         LockResource[] footprint = frees.Count > 0 ? [new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map)] : [];
-        bool allowJet4Mdb = _jet4MdbCloseCommit.Contains(cache);
         (MutationOpen open, string? detail) = PublishNonTransactional(
             cache,
             frees,
@@ -3301,13 +3263,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             CommitMode.Immediate,
             MutationErrorSource.Workspace,
             out MutationError? error,
-            allowJet4Mdb: allowJet4Mdb,
             allowDuringRollbackExtent: true);
         if (open == MutationOpen.None && error is null)
         {
             _releaseAtClose.Remove(cache);
             _allocatedGlobalMap.Remove(cache);
-            _jet4MdbCloseCommit.Remove(cache);
             _jet4MdbRollbackPending.Remove(cache);
             _reservedExtent.Remove(cache);
             _sessionReservedExtent.Remove(cache);

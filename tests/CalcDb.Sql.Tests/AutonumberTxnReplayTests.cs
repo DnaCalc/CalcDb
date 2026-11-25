@@ -91,40 +91,18 @@ public sealed class AutonumberTxnReplayTests
 
     [Theory]
     [MemberData(nameof(AllJet4MdbRecords))]
-    public void R_q27_jet4_mdb_record_matches_ace_after_statement_and_non_counter_after_next(string relativeRecord)
+    public void R_q27_jet4_mdb_record_matches_ace_kept_pages_after_statement_and_after_next(string relativeRecord)
     {
         string[] parts = relativeRecord.Split('/');
         RecordPlan plan = LoadPlan(parts[0], parts[1]);
 
-        // after-statement matches ACE 100% byte-for-byte including page 0 offset 3586.
+        // Both after-statement and after-next match ACE 100% byte-for-byte including page 0 [3586, 3588)
+        // (evidence/r-q27-autonumber-txn/ins-txn-rb-mdb, ins-dup-fail-mdb; evidence/r-q40-mdb-counter).
         byte[] afterStatement = RunStage1(plan);
         AssertMatchesCheckpoint(plan.Question, "after-statement", plan.Statement, afterStatement);
 
-        // after-next: leave page 0 offset 3586 out of the comparison because CalcDb does not model the Jet 4 MDB
-        // commit counter of a normal INSERT + Close (qualified.md R-CRASH-1 open). Every other kept byte is strict.
         byte[] afterNext = RunStage2(plan, afterStatement);
-        int counterOffset = D.Header.CommitCounter.Offset;
-        List<(long Offset, byte[] Bytes)> nonCounterReads = new(plan.Next.Reads.Count + 1);
-        foreach ((long offset, byte[] bytes) in plan.Next.Reads)
-        {
-            if (counterOffset >= offset && counterOffset < offset + bytes.Length)
-            {
-                int cut = (int)(counterOffset - offset);
-                if (cut > 0)
-                {
-                    nonCounterReads.Add((offset, bytes[..cut]));
-                }
-                if (cut + 1 < bytes.Length)
-                {
-                    nonCounterReads.Add((counterOffset + 1, bytes[(cut + 1)..]));
-                }
-            }
-            else
-            {
-                nonCounterReads.Add((offset, bytes));
-            }
-        }
-        AssertMatchesCheckpoint(plan.Question, "after-next (non-counter bytes)", new Checkpoint(plan.Next.Length, nonCounterReads), afterNext);
+        AssertMatchesCheckpoint(plan.Question, "after-next", plan.Next, afterNext);
     }
 
     private static byte[] RunStage1(RecordPlan plan)
