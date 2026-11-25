@@ -45,17 +45,42 @@ public readonly record struct AcceptOutcome(bool Accepted, MutationError? Error 
 /// </summary>
 public sealed record PublicationReceipt(int Changes, NativeProgram Program);
 
+/// <summary>Which catalog mutation queued a <see cref="DeferredCatalogCommit"/>.</summary>
+public enum DeferredCatalogCommitKind
+{
+    /// <summary>
+    /// Deferred <c>MSysQueries</c> TableDef counts / <c>MSysObjects.Flags</c> commit queued by
+    /// <c>SchemaWriter.CreateQueryDef</c> or <c>UpdateQueryDefSql</c> (<c>evidence/r-q39-querydef-bytes</c>).
+    /// </summary>
+    QueryDef,
+
+    /// <summary>
+    /// Deferred TableDef page rewrite queued by DAO <c>TableDefs.Append</c> (<c>evidence/r-q15-ddl-open/counter-dao-append-pages</c>,
+    /// <c>evidence/r-q28-schema-write-open/dao-fields-4-timing</c>, <c>evidence/r-q41-create-session-counter/ddl-tabledefs-append-*</c>):
+    /// ACE rewrites the newly created TableDef page about 0.5 s after return (+1), absorbs it into the next exclusive
+    /// <c>TableDefs.Append</c> when sooner (&lt; 0.50 s), or flushes it first at <c>Database.Close</c> (+1).
+    /// </summary>
+    TableDefAppend,
+}
+
 /// <summary>
-/// A deferred catalog commit queued by <c>SchemaWriter.CreateQueryDef</c> (5th commit) or
-/// <c>SchemaWriter.UpdateQueryDefSql</c> (close commit) (evidence/r-q39-querydef-bytes: MSysQueries TableDef
-/// RowCount/UniqueEntryCount on page 4 and changed MSysObjects.Flags, flushed at the next CreateQueryDef or at
-/// Database.Close).
+/// A deferred catalog commit queued on a <see cref="PageCache"/>:
+/// <list type="bullet">
+/// <item><see cref="DeferredCatalogCommitKind.QueryDef"/>: queued by <c>SchemaWriter.CreateQueryDef</c> (5th commit) or
+/// <c>SchemaWriter.UpdateQueryDefSql</c> (close commit) (<c>evidence/r-q39-querydef-bytes</c>).</item>
+/// <item><see cref="DeferredCatalogCommitKind.TableDefAppend"/>: queued by DAO <c>TableDefs.Append</c>
+/// (<c>evidence/r-q15-ddl-open/counter-dao-append-pages</c>, <c>evidence/r-q28-schema-write-open/dao-fields-4-timing</c>,
+/// <c>evidence/r-q41-create-session-counter/ddl-tabledefs-append-*</c>).</item>
+/// </list>
 /// </summary>
 public sealed record DeferredCatalogCommit(
     IReadOnlyList<PageEdit> Edits,
     IReadOnlyList<LockResource> Footprint,
     int? PendingQueryObjectId = null,
-    int? PendingQueryFlags = null);
+    int? PendingQueryFlags = null,
+    DeferredCatalogCommitKind Kind = DeferredCatalogCommitKind.QueryDef,
+    TimeSpan? QueuedAt = null,
+    uint? PendingTableDefPage = null);
 
 /// <summary>
 /// Where a Workspace's publication writes (II-08 §19; W-05/same-width-mutation): the file session's positioned handle
@@ -652,10 +677,48 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _releaseAtClose.ContainsKey(cache)
         || _deferredCatalogCommit.ContainsKey(cache);
 
-    /// <summary>True when any file on this workspace has a queued QueryDef deferred catalog commit.</summary>
-    public bool HasDeferredCatalogCommit => _deferredCatalogCommit.Count > 0;
+    /// <summary>
+    /// Report which kinds of deferred catalog commit are currently queued across all caches on this Workspace
+    /// (for deterministic Workspace-scoped guards such as <c>BeginTrans</c>).
+    /// </summary>
+    public bool TryGetPendingDeferredKinds(out bool hasQueryDef, out bool hasTableDefAppend)
+    {
+        hasQueryDef = false;
+        hasTableDefAppend = false;
+        foreach (DeferredCatalogCommit pending in _deferredCatalogCommit.Values)
+        {
+            if (pending.Kind == DeferredCatalogCommitKind.TableDefAppend)
+            {
+                hasTableDefAppend = true;
+            }
+            else
+            {
+                hasQueryDef = true;
+            }
+        }
+        return hasQueryDef || hasTableDefAppend;
+    }
 
-    /// <summary>Queue a QueryDef deferred catalog commit to flush at the next QueryDef mutation or Database.Close.</summary>
+    /// <summary>
+    /// Whether any live <see cref="EditFrame"/> registered with this Workspace holds deferred Delete TableDef row
+    /// counts on <paramref name="cache"/> awaiting <c>Recordset.Close</c> (<c>evidence/r-q17-growth/retire-rs-delete-au1</c>).
+    /// </summary>
+    public bool HasDeferredDeleteCounts(PageCache cache)
+    {
+        for (int i = 0; i < _edits.Count; i++)
+        {
+            if (_edits[i].HasDeferredCounts && ReferenceEquals(_edits[i].DeferredCountsFile, cache))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Whether <paramref name="cache"/> is opened or created in an exclusive session (no lock file, steps 0x0E00).</summary>
+    public bool IsExclusiveSession(PageCache cache) => IsExclusive(cache);
+
+    /// <summary>Queue a deferred catalog commit to flush or fold at the next matching mutation or Database.Close.</summary>
     public void SetDeferredCatalogCommit(PageCache cache, DeferredCatalogCommit commit) =>
         _deferredCatalogCommit[cache] = commit;
 
@@ -666,6 +729,45 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>Clear the queued deferred catalog commit for <paramref name="cache"/> after folding it into a later commit.</summary>
     public void ClearDeferredCatalogCommit(PageCache cache) =>
         _deferredCatalogCommit.Remove(cache);
+
+    /// <summary>
+    /// Flush a queued deferred catalog commit on <paramref name="cache"/> as its own immediate commit (+1 on page 0)
+    /// and remove it once published (<c>evidence/r-q41-create-session-counter/ddl-tabledefs-append-accdb</c>,
+    /// <c>ddl-tabledefs-append-mdb</c>; <c>evidence/r-q39-querydef-bytes</c>).
+    /// </summary>
+    public (MutationOpen Open, string? Detail) FlushDeferredCatalogCommit(PageCache cache)
+    {
+        if (_participants.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a deferred catalog commit would publish beside them");
+        }
+        if (!_deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? deferred))
+        {
+            return (MutationOpen.None, null);
+        }
+        (MutationOpen defOpen, string? defDetail) = PublishNonTransactional(
+            cache,
+            deferred.Edits,
+            deferred.Footprint,
+            CommitMode.Immediate,
+            MutationErrorSource.Workspace,
+            out MutationError? defError,
+            allowDuringRollbackExtent: true,
+            allowPendingDeferredCatalogCommit: true);
+        if (defOpen != MutationOpen.None || defError is not null)
+        {
+            return defError is { } defRefused
+                ? (MutationOpen.Publication, $"the deferred catalog commit: {defRefused.Describe()}")
+                : (defOpen, defDetail);
+        }
+        _deferredCatalogCommit.Remove(cache);
+        return (MutationOpen.None, null);
+    }
+
+    private static string PendingDeferredCommitDetail(DeferredCatalogCommit pending, string operation) =>
+        pending.Kind == DeferredCatalogCommitKind.TableDefAppend
+            ? $"{operation} while a DAO TableDefs.Append deferred TableDef write (page {pending.PendingTableDefPage}) is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"
+            : $"{operation} while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)";
 
     /// <summary>
     /// Unused pages of this session's active 32-page page-1 reservation on <paramref name="cache"/> available for
@@ -1200,7 +1302,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         CommitMode mode,
         MutationErrorSource conflictSource,
         out MutationError? error,
-        bool allowDuringRollbackExtent = false)
+        bool allowDuringRollbackExtent = false,
+        bool allowPendingDeferredCatalogCommit = false)
     {
         error = null;
         if (Publisher is not { } publisher)
@@ -1214,6 +1317,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (!allowDuringRollbackExtent && _jet4MdbRollbackPending.Contains(cache))
         {
             return (MutationOpen.Publication, PendingJet4MdbRollbackWriteDetail);
+        }
+        if (!allowPendingDeferredCatalogCommit && _deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? pendingDeferred))
+        {
+            return (MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a non-transactional write"));
         }
         if (TouchesGlobalMapPage(edits))
         {
@@ -1465,6 +1572,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (!allowDuringRollbackExtent && _jet4MdbRollbackPending.Contains(cache))
         {
             return (MutationOpen.Publication, PendingJet4MdbRollbackWriteDetail);
+        }
+        if (_deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? pendingDeferred))
+        {
+            return (MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a statement side-effect write"));
         }
         if (TouchesGlobalMapPage(edits))
         {
@@ -3020,9 +3131,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
                 }
-                if (_deferredCatalogCommit.ContainsKey(physical.File))
+                if (_deferredCatalogCommit.TryGetValue(physical.File, out DeferredCatalogCommit? pendingDeferred))
                 {
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a data write"));
                 }
             }
             // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
@@ -3188,7 +3299,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         PageCache file,
         MutationSemantics catalogTable,
         Func<FileParticipant, CompiledChange> compile,
-        bool allowPendingDeferredCatalogCommit = false)
+        DeferredCatalogCommitKind? allowPendingDeferredKind = null)
     {
         if (_unresolved.Contains(file))
         {
@@ -3198,9 +3309,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(false, null, MutationOpen.Publication, PendingJet4MdbRollbackWriteDetail);
         }
-        if (!allowPendingDeferredCatalogCommit && _deferredCatalogCommit.ContainsKey(file))
+        if (_deferredCatalogCommit.TryGetValue(file, out DeferredCatalogCommit? pendingDeferred)
+            && pendingDeferred.Kind != allowPendingDeferredKind)
         {
-            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return new AcceptOutcome(false, null, MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a catalog write"));
         }
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
@@ -3285,9 +3397,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a counter commit would publish beside them");
         }
-        if (_deferredCatalogCommit.ContainsKey(cache))
+        if (_deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? pendingDeferred))
         {
-            return (MutationOpen.Publication, "a counter commit while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return (MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a counter commit"));
         }
         (MutationOpen open, string? detail) = PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
         return error is { } refused ? (MutationOpen.Publication, $"the counter commit: {refused.Describe()}") : (open, detail);
@@ -3311,23 +3423,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a closing commit would publish beside them");
         }
-        if (_deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? deferred))
+        if (_deferredCatalogCommit.ContainsKey(cache))
         {
-            (MutationOpen defOpen, string? defDetail) = PublishNonTransactional(
-                cache,
-                deferred.Edits,
-                deferred.Footprint,
-                CommitMode.Immediate,
-                MutationErrorSource.Workspace,
-                out MutationError? defError,
-                allowDuringRollbackExtent: true);
-            if (defOpen != MutationOpen.None || defError is not null)
+            (MutationOpen defOpen, string? defDetail) = FlushDeferredCatalogCommit(cache);
+            if (defOpen != MutationOpen.None)
             {
-                return defError is { } defRefused
-                    ? (MutationOpen.Publication, $"the deferred catalog commit: {defRefused.Describe()}")
-                    : (defOpen, defDetail);
+                return (defOpen, defDetail);
             }
-            _deferredCatalogCommit.Remove(cache);
             if (!_allocatedGlobalMap.Contains(cache) && !_releaseAtClose.ContainsKey(cache))
             {
                 return (MutationOpen.None, null);

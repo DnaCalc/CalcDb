@@ -433,6 +433,22 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public DatabaseSql Sql => _sql ??= new DatabaseSql(this);
 
     /// <summary>
+    /// Refuse unrecorded operations interleaved while a DAO <c>TableDefs.Append</c> deferred TableDef write is pending
+    /// on this Database's cache (qualified.md <c>R-FMT-2, R-CRASH-1 r-q41</c>).
+    /// </summary>
+    internal CallResult? PendingDeferredTableDefRefusal(string name, string operation)
+    {
+        if (_workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pending)
+            && pending is { Kind: DeferredCatalogCommitKind.TableDefAppend })
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                name,
+                $"{operation} while a DAO TableDefs.Append deferred TableDef write (page {pending.PendingTableDefPage}) is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"));
+        }
+        return null;
+    }
+
+    /// <summary>
     /// OpenRecordset(Name, Type, Options, LockEdit) on a local table: table-type, dynaset, snapshot or forward-only; on
     /// SELECT text or a saved select query, a recordset over the SQL executor (<see cref="SelectRoute"/>). Not yet:
     /// crosstabs and the other saved families (W-06/relational-spill, W-07), LockEdit, editing (W-05).
@@ -442,6 +458,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (Closed)
         {
             return Fail(3420, DaoErrors.ObjectInvalid);
+        }
+        if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        {
+            return deferredRefusal;
         }
         string? name = Args.Text(args[0]);
         if (name is null)
@@ -545,6 +565,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// </summary>
     public CallResult OpenSaved(SavedQuery query, int? type, int options)
     {
+        if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
         if (query.Family != QueryFamily.Select)
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a saved {query.Family?.ToString() ?? "unclassified"} query (W-06/relational-spill, W-07)"));
@@ -682,6 +706,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (Args.Int32(optionsArg, omitted: 0) is not { } options)
         {
             return Args.TypeOf(optionsArg) == Foundation.VarType.Bstr ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented("Execute with an Options argument that is not numeric"));
+        }
+        if (PendingDeferredTableDefRefusal("NotModelled.ExecuteWithPendingDeferredTableDef", "Database.Execute") is { } deferredRefusal)
+        {
+            return deferredRefusal;
         }
         string sql = Args.Text(query) ?? "";
         if (SelectRoute.IsSelect(sql))
@@ -1050,7 +1078,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 QueryCatalog? read = QueryCatalog.Read(Cache, Format, Catalog, PageCount, out _queriesFailure);
                 if (read is not null
                     && _workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pending)
-                    && pending is { PendingQueryObjectId: int pendingId, PendingQueryFlags: int pendingFlags })
+                    && pending is { Kind: DeferredCatalogCommitKind.QueryDef, PendingQueryObjectId: int pendingId, PendingQueryFlags: int pendingFlags })
                 {
                     read = read.WithPendingFamily(pendingId, (QueryFamily)(pendingFlags & 0xF0));
                 }

@@ -279,4 +279,159 @@ public sealed unsafe class ExclusiveSessionCommitCounterTests : IDisposable
         Assert.Equal(HResults.E_NOTIMPL, Method(blocked, "Open", $"Provider={Ace};Data Source={path}", null, null, null).Failure?.Scode);
         Ok(Method(holder, "Close"));
     }
+
+    private nint HoldDispatch(CallResult result)
+    {
+        Assert.True(result.HasScalar && (VarType)result.Scalar.Vt == VarType.Dispatch, result.Failure?.Description);
+        _held.Add(result.Scalar.Pointer);
+        return result.Scalar.Pointer;
+    }
+
+    private nint ArgDispatch(nint dispatch)
+    {
+        var v = (NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(NativeVariant));
+        v->Vt = (ushort)VarType.Dispatch;
+        v->Pointer = dispatch;
+        _cells.Add((nint)v);
+        return (nint)v;
+    }
+
+    private CallResult MethodWithDispatch(DispatchObject target, string member, nint arg)
+    {
+        nint[] cells = [ArgDispatch(arg)];
+        return target.Run(target.Declaration.Member(member, InvokeKind.Method), cells);
+    }
+
+    private CallResult TryAppendLongTable(DatabaseObject db, string tableName, string fieldName)
+    {
+        nint tdPtr = HoldDispatch(Ok(Method(db, "CreateTableDef", tableName)));
+        NewTableDefObject td = ComObject.Recover<NewTableDefObject>(tdPtr);
+        nint fPtr = HoldDispatch(Ok(Method(td, "CreateField", fieldName, 4)));
+        NewFieldsObject fs = Recover<NewFieldsObject>(Ok(Get(td, "Fields")));
+        Ok(MethodWithDispatch(fs, "Append", fPtr));
+        DefinitionCollection tds = Recover<DefinitionCollection>(Ok(Get(db, "TableDefs")));
+        return MethodWithDispatch(tds, "Append", tdPtr);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Dao_CreateDatabase_tabledefs_append_absorbs_deferred_tdef_without_pause_and_splits_after_pause(bool isAccdb)
+    {
+        // Replays r-q41-create-session-counter/ddl-tabledefs-append-nopause-accdb, ddl-tabledefs-append-nopause-mdb
+        // (0xE00 ends at 0x0105), ddl-tabledefs-append-accdb, and ddl-tabledefs-append-mdb (0xE00 ends at 0x0106),
+        // plus verifies named NotModelled.* refusals for unrecorded interleaved operations while deferred TDEF is pending.
+        DBEngineObject engine = CreateEngine();
+        TimeSpan now = TimeSpan.Zero;
+
+        // 1. No-pause exclusive CreateDatabase: T1 (+1 -> 0x0102), T2 absorbs T1's deferred TDEF (+1 -> 0x0103),
+        //    Close flushes T2's deferred TDEF (+1 -> 0x0104) and Close commit (+1 -> 0x0105).
+        string npPath = Path.Combine(_dir, isAccdb ? "tdapp-np.accdb" : "tdapp-np.mdb");
+        DatabaseObject npDb = Recover<DatabaseObject>(Ok(Method(engine, "CreateDatabase", npPath, DbLangGeneral, isAccdb ? DbVersion120 : DbVersion40)));
+        npDb.Workspace.Transactions.Clock = () => now;
+        Ok(TryAppendLongTable(npDb, "T1", "ID"));
+        Assert.Equal((0x0102UL, 0x0100UL), ReadCounters(npDb));
+
+        // Interleaved Execute, OpenRecordset, and BeginTrans while deferred TDEF is pending refuse by name without stepping 0xE00.
+        CallResult execRefused = Method(npDb, "Execute", "CREATE TABLE T3 (ID LONG)", DbFailOnError);
+        Assert.Equal(FailureKind.NotModelled, execRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.ExecuteWithPendingDeferredTableDef:", execRefused.Failure?.Description);
+        CallResult rsRefused = Method(npDb, "OpenRecordset", "T1");
+        Assert.Equal(FailureKind.NotModelled, rsRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.OpenRecordsetWithPendingDeferredTableDef:", rsRefused.Failure?.Description);
+        CallResult txnRefused = npDb.Workspace.BeginTrans();
+        Assert.Equal(FailureKind.NotModelled, txnRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.BeginTransAfterTableDefsAppend:", txnRefused.Failure?.Description);
+        Assert.Equal((0x0102UL, 0x0100UL), ReadCounters(npDb));
+
+        Ok(TryAppendLongTable(npDb, "T2", "ID"));
+        Assert.Equal((0x0103UL, 0x0100UL), ReadCounters(npDb));
+        Ok(Method(npDb, "Close"));
+        Assert.Equal((0x0105UL, 0x0100UL), ReadCounters(npPath));
+
+        // 2. 1500 ms pause exclusive CreateDatabase: T1 (+1 -> 0x0102), 600 ms gap refuses NotModelled.Edit.CommitBurstGap,
+        //    1500 ms flushes T1's deferred TDEF (+1 -> 0x0103) before T2 (+1 -> 0x0104), Close (+2 -> 0x0106).
+        now = TimeSpan.Zero;
+        string pausePath = Path.Combine(_dir, isAccdb ? "tdapp-pause.accdb" : "tdapp-pause.mdb");
+        DatabaseObject pauseDb = Recover<DatabaseObject>(Ok(Method(engine, "CreateDatabase", pausePath, DbLangGeneral, isAccdb ? DbVersion120 : DbVersion40)));
+        pauseDb.Workspace.Transactions.Clock = () => now;
+        Ok(TryAppendLongTable(pauseDb, "T1", "ID"));
+        Assert.Equal((0x0102UL, 0x0100UL), ReadCounters(pauseDb));
+
+        now = TimeSpan.FromMilliseconds(600);
+        CallResult gapRefused = TryAppendLongTable(pauseDb, "T2", "ID");
+        Assert.Equal(FailureKind.NotModelled, gapRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.Edit.CommitBurstGap:", gapRefused.Failure?.Description);
+        Assert.Equal((0x0102UL, 0x0100UL), ReadCounters(pauseDb));
+
+        now = TimeSpan.FromMilliseconds(1500);
+        Ok(TryAppendLongTable(pauseDb, "T2", "ID"));
+        Assert.Equal((0x0104UL, 0x0100UL), ReadCounters(pauseDb));
+        Ok(Method(pauseDb, "Close"));
+        Assert.Equal((0x0106UL, 0x0100UL), ReadCounters(pausePath));
+
+        // 3. Shared ACCDB session refuses a second TableDefs.Append while deferred TDEF is pending.
+        if (isAccdb)
+        {
+            now = TimeSpan.Zero;
+            DatabaseObject shared = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", npPath, false, false)));
+            shared.Workspace.Transactions.Clock = () => now;
+            Ok(TryAppendLongTable(shared, "T3", "ID"));
+            Assert.Equal((0x0105UL, 0x0101UL), ReadCounters(shared));
+            CallResult secondShared = TryAppendLongTable(shared, "T4", "ID");
+            Assert.Equal(FailureKind.NotModelled, secondShared.Failure?.Kind);
+            Assert.StartsWith("NotModelled.Edit.Publication:", secondShared.Failure?.Description);
+            Ok(Method(shared, "Close"));
+            Assert.Equal((0x0105UL, 0x0103UL), ReadCounters(npPath));
+        }
+    }
+
+    [Fact]
+    public void Dao_Delete_then_TableDefs_Append_refuses_before_writing_so_rs_Close_publishes_deferred_counts()
+    {
+        // Gate 4 Finding 1: an open Recordset with a Delete holds deferred TableDef row counts awaiting rs.Close
+        // (evidence/r-q17-growth/retire-rs-delete-au1). TableDefs.Append and CreateQueryDef refuse by name before
+        // writing while deferred Delete counts are pending so rs.Close never silently drops the TableDef row count.
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string path = Path.Combine(_dir, "delete-then-append.accdb");
+        File.WriteAllBytes(path, store.ReadAll(EmptyAccdbFixture));
+
+        DBEngineObject engine = CreateEngine();
+        DatabaseObject setup = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, false)));
+        Ok(Method(setup, "Execute", "CREATE TABLE T (ID LONG)", DbFailOnError));
+        Ok(Method(setup, "Execute", "INSERT INTO T VALUES (1)", DbFailOnError));
+        Ok(Method(setup, "Execute", "INSERT INTO T VALUES (2)", DbFailOnError));
+        Ok(Method(setup, "Close"));
+
+        DatabaseObject db = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, false)));
+        CalcDb.Com.Dao.RecordsetObject rs = Recover<CalcDb.Com.Dao.RecordsetObject>(Ok(Method(db, "OpenRecordset", "T", 2)));
+        Ok(Method(rs, "Delete"));
+        Assert.True(db.Workspace.Transactions.HasDeferredDeleteCounts(db.Cache));
+
+        // TableDefs.Append and CreateQueryDef both refuse cleanly without writing while Delete counts are deferred.
+        CallResult appendRefused = TryAppendLongTable(db, "T2", "ID");
+        Assert.Equal(FailureKind.NotModelled, appendRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.Edit.Publication:", appendRefused.Failure?.Description);
+        Assert.Contains("deferred Delete TableDef counts", appendRefused.Failure?.Description);
+
+        CallResult qdRefused = Method(db, "CreateQueryDef", "Q1", "SELECT ID FROM T");
+        Assert.Equal(FailureKind.NotModelled, qdRefused.Failure?.Kind);
+        Assert.StartsWith("NotModelled.Edit.Publication:", qdRefused.Failure?.Description);
+        Assert.Contains("deferred Delete TableDef counts", qdRefused.Failure?.Description);
+
+        // rs.Close publishes T's deferred TableDef RowCount decrement (2 -> 1) cleanly; nothing was silently dropped.
+        Ok(Method(rs, "Close"));
+        Assert.False(db.Workspace.Transactions.HasDeferredDeleteCounts(db.Cache));
+        Ok(Method(db, "Close"));
+
+        // Verify T's TableDef page 42 RowCount is 1 (not stale 2) and T2 was not created.
+        byte[] closedBytes = File.ReadAllBytes(path);
+        uint tRowCount = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(closedBytes.AsSpan(42 * D.PageSize + 16, 4));
+        Assert.Equal(1u, tRowCount);
+
+        DatabaseObject verify = Recover<DatabaseObject>(Ok(Method(engine, "OpenDatabase", path, false, true)));
+        DefinitionCollection verifyTds = Recover<DefinitionCollection>(Ok(Get(verify, "TableDefs")));
+        Assert.Equal(3265, Call(verifyTds, "Item", InvokeKind.PropertyGet, "T2").Failure?.Number);
+        Ok(Method(verify, "Close"));
+    }
 }
