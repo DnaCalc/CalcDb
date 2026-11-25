@@ -16,6 +16,9 @@ persistent check worktree and gave code writers worktrees of their own.
    (rg, or roscli `nav.find_invocations`) and the bytes the records change to the project that writes them, and starts
    the writer only when no running writer holds those projects (2026-11-24: 9dvt needed Format and Isam for the page-1
    reservation its records show, x8vx needed Isam's statement rollback; both stopped, and x8vx then waited for 9dvt).
+   The tests go with the change: the organizer searches `tests/` (rg) for the refusal or member the change moves and
+   gives the writer every test file that asserts it, in whichever project (2026-11-25: nnnh, owning Sql and
+   Expressions, met a stale refusal assertion in CalcDb.Com.Tests and left it, as the file was not its own).
 3. **Write.** A code writer in a writer slot (`CalcDb-w1`, `CalcDb-w2`; AGENTS.md, Repository), a prober in a CodeAlta
    worktree of its own (`alta session create --worktree`), each on a branch `alta/<name>`. The child
    checks itself with `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with
@@ -39,7 +42,8 @@ A child ends with these parts and nothing else:
 - **Change:** its branch (or, in the integration checkout, the exact file list).
 - **Rules:** a domain table, one row per rule: the rule, the record (and calls or pages) that shows its case, the
   tuple it admits (format, route, cursor, type, argument form), and the neighbours it refuses by name.
-- **Tests:** the tests that cite those records, and the result of its last self-check.
+- **Tests:** the tests that cite those records, every assertion it changed with the record it now equals, and the
+  result of its last self-check.
 - **Review:** the reviewer's session, its minutes and tool calls, and each finding with its disposition (applied in
   commit X, or declined because Y).
 - **Bookkeeping:** the register row text (its status in one or two sentences: what it admits, with the commit), the
@@ -66,6 +70,9 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - Every rule cites the record (folder/question, call, page and offset) that shows its very case. A byte or a value no
   record decides: stop and report it, or refuse it by name and list it under Open; never guess. Tests replay the
   record's kept pages or calls.
+- **A failing test: read its record first.** A mismatch with the record is fixed in the code; an assertion changes only
+  to what its record shows, never to what your code produced, and a case no record shows is dropped or refused by name
+  (2026-11-25: the prfx writer changed event-sequence assertions five times to its own output until steered).
 - A new refusal is checked like a rule: search evidence/ and qualified.md for the case it refuses (`rg` over the member
   and the argument form) before refusing it. Refusing a recorded case is a regression (ptrj, 2026-11-24, refused the
   ByRef Move and Seek that r-q2-cursor-dao/byref-dao-move-seek records and qualified.md states; its reviewer and the
@@ -146,7 +153,9 @@ worktree (`git worktree remove`), and delete the branch (`git branch -d`). For a
 with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and push. When two children in the integration
 checkout edited one file, stage only the landing child's hunks (a copy of the file, `git hash-object -w`, `git
 update-index --cacheinfo`) and check the staged diff. Then update the register row, the task, and the bookkeeping lines
-of the child's report.
+of the child's report, in one `exec` script with the message file, the commit and the push; a child's start (its
+register row and task state) goes into the script that creates it (2026-11-25: organizer 16 spent 42 of 151 calls on
+bookkeeping, one call per step).
 
 ## The compare tiers
 

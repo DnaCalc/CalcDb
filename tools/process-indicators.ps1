@@ -73,7 +73,7 @@ function Pct($x) { "{0:P0}" -f $x }
 "| Register rows | $($status -join ', ') | - |"
 "| Leftover exports; compare snapshots | $exports; $snapshots | more than 5 leftover exports (about 1.2 GB each) |"
 "| Organizer tool calls per landing; handovers | (alta session report) | above about 15; more than 2 a day |"
-"| Reviewer findings per 1,000 lines | (reviews) | rising over three landings, or above about 3 |"
+"| Reviewer findings applied per 1,000 lines, pooled over the window (declined ones named) | (reviews) | rising over three handovers, or above about 3 |"
 "| Rules found wrong after landing | (register, process log) | more than one a day |"
 "| Children stopped waiting for a record | (child reports) | more than one per stretch |"
 "| Merge minutes per landing | (landings) | above 5 min |"

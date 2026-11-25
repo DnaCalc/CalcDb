@@ -1571,3 +1571,30 @@ free.
 
 Successor: CalcDb organizer 17, session 01a21328-187d-7f04-89ed-a26a67eb8f9d (`--no-parent`). Organizer 16 finishes the wide compare and does
 nothing else.
+
+wide-nnnh-1: 1,220 of 3,721, one unexplained loss (pjs2), not recorded by organizer 16.
+
+## 2026-11-25 - Organizer 17 (01a21328): triggered process review
+
+Two indicators of organizer 16's handover crossed (The Plan §4). Asked first: what process to remove. Nothing: each gate
+answered a failure of the last day.
+
+**Organizer calls per landing (about 20).** Organizer 16's 151 tool calls, from `alta session events`: 42 bookkeeping
+(a register row found, edited, a message file written, committed and pushed, each its own call), 17 compare (6 reading a
+running job's output, 2 compares by hand after the push outage), 17 reading in at the start, 13 task state, 12 landing
+checks, 3 steers. Without the start and the outage it is about 17 per landing. Change (landing-check.md, After a passing
+check): a landing's bookkeeping is one `exec` script with its commit and push, and a child's start row goes into the
+script that creates it. Expected effect: about 4 calls fewer per landing. A running job is not read: it reports itself.
+
+**Reviewer findings per 1,000 lines (fkn9 3.7, nnnh 4.4).** Small stretches magnify the rate: fkn9's 3 findings were one
+wrong citation in a test comment (applied) and two declined with records. Pooled over organizer 16's four reviewed
+stretches, 24 findings on 7,920 lines (3.0), 22 applied (2.8), the lowest yet (organizer 10: 4.7 to 10). No change to the
+review layer. tools/process-indicators.ps1 now names the measure: applied findings, pooled over the window, declined ones
+named.
+
+**The two lessons of organizer 16.** (a) Fitted assertions: the standard brief now says a failing test's record is read
+first and an assertion changes only to its record, and the report's Tests part lists every changed assertion with its
+record, so the organizer checks one from the report instead of watching interim answers. (b) The test outside the
+writer's project: landing-check.ps1 already selects every graph test project in an unfiltered self-check, filter or
+not (lines 536 to 577; nnnh's self-check ran CalcDb.Com.Tests and named the failure). The gap was ownership: gate 2 now
+has the organizer search `tests/` for the refusal or member the change moves and give the writer those test files.
