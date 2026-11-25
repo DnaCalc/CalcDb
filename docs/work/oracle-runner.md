@@ -144,12 +144,14 @@ tooling revision and the candidate module's hash once, so all its attempts answe
 their own pipe and log handles (launches are serialized), and records and cached content are created by a rename that
 never replaces.
 
-**The comparison rule (`calls.trace@12`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
+**The comparison rule (`calls.trace@13`, [CallTraceComparison](../../src/CalcDb.Corpus/CallTraceComparison.cs)).** Each
 relaxation is a named normalization with its bounds and the control it still rejects; an owner-accepted CalcDb difference
-is an accepted difference, counted apart. `calls.trace@12` compares the call trace and file observations and does not
+is an accepted difference, counted apart. `calls.trace@13` compares the call trace and file observations and does not
 compare `etw:file-io`. Revision 8 adds `ace-clock-fields` (task c4rv), revision 10 extends it to deleted/vacated rows and
-kept `nativeRead` pages (task 4t24), revision 11 extends it to the Jet 4 and ACE 2010/2016/2019 profiles (task 6qw5), and
-revision 12 extends kept-read reconstruction to direct full-file assembly and post-release file observations (task q3mv).
+kept `nativeRead` pages (task 4t24), revision 11 extends it to the Jet 4 and ACE 2010/2016/2019 profiles (task 6qw5),
+revision 12 extends kept-read reconstruction to direct full-file assembly and post-release file observations (task q3mv),
+and revision 13 matches vacated MSysObjects prefix copies without `Flags` (which remains strictly compared) and extends
+intact deleted MSysObjects rows to Jet 4 (task tpjw).
 ACE writes its clock into every file it creates or changes, so two ACE runs of one question give different files. Where
 the SHA-256 of a file observation differs and both files' bytes can be found (ACE's from the retained content store, or
 reconstructed from the capture's kept `nativeRead` pages — assembled directly when the slices cover the entire file with
@@ -167,21 +169,25 @@ profiles (Jet 4 code 1, ACE 2007 code 2, ACE 2010 code 3, ACE 2016 code 5, ACE 2
 creation DATE and live MSysObjects `DateCreate` and `DateUpdate`, and compared with the clock removed are the page-0
 password (XOR the creation day) and the 2-byte SIDs of `MSysObjects.Owner` and `MSysACEs.SID` (XOR the RC4 keystream of
 the DATE); for ACE 2007, Jet 4, and ACE 2010 (where repeats show them: `r-q28-schema-write-open/dao-fields-7`,
-`r-q34-ddl-sweep/nn-two-cols-mdb-dao`, and `r-fmt-1/create-accdb-calculated` `a1`/`a2`), vacated prefix copies left below
-the anchor MSysObjects row by a later shrink (including their unmasked `Owner`) are also normalized; for ACE 2007 only
-(where repeats decide them), set aside are intact deleted MSysObjects rows ending at the lowest slot
-(`r-q28-schema-write-open/pair-dao-Aa-aA`, plus their unmasked `Owner`) and a chained long value's millisecond tick stamp
-(its definition's word and its first LVAL page's stamp, where they agree and are not zero). Each kind of field that
-differed is a note on a Matched comparison; this is ACE's nondeterminism, not an accepted difference. Cross-profile pairs
-and unrecognized/refused profiles stay strict and name the refusal in the comparison note. Any other byte (including
-non-clock bytes in deleted or vacated rows, vacated MSysObjects copies on ACE 2016 or ACE 2019, deleted MSysObjects rows
-or chained long-value stamps outside ACE 2007, free-gap bytes, unkept pages whose difference breaks SHA-256
-reconstruction, sub-page `nativeRead` slices, or non-MSysObjects pages), kept `nativeRead` pages separated from the file
-observation by a non-release event or a `FilesEvent` where the file changed or is absent, kept pages that do not cover the
-whole file when no base file verifies (named in the note as `kept nativeRead pages do not cover the file`), kept pages
-whose assembled bytes do not hash to the recorded SHA-256 (named in the note as `kept nativeRead pages do not verify
-against the recorded SHA-256`), or a file whose bytes cannot be found or reconstructed still differs, the last with a
-note. `calcdb-oracle file-compare (--expected F --actual F | --attempts A,B | --repeats [--match REGEX])` shows the rule
+`r-q39-querydef-bytes/action-update-accdb`, `pause-open-accdb`, `union-accdb`, `sql-put-type-change-accdb`,
+`r-q34-ddl-sweep/nn-two-cols-mdb-dao`, `r-q39-querydef-bytes/delete-querydef-mdb`, and `r-fmt-1/create-accdb-calculated`
+`a1`/`a2`), vacated prefix copies left below the anchor MSysObjects row by a later shrink (recognised by `C`, `Id`,
+`ParentId`, `Type`, `Name`, and `Owner` without `Flags`, which remains unmasked and strictly compared, including their
+unmasked `Owner`) are also normalized; for ACE 2007 and Jet 4 (where repeats decide them:
+`r-q28-schema-write-open/pair-dao-Aa-aA`, `r-q39-querydef-bytes/delete-querydef-accdb`, and
+`r-q39-querydef-bytes/delete-querydef-mdb`), intact deleted MSysObjects rows ending at the lowest slot (plus their
+unmasked `Owner`) are normalized; and for ACE 2007 only (where repeats decide it), a chained long value's millisecond
+tick stamp (its definition's word and its first LVAL page's stamp, where they agree and are not zero) is set aside. Each
+kind of field that differed is a note on a Matched comparison; this is ACE's nondeterminism, not an accepted difference.
+Cross-profile pairs and unrecognized/refused profiles stay strict and name the refusal in the comparison note. Any other
+byte (including non-clock bytes such as `Flags` in deleted or vacated rows, vacated MSysObjects copies on ACE 2016 or
+ACE 2019, deleted MSysObjects rows outside ACE 2007 and Jet 4, chained long-value stamps outside ACE 2007, free-gap
+bytes, unkept pages whose difference breaks SHA-256 reconstruction, sub-page `nativeRead` slices, or non-MSysObjects
+pages), kept `nativeRead` pages separated from the file observation by a non-release event or a `FilesEvent` where the
+file changed or is absent, kept pages that do not cover the whole file when no base file verifies (named in the note as
+`kept nativeRead pages do not cover the file`), kept pages whose assembled bytes do not hash to the recorded SHA-256
+(named in the note as `kept nativeRead pages do not verify against the recorded SHA-256`), or a file whose bytes cannot
+be found or reconstructed still differs, the last with a note. `calcdb-oracle file-compare (--expected F --actual F | --attempts A,B | --repeats [--match REGEX])` shows the rule
 on two files, two attempts, or each native attempt in the store against the one before.
 
 **The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch once over the questions
@@ -280,7 +286,7 @@ the attempt, as for the plain `show`.
 
 A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
 file-I/O recorder on ACE attempts: every create, read, write and flush on the attempt's files, with offsets and sizes,
-becomes the artifact `etw:file-io`. Because `calls.trace@12` does not compare `etw:file-io`, candidate runs
+becomes the artifact `etw:file-io`. Because `calls.trace@13` does not compare `etw:file-io`, candidate runs
 (`windows-x64-calcdb-local`) skip the ETW recorder, write `Sealer.CandidateEtwSkippedStatus`
 (`skipped on candidate run (calls.trace@9 does not compare etw:file-io)`, kept verbatim for compatibility with sealed
 attempts) to `artifacts/etw-status.txt`, record the omission by name on `manifest.OmittedChannels` (and as artifact `etw:status`),

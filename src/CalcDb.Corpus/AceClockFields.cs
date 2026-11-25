@@ -25,8 +25,10 @@ public enum ClockFieldKind
     PasswordDayMask,
 
     /// <summary>
-    /// MSysObjects <c>DateCreate</c> and <c>DateUpdate</c> of every MSysObjects row — live, deleted (r-q28-schema-write-open/pair-dao-Aa-aA),
-    /// or a vacated copy left below a later commit of the same row (r-q28-schema-write-open/dao-fields-7): set aside
+    /// MSysObjects <c>DateCreate</c> and <c>DateUpdate</c> of every MSysObjects row — live, deleted
+    /// (r-q28-schema-write-open/pair-dao-Aa-aA; r-q39-querydef-bytes/delete-querydef-accdb, delete-querydef-mdb), or a
+    /// vacated copy left below a later commit of the same row (r-q28-schema-write-open/dao-fields-7;
+    /// r-q39-querydef-bytes/action-update-accdb, pause-open-accdb, union-accdb, sql-put-type-change-accdb): set aside
     /// (r-fmt-1/create-accdb-empty a1/a3; r-q11-ddl-closure/create-one-long repeats; r-q13-new-file-interop ace-created a2/a3).
     /// </summary>
     CatalogDate,
@@ -73,12 +75,12 @@ public sealed record PageClockContext(FileFormat Format, int PageSize, TableDefi
 
 /// <summary>
 /// Finds ACE's clock fields in a database image or kept page slice from its structure (W-01/corpus-comparison, tasks
-/// c4rv, 4t24, and 6qw5): page 0 through the decoded header, the catalog through MSysObjects' TableDef and rows (live
-/// rows on all five recorded profiles; vacated prefix copies below the lowest row on ACE 2007, Jet 4, and ACE 2010;
-/// intact deleted rows on ACE 2007), MSysACEs through its catalog row, and (on ACE 2007) chained long values through
-/// every table's Memo and OLE columns. Defined for the five profiles whose ACE repeats decide their clock fields
-/// (Jet 4, ACE 2007, ACE 2010, ACE 2016, ACE 2019); any unrecognized/refused profile, or a file or page the inspector
-/// finds problems in, is refused, and the caller compares it strictly.
+/// c4rv, 4t24, 6qw5, and tpjw): page 0 through the decoded header, the catalog through MSysObjects' TableDef and rows
+/// (live rows on all five recorded profiles; vacated prefix copies below the lowest row on ACE 2007, Jet 4, and
+/// ACE 2010; intact deleted rows on ACE 2007 and Jet 4), MSysACEs through its catalog row, and (on ACE 2007) chained
+/// long values through every table's Memo and OLE columns. Defined for the five profiles whose ACE repeats decide their
+/// clock fields (Jet 4, ACE 2007, ACE 2010, ACE 2016, ACE 2019); any unrecognized/refused profile, or a file or page
+/// the inspector finds problems in, is refused, and the caller compares it strictly.
 /// </summary>
 public static class AceClockFields
 {
@@ -89,12 +91,19 @@ public static class AceClockFields
     private static bool HasRecordedRepeats(FileFormat format) =>
         format is FileFormat.Jet4 or FileFormat.Ace2007 or FileFormat.Ace2010 or FileFormat.Ace2016 or FileFormat.Ace2019;
 
-    /// <summary>Profiles whose recorded ACE repeats show an intact deleted MSysObjects row (ACE 2007: r-q28-schema-write-open/pair-dao-Aa-aA).</summary>
-    private static bool AllowsDeletedMSysObjectsRows(FileFormat format) => format == FileFormat.Ace2007;
+    /// <summary>
+    /// Profiles whose recorded ACE repeats show an intact deleted MSysObjects row
+    /// (ACE 2007: r-q28-schema-write-open/pair-dao-Aa-aA, r-q39-querydef-bytes/delete-querydef-accdb;
+    /// Jet 4: r-q39-querydef-bytes/delete-querydef-mdb).
+    /// </summary>
+    private static bool AllowsDeletedMSysObjectsRows(FileFormat format) =>
+        format is FileFormat.Ace2007 or FileFormat.Jet4;
 
     /// <summary>
     /// Profiles whose recorded ACE repeats show a vacated MSysObjects prefix copy below the lowest row
-    /// (ACE 2007: r-q28-schema-write-open/dao-fields-7; Jet 4: r-q34-ddl-sweep/nn-two-cols-mdb-dao; ACE 2010: r-fmt-1/create-accdb-calculated).
+    /// (ACE 2007: r-q28-schema-write-open/dao-fields-7, r-q39-querydef-bytes/action-update-accdb, pause-open-accdb,
+    /// union-accdb, sql-put-type-change-accdb; Jet 4: r-q34-ddl-sweep/nn-two-cols-mdb-dao,
+    /// r-q39-querydef-bytes/delete-querydef-mdb; ACE 2010: r-fmt-1/create-accdb-calculated).
     /// </summary>
     private static bool AllowsVacatedMSysObjectsCopies(FileFormat format) =>
         format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2010;
@@ -105,6 +114,7 @@ public static class AceClockFields
     private readonly record struct MSysObjectsColumns(
         ColumnDescriptor DateCreate,
         ColumnDescriptor DateUpdate,
+        ColumnDescriptor Flags,
         ColumnDescriptor Owner,
         ColumnDescriptor Name,
         ColumnDescriptor Type,
@@ -392,25 +402,28 @@ public static class AceClockFields
         refusal = null;
         ColumnDescriptor? dateCreate = Column(objects, "DateCreate", NativeTypes.DateTime);
         ColumnDescriptor? dateUpdate = Column(objects, "DateUpdate", NativeTypes.DateTime);
+        ColumnDescriptor? flags = Column(objects, "Flags", NativeTypes.Long);
         ColumnDescriptor? owner = Column(objects, "Owner", NativeTypes.Binary);
         ColumnDescriptor? name = Column(objects, "Name", NativeTypes.Text);
         ColumnDescriptor? type = Column(objects, "Type", NativeTypes.Integer);
         ColumnDescriptor? id = Column(objects, "Id", NativeTypes.Long);
-        if (dateCreate is null || dateUpdate is null || owner is null || name is null || type is null || id is null)
+        if (dateCreate is null || dateUpdate is null || flags is null || owner is null || name is null || type is null || id is null)
         {
-            refusal = "MSysObjects lacks DateCreate, DateUpdate, Owner, Name, Type or Id with its recorded type";
+            refusal = "MSysObjects lacks DateCreate, DateUpdate, Flags, Owner, Name, Type or Id with its recorded type";
             return false;
         }
-        cols = new MSysObjectsColumns(dateCreate, dateUpdate, owner, name, type, id);
+        cols = new MSysObjectsColumns(dateCreate, dateUpdate, flags, owner, name, type, id);
         return true;
     }
 
     /// <summary>
     /// Locates and normalizes MSysObjects clock fields on one data page: live non-overflow rows, (when
     /// <paramref name="allowDeletedRows"/> is true) intact deleted rows immediately below <c>minStart</c> when the page
-    /// holds a deleted slot (r-q28-schema-write-open/pair-dao-Aa-aA), and (when <paramref name="allowVacatedCopies"/> is
-    /// true) any vacated prefix copy of the anchor row left below it by an in-place shrink
-    /// (r-q28-schema-write-open/dao-fields-7; r-q34-ddl-sweep/nn-two-cols-mdb-dao; r-fmt-1/create-accdb-calculated).
+    /// holds a deleted slot (r-q28-schema-write-open/pair-dao-Aa-aA; r-q39-querydef-bytes/delete-querydef-accdb,
+    /// delete-querydef-mdb), and (when <paramref name="allowVacatedCopies"/> is true) any vacated prefix copy of the
+    /// anchor row left below it by an in-place shrink (r-q28-schema-write-open/dao-fields-7;
+    /// r-q34-ddl-sweep/nn-two-cols-mdb-dao; r-fmt-1/create-accdb-calculated; r-q39-querydef-bytes/action-update-accdb,
+    /// pause-open-accdb, union-accdb, sql-put-type-change-accdb, delete-querydef-mdb).
     /// </summary>
     private static bool NormalizeMSysObjectsDataPage(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
         TableDefinition objects, MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowDeletedRows, bool allowVacatedCopies, FormatDescriptor d, List<ClockField> fields,
@@ -632,8 +645,11 @@ public static class AceClockFields
     /// <summary>
     /// Locates any vacated prefix copy of the anchor MSysObjects row immediately below it in <c>[directoryEnd, anchorStart)</c>
     /// (left when <see cref="DataPages.TryReplaceRow"/> shrinks a row in place or shifts the lowest row up). A candidate
-    /// offset must match the anchor row byte for byte across every fixed byte outside <c>DateCreate</c>/<c>DateUpdate</c>
-    /// (C, Id, ParentId, Type, Flags) and across the portion of <c>Name</c> and <c>Owner</c> preceding the anchor.
+    /// offset must match the anchor row byte for byte across the bytes that stay equal across in-place commits
+    /// (C, Id, ParentId, Type, and the portion of <c>Name</c> and <c>Owner</c> preceding the anchor), excluding
+    /// <c>DateCreate</c>, <c>DateUpdate</c>, and <c>Flags</c> (which a later commit of the same QueryDef updates, as in
+    /// r-q39-querydef-bytes/action-update-accdb, pause-open-accdb, union-accdb, and sql-put-type-change-accdb).
+    /// <c>Flags</c> is never masked and remains strictly compared.
     /// </summary>
     private static void NormalizeVacatedCopiesBelow(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
         int directoryEnd, int anchorStart, int anchorLength, RowEnvelope anchorRow, TableDefinition objects, MSysObjectsColumns cols,
@@ -650,12 +666,20 @@ public static class AceClockFields
         {
             return;
         }
+        FieldRead flagsRead = anchorRow.ReadField(cols.Flags, fixedEnd);
+        if (flagsRead.Outcome == FieldOutcome.Malformed
+            || (flagsRead.Outcome == FieldOutcome.Bytes && flagsRead.End - flagsRead.Start != 4))
+        {
+            return;
+        }
+        int flagsStart = flagsRead.Outcome == FieldOutcome.Bytes ? flagsRead.Start : d.Row.FixedBase + cols.Flags.FixedOffset;
+        int flagsEnd = flagsRead.Outcome == FieldOutcome.Bytes ? flagsRead.End : flagsStart + 4;
         FieldRead ownerField = anchorRow.ReadField(cols.Owner, fixedEnd);
         ReadOnlySpan<byte> anchorBody = page.Slice(anchorStart, anchorLength);
         int limit = anchorStart;
         for (int pos = limit - fixedEnd; pos >= directoryEnd; pos--)
         {
-            if (!MatchesVacatedPrefix(page, pos, limit, anchorBody, fixedEnd, dc, du, nameField, ownerField))
+            if (!MatchesVacatedPrefix(page, pos, limit, anchorBody, fixedEnd, dc, du, flagsStart, flagsEnd, nameField, ownerField))
             {
                 continue;
             }
@@ -675,7 +699,7 @@ public static class AceClockFields
     }
 
     private static bool MatchesVacatedPrefix(ReadOnlySpan<byte> page, int pos, int limit, ReadOnlySpan<byte> anchorBody,
-        int fixedEnd, FieldRead dc, FieldRead du, FieldRead nameField, FieldRead ownerField)
+        int fixedEnd, FieldRead dc, FieldRead du, int flagsStart, int flagsEnd, FieldRead nameField, FieldRead ownerField)
     {
         int available = limit - pos;
         if (available < fixedEnd || anchorBody.Length < fixedEnd)
@@ -684,7 +708,7 @@ public static class AceClockFields
         }
         for (int k = 0; k < fixedEnd; k++)
         {
-            if ((k >= dc.Start && k < dc.End) || (k >= du.Start && k < du.End))
+            if ((k >= dc.Start && k < dc.End) || (k >= du.Start && k < du.End) || (k >= flagsStart && k < flagsEnd))
             {
                 continue;
             }
