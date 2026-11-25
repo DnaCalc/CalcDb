@@ -1,0 +1,28 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q41-create-session-counter/ddl-create-index-mdb",
+  "bookRefs": ["W-05", "W-08", "R-CRASH-1", "CRASH-ORDER", "R-FMT-1", "R-FMT-2", "fkn9"],
+  "description": "Jet 4 MDB creating session (CreateDatabase option 64) with ETW: CREATE TABLE T, CREATE INDEX on empty table, INSERT 1 row, CREATE UNIQUE INDEX on populated table, Close, then keep full file via nativeRead.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo", "etwFileIo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeFiles", "label": "before-create", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "args": [{ "type": "outputPath", "fileName": "r-q41-ddl-ix.mdb" }, { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" }, { "type": "i4", "value": 64 }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE T (ID LONG, V LONG)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE INDEX IX_V ON T (V)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO T VALUES (1, 10)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE UNIQUE INDEX UX_ID ON T (ID)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg", "file": "work:r-q41-ddl-ix.mdb", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg", "offset": 0, "count": 262144, "keep": true },
+    { "op": "nativeClose", "handle": "pg" }
+  ]
+}
