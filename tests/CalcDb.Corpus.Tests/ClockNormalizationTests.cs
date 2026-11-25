@@ -1251,37 +1251,22 @@ public sealed class ClockNormalizationTests
         Assert.False(stampVerdict.EqualOutsideClock);
         Assert.StartsWith(ace2007Stamps[0].Location(4096) + " (outside ACE clock fields)", stampVerdict.Difference, StringComparison.Ordinal);
 
-        // Deleted MSysObjects row rejecting control: only ACE 2007 has a recorded deleted-row repeat (pair-dao-Aa-aA).
-        FormatDescriptor d = FormatDescriptor.Jet4Family;
-        PageClockContext ctx;
-        byte[] page17;
-        int deletedDateCreate;
-        if (expectedFormat == FileFormat.Jet4)
+        // Deleted MSysObjects row rejecting control: only ACE 2007 (pair-dao-Aa-aA, delete-querydef-accdb) and Jet 4
+        // (delete-querydef-mdb) have recorded deleted-row repeats; ACE 2010/2016/2019 keep deleted rows strict.
+        if (expectedFormat != FileFormat.Jet4)
         {
-            EvidenceRecord mdbRec = LoadRecord(@"evidence\r-q34-ddl-sweep\create-one-long-mdb-dao\r-q34-ddl-sweep.create-one-long-mdb-dao.301b2b6bf0.a1.json");
-            ctx = BuildContextFromRecord(mdbRec);
-            byte[] srcPage17 = KeptPage(mdbRec.Capture!, 17 * 4096);
-            SlotView slot8 = DataPages.CheckedSlot(srcPage17, 8, d, out string? sf) ?? throw new InvalidOperationException(sf);
-            byte[] userRow = srcPage17.AsSpan(slot8.Start, slot8.Length).ToArray();
-            page17 = Bytes(MdbCatEmpty).AsSpan(17 * 4096, 4096).ToArray();
-            Assert.True(DataPages.TryAppendRow(page17, userRow, d, out byte appendedSlot, out string? f1), f1);
-            Assert.True(DataPages.TryDeleteSlot(page17, appendedSlot, d, out string? f2), f2);
-            deletedDateCreate = slot8.Start + 12;
-        }
-        else
-        {
-            ctx = BuildContextFromImage(WithHeaderProfile(Bytes(CatEmpty), jetSignature, versionCode));
+            PageClockContext ctx = BuildContextFromImage(WithHeaderProfile(Bytes(CatEmpty), jetSignature, versionCode));
             EvidenceRecord pairRec = LoadRecord(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json");
-            page17 = KeptPage(pairRec.Capture!, 17 * 4096);
-            deletedDateCreate = 2246;
-        }
+            byte[] page17 = KeptPage(pairRec.Capture!, 17 * 4096);
+            const int deletedDateCreate = 2246;
 
-        Assert.Equal(expectedFormat, ctx.Format);
-        ClockFieldMap sliceMap = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? sliceRefusal) ?? throw new InvalidOperationException(sliceRefusal);
-        Assert.DoesNotContain(sliceMap.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
-        byte[] flippedDeletedDate = (byte[])page17.Clone();
-        flippedDeletedDate[deletedDateCreate] ^= 0x01;
-        Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, flippedDeletedDate, ctx, ctx).EqualOutsideClock);
+            Assert.Equal(expectedFormat, ctx.Format);
+            ClockFieldMap sliceMap = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? sliceRefusal) ?? throw new InvalidOperationException(sliceRefusal);
+            Assert.DoesNotContain(sliceMap.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+            byte[] flippedDeletedDate = (byte[])page17.Clone();
+            flippedDeletedDate[deletedDateCreate] ^= 0x01;
+            Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, flippedDeletedDate, ctx, ctx).EqualOutsideClock);
+        }
     }
 
     [Fact]
@@ -1600,5 +1585,170 @@ public sealed class ClockNormalizationTests
         Assert.Equal("13 $.files[0].sha256", mixedBothMissing.FirstDifference!.Path);
         Assert.Contains(mixedBothMissing.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
             && n.Contains("expected and actual file are not available; compared by SHA-256 (expected: kept nativeRead pages do not verify against the recorded SHA-256; actual: no kept nativeRead pages)", StringComparison.Ordinal));
+    }
+
+    // calls.trace revision 13 (task tpjw): vacated MSysObjects prefix copies matched without Flags
+    // (which remains strictly compared) and intact deleted MSysObjects rows extended to Jet 4 (r-q39-querydef-bytes).
+
+    [Fact]
+    public void Revision_13_widens_vacated_copy_matching_across_flags_changes_and_jet4_deleted_rows()
+    {
+        Assert.True(CallTraceComparison.Rule.Revision >= 13);
+        PermittedNormalization n = Assert.Single(CallTraceComparison.Rule.Normalizations, n => n.Name == CallTraceComparison.ClockNormalization);
+        Assert.Contains("revision 13 (task tpjw)", n.Bounds, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("without Flags", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("r-q39-querydef-bytes/action-update-accdb", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("r-q39-querydef-bytes/delete-querydef-mdb", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("Flags", n.RejectingControl, StringComparison.Ordinal);
+        Assert.Contains("outside ACE 2007 and Jet 4", n.RejectingControl, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("r-q39-querydef-bytes/action-update-accdb", @"evidence\r-q39-querydef-bytes\action-update-accdb\r-q39-querydef-bytes.action-update-accdb.8e7f5b4220.a1.json", @"evidence\r-q39-querydef-bytes\action-update-accdb\r-q39-querydef-bytes.action-update-accdb.8e7f5b4220.a2.json")]
+    [InlineData("r-q39-querydef-bytes/delete-querydef-accdb", @"evidence\r-q39-querydef-bytes\delete-querydef-accdb\r-q39-querydef-bytes.delete-querydef-accdb.db8ef4b5e3.a1.json", @"evidence\r-q39-querydef-bytes\delete-querydef-accdb\r-q39-querydef-bytes.delete-querydef-accdb.db8ef4b5e3.a2.json")]
+    [InlineData("r-q39-querydef-bytes/delete-querydef-mdb", @"evidence\r-q39-querydef-bytes\delete-querydef-mdb\r-q39-querydef-bytes.delete-querydef-mdb.a015280b43.a1.json", @"evidence\r-q39-querydef-bytes\delete-querydef-mdb\r-q39-querydef-bytes.delete-querydef-mdb.a015280b43.a2.json")]
+    [InlineData("r-q39-querydef-bytes/delete-then-create-accdb", @"evidence\r-q39-querydef-bytes\delete-then-create-accdb\r-q39-querydef-bytes.delete-then-create-accdb.fcc6cab1bd.a1.json", @"evidence\r-q39-querydef-bytes\delete-then-create-accdb\r-q39-querydef-bytes.delete-then-create-accdb.fcc6cab1bd.a2.json")]
+    [InlineData("r-q39-querydef-bytes/long-expr-accdb", @"evidence\r-q39-querydef-bytes\long-expr-accdb\r-q39-querydef-bytes.long-expr-accdb.949653a945.a1.json", @"evidence\r-q39-querydef-bytes\long-expr-accdb\r-q39-querydef-bytes.long-expr-accdb.949653a945.a2.json")]
+    [InlineData("r-q39-querydef-bytes/pause-open-accdb", @"evidence\r-q39-querydef-bytes\pause-open-accdb\r-q39-querydef-bytes.pause-open-accdb.cbb8112dd3.a1.json", @"evidence\r-q39-querydef-bytes\pause-open-accdb\r-q39-querydef-bytes.pause-open-accdb.cbb8112dd3.a2.json")]
+    [InlineData("r-q39-querydef-bytes/select-params-accdb", @"evidence\r-q39-querydef-bytes\select-params-accdb\r-q39-querydef-bytes.select-params-accdb.906316404c.a1.json", @"evidence\r-q39-querydef-bytes\select-params-accdb\r-q39-querydef-bytes.select-params-accdb.906316404c.a2.json")]
+    [InlineData("r-q39-querydef-bytes/select-star-accdb", @"evidence\r-q39-querydef-bytes\select-star-accdb\r-q39-querydef-bytes.select-star-accdb.946dcf0cac.a1.json", @"evidence\r-q39-querydef-bytes\select-star-accdb\r-q39-querydef-bytes.select-star-accdb.946dcf0cac.a2.json")]
+    [InlineData("r-q39-querydef-bytes/select-star-mdb", @"evidence\r-q39-querydef-bytes\select-star-mdb\r-q39-querydef-bytes.select-star-mdb.283f71edff.a1.json", @"evidence\r-q39-querydef-bytes\select-star-mdb\r-q39-querydef-bytes.select-star-mdb.283f71edff.a2.json")]
+    [InlineData("r-q39-querydef-bytes/select-where-order-accdb", @"evidence\r-q39-querydef-bytes\select-where-order-accdb\r-q39-querydef-bytes.select-where-order-accdb.0b783f5bca.a1.json", @"evidence\r-q39-querydef-bytes\select-where-order-accdb\r-q39-querydef-bytes.select-where-order-accdb.0b783f5bca.a2.json")]
+    [InlineData("r-q39-querydef-bytes/sql-put-accdb", @"evidence\r-q39-querydef-bytes\sql-put-accdb\r-q39-querydef-bytes.sql-put-accdb.bfdacbcab8.a1.json", @"evidence\r-q39-querydef-bytes\sql-put-accdb\r-q39-querydef-bytes.sql-put-accdb.bfdacbcab8.a2.json")]
+    [InlineData("r-q39-querydef-bytes/sql-put-mdb", @"evidence\r-q39-querydef-bytes\sql-put-mdb\r-q39-querydef-bytes.sql-put-mdb.be72c78001.a1.json", @"evidence\r-q39-querydef-bytes\sql-put-mdb\r-q39-querydef-bytes.sql-put-mdb.be72c78001.a2.json")]
+    [InlineData("r-q39-querydef-bytes/sql-put-type-change-accdb", @"evidence\r-q39-querydef-bytes\sql-put-type-change-accdb\r-q39-querydef-bytes.sql-put-type-change-accdb.eb528279fd.a1.json", @"evidence\r-q39-querydef-bytes\sql-put-type-change-accdb\r-q39-querydef-bytes.sql-put-type-change-accdb.eb528279fd.a2.json")]
+    [InlineData("r-q39-querydef-bytes/two-queries-accdb", @"evidence\r-q39-querydef-bytes\two-queries-accdb\r-q39-querydef-bytes.two-queries-accdb.0266892fc9.a1.json", @"evidence\r-q39-querydef-bytes\two-queries-accdb\r-q39-querydef-bytes.two-queries-accdb.0266892fc9.a2.json")]
+    [InlineData("r-q39-querydef-bytes/two-queries-mdb", @"evidence\r-q39-querydef-bytes\two-queries-mdb\r-q39-querydef-bytes.two-queries-mdb.48a024f847.a1.json", @"evidence\r-q39-querydef-bytes\two-queries-mdb\r-q39-querydef-bytes.two-queries-mdb.48a024f847.a2.json")]
+    [InlineData("r-q39-querydef-bytes/union-accdb", @"evidence\r-q39-querydef-bytes\union-accdb\r-q39-querydef-bytes.union-accdb.f991d162d9.a1.json", @"evidence\r-q39-querydef-bytes\union-accdb\r-q39-querydef-bytes.union-accdb.f991d162d9.a2.json")]
+    public void R_q39_all_16_retained_repeats_match_in_both_directions_for_files_and_traces(string caseId, string a1Path, string a2Path)
+    {
+        EvidenceRecord a1 = LoadRecord(a1Path);
+        EvidenceRecord a2 = LoadRecord(a2Path);
+
+        // Compare every full-file kept read pair directly with FileImageComparison.
+        byte[][] a1Reads = [.. a1.Capture!.Events.OfType<HandleEvent>().Where(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Select(h => Convert.FromHexString(h.Bytes!))];
+        byte[][] a2Reads = [.. a2.Capture!.Events.OfType<HandleEvent>().Where(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Select(h => Convert.FromHexString(h.Bytes!))];
+        Assert.Equal(a1Reads.Length, a2Reads.Length);
+        Assert.True(a1Reads.Length >= 2);
+        for (int i = 0; i < a1Reads.Length; i++)
+        {
+            FileImageVerdict fwd = FileImageComparison.Compare(a1Reads[i], a2Reads[i]);
+            Assert.True(fwd.EqualOutsideClock, $"{caseId} read[{i}] a1->a2: {fwd.Difference} ({fwd.Expected} / {fwd.Actual})");
+            FileImageVerdict rev = FileImageComparison.Compare(a2Reads[i], a1Reads[i]);
+            Assert.True(rev.EqualOutsideClock, $"{caseId} read[{i}] a2->a1: {rev.Difference} ({rev.Expected} / {rev.Actual})");
+        }
+
+        // Compare full call traces in both directions using kept nativeRead reconstruction.
+        ComparisonRecord t1 = CallTraceComparison.Compare(caseId, a1.RecordId, a1.Capture!, a2.RecordId, a2.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.True(t1.Status == ComparisonStatus.Matched, $"{caseId} trace a1->a2: {t1.FirstDifference?.Path} {t1.FirstDifference?.Expected} / {t1.FirstDifference?.Actual}");
+        Assert.Empty(t1.Differences);
+
+        ComparisonRecord t2 = CallTraceComparison.Compare(caseId, a2.RecordId, a2.Capture!, a1.RecordId, a1.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.True(t2.Status == ComparisonStatus.Matched, $"{caseId} trace a2->a1: {t2.FirstDifference?.Path} {t2.FirstDifference?.Expected} / {t2.FirstDifference?.Actual}");
+        Assert.Empty(t2.Differences);
+    }
+
+    [Theory]
+    [InlineData(@"evidence\r-q39-querydef-bytes\action-update-accdb\r-q39-querydef-bytes.action-update-accdb.8e7f5b4220.a1.json", @"evidence\r-q39-querydef-bytes\action-update-accdb\r-q39-querydef-bytes.action-update-accdb.8e7f5b4220.a2.json", 2160, 2216, 2298, 0x30)]
+    [InlineData(@"evidence\r-q39-querydef-bytes\pause-open-accdb\r-q39-querydef-bytes.pause-open-accdb.cbb8112dd3.a1.json", @"evidence\r-q39-querydef-bytes\pause-open-accdb\r-q39-querydef-bytes.pause-open-accdb.cbb8112dd3.a2.json", 2160, 2216, 2298, 0x30)]
+    [InlineData(@"evidence\r-q39-querydef-bytes\union-accdb\r-q39-querydef-bytes.union-accdb.f991d162d9.a1.json", @"evidence\r-q39-querydef-bytes\union-accdb\r-q39-querydef-bytes.union-accdb.f991d162d9.a2.json", 2156, 2212, 2298, 0x80)]
+    [InlineData(@"evidence\r-q39-querydef-bytes\sql-put-type-change-accdb\r-q39-querydef-bytes.sql-put-type-change-accdb.eb528279fd.a1.json", @"evidence\r-q39-querydef-bytes\sql-put-type-change-accdb\r-q39-querydef-bytes.sql-put-type-change-accdb.eb528279fd.a2.json", 2164, 2220, 2298, 0x30)]
+    [InlineData(@"evidence\r-q39-querydef-bytes\action-update-mdb\r-q39-querydef-bytes.action-update-mdb.fa6e0383d6.a1.json", null, 3226, 3282, 3364, 0x30)]
+    public void Vacated_MSysObjects_copy_after_Flags_change_normalizes_clock_bytes_and_still_compares_Flags(
+        string a1Path, string? a2Path, int vacatedStart, int liveStart, int liveEnd, int expectedLiveFlags)
+    {
+        byte[] a1Full = Convert.FromHexString(LoadRecord(a1Path).Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        PageClockContext ctx = BuildContextFromImage(a1Full);
+        byte[] page17 = a1Full.AsSpan(17 * 4096, 4096).ToArray();
+
+        // Confirm the record has vacated Flags == 0 and live Flags == expectedLiveFlags.
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(page17.AsSpan(vacatedStart + 28)));
+        Assert.Equal(expectedLiveFlags, BinaryPrimitives.ReadInt32LittleEndian(page17.AsSpan(liveStart + 28)));
+
+        ClockFieldMap map = AceClockFields.FindInSlice(17 * 4096, page17, ctx, out string? refusal) ?? throw new InvalidOperationException(refusal);
+        long[] vacatedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("vacated copy", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+        Assert.Equal([vacatedStart + 12L, vacatedStart + 20L], vacatedDates);
+
+        if (a2Path is not null)
+        {
+            byte[] a2Full = Convert.FromHexString(LoadRecord(a2Path).Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+            byte[] a2Page17 = a2Full.AsSpan(17 * 4096, 4096).ToArray();
+            PageClockContext ctx2 = BuildContextFromImage(a2Full);
+            FileImageVerdict fwd = FileImageComparison.CompareSlice(17 * 4096, page17, a2Page17, ctx, ctx2);
+            Assert.True(fwd.EqualOutsideClock, fwd.Difference);
+            Assert.Contains(fwd.Notes, n => n.StartsWith("CatalogDate (set aside):", StringComparison.Ordinal)
+                && n.Contains($"page 17 offset 0x{vacatedStart + 12:X}", StringComparison.Ordinal));
+            Assert.True(FileImageComparison.CompareSlice(17 * 4096, a2Page17, page17, ctx2, ctx).EqualOutsideClock);
+        }
+
+        // Rejecting control: every single byte in [vacatedStart, liveEnd) outside the 16+16 clock bytes — explicitly
+        // including all 4 bytes of vacated Flags and live Flags, plus C, Id, ParentId, Type, Name, Owner, LvProp — and
+        // free-gap bytes below vacatedStart must still mismatch.
+        foreach (int off in Enumerable.Range(vacatedStart, liveEnd - vacatedStart)
+            .Where(o => !(o >= vacatedStart + 12 && o < vacatedStart + 28) && !(o >= liveStart + 12 && o < liveStart + 28))
+            .Concat([60, 1000, vacatedStart - 1]))
+        {
+            byte[] bad = (byte[])page17.Clone();
+            bad[off] ^= 0x01;
+            FileImageVerdict v = FileImageComparison.CompareSlice(17 * 4096, page17, bad, ctx, ctx);
+            Assert.False(v.EqualOutsideClock, $"byte {off} (0x{off:X}) in vacated/live MSysObjects row was unexpectedly masked");
+            if (off >= vacatedStart + 28 && off < vacatedStart + 32)
+            {
+                Assert.Contains($"page 17 offset 0x{off:X} (outside ACE clock fields)", v.Difference, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
+    public void Jet4_deleted_MSysObjects_row_and_vacated_copy_normalize_clock_bytes_and_reject_other_bytes()
+    {
+        // evidence/r-q39-querydef-bytes/delete-querydef-mdb (Jet 4): at after-delete-open (read[2]) and after-s2-close
+        // (read[3]), slot 9 is deleted at minStart = 3365, leaving intact deleted row [3286, 3365) (DateCreate 3298,
+        // DateUpdate 3306, Flags 3314, Owner 3322) and vacated copy [3230, 3286) (DateCreate 3242, DateUpdate 3250,
+        // Flags 3258, Owner 3266).
+        EvidenceRecord a1 = LoadRecord(@"evidence\r-q39-querydef-bytes\delete-querydef-mdb\r-q39-querydef-bytes.delete-querydef-mdb.a015280b43.a1.json");
+        EvidenceRecord a2 = LoadRecord(@"evidence\r-q39-querydef-bytes\delete-querydef-mdb\r-q39-querydef-bytes.delete-querydef-mdb.a015280b43.a2.json");
+        byte[][] a1Reads = [.. a1.Capture!.Events.OfType<HandleEvent>().Where(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Select(h => Convert.FromHexString(h.Bytes!))];
+        byte[][] a2Reads = [.. a2.Capture!.Events.OfType<HandleEvent>().Where(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Select(h => Convert.FromHexString(h.Bytes!))];
+        Assert.Equal(4, a1Reads.Length);
+        Assert.Equal(4, a2Reads.Length);
+
+        foreach (int readIndex in new[] { 2, 3 })
+        {
+            PageClockContext ctx1 = BuildContextFromImage(a1Reads[readIndex]);
+            PageClockContext ctx2 = BuildContextFromImage(a2Reads[readIndex]);
+            Assert.Equal(FileFormat.Jet4, ctx1.Format);
+            byte[] p17_1 = a1Reads[readIndex].AsSpan(17 * 4096, 4096).ToArray();
+            byte[] p17_2 = a2Reads[readIndex].AsSpan(17 * 4096, 4096).ToArray();
+
+            ClockFieldMap map = AceClockFields.FindInSlice(17 * 4096, p17_1, ctx1, out string? refusal) ?? throw new InvalidOperationException(refusal);
+            long[] deletedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("deleted row", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+            long[] vacatedDates = [.. map.Fields.Where(f => f.Kind == ClockFieldKind.CatalogDate && f.Where.Contains("vacated copy", StringComparison.Ordinal)).Select(f => f.Offset - (17 * 4096))];
+            Assert.Equal([3298L, 3306L], deletedDates);
+            Assert.Equal([3242L, 3250L], vacatedDates);
+            Assert.Contains(map.Fields, f => f.Kind == ClockFieldKind.MaskedSid && f.Offset == (17 * 4096) + 3322 && f.Where.Contains("deleted row", StringComparison.Ordinal));
+            Assert.Contains(map.Fields, f => f.Kind == ClockFieldKind.MaskedSid && f.Offset == (17 * 4096) + 3266 && f.Where.Contains("vacated copy", StringComparison.Ordinal));
+
+            FileImageVerdict fwd = FileImageComparison.CompareSlice(17 * 4096, p17_1, p17_2, ctx1, ctx2);
+            Assert.True(fwd.EqualOutsideClock, fwd.Difference);
+            Assert.Contains(fwd.Notes, n => n.Contains("page 17 offset 0xCAA", StringComparison.Ordinal) && n.Contains("page 17 offset 0xCE2", StringComparison.Ordinal));
+            Assert.True(FileImageComparison.CompareSlice(17 * 4096, p17_2, p17_1, ctx2, ctx1).EqualOutsideClock);
+        }
+
+        // Rejecting control on after-s2-close page 17: every byte in [3230, 3365) outside the 16+16 clock bytes
+        // (including Flags, Name, Owner, LvProp, variable trailer, null mask) and gap bytes below 3230 must still differ.
+        PageClockContext finalCtx = BuildContextFromImage(a1Reads[3]);
+        byte[] finalPage17 = a1Reads[3].AsSpan(17 * 4096, 4096).ToArray();
+        foreach (int off in Enumerable.Range(3230, 3365 - 3230)
+            .Where(o => !(o >= 3242 && o < 3258) && !(o >= 3298 && o < 3314))
+            .Concat([40, 1000, 3229]))
+        {
+            byte[] bad = (byte[])finalPage17.Clone();
+            bad[off] ^= 0x01;
+            FileImageVerdict v = FileImageComparison.CompareSlice(17 * 4096, finalPage17, bad, finalCtx, finalCtx);
+            Assert.False(v.EqualOutsideClock, $"Jet 4 byte {off} (0x{off:X}) in deleted/vacated MSysObjects row was unexpectedly masked");
+        }
     }
 }

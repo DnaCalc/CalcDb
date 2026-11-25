@@ -11,8 +11,8 @@ public sealed record FileImageVerdict(bool EqualOutsideClock, string? Difference
 
 /// <summary>
 /// Compares two database images (or kept page slices) byte for byte except ACE's own clock (W-01/corpus-comparison,
-/// tasks c4rv, 4t24 and 6qw5; calls.trace revisions 8, 10 and 11): the clock fields of each side are derived from its
-/// own structure (<see cref="AceClockFields"/>), both sides must share the same profile and field list, and the
+/// tasks c4rv, 4t24, 6qw5, and tpjw; calls.trace revisions 8, 10, 11, and 13): the clock fields of each side are derived
+/// from its own structure (<see cref="AceClockFields"/>), both sides must share the same profile and field list, and the
 /// clock-normalized bytes must be equal. Where a side's fields cannot be derived or profiles disagree, the bytes are
 /// compared strictly. This normalizes ACE's nondeterminism; it is not an accepted difference.
 /// </summary>
