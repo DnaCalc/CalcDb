@@ -1,0 +1,153 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q42-field-rule-and/edge-forms-accdb",
+  "bookRefs": ["R-EXPR-1", "EXPR-MUTATION", "Branch D", "II-10"],
+  "description": "ACCDB edge-form discriminators: case-insensitivity of <> 'a' And <> 'b' ('A','B'); TableDef.ValidationRule refusal of implied-operand rules; Is Not Null, Is Null, Not Is Null; diagnosis of <> 'a' <> 'b', <> 'a' = False, And <> 'b', And <> 5, = 1 Eqv = 1, = 1 Imp = 2.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-plain-accdb.accdb",
+      "sha256": "5bd002eaf9f69ab1719d0ebf7e263e6853327f1c42c82f906966dca4854cb0f1",
+      "length": 184320,
+      "provenance": "r-q37-valrule-put.create-plain-accdb.b33bf5b149.a1 qk1-b33bf5b149b418c1a30a0187e3bf8007a04a427e1e3333b49d827f85b10676db output:r-q37-plain-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "T" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And <> 'b'" }] },
+    { "op": "invoke", "target": "td", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a'" }] },
+    { "op": "invoke", "target": "td", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fs" },
+    { "op": "invoke", "target": "fs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "fw" },
+    { "op": "invoke", "target": "fw", "member": "AllowZeroLength", "kind": "propertyPut", "args": [{ "type": "bool", "value": true }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And <> 'b'" }] },
+    { "op": "release", "target": "fw" }, { "op": "release", "target": "fs" }, { "op": "release", "target": "td" }, { "op": "release", "target": "tds" },
+
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E1 (ID LONG CONSTRAINT PKE1 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E2 (ID LONG CONSTRAINT PKE2 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E3 (ID LONG CONSTRAINT PKE3 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E4 (ID LONG CONSTRAINT PKE4 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E5 (ID LONG CONSTRAINT PKE5 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E6 (ID LONG CONSTRAINT PKE6 PRIMARY KEY, W TEXT(50))" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E7 (ID LONG CONSTRAINT PKE7 PRIMARY KEY, V LONG)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E8 (ID LONG CONSTRAINT PKE8 PRIMARY KEY, V LONG)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "CREATE TABLE E9 (ID LONG CONSTRAINT PKE9 PRIMARY KEY, V LONG)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds2" },
+    { "op": "invoke", "target": "tds2", "member": "Refresh", "kind": "method", "args": [] },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E1" }], "bind": "t1" },
+    { "op": "invoke", "target": "t1", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f1s" },
+    { "op": "invoke", "target": "f1s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f1" },
+    { "op": "invoke", "target": "f1", "member": "AllowZeroLength", "kind": "propertyPut", "args": [{ "type": "bool", "value": true }] },
+    { "op": "invoke", "target": "f1", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Is Not Null" }] },
+    { "op": "release", "target": "f1" }, { "op": "release", "target": "f1s" }, { "op": "release", "target": "t1" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E2" }], "bind": "t2" },
+    { "op": "invoke", "target": "t2", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f2s" },
+    { "op": "invoke", "target": "f2s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f2" },
+    { "op": "invoke", "target": "f2", "member": "AllowZeroLength", "kind": "propertyPut", "args": [{ "type": "bool", "value": true }] },
+    { "op": "invoke", "target": "f2", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Is Null" }] },
+    { "op": "release", "target": "f2" }, { "op": "release", "target": "f2s" }, { "op": "release", "target": "t2" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E3" }], "bind": "t3" },
+    { "op": "invoke", "target": "t3", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f3s" },
+    { "op": "invoke", "target": "f3s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f3" },
+    { "op": "invoke", "target": "f3", "member": "AllowZeroLength", "kind": "propertyPut", "args": [{ "type": "bool", "value": true }] },
+    { "op": "invoke", "target": "f3", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Not Is Null" }] },
+    { "op": "release", "target": "f3" }, { "op": "release", "target": "f3s" }, { "op": "release", "target": "t3" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E4" }], "bind": "t4" },
+    { "op": "invoke", "target": "t4", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f4s" },
+    { "op": "invoke", "target": "f4s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f4" },
+    { "op": "invoke", "target": "f4", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' = False" }] },
+    { "op": "release", "target": "f4" }, { "op": "release", "target": "f4s" }, { "op": "release", "target": "t4" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E5" }], "bind": "t5" },
+    { "op": "invoke", "target": "t5", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f5s" },
+    { "op": "invoke", "target": "f5s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f5" },
+    { "op": "invoke", "target": "f5", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' <> 'b'" }] },
+    { "op": "invoke", "target": "f5", "member": "ValidationRule", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "f5" }, { "op": "release", "target": "f5s" }, { "op": "release", "target": "t5" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E6" }], "bind": "t6" },
+    { "op": "invoke", "target": "t6", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f6s" },
+    { "op": "invoke", "target": "f6s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "f6" },
+    { "op": "invoke", "target": "f6", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "And <> 'b'" }] },
+    { "op": "invoke", "target": "f6", "member": "ValidationRule", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "f6" }, { "op": "release", "target": "f6s" }, { "op": "release", "target": "t6" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E7" }], "bind": "t7" },
+    { "op": "invoke", "target": "t7", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f7s" },
+    { "op": "invoke", "target": "f7s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "f7" },
+    { "op": "invoke", "target": "f7", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "And <> 5" }] },
+    { "op": "release", "target": "f7" }, { "op": "release", "target": "f7s" }, { "op": "release", "target": "t7" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E8" }], "bind": "t8" },
+    { "op": "invoke", "target": "t8", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f8s" },
+    { "op": "invoke", "target": "f8s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "f8" },
+    { "op": "invoke", "target": "f8", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> 0 Eqv < 10" }] },
+    { "op": "release", "target": "f8" }, { "op": "release", "target": "f8s" }, { "op": "release", "target": "t8" },
+
+    { "op": "invoke", "target": "tds2", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "E9" }], "bind": "t9" },
+    { "op": "invoke", "target": "t9", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "f9s" },
+    { "op": "invoke", "target": "f9s", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "f9" },
+    { "op": "invoke", "target": "f9", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> 0 Imp < 10" }] },
+    { "op": "release", "target": "f9" }, { "op": "release", "target": "f9s" }, { "op": "release", "target": "t9" },
+
+    { "op": "release", "target": "tds2" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] }, { "op": "release", "target": "db" },
+
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db2" },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO T (ID, W) VALUES (1, 'A')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO T (ID, W) VALUES (2, 'B')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO T (ID, W) VALUES (3, 'Z')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E1 VALUES (1, Null)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E1 VALUES (2, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E1 VALUES (3, '')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E2 VALUES (1, Null)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E2 VALUES (2, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E2 VALUES (3, '')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E3 VALUES (1, Null)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E3 VALUES (2, 'a')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E4 VALUES (1, 'a')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E4 VALUES (2, 'z')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E5 VALUES (1, '0')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E5 VALUES (2, '-1')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E6 VALUES (1, 'And')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E6 VALUES (2, 'b')" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E6 VALUES (3, '')" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E7 VALUES (1, 0)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E7 VALUES (2, 1)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E7 VALUES (3, 5)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E7 VALUES (4, -1)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E8 VALUES (1, 5)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E8 VALUES (2, 0)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E8 VALUES (3, 15)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E9 VALUES (1, 5)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E9 VALUES (2, 0)" }, { "type": "i4", "value": 128 }] },
+    { "op": "invoke", "target": "db2", "member": "Execute", "kind": "method", "args": [{ "type": "bstr", "text": "INSERT INTO E9 VALUES (3, 15)" }, { "type": "i4", "value": 128 }] },
+
+    { "op": "invoke", "target": "db2", "member": "Close", "kind": "method", "args": [] }, { "op": "release", "target": "db2" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "release", "target": "eng" }
+  ]
+}
