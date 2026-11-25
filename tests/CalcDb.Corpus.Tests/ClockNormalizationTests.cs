@@ -1340,4 +1340,265 @@ public sealed class ClockNormalizationTests
         Assert.Contains(trace.Notes, n => n.Contains("files[0]", StringComparison.Ordinal) && n.Contains(expectedMismatch, StringComparison.Ordinal));
         Assert.Contains(trace.Notes, n => n.Contains("read work/new.accdb@69632", StringComparison.Ordinal) && n.Contains(expectedMismatch, StringComparison.Ordinal));
     }
+
+    // calls.trace revision 12 (task q3mv): direct full-coverage kept nativeRead reconstruction and
+    // post-release FilesEvent observation scan (r-q38-mdb-new-image).
+
+    [Fact]
+    public void Revision_12_extends_clock_normalization_to_full_inline_kept_reads_and_post_release_observations()
+    {
+        Assert.True(CallTraceComparison.Rule.Revision >= 12);
+        PermittedNormalization n = Assert.Single(CallTraceComparison.Rule.Normalizations, n => n.Name == CallTraceComparison.ClockNormalization);
+        Assert.Contains("revision 12 (task q3mv)", n.Bounds, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("r-q38-mdb-new-image/eng-general-full", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ReleaseEvents", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("do not cover the whole file", n.RejectingControl, StringComparison.Ordinal);
+        Assert.Contains("InvokeEvent", n.RejectingControl, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a1.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a2.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a2.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a1.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a1.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a3.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a3.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a1.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a2.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a3.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-general-full", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a3.json", @"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a2.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-langid-only", @"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a1.json", @"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a2.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/eng-langid-only", @"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a2.json", @"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a1.json", "13", "16")]
+    [InlineData("r-q38-mdb-new-image/ws-general-full", @"evidence\r-q38-mdb-new-image\ws-general-full\r-q38-mdb-new-image.ws-general-full.d3241de4de.a1.json", @"evidence\r-q38-mdb-new-image\ws-general-full\r-q38-mdb-new-image.ws-general-full.d3241de4de.a2.json", "14", "18")]
+    [InlineData("r-q38-mdb-new-image/ws-general-full", @"evidence\r-q38-mdb-new-image\ws-general-full\r-q38-mdb-new-image.ws-general-full.d3241de4de.a2.json", @"evidence\r-q38-mdb-new-image\ws-general-full\r-q38-mdb-new-image.ws-general-full.d3241de4de.a1.json", "14", "18")]
+    public void R_q38_retained_repeats_match_in_both_directions_without_file_artifacts(
+        string caseId, string firstPath, string secondPath, string afterDbClosePath, string afterClosePath)
+    {
+        EvidenceRecord first = LoadRecord(firstPath);
+        EvidenceRecord second = LoadRecord(secondPath);
+        // Neither side has a retained file artifact: both files[after-db-close] (across release eng/ws +
+        // files[after-close]) and files[after-close] reconstruct directly from pg_close's kept nativeRead pages.
+        ComparisonRecord verdict = CallTraceComparison.Compare(caseId,
+            first.RecordId, first.Capture!, second.RecordId, second.Capture!, candidateModule: null,
+            oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Matched, verdict.Status);
+        Assert.Empty(verdict.Differences);
+        Assert.Contains(verdict.Notes, n => n.StartsWith($"ace-clock-fields {afterDbClosePath} files[0] ", StringComparison.Ordinal) && n.Contains("CreationDate", StringComparison.Ordinal));
+        Assert.Contains(verdict.Notes, n => n.StartsWith($"ace-clock-fields {afterClosePath} files[0] ", StringComparison.Ordinal) && n.Contains("CreationDate", StringComparison.Ordinal));
+        Assert.Contains(verdict.Notes, n => n.Contains(" read work/r-q38-", StringComparison.Ordinal) && n.Contains("CreationDate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R_q38_candidate_reconstruction_handles_direct_multi_chunk_reads_and_rejects_non_clock_byte()
+    {
+        EvidenceRecord oracleRec = LoadRecord(@"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a1.json");
+        EvidenceRecord repeatRec = LoadRecord(@"evidence\r-q38-mdb-new-image\eng-general-full\r-q38-mdb-new-image.eng-general-full.941ff47765.a2.json");
+        Capture oracle = oracleRec.Capture!;
+        byte[] repeatBytes = Convert.FromHexString(repeatRec.Capture!.Events.OfType<HandleEvent>().Single(h => h.Op == "read" && h.Success).Bytes!);
+        string repeatSha = Sha(repeatBytes);
+
+        static Capture AsCandidate(Capture source, byte[] fileBytes)
+        {
+            string sha = Sha(fileBytes);
+            return source with
+            {
+                AttemptId = source.AttemptId + ".calcdb",
+                Environment = source.Environment with { Implementation = "calcdb" },
+                Events = [.. source.Events.Select<CaptureEvent, CaptureEvent>(e => e switch
+                {
+                    ModulesEvent m => m with { ModulePaths = [@"C:\deploy\CalcDb.dll"] },
+                    FilesEvent fe when fe.Files.Count == 1 && fe.Files[0].Sha256 is not null =>
+                        fe with { Files = [fe.Files[0] with { Length = fileBytes.Length, Sha256 = sha }] },
+                    HandleEvent { Op: "read", Success: true } h => h with { BytesRead = fileBytes.Length, Bytes = Convert.ToHexStringLower(fileBytes), BytesSha256 = sha },
+                    _ => e,
+                })],
+            };
+        }
+
+        // Candidate matches both when candidateFiles supplies the created MDB and when neither resolver supplies it.
+        Capture candidate = AsCandidate(repeatRec.Capture!, repeatBytes);
+        ComparisonRecord withCandFile = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-general-full",
+            oracleRec.RecordId, oracle, candidate.AttemptId, candidate, "CalcDb.dll",
+            oracleFiles: StoreLookup,
+            candidateFiles: sha => sha == repeatSha ? repeatBytes : StoreLookup(sha));
+        Assert.Equal(ComparisonStatus.Matched, withCandFile.Status);
+        Assert.Empty(withCandFile.Differences);
+
+        ComparisonRecord inlineOnly = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-general-full",
+            oracleRec.RecordId, oracle, candidate.AttemptId, candidate, "CalcDb.dll",
+            oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Matched, inlineOnly.Status);
+
+        // Multi-chunk direct assembly: split the 77,824-byte pg_close read into two adjacent slices [0, 32768) and [32768, 77824).
+        static Capture SplitPgClose(Capture cap)
+        {
+            var list = new List<CaptureEvent>(cap.Events.Count + 1);
+            foreach (CaptureEvent ev in cap.Events)
+            {
+                if (ev is HandleEvent { Op: "read", Success: true, Bytes: { } hex } h)
+                {
+                    byte[] full = Convert.FromHexString(hex);
+                    byte[] part1 = full[..32768];
+                    byte[] part2 = full[32768..];
+                    list.Add(h with { Offset = 0, BytesRead = part1.Length, Bytes = Convert.ToHexStringLower(part1), BytesSha256 = Sha(part1) });
+                    list.Add(h with { Seq = h.Seq + 100, ProgramPath = h.ProgramPath + ".2", Offset = 32768, BytesRead = part2.Length, Bytes = Convert.ToHexStringLower(part2), BytesSha256 = Sha(part2) });
+                }
+                else
+                {
+                    list.Add(ev);
+                }
+            }
+            return cap with { Events = list };
+        }
+        ComparisonRecord chunked = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-general-full",
+            oracleRec.RecordId, SplitPgClose(oracle), candidate.AttemptId, SplitPgClose(candidate), "CalcDb.dll",
+            oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Matched, chunked.Status);
+
+        // Rejecting control: flipping 1 non-clock byte (page 0 offset 0x3C) in candidate fails at 13 $.files[0].sha256.
+        byte[] badBytes = (byte[])repeatBytes.Clone();
+        badBytes[0x3C] ^= 0x01;
+        string badSha = Sha(badBytes);
+        Capture badCandidate = AsCandidate(repeatRec.Capture!, badBytes);
+        ComparisonRecord bad = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-general-full",
+            oracleRec.RecordId, oracle, badCandidate.AttemptId, badCandidate, "CalcDb.dll",
+            oracleFiles: StoreLookup,
+            candidateFiles: sha => sha == badSha ? badBytes : StoreLookup(sha));
+        Assert.Equal(ComparisonStatus.Mismatched, bad.Status);
+        Assert.Equal("13 $.files[0].sha256", bad.FirstDifference!.Path);
+        Assert.Contains("page 0 offset 0x3C (outside ACE clock fields)", bad.FirstDifference.Actual, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Kept_read_reconstruction_rejects_partial_coverage_sha_mismatch_and_intervening_events()
+    {
+        EvidenceRecord recA = LoadRecord(@"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a1.json");
+        EvidenceRecord recB = LoadRecord(@"evidence\r-q38-mdb-new-image\eng-langid-only\r-q38-mdb-new-image.eng-langid-only.d90b83298b.a2.json");
+        Capture oracle = recA.Capture!;
+        Capture other = recB.Capture!;
+        byte[] oracleBytes = Convert.FromHexString(oracle.Events.OfType<HandleEvent>().Single(h => h.Op == "read" && h.Success).Bytes!);
+
+        static Capture ReplacePgClose(Capture cap, Func<HandleEvent, IEnumerable<CaptureEvent>> replace) => cap with
+        {
+            Events = [.. cap.Events.SelectMany<CaptureEvent, CaptureEvent>(e => e is HandleEvent { Op: "read", Success: true } h ? replace(h) : [e])],
+        };
+
+        // (a) Partial coverage (truncated tail: last page omitted on both sides, no base file) -> names partial coverage in note.
+        static Capture TruncateLastPage(Capture cap) => ReplacePgClose(cap, h =>
+        {
+            byte[] truncated = Convert.FromHexString(h.Bytes!)[..^4096];
+            return [h with { BytesRead = truncated.Length, Bytes = Convert.ToHexStringLower(truncated), BytesSha256 = Sha(truncated) }];
+        });
+        ComparisonRecord truncVerdict = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, TruncateLastPage(oracle), recB.RecordId, TruncateLastPage(other), candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, truncVerdict.Status);
+        Assert.Equal("13 $.files[0].sha256", truncVerdict.FirstDifference!.Path);
+        Assert.Contains(truncVerdict.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("are not available; compared by SHA-256 (kept nativeRead pages do not cover the file)", StringComparison.Ordinal));
+
+        // (b) Partial coverage (internal gap: page 1 omitted between [0, 4096) and [8192, 77824) on both sides so
+        // neither has a full file to act as otherFullFile) -> names partial coverage in note.
+        static Capture OmitPage1(Capture cap) => ReplacePgClose(cap, h =>
+        {
+            byte[] full = Convert.FromHexString(h.Bytes!);
+            byte[] p0 = full[..4096];
+            byte[] rest = full[8192..];
+            return
+            [
+                h with { Offset = 0, BytesRead = p0.Length, Bytes = Convert.ToHexStringLower(p0), BytesSha256 = Sha(p0) },
+                h with { Seq = h.Seq + 100, ProgramPath = h.ProgramPath + ".2", Offset = 8192, BytesRead = rest.Length, Bytes = Convert.ToHexStringLower(rest), BytesSha256 = Sha(rest) },
+            ];
+        });
+        ComparisonRecord gapVerdict = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, OmitPage1(oracle), recB.RecordId, OmitPage1(other), candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, gapVerdict.Status);
+        Assert.Equal("13 $.files[0].sha256", gapVerdict.FirstDifference!.Path);
+        Assert.Contains(gapVerdict.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("kept nativeRead pages do not cover the file", StringComparison.Ordinal));
+
+        // (c) Oversized slice (extends past file length) does not satisfy full coverage.
+        byte[] oversized = new byte[oracleBytes.Length + 4096];
+        oracleBytes.CopyTo(oversized, 0);
+        Capture oracleOversized = ReplacePgClose(oracle, h => [h with { BytesRead = oversized.Length, Bytes = Convert.ToHexStringLower(oversized), BytesSha256 = Sha(oversized) }]);
+        ComparisonRecord overVerdict = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleOversized, recB.RecordId, other, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, overVerdict.Status);
+        Assert.Equal("13 $.files[0].sha256", overVerdict.FirstDifference!.Path);
+        Assert.Contains(overVerdict.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("kept nativeRead pages do not cover the file", StringComparison.Ordinal));
+
+        // (d) Full coverage whose bytes do not hash to the recorded SHA-256 -> names SHA mismatch in note.
+        byte[] wrongBytes = (byte[])oracleBytes.Clone();
+        wrongBytes[0x3C] ^= 0xFF;
+        Capture oracleWrongSha = ReplacePgClose(oracle, h => [h with { Bytes = Convert.ToHexStringLower(wrongBytes), BytesSha256 = Sha(wrongBytes) }]);
+        ComparisonRecord shaVerdict = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleWrongSha, recB.RecordId, other, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, shaVerdict.Status);
+        Assert.Equal("13 $.files[0].sha256", shaVerdict.FirstDifference!.Path);
+        Assert.Contains(shaVerdict.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("are not available; compared by SHA-256 (kept nativeRead pages do not verify against the recorded SHA-256)", StringComparison.Ordinal));
+
+        // (e) Intervening InvokeEvent between files[after-db-close] and files[after-close] stops the scan.
+        static Capture InsertInvokeBeforeAfterClose(Capture cap)
+        {
+            var list = new List<CaptureEvent>(cap.Events.Count + 1);
+            foreach (CaptureEvent ev in cap.Events)
+            {
+                if (ev is FilesEvent { Label: "after-close" })
+                {
+                    list.Add(new InvokeEvent
+                    {
+                        Seq = ev.Seq - 1,
+                        ProgramPath = "14b",
+                        Target = "eng",
+                        Member = "Version",
+                        Flags = 2,
+                        Args = [],
+                        InvokeHresult = EvidenceSlim.SOk,
+                    });
+                }
+                list.Add(ev);
+            }
+            return cap with { Events = list };
+        }
+        ComparisonRecord invokeBlocked = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, InsertInvokeBeforeAfterClose(oracle), recB.RecordId, InsertInvokeBeforeAfterClose(other),
+            candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, invokeBlocked.Status);
+        Assert.Equal("13 $.files[0].sha256", invokeBlocked.FirstDifference!.Path);
+        string note13 = Assert.Single(invokeBlocked.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal));
+        Assert.EndsWith("are not available; compared by SHA-256", note13, StringComparison.Ordinal);
+
+        // (f) Intervening FilesEvent where the file changed hash or is absent stops the scan for path 13.
+        Capture oracleChangedAfterClose = oracle with
+        {
+            Events = [.. oracle.Events.Select<CaptureEvent, CaptureEvent>(e => e is FilesEvent { Label: "after-close" } fe
+                ? fe with { Files = [fe.Files[0] with { Sha256 = new string('0', 64) }] }
+                : e)],
+        };
+        ComparisonRecord changedBlocked = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleChangedAfterClose, recB.RecordId, other, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, changedBlocked.Status);
+        Assert.Equal("13 $.files[0].sha256", changedBlocked.FirstDifference!.Path);
+        Assert.Contains(changedBlocked.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.EndsWith("are not available; compared by SHA-256", StringComparison.Ordinal));
+
+        Capture oracleAbsentAfterClose = oracle with
+        {
+            Events = [.. oracle.Events.Select<CaptureEvent, CaptureEvent>(e => e is FilesEvent { Label: "after-close" } fe
+                ? fe with { Files = [] }
+                : e)],
+        };
+        ComparisonRecord absentBlocked = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleAbsentAfterClose, recB.RecordId, other, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, absentBlocked.Status);
+        Assert.Equal("13 $.files[0].sha256", absentBlocked.FirstDifference!.Path);
+        Assert.Contains(absentBlocked.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.EndsWith("are not available; compared by SHA-256", StringComparison.Ordinal));
+
+        // (g) Both sides missing with mixed outcomes (expected ShaMismatch, actual NoReads) qualifies both sides.
+        Capture otherNoKeptBytes = ReplacePgClose(other, h => [h with { Bytes = null }]);
+        ComparisonRecord mixedBothMissing = CallTraceComparison.Compare("r-q38-mdb-new-image/eng-langid-only",
+            recA.RecordId, oracleWrongSha, recB.RecordId, otherNoKeptBytes, candidateModule: null, oracleFiles: null, candidateFiles: null);
+        Assert.Equal(ComparisonStatus.Mismatched, mixedBothMissing.Status);
+        Assert.Equal("13 $.files[0].sha256", mixedBothMissing.FirstDifference!.Path);
+        Assert.Contains(mixedBothMissing.Notes, n => n.Contains("13 files[0]", StringComparison.Ordinal)
+            && n.Contains("expected and actual file are not available; compared by SHA-256 (expected: kept nativeRead pages do not verify against the recorded SHA-256; actual: no kept nativeRead pages)", StringComparison.Ordinal));
+    }
 }
