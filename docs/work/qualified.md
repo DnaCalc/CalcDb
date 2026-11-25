@@ -1305,7 +1305,8 @@ is summarised in [qualification-report.md](qualification-report.md).
   `09`, `0a`, `0b`, `0b`, `0d`).
 - **Open**: 0xFFFF; the MDB burst boundary between 0.5 and 1 s; an exclusive OpenDatabase; DROP TABLE, DROP INDEX,
   ALTER TABLE DROP and TableDefs.Append on MDB; whether rs.Close or db.Close writes the deferred TDEF count; why an
-  80-row INSERT into a populated table took its pages without a 32-page reservation (MDB and ACCDB alike).
+  80-row INSERT into a populated table took its pages without a 32-page reservation (MDB and ACCDB alike). Built in
+  3vkh (7eac9f1f); the creating session's 0xE00 is `fkn9`.
 
 ### R-FMT-2 r-q36 (W-05, task bfhj): a leading U+FEFF is stored as written, a row with no variable column pads to 4 bytes before its mask, a fixed field set to Null keeps its bytes
 
