@@ -1,8 +1,12 @@
 using CalcDb.Catalog;
+using CalcDb.Expressions;
 using CalcDb.Format;
+using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
+using CalcDb.Values;
+using CalcDb.Values.Scalar;
 
 namespace CalcDb.Isam.Tests;
 
@@ -55,12 +59,38 @@ public sealed class FieldValidationPropertyTests
             return outcome;
         }
 
+        public SchemaOutcome SetAllowZeroLength(string table, string column, bool allowZeroLength)
+        {
+            SchemaOutcome outcome = Writer().SetFieldAllowZeroLength(Workspace, table, column, allowZeroLength, Stamp, longValueTicks: 0x11223344);
+            if (outcome.PublishedAny)
+            {
+                Pages = outcome.ExtentPages;
+            }
+            return outcome;
+        }
+
         public PropertyBlob? ReadBlob(string table)
         {
             CatalogSnapshot catalog = CatalogBootstrap.Open(Cache, D, Pages, out CatalogFailure? failure, readProperties: true)!;
             Assert.Null(failure);
             CatalogEntry entry = catalog.LocalTables(D).Single(e => e.Name == table);
             return entry.Properties is { Length: > 0 } raw ? PropertyBlob.Read(raw, out _) : null;
+        }
+
+        public void SyncPages() => Pages = File.PageCount;
+
+        public LongValuePlan? ReadLvPropPlan(string table)
+        {
+            CatalogSnapshot catalog = CatalogBootstrap.Open(Cache, D, Pages, out CatalogFailure? failure, readProperties: false)!;
+            Assert.Null(failure);
+            CatalogEntry entry = catalog.LocalTables(D).Single(e => e.Name == table);
+            TableDefinition objects = catalog.ObjectTable;
+            ColumnDescriptor lvPropCol = objects.Columns.Single(c => c.Name == "LvProp");
+            using RowView row = RowResolver.Resolve(Cache, D, entry.Root, out _)!.Value;
+            Assert.True(RowEnvelope.TryOpen(row.Body, D, out RowEnvelope env, out _));
+            FieldRead read = env.ReadField(lvPropCol, objects.KnownFixedEnd(env.ColumnCount, D));
+            Assert.Equal(FieldOutcome.Bytes, read.Outcome);
+            return LongValuePlan.Inspect(row.Body[read.Start..read.End], out _);
         }
 
         public IPositionedFile? Writable(PageCache cache, IReadOnlyCollection<ulong> pages, out string? failure)
@@ -169,5 +199,145 @@ public sealed class FieldValidationPropertyTests
         Assert.Contains("chained", mdbChain.Accepted.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.False(mdbChain.PublishedAny);
         Assert.Equal(beforeMdb, mdb.File.Snapshot());
+    }
+
+    [Theory]
+    [InlineData(PlainAccdb, true, 0xFF)]
+    [InlineData(PlainAccdb, false, 0x00)]
+    [InlineData(PlainMdb, true, 0xFF)]
+    [InlineData(PlainMdb, false, 0x00)]
+    public void AllowZeroLength_65_byte_blob_uses_external_single_row_lval_and_encodes_ff_or_00(string fixtureSha, bool allow, byte expectedByte)
+    {
+        // evidence/r-q42-field-rule-and/rule-and2-ne-accdb, rule-and2-ne-mdb (0xFF),
+        // azl-explicit-false-accdb, azl-explicit-false-mdb (0x00):
+        // setting AllowZeroLength alone on T.W builds a 65-byte MR2 blob (> InlinePayloadMax 64) stored on an external SingleRow LVAL page.
+        using var session = new Session(NativeFixtures.Read(fixtureSha));
+        SchemaOutcome put = session.SetAllowZeroLength("T", "W", allow);
+        Assert.True(put.Succeeded, $"{put.Refused} {put.Accepted}");
+
+        LongValuePlan plan = session.ReadLvPropPlan("T")!;
+        Assert.Equal(LongValueForm.SingleRow, plan.Form);
+        Assert.Equal(65u, plan.Length);
+
+        PropertyBlob blob = session.ReadBlob("T")!;
+        Assert.Equal(["AllowZeroLength"], blob.Names);
+        StoredProperty prop = blob.Map(PropertySectionKind.ColumnValues, "W")!.Properties.Single();
+        Assert.Equal("AllowZeroLength", prop.Name);
+        Assert.Equal(0x01, prop.Flags);
+        Assert.Equal(NativeTypes.Boolean, prop.NativeType);
+        Assert.Equal([expectedByte], prop.Payload);
+
+        // Non-Text column refuses by name without writing.
+        SchemaOutcome nonText = session.SetAllowZeroLength("T", "V", allow);
+        Assert.NotNull(nonText.Refused);
+        Assert.Contains("AllowZeroLength", nonText.Refused.Value.NotWritten);
+        Assert.False(nonText.PublishedAny);
+    }
+
+    [Fact]
+    public void ValidationText_succeeds_on_populated_table_while_rule_and_azl_refuse_by_name()
+    {
+        // evidence/r-q42-field-rule-and/rule-and2-ne-accdb row 695 (after-setup-3316):
+        // ValidationText put on a populated table rewrites MSysObjects.LvProp only; ValidationRule and AllowZeroLength stay refused.
+        using var session = new Session(NativeFixtures.Read(PlainAccdb));
+        Assert.True(session.Set("T", "W", FieldValidationProperty.ValidationRule, "<> 'a' And <> 'b'").Succeeded);
+        Assert.Equal(MutationOpen.None, session.Workspace.PublishCloseCommit(session.Cache).Open);
+
+        // Reopen and insert a row into T so T.RowCount == 1.
+        using var session2 = new Session(session.File.Snapshot());
+        CatalogSnapshot cat = CatalogBootstrap.Open(session2.Cache, D, session2.Pages, out _, readProperties: true)!;
+        CatalogEntry entry = cat.LocalTables(D).Single(e => e.Name == "T");
+        uint tablePage = (uint)entry.Id;
+        TableDefSegmentView stream = TableDefSegmentView.Open(
+            tablePage,
+            page =>
+            {
+                using PagePin pin = session2.Cache.Pin(page).Pin!;
+                return pin.Bytes.ToArray();
+            },
+            D,
+            16,
+            out _)!;
+        TableDefinition table = TableDefDecoder.Decode(stream, tablePage, D, out _)!;
+        PropertyBlob blob = PropertyBlob.Read(entry.Properties!, out _)!;
+        DatabaseHeader header;
+        using (PagePin page0 = session2.Cache.Pin(0).Pin!)
+        {
+            header = DatabaseHeader.Decode(page0.Bytes, D);
+        }
+        var binder = new ExpressionRuleBinder(new ExpressionContext(7177, TextCompareMode.Database, DatabaseCollation.For(header.SortOrder), ExpressionUse.Query));
+        using MutationSemantics sem = MutationSemantics.Compile("T", table, blob, binder, D.IndexDescriptor);
+        var probe = new StoredUniqueProbe(session2.Cache, D, table, session2.Pages);
+        var footprints = new TableFootprints(session2.Cache, D, table, session2.Pages);
+        var context = new TableEditContext(sem, probe, 7177, footprints: footprints);
+        using TableCursor cursor = TableCursor.Open(session2.Cache, D, table, session2.Pages, tableIncarnation: 1, out _)!;
+        var frame = new EditFrame(context, cursor, session2.Workspace);
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(table.Columns.Single(c => c.Name == "ID"), new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 1 }).Succeeded);
+        UpdateOutcome ins = frame.Update();
+        Assert.True(ins.Succeeded, $"{ins.Error} {ins.Open} {ins.Detail}");
+        session2.SyncPages();
+
+        // ValidationText on populated T succeeds without changing the TableDef page.
+        byte[] tdefBefore;
+        using (PagePin pin = session2.Cache.Pin(tablePage).Pin!)
+        {
+            tdefBefore = pin.Bytes.ToArray();
+        }
+        SchemaOutcome textPut = session2.Set("T", "W", FieldValidationProperty.ValidationText, "W must not be a or b");
+        Assert.True(textPut.Succeeded, $"{textPut.Refused} {textPut.Accepted}");
+        using (PagePin pin = session2.Cache.Pin(tablePage).Pin!)
+        {
+            Assert.Equal(tdefBefore, pin.Bytes.ToArray());
+        }
+        PropertyBlob updated = session2.ReadBlob("T")!;
+        StoredProperty textProp = updated.Map(PropertySectionKind.ColumnValues, "W")!.Properties.Single(p => p.Name == "ValidationText");
+        Assert.Equal("W must not be a or b", PropertyBlob.Decode(textProp).Text);
+
+        // ValidationRule and AllowZeroLength on populated T remain refused by name.
+        SchemaOutcome ruleOnPopulated = session2.Set("T", "W", FieldValidationProperty.ValidationRule, "<> 'z'");
+        Assert.NotNull(ruleOnPopulated.Refused);
+        Assert.Contains("non-empty", ruleOnPopulated.Refused.Value.NotWritten);
+        SchemaOutcome azlOnPopulated = session2.SetAllowZeroLength("T", "W", false);
+        Assert.NotNull(azlOnPopulated.Refused);
+        Assert.Contains("non-empty", azlOnPopulated.Refused.Value.NotWritten);
+    }
+
+    [Fact]
+    public void Distinct_tables_share_msysobjects_lvprop_lval_page()
+    {
+        // evidence/r-q42-field-rule-and/disc-num-forms-accdb, disc-num-forms-mdb, disc-text-forms-accdb, disc-text-forms-mdb,
+        // edge-forms-accdb, edge-forms-mdb:
+        // setting field validation properties on a second table appends to the existing free-map MSysObjects.LvProp LVAL page.
+        using var session = new Session(NativeFixtures.Read(PlainAccdb));
+        SchemaOutcome createT2 = session.Writer().CreateTable(
+            session.Workspace,
+            new CreateTableRequest(
+                "T2",
+                [
+                    new NewField("ID", NewFieldType.Long),
+                    new NewField("W", NewFieldType.Text, Size: 50),
+                ],
+                SchemaRoute.Sql),
+            Stamp,
+            Stamp);
+        Assert.True(createT2.Succeeded, $"{createT2.Refused} {createT2.Accepted}");
+        if (createT2.PublishedAny)
+        {
+            Assert.Equal(MutationOpen.None, session.Workspace.PublishCloseCommit(session.Cache).Open);
+        }
+
+        using var session2 = new Session(session.File.Snapshot());
+        Assert.True(session2.SetAllowZeroLength("T", "W", true).Succeeded);
+        Assert.True(session2.Set("T", "W", FieldValidationProperty.ValidationRule, "<> 'a'").Succeeded);
+        Assert.True(session2.SetAllowZeroLength("T2", "W", true).Succeeded);
+        Assert.True(session2.Set("T2", "W", FieldValidationProperty.ValidationRule, "<> 'b'").Succeeded);
+
+        LongValuePlan planT = session2.ReadLvPropPlan("T")!;
+        LongValuePlan planT2 = session2.ReadLvPropPlan("T2")!;
+        Assert.Equal(LongValueForm.SingleRow, planT.Form);
+        Assert.Equal(LongValueForm.SingleRow, planT2.Form);
+        Assert.Equal(planT.First.Page, planT2.First.Page);
+        Assert.NotEqual(planT.First.Row, planT2.First.Row);
     }
 }

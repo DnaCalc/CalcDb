@@ -329,6 +329,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("LastUpdated", (self, args) => Live(self, t => CatalogDates.Date(t._entry.DateUpdateBits)))
         .Get("RecordCount", (self, args) => Live(self, t => t.Definition is { } d ? Int32((int)d.RowCount) : t.DefinitionFailure()))
         .Get("ValidationRule", (self, args) => Live(self, t => t.StoredText("ValidationRule")))
+        .Put("ValidationRule", (self, args) => { nint value = args[^1]; return Live(self, t => t.PutValidationRule(value)); })
         .Get("ValidationText", (self, args) => Live(self, t => t.StoredText("ValidationText")))
         .Get("Properties", (self, args) => Live(self, t => t.PropertiesCollection()))
         .Get("ConflictTable", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
@@ -367,6 +368,11 @@ internal sealed unsafe class TableDefObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, Foundation.VarType sourceType) =>
+        member.Kind == InvokeKind.PropertyPut && member.Name == "ValidationRule" && sourceType != Foundation.VarType.Bstr
+            ? Failure.NotImplemented($"TableDef.ValidationRule put of variant type {sourceType} (not recorded)")
+            : null;
+
     /// <summary>
     /// Reload this TableDef's catalog row and MR2 property blob after a property put published a new catalog image,
     /// keeping held <see cref="DefinitionFieldObject"/> wrappers live against the updated blob (W-08, r-q37).
@@ -403,6 +409,33 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         StoredProperty? stored = Blob?.ObjectMap?.Properties.FirstOrDefault(p => p.Name == name);
         return stored is null ? Text("") : PropertyObject.StoredValue(stored);
+    }
+
+    private CallResult PutValidationRule(nint valueArg)
+    {
+        if (_owner.Database.ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a read-only Database (not recorded)"));
+        }
+        if (IsSystem)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a system table (not recorded)"));
+        }
+        if (_owner.Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put inside BeginTrans (not recorded)"));
+        }
+        if (Definition is not { } definition || definition.RowCount > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a populated or unreadable table (not recorded)"));
+        }
+        Foundation.VarType vt = Args.TypeOf(valueArg);
+        if (vt != Foundation.VarType.Bstr)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"TableDef.ValidationRule put of variant type {vt} (not recorded)"));
+        }
+        string text = Args.Text(valueArg) ?? "";
+        return CallResult.Fail(FieldValidationRuleValidator.ValidateTableRuleRefusal(text));
     }
 
     /// <summary>The 12 built-ins, then the table's own stored properties (r-dao-1b/tabledef-properties-enumerated: Description).</summary>
@@ -631,12 +664,13 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Get("SourceField", (self, args) => Live(self, f => f.OfTable(t => Text(f._column.Name))))
         .Get("CollatingOrder", (self, args) => Live(self, f => f.OfTable(t => Int32(ColumnFacts.CollatingOrder(f._column)))))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
-        .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
+        .Get("ValidationRule", (self, args) => Live(self, f => f.GetValidationRule()))
         .Put("ValidationRule", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutValidationProperty(FieldValidationProperty.ValidationRule, value)); })
         .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
         .Put("ValidationText", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutValidationProperty(FieldValidationProperty.ValidationText, value)); })
         .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
+        .Put("AllowZeroLength", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutAllowZeroLength(value)); })
         .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
         .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
         .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
@@ -656,6 +690,8 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private readonly IndexColumn? _indexColumn;
     private readonly int _ordinal;
     private PropertiesObject? _properties;
+    private bool _validationRuleRead;
+    private string? _validationRuleOverride;
 
     /// <param name="table">The TableDef of a TableDef field; null for an index field, whose further members are not yet built.</param>
     public DefinitionFieldObject(DefinitionCollection owner, TableDefObject? table, ColumnDescriptor column, IndexColumn? indexColumn, int ordinal) : base(Decl, Vtable, owner.Engine, "DAO.Field")
@@ -675,7 +711,17 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
 
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, Foundation.VarType sourceType)
     {
-        if (member.Kind != InvokeKind.PropertyPut || member.Name is not ("ValidationRule" or "ValidationText"))
+        if (member.Kind != InvokeKind.PropertyPut)
+        {
+            return null;
+        }
+        if (member.Name == "AllowZeroLength")
+        {
+            return sourceType != Foundation.VarType.Bool
+                ? Failure.NotImplemented($"Field.AllowZeroLength put of variant type {sourceType} (not recorded)")
+                : null;
+        }
+        if (member.Name is not ("ValidationRule" or "ValidationText"))
         {
             return null;
         }
@@ -712,9 +758,26 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
     private CallResult Stored(string name, CallResult unset) => OfTable(t => ColumnFacts.Stored(t.Blob, _column, name, unset));
 
     /// <summary>
-    /// Write <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> on a stored table's field (W-08, task 9dvt;
-    /// qualified.md <c>r-q37</c>): <c>VT_NULL</c> raises DAO 3421 with <c>IErrorInfo</c> before touching the database;
-    /// other non-BSTR variants refuse by name.
+    /// <c>Field.ValidationRule</c> get: a read on a <see cref="DefinitionFieldObject"/> that has not yet been read returns
+    /// the stored NUL-terminated Memo bytes (<c>evidence/r-q37-valrule-put/rule-alone-accdb</c>,
+    /// <c>evidence/r-q37-valrule-put/rule-alone-mdb</c>, <c>evidence/r-q37-valrule-put/replace-rule-same-session-accdb</c>,
+    /// <c>evidence/r-q42-field-rule-and/put-forms-accdb</c> and <c>put-forms-mdb</c> rows 16-17, 68-69,
+    /// <c>evidence/r-q42-field-rule-and/edge-forms-accdb</c> and <c>edge-forms-mdb</c> rows 62-63, 70-71);
+    /// once <c>ValidationRule</c> has been read on this COM object, a subsequent non-empty put returns the written text
+    /// without a trailing NUL (<c>evidence/r-cat-1/field-rules</c> rows 16, 25-26, 106;
+    /// <c>evidence/r-expr-1/mut-validation-rules</c> rows 16, 18, 36, 38;
+    /// <c>evidence/r-q42-field-rule-and/put-forms-accdb</c> and <c>put-forms-mdb</c> rows 18-19..88-89), while disk bytes keep the NUL.
+    /// </summary>
+    private CallResult GetValidationRule() => OfTable(t =>
+    {
+        _validationRuleRead = true;
+        return _validationRuleOverride is not null ? Text(_validationRuleOverride) : ColumnFacts.Stored(t.Blob, _column, "ValidationRule", Text(""));
+    });
+
+    /// <summary>
+    /// Write <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> on a stored table's field (W-08, tasks 9dvt and
+    /// nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q42-field-rule-and/</c>): <c>VT_NULL</c> raises DAO 3421 with
+    /// <c>IErrorInfo</c> before touching the database; other non-BSTR variants refuse by name.
     /// </summary>
     private CallResult PutValidationProperty(FieldValidationProperty property, nint valueArg) => OfTable(t =>
     {
@@ -728,7 +791,27 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put of variant type {vt} (qualified.md r-q37 Open)"));
         }
         string text = Args.Text(valueArg) ?? "";
-        return _owner.Database.SetFieldValidationProperty(t, this, _column, property, text);
+        CallResult result = _owner.Database.SetFieldValidationProperty(t, this, _column, property, text);
+        if (result.Failure is null && property == FieldValidationProperty.ValidationRule)
+        {
+            _validationRuleOverride = text.Length == 0 || !_validationRuleRead ? null : text;
+        }
+        return result;
+    });
+
+    /// <summary>
+    /// Write <c>Field.AllowZeroLength</c> on a stored empty table's Text field (W-08, task nk97;
+    /// <c>evidence/r-q42-field-rule-and/</c>): only <c>VT_BOOL</c> is recorded; other variants refuse by name.
+    /// </summary>
+    private CallResult PutAllowZeroLength(nint valueArg) => OfTable(t =>
+    {
+        Foundation.VarType vt = Args.TypeOf(valueArg);
+        if (vt != Foundation.VarType.Bool)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.AllowZeroLength put of variant type {vt} (not recorded)"));
+        }
+        bool allow = Args.Bool(valueArg, omitted: false)!.Value;
+        return _owner.Database.SetFieldAllowZeroLength(t, this, _column, allow);
     });
 
     internal void InvalidateProperties()

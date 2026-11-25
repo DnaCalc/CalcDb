@@ -419,6 +419,79 @@ public sealed class CheckConstraintTests
         Assert.Equal(MutationOpen.CheckOrder, tableRuleAndCheck.Open);
     }
 
+    [Fact]
+    public void ZeroLength_beats_field_rule_with_validation_text_and_refuses_textless_pair()
+    {
+        using var fixture = new ReplayFixture(V2AccdbSha);
+        (TableDefinition table, _) = fixture.Table("Req")!.Value;
+        ColumnDescriptor id = Col(table, "ID");
+        ColumnDescriptor r = Col(table, "R");
+        ColumnDescriptor v = Col(table, "V");
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Clock = static () => TimeSpan.Zero };
+        ExpressionRuleBinder binder = MakeBinder(fixture);
+        var probe = new StoredUniqueProbe(fixture.Cache, D, table, fixture.Image.PageCount);
+        var footprints = new TableFootprints(fixture.Cache, D, table, fixture.Image.PageCount);
+
+        // Recorded (evidence/r-q42-field-rule-and/azl-explicit-false-accdb and azl-explicit-false-mdb rows 23, 34, 52):
+        // explicit AllowZeroLength = False (3315) beats Field.ValidationRule with ValidationText (3316).
+        byte[] encodedWithText = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, "R", [
+            new StoredProperty("AllowZeroLength", 0x01, NativeTypes.Boolean, [0x00]),
+            new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("= 'a' Or = 'b'\0")),
+            new StoredProperty("ValidationText", 0x01, NativeTypes.Text, Encoding.Unicode.GetBytes("R must be a or b")),
+        ])]);
+        PropertyBlob blobWithText = PropertyBlob.Read(encodedWithText, out string? failWithText)!;
+        Assert.Null(failWithText);
+        using MutationSemantics semWithText = MutationSemantics.Compile("Req", table, blobWithText, binder, D.IndexDescriptor);
+        var frameWithText = new EditFrame(new TableEditContext(semWithText, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameWithText.AddNew().Succeeded);
+        Assert.True(AssignLong(frameWithText, id, 30).Succeeded);
+        Assert.True(AssignText(frameWithText, r, "").Succeeded);
+        Assert.True(AssignLong(frameWithText, v, 5).Succeeded);
+        UpdateOutcome zeroBeatsRule = frameWithText.Update();
+        Assert.Equal(MutationError.ZeroLength, zeroBeatsRule.Error?.Number);
+        Assert.Equal("Req.R", zeroBeatsRule.Error?.Argument);
+        Assert.True(frameWithText.CancelUpdate().Succeeded);
+
+        // Unrecorded pair: AllowZeroLength = False (3315) vs textless Field.ValidationRule (3317) stays CheckOrder.
+        byte[] encodedTextless = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, "R", [
+            new StoredProperty("AllowZeroLength", 0x01, NativeTypes.Boolean, [0x00]),
+            new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("= 'a' Or = 'b'\0")),
+        ])]);
+        PropertyBlob blobTextless = PropertyBlob.Read(encodedTextless, out string? failTextless)!;
+        Assert.Null(failTextless);
+        using MutationSemantics semTextless = MutationSemantics.Compile("Req", table, blobTextless, binder, D.IndexDescriptor);
+        var frameTextless = new EditFrame(new TableEditContext(semTextless, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameTextless.AddNew().Succeeded);
+        Assert.True(AssignLong(frameTextless, id, 31).Succeeded);
+        Assert.True(AssignText(frameTextless, r, "").Succeeded);
+        Assert.True(AssignLong(frameTextless, v, 5).Succeeded);
+        UpdateOutcome zeroVsTextless = frameTextless.Update();
+        Assert.Equal(MutationOpen.CheckOrder, zeroVsTextless.Open);
+        Assert.True(frameTextless.CancelUpdate().Succeeded);
+
+        // Unrecorded cross-column pair: AllowZeroLength = False (3315) on R vs Field.ValidationRule with ValidationText (3316) on V stays CheckOrder.
+        byte[] encodedCrossCol = PropertyBlob.Encode([
+            new PropertyMap(PropertySectionKind.ColumnValues, "R", [
+                new StoredProperty("AllowZeroLength", 0x01, NativeTypes.Boolean, [0x00]),
+            ]),
+            new PropertyMap(PropertySectionKind.ColumnValues, "V", [
+                new StoredProperty("ValidationRule", 0x01, NativeTypes.Memo, Encoding.Unicode.GetBytes("> 10\0")),
+                new StoredProperty("ValidationText", 0x01, NativeTypes.Text, Encoding.Unicode.GetBytes("V must exceed 10")),
+            ]),
+        ]);
+        PropertyBlob blobCrossCol = PropertyBlob.Read(encodedCrossCol, out string? failCrossCol)!;
+        Assert.Null(failCrossCol);
+        using MutationSemantics semCrossCol = MutationSemantics.Compile("Req", table, blobCrossCol, binder, D.IndexDescriptor);
+        var frameCrossCol = new EditFrame(new TableEditContext(semCrossCol, probe, 7177, footprints: footprints), fixture.Open(table, 2)!, ws);
+        Assert.True(frameCrossCol.AddNew().Succeeded);
+        Assert.True(AssignLong(frameCrossCol, id, 32).Succeeded);
+        Assert.True(AssignText(frameCrossCol, r, "").Succeeded);
+        Assert.True(AssignLong(frameCrossCol, v, 5).Succeeded);
+        UpdateOutcome crossColOrder = frameCrossCol.Update();
+        Assert.Equal(MutationOpen.CheckOrder, crossColOrder.Open);
+        Assert.True(frameCrossCol.CancelUpdate().Succeeded);
+    }
+
     [Theory]
     [InlineData("CK_Eq", "V = 5", 5, 4)]
     [InlineData("CK_Le", "V <= 5", 5, 6)]

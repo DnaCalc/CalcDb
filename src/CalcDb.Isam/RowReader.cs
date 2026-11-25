@@ -9,7 +9,7 @@ namespace CalcDb.Isam;
 /// reads bind that row lazily and share the page hold, as the table and population cursors do. It has no movement of
 /// its own: the moves of <see cref="IRecordCursor"/> answer <see cref="MoveOutcome.NotSupported"/>.
 /// </summary>
-public sealed class RowReader : IRecordCursor
+public sealed class RowReader : IRecordCursor, IRowPositioned
 {
     private readonly RowBinding _row;
 
@@ -35,6 +35,9 @@ public sealed class RowReader : IRecordCursor
 
     /// <summary>The root the reader stands on, or null.</summary>
     public RowId? Current { get; private set; }
+
+    /// <inheritdoc />
+    RowId? IRowPositioned.CurrentRow => Current;
 
     /// <summary>
     /// When true, applies ACE's SQL query text round-trip on uncompressed Text columns whose stored UTF-16LE bytes
