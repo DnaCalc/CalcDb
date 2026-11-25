@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using CalcDb.Evidence;
@@ -132,6 +134,46 @@ public sealed class FileObserverTests : IDisposable
     }
 
     [Fact]
+    public void Observe_still_records_access_denied_on_live_file_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string accdb = Path.Combine(_attemptDir, "inputs", "db.accdb");
+        string laccdb = Path.Combine(_attemptDir, "inputs", "db.laccdb");
+        File.WriteAllBytes(accdb, [1, 2, 3, 4]);
+        File.WriteAllBytes(laccdb, new byte[64]);
+
+        RunIcacls(laccdb, "/deny", "*S-1-1-0:(RD)");
+        try
+        {
+            Assert.True(File.Exists(laccdb));
+            var artifacts = new ArtifactWriter(_attemptDir);
+            var observer = new FileObserver(_attemptDir, artifacts);
+            FilesEvent ev = observer.Observe(seq: 1, path: "11", label: "denied");
+
+            Assert.Equal(2, ev.Files.Count);
+            Assert.Equal("inputs/db.accdb", ev.Files[0].RelativePath);
+            Assert.Null(ev.Files[0].Error);
+
+            FileObservation denied = ev.Files[1];
+            Assert.Equal("inputs/db.laccdb", denied.RelativePath);
+            Assert.NotNull(denied.Error);
+            Assert.Contains("UnauthorizedAccessException", denied.Error, StringComparison.Ordinal);
+            Assert.Contains("0x80070005", denied.Error, StringComparison.Ordinal);
+            Assert.Equal(64, denied.Length);
+            Assert.NotNull(denied.Attributes);
+            Assert.Empty(artifacts.Artifacts);
+        }
+        finally
+        {
+            RunIcacls(laccdb, "/remove:d", "*S-1-1-0");
+        }
+    }
+
+    [Fact]
     public void Observe_reads_live_files_artifacts_and_page_hashes_through_one_open()
     {
         string accdb = Path.Combine(_attemptDir, "inputs", "db.accdb");
@@ -157,6 +199,7 @@ public sealed class FileObserverTests : IDisposable
         Assert.Null(dbObs.Error);
         Assert.Equal(dbBytes.Length, dbObs.Length);
         Assert.Equal(Hashing.Sha256Hex(dbBytes), dbObs.Sha256);
+        Assert.Equal(dbInfo.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture), dbObs.LastWriteUtc);
         Assert.Equal(dbInfo.Attributes.ToString(), dbObs.Attributes);
         Assert.Equal("snapshot:a-open:db.accdb", dbObs.ArtifactRole);
         Assert.Equal(4096, dbObs.PageSize);
@@ -172,6 +215,7 @@ public sealed class FileObserverTests : IDisposable
         Assert.Null(lockObs.Error);
         Assert.Equal(lockBytes.Length, lockObs.Length);
         Assert.Equal(Hashing.Sha256Hex(lockBytes), lockObs.Sha256);
+        Assert.Equal(lockInfo.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture), lockObs.LastWriteUtc);
         Assert.Equal(lockInfo.Attributes.ToString(), lockObs.Attributes);
         Assert.Equal("lockfile:a-open:db.laccdb", lockObs.ArtifactRole);
         Assert.Null(lockObs.PageSize);
@@ -188,6 +232,17 @@ public sealed class FileObserverTests : IDisposable
         Assert.NotNull(dup.Files[1].Error);
         Assert.Contains("IOException", dup.Files[1].Error, StringComparison.Ordinal);
         Assert.Contains("0x80070050", dup.Files[1].Error, StringComparison.Ordinal);
+    }
+
+    private static void RunIcacls(string path, string verb, string rule)
+    {
+        var psi = new ProcessStartInfo("icacls.exe") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        psi.ArgumentList.Add(path);
+        psi.ArgumentList.Add(verb);
+        psi.ArgumentList.Add(rule);
+        using Process proc = Process.Start(psi)!;
+        proc.WaitForExit();
+        Assert.Equal(0, proc.ExitCode);
     }
 
     private static void MarkDeletePending(string path)

@@ -73,20 +73,26 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts, 
         const uint StatusObjectPathNotFound = 0xC000003A;
 
         string fullPath = Path.GetFullPath(file);
-        string ntPath = fullPath.StartsWith(@"\\?\", StringComparison.Ordinal)
+        string ntPath = fullPath.StartsWith(@"\\?\", StringComparison.Ordinal) || fullPath.StartsWith(@"\\.\", StringComparison.Ordinal)
             ? @"\??\" + fullPath[4..]
             : fullPath.StartsWith(@"\\", StringComparison.Ordinal)
                 ? @"\??\UNC\" + fullPath[2..]
                 : @"\??\" + fullPath;
-        int byteLen = checked(ntPath.Length * 2);
-        nint pathBuf = Marshal.StringToHGlobalUni(ntPath);
-        nint usBuf = Marshal.AllocHGlobal(Marshal.SizeOf<UnicodeString>());
+        if (ntPath.Length > (ushort.MaxValue - 2) / 2)
+        {
+            return false;
+        }
+        int byteLen = ntPath.Length * 2;
+        nint pathBuf = 0;
+        nint usBuf = 0;
         try
         {
+            pathBuf = Marshal.StringToHGlobalUni(ntPath);
+            usBuf = Marshal.AllocHGlobal(Marshal.SizeOf<UnicodeString>());
             var us = new UnicodeString
             {
-                Length = checked((ushort)byteLen),
-                MaximumLength = checked((ushort)(byteLen + 2)),
+                Length = (ushort)byteLen,
+                MaximumLength = (ushort)(byteLen + 2),
                 Buffer = pathBuf,
             };
             Marshal.StructureToPtr(us, usBuf, fDeleteOld: false);
@@ -97,7 +103,7 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts, 
                 Attributes = ObjCaseInsensitive,
             };
             uint status = NtOpenFile(out nint handle, FileReadAttributes, ref oa, out _, ShareAll, 0);
-            if (status == 0 && handle != 0)
+            if ((int)status >= 0 && handle != 0 && handle != -1)
             {
                 _ = CloseHandle(handle);
                 return false;
@@ -106,8 +112,14 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts, 
         }
         finally
         {
-            Marshal.FreeHGlobal(usBuf);
-            Marshal.FreeHGlobal(pathBuf);
+            if (usBuf != 0)
+            {
+                Marshal.FreeHGlobal(usBuf);
+            }
+            if (pathBuf != 0)
+            {
+                Marshal.FreeHGlobal(pathBuf);
+            }
         }
     }
 
@@ -229,12 +241,6 @@ internal sealed class ArtifactWriter(string attemptDir, string prefix = "")
     private readonly List<ArtifactRef> _artifacts = [];
 
     public IReadOnlyList<ArtifactRef> Artifacts => _artifacts;
-
-    public ArtifactRef Add(string sourceFile, string role, string kind)
-    {
-        using var source = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        return Add(source, role, kind);
-    }
 
     public ArtifactRef Add(Stream source, string role, string kind)
     {
