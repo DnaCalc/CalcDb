@@ -320,12 +320,14 @@ public sealed class SchemaWriter
     /// Check a CREATE TABLE request against what ACE refuses (3125, 3010, 3380, 3191: R-CAT-1 CAT-B) and what this slice
     /// writes; null when it can be compiled.
     /// </summary>
-    public SchemaRefusal? Check(CreateTableRequest request) => CheckCore(request, out _);
+    public SchemaRefusal? Check(CreateTableRequest request, bool exclusiveSession = false) => CheckCore(request, out _, exclusiveSession);
 
-    private SchemaRefusal? CheckCore(CreateTableRequest request, out PreparedForeignKey? preparedFk)
+    private SchemaRefusal? CheckCore(CreateTableRequest request, out PreparedForeignKey? preparedFk, bool exclusiveSession = false)
     {
         preparedFk = null;
-        if (FileRefusal(allowJet4Mdb: request.Route is SchemaRoute.Sql or SchemaRoute.Ado, out bool isJet4Mdb) is { } file)
+        bool allowJet4Mdb = request.Route is SchemaRoute.Sql or SchemaRoute.Ado
+            || (request.Route == SchemaRoute.Dao && exclusiveSession);
+        if (FileRefusal(allowJet4Mdb: allowJet4Mdb, out bool isJet4Mdb) is { } file)
         {
             return file;
         }
@@ -340,6 +342,10 @@ public sealed class SchemaWriter
         if (request.Fields.Count == 0)
         {
             return new SchemaRefusal(null, "a table without fields (ACE's refusal through SQL is not recorded)");
+        }
+        if (exclusiveSession && request.Route == SchemaRoute.Dao && request.Fields.Count != 1)
+        {
+            return new SchemaRefusal(null, $"DAO TableDefs.Append with {request.Fields.Count} fields in an exclusive session is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records 1 Long field)");
         }
         for (int i = 1; i < request.Fields.Count; i++)
         {
@@ -664,6 +670,14 @@ public sealed class SchemaWriter
         {
             return daoLvRefusal;
         }
+        if (exclusiveSession && request.Route == SchemaRoute.Dao)
+        {
+            byte[] firstBlob = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, request.Fields[0].Name, [DaoFieldRequired])]);
+            if (firstBlob.Length > LongValuePlan.InlinePayloadMax)
+            {
+                return new SchemaRefusal(null, $"DAO TableDefs.Append in an exclusive session whose LvProp ({firstBlob.Length} bytes) exceeds the {LongValuePlan.InlinePayloadMax}-byte inline limit is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* keeps LvProp inline)");
+            }
+        }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado
             && requiredFields.Count > 0
             && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalWrite: false) is { } sqlLvRefusal)
@@ -841,17 +855,18 @@ public sealed class SchemaWriter
     /// <summary>
     /// CREATE TABLE through <paramref name="workspace"/>'s coordinator: checked (<see cref="Check"/>), compiled on the
     /// file's participant and accepted as a catalog change (published at once outside a level). On the DAO route ACE
-    /// commits the table row first without <c>LvProp</c>, then once per field in definition order, each commit storing
-    /// <c>LvProp</c> (<c>Required = False</c>) for the fields so far and the later <c>DateUpdate</c>
-    /// (evidence/r-q11-ddl-closure/append-dao, evidence/r-q15-ddl-open/lv-dao-name-8, evidence/r-q15-ddl-open/lv-dao-fields-*,
-    /// evidence/r-q15-ddl-open/columns-z-a-dao, evidence/r-q26-column-order/dao-*, evidence/r-q28-schema-write-open/dao-*):
-    /// N+1 commits during Append for N Long fields, N+2 on page 0 with the closing commit. The records keep the pages
-    /// after Close; the intermediate row states are not recorded. A DAO Append inside BeginTrans is refused by name:
-    /// its N+1 frames joining the level are not recorded (task 4nfc).
+    /// commits the table row together with field 1's <c>LvProp</c> (<c>Required = False</c>) in Commit 1, then commits
+    /// once per remaining field <c>2..N</c> in definition order (<c>N</c> synchronous commits at return:
+    /// <c>evidence/r-q15-ddl-open/counter-dao-append-pages</c>, <c>evidence/r-q28-schema-write-open/dao-fields-4-timing</c>,
+    /// <c>evidence/r-q41-create-session-counter/ddl-tabledefs-append-*</c>), and queues a deferred TableDef page rewrite
+    /// (+1 about 0.5 s later, absorbed into the next exclusive <c>TableDefs.Append</c> when sooner, or flushed first at
+    /// <c>Database.Close</c> before the Close commit for <c>N+2</c> total). A DAO Append inside BeginTrans is refused by
+    /// name: its frames joining the level are not recorded (task 4nfc).
     /// </summary>
     public SchemaOutcome CreateTable(TransactionCoordinator workspace, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits)
     {
-        if (CheckCore(request, out PreparedForeignKey? preparedFk) is { } refused)
+        bool exclusiveSession = workspace.IsExclusiveSession(_cache);
+        if (CheckCore(request, out PreparedForeignKey? preparedFk, exclusiveSession) is { } refused)
         {
             if (refused.Error == 3191 && request.Route == SchemaRoute.Dao)
             {
@@ -876,23 +891,109 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE in a Jet 4 MDB inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/*-mdb-* run outside BeginTrans)"), default, _pageCount);
         }
+        if (request.Route == SchemaRoute.Dao && workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO TableDefs.Append while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
+        }
+
+        DeferredCatalogCommit? absorbedDeferred = null;
+        bool flushedPriorDeferred = false;
+        if (request.Route == SchemaRoute.Dao
+            && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred))
+        {
+            if (priorDeferred!.Kind != DeferredCatalogCommitKind.TableDefAppend)
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.Publication,
+                        "a DAO TableDefs.Append while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"),
+                    _pageCount);
+            }
+            if (!exclusiveSession)
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.Publication,
+                        $"a second DAO TableDefs.Append in a shared session while a prior deferred TableDef write (page {priorDeferred.PendingTableDefPage}) is pending is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records exclusive sessions only)"),
+                    _pageCount);
+            }
+            byte[] firstBlob = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, request.Fields[0].Name, [DaoFieldRequired])]);
+            if (request.Fields.Count != 1
+                || request.AllIndexes.Count > 0
+                || request.ForeignKey is not null
+                || firstBlob.Length > LongValuePlan.InlinePayloadMax)
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.Publication,
+                        $"a multi-field, indexed, or LVAL-spilling DAO TableDefs.Append while a prior deferred TableDef write (page {priorDeferred.PendingTableDefPage}) is pending is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records 1-Long-field inline-LvProp tables)"),
+                    _pageCount);
+            }
+            TimeSpan elapsed = workspace.Clock() - priorDeferred.QueuedAt!.Value;
+            if (elapsed < TransactionCoordinator.ObservedSameBurstMax)
+            {
+                absorbedDeferred = priorDeferred;
+            }
+            else if (elapsed >= TransactionCoordinator.ObservedNewBurstMin)
+            {
+                (MutationOpen flushOpen, string? flushDetail) = workspace.FlushDeferredCatalogCommit(_cache);
+                if (flushOpen != MutationOpen.None)
+                {
+                    return new SchemaOutcome(null, new AcceptOutcome(false, null, flushOpen, flushDetail), _pageCount);
+                }
+                flushedPriorDeferred = true;
+            }
+            else
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.CommitBurstGap,
+                        $"elapsed {elapsed.TotalSeconds:F3} s since the previous DAO TableDefs.Append falls in the unobserved [{TransactionCoordinator.ObservedSameBurstMax.TotalSeconds:F2} s, {TransactionCoordinator.ObservedNewBurstMin.TotalSeconds:F1} s) deferred-TableDef window (evidence/r-q41-create-session-counter/ddl-tabledefs-append-*)"),
+                    _pageCount);
+            }
+        }
+
         ulong extent = _pageCount;
+        uint tdefPage = 0;
         RowId objectRow = default;
-        ulong initialUpdateBits = request.Route == SchemaRoute.Dao ? dateCreateBits : dateUpdateBits;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, initialUpdateBits, initialLvProp: null, out _, out _, out objectRow, out _, out extent));
+            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred),
+            allowPendingDeferredKind: absorbedDeferred is not null ? DeferredCatalogCommitKind.TableDefAppend : null);
         if (!accepted.Accepted)
         {
-            return new SchemaOutcome(null, accepted, _pageCount);
+            return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: flushedPriorDeferred);
         }
         bool publishedFirst = Published(accepted);
         if (!publishedFirst || request.Route != SchemaRoute.Dao)
         {
-            return new SchemaOutcome(null, accepted, extent, PublishedAny: publishedFirst);
+            return new SchemaOutcome(null, accepted, extent, PublishedAny: publishedFirst || flushedPriorDeferred);
         }
-        for (int k = 1; k <= request.Fields.Count; k++)
+        if (absorbedDeferred is not null)
+        {
+            workspace.ClearDeferredCatalogCommit(_cache);
+        }
+        for (int k = 2; k <= request.Fields.Count; k++)
         {
             int fieldCount = k;
             ulong published = extent;
@@ -911,12 +1012,20 @@ public sealed class SchemaWriter
                     {
                         Error = step.Error,
                         Open = step.Open == MutationOpen.None && step.Error is null ? MutationOpen.Publication : step.Open,
-                        Detail = $"DAO TableDefs.Append of {request.Name}: commit {k + 1} of {request.Fields.Count + 1} (LvProp through field {request.Fields[k - 1].Name}) failed after the table row was published: {why}",
+                        Detail = $"DAO TableDefs.Append of {request.Name}: commit {k} of {request.Fields.Count} (LvProp through field {request.Fields[k - 1].Name}) failed after the table row was published: {why}",
                     },
                     Math.Max(published, _cache.KnownExtentPages),
                     PublishedAny: true);
             }
         }
+        workspace.SetDeferredCatalogCommit(
+            _cache,
+            new DeferredCatalogCommit(
+                [new PageEdit(tdefPage, NoOpPageDelta.Instance, PageRole.Catalog)],
+                [new LockResource(tdefPage, LockPurpose.TableDef)],
+                Kind: DeferredCatalogCommitKind.TableDefAppend,
+                QueuedAt: workspace.Clock(),
+                PendingTableDefPage: tdefPage));
         return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
     }
 
@@ -1704,9 +1813,21 @@ public sealed class SchemaWriter
         }
 
         bool isUnion = request.Family == QueryFamily.Union;
+        if (!isUnion && workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO CreateQueryDef while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
+        }
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
         bool useSessionExtentReservation = !workspace.HasGlobalMapAllocationOrReservation(_cache);
         workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
+        DeferredCatalogCommit? priorQueryDeferred = priorDeferred is { Kind: DeferredCatalogCommitKind.QueryDef } ? priorDeferred : null;
 
         TableDefinition objects = _catalog.ObjectTable;
         int flagsFixedOffset = objects.Columns[Ordinal(objects, "Flags")].FixedOffset;
@@ -1728,10 +1849,10 @@ public sealed class SchemaWriter
                 isUnion,
                 sessionReserved,
                 useSessionExtentReservation,
-                priorDeferred,
+                priorQueryDeferred,
                 out objectRow,
                 out extent),
-            allowPendingDeferredCatalogCommit: true);
+            allowPendingDeferredKind: DeferredCatalogCommitKind.QueryDef);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -1742,7 +1863,7 @@ public sealed class SchemaWriter
         }
 
         createdObjectId = queryId;
-        if (priorDeferred is not null)
+        if (priorQueryDeferred is not null)
         {
             workspace.ClearDeferredCatalogCommit(_cache);
         }
@@ -1818,7 +1939,8 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(3265, null), default, _pageCount);
         }
         workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
-        int currentFlags = priorDeferred is { PendingQueryObjectId: int pid, PendingQueryFlags: int pf } && pid == entry.Id
+        DeferredCatalogCommit? priorQueryDeferred = priorDeferred is { Kind: DeferredCatalogCommitKind.QueryDef } ? priorDeferred : null;
+        int currentFlags = priorQueryDeferred is { PendingQueryObjectId: int pid, PendingQueryFlags: int pf } && pid == entry.Id
             ? pf
             : entry.Flags;
         int existingFamilyFlags = currentFlags & 0xF0;
@@ -1847,6 +1969,17 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, queriesFailure), default, _pageCount);
         }
+        if (workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "DAO QueryDef.SQL put while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded (qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q17-growth/retire-rs-delete-au1)"),
+                _pageCount);
+        }
 
         TableDefinition objects = _catalog.ObjectTable;
         int flagsFixedOffset = objects.Columns[Ordinal(objects, "Flags")].FixedOffset;
@@ -1856,8 +1989,8 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileUpdateQueryDefSql(p, entry, request, queries, dateUpdateBits, priorDeferred, out deletedClauseCount, out extent),
-            allowPendingDeferredCatalogCommit: true);
+            p => CompileUpdateQueryDefSql(p, entry, request, queries, dateUpdateBits, priorQueryDeferred, out deletedClauseCount, out extent),
+            allowPendingDeferredKind: DeferredCatalogCommitKind.QueryDef);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -1867,7 +2000,7 @@ public sealed class SchemaWriter
             return new SchemaOutcome(null, accepted, extent, PublishedAny: false);
         }
 
-        if (priorDeferred is not null)
+        if (priorQueryDeferred is not null)
         {
             workspace.ClearDeferredCatalogCommit(_cache);
         }
@@ -1930,11 +2063,12 @@ public sealed class SchemaWriter
         }
 
         workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
+        DeferredCatalogCommit? priorQueryDeferred = priorDeferred is { Kind: DeferredCatalogCommitKind.QueryDef } ? priorDeferred : null;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileDeleteQueryDef(p, entry, aces, queries, priorDeferred),
-            allowPendingDeferredCatalogCommit: true);
+            p => CompileDeleteQueryDef(p, entry, aces, queries, priorQueryDeferred),
+            allowPendingDeferredKind: DeferredCatalogCommitKind.QueryDef);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount);
@@ -1942,7 +2076,7 @@ public sealed class SchemaWriter
         bool published = Published(accepted);
         if (published)
         {
-            if (priorDeferred is not null)
+            if (priorQueryDeferred is not null)
             {
                 workspace.ClearDeferredCatalogCommit(_cache);
             }
@@ -2459,7 +2593,8 @@ public sealed class SchemaWriter
         out uint mapPage,
         out RowId objectRow,
         out List<RowId> aceRows,
-        out ulong extent)
+        out ulong extent,
+        DeferredCatalogCommit? absorbedDeferred = null)
     {
         tdefPage = 0;
         mapPage = 0;
@@ -2467,6 +2602,16 @@ public sealed class SchemaWriter
         aceRows = [];
         extent = _pageCount;
         var work = new Work(p);
+        if (absorbedDeferred is not null)
+        {
+            foreach (PageEdit edit in absorbedDeferred.Edits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
         if (work.Allocate(allocator) is not { } allocatedTdef || work.Allocate(allocator) is not { } allocatedMap)
         {
@@ -2553,6 +2698,13 @@ public sealed class SchemaWriter
             aceRows.Add(aceRow);
         }
         List<uint> releasedAtClose = [];
+        if (request.Route == SchemaRoute.Dao && initialLvProp is null)
+        {
+            if (!ApplyFieldProperties(work, p.Overlay, allocator, objectRow, request.Fields, 1, DaoFieldRequired, dateUpdateBits, releasedAtClose))
+            {
+                return work.NotWritten();
+            }
+        }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
         {
             List<NewField> requiredFields = [.. request.Fields.Where(f => f.Required)];

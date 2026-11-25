@@ -108,6 +108,10 @@ internal static class SelectRoute
     /// </summary>
     public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null)
     {
+        if (database.PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
         int recordsetType = type ?? 2;
         if (recordsetType is not (2 or 4 or 8))
         {
@@ -338,6 +342,10 @@ internal static class ActionRoute
     /// <summary>Run <paramref name="sql"/>; <paramref name="recordsAffected"/> tracks the caller's RecordsAffected.</summary>
     public static CallResult Execute(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
     {
+        if (database.PendingDeferredTableDefRefusal("NotModelled.ExecuteWithPendingDeferredTableDef", "Execute") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
         if (database.SchemaFailure is { } stale)
         {
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
@@ -354,6 +362,10 @@ internal static class ActionRoute
     /// <summary>Run a QueryDef's bound action plan with the QueryDef's parameter values (missing ones: 3061, SQL-B).</summary>
     public static CallResult Execute(DatabaseObject database, DaoObject caller, BoundAction plan, int options, IReadOnlyList<NativeVariant?> values, ref int recordsAffected)
     {
+        if (database.PendingDeferredTableDefRefusal("NotModelled.ExecuteWithPendingDeferredTableDef", "QueryDef.Execute") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
         if (database.SchemaFailure is { } stale)
         {
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
