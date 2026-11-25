@@ -2012,7 +2012,7 @@ public sealed class EditFrame : IDisposable
             winningStage = RelationshipStage;
             return stages[RelationshipStage];
         }
-        // evidence/r-q42-field-rule-and/azl-explicit-false-{accdb,mdb} (seq 23, 34, 52):
+        // evidence/r-q42-field-rule-and/azl-explicit-false-accdb and azl-explicit-false-mdb (rows 23, 34, 52):
         // explicit AllowZeroLength = False (3315) beats Field.ValidationRule with ValidationText (3316) when '' violates both.
         if (failing == 2
             && first == ZeroLengthStage

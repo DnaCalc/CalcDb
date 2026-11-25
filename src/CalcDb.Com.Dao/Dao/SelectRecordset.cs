@@ -20,9 +20,13 @@ namespace CalcDb.Com.Dao;
 /// cursor's; a value read that fails is ACE's error from DAO.Field with an IErrorInfo (r-q3-sql/constant-phase). Single-
 /// table updatable dynasets at transaction depth 0 support <c>Edit</c>, base-column <c>Field.Value</c> put,
 /// <c>Update</c>, <c>CancelUpdate</c>, and <c>EditMode</c> through the one shared <see cref="EditFrame"/>
-/// (<c>evidence/r-q42-field-rule-and/rule-*</c>). Other edit shapes and members remain named gaps. After Close every
-/// member fails 3420 (R-ACT-1 ACT-RETAIN).
+/// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 395-401, 415-422, 436-443;
+/// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 395-401, 415-422, 436-443;
+/// <c>evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain</c> rows 115, 133-137, 148;
+/// <c>evidence/r-err-1b/asg-update-without-edit</c> rows 5, 10, 32). Other edit shapes and members remain named gaps.
+/// After Close every member fails 3420 (R-ACT-1 ACT-RETAIN).
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "A COM object: its edit frame and cursor end at Close or at the final Release (CloseCursor), not through IDisposable.")]
 internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecordset
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Recordset2;
@@ -801,9 +805,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     /// <summary>
     /// Shared <see cref="EditFrame"/> for single-table updatable SELECT dynasets at transaction depth 0
-    /// (<c>evidence/r-q42-field-rule-and/rule-*</c>): delegates validation, check ordering, and page publication to the
-    /// one ISAM edit frame over a dedicated <see cref="RowReader"/> positioned on the current base row. Unrecorded
-    /// cursor types, multi-table/subquery shapes, read-only opens, and in-transaction edits stay refused by name.
+    /// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 395-401, 415-422, 436-443;
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 395-401, 415-422, 436-443;
+    /// <c>evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain</c> rows 115, 133-137, 148;
+    /// <c>evidence/r-err-1b/asg-update-without-edit</c> rows 5, 10, 32): delegates validation, check ordering, and page
+    /// publication to the one ISAM edit frame over a dedicated <see cref="RowReader"/> positioned on the current base
+    /// row. Unrecorded cursor types, multi-table/subquery shapes, read-only opens, and in-transaction edits stay refused
+    /// by name.
     /// </summary>
     internal EditFrame? EditFrameOrRefuse(string member, out CallResult refused)
     {
@@ -815,14 +823,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 $"{member} on a type {RecordsetType} SELECT recordset (only single-table updatable dynasets are recorded)"));
             return null;
         }
-        if (!_isSingleTableRowSelect || Plan.Sources.Count != 1 || Plan.Sources[0].Subquery is not null)
+        if (!_isSingleTableRowSelect || Plan.Sources.Count != 1 || Plan.Sources[0].Table is null)
         {
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditShape",
                 $"{member} on a non-single-table SELECT recordset (not recorded)"));
             return null;
         }
-        if (!Cursor.Updatable || Database.ReadOnly)
+        if (Cursor.Updatable != true || Database.ReadOnly)
         {
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditReadOnly",
@@ -840,7 +848,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return existing;
         }
-        BoundSource source = Plan.Sources[0];
+        SourceSlot source = Plan.Sources[0];
         CatalogEntry? entry = Database.Catalog.LocalTables(Database.Format)
             .FirstOrDefault(e => string.Equals(e.Name, source.TableName, StringComparison.OrdinalIgnoreCase));
         if (entry is null)
@@ -868,8 +876,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         if (RecordsetType != 2
             || !_isSingleTableRowSelect
             || Plan.Sources.Count != 1
-            || Plan.Sources[0].Subquery is not null
-            || !Cursor.Updatable
+            || Plan.Sources[0].Table is null
+            || Cursor.Updatable != true
             || Database.ReadOnly
             || Database.Workspace.Transactions.Depth > 0
             || _openLevels.Length > 0)
@@ -932,6 +940,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         return EditPublication.Of(frame.Edit());
     }
 
+    /// <summary>
+    /// Update on a single-table updatable SELECT dynaset at depth 0: commits pending edits or raises validation errors
+    /// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 400, 420, 441;
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 400, 420, 441;
+    /// <c>evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain</c> rows 115, 136); without a pending Edit raises
+    /// DAO 3020 from <c>DAO.Recordset</c> without <c>IErrorInfo</c>
+    /// (<c>evidence/r-err-1b/asg-update-without-edit</c> rows 5, 10, 32).
+    /// </summary>
     private CallResult Update(nint typeArg, nint forceArg)
     {
         if (EditFrameOrRefuse("Update", out CallResult refused) is not { } frame)
@@ -957,6 +973,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         return result;
     }
 
+    /// <summary>
+    /// CancelUpdate on a single-table updatable SELECT dynaset at depth 0: discards a pending edit and returns
+    /// <c>EditMode</c> to 0 (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 415-422, 436-443;
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 415-422, 436-443); without a pending Edit raises
+    /// DAO 3020 from <c>DAO.Recordset</c> without <c>IErrorInfo</c>
+    /// (<c>evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain</c> rows 115, 133-137, 148).
+    /// </summary>
     private CallResult CancelUpdate(nint typeArg)
     {
         if (Args.Int32(typeArg, omitted: 1) is not 1)
@@ -986,7 +1009,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     {
         if (!Closed)
         {
-            _frame?.Discard();
+            _frame?.Dispose();
             _frame = null;
             _editReader?.Dispose();
             _editReader = null;
@@ -1879,7 +1902,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
 
     /// <summary>
-    /// Base-column <c>Field.Value</c> put on a single-table updatable SELECT dynaset (<c>evidence/r-q42-field-rule-and/rule-*</c>):
+    /// Base-column <c>Field.Value</c> put on a single-table updatable SELECT dynaset
+    /// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 399, 419, 440;
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 399, 419, 440;
+    /// <c>evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain</c> rows 115, 134):
     /// delegates through the recordset's shared <see cref="EditFrame"/>; non-base columns and unrecorded cursor shapes refuse by name.
     /// </summary>
     private CallResult Assign(nint value)

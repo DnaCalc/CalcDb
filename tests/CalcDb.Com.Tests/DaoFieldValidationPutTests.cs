@@ -89,7 +89,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
     private static string TextOf(CallResult result)
     {
         Assert.True(result.Failure is null, result.Failure?.Description);
-        string s = Marshal.PtrToStringBSTR(result.Scalar.Pointer);
+        nint ptr = result.HasScalar ? result.Scalar.Pointer : result.Value!.Pointer->Pointer;
+        string s = Marshal.PtrToStringBSTR(ptr);
         result.ReleaseUntaken();
         return s;
     }
@@ -211,15 +212,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         // ExpressionUse.ValidationRule allows Like on an indexed Text field (unlike Query's NotModelled.IndexedLike).
         Assert.Null(Put(fs, "ValidationRule", "Like 'A*'").Failure);
 
-        // Unclosed paren fails DAO 3320 ("Missing ), ], or Item in table-level validation expression.", no IErrorInfo:
-        // evidence/r-q42-field-rule-and/put-refusals-{accdb,mdb} call 37); single-other-column reference refuses by name.
-        CallResult unclosed = Put(fv, "ValidationRule", "[V] > (10");
-        Assert.Equal(unchecked((int)0x800A0CF8), unclosed.Failure!.Scode);
-        Assert.Equal("DAO.Field", unclosed.Failure.Source);
-        Assert.Equal("Missing ), ], or Item in table-level validation expression.", unclosed.Failure.Description);
-        Assert.Equal("jeterr40.chm", unclosed.Failure.HelpFile);
-        Assert.Equal(5003320, unclosed.Failure.HelpContext);
-        Assert.False(unclosed.Failure.PublishesErrorInfo);
+        // Unrecorded syntax error (explicit-column unclosed paren) and single-other-column reference refuse by name.
+        Assert.Equal(FailureKind.NotImplemented, Put(fv, "ValidationRule", "[V] > (10").Failure!.Kind);
         Assert.Equal(FailureKind.NotImplemented, Put(fv, "ValidationRule", "[W] > 10").Failure!.Kind);
 
         // IDispatch::Invoke path: VT_NULL -> 3421 with IErrorInfo; VT_I4 -> E_NOTIMPL refusal.
@@ -268,7 +262,7 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         DefinitionFieldObject fs = Recover<DefinitionFieldObject>(Get(fields, "Item", "S"));
 
         // Multi-clause and parenthesized implied-operand forms put cleanly on empty T:
-        // r-q42-field-rule-and/put-forms-accdb calls 21, 47, 49, 53, 55, 67; r-q42-field-rule-and/put-refusals-accdb call 49.
+        // r-q42-field-rule-and/put-forms-accdb rows 22, 48, 50, 54, 56, 68; r-q42-field-rule-and/put-refusals-accdb row 74.
         foreach (string recorded in new[]
         {
             "<> 'a' Or <> 'b'",
@@ -282,7 +276,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
             Assert.Null(Put(fs, "ValidationRule", recorded).Failure);
         }
 
-        // Mixed clause referencing another column fails DAO 3783 (r-q42-field-rule-and/put-refusals-accdb calls 38, 42, 59).
+        // Mixed clause referencing another column fails DAO 3783
+        // (r-q42-field-rule-and/put-refusals-accdb rows 59, 67, 84).
         CallResult otherCol = Put(fs, "ValidationRule", "> 10 Or [V] < 0");
         Assert.NotNull(otherCol.Failure);
         Assert.Equal(3783, otherCol.Failure!.Scode & 0xFFFF);
@@ -293,13 +288,15 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal(FailureKind.NotImplemented, unrecordedNeg.Failure!.Kind);
 
         // Re-putting on fs when ValidationRule is already present returns the text without trailing NUL
-        // (evidence/r-q42-field-rule-and/put-forms-accdb calls 17 vs 19..67); first put on fv keeps trailing NUL (call 69).
+        // (evidence/r-q42-field-rule-and/put-forms-accdb row 17 vs row 19 and rows 21..67; put-forms-mdb rows 17, 19);
+        // first put on fv keeps trailing NUL (put-forms-accdb row 69, put-forms-mdb row 69).
         Assert.Null(Put(fs, "ValidationRule", "<> 'a' And <> 'b'").Failure);
         Assert.Equal("<> 'a' And <> 'b'", TextOf(Get(fs, "ValidationRule")));
         Assert.Null(Put(fv, "ValidationRule", "Between 1 And 10").Failure);
         Assert.Equal("Between 1 And 10\0", TextOf(Get(fv, "ValidationRule")));
 
-        // Enforcement of <> 'a' And <> 'b' on DAO Execute (128) (r-q42-field-rule-and/rule-and2-ne-accdb calls 22, 33, 47, 61):
+        // Enforcement of <> 'a' And <> 'b' on DAO Execute (128)
+        // (r-q42-field-rule-and/rule-and2-ne-accdb rows 23, 34, 52, 70):
         // 'c' and Null admit; 'a' and 'b' fail DAO 3317.
         Assert.Null(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (1, 5, 'c')", DbFailOnError).Failure);
 
@@ -334,7 +331,7 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         DefinitionFieldObject fw = Recover<DefinitionFieldObject>(Get(fields, "Item", "W"));
 
         // TableDef.ValidationRule implied-subject forms fail DAO 3320 from DAO.TableDef without IErrorInfo
-        // (evidence/r-q42-field-rule-and/edge-forms-{accdb,mdb} calls 6-7); valid table rule remains refused by name.
+        // (evidence/r-q42-field-rule-and/edge-forms-accdb rows 7-8, edge-forms-mdb rows 7-8); valid table rule stays refused by name.
         foreach (string implied in new[] { "<> 'a' And <> 'b'", "<> 'a'" })
         {
             CallResult tdFail = Put(td, "ValidationRule", implied);
@@ -347,7 +344,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         }
         Assert.Equal(FailureKind.NotImplemented, Put(td, "ValidationRule", "[V] > 0").Failure!.Kind);
 
-        // Missing parenthesis on Field.ValidationRule fails DAO 3320 (put-refusals-{accdb,mdb} call 37).
+        // Unclosed leading paren on implied-operand Field.ValidationRule fails DAO 3320
+        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 58, put-refusals-mdb row 58).
         CallResult paren = Put(fw, "ValidationRule", "(<> 'a'");
         Assert.Equal(unchecked((int)0x800A0CF8), paren.Failure!.Scode);
         Assert.Equal("DAO.Field", paren.Failure.Source);
@@ -356,7 +354,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.Equal(5003320, paren.Failure.HelpContext);
         Assert.False(paren.Failure.PublishesErrorInfo);
 
-        // Subquery fails DAO 3420 without invalidating the Field object (put-refusals-{accdb,mdb} call 47).
+        // Subquery fails DAO 3420 without invalidating the Field object
+        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 72, put-refusals-mdb row 72).
         CallResult subq = Put(fw, "ValidationRule", "In (SELECT W FROM T)");
         Assert.Equal(unchecked((int)0x800A0D5C), subq.Failure!.Scode);
         Assert.Equal("DAO.Field", subq.Failure.Source);
@@ -366,7 +365,8 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         Assert.False(subq.Failure.PublishesErrorInfo);
         Assert.Equal("W", TextOf(Get(fw, "Name")));
 
-        // Multi-column aggregate fails DAO 3783 (no helpFile, helpContext -1, no IErrorInfo: put-refusals call 48),
+        // Multi-column aggregate fails DAO 3783 (no helpFile, helpContext -1, no IErrorInfo:
+        // evidence/r-q42-field-rule-and/put-refusals-accdb row 73, put-refusals-mdb row 73),
         // while single-column aggregate stays NotModelled.Function.
         CallResult multiAgg = Put(fw, "ValidationRule", "> Sum([V])");
         Assert.Equal(unchecked((int)0x800A0EC7), multiAgg.Failure!.Scode);

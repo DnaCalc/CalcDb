@@ -1323,7 +1323,8 @@ public sealed class SchemaWriter
     /// the LVAL / map pages that hold the MR2 property blob. Leaving <paramref name="value"/> empty removes the property
     /// (and its column section when empty) while keeping its name in the MR2 Names section (writing the 40-byte
     /// Names-only inline blob when <c>LvProp</c> was Null). <c>ValidationText</c> is recorded on both empty and populated
-    /// tables (<c>evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb}</c>); <c>ValidationRule</c> on a populated
+    /// tables (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c>, <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c>);
+    /// <c>ValidationRule</c> on a populated
     /// table remains refused by name. Unrecorded shapes (replacing an existing chained <c>LvProp</c>, chained
     /// <c>LvProp</c> on Jet 4 MDB or spanning three or more pages, non-Long/Text or AutoNumber column, MSysObjects page
     /// split, or inside <c>BeginTrans</c>) stay refused by name.
@@ -1346,8 +1347,10 @@ public sealed class SchemaWriter
 
     /// <summary>
     /// DAO <c>Field.AllowZeroLength</c> put on a stored empty ACCDB or Jet 4 MDB table's Text field (W-08, task nk97;
-    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb}</c>, <c>azl-explicit-false-{accdb,mdb}</c>,
-    /// <c>disc-text-forms-{accdb,mdb}</c>): writes the <c>AllowZeroLength</c> Boolean property (<c>0xFF</c> for true,
+    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c>, <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c>,
+    /// <c>evidence/r-q42-field-rule-and/azl-explicit-false-accdb</c>, <c>evidence/r-q42-field-rule-and/azl-explicit-false-mdb</c>,
+    /// <c>evidence/r-q42-field-rule-and/disc-text-forms-accdb</c>, <c>evidence/r-q42-field-rule-and/disc-text-forms-mdb</c>):
+    /// writes the <c>AllowZeroLength</c> Boolean property (<c>0xFF</c> for true,
     /// <c>0x00</c> for false; flags <c>0x01</c>, native type <c>0x01</c>) into the table's <c>MSysObjects.LvProp</c>
     /// through the one shared <see cref="ApplyObjectProperties"/> writer (a 65-byte MR2 blob goes to an external
     /// SingleRow LVAL page, and distinct tables share the free-map <c>MSysObjects.LvProp</c> LVAL page). Non-empty
@@ -1596,9 +1599,10 @@ public sealed class SchemaWriter
         var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
         List<uint> releasedAtClose = [];
         List<uint> reservedExtentPages = [];
-        // 65-byte MR2 blobs go to an external SingleRow LVAL page (evidence/r-q42-field-rule-and/rule-and2-ne-{accdb,mdb},
-        // azl-explicit-false-{accdb,mdb}); distinct tables share the free-map MSysObjects.LvProp LVAL page
-        // (evidence/r-q42-field-rule-and/disc-num-forms-{accdb,mdb}, disc-text-forms-{accdb,mdb}, edge-forms-{accdb,mdb}).
+        // 65-byte MR2 blobs go to an external SingleRow LVAL page (evidence/r-q42-field-rule-and/rule-and2-ne-accdb,
+        // rule-and2-ne-mdb, azl-explicit-false-accdb, azl-explicit-false-mdb); distinct tables share the free-map
+        // MSysObjects.LvProp LVAL page (evidence/r-q42-field-rule-and/disc-num-forms-accdb, disc-num-forms-mdb,
+        // disc-text-forms-accdb, disc-text-forms-mdb, edge-forms-accdb, edge-forms-mdb).
         if (!ApplyObjectProperties(
             work,
             p.Overlay,

@@ -453,13 +453,32 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
     {
         DatabaseObject db = Open(DefCursorMain, readOnly: false);
         SelectRecordsetObject rs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N FROM T WHERE ID = 3", 2)));
-        foreach (string method in (string[])["Edit", "AddNew", "Update", "Delete"])
+        // Updatable single-table SELECT dynaset admits Edit / CancelUpdate in EditMode 1
+        // (evidence/r-q42-field-rule-and/rule-and2-ne-accdb rows 395-401, 415-422, 436-443;
+        // evidence/r-q42-field-rule-and/rule-and2-ne-mdb rows 395-401, 415-422, 436-443);
+        // Update without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
+        // (evidence/r-err-1b/asg-update-without-edit rows 5, 10, 32);
+        // CancelUpdate without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
+        // (evidence/r-def-cursor-dao/prov-distinct-distinctrow-plain rows 115, 133-137, 148);
+        // AddNew and Delete stay refused.
+        Ok(Method(rs, "Edit"));
+        Ok(Method(rs, "CancelUpdate"));
+        AssertDaoError(Method(rs, "Update"), 3020, "DAO.Recordset");
+        AssertDaoError(Method(rs, "CancelUpdate"), 3020, "DAO.Recordset");
+        foreach (string method in (string[])["AddNew", "Delete"])
         {
             CallResult result = Method(rs, method);
             Assert.NotNull(result.Failure);
             Assert.Equal(FailureKind.NotImplemented, result.Failure!.Kind);
         }
         Ok(Method(rs, "Close"));
+
+        // Snapshot SELECT keeps Edit refused by name.
+        SelectRecordsetObject snap = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N FROM T WHERE ID = 3", 4)));
+        CallResult snapEdit = Method(snap, "Edit");
+        Assert.NotNull(snapEdit.Failure);
+        Assert.Equal(FailureKind.NotModelled, snapEdit.Failure!.Kind);
+        Ok(Method(snap, "Close"));
     }
 
     private void AssertEnumeratedProperties(

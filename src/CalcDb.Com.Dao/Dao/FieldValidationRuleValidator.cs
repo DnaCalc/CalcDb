@@ -8,8 +8,9 @@ namespace CalcDb.Com.Dao;
 /// <summary>
 /// Validates the expression text of a DAO <c>Field.ValidationRule</c> put before any catalog write
 /// (W-08, tasks 9dvt and nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q37-valrule-put/errors-valrule-put-accdb</c>,
-/// <c>errors-only-nochange-accdb</c>, <c>evidence/r-q42-field-rule-and/put-refusals-{accdb,mdb}</c>,
-/// <c>edge-forms-{accdb,mdb}</c>):
+/// <c>evidence/r-q37-valrule-put/errors-only-nochange-accdb</c>,
+/// <c>evidence/r-q42-field-rule-and/put-refusals-accdb</c>, <c>evidence/r-q42-field-rule-and/put-refusals-mdb</c>,
+/// <c>evidence/r-q42-field-rule-and/edge-forms-accdb</c>, <c>evidence/r-q42-field-rule-and/edge-forms-mdb</c>):
 /// <list type="bullet">
 /// <item>Empty text (<c>""</c>) clears the rule.</item>
 /// <item>Source expansion is delegated to <see cref="ExpressionRuleBinder.ExpandFieldRule"/> so put validation and
@@ -18,11 +19,13 @@ namespace CalcDb.Com.Dao;
 /// on column <c>W</c>) fail DAO 3783 (<c>0x800A0EC7</c>, no help file, <c>HelpContext = -1</c>, no <c>IErrorInfo</c>);
 /// a rule naming a single other column is refused by name.</item>
 /// <item>Missing-operator syntax errors (such as <c>&gt;</c>, <c>[B] &gt;</c>, <c>&gt; &lt; 5</c>) fail DAO 3320
-/// (<c>0x800A0CF8</c>, <c>jeterr40.chm</c>, <c>5003320</c>, no <c>IErrorInfo</c>); missing-parenthesis syntax errors
-/// (such as <c>(&lt;&gt; 'a'</c>, <c>[V] &gt; (10</c>) fail DAO 3320 with
-/// <c>"Missing ), ], or Item in table-level validation expression."</c>; other parse failures are refused by name.</item>
-/// <item>Subquery expressions (<c>In (SELECT W FROM T)</c>, <c>put-refusals-{accdb,mdb}</c> call 47) fail DAO 3420
-/// (<c>0x800A0D5C</c>, <c>jeterr40.chm</c>, <c>5003420</c>, no <c>IErrorInfo</c>) while leaving the <c>Field</c> live.</item>
+/// (<c>0x800A0CF8</c>, <c>jeterr40.chm</c>, <c>5003320</c>, no <c>IErrorInfo</c>); an unclosed leading parenthesis on
+/// an implied-operand rule (<c>(&lt;&gt; 'a'</c>, <c>put-refusals-accdb</c> / <c>put-refusals-mdb</c> row 58) fails
+/// DAO 3320 with <c>"Missing ), ], or Item in table-level validation expression."</c>; explicit-column unclosed-paren
+/// forms (such as <c>[V] &gt; (10</c>) and other unrecorded parse failures are refused by name.</item>
+/// <item>Subquery expressions (<c>In (SELECT W FROM T)</c>, <c>put-refusals-accdb</c> / <c>put-refusals-mdb</c> row 72)
+/// fail DAO 3420 (<c>0x800A0D5C</c>, <c>jeterr40.chm</c>, <c>5003420</c>, no <c>IErrorInfo</c>) while leaving the
+/// <c>Field</c> live.</item>
 /// <item>Standalone-unknown functions (such as <c>CVErr(5)</c>, <c>r-expr-1/mut-validation-rules</c> call 236) fail DAO
 /// 3388 (<c>0x800A0D3C</c>, <c>jeterr40.chm</c>, <c>5003388</c>, no <c>IErrorInfo</c>).</item>
 /// <item>Constant expressions that bind cleanly (such as <c>1/0</c>, <c>r-expr-1/mut-validation-rules</c> call 211) are
@@ -59,13 +62,19 @@ internal static class FieldValidationRuleValidator
                 "Field.ValidationRule put of an unrecorded multi-clause or parenthesized implied-operand form (only single implied clauses and top-level And-joined '<>' clauses are recorded in r-q37-valrule-put)");
         }
 
+        // Only the implied-operand leading-paren shape `(<> 'a'` is recorded for MissingParenthesis 3320
+        // (evidence/r-q42-field-rule-and/put-refusals-accdb row 58, evidence/r-q42-field-rule-and/put-refusals-mdb row 58);
+        // explicit-column forms such as `[V] > (10` stay refused by name.
+        bool isRecordedUnclosedImpliedParen = trimmed.StartsWith('(')
+            && !string.Equals(source, trimmed, StringComparison.Ordinal);
+
         using ExpressionSyntax syntax = ExpressionSyntax.Parse(source);
         if (syntax.Root is null)
         {
             if (syntax.Failure is { IsNotModelled: true } open)
             {
-                // evidence/r-q42-field-rule-and/put-refusals-{accdb,mdb} call 47: `In (SELECT W FROM T)` fails DAO 3420
-                // from DAO.Field without an IErrorInfo while leaving the Field object live.
+                // evidence/r-q42-field-rule-and/put-refusals-accdb row 72, put-refusals-mdb row 72:
+                // `In (SELECT W FROM T)` fails DAO 3420 from DAO.Field without an IErrorInfo while leaving Field live.
                 if (open.NotModelled == "NotModelled.Subquery"
                     && open.Message.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
                 {
@@ -77,7 +86,7 @@ internal static class FieldValidationRuleValidator
             {
                 return Failure.Dao(3320, "DAO.Field", SyntaxErrorDescription);
             }
-            if (syntax.Failure is { Message: ExpressionMessages.MissingParenthesis })
+            if (syntax.Failure is { Message: ExpressionMessages.MissingParenthesis } && isRecordedUnclosedImpliedParen)
             {
                 return Failure.Dao(3320, "DAO.Field", MissingParenthesisDescription);
             }
@@ -89,8 +98,9 @@ internal static class FieldValidationRuleValidator
         {
             if (bindFailure is { IsNotModelled: true })
             {
-                // evidence/r-q42-field-rule-and/put-refusals-{accdb,mdb} call 48: `> Sum([V])` on column W fails DAO 3783
-                // (multiple columns in a column-level CHECK constraint) before checking aggregate functions.
+                // evidence/r-q42-field-rule-and/put-refusals-accdb row 73, put-refusals-mdb row 73:
+                // `> Sum([V])` on column W fails DAO 3783 (multiple columns in a column-level CHECK constraint)
+                // before checking aggregate functions.
                 if (bindFailure.NotModelled == "NotModelled.Function" && HasMultipleTableColumns(syntax.Root, table))
                 {
                     return MultipleColumnsFailure();
@@ -102,7 +112,7 @@ internal static class FieldValidationRuleValidator
                 return bindFailure.Message switch
                 {
                     ExpressionMessages.MissingOperator => Failure.Dao(3320, "DAO.Field", SyntaxErrorDescription),
-                    ExpressionMessages.MissingParenthesis => Failure.Dao(3320, "DAO.Field", MissingParenthesisDescription),
+                    ExpressionMessages.MissingParenthesis when isRecordedUnclosedImpliedParen => Failure.Dao(3320, "DAO.Field", MissingParenthesisDescription),
                     _ => Failure.NotImplemented($"Field.ValidationRule put with unrecorded syntax error ({bindFailure.Message}; qualified.md r-q37 Open)"),
                 };
             }
@@ -141,8 +151,9 @@ internal static class FieldValidationRuleValidator
     }
 
     /// <summary>
-    /// DAO <c>TableDef.ValidationRule</c> put refusals recorded in <c>evidence/r-q42-field-rule-and/edge-forms-{accdb,mdb}</c>
-    /// (calls 6-7: implied-subject field forms such as <c>"&lt;&gt; 'a' And &lt;&gt; 'b'"</c> and <c>"&lt;&gt; 'a'"</c>
+    /// DAO <c>TableDef.ValidationRule</c> put refusals recorded in
+    /// <c>evidence/r-q42-field-rule-and/edge-forms-accdb</c> and <c>evidence/r-q42-field-rule-and/edge-forms-mdb</c>
+    /// (rows 7–8: implied-subject field forms such as <c>"&lt;&gt; 'a' And &lt;&gt; 'b'"</c> and <c>"&lt;&gt; 'a'"</c>
     /// are not expanded for table-level rules and fail DAO 3320 from <c>DAO.TableDef</c> without an <c>IErrorInfo</c>).
     /// Valid table-level rules and all other outcomes remain refused by name.
     /// </summary>
@@ -157,7 +168,7 @@ internal static class FieldValidationRuleValidator
                 return Failure.Dao(3320, "DAO.TableDef", SyntaxErrorDescription);
             }
         }
-        return Failure.NotImplemented("TableDef.ValidationRule put (only missing-operator 3320 refusals are recorded in evidence/r-q42-field-rule-and/edge-forms)");
+        return Failure.NotImplemented("TableDef.ValidationRule put (only missing-operator 3320 refusals are recorded in evidence/r-q42-field-rule-and/edge-forms-accdb and edge-forms-mdb)");
     }
 
     private static Failure MultipleColumnsFailure() => new(
