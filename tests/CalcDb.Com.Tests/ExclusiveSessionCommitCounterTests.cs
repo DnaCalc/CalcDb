@@ -154,8 +154,11 @@ public sealed unsafe class ExclusiveSessionCommitCounterTests : IDisposable
     [InlineData(false)]
     public void Dao_CreateDatabase_and_exclusive_reopen_step_0xE00_while_shared_reopen_steps_0xE02(bool isAccdb)
     {
-        // Replays r-q41-create-session-counter: ddl-create-table-*, dml-sql-insert-*, excl-reopen-shared-*,
-        // excl-open-*, excl-no-write-*, excl-readonly-*.
+        // Replays r-q41-create-session-counter/ddl-create-table-2-accdb, r-q41-create-session-counter/ddl-create-table-2-mdb,
+        // r-q41-create-session-counter/dml-sql-insert-accdb, r-q41-create-session-counter/dml-sql-insert-mdb,
+        // r-q41-create-session-counter/excl-open-accdb, r-q41-create-session-counter/excl-open-mdb
+        // (after-excl-ro-close, after-excl-nowrite-close, after-excl-upd-close, after-excl-alloc-close,
+        // after-shared-upd-close), r-q40-mdb-counter/create-first-write-accdb, and r-q40-mdb-counter/create-first-write-mdb.
         DBEngineObject engine = CreateEngine();
         string path = Path.Combine(_dir, isAccdb ? "create-life.accdb" : "create-life.mdb");
         string lockPath = LockFilePath(path, isAccdb);
