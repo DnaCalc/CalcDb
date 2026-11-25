@@ -518,9 +518,11 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>BeginTrans: a new level, or 3003 at the eighth (R-TXN-1 TXN-NEST, nest-exhaustion).</summary>
     public CallResult BeginTrans()
     {
-        if (Transactions.HasDeferredCatalogCommit)
+        if (Transactions.TryGetAnyDeferredCatalogCommit(out DeferredCatalogCommit? pending))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+            return pending!.Kind == DeferredCatalogCommitKind.TableDefAppend
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterTableDefsAppend", "BeginTrans while a DAO TableDefs.Append deferred TableDef write is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"))
+                : CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
         }
         return Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
     }

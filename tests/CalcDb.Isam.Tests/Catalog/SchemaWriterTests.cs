@@ -118,13 +118,20 @@ public sealed class SchemaWriterTests
     /// <summary>One session over a copy of the fixture: its cache, catalog and Workspace coordinator.</summary>
     private sealed class Session : IPublicationTarget, IDisposable
     {
-        public Session(byte[] fixture)
+        private readonly bool _exclusive;
+
+        public Session(byte[] fixture, bool exclusive = false)
         {
+            _exclusive = exclusive;
             File = new MemoryDatabaseFile([.. fixture], D.PageSize);
             Cache = new PageCache(File, File.Incarnation, D.PageSize, 256);
             Pages = File.PageCount;
-            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Clock = static () => TimeSpan.Zero };
+            Workspace = new TransactionCoordinator(new LockerId(1)) { Publisher = this, Clock = () => Now };
         }
+
+        public TimeSpan Now { get; set; }
+
+        public bool IsExclusiveSession(PageCache cache) => _exclusive;
 
         public MemoryDatabaseFile File { get; }
 
@@ -1203,13 +1210,16 @@ public sealed class SchemaWriterTests
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
-    public void A_failed_DAO_property_commit_returns_the_published_table_row(int failingPublication)
+    [InlineData(2, 44)]
+    [InlineData(3, 45)]
+    public void A_failed_DAO_property_commit_returns_the_published_table_row(int failingPublication, ulong expectedExtent)
     {
+        // A 3-field DAO TableDefs.Append publishes 3 synchronous commits (Commit 1: table + field 1 inline LvProp;
+        // Commit 2: fields 1..2 spilling to LVAL page 44; Commit 3: fields 1..3 on page 44; matching
+        // evidence/r-q28-schema-write-open/dao-fields-4-timing and evidence/r-q15-ddl-open/counter-dao-append-pages).
         byte[] fixture = Fixture();
         using var session = new Session(fixture) { RefusePublication = failingPublication };
-        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long("a"), Long("b")], SchemaRoute.Dao), 1, 2);
+        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, new("T", [Long("a"), Long("b"), Long("c")], SchemaRoute.Dao), 1, 2);
         Assert.Null(outcome.Refused);
         Assert.False(outcome.Succeeded);
         Assert.True(outcome.PublishedAny);
@@ -1217,9 +1227,8 @@ public sealed class SchemaWriterTests
         Assert.Equal(MutationOpen.Publication, outcome.Accepted.Open);
         Assert.Contains($"commit {failingPublication} of 3", outcome.Accepted.Detail);
         Assert.Contains("after the table row was published", outcome.Accepted.Detail);
-        // Commit 1 allocated and published the TableDef and map pages 42 and 43; the refused commit wrote nothing.
-        Assert.Equal(44UL, outcome.ExtentPages);
-        Assert.Equal(44 * D.PageSize, session.File.Snapshot().Length);
+        Assert.Equal(expectedExtent, outcome.ExtentPages);
+        Assert.Equal((int)expectedExtent * D.PageSize, session.File.Snapshot().Length);
     }
 
     /// <summary>
@@ -2349,6 +2358,180 @@ public sealed class SchemaWriterTests
             Assert.False(orphanRefusal.PublishedAny);
             Assert.Contains("no matching row", orphanRefusal.Refused?.NotWritten);
             Assert.Equal(beforeOrphanFk, session.File.Snapshot());
+        }
+    }
+
+    [Theory]
+    [InlineData("ddl-tabledefs-append-nopause-accdb", true, 0, 0x0105UL)]
+    [InlineData("ddl-tabledefs-append-nopause-mdb", false, 0, 0x0105UL)]
+    [InlineData("ddl-tabledefs-append-accdb", true, 1500, 0x0106UL)]
+    [InlineData("ddl-tabledefs-append-mdb", false, 1500, 0x0106UL)]
+    public void Exclusive_dao_tabledefs_append_deferred_tdef_replays_r_q41_records(
+        string question,
+        bool isAccdb,
+        int pauseMs,
+        ulong expectedExclusiveCounter)
+    {
+        // Replays evidence/r-q41-create-session-counter/ddl-tabledefs-append-nopause-accdb,
+        // ddl-tabledefs-append-nopause-mdb, ddl-tabledefs-append-accdb, and ddl-tabledefs-append-mdb:
+        // T1(ID LONG) writes 1 immediate commit (+1 on 0xE00) and queues a deferred TableDef rewrite;
+        // T2(ID LONG) within < 500 ms absorbs T1's TableDef page into T2's Commit 1 (+1, ending at 0x0105 after Close),
+        // whereas after >= 1,000 ms T1's deferred TableDef flushes as its own commit (+1) before T2 (+1, ending at 0x0106).
+        Kept kept = Kept.Of(question, "r-q41-create-session-counter");
+        byte[] start = isAccdb ? Fixture() : FixtureMdb();
+        byte[] ace = kept.AceImage(start);
+
+        Assert.Equal(expectedExclusiveCounter, D.Header.ExclusiveCommitCounter.Read(ace));
+        Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(ace));
+
+        (ulong t1Created, ulong t1Updated) = AceDates(ace, "T1");
+        (ulong t2Created, ulong t2Updated) = AceDates(ace, "T2");
+
+        using var session = new Session(start, exclusive: true);
+        session.Create(new CreateTableRequest("T1", [Long("ID")], SchemaRoute.Dao), t1Created, t1Updated);
+        Assert.Equal(0x0102UL, D.Header.ExclusiveCommitCounter.Read(session.File.Snapshot()));
+        Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(session.File.Snapshot()));
+        Assert.True(session.Workspace.TryPeekDeferredCatalogCommit(session.Cache, out DeferredCatalogCommit? pending1));
+        Assert.Equal(DeferredCatalogCommitKind.TableDefAppend, pending1!.Kind);
+        uint t1TdefPage = pending1.PendingTableDefPage!.Value;
+        Assert.Equal(isAccdb ? 42u : 19u, t1TdefPage);
+
+        session.Now = TimeSpan.FromMilliseconds(pauseMs);
+        int pubsBeforeT2 = session.Workspace.Publications.Count;
+        session.Create(new CreateTableRequest("T2", [Long("ID")], SchemaRoute.Dao), t2Created, t2Updated);
+
+        if (pauseMs == 0)
+        {
+            // Absorbed into T2's single Commit 1: 1 publication containing T1's TableDef page, 0xE00 = 0x0103.
+            Assert.Equal(pubsBeforeT2 + 1, session.Workspace.Publications.Count);
+            Assert.Contains(
+                session.Workspace.Publications[^1].Program.Effects,
+                e => e.Kind == EffectKind.Transfer && e.PageNumber == t1TdefPage);
+            Assert.Equal(0x0103UL, D.Header.ExclusiveCommitCounter.Read(session.File.Snapshot()));
+        }
+        else
+        {
+            // Flushed T1's deferred TDEF as its own commit (+1) before T2's Commit 1 (+1): 0xE00 = 0x0104.
+            Assert.Equal(pubsBeforeT2 + 2, session.Workspace.Publications.Count);
+            Assert.Contains(
+                session.Workspace.Publications[pubsBeforeT2].Program.Effects,
+                e => e.Kind == EffectKind.Transfer && e.PageNumber == t1TdefPage);
+            Assert.Equal(0x0104UL, D.Header.ExclusiveCommitCounter.Read(session.File.Snapshot()));
+        }
+
+        Assert.True(session.Workspace.TryPeekDeferredCatalogCommit(session.Cache, out DeferredCatalogCommit? pending2));
+        uint t2TdefPage = pending2!.PendingTableDefPage!.Value;
+        Assert.Equal(isAccdb ? 44u : 21u, t2TdefPage);
+
+        session.Close();
+        Assert.False(session.Workspace.TryPeekDeferredCatalogCommit(session.Cache, out _));
+
+        byte[] ours = session.File.Snapshot();
+        Assert.Equal(ace.Length, ours.Length);
+        Assert.Equal(expectedExclusiveCounter, D.Header.ExclusiveCommitCounter.Read(ours));
+        Assert.Equal(0x0100UL, D.Header.CommitCounter.Read(ours));
+
+        // Page 1 (global map), pages 2-3 (MSysObjects/MSysACEs TDEFs), and both user TableDef + map pages match ACE byte-for-byte.
+        uint[] exactPages = isAccdb ? [1u, 2u, 3u, 42u, 43u, 44u, 45u] : [1u, 2u, 3u, 19u, 20u, 21u, 22u];
+        foreach (uint p in exactPages)
+        {
+            int off = (int)p * D.PageSize;
+            Assert.Equal(ace.AsSpan(off, D.PageSize).ToArray(), ours.AsSpan(off, D.PageSize).ToArray());
+        }
+    }
+
+    [Fact]
+    public void Shared_dao_tabledefs_append_at_return_counter_matches_r_q15_and_r_q28()
+    {
+        // evidence/r-q15-ddl-open/counter-dao-append-pages: 1 Long field writes +1 at return (0x0101), +2 at Close (0x0103).
+        byte[] fixture = Fixture();
+        using (var s1 = new Session(fixture))
+        {
+            s1.Create(new CreateTableRequest("T", [Long("n")], SchemaRoute.Dao), 1, 2);
+            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(s1.File.Snapshot()));
+            s1.Close();
+            Assert.Equal(0x0103UL, D.Header.CommitCounter.Read(s1.File.Snapshot()));
+        }
+
+        // evidence/r-q28-schema-write-open/dao-fields-4-timing: 4 Long fields write +4 at return (0x0104), +2 at Close (0x0106).
+        using (var s4 = new Session(fixture))
+        {
+            s4.Create(new CreateTableRequest("T", [Long("a"), Long("b"), Long("c"), Long("d")], SchemaRoute.Dao), 1, 2);
+            Assert.Equal(0x0104UL, D.Header.CommitCounter.Read(s4.File.Snapshot()));
+            s4.Close();
+            Assert.Equal(0x0106UL, D.Header.CommitCounter.Read(s4.File.Snapshot()));
+        }
+    }
+
+    [Fact]
+    public void Dao_tabledefs_append_pending_deferred_tdef_refuses_unrecorded_neighbours_by_name()
+    {
+        byte[] accdb = Fixture();
+        byte[] mdb = FixtureMdb();
+
+        // 1. Exclusive ACCDB: timing gap [0.50 s, 1.0 s), multi-field/spilling second Append, SQL DDL, and counter commit refuse without writing.
+        using (var excl = new Session(accdb, exclusive: true))
+        {
+            excl.Create(new CreateTableRequest("T1", [Long("ID")], SchemaRoute.Dao), 1, 1);
+            byte[] afterT1 = excl.File.Snapshot();
+
+            excl.Now = TimeSpan.FromMilliseconds(600);
+            SchemaOutcome gap = excl.Writer().CreateTable(excl.Workspace, new("T2", [Long("ID")], SchemaRoute.Dao), 2, 2);
+            Assert.False(gap.Succeeded);
+            Assert.Equal(MutationOpen.CommitBurstGap, gap.Accepted.Open);
+            Assert.Equal(afterT1, excl.File.Snapshot());
+
+            excl.Now = TimeSpan.FromMilliseconds(100);
+            SchemaOutcome multi = excl.Writer().CreateTable(excl.Workspace, new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), 2, 2);
+            Assert.False(multi.Succeeded);
+            Assert.Equal(MutationOpen.Publication, multi.Accepted.Open);
+            Assert.Contains("multi-field", multi.Accepted.Detail);
+
+            SchemaOutcome spilling = excl.Writer().CreateTable(excl.Workspace, new("T2", [Long("nnnnnnnn")], SchemaRoute.Dao), 2, 2);
+            Assert.False(spilling.Succeeded);
+            Assert.Equal(MutationOpen.Publication, spilling.Accepted.Open);
+            Assert.Contains("LVAL-spilling", spilling.Accepted.Detail);
+
+            SchemaOutcome sqlDdl = excl.Writer().CreateTable(excl.Workspace, new("T3", [Long("ID")], SchemaRoute.Sql), 2, 2);
+            Assert.False(sqlDdl.Succeeded);
+            Assert.Equal(MutationOpen.Publication, sqlDdl.Accepted.Open);
+            Assert.Contains("deferred TableDef write", sqlDdl.Accepted.Detail);
+
+            (MutationOpen counterOpen, string? counterDetail) = excl.Workspace.PublishCounterCommit(excl.Cache);
+            Assert.Equal(MutationOpen.Publication, counterOpen);
+            Assert.Contains("deferred TableDef write", counterDetail);
+
+            Assert.Equal(afterT1, excl.File.Snapshot());
+        }
+
+        // 2. Shared ACCDB: second TableDefs.Append while deferred TDEF is pending refuses at both 0 ms and 1500 ms.
+        using (var shared = new Session(accdb, exclusive: false))
+        {
+            shared.Create(new CreateTableRequest("T1", [Long("ID")], SchemaRoute.Dao), 1, 1);
+            byte[] afterT1 = shared.File.Snapshot();
+
+            SchemaOutcome secondImmediate = shared.Writer().CreateTable(shared.Workspace, new("T2", [Long("ID")], SchemaRoute.Dao), 2, 2);
+            Assert.False(secondImmediate.Succeeded);
+            Assert.Equal(MutationOpen.Publication, secondImmediate.Accepted.Open);
+            Assert.Contains("shared session", secondImmediate.Accepted.Detail);
+
+            shared.Now = TimeSpan.FromMilliseconds(1500);
+            SchemaOutcome secondAfterPause = shared.Writer().CreateTable(shared.Workspace, new("T2", [Long("ID")], SchemaRoute.Dao), 2, 2);
+            Assert.False(secondAfterPause.Succeeded);
+            Assert.Equal(MutationOpen.Publication, secondAfterPause.Accepted.Open);
+            Assert.Contains("shared session", secondAfterPause.Accepted.Detail);
+
+            Assert.Equal(afterT1, shared.File.Snapshot());
+        }
+
+        // 3. Exclusive Jet 4 MDB: 1 Long inline field admitted; shared MDB, 2-field MDB, and spilling MDB refused by name.
+        using (var exclMdb = new Session(mdb, exclusive: true))
+        {
+            SchemaWriter w = exclMdb.Writer();
+            Assert.Null(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: true));
+            Assert.NotNull(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: false)?.NotWritten);
+            Assert.Contains("Jet 4 MDB", w.Check(new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
+            Assert.Contains("inline limit", w.Check(new("T3", [Long("nnnnnnnn")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
         }
     }
 }
