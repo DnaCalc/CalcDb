@@ -108,7 +108,9 @@ It checks out master as committed and then:
   the integration checkout, and names the changed files it leaves out.
 - **checks every `<folder>/<question>` citation** in the changed files against `probes/` and `evidence/`.
 - **builds incrementally** and **chooses the tests from the project graph**: every test project whose references reach a
-  changed project; every test project when the build files, `evidence/` or `probes/` changed. `-Tests` adds more.
+  changed project, a project counting as changed also when it compiles a changed file from outside its folder (a
+  linked `<Compile Include>`); every test project when the build files, `evidence/` or `probes/` changed. `-Tests`
+  adds more.
 - **publishes CalcDb.Com** only when a source of its project closure changed since the last publish there (a hash in
   `artifacts/native`). The Com tests, the candidate check and the snapshot use the published module.
 - **runs the selected test projects** concurrently (up to `-MaxParallelTests`, 3 by default, longest first: `Isam`,

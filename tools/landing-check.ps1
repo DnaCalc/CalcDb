@@ -500,14 +500,20 @@ try {
             }
         }
 
-        # The project graph: each project's direct references, by project name.
+        # The project graph: each project's direct references, by project name, and the source files it compiles from
+        # outside its own folder (a linked <Compile Include>: CalcDb.Evidence.Tests compiles the worker's Observers.cs),
+        # so a change to such a file selects that project too (zjtz).
         $projects = @{}
         $projByPath = @{}
         foreach ($p in Get-ChildItem src, tests, tools -Recurse -Filter *.csproj | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' }) {
             $xml = [xml] (Get-Content $p.FullName -Raw)
             $refs = @($xml.Project.ItemGroup.ProjectReference.Include | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
             $relProj = ([IO.Path]::GetRelativePath($work, $p.FullName) -replace '\\', '/')
-            $projects[$p.BaseName] = [pscustomobject]@{ Dir = ([IO.Path]::GetRelativePath($work, $p.DirectoryName) -replace '\\', '/') + '/'; Proj = $relProj; Refs = $refs }
+            $dir = ([IO.Path]::GetRelativePath($work, $p.DirectoryName) -replace '\\', '/') + '/'
+            $linked = @($xml.Project.ItemGroup.Compile.Include | Where-Object { $_ -and -not $_.Contains('*') } |
+                    ForEach-Object { [IO.Path]::GetRelativePath($work, [IO.Path]::GetFullPath((Join-Path $p.DirectoryName $_))) -replace '\\', '/' } |
+                    Where-Object { -not $_.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) })
+            $projects[$p.BaseName] = [pscustomobject]@{ Dir = $dir; Proj = $relProj; Refs = $refs; Linked = $linked }
             $projByPath[$relProj] = $p.BaseName
         }
         function Closure([string] $start) {
@@ -525,6 +531,7 @@ try {
                 $path = $_
                 $projects.Keys | Where-Object { $path.StartsWith($projects[$_].Dir, [StringComparison]::OrdinalIgnoreCase) } |
                     Sort-Object { $projects[$_].Dir.Length } -Descending | Select-Object -First 1
+                $projects.Keys | Where-Object { $projects[$_].Linked -contains $path }
             } | Sort-Object -Unique)
         $graphTests = @($testProjects | Where-Object {
                 $everything -or @((Closure $_) | Where-Object { $_ -in $changedProjects }).Count } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
