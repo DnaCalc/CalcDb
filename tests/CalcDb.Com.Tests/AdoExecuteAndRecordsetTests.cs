@@ -1511,4 +1511,201 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             throw new Xunit.Sdk.XunitException(failure.ToString());
         }
     }
+
+    /// <summary>
+    /// W-08/W-09 (xmgx): AdoSqlErrors.TryMap maps ACE 3292 ("Syntax error in field definition.") on ad-hoc
+    /// Connection.Execute CREATE TABLE (r-q-cat-txn-lock/ii11-ado-check-constraint #23: 0x80040E14,
+    /// helpContext 5003292, IID_ICommandText; unobserved SQLState/NativeError refuse as NotModelled.AdoErrorDetail),
+    /// refuses unrecorded 3292 routes/statements (Command.Execute, saved queries, ALTER TABLE) as
+    /// NotModelled.AdoProviderError, and parses ADO-only DDL syntax (DECIMAL, WITH COMPRESSION, ON DELETE CASCADE)
+    /// on the 3380 and 3211 arms (r-q28-schema-write-open/pair-ado-Aa-aA, r-ado-1b/fields-refresh-ddl).
+    /// </summary>
+    [Fact]
+    public void CalcDb_ADO_Connection_Execute_maps_ACE_3292_CREATE_TABLE_and_ADO_syntax_3380()
+    {
+        Assert.True(File.Exists(PublishedModule), $"publish first: dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native ({PublishedModule} is missing)");
+
+        const string AceSource = "Microsoft Access Database Engine";
+        const string EmptyAccdbFixture = "c1e6c777efb0a240a6929e3d9d410e7ef32152e60cd01e620b0b0cfa71d44559"; // r-fmt-1-accdb-empty.accdb
+
+        // Direct AdoSqlErrors.TryMap checks:
+        var err3292 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Parse, 3292, "Syntax error in field definition.");
+        CalcDb.Com.Ado.MappedProviderError? mapped3292 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(
+            err3292,
+            isSavedQuery: false,
+            out Failure? unmodelled3292,
+            sql: "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))",
+            isConnectionExecuteAction: true);
+        Assert.NotNull(mapped3292);
+        Assert.Null(unmodelled3292);
+        Assert.Equal(unchecked((int)0x80040E14), mapped3292!.Value.ComFailure.Scode);
+        Assert.Equal(5003292, mapped3292.Value.ComFailure.HelpContext);
+        Assert.Equal(IidCommandText, mapped3292.Value.ComFailure.ErrorInfoIid);
+        Assert.Null(mapped3292.Value.ErrorEntry.SqlState);
+        Assert.Null(mapped3292.Value.ErrorEntry.NativeError);
+
+        // Unrecorded 3292 neighbours refuse as NotModelled.AdoProviderError: Command.Execute, saved query, ALTER TABLE.
+        foreach ((bool saved, bool connExec, string sql) in new[]
+        {
+            (false, false, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))"),
+            (true, true, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))"),
+            (false, true, "ALTER TABLE T ADD"),
+        })
+        {
+            Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(err3292, isSavedQuery: saved, out Failure? refused, sql: sql, isConnectionExecuteAction: connExec));
+            Assert.NotNull(refused);
+            Assert.Equal(FailureKind.NotModelled, refused!.Kind);
+            Assert.Contains("NotModelled.AdoProviderError", refused.Description);
+        }
+
+        // 3380 and 3211 DDL arms accept ADO-only syntax (DECIMAL, WITH COMPRESSION, ON DELETE CASCADE).
+        var err3380 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Bind, 3380, "Field 'A' already exists in table 'T'.");
+        foreach (string adoCreateSql in new[]
+        {
+            "CREATE TABLE T (A DECIMAL(10, 2), a LONG)",
+            "CREATE TABLE T (A TEXT(10) WITH COMPRESSION, a LONG)",
+            "CREATE TABLE T (ID LONG, A LONG REFERENCES P (ID) ON DELETE CASCADE, a LONG)",
+        })
+        {
+            CalcDb.Com.Ado.MappedProviderError? mapped3380 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(
+                err3380,
+                isSavedQuery: false,
+                out Failure? unmodelled3380,
+                sql: adoCreateSql,
+                isConnectionExecuteAction: true);
+            Assert.NotNull(mapped3380);
+            Assert.Null(unmodelled3380);
+            Assert.Equal(unchecked((int)0x80040E21), mapped3380!.Value.ComFailure.Scode);
+            Assert.Equal(5003191, mapped3380.Value.ComFailure.HelpContext);
+            Assert.Equal("3380", mapped3380.Value.ErrorEntry.SqlState);
+            Assert.Equal(-539297252, mapped3380.Value.ErrorEntry.NativeError);
+            Assert.Equal(IidCommand, mapped3380.Value.ComFailure.ErrorInfoIid);
+        }
+
+        var err3211 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Bind, 3211, "The database engine could not lock table 'T' because it is already in use by another person or process.");
+        CalcDb.Com.Ado.MappedProviderError? mapped3211 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(
+            err3211,
+            isSavedQuery: false,
+            out Failure? unmodelled3211,
+            sql: "ALTER TABLE T ADD COLUMN PID LONG REFERENCES P (ID) ON DELETE CASCADE",
+            isConnectionExecuteAction: true);
+        Assert.NotNull(mapped3211);
+        Assert.Null(unmodelled3211);
+        Assert.Equal(unchecked((int)0x80040E14), mapped3211!.Value.ComFailure.Scode);
+        Assert.Equal(5003009, mapped3211.Value.ComFailure.HelpContext);
+        Assert.Equal("3211", mapped3211.Value.ErrorEntry.SqlState);
+        Assert.Equal(-534316312, mapped3211.Value.ErrorEntry.NativeError);
+        Assert.Equal(IidCommand, mapped3211.Value.ComFailure.ErrorInfoIid);
+
+        // End-to-end COM replay of r-q-cat-txn-lock/ii11-ado-check-constraint #23 and ADO DECIMAL 3380:
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string tempDir = Path.Combine(Path.GetTempPath(), $"calcdb-ado-3292-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        string dbPath = CopyFixture(store, EmptyAccdbFixture, tempDir, "ado-3292.accdb");
+
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var scope = new Scope(Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Own.manifest"));
+                nint cn = OpenAceConnection(dbPath);
+                try
+                {
+                    Outcome o3292 = Call(cn, "Execute", "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))");
+                    AssertError(
+                        o3292,
+                        unchecked((int)0x80040E14),
+                        AceSource,
+                        "Syntax error in field definition.",
+                        5003292u,
+                        IidCommandText);
+
+                    nint errs = (nint)Get(cn, "Errors")!;
+                    try
+                    {
+                        Assert.Equal(1, Get(errs, "Count"));
+                        nint err0 = (nint)Get(errs, "Item", 0)!;
+                        try
+                        {
+                            Assert.Equal(unchecked((int)0x80040E14), Get(err0, "Number"));
+                            Assert.Equal(AceSource, Get(err0, "Source"));
+                            Assert.Equal("Syntax error in field definition.", Get(err0, "Description"));
+                            Assert.Equal(5003292, Get(err0, "HelpContext"));
+                            Outcome sqlState = TryGet(err0, "SQLState");
+                            Assert.Equal(HResults.E_NOTIMPL, sqlState.Failure?.Scode);
+                            Assert.Contains("NotModelled.AdoErrorDetail", sqlState.Failure!.Value.Description);
+                            Outcome nativeErr = TryGet(err0, "NativeError");
+                            Assert.Equal(HResults.E_NOTIMPL, nativeErr.Failure?.Scode);
+                            Assert.Contains("NotModelled.AdoErrorDetail", nativeErr.Failure!.Value.Description);
+                        }
+                        finally
+                        {
+                            Release(err0);
+                        }
+                    }
+                    finally
+                    {
+                        Release(errs);
+                    }
+
+                    // Non-CREATE TABLE 3292 on Connection.Execute refuses as NotModelled.AdoProviderError.
+                    Outcome alter3292 = Call(cn, "Execute", "ALTER TABLE T ADD");
+                    Assert.Equal(HResults.E_NOTIMPL, alter3292.Failure?.Scode);
+                    Assert.Contains("NotModelled.AdoProviderError", alter3292.Failure!.Value.Description);
+
+                    // Command.Execute of DDL refuses before executing (only UPDATE/INSERT are recorded on Command.Execute).
+                    nint cmd = New(OwnCommand);
+                    try
+                    {
+                        Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cn)).Failure);
+                        Assert.Null(Put(cmd, "CommandType", 1).Failure);
+                        Assert.Null(Put(cmd, "CommandText", "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))").Failure);
+                        Outcome cmdOut = Call(cmd, "Execute", Missing, Missing, 129);
+                        Assert.Equal(HResults.E_NOTIMPL, cmdOut.Failure?.Scode);
+                    }
+                    finally
+                    {
+                        Release(cmd);
+                    }
+
+                    // ADO-only DECIMAL CREATE TABLE with duplicate field maps 3380 rather than falling through to NotModelled.
+                    Outcome o3380 = Call(cn, "Execute", "CREATE TABLE D (A DECIMAL(10, 2), a LONG)");
+                    AssertError(
+                        o3380,
+                        unchecked((int)0x80040E21),
+                        AceSource,
+                        "Field 'a' already exists in table 'D'.",
+                        5003191u,
+                        IidCommand);
+                    AssertConnectionError0(cn, unchecked((int)0x80040E21), "3380", -539297252, AceSource);
+                }
+                finally
+                {
+                    Assert.Null(Call(cn, "Close").Failure);
+                    Release(cn);
+                }
+            }
+            catch (Exception e)
+            {
+                failure = e;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        try
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+        catch
+        {
+        }
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
 }

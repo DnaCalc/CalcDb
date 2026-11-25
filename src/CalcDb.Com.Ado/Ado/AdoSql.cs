@@ -292,15 +292,25 @@ internal static class AdoSqlErrors
             // pair-ado-sz-ss: ad-hoc CREATE TABLE duplicate field fails 0x80040E21 (DB_E_ERRORSOCCURRED),
             // helpContext 5003191, SQLState "3380", NativeError -539297252, IID_ICommand; saved queries and other
             // 3380 shapes have no ADO record.
-            3380 when !isSavedQuery && sql is not null && DdlParser.Parse(sql, out _) is CreateTableStatement =>
+            3380 when !isSavedQuery && sql is not null && DdlParser.Parse(sql, out _, allowAdoCheck: true) is CreateTableStatement =>
                 Make(AdoObject.HResultErrorsOccurred, failure.Message, 5003191, "3380", -539297252, AdoObject.IidCommand),
             3380 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3380 on this statement is not recorded (only ad-hoc CREATE TABLE is recorded in evidence/r-q28-schema-write-open/pair-ado-*)",
                 out unmodelled),
+            // r-q-cat-txn-lock/ii11-ado-check-constraint #23 (programPath 22): ad-hoc Connection.Execute of
+            // CREATE TABLE with a column-level CHECK constraint ("Syntax error in field definition.") fails
+            // 0x80040E14 (DB_E_ERRORSINCOMMAND), helpContext 5003292, IID_ICommandText; Connection.Errors
+            // SQLState/NativeError were not observed and refuse on read (NotModelled.AdoErrorDetail).
+            // Command.Execute, saved queries, and non-CREATE TABLE 3292 shapes have no ADO record.
+            3292 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003292, null, null, AdoObject.IidCommandText),
+            3292 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3292 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q-cat-txn-lock/ii11-ado-check-constraint)",
+                out unmodelled),
             // r-fix-wire-ado/fields-refresh-ddl-keyset-only #27-35, r-ado-1b/fields-refresh-ddl #29-37:
             // ADO 3211 error tuple is recorded only for ALTER TABLE ADD COLUMN on a held table; DROP TABLE and other DDL
             // shapes have DAO records only (no ADO Errors SQLState/NativeError record) and refuse by name.
-            3211 when sql is not null && DdlParser.Parse(sql, out _) is AlterTableStatement { Action: AddColumnsAlterAction } =>
+            3211 when sql is not null && DdlParser.Parse(sql, out _, allowAdoCheck: true) is AlterTableStatement { Action: AddColumnsAlterAction } =>
                 Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003009, "3211", -534316312, AdoObject.IidCommand),
             3211 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3211 on this DDL statement is not recorded (only ALTER TABLE ADD COLUMN is recorded in r-fix-wire-ado/fields-refresh-ddl-keyset-only and r-ado-1b/fields-refresh-ddl)",
@@ -380,6 +390,24 @@ internal static class AdoSqlErrors
         new(
             AdoObject.AceFailure(scode, description, helpContext, iid),
             new AdoErrorEntry(scode, AdoObject.AceEngineSource, description, "", helpContext, sqlState, nativeError));
+
+    private static bool IsCreateTableSql(string sql)
+    {
+        ReadOnlySpan<char> span = sql.AsSpan();
+        int nul = span.IndexOf('\0');
+        if (nul >= 0)
+        {
+            span = span[..nul];
+        }
+        span = span.TrimStart();
+        if (!span.StartsWith("CREATE", StringComparison.OrdinalIgnoreCase) || span.Length <= 6 || !char.IsWhiteSpace(span[6]))
+        {
+            return false;
+        }
+        span = span[6..].TrimStart();
+        return span.StartsWith("TABLE", StringComparison.OrdinalIgnoreCase)
+            && (span.Length == 5 || char.IsWhiteSpace(span[5]) || span[5] is '[' or '(' or '`' or '"');
+    }
 }
 
 /// <summary>
