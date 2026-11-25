@@ -1,5 +1,3 @@
-using System.Text;
-
 using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Isam;
@@ -11,7 +9,7 @@ namespace CalcDb.Expressions;
 
 /// <summary>
 /// Classification of a field-level <c>ValidationRule</c> text after <see cref="ExpressionRuleBinder.ExpandFieldRule"/>
-/// resolves implied operands (qualified.md <c>R-EXPR-1 EXPR-MUTATION</c>, <c>r-q37</c>).
+/// resolves implied operands (qualified.md <c>R-EXPR-1 EXPR-MUTATION</c>, <c>r-q37</c>, <c>r-q42</c>).
 /// </summary>
 public enum FieldRuleForm : byte
 {
@@ -26,20 +24,24 @@ public enum FieldRuleForm : byte
 
     /// <summary>
     /// Top-level <c>And</c>-joined clauses that each start with <c>&lt;&gt;</c>, expanded by prepending <c>[Field] </c>
-    /// to each clause (the long-rule form recorded at DAO put in <c>r-q37-valrule-put</c>:
-    /// <c>long-rule-spill-lval-*</c>, <c>long-rule-2040-accdb</c>, <c>long-rule-replace-chained-accdb</c>,
-    /// <c>errors-valrule-put-accdb</c> call 29).
+    /// to each clause (<c>r-q37-valrule-put</c>; <c>r-q42-field-rule-and/rule-and2-ne-*</c>, <c>rule-and3-ne-*</c>).
     /// </summary>
     AndNotEqualImplied,
 
     /// <summary>
-    /// An unrecorded multi-clause or parenthesized implied-operand form (<c>Or</c>, non-<c>&lt;&gt;</c> operators,
-    /// parentheses, or mixed explicit/implied clauses).
+    /// A field-rule form with no ACE put/enforcement record (for example, bare negative numeric literals such as
+    /// <c>-5</c>, <c>1 Or -5</c>, or <c>Not -5</c>, where leaving <c>-5</c> unrewritten would silently evaluate as truthy).
     /// </summary>
     UnrecordedMultiClause,
 
-    /// <summary>Did not parse as a direct, literal, single implied, or recorded multi-clause form.</summary>
+    /// <summary>Did not parse as a direct, literal, single implied, or multi-clause field rule.</summary>
     Unparsed,
+
+    /// <summary>
+    /// Recursive multi-clause, parenthesized, <c>Not</c>-prefixed, mixed explicit/implied, bare-literal-in-logical, or
+    /// leading-<c>And</c> field rule expanded per <c>r-q42-field-rule-and</c> (qualified.md <c>R-EXPR-1 EXPR-MUTATION r-q42</c>).
+    /// </summary>
+    MultiClause,
 }
 
 /// <summary>
@@ -49,16 +51,15 @@ public enum FieldRuleForm : byte
 /// <list type="bullet">
 /// <item>A default binds with no field in scope (II-10 §21 "restricted builtin environment") and is evaluated once per
 /// AddNew.</item>
-/// <item>A field rule is field-local (qualified.md R-EXPR-1 EXPR-MUTATION, Branch D). <b>The implied operand:</b>
-/// <see cref="ExpandFieldRule"/> is the single expansion used by both enforcement (<see cref="BindFieldRule"/>) and DAO
-/// <c>Field.ValidationRule</c> put validation: a rule that starts with an operator (<c>&lt;&gt;'bad'</c>,
-/// r-cursor-1-edit) reads with the field before it; a bare literal reads as an equality with the field (rule <c>0</c>
-/// admits only 0, <c>True</c> only -1, <c>''</c> and <c>'q'</c> no number; validation-rule-literals,
-/// mut-validation-rules); a rule that names the field (<c>[V] &gt; 0</c>) reads as written; top-level <c>And</c>-joined
-/// <c>&lt;&gt;</c> clauses (<see cref="FieldRuleForm.AndNotEqualImplied"/>) are expanded for DAO puts recorded in
-/// <c>r-q37-valrule-put</c> and refused by name on enforcement because no record shows ACE enforcing them on
-/// <c>INSERT</c> or <c>UPDATE</c>. Any other complete or multi-clause rule is not admitted here: no record shows how ACE
-/// reads it.</item>
+/// <item>A field rule is field-local (qualified.md R-EXPR-1 EXPR-MUTATION, Branch D, <c>r-q42</c>). <b>The implied
+/// operand:</b> <see cref="ExpandFieldRule"/> is the single expansion used by both enforcement
+/// (<see cref="BindFieldRule"/>) and DAO <c>Field.ValidationRule</c> put validation: inside <c>And</c>, <c>Or</c>,
+/// <c>Xor</c>, <c>Eqv</c>, <c>Imp</c>, parentheses and <c>Not</c>, every clause starting with an operator
+/// (<c>=</c>, <c>&lt;&gt;</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c>, <c>Between</c>, <c>In</c>,
+/// <c>Like</c>, <c>Is [Not] Null</c>, <c>Not Like/In/Between</c>) takes the field as its left operand, bare literals
+/// read as <c>[Field] = (literal)</c> (<c>Not 'a'</c> is <c>Not [Field] = ('a')</c>; <c>r-q42-field-rule-and</c>),
+/// explicit <c>[Field]</c> clauses mix with implied ones, and comparisons chain to the left (<c>&lt;&gt; 'a' = False</c>
+/// is <c>([W] &lt;&gt; 'a') = False</c>). A rule that does not name its field alone is refused by name.</item>
 /// <item>A rule's result: Null and True admit, False rejects (EXPR-MUTATION: a Null result admits the row, <c>([V] &gt; 0)
 /// And Null</c> rejects only V &lt;= 0); an evaluation failure is 3802; any other value is not modelled.</item>
 /// </list>
@@ -84,48 +85,7 @@ public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRul
         }
 
         string field = "[" + columnName + "]";
-        using ExpressionSyntax direct = ExpressionSyntax.Parse(rule);
-        if (direct.Root is not null)
-        {
-            if (direct.Root.Kind == SyntaxKind.Literal)
-            {
-                form = FieldRuleForm.Literal;
-                return $"{field} = ({rule})";
-            }
-            form = FieldRuleForm.Direct;
-            return rule;
-        }
-
-        string singlePrefixed = $"{field} {rule}";
-        using (ExpressionSyntax single = ExpressionSyntax.Parse(singlePrefixed))
-        {
-            if (single.Root is not null)
-            {
-                if (IsLogicalBinary(single.Root))
-                {
-                    form = FieldRuleForm.UnrecordedMultiClause;
-                    return rule;
-                }
-                form = FieldRuleForm.SingleImplied;
-                return singlePrefixed;
-            }
-        }
-
-        if (TryClassifyMultiClause(rule, field, out string? expanded, out bool unrecordedMultiClause))
-        {
-            form = FieldRuleForm.AndNotEqualImplied;
-            return expanded!;
-        }
-        if (unrecordedMultiClause)
-        {
-            form = FieldRuleForm.UnrecordedMultiClause;
-            return rule;
-        }
-
-        form = FieldRuleForm.Unparsed;
-        return direct.Failure is { IsNotModelled: false, Message: ExpressionMessages.MissingOperator }
-            ? singlePrefixed
-            : rule;
+        return ExpressionSyntax.ExpandFieldRule(rule, field, out form);
     }
 
     public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted)
@@ -138,9 +98,9 @@ public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRul
     public IMutationRule? BindFieldRule(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted)
     {
         string source = ExpandFieldRule(text, column.Name, out FieldRuleForm form);
-        if (form is FieldRuleForm.AndNotEqualImplied or FieldRuleForm.UnrecordedMultiClause)
+        if (form == FieldRuleForm.UnrecordedMultiClause)
         {
-            notAdmitted = "NotModelled.FieldRuleMultiClause: enforcing a multi-clause or parenthesized implied-operand field ValidationRule has no ACE enforcement record";
+            notAdmitted = "NotModelled.FieldRuleMultiClause: enforcing an unrecorded multi-clause or parenthesized implied-operand field ValidationRule has no ACE enforcement record";
             return null;
         }
         BoundExpression? bound = BoundExpression.Compile(source, new ExpressionSchema(table), _rule, out ExpressionFailure? failure);
@@ -157,227 +117,6 @@ public sealed class ExpressionRuleBinder(ExpressionContext query) : IMutationRul
         }
         notAdmitted = null;
         return new Rule(bound);
-    }
-
-    private static bool IsLogicalBinary(SyntaxNode node) =>
-        node.Kind == SyntaxKind.Binary
-        && node.Operation is ScalarOperation.And or ScalarOperation.Or or ScalarOperation.Xor or ScalarOperation.Eqv or ScalarOperation.Imp;
-
-    private static bool TryClassifyMultiClause(string rule, string field, out string? expanded, out bool unrecordedMultiClause)
-    {
-        expanded = null;
-        unrecordedMultiClause = false;
-
-        bool hasParen = false;
-        bool parenImplied = false;
-        bool hasOtherLogical = false;
-        bool anyClauseImplied = StartsWithImpliedOperatorSkippingParens(rule, 0);
-        List<(int Start, int End)>? andSpans = null;
-
-        int i = 0;
-        while (i < rule.Length)
-        {
-            char ch = rule[i];
-            if (ch is '\'' or '"')
-            {
-                i++;
-                while (i < rule.Length)
-                {
-                    if (rule[i] == ch)
-                    {
-                        i++;
-                        if (i < rule.Length && rule[i] == ch)
-                        {
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                    i++;
-                }
-                continue;
-            }
-            if (ch == '#')
-            {
-                i++;
-                while (i < rule.Length && rule[i] != '#')
-                {
-                    i++;
-                }
-                if (i < rule.Length)
-                {
-                    i++;
-                }
-                continue;
-            }
-            if (ch == '[')
-            {
-                i++;
-                while (i < rule.Length && rule[i] != ']')
-                {
-                    i++;
-                }
-                if (i < rule.Length)
-                {
-                    i++;
-                }
-                continue;
-            }
-            if (ch == '(')
-            {
-                hasParen = true;
-                i++;
-                if (StartsWithImpliedOperatorSkippingParens(rule, i))
-                {
-                    parenImplied = true;
-                }
-                continue;
-            }
-            if (ch == ')')
-            {
-                hasParen = true;
-                i++;
-                continue;
-            }
-            if (char.IsLetter(ch) || ch == '_')
-            {
-                int start = i++;
-                while (i < rule.Length && (char.IsLetterOrDigit(rule[i]) || rule[i] == '_'))
-                {
-                    i++;
-                }
-                ReadOnlySpan<char> word = rule.AsSpan(start, i - start);
-                if (word.Equals("And", StringComparison.OrdinalIgnoreCase))
-                {
-                    andSpans ??= [];
-                    andSpans.Add((start, i));
-                    if (StartsWithImpliedOperatorSkippingParens(rule, i))
-                    {
-                        anyClauseImplied = true;
-                    }
-                }
-                else if (word.Equals("Or", StringComparison.OrdinalIgnoreCase)
-                    || word.Equals("Xor", StringComparison.OrdinalIgnoreCase)
-                    || word.Equals("Eqv", StringComparison.OrdinalIgnoreCase)
-                    || word.Equals("Imp", StringComparison.OrdinalIgnoreCase))
-                {
-                    hasOtherLogical = true;
-                    if (StartsWithImpliedOperatorSkippingParens(rule, i))
-                    {
-                        anyClauseImplied = true;
-                    }
-                }
-                continue;
-            }
-            i++;
-        }
-
-        if (!hasParen && !hasOtherLogical && andSpans is { Count: > 0 })
-        {
-            var sb = new StringBuilder(rule.Length + field.Length * (andSpans.Count + 1) + andSpans.Count * 5);
-            int clauseStart = 0;
-            bool allNotEqual = true;
-            for (int c = 0; c <= andSpans.Count; c++)
-            {
-                int clauseEnd = c < andSpans.Count ? andSpans[c].Start : rule.Length;
-                string clause = rule.Substring(clauseStart, clauseEnd - clauseStart).Trim();
-                if (!clause.StartsWith("<>", StringComparison.Ordinal) || clause.Length <= 2)
-                {
-                    allNotEqual = false;
-                    break;
-                }
-                string prefixedClause = $"{field} {clause}";
-                using (ExpressionSyntax clauseSyntax = ExpressionSyntax.Parse(prefixedClause))
-                {
-                    if (clauseSyntax.Root is not { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual })
-                    {
-                        allNotEqual = false;
-                        break;
-                    }
-                }
-                if (c > 0)
-                {
-                    sb.Append(" And ");
-                }
-                sb.Append(prefixedClause);
-                if (c < andSpans.Count)
-                {
-                    clauseStart = andSpans[c].End;
-                }
-            }
-
-            if (allNotEqual)
-            {
-                string candidate = sb.ToString();
-                using ExpressionSyntax combined = ExpressionSyntax.Parse(candidate);
-                if (combined.Root is not null)
-                {
-                    expanded = candidate;
-                    return true;
-                }
-            }
-        }
-
-        if (parenImplied || ((hasOtherLogical || andSpans is { Count: > 0 }) && anyClauseImplied))
-        {
-            unrecordedMultiClause = true;
-        }
-        return false;
-    }
-
-    private static bool StartsWithImpliedOperatorSkippingParens(string text, int index)
-    {
-        while (index < text.Length && (char.IsWhiteSpace(text[index]) || text[index] == '('))
-        {
-            index++;
-        }
-        if (index >= text.Length)
-        {
-            return false;
-        }
-        char ch = text[index];
-        if (ch is '=' or '<' or '>')
-        {
-            return true;
-        }
-        if (!char.IsLetter(ch))
-        {
-            return false;
-        }
-        int end = index;
-        while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_'))
-        {
-            end++;
-        }
-        ReadOnlySpan<char> word = text.AsSpan(index, end - index);
-        if (word.Equals("Like", StringComparison.OrdinalIgnoreCase)
-            || word.Equals("Is", StringComparison.OrdinalIgnoreCase)
-            || word.Equals("In", StringComparison.OrdinalIgnoreCase)
-            || word.Equals("Between", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-        if (word.Equals("Not", StringComparison.OrdinalIgnoreCase))
-        {
-            int next = end;
-            while (next < text.Length && char.IsWhiteSpace(text[next]))
-            {
-                next++;
-            }
-            int nextEnd = next;
-            while (nextEnd < text.Length && (char.IsLetterOrDigit(text[nextEnd]) || text[nextEnd] == '_'))
-            {
-                nextEnd++;
-            }
-            ReadOnlySpan<char> second = text.AsSpan(next, nextEnd - next);
-            if (second.Equals("Like", StringComparison.OrdinalIgnoreCase)
-                || second.Equals("In", StringComparison.OrdinalIgnoreCase)
-                || second.Equals("Between", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     public IMutationRule? BindTableRule(TableDefinition table, string text, out string? notAdmitted)
