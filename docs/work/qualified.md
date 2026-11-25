@@ -1306,7 +1306,40 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Open**: 0xFFFF; the MDB burst boundary between 0.5 and 1 s; an exclusive OpenDatabase; DROP TABLE, DROP INDEX,
   ALTER TABLE DROP and TableDefs.Append on MDB; whether rs.Close or db.Close writes the deferred TDEF count; why an
   80-row INSERT into a populated table took its pages without a 32-page reservation (MDB and ACCDB alike). Built in
-  3vkh (7eac9f1f); the creating session's 0xE00 is `fkn9`.
+  3vkh (7eac9f1f); the creating session's 0xE00 is `fkn9`, decided by r-q41 below.
+
+### R-FMT-2, R-CRASH-1 r-q41 (W-05, task fkn9): an exclusive session steps the page-0 counter at 0xE00, a shared one at 0xE02
+
+- **Claim**: page 0 `[0xE00, 0xE02)` is a second little-endian u16 commit counter, `0x0101` in a new file, stepped
+  by every exclusive session (no `.laccdb`/`.ldb`): the session of DAO `CreateDatabase`, DAO `OpenDatabase(path,
+  True, False)` and ADO `Connection` with `Mode = 12`. Such a session leaves `[0xE02, 0xE04)` untouched; a shared
+  session steps 0xE02 by the r-q40 rule and leaves 0xE00 untouched. ACCDB and Jet 4 MDB agree at every point. The
+  counter carries (`ff 01`, `00 02`, `01 02`), and each slot keeps its value across sessions of the other kind
+  (`01 02 01 01` after a shared reopen, `02 02 01 01` after an exclusive one).
+
+| Statement or event (exclusive session) | While open | At Close |
+| --- | --- | --- |
+| CreateDatabase and Close; exclusive open read-only or with no write | +0 | +0 |
+| CREATE TABLE, CREATE [UNIQUE] INDEX (empty or populated), ALTER TABLE ADD COLUMN / ADD CONSTRAINT | +1 per statement, at its return | +1 when the session took a page (page 1 changed), else +0 |
+| DAO TableDefs.Append | +1 at the return, and a deferred TDEF write about 0.5 s later (+1), absorbed into the next statement's commit when it comes sooner | as above; the pending TDEF write first (+1) |
+| SQL INSERT, UPDATE, DELETE (1 or more rows, INSERT ... SELECT) | +1 per statement, deferred: written about 505-515 ms later by an ACE thread, at the start of the next Execute, or at Close; +0 for no row | +0 beyond the deferred write, unless a page was taken |
+| BeginTrans and CommitTrans with writes; Rollback; no write | +1 at CommitTrans; +0; +0 | as above |
+| DAO dynaset AddNew, Edit, Delete, Update | +1 per burst: 200 to 500 ms apart coalesce (12 of 12 at 450 and 500 ms), 1,000 ms split; 550 and 600 ms vary between repeats | as above |
+
+- **Conditions**: copies made by `CreateDatabase` option 128 (ACCDB) and 64 (Jet 4 MDB) in the session, or reopened
+  exclusive or shared; one process, DAO and ADO; the whole file kept at every point (`nativeRead keep`), ETW file-I/O
+  traces on the DDL, DML, transaction and exclusive-open questions.
+- **Records**: `evidence/r-q41-create-session-counter/` (38 questions, 58 records; `a2`/`a3` repeats of
+  rs-burst-450/500/550/600ms and rs-burst-vs-pause); premise on r-q40 create-first-write-accdb and -mdb. The
+  organizer read excl-open-accdb's page 0 at its seven points (`01 01 03 01` three times, `02 01 03 01`, `04 01 03
+  01`, `04 01 04 01` twice).
+- **Timing**: rs-burst-550ms, -600ms and rs-burst-vs-pause vary between `0x0106` and `0x0107` across ACE repeats (a
+  non-allocating lazy write sometimes not flushed within a 1,500 ms pause); they sit on ACE's write-behind boundary as
+  r-q8 does (`mhzd`).
+- **Open**: 0xFFFF at either slot; DROP TABLE, DROP INDEX, TableDefs.Delete, renames and Indexes.Append in an
+  exclusive session; SELECT INTO, refused statements and rolled-back allocating or AutoNumber work there;
+  `dbImplicitCommitSync` "Yes" and `dbUserCommitSync` "No" there; table-type and ADO recordsets in the creating
+  session; ADO `Mode = 1`.
 
 ### R-FMT-2 r-q36 (W-05, task bfhj): a leading U+FEFF is stored as written, a row with no variable column pads to 4 bytes before its mask, a fixed field set to Null keeps its bytes
 
@@ -1536,7 +1569,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Open**: `dbForceOSFlush` against default: the ETW recorder can now answer it (F).
 
 ### R-TXN-1 TXN-FLUSH-OP: an implicit statement is not in the file at return unless ImplicitCommitSync is Yes
-- **Claim**: An implicit (non-transactional) `Execute` returns before its change is in the file: killed 0 or 250 ms after return the next opener sees the old count (3 of 3 each, ACCDB and MDB), and the file image read in-process after the return is still the post-statement size at 0 and 250 ms. With `SetOption(dbImplicitCommitSync, "Yes")` the file image is final at the return (17,166,336 B at the first look and unchanged for 500 ms) and a process killed 0 ms after the return leaves the rows present (n=1 per format); the same statement under "No" is not final at the return (29.0 MB at the first look, 34.1 MB at the 200 ms look, a further content change at 250 ms). In the ETW traces the shared-session statement returns with its pages unwritten and an ACE background thread writes them 500 to 545 ms later (INSERT, UPDATE, DELETE alike); with "Yes" Execute writes them itself before it returns; in the exclusive session of CreateDatabase every statement writes synchronously.
+- **Claim**: An implicit (non-transactional) `Execute` returns before its change is in the file: killed 0 or 250 ms after return the next opener sees the old count (3 of 3 each, ACCDB and MDB), and the file image read in-process after the return is still the post-statement size at 0 and 250 ms. With `SetOption(dbImplicitCommitSync, "Yes")` the file image is final at the return (17,166,336 B at the first look and unchanged for 500 ms) and a process killed 0 ms after the return leaves the rows present (n=1 per format); the same statement under "No" is not final at the return (29.0 MB at the first look, 34.1 MB at the 200 ms look, a further content change at 250 ms). In the ETW traces the shared-session statement returns with its pages unwritten and an ACE background thread writes them 500 to 545 ms later (INSERT, UPDATE, DELETE alike); with "Yes" Execute writes them itself before it returns. In an exclusive session (CreateDatabase's among them) the statement is deferred too, and the next Execute writes the pending pages before its own, so back-to-back statements there look synchronous (r-q41-create-session-counter, corrected 2026-11-25 from "every statement writes synchronously").
 - **Records**: evidence/r-etw-rec/insert-implicit-256/, insert-implicit-4096/, update-in-place-4096/, delete-indexed-4096/, option-implicitcommitsync-yes/; q2/txn-flush-implicitcommitsync-yes-timeline/; evidence/r-txn-flush/*-implicit-wait-0ms/, *-wait-250ms/, *-implicitcommitsync-yes/; q1/txn-flush-implicit-file-image-timeline/ (t0, t250).
 - **Open**: none that blocks.
 
