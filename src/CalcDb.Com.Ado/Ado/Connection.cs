@@ -229,32 +229,47 @@ internal static class AdoFilePool
         }
     }
 
-    public static SharedComSession? AcquireExisting(string fullPath)
+    public static SharedComSession? AcquireExisting(string fullPath, bool exclusive, out bool conflict)
     {
         lock (Gate)
         {
             if (Sessions.TryGetValue(fullPath, out SharedComSession? shared))
             {
+                if (exclusive || shared.Core.Exclusive)
+                {
+                    conflict = true;
+                    return null;
+                }
                 shared.RefCount++;
+                conflict = false;
                 return shared;
             }
+            conflict = false;
             return null;
         }
     }
 
-    public static SharedComSession RegisterOrJoin(string fullPath, ComDatabaseSession core, out bool joinedExisting)
+    public static SharedComSession? RegisterOrJoin(string fullPath, ComDatabaseSession core, out bool joinedExisting, out bool conflict)
     {
         lock (Gate)
         {
             if (Sessions.TryGetValue(fullPath, out SharedComSession? existing))
             {
+                if (core.Exclusive || existing.Core.Exclusive)
+                {
+                    joinedExisting = false;
+                    conflict = true;
+                    return null;
+                }
                 existing.RefCount++;
                 joinedExisting = true;
+                conflict = false;
                 return existing;
             }
             var created = new SharedComSession(fullPath, core) { RefCount = 1 };
             Sessions[fullPath] = created;
             joinedExisting = false;
+            conflict = false;
             return created;
         }
     }
@@ -526,8 +541,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private static readonly InterfaceDecl Decl = AdoTypes.Connection;
     private static readonly nint Vtable = DualEntries.Build(Decl);
 
-    /// <summary>Mode values accepted on a closed Connection in the records (prop-modes, error-open-failures); 99 is refused 0x800A0C93.</summary>
-    private static readonly int[] AskedModes = [1, 2, 3, 5, 11, 15, 19];
+    /// <summary>Mode values accepted on a closed Connection in the records (prop-modes, error-open-failures, r-q41-create-session-counter/excl-open-ado-*); 99 is refused 0x800A0C93.</summary>
+    private static readonly int[] AskedModes = [1, 2, 3, 5, 11, 12, 15, 19];
 
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("State", (self, args) => Int32(((ConnectionObject)self).IsOpen ? 1 : 0))
@@ -879,7 +894,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
             AdoOpenSession s = _session!;
             if (s.LockingMode is not int lockingMode)
             {
-                return NotImplemented("Connection.ConnectionString while open on a Jet 4 MDB with Mode=16 (Jet OLEDB:Database Locking Mode is not recorded)");
+                return NotImplemented(s.EffectiveMode == 12
+                    ? $"Connection.ConnectionString while open with Mode=12 on {(s.Profile.IsAce ? "ACCDB" : "Jet 4 MDB")} (Jet OLEDB:Database Locking Mode is not recorded)"
+                    : "Connection.ConnectionString while open on a Jet 4 MDB with Mode=16 (Jet OLEDB:Database Locking Mode is not recorded)");
             }
             return BuildOpenConnectionString(_pinned!.Value.Name, s.DataSource, s.EffectiveMode, s.EngineType, lockingMode, s.OpenInitValues);
         }
@@ -1010,8 +1027,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return CallResult.Fail(ReadOnlyPropertyFailure("ADODB.Connection", Decl.Iid, publishesErrorInfo: true));
     }
 
-    private const string UnrecordedMdbOpenPropertiesReason =
-        "Connection.Properties while open on a Jet 4 MDB with Mode=16 (open property inventory and Jet OLEDB:Database Locking Mode are not recorded)";
+    private static string UnrecordedOpenPropertiesReason(int effectiveMode, bool isAce) =>
+        effectiveMode == 12
+            ? $"Connection.Properties while open with Mode=12 on {(isAce ? "ACCDB" : "Jet 4 MDB")} (open property inventory and Jet OLEDB:Database Locking Mode are not recorded)"
+            : "Connection.Properties while open on a Jet 4 MDB with Mode=16 (open property inventory and Jet OLEDB:Database Locking Mode are not recorded)";
 
     /// <summary>
     /// Properties: same COM identity across closed (31) -> open (101) -> closed (31). Reading Properties while closed
@@ -1023,7 +1042,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (_session!.LockingMode is null)
             {
-                return NotImplemented(UnrecordedMdbOpenPropertiesReason);
+                return NotImplemented(UnrecordedOpenPropertiesReason(_session.EffectiveMode, _session.Profile.IsAce));
             }
             return Object(_properties ??= CreateProperties(BuildOpenSlots()));
         }
@@ -1278,7 +1297,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 EmitWillConnect();
                 return FailProviderOpen(openText, persistSecurityInfo, HResultErrorsOccurred, MultipleStepDescription);
             }
-            if (effectiveMode is not (1 or 3 or 16 or 19))
+            if (effectiveMode is not (1 or 3 or 12 or 16 or 19))
             {
                 DisposeValues(initValues);
                 return NotImplemented($"Connection.Open with Mode={effectiveMode} (not asked)");
@@ -1380,7 +1399,15 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return NotImplemented($"Connection.Open with Locale Identifier={localeId} (only 1033 was asked)");
             }
 
-            SharedComSession? shared = AdoFilePool.AcquireExisting(full);
+            bool exclusive = effectiveMode == 12;
+            SharedComSession? shared = AdoFilePool.AcquireExisting(full, exclusive, out bool poolConflict);
+            if (poolConflict)
+            {
+                DisposeValues(initValues);
+                return NotImplemented(exclusive
+                    ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
+                    : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
+            }
             FileProfile profile;
             if (shared is not null)
             {
@@ -1432,18 +1459,32 @@ internal sealed unsafe class ConnectionObject : AdoObject
                         : "Connection.Open when the catalog cannot be read: " + catalogFailure);
                 }
 
-                LockFile? lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
-                if (lockFile is null)
+                // Exclusive ADO sessions (Mode=12, adModeShareExclusive; r-q41-create-session-counter/excl-open-ado-accdb,
+                // excl-open-ado-mdb) create no .laccdb/.ldb lock file and step page-0 offset 0x0E00 instead of 0x0E02.
+                LockFile? lockFile = null;
+                if (!exclusive)
                 {
-                    file.Dispose();
-                    DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
+                    lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
+                    if (lockFile is null)
+                    {
+                        file.Dispose();
+                        DisposeValues(initValues);
+                        return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
+                    }
                 }
 
                 // Pool core always starts reader-admitted and acquires its writer lease lazily on first write,
                 // while each AdoOpenSession enforces its own effective Mode (ReadOnly).
-                var freshCore = new ComDatabaseSession(file, lockFile, cache, profile, decodedHeader, pages, catalog, readOnly: false, "ADO session");
-                shared = AdoFilePool.RegisterOrJoin(full, freshCore, out bool joinedExisting);
+                var freshCore = new ComDatabaseSession(file, lockFile, cache, profile, decodedHeader, pages, catalog, readOnly: false, "ADO session", exclusive: exclusive);
+                shared = AdoFilePool.RegisterOrJoin(full, freshCore, out bool joinedExisting, out bool registerConflict);
+                if (registerConflict || shared is null)
+                {
+                    freshCore.DisposeAll();
+                    DisposeValues(initValues);
+                    return NotImplemented(exclusive
+                        ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
+                        : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
+                }
                 if (joinedExisting)
                 {
                     freshCore.DisposeAll();
@@ -1455,17 +1496,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
             int? lockingMode;
             if (!profile.IsAce)
             {
-                if (lockingModeExplicit || (effectiveMode != 1 && !(effectiveMode == 16 && defaultMode)))
+                if (lockingModeExplicit || (effectiveMode != 1 && effectiveMode != 12 && !(effectiveMode == 16 && defaultMode)))
                 {
                     AdoFilePool.CancelAcquire(shared);
                     DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1 and default Mode=16 without explicit Database Locking Mode are recorded)");
+                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1, Mode=12, and default Mode=16 without explicit Database Locking Mode are recorded)");
                 }
                 // r-oledb-odbc/prop-connection-inventory records Database Locking Mode=0 for Jet 4 MDB Mode=1.
                 // Default Mode=16 opens on Jet 4 MDB are recorded in r-q30-sql-check/mdb-sat-ado-exec,
                 // r-q31-sql-check-2/mdb-null-ado-exec, r-q34-ddl-sweep/create-one-long-mdb-ado,
-                // r-fix-fmt-sort/sort3-comp-mdb, and r-oledb-odbc/create-mdb; none read open ConnectionString
-                // or open Properties, so LockingMode stays null and those open reads refuse by name.
+                // r-fix-fmt-sort/sort3-comp-mdb, and r-oledb-odbc/create-mdb; Mode=12 in
+                // r-q41-create-session-counter/excl-open-ado-mdb; none read open ConnectionString or open Properties,
+                // so LockingMode stays null and those open reads refuse by name.
                 lockingMode = effectiveMode == 1 ? 0 : null;
             }
             else if (lockingModeExplicit)
@@ -1481,7 +1523,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             else
             {
-                lockingMode = effectiveMode == 1 ? 0 : 1;
+                // r-q41-create-session-counter/excl-open-ado-accdb opens ACCDB with Mode=12 without reading open
+                // ConnectionString or open Properties, so LockingMode stays null and those reads refuse by name.
+                lockingMode = effectiveMode switch
+                {
+                    1 => 0,
+                    12 => null,
+                    _ => 1,
+                };
             }
 
             SetInitValue(initValues, "User ID", OwnedVariant.FromText("Admin"));
@@ -1510,7 +1559,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             else
             {
-                _properties?.MarkUnrecorded(UnrecordedMdbOpenPropertiesReason);
+                _properties?.MarkUnrecorded(UnrecordedOpenPropertiesReason(effectiveMode, profile.IsAce));
             }
             AdoEvents.ConnectComplete(_events, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;

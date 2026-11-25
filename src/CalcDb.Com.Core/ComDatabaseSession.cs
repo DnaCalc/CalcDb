@@ -53,7 +53,8 @@ public sealed class ComDatabaseSession : IPublicationTarget
         CatalogSnapshot catalog,
         bool readOnly,
         string ownerLabel,
-        Action<TableEditContext, CatalogEntry, TableDefinition>? onEditContextCreated = null)
+        Action<TableEditContext, CatalogEntry, TableDefinition>? onEditContextCreated = null,
+        bool exclusive = false)
     {
         _file = file;
         _lockFile = lockFile;
@@ -63,6 +64,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
         _extentPages = pageCount;
         Catalog = catalog;
         ReadOnly = readOnly;
+        Exclusive = exclusive;
         _ownerLabel = ownerLabel;
         _onEditContextCreated = onEditContextCreated;
     }
@@ -86,6 +88,13 @@ public sealed class ComDatabaseSession : IPublicationTarget
     public ulong PageCount => Math.Max(_extentPages, Cache.KnownExtentPages);
 
     public bool ReadOnly { get; }
+
+    /// <summary>
+    /// Whether this session opened or created the database exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file),
+    /// selecting page-0 commit counter slot <c>[0x0E00, 0x0E02)</c> instead of the shared slot <c>[0x0E02, 0x0E04)</c>
+    /// (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter).
+    /// </summary>
+    public bool Exclusive { get; }
 
     public bool Closed => _file is null;
 
@@ -163,6 +172,8 @@ public sealed class ComDatabaseSession : IPublicationTarget
         }
         return Writable(pages, out failure);
     }
+
+    bool IPublicationTarget.IsExclusiveSession(PageCache cache) => ReferenceEquals(cache, Cache) && Exclusive;
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
     public TableDefinition? Definition(CatalogEntry entry, out string? failure)
