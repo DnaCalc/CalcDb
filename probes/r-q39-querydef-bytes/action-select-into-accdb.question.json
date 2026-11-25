@@ -1,0 +1,50 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q39-querydef-bytes/action-select-into-accdb",
+  "bookRefs": ["R-CAT-1", "CAT-Q", "II-06", "W-07"],
+  "description": "ACCDB empty table T: CreateQueryDef('QMake', 'SELECT ID, V INTO T2 FROM T WHERE V > 0'), keeping all pages before, after create while open, and after Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-plain-accdb.accdb",
+      "sha256": "5bd002eaf9f69ab1719d0ebf7e263e6853327f1c42c82f906966dca4854cb0f1",
+      "length": 184320,
+      "provenance": "r-q37-valrule-put.create-plain-accdb.b33bf5b149.a1 qk1-b33bf5b149b418c1a30a0187e3bf8007a04a427e1e3333b49d827f85b10676db output:r-q37-plain-accdb.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "CreateQueryDef", "kind": "method", "args": [{ "type": "bstr", "text": "QMake" }, { "type": "bstr", "text": "SELECT ID, V INTO T2 FROM T WHERE V > 0" }], "bind": "qd" },
+    { "op": "observeFiles", "label": "after-create-open", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+    { "op": "release", "target": "qd" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg2", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg2", "offset": 0, "count": 327680, "keep": true },
+    { "op": "nativeClose", "handle": "pg2" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true }], "bind": "dbro" },
+    { "op": "invoke", "target": "dbro", "member": "QueryDefs", "kind": "propertyGet", "args": [], "bind": "qdfs" },
+    { "op": "invoke", "target": "qdfs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "QMake" }], "bind": "qdr" },
+    { "op": "invoke", "target": "qdr", "member": "Type", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "qdr", "member": "SQL", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "qdr" },
+    { "op": "release", "target": "qdfs" },
+    { "op": "invoke", "target": "dbro", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "dbro" },
+    { "op": "release", "target": "eng" }
+  ]
+}
