@@ -1450,3 +1450,15 @@ above), and every large stretch had one or two rules beyond its records, caught 
 
 Successor: CalcDb organizer 15, session 01a21018-8797-7e2a-a83d-e809e872a3d4, started beside 01a20e84 (`--no-parent`). Organizer 14 finishes the wide
 compare wide-q3mv-1 (records compare-baseline-wide.tsv if nothing is lost) and forwards nothing else.
+
+## 2026-11-25 - Organizer 15 (01a21018): five idle hours behind a stalled notification queue
+
+At 00:30 UTC the organizer started three Neon children (the zsfm and 3vkh ready-gate probers, the xmgx writer) and
+set no reminder. Their interim answers arrived until 01:00; from 01:05 CodeAlta put every answer into the organizer's
+queue (`alta session queued`: nine `parent-notify` items, the two probers' final reports at 01:07 and 01:12 and the
+writer's at 01:53) and started no turn. The children were idle and done; nothing moved until the owner asked at 06:00
+why the work had stopped. The organizer read the three reports from the queue, unqueued all nine, and checked the
+probers' notes against their kept pages before landing. Cause outside CalcDb: the queue was not drained after a turn
+ended (for the owner to pass on to CodeAlta if wanted). Changed: AGENTS.md (Sub-sessions) has the organizer keep a
+30-minute repeating reminder while a child or a landing job runs, checking its own queue and the children; the brief
+rule "set one reminder when children may take several minutes" was there and not followed.

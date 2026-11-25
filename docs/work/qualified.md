@@ -1282,6 +1282,31 @@ is summarised in [qualification-report.md](qualification-report.md).
   Built in publication (18c274e3).
 - **Open**: an empty BINARY value; the counter at 0xFFFF. A fixed field set to Null: see the r-q36 note below.
 
+### R-FMT-2, R-CRASH-1 r-q40 (W-05, task 3vkh): Jet 4 MDB steps the page-0 counter at 0xE02 as ACCDB does
+
+- **Claim**: on Jet 4 MDB, page 0 `[0xE02, 0xE04)` is the same little-endian u16 commit counter as on ACCDB and steps
+  by the same rule; every MDB and ACCDB twin agrees at every point, and the MDB counter carries (`01FE`, `01FF`,
+  `0200`, `0201`).
+
+| Statement or event (shared open) | While open | At Close |
+| --- | --- | --- |
+| CREATE TABLE, CREATE [UNIQUE] INDEX (empty or populated), ALTER TABLE | +1 per statement | +1 when page 1 changed (a reservation returned, ADD CONSTRAINT), else +0 (ADD COLUMN) |
+| SQL INSERT (1, 5 or 80 rows) | +1 per statement, not per row or page | +1 when page 1 changed, else +0 |
+| SQL UPDATE, DELETE | +0 for no row, else +1 per statement | +1 when a DELETE emptied a page returned in page 1, else +0 |
+| DAO recordset AddNew, Edit, Delete, Update | +1 per burst (writes under 500 ms apart coalesce; 1,500 ms apart step each) | +1 for a page-1 return or a deferred TDEF row count, else +0 |
+| BeginTrans and CommitTrans with writes; Rollback; no write | +1 at CommitTrans; +0; +0 | +0 |
+| ADO Connection.Execute INSERT, UPDATE, DELETE | +1 per statement | +1 when page 1 changed |
+| A new empty MDB; DDL in its exclusive CreateDatabase session | `0x0100`; +0 at 0xE02 (0xE00 steps `01 01` to `03 01`) | +0 |
+
+- **Conditions**: Jet 4 MDB copies of `r-cat-1-mdb-empty.mdb` or a fresh CreateDatabase option 64, ACCDB twins; one
+  process, DAO and ADO; the whole file kept at every point.
+- **Records**: `evidence/r-q40-mdb-counter/` (27 questions, 7 MDB `a2` repeats equal outside CatalogDate); r-q27, r-q29,
+  r-q30, r-q31, r-q34, r-q36, r-q37 and r-q38 MDB twins agree. The organizer read dml-insert-rows-mdb page 0 (`08`,
+  `09`, `0a`, `0b`, `0b`, `0d`).
+- **Open**: 0xFFFF; the MDB burst boundary between 0.5 and 1 s; an exclusive OpenDatabase; DROP TABLE, DROP INDEX,
+  ALTER TABLE DROP and TableDefs.Append on MDB; whether rs.Close or db.Close writes the deferred TDEF count; why an
+  80-row INSERT into a populated table took its pages without a 32-page reservation (MDB and ACCDB alike).
+
 ### R-FMT-2 r-q36 (W-05, task bfhj): a leading U+FEFF is stored as written, a row with no variable column pads to 4 bytes before its mask, a fixed field set to Null keeps its bytes
 
 - **Claim**:
@@ -1343,6 +1368,45 @@ is summarised in [qualification-report.md](qualification-report.md).
   of three or more pages; an LVAL page shared with another live row; an MSysObjects page without room for the inline
   blob; the length limits of the rule and the text; a table with rows; TableDef-level rules, a draft field before
   Append, other variant types; why the chained replacement allocated page 48 and not 47; the counter's width and wrap.
+
+### R-CAT-1 CAT-Q r-q39 (W-07/saved-definition, task zsfm): the bytes of a saved QueryDef
+
+- **Claim**:
+  - *No write*: `CreateQueryDef("", sql)` (`#Temporary QueryDef#`) and an unappended draft `CreateQueryDef()` change no
+    byte; `QueryDefs.Append` of a draft writes the bytes a named `CreateQueryDef` writes.
+  - *MSysObjects*: one row, `Id` the lowest free negative Int32 from `0x80000000` (`0x80000001` for the second, the
+    first reused after `Delete`), `ParentId 0x0F000001`, `Type 5`, `Name` uncompressed UTF-16LE, `Owner` the masked
+    Admin SID. `Flags` is `QueryDef.Type`: 0 select, 0x10 crosstab, 0x20 delete, 0x30 update, 0x40 append, 0x50
+    make-table, 0x60 DDL, 0x70 pass-through, 0x80 union. `LvProp` is written twice: a 56-byte inline `MR2` blob
+    (ODBCTimeout 60), then a 90-byte single-page LVAL (ODBCTimeout 60, MaxRecords 0; later queries share that page),
+    the row shrinking in place and leaving a 56-byte vacated copy (Flags 0) below it.
+  - *MSysACEs*: two 19-byte rows per query, Admin `ACM 0x000F00FE` and Users `0x000FFEFF`, `FInheritable` 0.
+  - *MSysQueries*: rows 0 (`Attribute 0`, Flag 0) and 255 (Flag Null) first, then the clause rows in parse order per
+    shape (select `*`, columns with aliases, WHERE, ORDER BY with `d`, PARAMETERS Long and Text(n), UPDATE, DELETE,
+    INSERT VALUES and SELECT, SELECT INTO, UNION and UNION ALL (option Flag 3 or 1), TRANSFORM, DDL, pass-through);
+    Name1 and Name2 uncompressed; `Expression` inline up to 32 UTF-16 units (3 to 32 ASCII units compressed with
+    `ff fe`), from 33 units an uncompressed single-page LVAL; after a Text(n) parameter row, `LvExtra` stays non-Null
+    (0) on the query's later rows. Allocation order: MSysQueries data page, Expression LVAL page, LvProp LVAL page.
+  - *Indexes*: MSysObjects ParentIdName and Id, MSysACEs ObjectId, MSysQueries ObjectIdAttribute (key ObjectId,
+    Attribute, Order), single-leaf; the TDEF counters at +67 and +79 only grow.
+  - *Commits*: a non-union CreateQueryDef steps page 0 `+0xE02` by 4 at once and reserves a 32-page block in page 1;
+    the fifth commit (TDEF row count, a non-select Flags) comes on ACE's deferred timer, at the next CreateQueryDef, or
+    at Close; a union writes all five at once. Close returns the unused reserved pages and steps +1.
+  - *SQL put*: rows 0 and 255 stay, the old clause rows are deleted, the new ones appended, DateUpdate written at once
+    (+1); the TDEF count and a family change's Flags at Close (+1). *Delete*: the MSysObjects, MSysACEs and MSysQueries
+    rows and index entries go, an emptied LvProp LVAL page becomes type `0x09` (slot 0 `0xD000`) at once and its page
+    1 bit returns at Close; the MSysQueries data page stays allocated.
+  - Only DateCreate and DateUpdate (live, deleted and vacated rows) differ between repeats.
+- **Conditions**: ACE 2007 ACCDB and Jet 4 MDB from frozen fixtures `r-q37-plain-*`; DAO, one session; single-table
+  sources of the shapes named.
+- **Records**: `evidence/r-q39-querydef-bytes/` (35 questions, 16 `a2` repeats; every page before and after each
+  call and after Close). The organizer read select-star-accdb (page 0 `00 04` at create, `06` after Close; page 1
+  reservation; page 8 Id index) and temp-querydef-accdb (no byte changed).
+- **Open**: JOIN, HAVING, GROUP BY outside a crosstab, DISTINCT, DISTINCTROW, TOP, WITH OWNERACCESS OPTION, PIVOT IN,
+  subqueries, several sources, other PARAMETERS types; a SQL put between inline and LVAL Expression; Delete of a query
+  that shares its LvProp page or owns an Expression page; property changes after save; chained LVALs; page splits;
+  error paths; ADO CREATE VIEW and PROCEDURE; ACE 2010 and later. The comparison rule misses five repeats' clock
+  fields (`tpjw`).
 
 ### R-TXN-1 TXN-NEST: current-level nesting
 - **Claim**: `CommitTrans`/`Rollback` act on the current level; inner commit then outer rollback reverses both; inner rollback then outer commit keeps the outer change; the same row changed at every level takes the outer image after an inner rollback; empty levels raise nothing; resolving with no level raises 3034; the 8th `BeginTrans` raises 3003 (7 levels, also on a second Workspace independently) and writes at levels 6 and 7 raise 3003; `CommitTrans` accepts 0/Missing/Empty/I2 1/UI1 1/R8 1.0/"1", other values 3001 leaving the level open; `BeginTrans(1)` 3001 starts no level; a file opened after a nested begin joins and rolls back with it.

@@ -88,6 +88,10 @@ scope or design, the book wins.
   under about 300 lines, a probe round or a bookkeeping change has the organizer's review only.
 - A note that matters to a running child now is steered (`alta session send` without `--queue-if-busy`); a queued
   prompt waits for the end of its turn and then starts a new one. Check `alta session queued` before a child ends.
+- While a child or a landing job runs, the organizer keeps a repeating reminder (`alta reminder create --duration
+  00:30:00 --repeat 6 --stdin`) that checks its own `alta session queued` and the children's state: on 2026-11-25 the
+  organizer's queue held nine child answers, three final reports among them, for five hours without starting a turn.
+  A queued answer is read from the queue (or the child's `alta session tail`) and then unqueued.
 - An organizer hands over to a fresh session at about 300 tool calls or 5 hours, at a quiet point: no writer
   running, or each running child named in the handoff as the old organizer's. The successor is a sibling, never a
   child: `alta session create --no-parent --model-ref claude-code:opus@high --title "CalcDb organizer N (from <old
