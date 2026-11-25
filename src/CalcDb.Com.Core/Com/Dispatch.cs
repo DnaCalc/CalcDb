@@ -131,12 +131,32 @@ public readonly record struct ArgumentConversion(int Parameter, VarType SourceTy
 /// binds and coerces arguments, the typed adapter (<see cref="TypedCall"/>) converts native arguments; both reach the
 /// same operation. A declared member without an operation fails with the named not-implemented outcome.
 /// </summary>
-public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable, SupportErrorInfo.Vtable)
+public abstract unsafe class DispatchObject : ComObject
 {
-    public InterfaceDecl Declaration { get; } = declaration;
+    private readonly ConnectionPointHub? _connectionPoints;
+
+    protected DispatchObject(InterfaceDecl declaration, nint vtable) : base(vtable, SupportErrorInfo.Vtable)
+    {
+        Declaration = declaration;
+    }
+
+    protected DispatchObject(InterfaceDecl declaration, nint vtable, ConnectionPointHub connectionPoints)
+        : base(vtable, SupportErrorInfo.Vtable, ConnectionPointContainerVtable.Vtable)
+    {
+        Declaration = declaration;
+        _connectionPoints = connectionPoints;
+        connectionPoints.AttachOwner(this);
+    }
+
+    public InterfaceDecl Declaration { get; }
+
+    internal ConnectionPointHub? ConnectionPoints => _connectionPoints;
 
     /// <summary>The head of ISupportErrorInfo (head 1, after the dual interface).</summary>
     private const int SupportErrorInfoHead = 1;
+
+    /// <summary>The head of IConnectionPointContainer (head 2, present only when a ConnectionPointHub is attached).</summary>
+    private const int ConnectionPointContainerHead = 2;
 
     protected abstract Operation? Find(MemberDecl member);
 
@@ -232,7 +252,17 @@ public abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtab
         {
             return SupportErrorInfoHead;
         }
+        if (_connectionPoints is not null && iid == ComIids.IConnectionPointContainer)
+        {
+            return ConnectionPointContainerHead;
+        }
         return DeclarationIndex.Chain(Declaration).AsSpan().Contains(iid) ? 0 : -1;
+    }
+
+    protected override void OnFinalRelease()
+    {
+        _connectionPoints?.ReleaseAllSinks();
+        base.OnFinalRelease();
     }
 
     /// <summary>

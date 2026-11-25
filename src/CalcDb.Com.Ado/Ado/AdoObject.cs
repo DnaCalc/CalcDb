@@ -189,6 +189,13 @@ internal abstract class AdoObject : DispatchObject
         CostCounters.Current.WrappersCreated++;
     }
 
+    protected AdoObject(InterfaceDecl declaration, nint vtable, string source, ConnectionPointHub connectionPoints)
+        : base(declaration, vtable, connectionPoints)
+    {
+        Source = source;
+        CostCounters.Current.WrappersCreated++;
+    }
+
     public string Source { get; }
 
     protected abstract OperationTable Table { get; }

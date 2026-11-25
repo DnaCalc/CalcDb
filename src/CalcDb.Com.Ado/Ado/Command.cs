@@ -63,6 +63,8 @@ internal sealed unsafe class CommandObject : AdoObject
 
     public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new CommandObject(), outer, iid, result);
 
+    internal static CommandObject CreateSynthetic() => new();
+
     private ParametersObject ParameterCollection => _parameters ??= new ParametersObject(this);
 
     private CallResult PutCommandType(nint arg)
@@ -282,7 +284,7 @@ internal sealed unsafe class CommandObject : AdoObject
             {
                 return NotImplemented("Command.Execute for non-UPDATE/INSERT command text (only UPDATE and INSERT are recorded)");
             }
-            return _activeConnection.ExecuteCommandText(text, _commandType, 0, optionsArg, "Command.Execute");
+            return _activeConnection.ExecuteCommandText(text, _commandType, 0, optionsArg, "Command.Execute", explicitCommand: this);
         }
         return NotImplemented("Command.Execute of a non-parameterized Command (not recorded)");
     }
