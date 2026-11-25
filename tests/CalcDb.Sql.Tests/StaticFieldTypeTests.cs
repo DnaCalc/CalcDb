@@ -405,6 +405,77 @@ public sealed class StaticFieldTypeTests
         Assert.True(distinctRows >= 2);
     }
 
+    /// <summary>
+    /// W-06 (agg-types): an aggregate over an expression takes its result from the expression's static type, for the
+    /// kind and type pairs a record shows (SqlBinder.ExpressionAggregateRule): Sum and Avg of a Long or Double expression
+    /// are Double (r-cplx-rebuild/compact-bloat-repeated call 7 <c>SUM(LEN(M))</c> Type 7; r-fix-expr-sql/
+    /// agg-occur-convertible <c>Sum(CLng(t))</c> Type 7, Size 8; r-par-1/fold-currency-argument-forms <c>Sum(CDbl(c))</c>
+    /// Type 7, Size 8; r-par-1/err-aggregate-and-groups calls 75, 85 <c>Sum(1 / zm)</c> Type 7, Size 8), Sum of a Currency
+    /// expression is Currency (fold-currency-argument-forms <c>Sum(CCur(c))</c>, <c>Sum(c * 1)</c>, <c>Sum(c + 0)</c>
+    /// Type 5, Size 8), Min and Max of a Long expression are Long (r-fix-expr-sql/record-width-bracket call 14
+    /// <c>Max(Len(c1))</c> Type 4) and of a Text expression Text, Size 0 (r-sql-13b/agg-min-max-text
+    /// <c>Min(t &amp; '')</c>, <c>Max(t &amp; '')</c> Type 10, Size 0). Avg of a Currency field is Currency
+    /// (r-par-1/fold-currency-avg-minmax call 25: Type 5, Size 8).
+    /// </summary>
+    [Theory]
+    [InlineData("SELECT Sum(Len(MemoCol)) AS v FROM T", 7, 8)]
+    [InlineData("SELECT Sum(CLng(Txt)) AS v FROM T", 7, 8)]
+    [InlineData("SELECT Sum(CDbl(C)) AS v FROM T", 7, 8)]
+    [InlineData("SELECT Sum(1 / L) AS v FROM T", 7, 8)]
+    [InlineData("SELECT Sum(CCur(C)) AS v FROM T", 5, 8)]
+    [InlineData("SELECT Sum(C * 1) AS v FROM T", 5, 8)]
+    [InlineData("SELECT Sum(C + 0) AS v FROM T", 5, 8)]
+    [InlineData("SELECT Max(Len(Txt)) AS v FROM T", 4, 4)]
+    [InlineData("SELECT Max(Len(MemoCol)) AS v FROM T", 4, 4)]
+    [InlineData("SELECT Min(Txt & '') AS v FROM T", 10, 0)]
+    [InlineData("SELECT Max(Txt & '') AS v FROM T", 10, 0)]
+    [InlineData("SELECT Avg(C) AS v FROM T", 5, 8)]
+    public void Aggregates_over_expressions_take_the_recorded_result_type(string sql, int expectedType, int expectedSize)
+    {
+        using BoundSelect plan = Prepare(sql);
+        ResultColumn col = Assert.Single(plan.Columns);
+        Assert.Equal(ColumnTypeRule.Bound, col.TypeRule);
+        Assert.Equal(expectedType, col.FieldType);
+        Assert.Equal(expectedSize, col.Size);
+    }
+
+    /// <summary>
+    /// W-06 (agg-types): kind and type pairs no record shows stay named: First and Last of an expression, Avg and Min of a
+    /// Currency expression, Sum of a Date expression, an expression with no identified static type, and an expression
+    /// over a parameter.
+    /// </summary>
+    [Theory]
+    [InlineData("SELECT First(Len(Txt)) AS v FROM T")]
+    [InlineData("SELECT Last(CDbl(D)) AS v FROM T")]
+    [InlineData("SELECT Avg(CCur(C)) AS v FROM T")]
+    [InlineData("SELECT Min(CCur(C)) AS v FROM T")]
+    [InlineData("SELECT Sum(CDate(Txt)) AS v FROM T")]
+    [InlineData("SELECT Sum(Abs(L)) AS v FROM T")]
+    [InlineData("SELECT Sum(L * p) AS v FROM T")]
+    public void Unrecorded_aggregates_over_expressions_stay_named(string sql)
+    {
+        BoundSelect? plan = BoundSelect.Prepare(sql, Db, out SqlFailure? failure);
+        plan?.Dispose();
+        Assert.Null(plan);
+        Assert.Equal("NotModelled.AggregateArgumentType", failure?.NotModelled);
+    }
+
+    /// <summary>
+    /// PAR-FOLD: Avg(Currency) rounds its Double quotient to Currency exactly, half to even (r-par-1/fold-currency-avg-minmax
+    /// call 25: 307445734561825.875; call 85: 0.0003 / 2 in Double reads 0.0001).
+    /// </summary>
+    [Fact]
+    public void Currency_of_a_double_rounds_the_exact_value()
+    {
+        Assert.True(SelectCursor.TryCurrencyOf(922337203685477.5807 / 3, out long g3));
+        Assert.Equal(3074457345618258750L, g3);
+        Assert.True(SelectCursor.TryCurrencyOf(0.0003 / 2, out long g9));
+        Assert.Equal(1L, g9);
+        Assert.False(SelectCursor.TryCurrencyOf(922337203685477.625, out _));
+        Assert.True(SelectCursor.TryCurrencyOf(0, out long zero));
+        Assert.Equal(0L, zero);
+    }
+
     private static BoundSelect Prepare(string sql)
     {
         BoundSelect? plan = BoundSelect.Prepare(sql, Db, out SqlFailure? failure);

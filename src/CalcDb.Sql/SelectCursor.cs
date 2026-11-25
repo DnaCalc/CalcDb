@@ -603,6 +603,64 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         Unrecorded,
     }
 
+    /// <summary>
+    /// A Double as Currency: the exact value times 10,000 rounded half to even, false outside the range. Exact, not a
+    /// Double multiply: r-par-1/fold-currency-avg-minmax call 25 reads 307445734561825.875 for the Double
+    /// 307445734561825.875, where <c>Math.Round(d * 10000)</c> gives 307445734561825.8944.
+    /// </summary>
+    internal static bool TryCurrencyOf(double value, out long money)
+    {
+        money = 0;
+        if (!double.IsFinite(value))
+        {
+            return false;
+        }
+        long bits = BitConverter.DoubleToInt64Bits(value);
+        bool negative = bits < 0;
+        int exponent = (int)((bits >> 52) & 0x7FF);
+        long mantissa = bits & 0xFFFFFFFFFFFFFL;
+        if (exponent == 0)
+        {
+            exponent = 1;
+        }
+        else
+        {
+            mantissa |= 1L << 52;
+        }
+        int shift = exponent - 1075; // value = mantissa * 2^shift
+        if (shift >= 0)
+        {
+            // At least 2^52 (the mantissa carries its leading bit here): beyond the Currency range.
+            return false;
+        }
+        Int128 scaled = (Int128)mantissa * 10000;
+        if (-shift >= 127)
+        {
+            scaled = 0;
+        }
+        else
+        {
+            Int128 whole = scaled >> -shift;
+            Int128 rest = scaled - (whole << -shift);
+            Int128 half = (Int128)1 << (-shift - 1);
+            if (rest > half || (rest == half && (whole & 1) != 0))
+            {
+                whole++;
+            }
+            scaled = whole;
+        }
+        if (negative)
+        {
+            scaled = -scaled;
+        }
+        if (scaled < long.MinValue || scaled > long.MaxValue)
+        {
+            return false;
+        }
+        money = (long)scaled;
+        return true;
+    }
+
     /// <summary>What an open computed: constant values and types, and the materialized rows with their group slots.</summary>
     private sealed class Prepared
     {
@@ -2753,7 +2811,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 NewGroup(states);
                 sorted.Add(0);
             }
-            if ((keys > 0 || plan.Tree is not null) && roots.Count > 0 && FeedOrderOpen() is { } feedOpen)
+            bool derived = plan.Sources.Count == 1 && plan.Sources[0].Subquery is not null;
+            if ((keys > 0 || plan.Tree is not null || derived) && roots.Count > 0 && FeedOrderOpen() is { } feedOpen)
             {
                 failure = feedOpen;
                 return null;
@@ -2852,7 +2911,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 for (int a = 0; a < aggregates.Count; a++)
                 {
-                    _slots[(g * _slotWidth) + keys + a] = Finish(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(g * aggregates.Count) + a]);
+                    _slots[(g * _slotWidth) + keys + a] = Finish(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(g * aggregates.Count) + a], out failure);
+                    if (failure is not null)
+                    {
+                        return null;
+                    }
                 }
             }
             var rows = new List<ResultRow>();
@@ -2898,7 +2961,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private SqlFailure? FeedOrderOpen()
         {
             bool sensitive = plan.Aggregates.Any(a => a.Kind is AggregateKind.First or AggregateKind.Last
-                || (a.Kind is AggregateKind.Sum or AggregateKind.Avg && a.Argument!.BareField is { } f && f.Column.TypeCode is Format.NativeTypes.Double or Format.NativeTypes.Single));
+                || (a.Kind is AggregateKind.Sum or AggregateKind.Avg && a.FloatingInput));
             if (!sensitive)
             {
                 return null;
@@ -2909,6 +2972,14 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderJoin", "an order-sensitive aggregate (First, Last, a floating Sum or Avg) over a join");
             }
             SourceSlot s = plan.Sources[0];
+            if (s.Subquery is { Order.Count: > 0 })
+            {
+                // r-sql-1/agg-order calls 26, 36 and r-par-1/fold-double-large-reordered calls 5 to 115 (Sum(d) over a derived
+                // table with ORDER BY id, id DESC, d or d DESC), r-sql-1/agg-first-last call 26 (First and Last of d over
+                // ORDER BY id DESC: 2 and Null, the reverse of the ORDER BY): the rows do not reach the aggregate in the
+                // derived table's order, and the order they do reach it in is not identified.
+                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderDerived", "an order-sensitive aggregate (First, Last, a floating Sum or Avg) over a derived table with ORDER BY");
+            }
             foreach (BoundExpression key in plan.Keys)
             {
                 if (key.BareField is { } field && s.IndexLeaders.Contains(field.Column.PhysicalNumber))
@@ -2963,6 +3034,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     s.Count++;
                     if (a.Result == VarType.Currency)
                     {
+                        if (v.Vt != (ushort)VarType.Currency)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", "a Currency Sum or Avg over a value that is not VT_CY");
+                            return false;
+                        }
                         long next;
                         try
                         {
@@ -2970,7 +3046,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         }
                         catch (OverflowException)
                         {
-                            // SQL-AGG: Sum(Currency) overflows at open (error 6) when a group exceeds the range.
+                            // SQL-AGG: Sum(Currency) overflows at open (error 6) when a group exceeds the range; PAR-FOLD: so
+                            // does Avg(Currency), whenever the running total leaves the range (r-par-1/fold-currency-avg-minmax
+                            // g 1, 2, 4, 5, 6, 11, 12).
                             failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
                             return false;
                         }
@@ -2978,7 +3056,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     }
                     else
                     {
-                        RelationalOrder.Number(v, out double d);
+                        if (!RelationalOrder.Number(v, out double d))
+                        {
+                            // An expression whose static type is Long or Double evaluating to another type (a Decimal) is not recorded.
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", $"a Double Sum or Avg over a VARIANT type {v.Vt} value");
+                            return false;
+                        }
                         s.Sum += d; // PAR-FOLD: a strictly sequential sum in feed order
                         if (double.IsInfinity(s.Sum))
                         {
@@ -3030,14 +3113,28 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             slot = Copy(value);
         }
 
-        private static NativeVariant Finish(AggregateSpec a, ref AggregateState s)
+        private static NativeVariant Finish(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
         {
+            failure = null;
             switch (a.Kind)
             {
                 case AggregateKind.CountRows or AggregateKind.Count:
                     return new NativeVariant { Vt = (ushort)VarType.I4, Int64 = (uint)(int)s.Count };
                 case AggregateKind.Sum when s.Seen:
                     return a.Result == VarType.Currency ? new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = s.Money } : new NativeVariant { Vt = (ushort)VarType.R8, Double = s.Sum };
+                case AggregateKind.Avg when s.Seen && a.Result == VarType.Currency:
+                    // PAR-FOLD (r-par-1/fold-currency-avg-minmax): the exact Currency total as a Double, divided by the count
+                    // in Double and rounded back to Currency. g 3 [-1, 1, 922337203685477.5807] gives 307445734561825.875
+                    // (the total's Double 922337203685477.625 / 3, call 25), not the exact 307445734561825.8602; g 9
+                    // [0.0001, 0.0002] gives 0.0001 (0.0003 / 2 in Double lies below the half, call 85), not the decimal
+                    // half-even 0.0002; g 7, 8, 10 give 0.0002, 0.3333, 100000000.0002 (calls 65, 75, 95).
+                    if (!TryCurrencyOf((s.Money / 10000.0) / s.Count, out long money))
+                    {
+                        // A quotient beyond the Currency range (possible only within a unit of the limits) is not recorded.
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AvgCurrencyRange", "Avg(Currency) whose Double quotient rounds outside the Currency range");
+                        return ScalarLiterals.Null;
+                    }
+                    return new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = money };
                 case AggregateKind.Avg when s.Seen:
                     return new NativeVariant { Vt = (ushort)VarType.R8, Double = s.Sum / s.Count };
                 case AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when s.Seen:

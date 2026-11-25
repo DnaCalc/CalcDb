@@ -414,8 +414,14 @@ internal enum AggregateKind : byte
 }
 
 /// <summary>An aggregate occurrence: its function, its argument over the input row, and its result type.</summary>
-internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType, ColumnDescriptor? sourceColumn = null)
+internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType, ColumnDescriptor? sourceColumn = null, bool floatingInput = false)
 {
+    /// <summary>
+    /// Whether a Sum or Avg adds floating values (a Double or Single field, a Double expression or derived column), so its
+    /// result depends on the feed order (PAR-FOLD).
+    /// </summary>
+    public bool FloatingInput { get; } = floatingInput;
+
     public AggregateKind Kind { get; } = kind;
 
     public SyntaxNode Node { get; } = node;
@@ -2627,11 +2633,15 @@ public sealed class BoundSelect : IDisposable
                 return new(OperandKind.Long, 4, true);
             }
             if (name.Equals("VarType", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("LenB", StringComparison.OrdinalIgnoreCase))
+                || name.Equals("LenB", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Len", StringComparison.OrdinalIgnoreCase))
             {
                 // r-expr-1b/conv-cdate-forms (#8/#19 VarType), r-expr-1b/arith-overflow-promotion (#8/#19 VarType),
                 // r-expr-1b/meta-memo-functions (#21/#26 LenB, #360/#365 VarType), r-expr-1b/str-chr-asc-range (#538/#544 LenB),
                 // r-def-expr-sql/expr-bytes-instrb-rightb (#606/#622 LenB): 4 (Long, VT_I4).
+                // r-expr-1b/str-len-lenb-forms (calls 7 to 95: Len of text, numbers, dates, True, CCur and CByte, Type 4,
+                // VT_I4), r-expr-1b/meta-memo-functions (calls 7, 169, 229: Len(Mm) and Len(Mm & Mm) Type 4, VT_I4 300,
+                // 600 and Null): Len is 4 (Long, VT_I4).
                 return new(OperandKind.Long, 4, true);
             }
             if (name.Equals("CCur", StringComparison.OrdinalIgnoreCase))
@@ -3679,8 +3689,13 @@ public sealed class BoundSelect : IDisposable
             }
             if (argument!.BareField is not { } field)
             {
-                argument.Dispose();
-                return Open("NotModelled.AggregateArgumentType", $"{node.Text} of an expression: its result type is not identified");
+                if (ExpressionAggregateRule(kind, node.Items[0], argument) is not { } er)
+                {
+                    argument.Dispose();
+                    return Open("NotModelled.AggregateArgumentType", $"{node.Text} of an expression: no recorded rule for its kind and static type");
+                }
+                bound.Aggregates.Add(new AggregateSpec(kind, node, argument, er.Result, er.Type, floatingInput: er.Floating));
+                return null;
             }
             byte t = field.Column.TypeCode;
             if (t is NativeTypes.Memo or NativeTypes.Ole && kind is AggregateKind.Sum or AggregateKind.Avg or AggregateKind.Min or AggregateKind.Max)
@@ -3693,6 +3708,11 @@ public sealed class BoundSelect : IDisposable
             {
                 AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
                 AggregateKind.Sum when t is NativeTypes.Currency => (VarType.Currency, 5),
+                // qualified.md R-PAR-1 PAR-FOLD: Avg of a Currency field is Currency, Field.Type 5 and Size 8
+                // (r-par-1/fold-currency-avg-minmax calls 25, 65, 75, 85, 95: Type 5, Size 8, VT_CY values); its total
+                // overflows at open as Sum's does (calls 5, 15, 35, 45, 55, 105, 115: error 6; r-fix-expr-sql/
+                // agg-sum-boundary-per-group calls 134, 170). The quotient is SelectCursor's (Finish).
+                AggregateKind.Avg when t is NativeTypes.Currency => (VarType.Currency, 5),
                 AggregateKind.Min or AggregateKind.Max when t is NativeTypes.Byte => (VarType.I4, 4),
                 AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when t is NativeTypes.Boolean => (VarType.I2, 3),
                 AggregateKind.First or AggregateKind.Last when t is NativeTypes.Memo => (VarType.Bstr, 12),
@@ -3705,8 +3725,77 @@ public sealed class BoundSelect : IDisposable
                 argument.Dispose();
                 return Open("NotModelled.AggregateArgumentType", $"{node.Text} of a native type {t} field: no recorded rule");
             }
-            bound.Aggregates.Add(new AggregateSpec(kind, node, argument, r.result, r.type, field.Column));
+            bool floating = kind is AggregateKind.Sum or AggregateKind.Avg && t is NativeTypes.Double or NativeTypes.Single;
+            bound.Aggregates.Add(new AggregateSpec(kind, node, argument, r.result, r.type, field.Column, floating));
             return null;
+        }
+
+        /// <summary>
+        /// The result of an aggregate over an expression or a derived-table column, by its kind and the argument's DAO type:
+        /// the computed column's static type (<see cref="StaticTypeOf"/>) or the derived column's Field.Type. Only the
+        /// pairs a record shows are admitted; the others stay <c>NotModelled.AggregateArgumentType</c>:
+        /// <list type="bullet">
+        /// <item>Sum of a Long expression is Double, Field.Type 7 (r-cplx-rebuild/compact-bloat-repeated call 7:
+        /// <c>SUM(LEN(M))</c> Type 7, VT_R8 80000; r-sql-13b/agg-expression-composition <c>Sum(v + 1)</c> and
+        /// <c>Sum(IIf(v &gt; 6, 1, 0))</c> Type 7, Size 8, VT_R8; r-par-1/err-write-statements-bad-row
+        /// <c>Sum(IIf(w = 5, 1, 0))</c> Type 7, VT_R8 239; r-fix-expr-sql/agg-occur-convertible <c>Sum(CLng(t))</c> Type 7).</item>
+        /// <item>Avg of a Long expression is Double (r-sql-13b/agg-expression-composition <c>Avg(v * 2)</c> Type 7, Size 8,
+        /// VT_R8 17.666666666666668).</item>
+        /// <item>Sum and Avg of a Double expression are Double (r-par-1/err-aggregate-and-groups calls 75, 85:
+        /// <c>Sum(1 / zm)</c> Type 7, Size 8, VT_R8 239 and 99, calls 5, 15: <c>Sum</c> and <c>Avg(1 / zm)</c> error 11 at open;
+        /// r-par-1/fold-currency-argument-forms <c>Sum(CDbl(c))</c> Type 7, VT_R8 0.0006000000000000001, a sequential
+        /// sum). Avg's value type has only the bare Double field's records (SQL-AGG) beside the error.</item>
+        /// <item>Sum of a Currency expression is Currency, Type 5, Size 8, and overflows at open (r-par-1/
+        /// fold-currency-argument-forms <c>Sum(CCur(c))</c>, <c>Sum(c * 1)</c>, <c>Sum(c + 0)</c>: VT_CY 0.0006 for g 7,
+        /// error 6 for g 1 and 2).</item>
+        /// <item>Min and Max of a Long expression are Long, Type 4 (r-fix-expr-sql/record-width-bracket call 14:
+        /// <c>Max(Len(c1))</c> Type 4, VT_I4 255; r-lock-1-2/accdb-alias-inproc-dot call 5: <c>MAX(LEN(M))</c> VT_I4 2000;
+        /// r-q2-cat-txn-lock/read-path-writer-frozen-mid-insert: <c>MIN(LEN(M))</c>, <c>MAX(LEN(M))</c> VT_I4 2000),
+        /// of a Text expression Text, Type 10, Size 0 (r-sql-13b/agg-min-max-text <c>Min(t &amp; '')</c>,
+        /// <c>Max(t &amp; '')</c>: Type 10, Size 0, VT_BSTR), of a Double expression Double (r-par-1/err-aggregate-and-groups call 35:
+        /// <c>Min(1 / zm)</c>, <c>Max(1 / zm)</c> error 11 at open; the value type is the bare Double field's).</item>
+        /// <item>Sum of a Double derived-table column is Double (r-par-1/err-aggregate-and-groups calls 105, 125:
+        /// <c>Sum(e)</c> over <c>1 / zm AS e</c>, Type 7, VT_R8 10 and 49); Min and Max of a Long stored or aggregate
+        /// column of a derived table are Long (r-sql-13b/agg-expression-composition <c>Max(n)</c> over
+        /// <c>Count(*) AS n</c>: Type 4, Size 4, VT_I4 3). Over a derived table with ORDER BY the feed
+        /// order is not identified (SelectCursor.FeedOrderOpen); First and Last of a derived column have only that case
+        /// (r-sql-1/agg-first-last call 26) and stay named.</item>
+        /// </list>
+        /// Min and Max need the evaluator's value type to be the DAO type's; an argument over parameters, an expression
+        /// whose static type is not identified and every other kind/type pair (First and Last of any expression among
+        /// them) stay named.
+        /// </summary>
+        private (VarType Result, int Type, bool Floating)? ExpressionAggregateRule(AggregateKind kind, SyntaxNode root, BoundExpression argument)
+        {
+            if (argument.BareSlot is int slot && slot >= DerivedSlot0 && slot < ParameterSlot0)
+            {
+                ResultColumn inner = bound.SourceList[0].Subquery!.Columns[slot - DerivedSlot0];
+                if (inner.TypeRule != ColumnTypeRule.Bound)
+                {
+                    return null;
+                }
+                return (kind, inner.FieldType) switch
+                {
+                    (AggregateKind.Sum, 7) => (VarType.R8, 7, true),
+                    (AggregateKind.Min or AggregateKind.Max, 4) when inner.Origin is ColumnOrigin.BaseColumn or ColumnOrigin.Aggregate => (VarType.I4, 4, false),
+                    _ => null,
+                };
+            }
+            if (argument.UsesSlots)
+            {
+                return null;
+            }
+            StaticTypeResult s = StaticTypeOf(root, null);
+            return (kind, s.FieldType) switch
+            {
+                (AggregateKind.Sum or AggregateKind.Avg, 4) => (VarType.R8, 7, false),
+                (AggregateKind.Sum or AggregateKind.Avg, 7) => (VarType.R8, 7, true),
+                (AggregateKind.Sum, 5) when s.InnerMatchesDao => (VarType.Currency, 5, false),
+                (AggregateKind.Min or AggregateKind.Max, 4) when s.InnerMatchesDao => (VarType.I4, 4, false),
+                (AggregateKind.Min or AggregateKind.Max, 7) when s.InnerMatchesDao => (VarType.R8, 7, false),
+                (AggregateKind.Min or AggregateKind.Max, 10) when s.InnerMatchesDao => (VarType.Bstr, 10, false),
+                _ => null,
+            };
         }
     }
 
