@@ -794,18 +794,31 @@ internal sealed unsafe partial class Run : IDisposable
         {
             foreach (string file in Directory.EnumerateFiles(Path.Combine(_attemptDir, "work")).Order(StringComparer.Ordinal))
             {
-                _artifacts.Add(file, "output:" + Path.GetFileName(file), "output-file");
+                using FileStream? stream = FileObserver.TryOpenSharedRead(file);
+                if (stream is not null)
+                {
+                    _artifacts.Add(stream, "output:" + Path.GetFileName(file), "output-file");
+                }
             }
             foreach (string file in Directory.EnumerateFiles(Path.Combine(_attemptDir, "inputs")).Order(StringComparer.Ordinal))
             {
-                string name = Path.GetFileName(file);
-                if (inputHashes.TryGetValue(name, out string? original) && Hashing.Sha256File(file) != original)
+                using FileStream? stream = FileObserver.TryOpenSharedRead(file);
+                if (stream is null)
                 {
-                    _artifacts.Add(file, "input-final:" + name, "changed-input");
+                    continue;
                 }
-                else if (!inputHashes.ContainsKey(name))
+                string name = Path.GetFileName(file);
+                if (inputHashes.TryGetValue(name, out string? original))
                 {
-                    _artifacts.Add(file, "input-sibling:" + name, "new-file-beside-input");
+                    if (Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(stream)) != original)
+                    {
+                        stream.Position = 0;
+                        _artifacts.Add(stream, "input-final:" + name, "changed-input");
+                    }
+                }
+                else
+                {
+                    _artifacts.Add(stream, "input-sibling:" + name, "new-file-beside-input");
                 }
             }
         }
