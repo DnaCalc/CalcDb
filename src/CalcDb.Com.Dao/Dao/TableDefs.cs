@@ -23,22 +23,31 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     private readonly Dictionary<int, DaoObject> _held = [];
 
     /// <summary>
-    /// The membership as the Database lists it now, for a collection whose members a catalog change alters (TableDefs);
-    /// null for a fixed collection. The Database relists its one TableDefs object after each catalog change, so a client
-    /// that holds it, or fetches it again, sees the new table (r-q15-ddl-open/lv-rewrite-byte-n: db.TableDefs after the
-    /// Append is the same object, u6, and Item("T") finds the new table; r-cat-1/names: Refresh after the Appends, Count 11).
+    /// The membership as the Database lists it now, for a collection whose members a catalog change alters
+    /// (TableDefs, Relations); null for a fixed collection. When a catalog read cannot succeed, returns a failure
+    /// reason and leaves the existing members unchanged. The Database relists its one TableDefs object after each
+    /// catalog change, so a client that holds it, or fetches it again, sees the new table
+    /// (r-q15-ddl-open/lv-rewrite-byte-n: db.TableDefs after the Append is the same object, u6, and Item("T") finds
+    /// the new table; r-cat-1/names: Refresh after the Appends, Count 11). Relations stays as last read across SQL
+    /// DDL until Refresh reloads it (r-def-expr-sql/ddl-fk-actions, r-ddl-limits/accdb-fk-alter,
+    /// r-q-cursor-dao/draft-correct-after-failure).
     /// </summary>
-    public Func<(IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make)>? Membership { get; init; }
+    public Func<(IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure)>? Membership { get; init; }
 
     /// <summary>List the members again from <see cref="Membership"/>; held member wrappers stay valid for their clients.</summary>
-    public void Relist()
+    public string? Relist()
     {
         if (Membership is { } membership)
         {
-            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make) = membership();
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? failure) = membership();
+            if (failure is not null)
+            {
+                return failure;
+            }
             (_names, _lookup, _make) = (names, new CollectionNames(names), make);
             _held.Clear(); // the ordinals change
         }
+        return null;
     }
 
     /// <param name="holdsDatabase">False for the Database's own TableDefs, which the Database keeps (a reference back would be a cycle).</param>
@@ -121,7 +130,9 @@ internal sealed unsafe class DefinitionCollection : DaoObject
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
                     .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.Item(index)); })
-                    .Method("Refresh", (self, args) => Live(self, c => { c.Relist(); return CallResult.Nothing; }));
+                    .Method("Refresh", (self, args) => Live(self, c => c.Relist() is { } fail
+                        ? CallResult.Fail(Failure.NotImplemented(fail))
+                        : CallResult.Nothing));
                 if (decl.MembersNamed("Append").Length > 0)
                 {
                     operations = operations.Method("Append", (self, args) => { nint item = args[0]; return Live(self, c => c.Appender is { } append ? append(c, item) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Append"))); });

@@ -710,22 +710,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public string? SchemaFailure => _session.SchemaFailure;
 
     /// <summary>
-    /// Whether DDL statement <paramref name="sql"/> may run beside the open recordsets: an existing table it changes or
-    /// drops that an open recordset holds in a way no record decides (a snapshot of the table itself or a forward-only
-    /// recordset, <see cref="TableHold"/>) refuses it by name; so does an MSysRelationships that cannot be read (the
-    /// binder's 3281 and 3383 read it). A statement that does not parse is left to the executor, which answers it.
+    /// Whether DDL statement <paramref name="sql"/> may run beside the open recordsets: an existing table it changes,
+    /// drops, or references in a FOREIGN KEY constraint that an open recordset holds in a way no record decides (a
+    /// snapshot of the table itself or a forward-only recordset, <see cref="TableHold"/>) refuses it by name; so does
+    /// an MSysRelationships that cannot be read (the binder's 3281 and 3383 read it). A statement that does not parse
+    /// is left to the executor, which answers it.
     /// </summary>
     public Failure? DdlRefusal(string sql)
     {
-        IEnumerable<string> targets = DdlParser.Parse(sql, out _) switch
-        {
-            DropTableStatement drop => drop.TableNames,
-            CreateIndexStatement index => [index.TableName],
-            DropIndexStatement index => [index.TableName],
-            AlterTableStatement alter => [alter.TableName],
-            _ => [],
-        };
-        foreach (string table in targets)
+        foreach (string table in DdlTargets(DdlParser.Parse(sql, out _)))
         {
             switch (Hold(table))
             {
@@ -736,6 +729,65 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
         }
         return Relationships(out string? failure) is null ? Failure.NotImplemented("DDL when " + failure) : null;
+    }
+
+    private static IEnumerable<string> DdlTargets(DdlStatement? statement)
+    {
+        switch (statement)
+        {
+            case CreateTableStatement create:
+                foreach (DdlColumnDef col in create.Columns)
+                {
+                    foreach (DdlColumnConstraint cc in col.Constraints)
+                    {
+                        if (cc.Kind == DdlConstraintKind.ForeignKey && cc.RefTable is { } refTable)
+                        {
+                            yield return refTable;
+                        }
+                    }
+                }
+                foreach (DdlTableConstraint tc in create.TableConstraints)
+                {
+                    if (tc.Kind == DdlConstraintKind.ForeignKey && tc.RefTable is { } refTable)
+                    {
+                        yield return refTable;
+                    }
+                }
+                break;
+            case DropTableStatement drop:
+                foreach (string table in drop.TableNames)
+                {
+                    yield return table;
+                }
+                break;
+            case CreateIndexStatement index:
+                yield return index.TableName;
+                break;
+            case DropIndexStatement index:
+                yield return index.TableName;
+                break;
+            case AlterTableStatement alter:
+                yield return alter.TableName;
+                switch (alter.Action)
+                {
+                    case AddConstraintAlterAction { Constraint: { Kind: DdlConstraintKind.ForeignKey, RefTable: { } refTable } }:
+                        yield return refTable;
+                        break;
+                    case AddColumnsAlterAction addCols:
+                        foreach (DdlColumnDef col in addCols.Columns)
+                        {
+                            foreach (DdlColumnConstraint cc in col.Constraints)
+                            {
+                                if (cc.Kind == DdlConstraintKind.ForeignKey && cc.RefTable is { } colRefTable)
+                                {
+                                    yield return colRefTable;
+                                }
+                            }
+                        }
+                        break;
+                }
+                break;
+        }
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
@@ -749,7 +801,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         if (_tableDefs is null)
         {
-            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make) = TableDefsMembership();
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, _) = TableDefsMembership();
             _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, names, make, holdsDatabase: false)
             {
                 Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
@@ -766,10 +818,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// The TableDefs members of the current catalog. ACE does not list the tables whose catalog flags carry 0x00030000
     /// (the MSysComplexType_* tables, flags 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
     /// </summary>
-    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make) TableDefsMembership()
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) TableDefsMembership()
     {
         CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-        return ([.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]));
+        return ([.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), null);
     }
 
     /// <summary>
@@ -940,6 +992,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private void OnCatalogReloaded()
     {
         _tableDefs?.Relist();
+        // _relations is intentionally not relisted here: DAO collections stay stale across SQL DDL until Refresh
+        // (r-def-expr-sql/ddl-fk-actions #1365-1367, r-q-cursor-dao/draft-correct-after-failure #101-127,
+        // r-dao-1-err-1/coll-mutation-refresh). _session.SchemaPublished clears the cached MSysRelationships list so
+        // Relations.Refresh() (or a first fetch of db.Relations after DDL) reads the new Type 8 relationship.
         _sql?.Forget();
     }
 
@@ -978,20 +1034,38 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return _containers;
     }
 
-    /// <summary>Relations: MSysRelationships in name order (r-dao-1b/relation-members-each: FK_Grand, RelMain). One collection per Database.</summary>
+    /// <summary>
+    /// Relations: MSysRelationships in name order (r-dao-1b/relation-members-each: FK_Grand, RelMain). One collection
+    /// per Database; stays as last read across SQL DDL until Refresh reloads it from the current MSysRelationships
+    /// (r-def-expr-sql/ddl-fk-actions #1365-1367, r-def-expr-sql/ddl-drop-and-missing-objects #201-204,
+    /// r-ddl-limits/accdb-fk-alter, r-q-cursor-dao/draft-correct-after-failure #101-127,
+    /// r-dao-1-err-1/coll-mutation-refresh).
+    /// </summary>
     private CallResult RelationsCollection()
     {
         if (_relations is null)
         {
-            IReadOnlyList<Relationship>? read = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out string? failure);
-            if (read is null)
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? failure) = RelationsMembership();
+            if (failure is not null)
             {
-                return CallResult.Fail(Failure.NotImplemented("Relations when MSysRelationships cannot be read: " + failure));
+                return CallResult.Fail(Failure.NotImplemented(failure));
             }
-            Relationship[] relations = [.. read.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)];
-            _relations = new DefinitionCollection(DaoTypes.Relations, "DAO.Relations", this, [.. relations.Select(r => r.Name)], (c, i) => new RelationObject(c, relations[i]), holdsDatabase: false);
+            _relations = new DefinitionCollection(DaoTypes.Relations, "DAO.Relations", this, names, make, holdsDatabase: false)
+            {
+                Membership = RelationsMembership,
+            };
         }
         return Object(_relations);
+    }
+
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) RelationsMembership()
+    {
+        if (Relationships(out string? failure) is not { } read)
+        {
+            return ([], static (_, _) => throw new InvalidOperationException(), "Relations when MSysRelationships cannot be read: " + failure);
+        }
+        Relationship[] relations = [.. read.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)];
+        return ([.. relations.Select(r => r.Name)], (c, i) => new RelationObject(c, relations[i]), null);
     }
 
     /// <summary>A catalog object's MR2 property blob (CAT-P), or null when it stores none; a blob that does not frame is a failure.</summary>

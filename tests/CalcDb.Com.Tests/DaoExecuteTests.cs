@@ -46,13 +46,13 @@ public sealed unsafe class DaoExecuteTests : IDisposable
         }
     }
 
-    private DatabaseObject NewDatabase()
+    private DatabaseObject NewDatabase(string fileName = "exec.accdb")
     {
         nint engine;
         Assert.Equal(0, DBEngineObject.Create(_engine.Binding, 0, NativeRoute.IidIDispatch, &engine));
         _held.Add(engine);
         DBEngineObject eng = ComObject.Recover<DBEngineObject>(engine);
-        return Recover<DatabaseObject>(Ok(Method(eng, "CreateDatabase", Path.Combine(_dir, "exec.accdb"), DbLangGeneral, 128)));
+        return Recover<DatabaseObject>(Ok(Method(eng, "CreateDatabase", Path.Combine(_dir, fileName), DbLangGeneral, 128)));
     }
 
     private nint Arg(object? value)
@@ -315,5 +315,124 @@ public sealed unsafe class DaoExecuteTests : IDisposable
             Ok(Method(db, "Close"));
             Assert.Equal(beforeAuto, File.ReadAllBytes(autoPath));
         }
+    }
+
+    private short CountOf(DispatchObject collection)
+    {
+        CallResult result = Ok(Get(collection, "Count"));
+        Assert.Equal(VarType.I2, (VarType)result.Scalar.Vt);
+        return unchecked((short)result.Scalar.Int64);
+    }
+
+    private string TextOf(DispatchObject target, string member)
+    {
+        CallResult result = Ok(Get(target, member));
+        Assert.Equal(VarType.Bstr, (VarType)result.Scalar.Vt);
+        string text = Marshal.PtrToStringBSTR(result.Scalar.Pointer);
+        Marshal.FreeBSTR(result.Scalar.Pointer);
+        return text;
+    }
+
+    /// <summary>
+    /// W-08 (xmgx): Database.DdlRefusal checks the referenced parent table of CREATE TABLE (column and table
+    /// constraints) and ALTER TABLE (ADD CONSTRAINT FOREIGN KEY and ADD COLUMN REFERENCES) against held
+    /// TableSnapshot and ForwardOnly cursors (NotModelled.DdlBesideTableSnapshot / NotModelled.DdlBesideForwardOnly);
+    /// a held dynaset on the parent reaches the Sql binder and refuses as NotModelled.DdlTableInUsePrecedence.
+    /// </summary>
+    [Fact]
+    public void Foreign_key_DDL_refuses_when_referenced_parent_is_held_by_snapshot_or_forward_only_and_dynaset_is_named()
+    {
+        DatabaseObject db = NewDatabase("fk-hold.accdb");
+        Ok(Method(db, "Execute", "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY)"));
+        Ok(Method(db, "Execute", "CREATE TABLE C (ID LONG CONSTRAINT PK_C PRIMARY KEY, PID LONG)"));
+
+        string[] fkStatements =
+        [
+            "CREATE TABLE C1 (ID LONG CONSTRAINT PK_C1 PRIMARY KEY, PID LONG CONSTRAINT FK_C1 REFERENCES P (ID))",
+            "CREATE TABLE C2 (ID LONG CONSTRAINT PK_C2 PRIMARY KEY, PID LONG, CONSTRAINT FK_C2 FOREIGN KEY (PID) REFERENCES P (ID))",
+            "ALTER TABLE C ADD CONSTRAINT FK_C FOREIGN KEY (PID) REFERENCES P (ID)",
+            "ALTER TABLE C ADD COLUMN PID2 LONG CONSTRAINT FK_C3 REFERENCES P (ID)",
+        ];
+
+        // TableSnapshot on parent P -> NotModelled.DdlBesideTableSnapshot before executor runs.
+        DispatchObject tableSnapshot = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "P", 4)));
+        foreach (string sql in fkStatements)
+        {
+            CallResult res = Method(db, "Execute", sql);
+            Assert.Equal(FailureKind.NotModelled, res.Failure?.Kind);
+            Assert.StartsWith("NotModelled.DdlBesideTableSnapshot", res.Failure!.Description, StringComparison.Ordinal);
+        }
+        Ok(Method(tableSnapshot, "Close"));
+
+        // ForwardOnly on parent P -> NotModelled.DdlBesideForwardOnly before executor runs.
+        DispatchObject forwardOnly = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT * FROM P", 8)));
+        foreach (string sql in fkStatements)
+        {
+            CallResult res = Method(db, "Execute", sql);
+            Assert.Equal(FailureKind.NotModelled, res.Failure?.Kind);
+            Assert.StartsWith("NotModelled.DdlBesideForwardOnly", res.Failure!.Description, StringComparison.Ordinal);
+        }
+        Ok(Method(forwardOnly, "Close"));
+
+        // Dynaset on parent P -> locked hold reaches Sql binder -> NotModelled.DdlTableInUsePrecedence.
+        DispatchObject dynaset = Recover<DispatchObject>(Ok(Method(db, "OpenRecordset", "SELECT * FROM P", 2)));
+        foreach (string sql in fkStatements[..3])
+        {
+            CallResult res = Method(db, "Execute", sql);
+            Assert.Equal(FailureKind.NotModelled, res.Failure?.Kind);
+            Assert.StartsWith("NotModelled.DdlTableInUsePrecedence", res.Failure!.Description, StringComparison.Ordinal);
+        }
+        Ok(Method(dynaset, "Close"));
+
+        // Once parent P is released, FK DDL succeeds.
+        Ok(Method(db, "Execute", fkStatements[0]));
+        Ok(Method(db, "Close"));
+    }
+
+    /// <summary>
+    /// W-08 (xmgx): Database.Relations stays stale across SQL FK DDL until Refresh() reloads MSysRelationships,
+    /// matching ACE's DAO collection staleness (r-def-expr-sql/ddl-fk-actions #1365-1367,
+    /// r-def-expr-sql/ddl-drop-and-missing-objects #201-204, r-ddl-limits/accdb-fk-alter,
+    /// r-q-cursor-dao/draft-correct-after-failure #101-127, r-dao-1-err-1/coll-mutation-refresh).
+    /// </summary>
+    [Fact]
+    public void Relations_collection_stays_stale_across_SQL_FK_DDL_until_Refresh_reloads_it()
+    {
+        // CREATE TABLE with FK writes a Type 8 relationship; held Relations stays stale until Refresh().
+        DatabaseObject dbCreate = NewDatabase("rel-create.accdb");
+        Ok(Method(dbCreate, "Execute", "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY)"));
+        DispatchObject relsCreate = Recover<DispatchObject>(Ok(Get(dbCreate, "Relations")));
+        Assert.Equal(0, CountOf(relsCreate));
+
+        Ok(Method(dbCreate, "Execute", "CREATE TABLE C1 (ID LONG CONSTRAINT PK_C1 PRIMARY KEY, PID LONG CONSTRAINT FK_C1 REFERENCES P (ID))"));
+        Assert.Equal(0, CountOf(relsCreate));
+        Fails(Get(relsCreate, "Item", "FK_C1"), 3265, "DAO.Relations");
+
+        Ok(Method(relsCreate, "Refresh"));
+        Assert.Equal(1, CountOf(relsCreate));
+        DispatchObject rel1 = Recover<DispatchObject>(Ok(Get(relsCreate, "Item", "FK_C1")));
+        Assert.Equal("FK_C1", TextOf(rel1, "Name"));
+        Assert.Equal("P", TextOf(rel1, "Table"));
+        Assert.Equal("C1", TextOf(rel1, "ForeignTable"));
+        Ok(Method(dbCreate, "Close"));
+
+        // ALTER TABLE ADD CONSTRAINT FOREIGN KEY writes a Type 8 relationship; held Relations stays stale until Refresh().
+        DatabaseObject dbAlter = NewDatabase("rel-alter.accdb");
+        Ok(Method(dbAlter, "Execute", "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY)"));
+        Ok(Method(dbAlter, "Execute", "CREATE TABLE C (ID LONG CONSTRAINT PK_C PRIMARY KEY, PID LONG)"));
+        DispatchObject relsAlter = Recover<DispatchObject>(Ok(Get(dbAlter, "Relations")));
+        Assert.Equal(0, CountOf(relsAlter));
+
+        Ok(Method(dbAlter, "Execute", "ALTER TABLE C ADD CONSTRAINT FK_C FOREIGN KEY (PID) REFERENCES P (ID)"));
+        Assert.Equal(0, CountOf(relsAlter));
+        Fails(Get(relsAlter, "Item", "FK_C"), 3265, "DAO.Relations");
+
+        Ok(Method(relsAlter, "Refresh"));
+        Assert.Equal(1, CountOf(relsAlter));
+        DispatchObject rel2 = Recover<DispatchObject>(Ok(Get(relsAlter, "Item", "FK_C")));
+        Assert.Equal("FK_C", TextOf(rel2, "Name"));
+        Assert.Equal("P", TextOf(rel2, "Table"));
+        Assert.Equal("C", TextOf(rel2, "ForeignTable"));
+        Ok(Method(dbAlter, "Close"));
     }
 }
