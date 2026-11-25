@@ -58,7 +58,7 @@ public readonly record struct TopClause(double Count, bool Percent, string Text)
 /// the same except for BigInt (16, Parameter.Type 19) and Value (0, Parameter.Type 10; not identified, null)
 /// (r-sql-13b/params-declared-type-names).
 /// </summary>
-public sealed record ParameterDeclaration(string Name, int DaoType, int? FieldType);
+public sealed record ParameterDeclaration(string Name, int DaoType, int? FieldType, int? TextSize = null);
 
 /// <summary>A later arm of a UNION with the operator before it (II-11 §15: each UNION/ALL token kept with its arm).</summary>
 public readonly record struct UnionArm(bool All, SelectSyntax Select);
@@ -94,6 +94,12 @@ public sealed class SelectSyntax : IDisposable
 
     public List<SelectItem> Items { get; } = [];
 
+    /// <summary>The target table of a make-table <c>SELECT ... INTO target FROM ...</c>, or null.</summary>
+    public string? IntoTarget { get; internal set; }
+
+    /// <summary>Whether <c>WITH OWNERACCESS OPTION</c> appeared at the end of the statement.</summary>
+    public bool WithOwnerAccess { get; internal set; }
+
     /// <summary>The comma-separated FROM sources, in order.</summary>
     public List<SourceSyntax> From { get; } = [];
 
@@ -104,6 +110,13 @@ public sealed class SelectSyntax : IDisposable
     public Fragment? Having { get; internal set; }
 
     public List<OrderItem> OrderBy { get; } = [];
+
+    /// <summary>Source span of this SELECT arm (used by UNION definition storage, r-q39).</summary>
+    internal int ArmStart { get; set; }
+
+    internal int ArmEnd { get; set; }
+
+    internal bool ParenthesizedArm { get; set; }
 
     /// <summary>Every expression of the statement, for disposal.</summary>
     internal List<Fragment> Fragments { get; } = [];
@@ -138,6 +151,25 @@ public sealed class SelectSyntax : IDisposable
                 break;
         }
     }
+}
+
+/// <summary>
+/// A parsed Access crosstab query (<c>TRANSFORM expr [AS alias] SELECT ... FROM ... GROUP BY ... PIVOT expr [IN (...)]</c>,
+/// r-q39 crosstab-accdb). Owns its <see cref="Select"/> and its expression fragments until <see cref="Dispose"/>.
+/// </summary>
+internal sealed class CrosstabSyntax(Fragment transform, string? transformAlias, SelectSyntax select, Fragment pivot, bool hasPivotIn) : IDisposable
+{
+    public Fragment Transform { get; } = transform;
+
+    public string? TransformAlias { get; } = transformAlias;
+
+    public SelectSyntax Select { get; } = select;
+
+    public Fragment Pivot { get; } = pivot;
+
+    public bool HasPivotIn { get; } = hasPivotIn;
+
+    public void Dispose() => Select.Dispose();
 }
 
 /// <summary>
@@ -368,6 +400,57 @@ public static class SqlParser
         return statement;
     }
 
+    /// <summary>
+    /// Parse a SELECT, SELECT INTO or UNION statement for saved-query definition compilation (<see cref="QueryDefinitionCompiler"/>):
+    /// reuses the one SELECT grammar while also accepting <c>SELECT ... INTO target FROM ...</c> and recognizing trailing
+    /// <c>WITH OWNERACCESS OPTION</c> so the definition compiler can refuse undecided clauses explicitly by name.
+    /// </summary>
+    internal static SelectSyntax? ParseForDefinition(string source, out SqlFailure? failure)
+    {
+        if (!NormalizeSource(ref source, out failure))
+        {
+            return null;
+        }
+        var p = new Parser(source);
+        var statement = new SelectSyntax(source);
+        failure = p.Select(statement, allowInto: true, allowWith: true);
+        if (failure is null && p.BadName)
+        {
+            failure = SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+        }
+        if (failure is not null)
+        {
+            statement.Dispose();
+            return null;
+        }
+        return statement;
+    }
+
+    /// <summary>
+    /// Parse a single-table <c>TRANSFORM expr [AS alias] SELECT ... FROM ... GROUP BY ... PIVOT expr [;]</c> statement
+    /// for saved-query definition compilation (<see cref="QueryDefinitionCompiler"/>; r-q39 crosstab-accdb).
+    /// </summary>
+    internal static CrosstabSyntax? ParseCrosstab(string source, out SqlFailure? failure)
+    {
+        if (!NormalizeSource(ref source, out failure))
+        {
+            return null;
+        }
+        var p = new Parser(source);
+        var statement = new SelectSyntax(source);
+        failure = p.Crosstab(statement, out Fragment? transform, out string? transformAlias, out Fragment? pivot, out bool hasPivotIn);
+        if (failure is null && p.BadName)
+        {
+            failure = SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+        }
+        if (failure is not null)
+        {
+            statement.Dispose();
+            return null;
+        }
+        return new CrosstabSyntax(transform!, transformAlias, statement, pivot!, hasPivotIn);
+    }
+
     private sealed class Parser(string s, int start = 0)
     {
         private int _p = start;
@@ -575,15 +658,23 @@ public static class SqlParser
         /// A statement: <c>[PARAMETERS …;] arm {UNION [ALL] arm} [;]</c> (II-11 §2, §15). The last arm's ORDER BY is the
         /// union's; an ORDER BY on an earlier arm is not recorded. UNION is left-associative: each operator keeps its arm.
         /// </summary>
-        public SqlFailure? Select(SelectSyntax statement)
+        public SqlFailure? Select(SelectSyntax statement, bool allowInto = false, bool allowWith = false)
         {
             if (LeadingParameters(statement) is { } declarations)
             {
                 return declarations;
             }
-            if (QueryBody(statement) is { } bodyFailure)
+            if (QueryBody(statement, allowInto, allowWith) is { } bodyFailure)
             {
                 return bodyFailure;
+            }
+            if (allowWith && TakeWord("WITH"))
+            {
+                if (!TakeWord("OWNERACCESS") || !TakeWord("OPTION"))
+                {
+                    return Open("NotModelled.SqlSyntax", $"WITH clause at {_p} (ACE's answer not recorded)");
+                }
+                statement.WithOwnerAccess = true;
             }
             if (TakeSymbol(';'))
             {
@@ -602,9 +693,75 @@ public static class SqlParser
             return null;
         }
 
-        private SqlFailure? QueryBody(SelectSyntax statement)
+        public SqlFailure? Crosstab(SelectSyntax statement, out Fragment? transform, out string? transformAlias, out Fragment? pivot, out bool hasPivotIn)
         {
-            if (Arm(statement) is { } first)
+            transform = null;
+            transformAlias = null;
+            pivot = null;
+            hasPivotIn = false;
+            if (LeadingParameters(statement) is { } declarations)
+            {
+                return declarations;
+            }
+            if (!TakeWord("TRANSFORM"))
+            {
+                return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
+            }
+            if (Expression(statement, out transform) is { } transformFailure)
+            {
+                return transformFailure;
+            }
+            if (TakeWord("AS"))
+            {
+                transformAlias = Name(WordRole.ReservedAlias);
+                if (transformAlias is null || BadName)
+                {
+                    return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                }
+            }
+            if (ArmBody(statement, allowNoFrom: false, allowWith: false, out _, allowInto: false, allowPivot: true) is { } bodyFailure)
+            {
+                return bodyFailure;
+            }
+            if (!TakeWord("PIVOT"))
+            {
+                return Open("NotModelled.CrosstabSyntax", "TRANSFORM without PIVOT (ACE's answer not recorded)");
+            }
+            if (Clause(statement, out pivot, "IN", "WITH") is { } pivotFailure)
+            {
+                return pivotFailure;
+            }
+            if (TakeWord("IN"))
+            {
+                hasPivotIn = true;
+                return null;
+            }
+            if (TakeWord("WITH"))
+            {
+                if (!TakeWord("OWNERACCESS") || !TakeWord("OPTION"))
+                {
+                    return Open("NotModelled.SqlSyntax", $"WITH clause at {_p} (ACE's answer not recorded)");
+                }
+                statement.WithOwnerAccess = true;
+            }
+            if (TakeSymbol(';'))
+            {
+                if (!AtEnd())
+                {
+                    return SqlFailure.Ace(SqlPhase.Parse, 3142, SqlMessages.CharactersAfterEnd);
+                }
+                return null;
+            }
+            if (!AtEnd())
+            {
+                return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
+            }
+            return null;
+        }
+
+        private SqlFailure? QueryBody(SelectSyntax statement, bool allowInto = false, bool allowWith = false)
+        {
+            if (Arm(statement, allowInto, allowWith) is { } first)
             {
                 return first;
             }
@@ -622,7 +779,7 @@ public static class SqlParser
                 }
                 var arm = new SelectSyntax(s);
                 statement.Unions.Add(new UnionArm(all, arm));
-                if (Arm(arm) is { } armFailure)
+                if (Arm(arm, allowInto: false, allowWith) is { } armFailure)
                 {
                     return armFailure;
                 }
@@ -665,6 +822,7 @@ public static class SqlParser
                 {
                     return clause;
                 }
+                int? textSize = null;
                 if (TakeSymbol('('))
                 {
                     Skip();
@@ -673,12 +831,18 @@ public static class SqlParser
                     {
                         _p++;
                     }
-                    if (type != 10 || _p == digits || !TakeSymbol(')'))
+                    int digitsEnd = _p;
+                    if (type != 10 || digitsEnd == digits || !TakeSymbol(')'))
                     {
                         return Open("NotModelled.ParameterLength", $"a length on a {typeWord} parameter (only Text ( n ) is recorded)");
                     }
+                    if (!int.TryParse(s.AsSpan(digits, digitsEnd - digits), System.Globalization.CultureInfo.InvariantCulture, out int parsedSize))
+                    {
+                        return Open("NotModelled.ParameterLength", $"Text parameter length '{s[digits..digitsEnd]}' overflows Int32");
+                    }
+                    textSize = parsedSize;
                 }
-                statement.Parameters.Add(new ParameterDeclaration(name, type, typeWord.ToUpperInvariant() switch { "VALUE" => null, "BIGINT" => 16, _ => type }));
+                statement.Parameters.Add(new ParameterDeclaration(name, type, typeWord.ToUpperInvariant() switch { "VALUE" => null, "BIGINT" => 16, _ => type }, textSize));
             }
             while (TakeSymbol(','));
             return TakeSymbol(';') ? null : clause;
@@ -712,27 +876,37 @@ public static class SqlParser
         }
 
         /// <summary>One SELECT arm, bare or in parentheses (r-sql-13b/union-syntax-forms: <c>(SELECT a FROM JA) UNION (SELECT b FROM JB)</c>).</summary>
-        private SqlFailure? Arm(SelectSyntax statement)
+        private SqlFailure? Arm(SelectSyntax statement, bool allowInto = false, bool allowWith = false)
         {
+            Skip();
             int save = _p;
+            statement.ArmStart = save;
             if (TakeSymbol('(') && IsWord("SELECT"))
             {
+                statement.ParenthesizedArm = true;
                 _armDepth++;
-                SqlFailure? inner = ArmBody(statement);
+                SqlFailure? inner = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false);
                 _armDepth--;
                 if (inner is not null)
                 {
                     return inner;
                 }
-                return TakeSymbol(')') ? null : Open("NotModelled.SqlSyntax", $"an unclosed parenthesized SELECT at {_p} (ACE's answer not recorded)");
+                if (!TakeSymbol(')'))
+                {
+                    return Open("NotModelled.SqlSyntax", $"an unclosed parenthesized SELECT at {_p} (ACE's answer not recorded)");
+                }
+                statement.ArmEnd = _p;
+                return null;
             }
             _p = save;
-            return ArmBody(statement);
+            SqlFailure? result = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false);
+            statement.ArmEnd = _p;
+            return result;
         }
 
         public SqlFailure? InsertSelectBody(SelectSyntax statement, out bool hasFrom)
         {
-            SqlFailure? f = ArmBody(statement, allowNoFrom: true, allowWith: true, out hasFrom);
+            SqlFailure? f = ArmBody(statement, allowNoFrom: true, allowWith: true, out hasFrom, allowInto: false, allowPivot: false);
             if (f is not null)
             {
                 return f;
@@ -745,9 +919,9 @@ public static class SqlParser
             return null;
         }
 
-        private SqlFailure? ArmBody(SelectSyntax statement) => ArmBody(statement, allowNoFrom: false, allowWith: false, out _);
+        private SqlFailure? ArmBody(SelectSyntax statement) => ArmBody(statement, allowNoFrom: false, allowWith: false, out _, allowInto: false, allowPivot: false);
 
-        private SqlFailure? ArmBody(SelectSyntax statement, bool allowNoFrom, bool allowWith, out bool hasFrom)
+        private SqlFailure? ArmBody(SelectSyntax statement, bool allowNoFrom, bool allowWith, out bool hasFrom, bool allowInto = false, bool allowPivot = false)
         {
             hasFrom = false;
             if (!TakeWord("SELECT"))
@@ -776,12 +950,25 @@ public static class SqlParser
             }
             do
             {
-                if (Item(statement, allowWith) is { } itemFailure)
+                if (Item(statement, allowWith, allowInto) is { } itemFailure)
                 {
                     return itemFailure;
                 }
             }
             while (TakeSymbol(','));
+            if (allowInto && TakeWord("INTO"))
+            {
+                string? target = Name(WordRole.Clause);
+                if (target is null || BadName)
+                {
+                    return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                }
+                if (TakeWord("IN"))
+                {
+                    return Open("NotModelled.ExternalDatabase", "SELECT INTO ... IN 'file' (external target not recorded)");
+                }
+                statement.IntoTarget = target;
+            }
             if (!TakeWord("FROM"))
             {
                 if (allowNoFrom && (AtEnd() || IsSymbol(';') || (allowWith && IsWord("WITH"))))
@@ -815,7 +1002,8 @@ public static class SqlParser
             }
             if (TakeWord("WHERE"))
             {
-                if (Clause(statement, out Fragment? where, allowWith ? ["GROUP", "HAVING", "ORDER", "WITH"] : ["GROUP", "HAVING", "ORDER"]) is { } f)
+                string[] whereFollowers = allowPivot ? ["GROUP", "HAVING", "ORDER", "PIVOT"] : allowWith ? ["GROUP", "HAVING", "ORDER", "WITH"] : ["GROUP", "HAVING", "ORDER"];
+                if (Clause(statement, out Fragment? where, whereFollowers) is { } f)
                 {
                     return f;
                 }
@@ -827,9 +1015,10 @@ public static class SqlParser
                 {
                     return SqlFailure.Ace(SqlPhase.Parse, 3132, "Syntax error in GROUP BY clause.");
                 }
+                string[] groupFollowers = allowPivot ? ["HAVING", "ORDER", "PIVOT"] : allowWith ? ["HAVING", "ORDER", "WITH"] : ["HAVING", "ORDER"];
                 do
                 {
-                    if (Clause(statement, out Fragment? key, allowWith ? ["HAVING", "ORDER", "WITH"] : ["HAVING", "ORDER"]) is { } f)
+                    if (Clause(statement, out Fragment? key, groupFollowers) is { } f)
                     {
                         return f;
                     }
@@ -839,7 +1028,8 @@ public static class SqlParser
             }
             if (TakeWord("HAVING"))
             {
-                if (Clause(statement, out Fragment? having, allowWith ? ["ORDER", "WITH"] : ["ORDER"]) is { } f)
+                string[] havingFollowers = allowPivot ? ["ORDER", "PIVOT"] : allowWith ? ["ORDER", "WITH"] : ["ORDER"];
+                if (Clause(statement, out Fragment? having, havingFollowers) is { } f)
                 {
                     return f;
                 }
@@ -851,9 +1041,10 @@ public static class SqlParser
                 {
                     return Open("NotModelled.SqlSyntax", "ORDER without BY (ACE's answer not recorded)");
                 }
+                string[] orderFollowers = allowPivot ? ["ASC", "DESC", "PIVOT"] : allowWith ? ["ASC", "DESC", "WITH"] : ["ASC", "DESC"];
                 do
                 {
-                    if (Clause(statement, out Fragment? key, allowWith ? ["ASC", "DESC", "WITH"] : ["ASC", "DESC"]) is { } f)
+                    if (Clause(statement, out Fragment? key, orderFollowers) is { } f)
                     {
                         return f;
                     }
@@ -866,7 +1057,7 @@ public static class SqlParser
                 }
                 while (TakeSymbol(','));
             }
-            if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(allowWith && IsWord("WITH")) && !(_armDepth > 0 && IsSymbol(')')))
+            if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(allowWith && IsWord("WITH")) && !(allowPivot && IsWord("PIVOT")) && !(_armDepth > 0 && IsSymbol(')')))
             {
                 return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
             }
@@ -906,7 +1097,7 @@ public static class SqlParser
             return null;
         }
 
-        private SqlFailure? Item(SelectSyntax statement, bool allowWith = false)
+        private SqlFailure? Item(SelectSyntax statement, bool allowWith = false, bool allowInto = false)
         {
             Skip();
             int offset = _p;
@@ -938,7 +1129,7 @@ public static class SqlParser
                 }
             }
             statement.Items.Add(new SelectItem(expression, false, null, alias, offset));
-            if (!IsSymbol(',') && !IsWord("FROM") && !AtEnd() && !(_armDepth == 0 && IsSymbol(';')) && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
+            if (!IsSymbol(',') && !IsWord("FROM") && !(allowInto && IsWord("INTO")) && !AtEnd() && !(_armDepth == 0 && IsSymbol(';')) && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
             {
                 return MissingOperator(offset);
             }

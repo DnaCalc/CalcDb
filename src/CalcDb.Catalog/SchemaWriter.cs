@@ -256,6 +256,13 @@ public sealed class SchemaWriter
     /// </summary>
     private static readonly StoredProperty SqlFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x01]);
 
+    /// <summary>A saved query's MSysObjects Type (5) and its two-step default LvProp blobs (evidence/r-q39-querydef-bytes).</summary>
+    private const short QueryObjectType = 5;
+    private static readonly StoredProperty QueryOdbcTimeout = new("ODBCTimeout", 0x01, NativeTypes.Integer, [0x3C, 0x00]);
+    private static readonly StoredProperty QueryMaxRecords = new("MaxRecords", 0x01, NativeTypes.Long, [0x00, 0x00, 0x00, 0x00]);
+    private static readonly byte[] InitialQueryLvProp = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ObjectValues, "", [QueryOdbcTimeout])]);
+    private static readonly PropertyMap[] FinalQueryLvPropMaps = [new PropertyMap(PropertySectionKind.ObjectValues, "", [QueryOdbcTimeout, QueryMaxRecords])];
+
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
     private readonly CatalogSnapshot _catalog;
@@ -1537,6 +1544,329 @@ public sealed class SchemaWriter
             consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
+    /// <summary>
+    /// Create a saved QueryDef through <paramref name="workspace"/>'s coordinator (W-07/saved-definition;
+    /// qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q39-querydef-bytes):
+    /// <list type="bullet">
+    /// <item>Validates ACCDB or Jet 4 MDB, depth 0 (outside BeginTrans), object name (3125), and uniqueness across
+    /// TablesContainer (3012).</item>
+    /// <item>Assigns the lowest free negative Int32 Id starting at <see cref="int.MinValue"/> (<c>0x80000000</c>).</item>
+    /// <item>Inserts the <c>MSysObjects</c> row (Type 5, Flags 0, 56-byte inline <c>LvProp</c> with <c>ODBCTimeout=60</c>),
+    /// its two <c>MSysACEs</c> rows, and all <c>MSysQueries</c> rows in encounter order, then spills <c>LvProp</c> to
+    /// the 90-byte LVAL (<c>ODBCTimeout=60, MaxRecords=0</c>, shrinking the <c>MSysObjects</c> row in place and leaving
+    /// the 56-byte vacated copy).</item>
+    /// <item>Union queries flush <c>MSysQueries</c> TableDef counts and <c>MSysObjects.Flags = 0x80</c> immediately
+    /// (+5 commits on page 0; +1 at Close). All other families emit +4 commits immediately and queue the 5th commit
+    /// (<c>MSysQueries</c> TableDef counts and non-select <c>MSysObjects.Flags</c>) via
+    /// <see cref="TransactionCoordinator.SetDeferredCatalogCommit"/> to flush at the next <c>CreateQueryDef</c> or
+    /// <c>Database.Close</c> (+2 at Close).</item>
+    /// </list>
+    /// </summary>
+    public SchemaOutcome CreateQueryDef(
+        TransactionCoordinator workspace,
+        CreateQueryDefRequest request,
+        ulong dateCreateBits,
+        ulong dateUpdateBits,
+        out int createdObjectId,
+        ulong? initialDateUpdateBits = null)
+    {
+        createdObjectId = 0;
+        if (FileRefusal(allowJet4Mdb: true) is { } fileRefusal)
+        {
+            return new SchemaOutcome(fileRefusal, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO CreateQueryDef inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"), default, _pageCount);
+        }
+        if (!IsValidName(request.Name))
+        {
+            return new SchemaOutcome(new SchemaRefusal(3125, null), default, _pageCount);
+        }
+        if (FindTable(request.Name) is not null)
+        {
+            return new SchemaOutcome(new SchemaRefusal(3012, null), default, _pageCount);
+        }
+        if (request.Rows.Count == 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CreateQueryDef with zero MSysQueries rows is not recorded"), default, _pageCount);
+        }
+        if (SystemTable("MSysACEs", out string? acesFailure) is not { } aces)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, acesFailure), default, _pageCount);
+        }
+        if (SystemTable(_d.Catalog.QueryTableName, out string? queriesFailure) is not { } queries)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, queriesFailure), default, _pageCount);
+        }
+
+        HashSet<int> usedIds = [.. _catalog.Entries.Select(e => e.Id)];
+        int queryId = int.MinValue;
+        while (usedIds.Contains(queryId))
+        {
+            if (queryId == -1)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, "no negative Int32 MSysObjects.Id remains available for a new query"), default, _pageCount);
+            }
+            queryId++;
+        }
+
+        bool isUnion = request.Family == QueryFamily.Union;
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        bool useSessionExtentReservation = !workspace.HasGlobalMapActivity(_cache);
+        workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
+
+        TableDefinition objects = _catalog.ObjectTable;
+        int flagsFixedOffset = objects.Columns[Ordinal(objects, "Flags")].FixedOffset;
+        ulong extent = _pageCount;
+        RowId objectRow = default;
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileCreateQueryDef(
+                p,
+                request,
+                queryId,
+                aces,
+                queries,
+                flagsFixedOffset,
+                dateCreateBits,
+                initialDateUpdateBits ?? dateCreateBits,
+                dateUpdateBits,
+                isUnion,
+                sessionReserved,
+                useSessionExtentReservation,
+                priorDeferred,
+                out objectRow,
+                out extent));
+        if (!accepted.Accepted)
+        {
+            return new SchemaOutcome(null, accepted, _pageCount);
+        }
+        if (!Published(accepted))
+        {
+            return new SchemaOutcome(null, accepted, extent, PublishedAny: false);
+        }
+
+        createdObjectId = queryId;
+        if (priorDeferred is not null)
+        {
+            workspace.ClearDeferredCatalogCommit(_cache);
+        }
+
+        int extraCommits = isUnion ? 4 : 3;
+        for (int c = 0; c < extraCommits; c++)
+        {
+            (MutationOpen counterOpen, string? counterDetail) = workspace.PublishCounterCommit(_cache);
+            if (counterOpen != MutationOpen.None)
+            {
+                return new SchemaOutcome(
+                    null,
+                    accepted with
+                    {
+                        Open = counterOpen,
+                        Detail = $"DAO CreateQueryDef of {request.Name}: commit {c + 2} of {extraCommits + 1} failed after query rows were published: {counterDetail}",
+                    },
+                    Math.Max(extent, _cache.KnownExtentPages),
+                    PublishedAny: true);
+            }
+        }
+
+        if (!isUnion)
+        {
+            int[] queryIndexIncrements = queries.PhysicalIndexes.Count > 0
+                ? [.. Enumerable.Repeat(queries.PhysicalIndexes[0].Number, request.Rows.Count)]
+                : [];
+            List<PageEdit> deferredEdits =
+            [
+                new PageEdit(queries.FirstPage, new TableDefUniqueCountsDelta(queryIndexIncrements, _d, rowCountDelta: request.Rows.Count), PageRole.Catalog),
+            ];
+            List<LockResource> deferredFootprint =
+            [
+                new LockResource(queries.FirstPage, LockPurpose.TableDef),
+            ];
+            if (request.Family != QueryFamily.Select)
+            {
+                deferredEdits.Add(new PageEdit(objectRow.Page, new ObjectFlagsDelta(objectRow.Row, flagsFixedOffset, (int)request.Family, _d), PageRole.Data));
+                deferredFootprint.Add(new LockResource(objectRow.Page, LockPurpose.DataPage));
+            }
+            workspace.SetDeferredCatalogCommit(
+                _cache,
+                new DeferredCatalogCommit(deferredEdits, deferredFootprint, queryId, (int)request.Family));
+        }
+
+        return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
+    }
+
+    private CompiledChange CompileCreateQueryDef(
+        FileParticipant p,
+        CreateQueryDefRequest request,
+        int queryId,
+        TableDefinition aces,
+        TableDefinition queries,
+        int flagsFixedOffset,
+        ulong dateCreateBits,
+        ulong initialDateUpdateBits,
+        ulong finalDateUpdateBits,
+        bool isUnion,
+        IReadOnlyList<uint> sessionReserved,
+        bool useSessionExtentReservation,
+        DeferredCatalogCommit? priorDeferred,
+        out RowId objectRow,
+        out ulong extent)
+    {
+        objectRow = default;
+        extent = _pageCount;
+        var work = new Work(p);
+
+        if (priorDeferred is not null)
+        {
+            foreach (PageEdit edit in priorDeferred.Edits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
+
+        if (PinCopy(0) is not { } page0)
+        {
+            return NotWritten("page 0 could not be read for the SID keystream");
+        }
+        byte[] keystream = DefaultAdminSecurity.Keystream(page0, _d);
+
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
+        uint firstFreeBefore = 0;
+        byte[] globalMapBefore = [];
+        bool captureForExtent = useSessionExtentReservation && !allocator.HasSessionReservedPages;
+        if (captureForExtent && !allocator.TryCaptureGlobalFreeMap(p.Overlay, out firstFreeBefore, out globalMapBefore, out string? captureFailure))
+        {
+            return NotWritten(captureFailure);
+        }
+
+        TableDefinition objects = _catalog.ObjectTable;
+        NativeValue[] objRow = new NativeValue[objects.Columns.Count];
+        Array.Fill(objRow, NativeValue.Null);
+        Set(objects, objRow, "Id", Long(queryId));
+        Set(objects, objRow, "ParentId", Long(_catalog.TablesContainer!.Value));
+        Set(objects, objRow, "Name", new NativeValue(NativeKind.Text) { Text = request.Name });
+        Set(objects, objRow, "Type", new NativeValue(NativeKind.Integer) { Integer = QueryObjectType });
+        Set(objects, objRow, "Flags", Long(0));
+        Set(objects, objRow, "DateCreate", new NativeValue(NativeKind.DateTime) { Bits = dateCreateBits });
+        Set(objects, objRow, "DateUpdate", new NativeValue(NativeKind.DateTime) { Bits = initialDateUpdateBits });
+        Set(objects, objRow, "Owner", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(DefaultAdminSecurity.Admin, keystream) });
+        Set(objects, objRow, "LvProp", new NativeValue(NativeKind.LongBinary) { Bytes = InitialQueryLvProp });
+        if (!work.Insert(this, objects, objRow, out objectRow, extent: allocator.ExtentPages, externalAllocator: allocator, allowInlineOleOnMdb: true))
+        {
+            return work.NotWritten();
+        }
+
+        foreach ((byte[] sid, int acm) in DefaultAdminSecurity.NewTableAces)
+        {
+            NativeValue[] ace = new NativeValue[aces.Columns.Count];
+            Array.Fill(ace, NativeValue.Null);
+            Set(aces, ace, "ObjectId", Long(queryId));
+            Set(aces, ace, "SID", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(sid, keystream) });
+            Set(aces, ace, "ACM", Long(acm));
+            Set(aces, ace, "FInheritable", new NativeValue(NativeKind.Boolean) { Boolean = false });
+            if (!work.Insert(this, aces, ace, out _, extent: allocator.ExtentPages, externalAllocator: allocator))
+            {
+                return work.NotWritten();
+            }
+        }
+
+        foreach (QueryRow qr in request.Rows)
+        {
+            NativeValue[] qRow = new NativeValue[queries.Columns.Count];
+            Array.Fill(qRow, NativeValue.Null);
+            Set(queries, qRow, "ObjectId", Long(queryId));
+            Set(queries, qRow, "Attribute", new NativeValue(NativeKind.Byte) { Integer = qr.Attribute });
+            if (qr.Expression is not null)
+            {
+                Set(queries, qRow, "Expression", new NativeValue(NativeKind.Text) { Text = qr.Expression });
+            }
+            if (qr.Flag is { } flag)
+            {
+                Set(queries, qRow, "Flag", new NativeValue(NativeKind.Integer) { Integer = flag });
+            }
+            if (qr.LvExtra is { } lvExtra)
+            {
+                Set(queries, qRow, "LvExtra", Long(lvExtra));
+            }
+            if (qr.Name1 is not null)
+            {
+                Set(queries, qRow, "Name1", new NativeValue(NativeKind.Text) { Text = qr.Name1 });
+            }
+            if (qr.Name2 is not null)
+            {
+                Set(queries, qRow, "Name2", new NativeValue(NativeKind.Text) { Text = qr.Name2 });
+            }
+            if (qr.Order is not null)
+            {
+                Set(queries, qRow, "Order", new NativeValue(NativeKind.Binary) { Bytes = qr.Order });
+            }
+            if (!work.Insert(this, queries, qRow, out _, extent: allocator.ExtentPages, externalAllocator: allocator, deferTableDefCountUpdate: !isUnion))
+            {
+                return work.NotWritten();
+            }
+        }
+
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        if (!ApplyObjectProperties(
+            work,
+            p.Overlay,
+            allocator,
+            objectRow,
+            FinalQueryLvPropMaps,
+            finalDateUpdateBits,
+            releasedAtClose,
+            useSessionExtentReservation: useSessionExtentReservation,
+            reservedExtentPages: reservedExtentPages,
+            allowSharedLvalPage: true,
+            deferExtentReservation: true))
+        {
+            return work.NotWritten();
+        }
+
+        if (isUnion)
+        {
+            if (!work.Apply(new PageEdit(objectRow.Page, new ObjectFlagsDelta(objectRow.Row, flagsFixedOffset, (int)QueryFamily.Union, _d), PageRole.Data)))
+            {
+                return work.NotWritten();
+            }
+        }
+
+        if (captureForExtent && allocator.AllocatedCount > 0)
+        {
+            List<PageEdit> reserveEdits = [];
+            List<uint> reserved = [];
+            if (!allocator.TryReserveExtent(firstFreeBefore, globalMapBefore, reserveEdits, reserved, out string? reserveFailure, allowCrossByteWithinBlock: true))
+            {
+                work.Fail(reserveFailure!);
+                return work.NotWritten();
+            }
+            foreach (PageEdit edit in reserveEdits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+            reservedExtentPages.AddRange(reserved);
+            releasedAtClose.AddRange(reserved);
+        }
+
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: allocator.ConsumedReservedPages);
+    }
+
     /// <summary>MSysObjects as the change set names the table a catalog change writes (no rules: it has no property blob).</summary>
     private MutationSemantics ObjectSemantics => _objectSemantics ??= MutationSemantics.Compile("MSysObjects", _catalog.ObjectTable, null, NoRules.Instance, _d.IndexDescriptor);
 
@@ -1856,7 +2186,9 @@ public sealed class SchemaWriter
         bool allowTwoPageChain = false,
         bool refuse65ByteBlob = false,
         List<uint>? reservedExtentPages = null,
-        uint? longValueTicks = null)
+        uint? longValueTicks = null,
+        bool allowSharedLvalPage = false,
+        bool deferExtentReservation = false)
     {
         TableDefinition objects = _catalog.ObjectTable;
         var source = new PageSource(_cache, overlay);
@@ -2094,7 +2426,78 @@ public sealed class SchemaWriter
             }
             else if (oldPlan is null or { Form: LongValueForm.Inline })
             {
-                if (allowShrinkToInline)
+                uint? reusedLvalPage = null;
+                byte reusedSlot = 0;
+                if (allowSharedLvalPage)
+                {
+                    ulong currentExtent = PageAllocator.ExtentOf(_cache, _pageCount, overlay);
+                    IReadOnlyList<uint>? freePages = UsageMaps.Pages(source, _d, lvMaps.FreeMap, currentExtent, out TraversalFailure? freeMapFailure);
+                    if (freePages is null)
+                    {
+                        work.Fail($"MSysObjects.LvProp free map cannot be read: {freeMapFailure?.Predicate}");
+                        return false;
+                    }
+                    List<uint> lvalFree = [];
+                    List<(uint Page, int FreeBytes)> withRoom = [];
+                    foreach (uint candidate in freePages)
+                    {
+                        using PagePin? pin = source.Pin(candidate).Pin;
+                        if (pin is not null && DataPages.IsLvalPage(pin.Bytes, _d))
+                        {
+                            lvalFree.Add(candidate);
+                            int freeBytes = (int)_d.DataPage.FreeCount.Read(pin.Bytes);
+                            int rowCount = (int)_d.DataPage.RowCount.Read(pin.Bytes);
+                            if (freeBytes >= needed && rowCount < _d.DataPage.WriterSlotLimit)
+                            {
+                                withRoom.Add((candidate, freeBytes));
+                            }
+                        }
+                    }
+                    if (withRoom.Count >= 2)
+                    {
+                        work.Fail($"{withRoom.Count} MSysObjects.LvProp LVAL free-map pages have room ({string.Join(", ", withRoom.Select(p => $"page {p.Page}: {p.FreeBytes}B"))}): choosing among multiple free MSysObjects.LvProp LVAL pages is not recorded");
+                        return false;
+                    }
+                    if (withRoom.Count == 1)
+                    {
+                        uint candidate = withRoom[0].Page;
+                        if (candidate != lvalFree[0])
+                        {
+                            work.Fail($"MSysObjects.LvProp LVAL page {lvalFree[0]} lacks room and page {candidate} follows: walking past a full MSysObjects.LvProp LVAL page is not recorded");
+                            return false;
+                        }
+                        using PagePin? pin = source.Pin(candidate).Pin;
+                        if (pin is null)
+                        {
+                            work.Fail($"MSysObjects.LvProp LVAL page {candidate} could not be pinned");
+                            return false;
+                        }
+                        byte[] copy = pin.Bytes.ToArray();
+                        if (!DataPages.TryAppendRow(copy, blob, _d, out byte appendedSlot, out string? appendFailure, lval: true))
+                        {
+                            work.Fail($"MSysObjects.LvProp LVAL page {candidate}: {appendFailure}");
+                            return false;
+                        }
+                        int remainingFree = (int)_d.DataPage.FreeCount.Read(copy);
+                        if (remainingFree < LvalFreeMapStaysAtOrAbove)
+                        {
+                            work.Fail($"MSysObjects.LvProp LVAL page {candidate} would keep {remainingFree} free bytes (< {LvalFreeMapStaysAtOrAbove}): leaving or uncertain MSysObjects.LvProp free map on a shared LVAL page is not recorded");
+                            return false;
+                        }
+                        if (!work.Apply(new PageEdit(candidate, new LvalAppendDelta(blob, appendedSlot, _d), PageRole.Data)))
+                        {
+                            return false;
+                        }
+                        reusedLvalPage = candidate;
+                        reusedSlot = appendedSlot;
+                    }
+                    else if (lvalFree.Count > 1)
+                    {
+                        work.Fail($"MSysObjects.LvProp LVAL free map holds {lvalFree.Count} full pages: walking past multiple full MSysObjects.LvProp LVAL pages is not recorded");
+                        return false;
+                    }
+                }
+                else if (allowShrinkToInline)
                 {
                     IReadOnlyList<uint>? freePages = UsageMaps.Pages(source, _d, lvMaps.FreeMap, _pageCount, out TraversalFailure? freeMapFailure);
                     if (freePages is null)
@@ -2108,27 +2511,35 @@ public sealed class SchemaWriter
                         return false;
                     }
                 }
-                // First external LvProp write for this table (dao-fields-2-p6, dao-name-8-p6, dao-first8-2fields,
-                // lv-sql-notnull-8..64, r-q34-ddl-sweep/nn-two-cols-*, r-q37-valrule-put).
-                if (!AllocateLvalPages(work, overlay, allocator, 1, useSessionExtentReservation, releasedAtClose, reservedExtentPages, out uint[] allocated))
+
+                if (reusedLvalPage is { } sharedPage)
                 {
-                    return false;
+                    newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(sharedPage, reusedSlot), 0);
                 }
-                uint newPage = allocated[0];
-                byte[] newLvalBytes = new byte[_d.PageSize];
-                DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
-                if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
+                else
                 {
-                    work.Fail($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
-                    return false;
+                    // First external LvProp write for this table or query (dao-fields-2-p6, dao-name-8-p6, dao-first8-2fields,
+                    // lv-sql-notnull-8..64, r-q34-ddl-sweep/nn-two-cols-*, r-q37-valrule-put, r-q39-querydef-bytes).
+                    if (!AllocateLvalPages(work, overlay, allocator, 1, useSessionExtentReservation && !deferExtentReservation, releasedAtClose, reservedExtentPages, out uint[] allocated))
+                    {
+                        return false;
+                    }
+                    uint newPage = allocated[0];
+                    byte[] newLvalBytes = new byte[_d.PageSize];
+                    DataPages.InitializeLval(newLvalBytes, stamp: 0, _d);
+                    if (!DataPages.TryAppendRow(newLvalBytes, blob, _d, out byte newSlot, out string? appendFailure, lval: true))
+                    {
+                        work.Fail($"new MSysObjects.LvProp LVAL page {newPage}: {appendFailure}");
+                        return false;
+                    }
+                    if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
+                        || !ApplyMapBit(work, overlay, lvMaps.OwnedMap, newPage, member: true, out _)
+                        || !ApplyMapBit(work, overlay, lvMaps.FreeMap, newPage, member: true, out _))
+                    {
+                        return false;
+                    }
+                    newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
                 }
-                if (!work.Apply(new PageEdit(newPage, new WholePage(newLvalBytes), PageRole.Data))
-                    || !ApplyMapBit(work, overlay, lvMaps.OwnedMap, newPage, member: true, out _)
-                    || !ApplyMapBit(work, overlay, lvMaps.FreeMap, newPage, member: true, out _))
-                {
-                    return false;
-                }
-                newLvPropField = LongValuePlan.EncodeReference(LongValueForm.SingleRow, (uint)blob.Length, new RowLocator(newPage, newSlot), 0);
             }
             else
             {
@@ -4642,6 +5053,28 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
+    /// Patch the fixed 4-byte <c>Flags</c> column of an <c>MSysObjects</c> live row in place without disturbing vacated
+    /// bytes (evidence/r-q39-querydef-bytes: union sets 0x80 immediately after LvProp spill; action/crosstab/DDL/passthrough
+    /// set family flags in the 5th commit).
+    /// </summary>
+    private sealed class ObjectFlagsDelta(byte slot, int flagsFixedOffset, int flags, FormatDescriptor d) : IPageDelta
+    {
+        public void Apply(Span<byte> decodedPage)
+        {
+            if (DataPages.CheckedSlot(decodedPage, slot, d, out string? failure) is not { } view)
+            {
+                throw new FormatViolationException($"MSysObjects Flags patch on slot {slot}: {failure}");
+            }
+            int offset = view.Start + d.Row.FixedBase + flagsFixedOffset;
+            if (offset + 4 > view.End)
+            {
+                throw new FormatViolationException($"MSysObjects Flags patch on slot {slot} runs past row end");
+            }
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(decodedPage.Slice(offset, 4), flags);
+        }
+    }
+
+    /// <summary>
     /// One catalog change being compiled on its participant: each edit is applied as it is made, so the next compiled
     /// row or allocation sees it, and kept with its lock closure for the change's roles and footprint.
     /// </summary>
@@ -4682,11 +5115,26 @@ public sealed class SchemaWriter
         }
 
         /// <summary>Insert one catalog row through the one row compiler.</summary>
-        public bool Insert(SchemaWriter owner, TableDefinition table, NativeValue[] values, out RowId inserted, ulong? extent = null)
+        public bool Insert(
+            SchemaWriter owner,
+            TableDefinition table,
+            NativeValue[] values,
+            out RowId inserted,
+            ulong? extent = null,
+            PageAllocator? externalAllocator = null,
+            bool deferTableDefCountUpdate = false,
+            bool allowInlineOleOnMdb = false)
         {
             inserted = default;
             using MutationSemantics semantics = MutationSemantics.Compile(table.FirstPage.ToString(), table, null, NoRules.Instance, owner._d.IndexDescriptor);
-            CompiledChange compiled = owner.Writer(table, extent).CompileInsert(semantics, values, null, participant.Overlay);
+            CompiledChange compiled = owner.Writer(table, extent).CompileInsert(
+                semantics,
+                values,
+                null,
+                participant.Overlay,
+                externalAllocator: externalAllocator,
+                deferTableDefCountUpdate: deferTableDefCountUpdate,
+                allowInlineOleOnMdb: allowInlineOleOnMdb);
             if (!Take(compiled, $"a row of TableDef {table.FirstPage}"))
             {
                 return false;

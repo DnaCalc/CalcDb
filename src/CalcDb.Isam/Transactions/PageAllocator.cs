@@ -297,7 +297,13 @@ public sealed class PageAllocator
     /// != firstFreeBefore / 8</c>, where the range leaves its byte and would reserve 3 bytes instead of 4).</item>
     /// </list>
     /// </summary>
-    public bool TryReserveExtent(uint firstFreeBefore, ReadOnlySpan<byte> globalMapBefore, List<PageEdit> edits, List<uint> reservedPages, out string? failure)
+    public bool TryReserveExtent(
+        uint firstFreeBefore,
+        ReadOnlySpan<byte> globalMapBefore,
+        List<PageEdit> edits,
+        List<uint> reservedPages,
+        out string? failure,
+        bool allowCrossByteWithinBlock = false)
     {
         if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
@@ -317,9 +323,14 @@ public sealed class PageAllocator
                     maxAllocated = allocated;
                 }
             }
-            if (maxAllocated / 8 != firstFreeBefore / 8)
+            if (!allowCrossByteWithinBlock && maxAllocated / 8 != firstFreeBefore / 8)
             {
                 failure = $"allocated page {maxAllocated} spills past first free page {firstFreeBefore}'s global-map byte ({firstFreeBefore / 8}): the page-1 reservation when new chain pages cross into the next map byte is not recorded";
+                return false;
+            }
+            if (maxAllocated >= blockEnd)
+            {
+                failure = $"allocated page {maxAllocated} reaches or exceeds the 32-page reservation block end {blockEnd} anchored at first free page {firstFreeBefore}: spilling past the 4-byte reservation block is not recorded";
                 return false;
             }
             rangeStart = firstFreeBefore;

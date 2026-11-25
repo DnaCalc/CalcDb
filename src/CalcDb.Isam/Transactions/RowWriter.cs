@@ -818,7 +818,15 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
     /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
-    public CompiledChange CompileInsert(MutationSemantics semantics, IReadOnlyList<NativeValue> values, uint? autoNumberFloor, PrivateOverlay? seen = null, bool reseedAutoNumber = false)
+    public CompiledChange CompileInsert(
+        MutationSemantics semantics,
+        IReadOnlyList<NativeValue> values,
+        uint? autoNumberFloor,
+        PrivateOverlay? seen = null,
+        bool reseedAutoNumber = false,
+        PageAllocator? externalAllocator = null,
+        bool deferTableDefCountUpdate = false,
+        bool allowInlineOleOnMdb = false)
     {
         if (_pageCount == 0)
         {
@@ -839,7 +847,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             if (c.TypeCode is NativeTypes.Memo or NativeTypes.Ole && v.Kind != NativeKind.Null)
             {
-                if (PrepareLongValuePayload(c, v, seen, out string? lvFailure) is not { } prepared)
+                if (PrepareLongValuePayload(c, v, seen, out string? lvFailure, allowInlineOleOnMdb) is not { } prepared)
                 {
                     return NotWritten($"field {c.Name}: {lvFailure}");
                 }
@@ -904,8 +912,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         // A long value's LVAL pages are taken before the row's page (evidence/r-q17-growth/lval-memo: LVAL page 45, then
         // data page 46; evidence/r-q22-lv-open/lv-inline-tight-3960: spilled LVAL page 45, then data page 46), from the
-        // one allocator of the insert.
-        var allocator = new PageAllocator(_cache, _d, ExtentOf(seen));
+        // one allocator of the insert (or the caller's shared allocator for multi-row catalog writes).
+        PageAllocator allocator = externalAllocator ?? new PageAllocator(_cache, _d, ExtentOf(seen));
         List<PageEdit> edits = [];
         for (int lvIndex = 0; lvIndex < longValues.Count; lvIndex++)
         {
@@ -1010,22 +1018,25 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
         }
 
-        using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
-        if (tdefPin is null)
+        if (!deferTableDefCountUpdate)
         {
-            return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+            using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
+            if (tdefPin is null)
+            {
+                return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
+            }
+            byte[] tdefCopy = tdefPin.Bytes.ToArray();
+            if (!TableDefCountsDelta.TryApply(tdefCopy, +1, autoNumberFloor, reseedAutoNumber, incrementUnique, [], _d, out string? tdefFailure))
+            {
+                return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
+            }
+            edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
+            AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         }
-        byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefCountsDelta.TryApply(tdefCopy, +1, autoNumberFloor, reseedAutoNumber, incrementUnique, [], _d, out string? tdefFailure))
-        {
-            return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
-        }
-        edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
-        AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root)
         {
-            AllocatedGlobalMapPages = allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
-            BaseExtentPages = allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
+            AllocatedGlobalMapPages = externalAllocator is null && allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
+            BaseExtentPages = externalAllocator is null && allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
         }, null);
     }
 
@@ -2129,7 +2140,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// <c>feff-content-mdb-dao</c>, <c>zf-var-mixed-mdb-dao</c>); MDB chained Memo and MDB OLE stay refused.</item>
     /// </list>
     /// </summary>
-    private PreparedLongValue? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure)
+    private PreparedLongValue? PrepareLongValuePayload(ColumnDescriptor c, in NativeValue value, PrivateOverlay? seen, out string? failure, bool allowInlineOleOnMdb = false)
     {
         byte[]? payload;
         int rawLength;
@@ -2170,7 +2181,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
             {
-                if (c.TypeCode != NativeTypes.Memo)
+                if (c.TypeCode != NativeTypes.Memo && !(allowInlineOleOnMdb && c.TypeCode == NativeTypes.Ole && isInlineCandidate))
                 {
                     failure = "writing an OLE long value in an MDB file is not recorded (R-FMT-2 LV form selection Open)";
                     return null;
@@ -2554,10 +2565,29 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         return false;
     }
 
+    private static uint? AllocatePage(PageAllocator allocator, PrivateOverlay? seen, out PageEdit? globalEdit, out string? failure)
+    {
+        globalEdit = null;
+        if (allocator.HasSessionReservedPages)
+        {
+            if (!allocator.TryAllocateFromReserved(seen, out uint reserved, out failure))
+            {
+                return null;
+            }
+            return reserved;
+        }
+        if (allocator.Allocate(seen, out PageEdit edit, out failure) is not { } page)
+        {
+            return null;
+        }
+        globalEdit = edit;
+        return page;
+    }
+
     /// <summary>A new LVAL page holding <paramref name="row"/> as slot 0, in the column's owned map and, when asked, its free map.</summary>
     private uint? NewLvalPage(LvalColumnMapSpec maps, bool joinsFree, uint stamp, byte[] row, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
     {
-        if (allocator.Allocate(seen, out PageEdit globalEdit, out failure) is not { } page)
+        if (AllocatePage(allocator, seen, out PageEdit? globalEdit, out failure) is not { } page)
         {
             failure = $"an LVAL page: {failure}";
             return null;
@@ -2584,7 +2614,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(free);
         }
-        edits.Add(globalEdit);
+        if (globalEdit is { } ge)
+        {
+            edits.Add(ge);
+        }
         return page;
     }
 
@@ -2621,7 +2654,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(cleared);
         }
-        if (allocator.Allocate(seen, out PageEdit globalEdit, out failure) is not { } page)
+        if (AllocatePage(allocator, seen, out PageEdit? globalEdit, out failure) is not { } page)
         {
             failure = $"no FreeMap page has room and no page can be allocated: {failure}";
             return null;
@@ -2660,7 +2693,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             edits.Add(f);
         }
-        edits.Add(globalEdit);
+        if (globalEdit is { } ge)
+        {
+            edits.Add(ge);
+        }
         return new RowLocator(page, first);
     }
 

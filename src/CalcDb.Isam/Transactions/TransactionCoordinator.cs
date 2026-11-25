@@ -46,6 +46,17 @@ public readonly record struct AcceptOutcome(bool Accepted, MutationError? Error 
 public sealed record PublicationReceipt(int Changes, NativeProgram Program);
 
 /// <summary>
+/// A deferred catalog commit queued by <c>SchemaWriter.CreateQueryDef</c> for ACE's 5th query-creation commit
+/// (evidence/r-q39-querydef-bytes: MSysQueries TableDef RowCount/UniqueEntryCount on page 4 and non-select
+/// MSysObjects.Flags, flushed at the next CreateQueryDef or at Database.Close).
+/// </summary>
+public sealed record DeferredCatalogCommit(
+    IReadOnlyList<PageEdit> Edits,
+    IReadOnlyList<LockResource> Footprint,
+    int? PendingQueryObjectId = null,
+    int PendingQueryFlags = 0);
+
+/// <summary>
 /// Where a Workspace's publication writes (II-08 §19; W-05/same-width-mutation): the file session's positioned handle
 /// for a cache, under the session's writer lease (II-09 §3 Step 1, taken on the explicit reopen path when the session
 /// was admitted as a reader). The platform adapter supplies it; the ISAM decides no admission of its own.
@@ -516,6 +527,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
     private readonly HashSet<PageCache> _pendingCloseCommit = [];
     private readonly HashSet<PageCache> _jet4MdbRollbackPending = [];
+    private readonly Dictionary<PageCache, DeferredCatalogCommit> _deferredCatalogCommit = [];
     private PageCache? _statementRollbackGroup2File;
     private OperationFrame? _operation;
     private StatementScope? _statement;
@@ -627,7 +639,22 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// evidence/r-q19-growth-open/lv-op-delete-row-chain, evidence/r-q22-lv-open/lv-free-timing-delete-chain) or when
     /// another session changed page 1 on disk.
     /// </summary>
-    public bool NeedsCloseCommit(PageCache cache) => _allocatedGlobalMap.Contains(cache) || _releaseAtClose.ContainsKey(cache);
+    public bool NeedsCloseCommit(PageCache cache) =>
+        _allocatedGlobalMap.Contains(cache)
+        || _releaseAtClose.ContainsKey(cache)
+        || _deferredCatalogCommit.ContainsKey(cache);
+
+    /// <summary>Queue a deferred catalog commit (CreateQueryDef 5th commit) to flush at the next CreateQueryDef or Database.Close.</summary>
+    public void SetDeferredCatalogCommit(PageCache cache, DeferredCatalogCommit commit) =>
+        _deferredCatalogCommit[cache] = commit;
+
+    /// <summary>Inspect a queued deferred catalog commit for <paramref name="cache"/> without removing it.</summary>
+    public bool TryPeekDeferredCatalogCommit(PageCache cache, out DeferredCatalogCommit? commit) =>
+        _deferredCatalogCommit.TryGetValue(cache, out commit);
+
+    /// <summary>Clear the queued deferred catalog commit for <paramref name="cache"/> after folding it into a later commit.</summary>
+    public void ClearDeferredCatalogCommit(PageCache cache) =>
+        _deferredCatalogCommit.Remove(cache);
 
     /// <summary>
     /// Unused pages of this session's active 32-page page-1 reservation on <paramref name="cache"/> available for
@@ -3237,6 +3264,28 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_participants.ContainsKey(cache))
         {
             return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a closing commit would publish beside them");
+        }
+        if (_deferredCatalogCommit.TryGetValue(cache, out DeferredCatalogCommit? deferred))
+        {
+            (MutationOpen defOpen, string? defDetail) = PublishNonTransactional(
+                cache,
+                deferred.Edits,
+                deferred.Footprint,
+                CommitMode.Immediate,
+                MutationErrorSource.Workspace,
+                out MutationError? defError,
+                allowDuringRollbackExtent: true);
+            if (defOpen != MutationOpen.None || defError is not null)
+            {
+                return defError is { } defRefused
+                    ? (MutationOpen.Publication, $"the deferred catalog commit: {defRefused.Describe()}")
+                    : (defOpen, defDetail);
+            }
+            _deferredCatalogCommit.Remove(cache);
+            if (!_allocatedGlobalMap.Contains(cache) && !_releaseAtClose.ContainsKey(cache))
+            {
+                return (MutationOpen.None, null);
+            }
         }
         List<PageEdit> frees = [];
         if (_releaseAtClose.TryGetValue(cache, out List<uint>? released) && released.Count > 0)
