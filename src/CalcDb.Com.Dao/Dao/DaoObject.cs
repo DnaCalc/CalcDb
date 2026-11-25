@@ -54,6 +54,9 @@ internal static class DaoErrors
     /// <summary>3010 (R-CAT-1 CAT-B: a table name the catalog already lists, compared without case).</summary>
     public static string TableExists(string name) => $"Table '{name}' already exists.";
 
+    /// <summary>3012 (R-CAT-1 CAT-Q; r-dao-1-err-1/draft-querydef, r-cat-1/names: a QueryDef name the catalog already lists).</summary>
+    public static string ObjectExists(string name) => $"Object '{name}' already exists.";
+
     /// <summary>3125 (R-CAT-1 CAT-B; r-cat-1/names, r-dao-1-err-1/err-invalid-names: an invalid object name).</summary>
     public static string InvalidName(string name) => $"'{name}' is not a valid name. Make sure that it does not include invalid characters or punctuation and that it is not too long.";
 

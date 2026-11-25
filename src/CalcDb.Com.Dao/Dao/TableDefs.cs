@@ -35,6 +35,12 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// </summary>
     public Func<(IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure)>? Membership { get; init; }
 
+    /// <summary>
+    /// When true, <see cref="Relist"/> re-binds currently held member wrappers by their name instead of clearing them
+    /// (r-dao-1-err-1/draft-querydef: QueryDefs.Refresh keeps identity of held QueryDef wrappers).
+    /// </summary>
+    public bool PreserveHeldByName { get; init; }
+
     /// <summary>List the members again from <see cref="Membership"/>; held member wrappers stay valid for their clients.</summary>
     public string? Relist()
     {
@@ -45,10 +51,44 @@ internal sealed unsafe class DefinitionCollection : DaoObject
             {
                 return failure;
             }
+            Dictionary<string, DaoObject>? preserved = null;
+            if (PreserveHeldByName && _held.Count > 0)
+            {
+                preserved = new Dictionary<string, DaoObject>(_held.Count, StringComparer.OrdinalIgnoreCase);
+                foreach ((int oldIndex, DaoObject wrapper) in _held)
+                {
+                    if ((uint)oldIndex < (uint)_names.Count)
+                    {
+                        preserved.TryAdd(_names[oldIndex], wrapper);
+                    }
+                }
+            }
             (_names, _lookup, _make) = (names, new CollectionNames(names), make);
             _held.Clear(); // the ordinals change
+            if (preserved is not null)
+            {
+                for (int i = 0; i < _names.Count; i++)
+                {
+                    if (preserved.TryGetValue(_names[i], out DaoObject? wrapper))
+                    {
+                        _held[i] = wrapper;
+                    }
+                }
+            }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Register an already-created live wrapper under its member <paramref name="name"/> so subsequent
+    /// <c>Item</c> lookups return that exact COM identity (r-cat-1/temporary-querydef, r-dao-1-err-1/draft-querydef).
+    /// </summary>
+    public void RegisterHeld(string name, DaoObject wrapper)
+    {
+        if (_lookup.Find(name) is int ordinal)
+        {
+            _held[ordinal] = wrapper;
+        }
     }
 
     /// <param name="holdsDatabase">False for the Database's own TableDefs, which the Database keeps (a reference back would be a cycle).</param>

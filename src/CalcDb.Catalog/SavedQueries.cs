@@ -49,6 +49,9 @@ public enum QueryFamily
 /// <summary>A declared parameter (attribute 2): its name as stored, native type code and declared Text size (LvExtra).</summary>
 public sealed record QueryParameter(string Name, short NativeType, int? TextSize);
 
+/// <summary>A compiled saved-query definition ready for <see cref="SchemaWriter.CreateQueryDef"/>.</summary>
+public sealed record CreateQueryDefRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows);
+
 /// <summary>
 /// A saved query (II-06 §8): its catalog row and its role rows in encounter order. <see cref="OrderingFailure"/> is set
 /// when the rows' Order bytes are not nondecreasing per attribute in encounter order: the encounter-order profile
@@ -56,10 +59,13 @@ public sealed record QueryParameter(string Name, short NativeType, int? TextSize
 /// </summary>
 public sealed class SavedQuery
 {
-    internal SavedQuery(CatalogEntry entry, IReadOnlyList<QueryRow> rows)
+    private readonly QueryFamily? _familyOverride;
+
+    internal SavedQuery(CatalogEntry entry, IReadOnlyList<QueryRow> rows, QueryFamily? familyOverride = null)
     {
         Entry = entry;
         Rows = rows;
+        _familyOverride = familyOverride;
         OrderingFailure = CheckOrdering(rows);
     }
 
@@ -71,8 +77,11 @@ public sealed class SavedQuery
 
     public string? OrderingFailure { get; }
 
-    /// <summary>The masked flag class (II-06 §8), or null when it is not one of the nine known classes.</summary>
-    public QueryFamily? Family => (Entry.Flags & 0xF0) is var c && Enum.IsDefined(typeof(QueryFamily), c) ? (QueryFamily)c : null;
+    /// <summary>The masked flag class (II-06 §8), or the session's pending family before the 5th commit writes MSysObjects.Flags (r-q39).</summary>
+    public QueryFamily? Family => _familyOverride ?? ((Entry.Flags & 0xF0) is var c && Enum.IsDefined(typeof(QueryFamily), c) ? (QueryFamily)c : null);
+
+    /// <summary>Return a view of this saved query with its pending family applied while the 5th commit has not yet flushed MSysObjects.Flags.</summary>
+    public SavedQuery WithPendingFamily(QueryFamily family) => new(Entry, Rows, family);
 
     /// <summary>The raw masked class, for a named refusal of an unknown one.</summary>
     public int FlagClass => Entry.Flags & 0xF0;
@@ -121,6 +130,17 @@ public sealed class QueryCatalog
     public IReadOnlyList<SavedQuery> Queries { get; }
 
     public IReadOnlyList<QueryRow> Orphans { get; }
+
+    /// <summary>Return a catalog snapshot whose matching query carries its pending deferred <see cref="QueryFamily"/>.</summary>
+    public QueryCatalog WithPendingFamily(int objectId, QueryFamily family)
+    {
+        List<SavedQuery> updated = new(Queries.Count);
+        foreach (SavedQuery q in Queries)
+        {
+            updated.Add(q.Entry.Id == objectId ? q.WithPendingFamily(family) : q);
+        }
+        return new QueryCatalog(updated, Orphans);
+    }
 
     public static QueryCatalog? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, out string? failure)
     {

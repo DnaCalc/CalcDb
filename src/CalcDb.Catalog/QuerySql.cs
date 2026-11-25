@@ -145,7 +145,24 @@ public static class QuerySql
             }
             case QueryFamily.Append:
             {
-                if (type!.Name1 is not { } target || outputs.Any(o => o.Name2 is null || (o.Flag ?? 0) != 0))
+                if (type!.Name1 is not { } target || outputs.Length == 0)
+                {
+                    return RenderedSql.Refuse("an append query without a target or outputs");
+                }
+                if (outputs.All(o => o.Name2 is not null && o.Expression is not null && o.Name1 is null && o.Flag == unchecked((short)0x8000)))
+                {
+                    if (options != 0 || q.Role(QueryAttributes.Source).Any() || q.Role(QueryAttributes.Join).Any()
+                        || q.Role(QueryAttributes.Where).Any() || q.Role(QueryAttributes.GroupBy).Any()
+                        || q.Role(QueryAttributes.Having).Any() || q.Role(QueryAttributes.OrderBy).Any())
+                    {
+                        return RenderedSql.Refuse("an INSERT VALUES query with options or table clauses (not observed)");
+                    }
+                    // r-q39-querydef-bytes/action-insert-values-accdb: INSERT INTO T ( ID, V, W )\r\nVALUES (1, 10, 'a');\r\n
+                    sql.Append("INSERT INTO ").Append(target).Append(" ( ").AppendJoin(", ", outputs.Select(o => o.Name2)).Append(" )").Append(Line)
+                       .Append("VALUES (").AppendJoin(", ", outputs.Select(o => o.Expression)).Append(");").Append(Line);
+                    return RenderedSql.Of(sql.ToString());
+                }
+                if (outputs.Any(o => o.Name2 is null || (o.Flag ?? 0) != 0))
                 {
                     return RenderedSql.Refuse("an append query whose outputs are not all mapped to target columns");
                 }
@@ -159,12 +176,15 @@ public static class QuerySql
             case QueryFamily.Update:
             {
                 QueryRow[] sources = [.. q.Role(QueryAttributes.Source)];
-                if (outputs is not [{ Name2: { } column, Expression: { } value, Name1: null }] || sources is not [{ Name1: { } table, Name2: null, Expression: null }] || options != 0
+                if (outputs.Length == 0 || outputs.Any(o => o.Name2 is null || o.Expression is null || o.Name1 is not null || (o.Flag ?? 0) != 0)
+                    || sources is not [{ Name1: { } table, Name2: null, Expression: null }] || options != 0
                     || q.Role(QueryAttributes.Join).Any())
                 {
-                    return RenderedSql.Refuse("an UPDATE other than one assignment to one table (several assignments are not observed)");
+                    return RenderedSql.Refuse("an UPDATE other than assignments to one table");
                 }
-                sql.Append("UPDATE ").Append(table).Append(" SET ").Append(column).Append(" = ").Append(value);
+                // r-q39-querydef-bytes/action-update-accdb and action-update-mdb: UPDATE T SET V = 1, W = 'x'\r\nWHERE ID = 1;\r\n
+                sql.Append("UPDATE ").Append(table).Append(" SET ")
+                   .AppendJoin(", ", outputs.Select(o => $"{o.Name2} = {o.Expression}"));
                 return Tail(q, sql, from: false, family);
             }
             case QueryFamily.Delete:

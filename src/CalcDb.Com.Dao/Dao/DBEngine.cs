@@ -499,7 +499,14 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     }
 
     /// <summary>BeginTrans: a new level, or 3003 at the eighth (R-TXN-1 TXN-NEST, nest-exhaustion).</summary>
-    public CallResult BeginTrans() => Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
+    public CallResult BeginTrans()
+    {
+        if (Transactions.HasDeferredCatalogCommit)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
+        return Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
+    }
 
     /// <summary>
     /// CommitTrans(Options): the declared Long, coerced by the binder (TXN-NEST, commit-option-vartypes: Missing, Empty,
