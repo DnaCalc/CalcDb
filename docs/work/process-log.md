@@ -1,11 +1,11 @@
 # Process log
 
-The observe → change → retest → adopt loop of [The Plan](../the-plan.md) §4, kept light. Each
+The observe  change  retest  adopt loop of [The Plan](../the-plan.md) 4, kept light. Each
 entry gives the work it observed, rough counts, one change tried, and (in a later entry) whether
 the change helped. These are development-process notes, separate from the Access evidence in
 `evidence/`.
 
-## 2026-11-17 · W-01 first slice (one CodeAlta session, Claude Opus 5.5)
+## 2026-11-17 ú W-01 first slice (one CodeAlta session, Claude Opus 5.5)
 
 **Work observed.** From an empty code base to the sealed and retained R-ORACLE-1 read and
 failed call, the `.accdb` index, the register, ten task drafts and the oracle service design:
@@ -16,7 +16,7 @@ Roslyn tooling, no skills, no sub-agents.
 
 | Cause | Calls lost | Note |
 | --- | --- | --- |
-| Bash heredocs failing on non-ASCII text (`§`, `ä€`) | ~4 | The tool reports "unexpected EOF"; nothing was written. |
+| Bash heredocs failing on non-ASCII text (``, `„?`) | ~4 | The tool reports "unexpected EOF"; nothing was written. |
 | Python used as an ad-hoc multi-file editor | ~3 | An escape turned `\n` into a newline in C#. The owner asked why Python was used at all: it is not project tooling. |
 | PowerShell here-string piped to `git commit -F -` | 2 | Taken as a pathspec. A message file works. |
 | A CodeAlta `exec` script that called `alta ... help` and a shell `echo` | 1 (70 s hang) | The script had to be stopped. |
@@ -32,10 +32,10 @@ Roslyn tooling, no skills, no sub-agents.
 - One defect slipped past: host line endings in the serialized evidence, which made seal
   digests depend on the OS. It was caught only by git's CRLF warning after retention. A test now
   covers it. The general lesson is to test platform independence of anything that is hashed.
-- Reading the book by ID (II-15 §§1–4 and §16, the R-ORACLE-1 card, II-16 §§14, 24 and 33) was
+- Reading the book by ID (II-15 1-4 and 16, the R-ORACLE-1 card, II-16 14, 24 and 33) was
   enough to build the slice; no chapter was read whole.
 
-**Not yet tried** (The Plan §4 candidates): RoslynSkills/RosCLI and a persistent Roslyn
+**Not yet tried** (The Plan 4 candidates): RoslynSkills/RosCLI and a persistent Roslyn
 workspace, JSM skills, sub-agents for independent research, and separate implementer and
 reviewer agents.
 
@@ -50,7 +50,7 @@ Zero or one means adopt; more means the guidance is not read or not specific eno
 They cost context on every edit. Then try RosCLI on a refactoring-heavy slice, such as moving
 the VARIANT declarations into the W-02 project, against the raw-agent baseline above.
 
-## 2026-11-17 night · evidence run (one CodeAlta session, Opus, plus 14 card-design sub-agents)
+## 2026-11-17 night ú evidence run (one CodeAlta session, Opus, plus 14 card-design sub-agents)
 
 **Work observed.** Tooling built during the night (probe generator, batch runs, multi-process participants,
 native file driver, lifecycle trace, build-stamped provenance), 15 probe cards, about 1,000 designed questions
@@ -99,13 +99,13 @@ hex and re-captured constant arguments, and built a lossless compaction for them
 costs are the per-call event structure and indentation. Git's packed size was 372 MB, about four times smaller,
 because the repetitive JSON compresses well. The compaction was reverted before commit, so one night's
 evidence keeps one format. The storage decision (a compact capture encoding, environment once per worker, or a
-separate evidence repository, The Plan §2.4) is the owner's.
+separate evidence repository, The Plan 2.4) is the owner's.
 
 **Next candidates.** Add a fixture-review step that reads the
 creation capture and fails a fixture whose required tables did not appear. Store the environment once per
 worker, as proposed in oracle-service.md.
 
-## 2026-11-17 early morning · conduct incident, private desktop, Decimal discriminator
+## 2026-11-17 early morning ú conduct incident, private desktop, Decimal discriminator
 
 **Work observed.** Wave 4 (301 questions), the OR-DESKTOP launch and window guard, the `r-dec-read`
 discriminator (18 records), wave-4 summaries and the wave-5 designs (4 cards).
@@ -139,7 +139,7 @@ the summaries surfaced the Decimal question.
 **Next candidate.** `batch` already takes `--timeout` for all its questions. A per-question timeout would let
 a probe that may block declare 60 s while long joins keep 300 s.
 
-## 2026-11-17 morning · waves 5 and 6
+## 2026-11-17 morning ú waves 5 and 6
 
 **Work observed.** Wave 5 (233 questions, 4 cards) and a repair wave 6 (264 questions, 5 cards; the wave-6 evidence commit says 265, which was a miscount), designed by
 Sonnet sub-agents, all complete except one designed kill. Every worker ran on the private desktop and no window was
@@ -170,7 +170,7 @@ carefully. Changes: `show` prints invisible and unprintable code units as `\uXXX
 `--evidence DIR`, so a check of one folder takes seconds instead of an hour. Rule: decode bytes with their stated
 order, and read the designed probe before naming the behaviour.
 
-## 2026-11-17 midday · the qualification round
+## 2026-11-17 midday ú the qualification round
 
 **Work observed.** Six Sonnet agents classified 467 branch rows, drafted notes, designed 271 follow-up probes, and
 after the run turned about 126 follow-ups into qualified behaviour; 238 notes in qualified.md and a slice-by-slice
@@ -196,7 +196,7 @@ report. The machine crashed during the first phase.
 **Next candidates.** The worker operations in the report's table (`IEnumVARIANT`, ByRef and named arguments, raw
 activation, an event sink, pause points): small, and they turn many T rows into F.
 
-## 2026-11-17 afternoon · worker operations and the second follow-up round
+## 2026-11-17 afternoon ú worker operations and the second follow-up round
 
 **Work observed.** Seven new worker operations, two native COM objects of our own (a controlled outer and a recording
 sink), a sampling write recorder, 196 follow-up probes, and the report updated: F rows from 30 to 10, T rows from 122 to
@@ -225,7 +225,7 @@ code or a name.
 **Next candidates.** Repeats of the sampling recorder per mutation class; a pre-push size check is no longer needed
 since retain enforces it.
 
-## 2026-11-17 (afternoon) · ETW recorder and the owned Access host (one session, Claude Opus 5.5)
+## 2026-11-17 (afternoon) ú ETW recorder and the owned Access host (one session, Claude Opus 5.5)
 
 **Work observed.** The owner installed the ETW recorder; 11 `r-etw-rec` records, a `show --etw` view, the
 `claimProcess` operation, owned out-of-process servers in the runner, `--desktop main`, and the first 7
@@ -255,7 +255,7 @@ it falls after.
 attribution, which needs a recorder change and the owner's reinstall; moving the Access host to the private desktop when
 the owner says so.
 
-## 2026-11-17 (evening) · Dialog handling by UI Automation (one session, Claude Opus 5.5)
+## 2026-11-17 (evening) ú Dialog handling by UI Automation (one session, Claude Opus 5.5)
 
 **Work observed.** Reproduce first, then handle: four repro probes recorded what each VBA dialog is, then three rounds
 of answered probes (the second round contaminated, the third clean). A UI Automation helper, dialog policies in the
@@ -280,7 +280,7 @@ question key, editor windows, an input guard. 10 records, one note rewritten, tw
 
 **Next candidates.** The private desktop for the host (by the owner's word); nested and cleanup errors (UDF-ERROR open).
 
-## 2026-11-18 · W-01/dao-cost, W-04/key-navigation, W-10/native-readers-only, W-08 TableDefs (one session, Claude Opus 5.5)
+## 2026-11-18 ú W-01/dao-cost, W-04/key-navigation, W-10/native-readers-only, W-08 TableDefs (one session, Claude Opus 5.5)
 
 **Work observed.** Cost counters in CalcDb and a performance driver (calcdb-perf) with six DAO loop cases against ACE.
 Index descriptors, a scalar key codec, an index navigator, Index and Seek. The lock-file slot protocol. TableDefs and
@@ -294,8 +294,8 @@ operation. The comparison rule went to revision 3. Three harness defects were fo
 - *Bisection for an unknown protocol.* The lock bytes of a shared session were not in any document. An exclusive
   fail-immediately LockFileEx is refused exactly when another handle holds a lock in its range, so bisecting
   [0, 2^62) found the slot byte 0x10000001 in 125 requests.
-- *A/A controls before interpreting a ratio.* calcdb/calcdb and ace/ace runs gave 0.98–1.04. Without them the
-  1.2–1.5× ratios of the cheap bodies would have been unreadable.
+- *A/A controls before interpreting a ratio.* calcdb/calcdb and ace/ace runs gave 0.98-1.04. Without them the
+  1.2-1.5x ratios of the cheap bodies would have been unreadable.
 
 **What cost time:**
 
@@ -314,19 +314,19 @@ that the candidate answered before counting a match.
 (W-06/restricted-scalar) unblocks Find. A per-question provenance summary in `batch --compare` would make the count
 script unnecessary.
 
-## 2026-11-18 (later) · Allocation-free inner loop (6p9q) and the evidence index (one session, Claude Opus 5.5)
+## 2026-11-18 (later) ú Allocation-free inner loop (6p9q) and the evidence index (one session, Claude Opus 5.5)
 
 **Work observed.** The owner asked for 6p9q with experiments on allocation-free inner loops, the learnings codified
 lightly, and candidates named. The owner also flagged the 75-minute evidence index as overreach. Result: a held DAO
-Field read went from 1,264 to 10.6 managed bytes per row and from 1.2–1.5× ACE's time to 0.54–0.80×. Index build
-and verify take 5 s each. The Plan v0.3 gained §3.2.
+Field read went from 1,264 to 10.6 managed bytes per row and from 1.2-1.5x ACE's time to 0.54-0.80x. Index build
+and verify take 5 s each. The Plan v0.3 gained 3.2.
 
 **What worked.**
 - *Attribute before changing.* A 40-line in-process test measured bytes per row by layer (movement, read). Each
   change was measured on its own; the pin hold, not the value types, was the largest single step.
 - *Look for the cause behind a slow tool.* The index's per-row cost (0.5 ms, transaction or not) did not fit any
   storage explanation. The apartment did: an MTA caller of an apartment-threaded engine pays a cross-apartment call
-  for every member. One attribute made it 30–40 times faster.
+  for every member. One attribute made it 30-40 times faster.
 - *Ask what the output is for.* 1.25 million of the index's 1.34 million rows indexed individual calls that no query
   used and that `show` already reads per record.
 
@@ -334,8 +334,8 @@ and verify take 5 s each. The Plan v0.3 gained §3.2.
 
 | Cause | Effect | Change made |
 | --- | --- | --- |
-| I let a 30-minute background limit absorb a 43-minute verify instead of asking why | The owner had to point out the overreach | The Plan §3.2: a tool that takes minutes where seconds are expected has a cause; find it first |
-| A struct is never null | `FirstOrDefault(...) is { } bad` on the new `NativeValue` struct would have reported every catalog row as failed | Checked every null test on the changed types; The Plan §3.2 names the trap |
+| I let a 30-minute background limit absorb a 43-minute verify instead of asking why | The owner had to point out the overreach | The Plan 3.2: a tool that takes minutes where seconds are expected has a cause; find it first |
+| A struct is never null | `FirstOrDefault(...) is { } bad` on the new `NativeValue` struct would have reported every catalog row as failed | Checked every null test on the changed types; The Plan 3.2 names the trap |
 | My count script counted a killed (Uncertain) attempt as a match | The batch total was one too high | Incomplete attempts count as differences |
 | The machine slept during a batch | One attempt was killed on wake; the batch took 1 h 47 min of wall time | Checked the System log (S3 resume at 10:41) before blaming the tooling |
 | Some edits were made by scripted text replacement (test files, one source file) | Against AGENTS.md's tool practice; no harm found in review | Use the edit tools |
@@ -345,7 +345,7 @@ and verify take 5 s each. The Plan v0.3 gained §3.2.
 **Next candidates.** The pattern search in perf.md lists five paths (text reads, index pages, Seek keys, name lookup,
 long values); each is to be fixed when its path is worked on, measured the same way.
 
-## 2026-11-18 (afternoon) · Five hot paths, evidence storage, found work (one session, Claude Opus 5.5)
+## 2026-11-18 (afternoon) ú Five hot paths, evidence storage, found work (one session, Claude Opus 5.5)
 
 **Work observed.** The owner asked for the five P1 performance items, then the construction slices, and mid-way for a
 review of what evidence the repository keeps. Result: the five paths measured and fixed (perf.md: repeated text 0.45
@@ -365,9 +365,9 @@ they find (AGENTS.md). A sub-session took vm83.
 
 | Cause | Effect | Change made |
 | --- | --- | --- |
-| The count script counted questions without a retained ACE answer as matches | Earlier totals of 31–32 were 28 | A match needs a retained answer; register corrected |
-| xunit assertions inside a measured loop | About 500 bytes per call blamed on Seek | The Plan §3.2: keep assertions out of measured loops |
-| Fewer bytes taken for faster | Index views made Seek 1.24× slower than HEAD until the page search became binary | The Plan §3.2: time it as well as weigh it |
+| The count script counted questions without a retained ACE answer as matches | Earlier totals of 31-32 were 28 | A match needs a retained answer; register corrected |
+| xunit assertions inside a measured loop | About 500 bytes per call blamed on Seek | The Plan 3.2: keep assertions out of measured loops |
+| Fewer bytes taken for faster | Index views made Seek 1.24x slower than HEAD until the page search became binary | The Plan 3.2: time it as well as weigh it |
 | n7mw not committed before x8d9 began | Five items landed as one commit | Commit each item when it is verified |
 | A stray `python3 -` and a `du` over 67,000 files | Two shell calls hung until stopped | Read a command before running it; size large trees with .NET enumeration |
 | A few edits by `sed` | Against AGENTS.md's tool practice; no harm found | Edit tools only |
@@ -377,9 +377,9 @@ they find (AGENTS.md). A sub-session took vm83.
 **Next candidates.** The call traces are most of the remaining 681 MB of records (owner asked whether to slim them);
 `hdw6` (wrapper objects and page pins per row).
 
-## 2026-11-18 (evening) to 2026-11-19 · Slim traces, hdw6, the first slice sub-session (same session, Claude Opus 5.5)
+## 2026-11-18 (evening) to 2026-11-19 ú Slim traces, hdw6, the first slice sub-session (same session, Claude Opus 5.5)
 
-**Work observed.** Records slimmed (681 → 488 MB; `evidence/` 506 MB), `hdw6` done (every DAO loop body 10.6 bytes per
+**Work observed.** Records slimmed (681  488 MB; `evidence/` 506 MB), `hdw6` done (every DAO loop body 10.6 bytes per
 row), `vm83` and `2nqn` done. The first construction-slice sub-session (W-08/native-read) designed and ran three
 PercentPosition probes, then stopped on the account's weekly usage limit before it reported; its ACE answers were
 retained by the parent.
@@ -401,11 +401,11 @@ retained by the parent.
 **Rule.** Hand over to a new session when a stretch of work ends; the register, the notes and the process log carry
 the state, not the conversation.
 
-## 2026-11-19 (night) to 2026-11-20 · PercentPosition, private images, one writer at a time (one session, Claude Opus 5.5)
+## 2026-11-19 (night) to 2026-11-20 ú PercentPosition, private images, one writer at a time (one session, Claude Opus 5.5)
 
 **Work observed.** A fresh session after the handoff rule of the last round. `thhj` gained PercentPosition on every
 recordset type from ten designed questions (r-cursor-1-pct) and a qualification note; two binder faults found by the
-per-question diff were fixed at their cause (3421 and 3001 for arguments that do not coerce); 28 → 38 of 527 compared
+per-question diff were fixed at their cause (3421 and 3001 for arguments that do not coerce); 28  38 of 527 compared
 questions match. `gcvf` (W-03/private-images-coherence) was built by an Opus sub-session and reviewed here; `bfsh`
 started the same way. `685w` stopped on an owner decision: no shared conversion service the C# reference can consume.
 
@@ -432,11 +432,11 @@ started the same way. `685w` stopped on an owner decision: no shared conversion 
 **Next candidates.** A `--dirs` list in the repository for the standard compare set, instead of a script in temp; the
 compare script's diff as a `calcdb-oracle` command (it reads the comparison ledger, so it is tooling, not analysis).
 
-## 2026-11-20 · Eight items through sub-sessions; one brief that contradicted the book (same session, Claude Opus 5.5)
+## 2026-11-20 ú Eight items through sub-sessions; one brief that contradicted the book (same session, Claude Opus 5.5)
 
 **Work observed.** After the last round this session delegated each slice to a sub-session and kept review, the
 compare and the commits: `bfsh`, `n764` (Sonnet), `73vf` (two children), Database.Version, `58sc`, CollatingOrder,
-`nksv`, `gw6c`, `6w9p`/`77wt`, with `tdt9` running. Compared questions matching ACE: 38 → 69, of 527 → 965 as the
+`nksv`, `gw6c`, `6w9p`/`77wt`, with `tdt9` running. Compared questions matching ACE: 38  69, of 527  965 as the
 sort-order, ADO and activation folders joined the compare set. Two owner decisions are open (`685w`, ADO threading).
 
 **What worked.**
@@ -465,12 +465,12 @@ sort-order, ADO and activation folders joined the compare set. Two owner decisio
 with the folder list and the per-question diff against a named run); the session is long: hand over to a fresh
 session after `tdt9`, with the two owner decisions in the handoff.
 
-## 2026-11-20 (day) · compare-set in the repository, 685w, x866, parallel tracks (fresh session, Claude Opus 5.5)
+## 2026-11-20 (day) ú compare-set in the repository, 685w, x866, parallel tracks (fresh session, Claude Opus 5.5)
 
 **Work observed.** A fresh session from the handoff. The last round's first candidate became tooling
 (`calcdb-oracle compare-set`, a committed per-question baseline); then 685w (CalcDb.Values, the one oleaut32 table, stand-ins,
 the scalar kernel by an Opus child, the CalcVBA brief), x866 (Find, Opus child), 2b3c (Sonnet child), and probe rounds for
-x6bq and b999 run by this session beside the children. Compared questions matching or accepted: 78 → 85 of 1038.
+x6bq and b999 run by this session beside the children. Compared questions matching or accepted: 78  85 of 1038.
 
 **Last round's change measured.** The compare set in the repository replaced the temp-folder scripts: every comparison
 this session was `compare-set` plus its diff, and the diff named each gain, loss and moved first difference without a
@@ -483,7 +483,7 @@ script. Adopt. The handoff worked again: register, notes and process log were en
   designed and ran probes (tools/CalcDb.Probes, evidence) and a Sonnet child changed the ETW recorder. Nothing collided;
   the owner's push for more parallel work was right.
 - *A control set for a rule change.* The 15,133-entry native key corpus showed at once that the first form of the
-  placeholder rule overreached (General 1033/1's two-byte é), so the rule was narrowed to the evidence.
+  placeholder rule overreached (General 1033/1's two-byte ‚), so the rule was narrowed to the evidence.
 - *Stopping a formula search on time.* x6bq's three-page landing fit neither the two- nor the four-page shape; the shape
   found so far was recorded and the stretch closed, as the last-but-one round's rule asked.
 
@@ -502,7 +502,7 @@ each one owns in its brief.
 **Next candidates.** The owner's request for the next process round: CodeAlta work items as the sole tracker (`6v2c`).
 The w-10 lock-length flake at its cause.
 
-## 2026-11-20 (afternoon) · Organizer handover: 68jn, 7htc, mpvx, 6d79/hd6v landed; four probe rounds beside the children (top-level session, Claude Opus 5.5)
+## 2026-11-20 (afternoon) ú Organizer handover: 68jn, 7htc, mpvx, 6d79/hd6v landed; four probe rounds beside the children (top-level session, Claude Opus 5.5)
 
 Not a process round (none was called); observations made during the work, each with the change it led to.
 
@@ -515,10 +515,10 @@ Not a process round (none was called); observations made during the work, each w
 | A note's claim contradicted its own record (Mid's start) | Found by the implementing child, not at qualification | When a note is written, check each claimed value against the record it cites |
 | A probe over all retained fixtures before writing the leaf writer (mpvx) | Found that ACE's stored prefix is not the common prefix before any page was written | Run such a fixture-wide probe before every format writer |
 
-## 2026-11-21 · Process round: velocity without quality loss (krnv, 6v2c; sub-session of the organizer, Claude Opus 5.5)
+## 2026-11-21 ú Process round: velocity without quality loss (krnv, 6v2c; sub-session of the organizer, Claude Opus 5.5)
 
-**Work observed.** All of 2026-11-20 (UTC): the organizers `01a1f844` (09:24–15:23, Opus medium) and `01a1f97d`
-(15:04–22:58, Opus high) and their 27 children, 20 Claude and 5 Gemini 4 Neon of them finished. The day made 84
+**Work observed.** All of 2026-11-20 (UTC): the organizers `01a1f844` (09:24-15:23, Opus medium) and `01a1f97d`
+(15:04-22:58, Opus high) and their 27 children, 20 Claude and 5 Gemini 4 Neon of them finished. The day made 84
 commits, and compared questions matching or accepted went from 78 to 178 of 1,043. The numbers come from
 `alta session report --scope session --include=metrics`, `alta session events` (each tool call's request and
 completion), `alta job list --all`, and the attempt folders of the growth-2 compare run. Timing an export used
@@ -531,12 +531,12 @@ completion), `alta job list --all`, and the attempt folders of the growth-2 comp
 | Organizer `01a1f97d` | 474 min wall: 202 min in turns (43 %), the rest waiting on children and jobs. 644 tool calls, 264.8M input tokens (99.7 % cached), $67.8. |
 | Its tool time (141 min) | export, build and test 45 calls / 50 min; probes and records 144 / 32 min; git 47 / 31 min (chained with exports); compare-set launches and diffs 30 / 7 min; edits 95; register and tasks 33; code reads 73; qualified.md 28 (0.2 min) |
 | Organizer context | 411k input tokens per call (`01a1f97d`), 558k (`01a1f844`); the two organizers were $120.8 of the day's $326 Claude cost (37 %) |
-| Claude children | 20 sessions, $205.6. Opus: 9–59 min, 44–227 calls, 4.8–66M input, 130–290k per call |
-| Neon children | trials 1–4: 26–81 min, 149–380 calls, 12–34M input, 90–112k per call, no cost reported. Trial 5's session totals (1,678M in, 17.7M out in 99 min) are a metrics fault (codealta-work-items.md, item 10) |
-| Child orientation | first code edit after 2–42 min (median 10) and 12–181 calls (median 44), spent reading the code to be changed. Book 0–19 calls, qualified.md 0–18 calls (at most 2 min). Briefs 465–1,477 tokens |
-| Export per landing | 1.4–4.0 min. Extracting HEAD is 48 s and deleting it 15 s (7,917 files, 753 MB; `evidence/` and `probes/` are 699 MB); the code alone extracts in 2.8 s. Then a full build and a NativeAOT publish every time |
+| Claude children | 20 sessions, $205.6. Opus: 9-59 min, 44-227 calls, 4.8-66M input, 130-290k per call |
+| Neon children | trials 1-4: 26-81 min, 149-380 calls, 12-34M input, 90-112k per call, no cost reported. Trial 5's session totals (1,678M in, 17.7M out in 99 min) are a metrics fault (codealta-work-items.md, item 10) |
+| Child orientation | first code edit after 2-42 min (median 10) and 12-181 calls (median 44), spent reading the code to be changed. Book 0-19 calls, qualified.md 0-18 calls (at most 2 min). Briefs 465-1,477 tokens |
+| Export per landing | 1.4-4.0 min. Extracting HEAD is 48 s and deleting it 15 s (7,917 files, 753 MB; `evidence/` and `probes/` are 699 MB); the code alone extracts in 2.8 s. Then a full build and a NativeAOT publish every time |
 | Full compare set | 11 runs by `01a1f97d` (180 min; 2 failed, 18 min), about 17 on the day (about 270 min). One run: 1,043 attempts one after another, 896 s, 0.86 s each, 87 % inside workers. 8 ADO questions waiting out timeouts take 140 s |
-| Writer occupancy, 15:04–22:53 | 76 min without any code writer, in six gaps of 7–21 min (review, then the compare during which nothing may build). From 17:37 to 22:53 one code writer at a time |
+| Writer occupancy, 15:04-22:53 | 76 min without any code writer, in six gaps of 7-21 min (review, then the compare during which nothing may build). From 17:37 to 22:53 one code writer at a time |
 
 **What caused rework on 2026-11-20.**
 
@@ -544,7 +544,7 @@ completion), `alta job list --all`, and the attempt folders of the growth-2 comp
 | --- | --- | --- |
 | Eight qualified notes contradicted by their records (Mid's start, comma-join order, the snapshot bookmark base, the literal 2147483648, four r-q3-sql notes) | a discriminator round each, after a child had started | children that stop on a contradiction; replay tests |
 | Two Neon rules generalized beyond the records (3421 for every numeric target; the landing page among several FreeMap pages), in 5 trials | narrowed in review | the reviewer checking each rule against a record |
-| A change that lost an untouched question (6fsf → `r-sort-3b/lu-unique-survivors`) | fixed in the same commit | the full compare set, its only out-of-scope loss in about 14 runs |
+| A change that lost an untouched question (6fsf  `r-sort-3b/lu-unique-survivors`) | fixed in the same commit | the full compare set, its only out-of-scope loss in about 14 runs |
 | An inspector change committed without its Evidence tests (316105cf) | a broken test on master until the next commit | nothing: the export test was skipped |
 | `cmp -l` octal read as decimal | a wrong statement to a child | the child (Neon trial 5) |
 | A stale fixed-name message file; an export copy of another child's files | a wrong message before push; a broken export build | the organizer, at once |
@@ -558,21 +558,21 @@ candidate check of a child's target questions.
 
 | # | Change | Expected gain | Risk | State |
 | --- | --- | --- | --- | --- |
-| 1 | Run compare-set from a snapshot of the export's runner, worker and deployment, with its own store ([landing-check.md](landing-check.md)) | the 15–21 min run no longer blocks builds or the next child: about 1.5 h of writer time a day | none: same set, comparer and diff | proposed; try at the next landing |
+| 1 | Run compare-set from a snapshot of the export's runner, worker and deployment, with its own store ([landing-check.md](landing-check.md)) | the 15-21 min run no longer blocks builds or the next child: about 1.5 h of writer time a day | none: same set, comparer and diff | proposed; try at the next landing |
 | 2 | Two code writers again, on disjoint projects (storage and format: Format, Storage, Isam, Catalog; SQL: Sql, Expressions, Values), with Com wiring by the organizer or a short follow-up; Neon and Claude on separate quotas | up to twice the writer throughput | the organizer's review load; keep one review per landing | allowed today; do it |
 | 3 | `batch --compare` runs candidate attempts in parallel (task `mvgk`) | a full set in about 3 min instead of 15 with six workers (estimate) | store races, 12 two-participant questions | task |
 | 4 | Find why eight ADO candidate questions wait out timeouts (task `6zkg`) | 140 s of every full run | none | task |
-| 5 | One landing-check command over a persistent check clone ([landing-check.md](landing-check.md)) | about 1–2.5 min and five calls per landing; removes the wrong-file-list and skipped-test slips | a second checkout: the owner's word | proposed |
+| 5 | One landing-check command over a persistent check clone ([landing-check.md](landing-check.md)) | about 1-2.5 min and five calls per landing; removes the wrong-file-list and skipped-test slips | a second checkout: the owner's word | proposed |
 | 6 | Organizer: hand over at about 300 calls or 5 h (`01a1f97d` reached 644); try one probe round in an Opus high prober child | its 144 probe calls were about 22 % of its input at 411k per call | the prober lacks the organizer's view; the brief names the gap the child stopped on | proposed, one trial |
 | 7 | The handoff's working rules go into AGENTS.md and landing-check.md, not scratchpads (CodeAlta deletes those after a week) | rules survive handovers | none | diff proposed |
 | 8 | Model by task class: Neon by default for record-backed implementation with replay or byte acceptance; Opus high where behaviour is still being found; Sonnet for tooling | a second quota; Neon uses a third of Opus high's tokens per call at a similar time | one unrecorded generalization per larger task; the review catches it | adopt (the memory note already says so) |
 
-**Rejected from measurement.** Leaner briefs (they are 465–1,477 tokens already). A qualified.md index (children spend
+**Rejected from measurement.** Leaner briefs (they are 465-1,477 tokens already). A qualified.md index (children spend
 at most 18 calls and 2 min on it). A scoped compare per landing (with change 1 the full set blocks nothing, and it
 caught the day's one out-of-scope loss). The medium against high comparison found no matched pair of tasks in the data
 and draws no conclusion; a matched trial costs more than the choice is worth.
 
-**For the owner.** Worktrees: AGENTS.md forbids them. The Plan §2.1 asks for isolation chosen deliberately, once
+**For the owner.** Worktrees: AGENTS.md forbids them. The Plan 2.1 asks for isolation chosen deliberately, once
 concurrent writers are worthwhile. The next items in order, W-07 DDL and actions and zfrp stretch 3, share Storage
 and Format, so changes 1 and 2 cannot run them side by side. A trial of one worktree child for one such pair would
 measure the merge cost. The tracker (6v2c) needs two decisions: keep completed tasks, and commit `.alta/tasks/`
@@ -583,7 +583,7 @@ three tracker questions answered from CodeAlta alone in one 254 ms script. It wo
 `.alta/` is not in git and in progress is not in the file, so the register stays for now. The export anatomy and the
 compare-run anatomy above were measured without building.
 
-**Measure next time.** For change 1: the gap from a child's report to the next writer's start (7–21 min today) and
+**Measure next time.** For change 1: the gap from a child's report to the next writer's start (7-21 min today) and
 whether the snapshot run's verdicts equal a normal run's. For change 2: landings per day and review findings per
 landing, against 2026-11-20. For the organizer: input tokens per call after a handover at 300 calls.
 
@@ -625,7 +625,7 @@ qualified.md note.
 | Calls | 51 for 4 rounds and 24 questions | about 25 per round of one card |
 | Time | 14.6 min | not separated from the organizer's turns |
 | Input | 5.98M, 146k per call ($4.13) | at 411k per call, about 10M per round |
-| Organizer cost | review: 6 calls, four records against the note; export check: 2 calls, 2.3 min | — |
+| Organizer cost | review: 6 calls, four records against the note; export check: 2 calls, 2.3 min | - |
 | Findings in review | none against the records (index choice, name ties, DESC, range forms rechecked); one description slip (multi-page-residual says 13 rows, GetRows returned 27; the answer is unaffected, the note says so) | eight notes contradicted by their records on 2026-11-20 |
 
 Quality held: every rule rechecked held, the note names its discriminators and open cases, and both of the SQL
@@ -641,7 +641,7 @@ gap: `show` prints no kept page bytes or diffs, so the prober wrote helpers in `
 
 **Organizer stretch measured (01a1fb8b, 2026-11-21 00:40-03:40 UTC, about 280 calls).** 15 landings: 10 code
 stretches (c4rv, 42cd s1 with 5tw7, tc26 s1, mvgk, 8jq6, zfrp s3, sjws with rf2n, three Com stretches) and 5 prober
-rounds (r-q14 to r-q18, 147 questions), plus doc fixes. Compare baseline 183 → 215 of 1043, no question lost in any landing.
+rounds (r-q14 to r-q18, 147 questions), plus doc fixes. Compare baseline 183  215 of 1043, no question lost in any landing.
 Up to five children at once in disjoint projects (changes 1, 2 and 6 together). After change 3 (mvgk) a full compare
 set took 5 min instead of 15-22, so every landing got its own baseline within minutes. Review found per landing about
 one rule beyond its records (narrowed in four of the nine code stretches) and three notes contradicted by new records
@@ -655,7 +655,7 @@ one rule beyond its records (narrowed in four of the nine code stretches) and th
 | Change 3 (task mvgk) built and measured: candidate attempts six at a time | a full compare set in 268-341 s instead of 1,024 s, verdicts equal to a sequential run on all 1,043 questions; it found a handle-inheritance race in worker launch (two launches could swap stdin and log handles) | adopted: landing-check.md step 5 |
 | One Evidence test failed once in a landing export under load (r-q17, run of 1 min 15 s) and passed three reruns (27-29 s); the check's filter dropped its name | a flaky test cannot be found without its name | landing scripts run `dotnet test` with a trx logger and print failed test names; the next failure names it |
 | A child left an export holding junctions to the repository's evidence, probes and docs | a recursive delete would have followed them into the repository | delete such junctions as links first; children build exports by copying, not by junction |
-| A child's ACE-side file bytes came from leftover unretained local attempts (c4rv) | a Matched verdict would rest on observations not retained (The Plan §2.4) and differ between machines | ACE's side of a byte comparison reads retained artifacts only; retaining new-file bytes is an owner decision (`fh8f`) |
+| A child's ACE-side file bytes came from leftover unretained local attempts (c4rv) | a Matched verdict would rest on observations not retained (The Plan 2.4) and differ between machines | ACE's side of a byte comparison reads retained artifacts only; retaining new-file bytes is an owner decision (`fh8f`) |
 
 **Observations (organizer 01a1fc2f, 2026-11-21 from 03:39 UTC).**
 
@@ -668,7 +668,7 @@ one rule beyond its records (narrowed in four of the nine code stretches) and th
 | Model choice by continuity (the Com Execute wiring to Opus medium, as the handoff's Com child) | record-backed implementation ran on Opus while Neon's quota sat partly idle (owner's question) | owner, 2026-11-21: every child on Neon, the organizer on Opus (AGENTS.md, Sub-sessions) |
 | A rule accepted at landing on a record that shows a neighbouring case (Com Execute: "RecordsAffected 0 after DDL", cited to a DML record) | the next child's DDL replays contradicted it (the last DML count survives a DDL statement); fixed before it misled anything else | review checks that the cited record shows the very case the rule names, not a neighbour |
 | Children changed test assertions to what their code now returns (SchemaWriterTests, three ADO null-BSTR assertions, the Delete_forms test) | each was checked against its record at landing; all followed a record | a changed assertion is read against its record before landing, every time |
-| Portable test projects switched to net11.0-windows to reach a Windows-only adapter (3rwk) | the portable tests would have stopped building on Linux (The Plan §2.3) | caught in review; the adapter is marked SupportedOSPlatform and supplied by a test helper on Windows only |
+| Portable test projects switched to net11.0-windows to reach a Windows-only adapter (3rwk) | the portable tests would have stopped building on Linux (The Plan 2.3) | caught in review; the adapter is marked SupportedOSPlatform and supplied by a test helper on Windows only |
 | Neon reviewer children (zfrp 5a, ADO Open) | the zfrp 5a reviewer confirmed a wrong qualified.md note from page bytes and found five unrecorded choices that were not refused | a Neon reviewer does the rule-against-record check as well as an Opus one did (42cd2); keep it for every stretch over about 1,000 lines |
 | Stretch measured (organizer 01a1fc2f, 03:39-07:45 UTC, about 230 calls) | 12 landings (frfp, vqs3, 42cd s2, r-q19, r-q20, kddw, sg5t, zfrp s4 with the DELETE routing, Com Execute, r-q21, SchemaWriter types, fgx5), compare 215 -> 246 of 1043, no question lost; up to six children at once on disjoint projects or files; five rule sets narrowed in review before landing | file-level ownership let two children share a project (SchemaWriter in Format, Sql and Com files beside the long-value, 3rwk and ADO children) without a hunk conflict |
 
@@ -736,7 +736,7 @@ compare baseline in 38; the busiest code file in 16.
 | Bookkeeping files edited by the organizer alone; children give the lines in a fixed report | merge conflicts on the register and baseline | branches rarely conflict |
 | Reviews by a model other than the writer's; Sonnet for tooling; Opus for subtle probe design | Neon for every child | uncorrelated misses between writer and reviewer |
 | Compare tiers: the 1,360-question core per landing, the 3,158-question wide set daily and before a baseline | the undecided choice between 8 and 25 min per landing | wide coverage without slower landings |
-| An indicator table at each handover; a full review only on a trigger (The Plan v0.4 §4) | the standing 15% budget | review when something moves, not by the clock |
+| An indicator table at each handover; a full review only on a trigger (The Plan v0.4 4) | the standing 15% budget | review when something moves, not by the clock |
 | Organizer successors created with `--no-parent` at a quiet point | nested organizers | no relaying between organizers |
 
 Not done: one shared repository-root helper for the test projects. It was proposed so a code-only export could read
@@ -746,7 +746,7 @@ Not done: one shared repository-root helper for the test projects. It was propos
 tools/process-indicators.ps1); the gap from a child's report to its landing; whether any branch conflicts outside the
 bookkeeping files.
 
-**Trial: the long-lived Roslyn workspace (The Plan §4; Sonnet child 01a1ffc0-fef6, roscli 0.1.6-preview.20).** Six
+**Trial: the long-lived Roslyn workspace (The Plan 4; Sonnet child 01a1ffc0-fef6, roscli 0.1.6-preview.20).** Six
 navigation tasks on CalcDb.slnx, each done with grep and file reads and again with roscli's hot workspace (daemon,
 `workspace.use`). Grep answered all six completely in 3 to 7 calls and 0.4 to 15 KB. roscli was right only where the
 query was anchored in the right file: `find_references` searches one file and `find_invocations` one project (the 41
@@ -774,7 +774,7 @@ tasks.
 read-only semantic command to the warm daemon and made the searches solution-wide; installed as 0.1.6-preview.21.local1.
 On CalcDb, warm: `call_hierarchy` 56.8 s to 1.2 s (2 to 25 nodes), `impact_slice` 57.3 s to 1.5 s (4 to 84 hits),
 `find_implementations` 54.1 s and 0 found to 0.3 s and all 5, `find_invocations` all 41 callers in 0.4 s; an edit is seen
-by the next query. One-time: about 53 s load, 45 s for the first call graph, about 800 MB. The Plan §4 and AGENTS.md
+by the next query. One-time: about 53 s load, 45 s for the first call graph, about 800 MB. The Plan 4 and AGENTS.md
 (Tool practice) name the query classes; grep stays for names and text. A second trial (Neon, a timing matrix of eight
 queries across git grep, ripgrep, Select-String, the harness's search tool, roscli cold and warm, and csharp-ls) sets the
 boundaries. The owner added the editing and refactoring commands (rename, signature change, member-scoped and batch
@@ -791,7 +791,7 @@ hierarchy that misses method groups and a lambda, and a workspace snapshot of ".
 projects. Warm-up 75 s, memory up to 950 MB. Edits: by hand 1 to 2 s and correct in all six; roscli renamed one file of
 eleven (41 callers broken), its signature change pulled a brace onto the parameter line, batch edits leaked CRLF into LF
 files, the daemon did not see a created file, and repair proposed TODO stubs. The guidance of earlier this evening
-(roscli for renames and signature changes) was wrong and is corrected: The Plan §4 and AGENTS.md keep roscli for the
+(roscli for renames and signature changes) was wrong and is corrected: The Plan 4 and AGENTS.md keep roscli for the
 semantic queries above, ripgrep and the harness's file tools for the rest. The editing and navigation gaps are RoslynSkills
 tasks; the edit tasks are measured again when they land.
 
@@ -808,7 +808,7 @@ released on GitHub as v0.1.6-preview.22), the six edit tasks again, both ways, e
 | Fix a missing using | 1 call; correct | repair proposes TODO stubs; apply_code_fix refuses CS0103 |
 
 Setup 3 s restore and 43 s load; 320 to 690 MB; no `--workspace-path` needed in a worktree; navigation unchanged (51 of 51
-callers, 5 of 5 implementers). AGENTS.md and The Plan §4 now name the rename, the signature change and file creation
+callers, 5 of 5 implementers). AGENTS.md and The Plan 4 now name the rename, the signature change and file creation
 for roscli; single-file and small edits stay with the harness's tools; repair stays out (RoslynSkills 25j6).
 
 **roscli navigation completed (RoslynSkills 57zm, 4eaaa64, released on GitHub as v0.1.6-preview.23, 2026-11-22).** On
@@ -868,7 +868,7 @@ roscli (RoslynSkills) from 0.1.6-preview.20 to .26 as CalcDb's own tool. Indicat
 **Triggered review for organizer 8.** Two lines are crossed. The reviewer findings say the Neon writers in W-05 and W-07
 still write rules beyond their records and do not stop for a missing record, though the brief says so; the first-pass
 rate says self-checks miss what the landing check finds. Measure both on the next two landings before changing the
-rules (The Plan §4: find the cause; a review layer catches them today, so nothing wrong has landed).
+rules (The Plan 4: find the cause; a review layer catches them today, so nothing wrong has landed).
 
 **roscli 0.1.6-preview.27 (RoslynSkills qvcn, 17069ce, GitHub release, 2026-11-22).** One JSON answer shape in every path:
 the payload in `Data`, how it ran (in-process, daemon, MCP, transport server) in `Transport`; two writers' scripts had
@@ -1055,7 +1055,7 @@ trx start and finish of 24 runs since 13:38 UTC. One test was the largest single
 `QuestionKeyTests.Retained_question_keys_are_stable` read all 3,681 retained records whole (698 MB) on one thread, 55 to
 100 s of the Evidence project's 32 to 114 s. Evidence runs on every probe or evidence landing and on most code landings.
 Workstation GC made it GC-bound: whole records in parallel took 19 s, 9 s with server GC. A projection of the key and
-the question, in parallel (The Plan §3.2, "read only what you use"), takes 5 s with the same assertion. In the check
+the question, in parallel (The Plan 3.2, "read only what you use"), takes 5 s with the same assertion. In the check
 worktree the Evidence project went from 32 to 114 s to 14 s and the evid-keys check took 40 s. The rest, from 2tkf's
 313 s rerun: build 142 s (Catalog, Sql and both Com projects changed), NativeAOT publish 64 s when CalcDb.Com's closure
 changed, the other tests about 90 s, three candidate-check folders 41 s. A no-op build of CalcDb.slnx takes 8 s here; the
@@ -1274,7 +1274,7 @@ Indicators (`tools/process-indicators.ps1`, window since 2026-11-23 04:27; sessi
 | four Neon starts that failed ('initialize' not answered in 120 s) | - | 0 |
 
 Two indicators crossed. The check duration should fall now that x38g is in (measure the median over the next day). The
-engine share needs the triggered review The Plan §4 asks for: it first asks what process to remove. Candidates the
+engine share needs the triggered review The Plan 4 asks for: it first asks what process to remove. Candidates the
 organizer saw: bookkeeping lines (3,405) close to the engine's own; long report texts copied into register rows;
 several organizer calls per landing for status reads. Antigravity failed to start agents four times in an hour
 (2026-11-24, about 01:00 to 01:20 UTC) and recovered on its own; the next organizer retries a failed start once, then
@@ -1285,7 +1285,7 @@ only DDL writer 3a's (01a20b14) final answer.
 
 ## 2026-11-24 - Organizer 13 (01a20b62): triggered process review
 
-Two indicators of organizer 12's handover crossed (The Plan §4). Asked first: what process to remove.
+Two indicators of organizer 12's handover crossed (The Plan 4). Asked first: what process to remove.
 
 **Engine share: a counting effect.** Of the 3,405 bookkeeping lines, 3,242 were the compare-baseline TSVs, copies of a
 compare run's output that the organizer commits; hand-written bookkeeping was 163 lines. `tools/process-indicators.ps1`
@@ -1341,7 +1341,7 @@ Indicators (`tools/process-indicators.ps1`, window since 2026-11-23 19:03; sessi
 | three Neon starts that failed ('initialize' not answered in 120 s, 15:15 to 15:25 UTC) | - | 0 |
 
 Organizer calls per landing are just above the line, and reviewer findings stay above about 3 per 1,000 lines in every
-large stretch, as in organizer 12's window: the next weekly review (The Plan §4) should ask whether one deliverable per
+large stretch, as in organizer 12's window: the next weekly review (The Plan 4) should ask whether one deliverable per
 stretch is kept (nxk2 was briefed for 3 functions and wrote 44). Two delivery failures of CodeAlta: DDL writer 3b's and
 the publication writer's final answers (05:22, 05:50) never reached the organizer, so the work sat idle until the owner
 asked; a fallback reminder found nothing lost afterwards. Antigravity again stopped starting agents at 15:15 and had not
@@ -1376,7 +1376,7 @@ the project that writes them before it assigns ownership and starts a writer.
 2 stops. About 20 turns were wake-ups for a child's interim "waiting for job X" answer: each turn a child ends while
 its job runs reaches the parent, and `alta session send` and `create` have no option to filter it. Of the calls, about
 10 were the organizer's own fumbles (alta argument names, finding `calcdb-oracle show`; AGENTS.md now says where the
-runner is and how `show --record` reads a retained record), about 9 the two lost reports. For CodeAlta (The Plan §2.1,
+runner is and how `show --record` reads a retained record), about 9 the two lost reports. For CodeAlta (The Plan 2.1,
 for the owner to pass on if wanted): a parent notification only when the child's run ends with none of its own jobs
 running, or all of a run's messages forwarded rather than the last.
 
@@ -1576,7 +1576,7 @@ wide-nnnh-1: 1,220 of 3,721, one unexplained loss (pjs2), not recorded by organi
 
 ## 2026-11-25 - Organizer 17 (01a21328): triggered process review
 
-Two indicators of organizer 16's handover crossed (The Plan §4). Asked first: what process to remove. Nothing: each gate
+Two indicators of organizer 16's handover crossed (The Plan 4). Asked first: what process to remove. Nothing: each gate
 answered a failure of the last day.
 
 **Organizer calls per landing (about 20).** Organizer 16's 151 tool calls, from `alta session events`: 42 bookkeeping
@@ -1598,3 +1598,45 @@ record, so the organizer checks one from the report instead of watching interim 
 writer's project: landing-check.ps1 already selects every graph test project in an unfiltered self-check, filter or
 not (lines 536 to 577; nnnh's self-check ran CalcDb.Com.Tests and named the failure). The gap was ownership: gate 2 now
 has the organizer search `tests/` for the refusal or member the change moves and give the writer those test files.
+
+**Measured after the review.** zsfm stretch 2's landing took the organizer six calls from the writer's report to the
+pushed register row (the queue, one rule checked against r-cat-1/held-querydef-lifetime, the refusal search, the
+landing job, the CAT-Q note read, one bookkeeping script), against about 20 before. Its reviewer applied 7 findings on
+about 1,580 lines (4.4), three of them defects (a stale saved query after a put, pages released at Close dropped, a
+crash on a held Field): one stretch, so the pooled line is read at the next window. The writer reported every changed
+assertion with its record; the two it removed were the refusals the stretch lifted.
+
+## 2026-11-25 - Handover: organizer 17 (01a21328), work stopped on the owner's call
+
+Session 01a21328 (Claude Opus 5.5, 2026-11-25 14:42 to about 20:00 UTC; 55 tool calls by `alta session report`).
+Landed: zsfm stretch 2 (saved QueryDef.SQL put and QueryDefs.Delete, merge f84d55ca). Core zsfm-2-1 491 of 1360
+(2b138d0c), nothing lost, 11 questions moved further; wide baseline still wide-q3mv-1 (wide-nnnh-1 not recorded,
+`pjs2`). The triggered process review is above. The owner stopped the work for a move to another harness: the nk97
+DAO writer (01a2142d-fc99) was aborted after 13 minutes with nothing written, its roscli daemon stopped, CalcDb-w1
+detached at master and `alta/nk97-dao` deleted.
+
+Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 21:41):
+
+| Indicator | Value | Review when |
+| --- | --- | --- |
+| Engine share of changed lines | 90% (16,843 of 18,721) | below two thirds over a day |
+| Landings checked; passed on the first run | 19; 95% (this session 1 of 1) | below 70% |
+| Landing check duration (median of 20 runs) | 271 s | above 3 min |
+| Compare baselines | core 491 to 491 (zsfm-2-1); wide wide-q3mv-1 | any loss nobody can explain |
+| Organizer tool calls per landing | 6 for the zsfm-2 landing; 55 in all with the review, gp86 and the stop | above about 15 |
+| Reviewer findings applied per 1,000 lines | zsfm-2 7 on about 1,580 (4.4) | above about 3 |
+| Rules found wrong after landing | 0 | more than one a day |
+| Children stopped waiting for a record; for ownership | 0; 0 | more than one per stretch |
+| Merge minutes per landing | under 1 (`-Land -Finish`) | above 5 min |
+
+| Session (Neon unless named) | Minutes | Tool calls |
+| --- | --- | --- |
+| organizer 17 (Opus) | about 300 wall | 55 |
+| zsfm-2 writer (01a213cc-9f16) / reviewer (01a213fc-6f4e) | 110 / 12 | 284 / 94 |
+| nk97 DAO writer (01a2142d-fc99), aborted | 13 | 76 |
+
+State at the stop: nothing runs; master pushed; CalcDb-w1 and CalcDb-w2 detached at master; no `alta/*` branch; no
+roscli daemon. Next in register order: the nk97 DAO part (ready, briefed as its row says), then v9dh (Catalog, Isam;
+after nk97's DAO part, which also holds Catalog), nk97's Values part (ready gate first) and Isam part, prfx's later
+stretches, the rest of 537t, pjs2 (the harness flake that holds the wide baseline). Waiting for the owner: gp86 (the
+book keeps the writer lease at share zero; an accepted difference in the comparison rule needs the owner's approval).
