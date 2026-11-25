@@ -1612,8 +1612,12 @@ Session 01a21328 (Claude Opus 5.5, 2026-11-25 14:42 to about 20:00 UTC; 55 tool 
 Landed: zsfm stretch 2 (saved QueryDef.SQL put and QueryDefs.Delete, merge f84d55ca). Core zsfm-2-1 491 of 1360
 (2b138d0c), nothing lost, 11 questions moved further; wide baseline still wide-q3mv-1 (wide-nnnh-1 not recorded,
 `pjs2`). The triggered process review is above. The owner stopped the work for a move to another harness: the nk97
-DAO writer (01a2142d-fc99) was aborted after 13 minutes with nothing written, its roscli daemon stopped, CalcDb-w1
-detached at master and `alta/nk97-dao` deleted.
+DAO writer (01a2142d-fc99) was aborted after 13 minutes with its worktree clean, its roscli daemon stopped, CalcDb-w1
+detached at master and `alta/nk97-dao` deleted. **`alta session abort` did not stop it:** a new run of the writer
+went on for about 25 minutes and wrote 11 files (about 900 lines) into the detached slot, then cancelled its own test
+job and asked what to do. The organizer kept the work as commit 3ff649d3 on `alta/nk97-dao` (unbuilt, untested,
+unreviewed, not landed) and detached the slot again. After an abort, check the child's later runs and its worktree
+before cleaning up (for the owner to pass on to CodeAlta if wanted).
 
 Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 21:41):
 
@@ -1635,8 +1639,9 @@ Indicators (`tools/process-indicators.ps1`, window since 2026-11-24 21:41):
 | zsfm-2 writer (01a213cc-9f16) / reviewer (01a213fc-6f4e) | 110 / 12 | 284 / 94 |
 | nk97 DAO writer (01a2142d-fc99), aborted | 13 | 76 |
 
-State at the stop: nothing runs; master pushed; CalcDb-w1 and CalcDb-w2 detached at master; no `alta/*` branch; no
-roscli daemon. Next in register order: the nk97 DAO part (ready, briefed as its row says), then v9dh (Catalog, Isam;
+State at the stop: nothing runs; master pushed; CalcDb-w1 and CalcDb-w2 detached at master; one `alta/*` branch,
+`alta/nk97-dao` (3ff649d3, the unbuilt nk97 work); no roscli daemon. Next in register order: the nk97 DAO part (ready,
+briefed as its row says; start from 3ff649d3 or master), then v9dh (Catalog, Isam;
 after nk97's DAO part, which also holds Catalog), nk97's Values part (ready gate first) and Isam part, prfx's later
 stretches, the rest of 537t, pjs2 (the harness flake that holds the wide baseline). Waiting for the owner: gp86 (the
 book keeps the writer lease at share zero; an accepted difference in the comparison rule needs the owner's approval).
