@@ -520,7 +520,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     {
         if (Transactions.HasDeferredCatalogCommit)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
         }
         return Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
     }

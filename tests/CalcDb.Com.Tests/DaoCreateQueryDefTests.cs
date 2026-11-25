@@ -702,4 +702,97 @@ public sealed unsafe class DaoCreateQueryDefTests : IDisposable
         Assert.Equal(unchecked((int)0x80004001), delRo.Failure!.Scode);
         Assert.Null(Method(dbRo, "Close").Failure);
     }
+
+    [Fact]
+    public void Saved_querydef_sql_put_refetch_field_invalidation_passthrough_and_deferred_folding()
+    {
+        (DBEngineObject eng, DatabaseObject db, string path) = CreateSeededDb("sql-put-edge-cases.accdb");
+
+        // Create Q1 and a PassThrough query QPass in one session, then immediately rewrite Q1 before Close (folds priorDeferred).
+        (QueryDefObject q1Create, nint q1CreatePtr) = RecoverWithPtr<QueryDefObject>(Method(db, "CreateQueryDef", "Q1", "SELECT ID, V FROM T"));
+        Assert.Null(Put(q1Create, "SQL", "SELECT ID, V, W FROM T").Failure);
+
+        // Hold a QueryFieldObject at ordinal 2 (W), then shrink to 1 column; held field must refuse cleanly (not throw ArgumentOutOfRangeException).
+        DispatchObject heldFields = Recover<DispatchObject>(Get(q1Create, "Fields"));
+        DispatchObject heldFieldW = Recover<DispatchObject>(Get(heldFields, "Item", 2));
+        Assert.Equal("W", TextOf(Get(heldFieldW, "Name")));
+
+        Assert.Null(Put(q1Create, "SQL", "UPDATE T SET V = 55 WHERE ID = 2").Failure);
+        CallResult staleFieldName = Get(heldFieldW, "Name");
+        Assert.NotNull(staleFieldName.Failure);
+        Assert.Equal(unchecked((int)0x80004001), staleFieldName.Failure!.Scode);
+
+        // Release Q1 and re-fetch it from QueryDefs in the same session: re-fetched QueryDef must see the rewritten UPDATE plan and execute it!
+        DefinitionCollection qdfs = Recover<DefinitionCollection>(Get(db, "QueryDefs"));
+        ReleaseHeld(q1CreatePtr);
+        QueryDefObject q1Refetched = Recover<QueryDefObject>(Get(qdfs, "Item", "Q1"));
+        Assert.Equal("UPDATE T SET V = 55 WHERE ID = 2", TextOf(Get(q1Refetched, "SQL")));
+        Assert.Equal(0, IntOf(Get(q1Refetched, "Type")));
+        Assert.Equal(0, IntOf(Get(Recover<DispatchObject>(Get(q1Refetched, "Fields")), "Count")));
+        // Note: Execute of Q1Refetched is guarded by the pending deferred commit only on data write (expected refusal before Close);
+        // verify it does NOT fail with 3065 (Cannot execute a select query) which would indicate a stale SELECT SavedQuery!
+        CallResult execPending = Method(q1Refetched, "Execute", DbFailOnError);
+        Assert.NotNull(execPending.Failure);
+        Assert.Equal(unchecked((int)0x80004001), execPending.Failure!.Scode);
+
+        // Create a saved PassThrough query via draft + Append.
+        (QueryDefObject qPassDraft, nint qPassDraftPtr) = RecoverWithPtr<QueryDefObject>(Method(db, "CreateQueryDef"));
+        Assert.Null(Put(qPassDraft, "Name", "QPass").Failure);
+        Assert.Null(Put(qPassDraft, "Connect", "ODBC;DSN=CalcDbProbeNoSuchDsn;").Failure);
+        Assert.Null(Put(qPassDraft, "SQL", "SELECT 1").Failure);
+        Assert.Null(Method(qdfs, "Append", new DispatchArg(qPassDraftPtr)).Failure);
+        Assert.Null(Method(db, "Close").Failure);
+
+        // Reopen: Q1 persisted as UPDATE (Type 48); QPass SQL put with backend T-SQL refuses by name (0x80004001, not 3129).
+        DatabaseObject db2 = Recover<DatabaseObject>(Method(eng, "OpenDatabase", path, false, false));
+        DefinitionCollection qdfs2 = Recover<DefinitionCollection>(Get(db2, "QueryDefs"));
+        QueryDefObject q1Re = Recover<QueryDefObject>(Get(qdfs2, "Item", "Q1"));
+        Assert.Equal(48, IntOf(Get(q1Re, "Type")));
+        Assert.Null(Method(q1Re, "Execute", DbFailOnError).Failure);
+        Assert.Equal(1, IntOf(Get(q1Re, "RecordsAffected")));
+
+        QueryDefObject qPass = Recover<QueryDefObject>(Get(qdfs2, "Item", "QPass"));
+        CallResult ptPut = Put(qPass, "SQL", "EXEC dbo.sp_foo");
+        Assert.NotNull(ptPut.Failure);
+        Assert.Equal(unchecked((int)0x80004001), ptPut.Failure!.Scode);
+
+        // Unheld parameter value survives same-type SQL put, and type-changing rewrite refuses OpenRecordset cleanly.
+        Assert.Null(Put(q1Re, "SQL", "PARAMETERS pId Long; SELECT ID, V FROM T WHERE ID = pId").Failure);
+        (DefinitionCollection ps, nint _) = RecoverWithPtr<DefinitionCollection>(Get(q1Re, "Parameters"));
+        (ParameterObject pTransient, nint pTransientPtr) = RecoverWithPtr<ParameterObject>(Get(ps, "Item", "pId"));
+        Assert.Null(Put(pTransient, "Value", 2).Failure);
+        ReleaseHeld(pTransientPtr);
+
+        // Rewrite keeping pId as Long: unheld parameter's Value (2) survives!
+        Assert.Null(Put(q1Re, "SQL", "PARAMETERS pId Long; SELECT V FROM T WHERE ID = pId").Failure);
+        Assert.Equal(2, IntOf(Get(Recover<ParameterObject>(Get(ps, "Item", "pId")), "Value")));
+        DispatchObject rs2 = Recover<DispatchObject>(Method(q1Re, "OpenRecordset", DbOpenSnapshot));
+        Assert.Equal(55, IntOf(Get(Recover<DispatchObject>(Get(Recover<DispatchObject>(Get(rs2, "Fields")), "Item", "V")), "Value")));
+        Assert.Null(Method(rs2, "Close").Failure);
+
+        // Rewrite changing pId from Long -> Text(10): OpenRecordset refuses cleanly (0x80004001) instead of feeding VT_I4 into Text.
+        Assert.Null(Put(q1Re, "SQL", "PARAMETERS pId Text(10); SELECT ID FROM T WHERE W = pId").Failure);
+        CallResult mismatchOpen = Method(q1Re, "OpenRecordset", DbOpenSnapshot);
+        Assert.NotNull(mismatchOpen.Failure);
+        Assert.Equal(unchecked((int)0x80004001), mismatchOpen.Failure!.Scode);
+
+        // Same-session SQL put followed immediately by Delete folds priorDeferred cleanly (on a fresh single-query DB).
+        Assert.Null(Method(db2, "Close").Failure);
+
+        (DBEngineObject eng2, DatabaseObject dbSolo, string pathSolo) = CreateSeededDb("sql-put-then-delete.accdb");
+        Assert.Null(Method(dbSolo, "CreateQueryDef", "QSolo", "SELECT ID FROM T").Failure);
+        Assert.Null(Method(dbSolo, "Close").Failure);
+
+        DatabaseObject dbSolo2 = Recover<DatabaseObject>(Method(eng2, "OpenDatabase", pathSolo, false, false));
+        DefinitionCollection qdfsSolo = Recover<DefinitionCollection>(Get(dbSolo2, "QueryDefs"));
+        QueryDefObject qSolo = Recover<QueryDefObject>(Get(qdfsSolo, "Item", "QSolo"));
+        Assert.Null(Put(qSolo, "SQL", "UPDATE T SET V = 1 WHERE ID = 1").Failure);
+        Assert.Null(Method(qdfsSolo, "Delete", "QSolo").Failure);
+        Assert.Equal(0, IntOf(Get(qdfsSolo, "Count")));
+        Assert.Null(Method(dbSolo2, "Close").Failure);
+
+        DatabaseObject dbSolo3 = Recover<DatabaseObject>(Method(eng2, "OpenDatabase", pathSolo, false, false));
+        Assert.Equal(0, IntOf(Get(Recover<DefinitionCollection>(Get(dbSolo3, "QueryDefs")), "Count")));
+        Assert.Null(Method(dbSolo3, "Close").Failure);
+    }
 }

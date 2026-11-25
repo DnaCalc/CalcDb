@@ -1217,6 +1217,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
         }
+        if (existing.Family == QueryFamily.PassThrough)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put: DAO QueryDef.SQL put to or from a pass-through query is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
+        if (existing.Family == QueryFamily.Union)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put: DAO QueryDef.SQL put to or from a UNION query is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
         QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(sql, connect: null);
         if (!compiled.Succeeded)
         {
@@ -1270,6 +1278,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _sessionSavedSqlOverrides[existing.Entry.Id] = sql;
         queryDef.ApplySavedSqlUpdate(updatedQuery, sql);
+        _queryDefs?.Relist();
         return CallResult.Nothing;
     }
 

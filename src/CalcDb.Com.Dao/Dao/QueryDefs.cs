@@ -75,6 +75,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private SqlFailure? _planFailure;
     private bool _planMade;
     private NativeVariant?[] _values = [];
+    private bool[] _parameterTypeMismatch = [];
+    private int _sqlGeneration;
 
     /// <summary>Wrap an already-saved QueryDef owned by <paramref name="owner"/> (or created in this session).</summary>
     public QueryDefObject(
@@ -127,6 +129,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     public int? ObjectId => _query?.Entry.Id;
 
     public int? SessionTypeOverride => _sessionTypeOverride;
+
+    internal int SqlGeneration => _sqlGeneration;
 
     public string DraftName => _draftName;
 
@@ -202,21 +206,32 @@ internal sealed unsafe class QueryDefObject : DaoObject
         _properties?.Release();
         _properties = null;
         Opened = false;
+        _sqlGeneration++;
 
         IReadOnlyList<(string Name, DaoObject Wrapper)> priorHeld = _parameters?.SnapshotHeld() ?? [];
-        List<(string Name, ParameterObject Param, NativeVariant? Value)> priorParams = new(priorHeld.Count);
-        HashSet<int> transferredValueIndices = [];
+        List<(string Name, ParameterObject Param)> priorParams = new(priorHeld.Count);
+        Dictionary<int, int> heldDaoTypeByBoundIndex = [];
         foreach ((string name, DaoObject wrapper) in priorHeld)
         {
             if (wrapper is ParameterObject param)
             {
-                NativeVariant? existingValue = null;
-                if ((uint)param.BoundIndex < (uint)_values.Length && transferredValueIndices.Add(param.BoundIndex))
+                priorParams.Add((name, param));
+                heldDaoTypeByBoundIndex.TryAdd(param.BoundIndex, param.ParameterInfo.DaoType);
+            }
+        }
+
+        Dictionary<string, (NativeVariant Value, int DaoType)> priorValuesByName = new(StringComparer.OrdinalIgnoreCase);
+        if (BoundParameters is { } oldBound)
+        {
+            int count = Math.Min(oldBound.Count, _values.Length);
+            for (int i = 0; i < count; i++)
+            {
+                if (_values[i] is { } existingValue)
                 {
-                    existingValue = _values[param.BoundIndex];
-                    _values[param.BoundIndex] = null;
+                    int daoType = heldDaoTypeByBoundIndex.TryGetValue(i, out int heldType) ? heldType : oldBound[i].DaoType;
+                    priorValuesByName[Unbracketed(oldBound[i].Name)] = (existingValue, daoType);
+                    _values[i] = null;
                 }
-                priorParams.Add((name, param, existingValue));
             }
         }
 
@@ -229,6 +244,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
             }
         }
         _values = [];
+        _parameterTypeMismatch = [];
         _plan?.Dispose();
         _plan = null;
         _action?.Dispose();
@@ -238,13 +254,14 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
         if (_parameters is null)
         {
+            ReleasePriorValues(priorValuesByName);
             return;
         }
 
         QueryFamily? family = EffectiveFamily;
         if (family is QueryFamily.PassThrough or QueryFamily.DataDefinition)
         {
-            InvalidatePriorParameters(priorParams);
+            InvalidatePriorParameters(priorParams, priorValuesByName);
             _parameters.Rebind([], static (_, _) => throw new InvalidOperationException("no parameters"));
             return;
         }
@@ -252,7 +269,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         Plan();
         if (BoundParameters is not { } newBound)
         {
-            InvalidatePriorParameters(priorParams);
+            InvalidatePriorParameters(priorParams, priorValuesByName);
             string gap = _planFailure is { } f
                 ? $"the Parameters of '{CurrentName}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
                 : $"the Parameters of a {family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)";
@@ -272,7 +289,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         Dictionary<int, DaoObject> preserved = [];
         HashSet<int> usedNewBound = [];
 
-        foreach ((string oldName, ParameterObject param, NativeVariant? oldValue) in priorParams)
+        foreach ((string oldName, ParameterObject param) in priorParams)
         {
             if (newByName.TryGetValue(oldName, out int newBoundIndex) && usedNewBound.Add(newBoundIndex))
             {
@@ -282,18 +299,18 @@ internal sealed unsafe class QueryDefObject : DaoObject
                 boundIndices.Add(newBoundIndex);
                 param.Rebind(newBoundIndex);
                 preserved[collectionOrdinal] = param;
-                if (oldValue is { } carried)
+                if (priorValuesByName.Remove(oldName, out (NativeVariant Value, int DaoType) carried))
                 {
-                    _values[newBoundIndex] = carried;
+                    _values[newBoundIndex] = carried.Value;
+                }
+                if (param.ParameterInfo.DaoType != newBound[newBoundIndex].DaoType)
+                {
+                    _parameterTypeMismatch[newBoundIndex] = true;
                 }
             }
             else
             {
                 param.Invalidate();
-                if (oldValue is { } dropped)
-                {
-                    SqlParameters.Release(ref dropped);
-                }
             }
         }
 
@@ -301,11 +318,22 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             if (usedNewBound.Add(b))
             {
-                newNames.Add(Unbracketed(newBound[b].Name));
+                string paramName = Unbracketed(newBound[b].Name);
+                newNames.Add(paramName);
                 effectiveParams.Add(newBound[b]);
                 boundIndices.Add(b);
+                if (priorValuesByName.Remove(paramName, out (NativeVariant Value, int DaoType) carried))
+                {
+                    _values[b] = carried.Value;
+                    if (carried.DaoType != newBound[b].DaoType)
+                    {
+                        _parameterTypeMismatch[b] = true;
+                    }
+                }
             }
         }
+
+        ReleasePriorValues(priorValuesByName);
 
         SqlFailure? declarations = _plan?.ParametersFailure ?? _action?.ParametersFailure;
         _parameters.Rebind(
@@ -317,16 +345,25 @@ internal sealed unsafe class QueryDefObject : DaoObject
             itemGap: declarations is { IsNotModelled: false } ? "Parameters.Item of a statement declaring one name with two types (Count fails 3060; Item is not recorded)" : null);
     }
 
-    private static void InvalidatePriorParameters(List<(string Name, ParameterObject Param, NativeVariant? Value)> priorParams)
+    private static void InvalidatePriorParameters(
+        List<(string Name, ParameterObject Param)> priorParams,
+        Dictionary<string, (NativeVariant Value, int DaoType)> priorValuesByName)
     {
-        foreach ((_, ParameterObject param, NativeVariant? oldValue) in priorParams)
+        foreach ((_, ParameterObject param) in priorParams)
         {
             param.Invalidate();
-            if (oldValue is { } dropped)
-            {
-                SqlParameters.Release(ref dropped);
-            }
         }
+        ReleasePriorValues(priorValuesByName);
+    }
+
+    private static void ReleasePriorValues(Dictionary<string, (NativeVariant Value, int DaoType)> priorValuesByName)
+    {
+        foreach ((NativeVariant value, _) in priorValuesByName.Values)
+        {
+            NativeVariant dropped = value;
+            SqlParameters.Release(ref dropped);
+        }
+        priorValuesByName.Clear();
     }
 
     private static CallResult Live(ComObject self, Func<QueryDefObject, CallResult> op)
@@ -454,6 +491,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     private void ResetPlan()
     {
+        _sqlGeneration++;
         _parameters?.Release();
         _parameters = null;
         for (int i = 0; i < _values.Length; i++)
@@ -465,12 +503,25 @@ internal sealed unsafe class QueryDefObject : DaoObject
             }
         }
         _values = [];
+        _parameterTypeMismatch = [];
         _plan?.Dispose();
         _plan = null;
         _action?.Dispose();
         _action = null;
         _planFailure = null;
         _planMade = false;
+    }
+
+    private bool HasParameterTypeMismatch()
+    {
+        for (int i = 0; i < _parameterTypeMismatch.Length; i++)
+        {
+            if (_parameterTypeMismatch[i])
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private CallResult Sql()
@@ -514,7 +565,14 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
         else
         {
-            result = Plan() is not null && QuerySql.Render(_query!).Text is { } text
+            BoundSelect? plan = Plan();
+            if (HasParameterTypeMismatch())
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryDefExecuteAfterParameterTypeChange",
+                    "opening a QueryDef after QueryDef.SQL changed a surviving parameter's declared type is not recorded (r-cat-1/held-sql-replace)"));
+            }
+            result = plan is not null && QuerySql.Render(_query!).Text is { } text
                 ? SelectRoute.Open(Database, text, type, options.Value, _values)
                 : Database.OpenSaved(_query!, type, options.Value);
         }
@@ -546,7 +604,9 @@ internal sealed unsafe class QueryDefObject : DaoObject
                 {
                     _action = BoundAction.Prepare(text, Database.Sql, out _planFailure);
                 }
-                _values = BoundParameters is { } bound ? new NativeVariant?[bound.Count] : [];
+                int paramCount = BoundParameters?.Count ?? 0;
+                _values = paramCount > 0 ? new NativeVariant?[paramCount] : [];
+                _parameterTypeMismatch = paramCount > 0 ? new bool[paramCount] : [];
             }
         }
         return _plan;
@@ -625,6 +685,12 @@ internal sealed unsafe class QueryDefObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("QueryDef.Execute with an Options argument that is not numeric (not recorded)"));
         }
         Plan();
+        if (HasParameterTypeMismatch())
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryDefExecuteAfterParameterTypeChange",
+                "executing a QueryDef after QueryDef.SQL changed a surviving parameter's declared type is not recorded (r-cat-1/held-sql-replace)"));
+        }
         if (_action is { } action)
         {
             return ActionRoute.Execute(Database, this, action, options, _values, ref _recordsAffected);
@@ -900,11 +966,13 @@ internal sealed unsafe class QueryFieldObject : DaoObject
 
     private readonly QueryFieldsObject _fields;
     private readonly int _ordinal;
+    private readonly int _generation;
 
     public QueryFieldObject(QueryFieldsObject fields, int ordinal) : base(Decl, Vtable, fields.Engine, "DAO.Field")
     {
         _fields = fields;
         _ordinal = ordinal;
+        _generation = fields.Query.SqlGeneration;
         fields.AddRef();
     }
 
@@ -917,7 +985,14 @@ internal sealed unsafe class QueryFieldObject : DaoObject
     private static CallResult Live(ComObject self, Func<QueryFieldObject, CallResult> op)
     {
         var f = (QueryFieldObject)self;
-        return QueryFieldsObject.Live(f, op, f._fields.Query);
+        return QueryFieldsObject.Live(
+            f,
+            field => field._generation != field._fields.Query.SqlGeneration || (uint)field._ordinal >= (uint)field._fields.Columns.Count
+                ? CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.HeldQueryFieldAfterSqlPut",
+                    "accessing a held QueryDef.Field after QueryDef.SQL rewrite is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"))
+                : op(field),
+            f._fields.Query);
     }
 
     protected override void OnFinalRelease() => _fields.Release();

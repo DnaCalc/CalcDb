@@ -55,8 +55,7 @@ public sealed record DeferredCatalogCommit(
     IReadOnlyList<PageEdit> Edits,
     IReadOnlyList<LockResource> Footprint,
     int? PendingQueryObjectId = null,
-    int? PendingQueryFlags = null,
-    bool FromCreateQueryDef = true);
+    int? PendingQueryFlags = null);
 
 /// <summary>
 /// Where a Workspace's publication writes (II-08 §19; W-05/same-width-mutation): the file session's positioned handle
@@ -653,10 +652,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _releaseAtClose.ContainsKey(cache)
         || _deferredCatalogCommit.ContainsKey(cache);
 
-    /// <summary>True when any file on this workspace has a queued CreateQueryDef deferred fifth commit.</summary>
+    /// <summary>True when any file on this workspace has a queued QueryDef deferred catalog commit.</summary>
     public bool HasDeferredCatalogCommit => _deferredCatalogCommit.Count > 0;
 
-    /// <summary>Queue a deferred catalog commit (CreateQueryDef 5th commit) to flush at the next CreateQueryDef or Database.Close.</summary>
+    /// <summary>Queue a QueryDef deferred catalog commit to flush at the next QueryDef mutation or Database.Close.</summary>
     public void SetDeferredCatalogCommit(PageCache cache, DeferredCatalogCommit commit) =>
         _deferredCatalogCommit[cache] = commit;
 
@@ -3023,7 +3022,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (_deferredCatalogCommit.ContainsKey(physical.File))
                 {
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "a data write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
                 }
             }
             // A batch of one change with at most one page edit needs no nested overlay scope: a single PrivateOverlay.Edit
@@ -3201,7 +3200,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (!allowPendingDeferredCatalogCommit && _deferredCatalogCommit.ContainsKey(file))
         {
-            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return new AcceptOutcome(false, null, MutationOpen.Publication, "a catalog write while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         OperationFrame? op = BeginOperation(out MutationError? refused);
         if (op is null)
@@ -3288,7 +3287,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (_deferredCatalogCommit.ContainsKey(cache))
         {
-            return (MutationOpen.Publication, "a counter commit while a CreateQueryDef deferred fifth commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            return (MutationOpen.Publication, "a counter commit while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
         }
         (MutationOpen open, string? detail) = PublishNonTransactional(cache, [], [], CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? error);
         return error is { } refused ? (MutationOpen.Publication, $"the counter commit: {refused.Describe()}") : (open, detail);

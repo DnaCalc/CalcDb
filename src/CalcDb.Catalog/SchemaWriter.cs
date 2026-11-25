@@ -1720,7 +1720,7 @@ public sealed class SchemaWriter
             }
             workspace.SetDeferredCatalogCommit(
                 _cache,
-                new DeferredCatalogCommit(deferredEdits, deferredFootprint, queryId, (int)request.Family, FromCreateQueryDef: true));
+                new DeferredCatalogCommit(deferredEdits, deferredFootprint, queryId, (int)request.Family));
         }
 
         return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
@@ -1827,7 +1827,7 @@ public sealed class SchemaWriter
         }
         workspace.SetDeferredCatalogCommit(
             _cache,
-            new DeferredCatalogCommit(deferredEdits, deferredFootprint, entry.Id, newFlags, FromCreateQueryDef: false));
+            new DeferredCatalogCommit(deferredEdits, deferredFootprint, entry.Id, newFlags));
 
         return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
     }
@@ -1966,12 +1966,17 @@ public sealed class SchemaWriter
             return work.NotWritten();
         }
 
+        List<uint> releasedAtClose = [];
         foreach (ExistingQueryRow oldClause in clauseRows)
         {
-            if (!work.Delete(this, queries, oldClause.Root, extent: _pageCount, deferTableDefCounts: true, catalogDelete: true))
+            if (!work.Delete(this, queries, oldClause.Root, extent: _pageCount, deferTableDefCounts: true, catalogDelete: true, releasedAtClose: releasedAtClose))
             {
                 return work.NotWritten();
             }
+        }
+        if (releasedAtClose.Count > 0)
+        {
+            return NotWritten($"DAO QueryDef.SQL put on '{entry.Name}' retired {releasedAtClose.Count} MSysQueries page(s): retiring an emptied MSysQueries page on SQL put is not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open)");
         }
         deletedClauseCount = clauseRows.Count;
 
