@@ -1,0 +1,121 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q42-field-rule-and/put-refusals-mdb",
+  "bookRefs": ["R-EXPR-1", "EXPR-MUTATION", "Branch D", "II-10"],
+  "description": "Jet 4 MDB table T (ID LONG PK, V LONG, W TEXT(50)): probe Field.ValidationRule puts that ACE refuses or accepts at boundary/neighbour forms (incomplete And/Or, missing operator, double Not, Not Is Null / Is Not Null, Eqv/Imp implied, unbalanced paren, multi-column in multi-clause, mixed literal+implied, Between/In combined with And/Or, subquery, aggregate, parenthesized single implied, And + Not). Records EXCEPINFO, DAO Errors, and keeps whole file before and after Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-plain-mdb.mdb",
+      "sha256": "136bce0e84a9c979a0cb63ef86039e70ecb8114ad27a2ccc22279f2c45ea6645",
+      "length": 90112,
+      "provenance": "r-q37-valrule-put.create-plain-mdb.ab7829cb4c.a1 qk1-ab7829cb4c15c6857bce64f9e3af0b3dd34d9198fca9a7e7eaa8ded23cf0687d output:r-q37-plain-mdb.mdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg0", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg0", "offset": 0, "count": 131072, "keep": true },
+    { "op": "nativeClose", "handle": "pg0" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "args": [{ "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": false }], "bind": "db" },
+    { "op": "invoke", "target": "db", "member": "TableDefs", "kind": "propertyGet", "args": [], "bind": "tds" },
+    { "op": "invoke", "target": "tds", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "T" }], "bind": "td" },
+    { "op": "invoke", "target": "td", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "fs" },
+    { "op": "invoke", "target": "fs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "W" }], "bind": "fw" },
+    { "op": "invoke", "target": "fs", "member": "Item", "kind": "methodOrGet", "args": [{ "type": "bstr", "text": "V" }], "bind": "fv" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e01" },
+    { "op": "forEachItem", "target": "e01", "bind": "x01", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x01", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x01", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e01" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "And <> 'b'" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e02" },
+    { "op": "forEachItem", "target": "e02", "bind": "x02", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x02", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x02", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e02" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And >" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e03" },
+    { "op": "forEachItem", "target": "e03", "bind": "x03", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x03", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x03", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e03" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "= 'a' Or" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e04" },
+    { "op": "forEachItem", "target": "e04", "bind": "x04", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x04", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x04", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e04" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' <> 'b'" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e05" },
+    { "op": "forEachItem", "target": "e05", "bind": "x05", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x05", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x05", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e05" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Not Not = 'a'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Not Is Null" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Is Not Null" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "= 'a' Eqv = 'b'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "= 'a' Imp = 'b'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "(<> 'a'" }] },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And [V] > 0" }] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "args": [], "bind": "e12" },
+    { "op": "forEachItem", "target": "e12", "bind": "x12", "maxItems": 4, "body": [
+      { "op": "invoke", "target": "x12", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "x12", "member": "Description", "kind": "propertyGet", "args": [] }
+    ] },
+    { "op": "release", "target": "e12" },
+
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "[V] > 0 And <> 'a'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "'a' Or <> 'b'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "In ('a', 'b') Or = 'c'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Between 'a' And 'm' And <> 'e'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> 'a' And Between 'b' And 'm'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "In (SELECT W FROM T)" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> Sum([V])" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "(> 'a')" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And Not 'b'" }] },
+    { "op": "invoke", "target": "fw", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "<> 'a' And Not = 'b'" }] },
+
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> 0 And" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> < 5" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "1 Or 2" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "1 Or > 5" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Between 1 And 10 And <> 5" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "In (1, 3) Or = 5" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "Not 0 And <> 5" }] },
+    { "op": "invoke", "target": "fv", "member": "ValidationRule", "kind": "propertyPut", "args": [{ "type": "bstr", "text": "> 0 And [W] <> 'a'" }] },
+
+    { "op": "release", "target": "fv" },
+    { "op": "release", "target": "fw" },
+    { "op": "release", "target": "fs" },
+    { "op": "release", "target": "td" },
+    { "op": "release", "target": "tds" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "observeFiles", "label": "after-close", "keep": false, "pageSize": 4096 },
+    { "op": "nativeOpen", "bind": "pg1", "file": "input:main", "access": 2147483648, "share": 7, "disposition": 3 },
+    { "op": "nativeRead", "handle": "pg1", "offset": 0, "count": 131072, "keep": true },
+    { "op": "nativeClose", "handle": "pg1" },
+    { "op": "release", "target": "eng" }
+  ]
+}
