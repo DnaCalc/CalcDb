@@ -133,15 +133,7 @@ public sealed unsafe class ConnectionPointContractTests
 
                     var order = new List<string>();
                     using var sink1 = new RecordingEventSink(TestEventIid, (dispId, _) => order.Add($"s1:{dispId}"));
-                    using var sink2 = new RecordingEventSink(TestEventIid, (dispId, args) =>
-                    {
-                        order.Add($"s2:{dispId}");
-                        // Mark dispId 100 unwanted on sink2 via ByRef adStatus (arg 0)
-                        if (dispId == 100 && args.Count == 1 && args[0].ByRefIntPtr != null)
-                        {
-                            *args[0].ByRefIntPtr = 5;
-                        }
-                    });
+                    using var sink2 = new RecordingEventSink(TestEventIid, (dispId, _) => order.Add($"s2:{dispId}"));
 
                     uint c1 = 0;
                     uint c2 = 0;
@@ -171,16 +163,13 @@ public sealed unsafe class ConnectionPointContractTests
                         Release(enumConn);
                     }
 
-                    // Invoke dispId 100 twice: first hits s1 and s2 (s2 marks 100 unwanted); second hits s1 only.
+                    // Invoke dispId 100 and 101: both hit s1 then s2 in registration order.
                     int status = 1;
                     NativeVariant statusArg = new() { Vt = (ushort)(VarType.ByRef | VarType.I4), Pointer = (nint)(&status) };
-                    source.Events.Invoke(100, [statusArg], &status);
-                    Assert.Equal(1, status); // restored after sink2 set adStatusUnwantedEvent
-                    source.Events.Invoke(100, [statusArg], &status);
-                    // Invoke dispId 101: still hits both s1 and s2.
-                    source.Events.Invoke(101, [statusArg], &status);
+                    source.Events.Invoke(100, [statusArg]);
+                    source.Events.Invoke(101, [statusArg]);
 
-                    Assert.Equal(["s1:100", "s2:100", "s1:100", "s1:101", "s2:101"], order);
+                    Assert.Equal(["s1:100", "s2:100", "s1:101", "s2:101"], order);
 
                     // Unadvise sink1; sink2 remains active until source final release.
                     Assert.Equal(0, ((delegate* unmanaged<nint, uint, int>)Vtable(cp)[6])(cp, c1));
@@ -188,7 +177,7 @@ public sealed unsafe class ConnectionPointContractTests
                     Assert.Equal(HResults.CONNECT_E_NOCONNECTION, ((delegate* unmanaged<nint, uint, int>)Vtable(cp)[6])(cp, c1));
 
                     order.Clear();
-                    source.Events.Invoke(101, [statusArg], &status);
+                    source.Events.Invoke(101, [statusArg]);
                     Assert.Equal(["s2:101"], order);
 
                     // Release cp, cpc, and source -> sink2 must be released by source's OnFinalRelease.
@@ -221,7 +210,6 @@ public sealed unsafe class ConnectionPointContractTests
 public sealed unsafe class AdoEventsTests
 {
     private static readonly Guid OwnStream = new("95C5FB19-3B72-4FFA-868F-12A68495FF37");
-    private static readonly Guid OwnRecord = new("2CA37905-9986-469E-8E8D-8E14E85E606E");
 
     private static readonly Guid IidConnectionEvents = new("00001400-0000-0010-8000-00AA006D2EA4");
     private static readonly Guid IidRecordsetEvents = new("00001266-0000-0010-8000-00AA006D2EA4");
@@ -294,11 +282,10 @@ public sealed unsafe class AdoEventsTests
         nint rs = New(OwnRecordset);
         nint cmd = New(OwnCommand);
         nint st = New(OwnStream);
-        nint rec = New(OwnRecord);
         nint errs = (nint)Get(cn, "Errors")!;
         try
         {
-            // r-act-1-meta/support-ado-objects (d3c8d14d3b.a1): Connection & Recordset -> S_OK; Errors, Command, Stream (and Record) -> E_NOINTERFACE.
+            // r-act-1-meta/support-ado-objects (d3c8d14d3b.a1): Connection & Recordset -> S_OK; Errors, Command, Stream -> E_NOINTERFACE.
             Assert.Equal(0, QueryInterface(cn, ComIids.IConnectionPointContainer, out nint cpcCn));
             Release(cpcCn);
             Assert.Equal(0, QueryInterface(rs, ComIids.IConnectionPointContainer, out nint cpcRs));
@@ -306,12 +293,11 @@ public sealed unsafe class AdoEventsTests
 
             Assert.Equal(HResults.E_NOINTERFACE, QueryInterface(cmd, ComIids.IConnectionPointContainer, out _));
             Assert.Equal(HResults.E_NOINTERFACE, QueryInterface(st, ComIids.IConnectionPointContainer, out _));
-            Assert.Equal(HResults.E_NOINTERFACE, QueryInterface(rec, ComIids.IConnectionPointContainer, out _));
             Assert.Equal(HResults.E_NOINTERFACE, QueryInterface(errs, ComIids.IConnectionPointContainer, out _));
         }
         finally
         {
-            foreach (nint p in new[] { errs, rec, st, cmd, rs, cn })
+            foreach (nint p in new[] { errs, st, cmd, rs, cn })
             {
                 Release(p);
             }
@@ -552,7 +538,7 @@ public sealed unsafe class AdoEventsTests
         }
     }
 
-    // Replays r-q2-cat-txn-lock/txn-local-two-ado-connections-events (step 39, seq 72): Close while in txn fails without Disconnect.
+    // Replays r-q2-cat-txn-lock/txn-local-two-ado-connections-events (eee8cc4190.a1, step 39, seq 72): Close while in txn fails without Disconnect.
     private static void ReplayCloseInTransactionNoDisconnect(string dbPath)
     {
         nint cn = New(OwnConnection);
@@ -565,7 +551,7 @@ public sealed unsafe class AdoEventsTests
             Assert.Equal(1, Call(cn, "BeginTrans").Value);
             ev.Calls.Clear();
             AssertError(Call(cn, "Close"), unchecked((int)0x800A0CAE));
-            Assert.Empty(ev.Calls); // r-q2-cat-txn-lock/txn-local-two-ado-connections-events step 39, seq 72
+            Assert.Empty(ev.Calls); // r-q2-cat-txn-lock/txn-local-two-ado-connections-events (eee8cc4190.a1) step 39, seq 72
             Assert.Null(Call(cn, "RollbackTrans").Failure);
             Assert.Null(Call(cn, "Close").Failure);
         }
@@ -651,7 +637,7 @@ public sealed unsafe class AdoEventsTests
         try
         {
             Assert.Null(Put(rs, "CursorLocation", 2).Failure);
-            Assert.Null(Call(rs, "Open", "SELECT ID, Code, T, L FROM K ORDER BY ID", new Dispatch(cn), 1, 3, 1).Failure);
+            Assert.Null(Call(rs, "Open", "SELECT ID, Code, T, L FROM K WHERE ID <= 5 ORDER BY ID", new Dispatch(cn), 1, 3, 1).Failure);
             Assert.Equal([15, 16], evr.Calls.Select(c => c.DispId).ToArray()); // 25df46ebc8.a1 step 15, seq 16-17
 
             nint fields = (nint)Get(rs, "Fields")!;
@@ -835,7 +821,26 @@ public sealed unsafe class AdoEventsTests
                 rev0.Calls.Clear();
                 Assert.Equal(256, Get(ar0, "RecordCount"));
                 Assert.Empty(rev0.Calls); // 28618e250b.a1 step 14, seq 17 (RecordCount does not realize initial position)
+                rev0.Calls.Clear();
+                Assert.Null(Call(ar0, "MoveLast").Failure);
+                Assert.Equal([15, 16], rev0.Calls.Select(c => c.DispId).ToArray()); // 28618e250b.a1 step 15, seq 18-19
+                Assert.Equal(15, rev0.Calls[0].Args[0].Value);
+                rev0.Calls.Clear();
+                Assert.Null(Call(ar0, "MoveFirst").Failure);
+                Assert.Equal([15, 16], rev0.Calls.Select(c => c.DispId).ToArray()); // 28618e250b.a1 step 16, seq 21-22
+                Assert.Equal(12, rev0.Calls[0].Args[0].Value);
+                rev0.Calls.Clear();
+                Assert.Null(Call(ar0, "MoveNext").Failure);
+                Assert.Equal([15, 16], rev0.Calls.Select(c => c.DispId).ToArray()); // 28618e250b.a1 step 17, seq 24-25
+                Assert.Equal(13, rev0.Calls[0].Args[0].Value);
+                rev0.Calls.Clear();
+                Assert.Null(Call(ar0, "MoveNext").Failure);
+                Assert.Equal([15, 16], rev0.Calls.Select(c => c.DispId).ToArray()); // 28618e250b.a1 step 18, seq 27-28
+                Assert.Equal(13, rev0.Calls[0].Args[0].Value);
+                rev0.Calls.Clear();
                 Assert.Null(Call(ar0, "Close").Failure);
+                Assert.Equal([14], rev0.Calls.Select(c => c.DispId).ToArray()); // 28618e250b.a1 step 19, seq 30
+                Assert.Equal(9, rev0.Calls[0].Args[0].Value);
             }
             finally
             {

@@ -10,8 +10,6 @@ internal static class AdoEventStatus
     public const int Ok = 1;                // adStatusOK
     public const int ErrorsOccurred = 2;    // adStatusErrorsOccurred
     public const int CantDeny = 3;          // adStatusCantDeny
-    public const int Cancel = 4;            // adStatusCancel
-    public const int UnwantedEvent = 5;     // adStatusUnwantedEvent
 }
 
 /// <summary>ADO <c>EventReasonEnum</c> values delivered in <c>adReason</c>.</summary>
@@ -75,7 +73,7 @@ internal static unsafe class AdoEvents
         args[1] = Unknown(error);
         args[2] = ByRefInt32(&adStatus);
         args[3] = Unknown(connection);
-        point.Invoke(DispIdBeginTransComplete, args, &adStatus);
+        InvokeWithError(point, DispIdBeginTransComplete, args, error);
     }
 
     public static void RollbackTransComplete(ConnectionPoint point, AdoErrorObject? error, int status, ConnectionObject connection)
@@ -89,7 +87,7 @@ internal static unsafe class AdoEvents
         args[0] = Unknown(error);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(connection);
-        point.Invoke(DispIdRollbackTransComplete, args, &adStatus);
+        InvokeWithError(point, DispIdRollbackTransComplete, args, error);
     }
 
     public static void CommitTransComplete(ConnectionPoint point, AdoErrorObject? error, int status, ConnectionObject connection)
@@ -103,7 +101,7 @@ internal static unsafe class AdoEvents
         args[0] = Unknown(error);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(connection);
-        point.Invoke(DispIdCommitTransComplete, args, &adStatus);
+        InvokeWithError(point, DispIdCommitTransComplete, args, error);
     }
 
     public static void WillConnect(
@@ -132,7 +130,7 @@ internal static unsafe class AdoEvents
             args[3] = ByRefInt32(&opt);
             args[4] = ByRefInt32(&adStatus);
             args[5] = Unknown(connection);
-            point.Invoke(DispIdWillConnect, args, &adStatus);
+            point.Invoke(DispIdWillConnect, args);
         }
         finally
         {
@@ -153,7 +151,7 @@ internal static unsafe class AdoEvents
         args[0] = Unknown(error);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(connection);
-        point.Invoke(DispIdConnectComplete, args, &adStatus);
+        InvokeWithError(point, DispIdConnectComplete, args, error);
     }
 
     public static void Disconnect(ConnectionPoint point, ConnectionObject connection)
@@ -166,7 +164,7 @@ internal static unsafe class AdoEvents
         Span<NativeVariant> args = stackalloc NativeVariant[2];
         args[0] = ByRefInt32(&adStatus);
         args[1] = Unknown(connection);
-        point.Invoke(DispIdDisconnect, args, &adStatus);
+        point.Invoke(DispIdDisconnect, args);
     }
 
     public static void WillExecute(
@@ -199,7 +197,7 @@ internal static unsafe class AdoEvents
             args[5] = Unknown(command);
             args[6] = Unknown(recordset);
             args[7] = Unknown(connection);
-            point.Invoke(DispIdWillExecute, args, &adStatus);
+            point.Invoke(DispIdWillExecute, args);
         }
         finally
         {
@@ -228,7 +226,7 @@ internal static unsafe class AdoEvents
         args[3] = Unknown(command);
         args[4] = Unknown(recordset);
         args[5] = Unknown(connection);
-        point.Invoke(DispIdExecuteComplete, args, &adStatus);
+        InvokeWithError(point, DispIdExecuteComplete, args, error);
     }
 
     // ---- RecordsetEvents ----
@@ -248,7 +246,7 @@ internal static unsafe class AdoEvents
             args[1] = DispatchArray(psa);
             args[2] = ByRefInt32(&adStatus);
             args[3] = Unknown(recordset);
-            point.Invoke(DispIdWillChangeField, args, &adStatus);
+            point.Invoke(DispIdWillChangeField, args);
         }
         finally
         {
@@ -275,7 +273,7 @@ internal static unsafe class AdoEvents
             args[2] = Unknown(error);
             args[3] = ByRefInt32(&adStatus);
             args[4] = Unknown(recordset);
-            point.Invoke(DispIdFieldChangeComplete, args, &adStatus);
+            InvokeWithError(point, DispIdFieldChangeComplete, args, error);
         }
         finally
         {
@@ -298,7 +296,7 @@ internal static unsafe class AdoEvents
         args[1] = Int32(recordCount);
         args[2] = ByRefInt32(&adStatus);
         args[3] = Unknown(recordset);
-        point.Invoke(DispIdWillChangeRecord, args, &adStatus);
+        point.Invoke(DispIdWillChangeRecord, args);
     }
 
     public static void RecordChangeComplete(ConnectionPoint point, int reason, int recordCount, AdoErrorObject? error, int status, RecordsetObject recordset)
@@ -314,7 +312,7 @@ internal static unsafe class AdoEvents
         args[2] = Unknown(error);
         args[3] = ByRefInt32(&adStatus);
         args[4] = Unknown(recordset);
-        point.Invoke(DispIdRecordChangeComplete, args, &adStatus);
+        InvokeWithError(point, DispIdRecordChangeComplete, args, error);
     }
 
     public static void WillChangeRecordset(ConnectionPoint point, int reason, RecordsetObject recordset)
@@ -328,7 +326,7 @@ internal static unsafe class AdoEvents
         args[0] = Int32(reason);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(recordset);
-        point.Invoke(DispIdWillChangeRecordset, args, &adStatus);
+        point.Invoke(DispIdWillChangeRecordset, args);
     }
 
     public static void RecordsetChangeComplete(ConnectionPoint point, int reason, AdoErrorObject? error, int status, RecordsetObject recordset)
@@ -343,7 +341,7 @@ internal static unsafe class AdoEvents
         args[1] = Unknown(error);
         args[2] = ByRefInt32(&adStatus);
         args[3] = Unknown(recordset);
-        point.Invoke(DispIdRecordsetChangeComplete, args, &adStatus);
+        InvokeWithError(point, DispIdRecordsetChangeComplete, args, error);
     }
 
     public static void WillMove(ConnectionPoint point, int reason, int status, RecordsetObject recordset)
@@ -357,7 +355,7 @@ internal static unsafe class AdoEvents
         args[0] = Int32(reason);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(recordset);
-        point.Invoke(DispIdWillMove, args, &adStatus);
+        point.Invoke(DispIdWillMove, args);
     }
 
     public static void MoveComplete(ConnectionPoint point, int reason, AdoErrorObject? error, int status, RecordsetObject recordset)
@@ -372,7 +370,7 @@ internal static unsafe class AdoEvents
         args[1] = Unknown(error);
         args[2] = ByRefInt32(&adStatus);
         args[3] = Unknown(recordset);
-        point.Invoke(DispIdMoveComplete, args, &adStatus);
+        InvokeWithError(point, DispIdMoveComplete, args, error);
     }
 
     public static void EndOfRecordset(ConnectionPoint point, RecordsetObject recordset)
@@ -387,10 +385,24 @@ internal static unsafe class AdoEvents
         args[0] = ByRefBool(&moreData);
         args[1] = ByRefInt32(&adStatus);
         args[2] = Unknown(recordset);
-        point.Invoke(DispIdEndOfRecordset, args, &adStatus);
+        point.Invoke(DispIdEndOfRecordset, args);
     }
 
     // ---- VARIANT & SAFEARRAY helpers ----
+
+    private static void InvokeWithError(ConnectionPoint point, int dispId, ReadOnlySpan<NativeVariant> args, AdoErrorObject? error)
+    {
+        // Retain pError across multi-sink synchronous dispatch so a sink clearing Connection.Errors cannot free it early.
+        error?.AddRef();
+        try
+        {
+            point.Invoke(dispId, args);
+        }
+        finally
+        {
+            error?.Release();
+        }
+    }
 
     private static NativeVariant Int32(int value)
     {

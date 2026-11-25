@@ -592,8 +592,6 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     public int CursorLocationValue => _cursorLocation;
 
-    internal bool HasEventSinks => _events.HasSinks;
-
     internal AdoErrorObject? FirstErrorObject => _errors?.FirstErrorObject;
 
     internal void EmitWillExecute(
@@ -1152,7 +1150,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return NotImplemented($"Connection.Open with Options={options} (not asked)");
         }
 
-        AdoEvents.WillConnect(_events, openText, userArg, passwordArg, options, this);
+        void EmitWillConnect() => AdoEvents.WillConnect(_events, openText, userArg, passwordArg, options, this);
 
         var initValues = new Dictionary<string, OwnedVariant>(StringComparer.Ordinal);
         bool propsModeModified = false;
@@ -1222,6 +1220,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                         return NotImplemented($"Connection.Open with case-variant key '{key.Key}' (not asked)");
                     }
                     // r-str-ado-act/ado-connstring-keys kb: unknown ACE key fails with 3170 "Could not find installable ISAM."
+                    EmitWillConnect();
                     return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                         "Could not find installable ISAM.", 5003170, "3170", -69141536);
                 }
@@ -1276,6 +1275,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 // r-oledb-odbc/prop-modes (ma2=2, ma5=15, ma6=11, ma7=5), error-open-failures (fh1/fh4=15):
                 // these modes fail before engine init with Provider 0x80040E21.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailProviderOpen(openText, persistSecurityInfo, HResultErrorsOccurred, MultipleStepDescription);
             }
             if (effectiveMode is not (1 or 3 or 16 or 19))
@@ -1295,6 +1295,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-str-ado-act/ado-open-alt-orders cc, r-ado-1b/conn-set-while-open: missing Data Source -> Provider 0x80040E4D.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailProviderOpen(openText, persistSecurityInfo, HResultAuthFailed, "Authentication failed.");
             }
 
@@ -1309,6 +1310,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 }
                 // r-ado-1b/conn-open-args oc/og: non-Admin user -> ACE 3028.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
                     "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
                     5003028, "3028", -124520301);
@@ -1317,6 +1319,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-ado-1b/conn-open-args ob, r-oledb-odbc/error-open-failures ff: non-empty password -> ACE 3028.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
                     "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
                     5003028, "3028", -124520301);
@@ -1326,6 +1329,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-ado-1b/conn-datasource-spellings sp_extended: Win32 extended-length prefix -> ACE 3043.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     "Your network access was interrupted. To continue, close the database, and then open it again.",
                     5003043, "3043", -66913278);
@@ -1347,6 +1351,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-act-1-thread/ado-main-sta, r-oledb-odbc/error-open-failures fe: nonexistent directory -> ACE 3044.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     $"'{dataSource}' is not a valid path. Make sure that the path name is spelled correctly and that you are connected to the server on which the file resides.",
                     5003044, "3044", -534774783);
@@ -1356,6 +1361,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-oledb-odbc/error-open-failures fa: nonexistent file -> ACE 3024.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     $"Could not find file '{dataSource}'.",
                     5003024, "3024", -534578963);
@@ -1487,6 +1493,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(knownLockingMode));
             }
 
+            EmitWillConnect();
             _session = new AdoOpenSession(
                 shared,
                 readOnly: effectiveMode == 1,
@@ -1779,7 +1786,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             cmdType = defaultCommandType;
         }
 
-        AdoEvents.WillExecute(_events, commandText, -1, -1, options, explicitCommand, null, this);
+        void EmitWillExec() => AdoEvents.WillExecute(_events, commandText, -1, -1, options, explicitCommand, null, this);
 
         string effectiveText = cmdType switch
         {
@@ -1795,6 +1802,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (!AdoSqlText.IsSimpleQueryName(procArg, out string queryName))
             {
+                EmitWillExec();
                 MappedProviderError err = AdoSqlErrors.ExpectedQueryNameAfterExecute();
                 SetProviderError(err.ErrorEntry);
                 EmitFailedExecuteComplete(noRecords, explicitCommand);
@@ -1806,14 +1814,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (session.FindSavedQuery(queryName) is not { } saved)
             {
+                EmitWillExec();
                 MappedProviderError err = AdoSqlErrors.TableOrQueryNotFound(queryName);
                 SetProviderError(err.ErrorEntry);
                 EmitFailedExecuteComplete(noRecords, explicitCommand);
                 return CallResult.Fail(err.ComFailure);
             }
-            return saved.Family is QueryFamily.Select or QueryFamily.Union
-                ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand)
-                : ExecuteSavedAction(saved);
+            if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
+            {
+                return ExecuteSavedAction(saved);
+            }
+            EmitWillExec();
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
         }
 
         // TableDirect, adCmdTable, SELECT @@IDENTITY, or SELECT SQL -> row-returning.
@@ -1821,6 +1833,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             || AdoSqlText.IsSelectIdentity(effectiveText)
             || AdoSqlText.IsSelect(effectiveText))
         {
+            EmitWillExec();
             return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
         }
 
@@ -1829,25 +1842,31 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (session.Sql.Table(effectiveText) is not null)
             {
+                EmitWillExec();
                 return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
             }
             if (session.FindSavedQuery(effectiveText) is { } saved)
             {
-                return saved.Family is QueryFamily.Select or QueryFamily.Union
-                    ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand)
-                    : ExecuteSavedAction(saved);
+                if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
+                {
+                    return ExecuteSavedAction(saved);
+                }
+                EmitWillExec();
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
             }
         }
 
         // Ad-hoc action DML or DDL; non-SQL garbage fails 3129 (r-str-ado-act/ado-execute-results #35).
         if (!DdlParser.IsDdlLeadingKeyword(effectiveText) && !ActionParser.IsAction(effectiveText))
         {
+            EmitWillExec();
             MappedProviderError err = AdoSqlErrors.InvalidSqlStatement();
             SetProviderError(err.ErrorEntry);
             EmitFailedExecuteComplete(noRecords, explicitCommand);
             return CallResult.Fail(err.ComFailure);
         }
 
+        EmitWillExec();
         return ExecuteAction(
             session,
             effectiveText,

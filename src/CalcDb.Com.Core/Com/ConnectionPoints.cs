@@ -19,7 +19,6 @@ public struct ConnectData
 public sealed unsafe class ConnectionPoint(Guid interfaceId)
 {
     private const ushort DispatchMethod = 1;
-    private const int AdStatusUnwantedEvent = 5;
 
     private readonly List<SinkEntry> _sinks = [];
     private uint _nextCookie = 1;
@@ -105,7 +104,7 @@ public sealed unsafe class ConnectionPoint(Guid interfaceId)
     /// <paramref name="logicalArgs"/> are passed in declaration (left-to-right) order and reversed into
     /// <c>DISPPARAMS.rgvarg</c> as COM automation requires.
     /// </summary>
-    public void Invoke(int dispId, ReadOnlySpan<NativeVariant> logicalArgs, int* adStatusRef = null)
+    public void Invoke(int dispId, ReadOnlySpan<NativeVariant> logicalArgs)
     {
         if (_sinks.Count == 0)
         {
@@ -128,12 +127,11 @@ public sealed unsafe class ConnectionPoint(Guid interfaceId)
         };
 
         Guid iidNull = Guid.Empty;
-        int initialStatus = adStatusRef is not null ? *adStatusRef : 0;
         SinkEntry[] snapshot = [.. _sinks];
 
         foreach (SinkEntry sink in snapshot)
         {
-            if (!sink.Active || sink.IsUnwanted(dispId))
+            if (!sink.Active)
             {
                 continue;
             }
@@ -148,12 +146,6 @@ public sealed unsafe class ConnectionPoint(Guid interfaceId)
             finally
             {
                 ReleaseCom(disp);
-            }
-
-            if (adStatusRef is not null && *adStatusRef == AdStatusUnwantedEvent)
-            {
-                sink.MarkUnwanted(dispId);
-                *adStatusRef = initialStatus;
             }
         }
     }
@@ -179,11 +171,6 @@ public sealed unsafe class ConnectionPoint(Guid interfaceId)
         public uint Cookie { get; } = cookie;
         public nint Dispatch { get; } = dispatch;
         public bool Active { get; set; } = true;
-        private HashSet<int>? _unwanted;
-
-        public bool IsUnwanted(int dispId) => _unwanted is not null && _unwanted.Contains(dispId);
-
-        public void MarkUnwanted(int dispId) => (_unwanted ??= []).Add(dispId);
     }
 }
 
