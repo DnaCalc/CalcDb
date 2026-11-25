@@ -354,8 +354,11 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
 
     public bool IsEmpty => _knownCount == 0 || (_cursor.Bof && _cursor.Eof);
 
+    public MappedProviderError? LastSeekProviderError { get; private set; }
+
     public bool TrySeek(int index, out Failure? failure)
     {
+        LastSeekProviderError = null;
         failure = null;
         if (index < 0 || (_knownCount >= 0 && index >= _knownCount))
         {
@@ -385,6 +388,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         if (_cursor.FetchFailure is { } fetch)
         {
             MappedProviderError? mapped = AdoSqlErrors.TryMap(fetch, false, out Failure? unmodelled);
+            LastSeekProviderError = mapped;
             failure = mapped?.ComFailure ?? unmodelled;
             return false;
         }
@@ -1116,10 +1120,18 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private AdoFilterExpression? _filterExpr;
     private string? _sortText;
     private AdoSortSpec? _sortSpec;
+    private readonly ConnectionPoint _events;
+    private bool _initialPositionPending;
     private int[]? _viewMap;
 
-    private RecordsetObject() : base(Decl, Vtable, "ADODB.Recordset")
+    private RecordsetObject() : this(new ConnectionPoint(AdoTypes.RecordsetEventsMeta.Guid))
     {
+    }
+
+    private RecordsetObject(ConnectionPoint events)
+        : base(Decl, Vtable, "ADODB.Recordset", new ConnectionPointHub(events))
+    {
+        _events = events;
     }
 
     protected override OperationTable Table => Operations;
@@ -1429,22 +1441,32 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return _rows.IsEmpty ? 0 : ScanToLast(out _) + 1;
     }
 
-    internal bool TrySeekView(int viewIndex, out Failure? failure)
+    internal bool TrySeekView(int viewIndex, out Failure? failure) =>
+        TrySeekView(viewIndex, out _, out failure);
+
+    internal bool TrySeekView(int viewIndex, out MappedProviderError? providerError, out Failure? failure)
     {
+        providerError = null;
         failure = null;
         if (viewIndex < 0)
         {
             return false;
         }
+        int baseIndex = viewIndex;
         if (_viewMap is not null)
         {
             if (viewIndex >= _viewMap.Length)
             {
                 return false;
             }
-            return _rows!.TrySeek(_viewMap[viewIndex], out failure);
+            baseIndex = _viewMap[viewIndex];
         }
-        return _rows!.TrySeek(viewIndex, out failure);
+        if (_rows!.TrySeek(baseIndex, out failure))
+        {
+            return true;
+        }
+        providerError = (_rows as SelectRowSource)?.LastSeekProviderError;
+        return false;
     }
 
     /// <summary>
@@ -1681,20 +1703,25 @@ internal sealed unsafe class RecordsetObject : AdoObject
     }
 
     /// <summary>
-    /// Implicitly posts a pending Edit or AddNew before MoveNext (r-fix-wire-ado/ado-edit-fresh #103-113).
+    /// Implicitly posts a pending Edit or AddNew before MoveNext (r-fix-wire-ado/ado-edit-fresh #103-113,
+    /// r-q2-ado-misc/ado-events-recordset-edit #33).
     /// Returns a failure CallResult if the implicit Update fails.
     /// </summary>
-    private CallResult? FlushPendingEdit()
+    private CallResult? FlushPendingEdit(out bool providerFailed)
     {
+        providerFailed = false;
         if (_rows is not KeysetRowSource ks || ks.EditModeValue == 0)
         {
             return null;
         }
+        AdoEvents.WillChangeRecord(_events, AdoEventReason.Update, 1, this);
         if (!ks.TryUpdate(out int? newPos, out MappedProviderError? pe, out Failure? refFail))
         {
             if (pe is { } provErr)
             {
+                providerFailed = true;
                 ReportProviderError(provErr);
+                AdoEvents.RecordChangeComplete(_events, AdoEventReason.Update, 1, _activeConnection?.FirstErrorObject, AdoEventStatus.ErrorsOccurred, this);
                 return CallResult.Fail(provErr.ComFailure);
             }
             return CallResult.Fail(refFail!);
@@ -1708,6 +1735,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
         }
         ClearConnectionErrors();
+        AdoEvents.RecordChangeComplete(_events, AdoEventReason.Update, 1, null, AdoEventStatus.Ok, this);
         return null;
     }
 
@@ -1747,10 +1775,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return NotImplemented($"Recordset.AddNew while EditMode={ks!.EditModeValue} (implicit Update on AddNew is not recorded)");
         }
 
+        EnsureInitialPositionRealized();
         _posBeforeAddNew = _position;
         _bofBeforeAddNew = _bof;
         _eofBeforeAddNew = _eof;
 
+        // r-q2-ado-misc/ado-events-recordset-edit #35-38, r-q2-cursor-dao/errnest-ado-recordset-event-error #21-24:
+        // AddNew fires WillMove(adRsnMove=10) -> WillChangeRecord(adRsnAddNew=1, 1) -> RecordChangeComplete(1, 1) -> MoveComplete(10).
+        AdoEvents.WillMove(_events, AdoEventReason.Move, AdoEventStatus.Ok, this);
+        AdoEvents.WillChangeRecord(_events, AdoEventReason.AddNew, 1, this);
         if (!ks!.TryAddNew(out MappedProviderError? pe, out Failure? refFail))
         {
             if (pe is { } provErr)
@@ -1765,6 +1798,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _eof = false;
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
+        AdoEvents.RecordChangeComplete(_events, AdoEventReason.AddNew, 1, null, AdoEventStatus.Ok, this);
+        AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
 
         if (fieldMissing)
         {
@@ -1864,11 +1899,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Nothing;
         }
 
+        // r-q2-ado-misc/ado-events-recordset-edit, r-q2-cursor-dao/errnest-ado-recordset-event-error #25:
+        // Update fires WillChangeRecord(adRsnUpdate=3, 1) -> RecordChangeComplete(3, 1, pErrorOrNull, status).
+        AdoEvents.WillChangeRecord(_events, AdoEventReason.Update, 1, this);
         if (!ks!.TryUpdate(out int? newPos, out MappedProviderError? pe, out Failure? refFail))
         {
             if (pe is { } provErr)
             {
                 ReportProviderError(provErr);
+                AdoEvents.RecordChangeComplete(_events, AdoEventReason.Update, 1, _activeConnection?.FirstErrorObject, AdoEventStatus.ErrorsOccurred, this);
                 return CallResult.Fail(provErr.ComFailure);
             }
             return CallResult.Fail(refFail!);
@@ -1882,6 +1921,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
         }
         ClearConnectionErrors();
+        AdoEvents.RecordChangeComplete(_events, AdoEventReason.Update, 1, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -1910,11 +1950,29 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (_rows is KeysetRowSource ks)
         {
-            bool wasAddNew = ks.EditModeValue == 2;
-            ks.CancelUpdate();
-            if (wasAddNew)
+            int editMode = ks.EditModeValue;
+            if (editMode == 2)
             {
+                // r-q2-cursor-dao/errnest-ado-recordset-event-error #27:
+                // CancelUpdate of an AddNew fires WillMove(15) -> WillChangeRecord(5, 1) -> RecordChangeComplete(5, 1) -> MoveComplete(15).
+                AdoEvents.WillMove(_events, AdoEventReason.MoveLast, AdoEventStatus.Ok, this);
+                AdoEvents.WillChangeRecord(_events, AdoEventReason.UndoAddNew, 1, this);
+                ks.CancelUpdate();
                 RestorePreAddNewPosition();
+                AdoEvents.RecordChangeComplete(_events, AdoEventReason.UndoAddNew, 1, null, AdoEventStatus.Ok, this);
+                AdoEvents.MoveComplete(_events, AdoEventReason.MoveLast, null, AdoEventStatus.Ok, this);
+            }
+            else if (editMode == 1)
+            {
+                // r-q2-ado-misc/ado-events-recordset-edit #27:
+                // CancelUpdate of an existing-row edit fires WillChangeRecord(4, 1) -> RecordChangeComplete(4, 1).
+                AdoEvents.WillChangeRecord(_events, AdoEventReason.UndoUpdate, 1, this);
+                ks.CancelUpdate();
+                AdoEvents.RecordChangeComplete(_events, AdoEventReason.UndoUpdate, 1, null, AdoEventStatus.Ok, this);
+            }
+            else
+            {
+                ks.CancelUpdate();
             }
             // Note: CancelUpdate intentionally does NOT clear Connection.Errors (r-ado-1b/fields-assign-conversion #199-215).
             return CallResult.Nothing;
@@ -1940,6 +1998,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.Delete while EditMode=adEditAdd (not recorded)");
         }
+        EnsureInitialPositionRealized();
         if (_bof || _eof || _suspendedAfterForwardMoveLast)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
@@ -1958,6 +2017,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(refFail!);
         }
         ClearConnectionErrors();
+        // r-q2-ado-misc/ado-events-recordset-edit #46: ACE fires RecordChangeComplete(adRsnDelete=2, 1, null, 1) twice, with no WillChangeRecord.
+        AdoEvents.RecordChangeComplete(_events, AdoEventReason.Delete, 1, null, AdoEventStatus.Ok, this);
+        AdoEvents.RecordChangeComplete(_events, AdoEventReason.Delete, 1, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -2739,9 +2801,53 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _activeConnection = cn;
     }
 
-    private CallResult GetBof() => IsOpen ? Bool(_bof) : FailAdo(AdoErrors.ObjectClosed);
+    /// <summary>
+    /// Server cursors lazily realize their initial row position on first EOF/BOF/Field/AddNew/Delete/Close access
+    /// (not on RecordCount): ForwardOnly emits WillChangeRecordset/RecordsetChangeComplete(10) before WillMove/MoveComplete(10);
+    /// Keyset/Static emit WillMove/MoveComplete(10) (r-q2-ado-misc/ado-events-recordset-moves, ado-events-recordset-edit,
+    /// r-q2-cursor-dao/errnest-ado-recordset-event-error, r-q2-expr-sql/demand-ado-events-shapes, demand-ado-events-failing-row,
+    /// r-q2-wire/events-ado-recordset).
+    /// </summary>
+    private void EnsureInitialPositionRealized()
+    {
+        if (!_initialPositionPending)
+        {
+            return;
+        }
+        _initialPositionPending = false;
+        if (_effectiveCursorType == 0)
+        {
+            AdoEvents.WillChangeRecordset(_events, AdoEventReason.Move, this);
+            AdoEvents.RecordsetChangeComplete(
+                _events,
+                AdoEventReason.Move,
+                null,
+                _rows is null || _rows.IsEmpty ? AdoEventStatus.ErrorsOccurred : AdoEventStatus.Ok,
+                this);
+        }
+        AdoEvents.WillMove(_events, AdoEventReason.Move, AdoEventStatus.Ok, this);
+        AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
+    }
 
-    private CallResult GetEof() => IsOpen ? Bool(_eof) : FailAdo(AdoErrors.ObjectClosed);
+    private CallResult GetBof()
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        EnsureInitialPositionRealized();
+        return Bool(_bof);
+    }
+
+    private CallResult GetEof()
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        EnsureInitialPositionRealized();
+        return Bool(_eof);
+    }
 
     private CallResult GetRecordCount()
     {
@@ -3148,6 +3254,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         // Source argument: supports text or non-parameterized ADODB.Command (r-ado-1b/rs-source-kinds #258-277).
         bool sourceWasCommand = false;
+        CommandObject? sourceCommand = null;
         string? commandOriginalSource = null;
         if (sourceArg != 0 && AdoArgs.IsObject(sourceArg))
         {
@@ -3158,6 +3265,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                     return NotImplemented("Recordset.Open with a parameterized Command as Source (parameterized Command execution belongs to a later stretch)");
                 }
                 sourceWasCommand = true;
+                sourceCommand = cmd;
                 commandOriginalSource = cmd.CommandTextValue;
                 if (cmdType == AdoSqlText.AdCmdUnspecified && cmd.CommandTypeValue != AdoSqlText.AdCmdUnspecified)
                 {
@@ -3318,6 +3426,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             effCursor,
             effLock);
 
+        // r-q2-ado-misc/ado-events-command-identity #85, r-q2-cursor-dao/errado-warning-infomessage #18/#32/#46:
+        // Recordset.Open emits ConnectionEvents.WillExecute with the requested CursorType/LockType and raw Options before running.
+        _activeConnection.EmitWillExecute(originalSource, _requestedCursorType, _requestedLockType, rawOptions, sourceCommand, this);
+
         IAdoRowSource? rowSource = OpenRowSource(
             session,
             originalSource,
@@ -3343,6 +3455,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
                         : null;
                 FieldsCollection.RecordFailedOpen(fieldsErr);
                 ReportProviderError(pe);
+                // r-q2-expr-sql/demand-ado-events-failing-row ar5 #48-51: failed Open emits NO RecordsetEvents;
+                // ConnectionEvents.ExecuteComplete reports ErrorsOccurred with pError.
+                _activeConnection.EmitExecuteComplete(0, _activeConnection.FirstErrorObject, AdoEventStatus.ErrorsOccurred, sourceCommand, this);
                 return CallResult.Fail(pe.ComFailure);
             }
             return CallResult.Fail(refusal!);
@@ -3382,6 +3497,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
             openedFromCommand: sourceWasCommand,
             recordCountSource: rcSource,
             selectShape: selectShape);
+        _activeConnection.EmitExecuteComplete(0, null, AdoEventStatus.Ok, sourceCommand, this);
+        // r-q2-ado-misc/ado-events-recordset-moves #16-17, ado-events-recordset-edit, r-q2-wire/events-ado-recordset:
+        // Recordset.Open succeeds with WillMove(adRsnMove=10, adStatusCantDeny=3) -> MoveComplete(10, null, adStatusOK=1).
+        AdoEvents.WillMove(_events, AdoEventReason.Move, AdoEventStatus.CantDeny, this);
+        AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -3689,6 +3809,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             case (0, 1): // r-fix-wire-ado/ado-rs-cursors-writable c1
                 effectiveCursor = 0; effectiveLock = 1; hasBookmarks = false; supportedOptions = AdFind | AdNotify;
                 return true;
+            case (0, 2): // r-q2-cursor-dao/errado-warning-infomessage #44-50, r-oledb-odbc/prop-rowset-requests (2862dd72da.a1) #3479-3500: ForwardOnly + Pessimistic -> Keyset + Pessimistic without bookmarks
+                effectiveCursor = 1; effectiveLock = 2; hasBookmarks = false; supportedOptions = ServerNoBookmarkScroll | EditBits;
+                return true;
             case (1, 1): // r-ado-1b/rs-lock-matrix m0, r-fix-wire-ado/ado-rs-cursors-writable c2
                 effectiveCursor = 1; effectiveLock = 1; hasBookmarks = true; supportedOptions = ServerScrollBase;
                 return true;
@@ -3755,6 +3878,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _openedFromSavedQuery = openedFromSavedQuery;
         _hasBookmarks = hasBookmarks;
         _supportedOptions = supportedOptions;
+        _initialPositionPending = effectiveCursorLocation == 2;
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         ResetChunkState();
@@ -3786,9 +3910,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             // server keyset Close while a pending row change has not been canceled fails 0x800A0C93.
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
+        EnsureInitialPositionRealized();
         DisposeOpenRows();
         // Keep column descriptors in Fields while Connection stays open, invalidating Field wrappers (r-str-ado-act/ado-rs-read-close #279-288).
         _fields?.OnRecordsetClosed();
+        // r-q2-ado-misc/ado-events-recordset-moves #57, ado-events-recordset-edit, r-q2-wire/events-ado-recordset:
+        // Close fires RecordsetChangeComplete(adRsnClose=9, null, adStatusOK=1).
+        AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Close, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -3808,6 +3936,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _recordCountRefusal = null;
         _openedFromExecute = false;
         _openedFromSavedQuery = false;
+        _initialPositionPending = false;
         ResetChunkState();
         _viewMap = null;
         _filterExpr = null;
@@ -3844,11 +3973,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.MoveFirst while editing (implicit Update on MoveFirst is not recorded)");
         }
+        _initialPositionPending = false;
         ConsumeDeletedCurrent();
         if (ViewIsEmpty)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
+        AdoEvents.WillMove(_events, AdoEventReason.MoveFirst, AdoEventStatus.Ok, this);
         if (!TrySeekView(0, out Failure? fail))
         {
             return fail is not null ? CallResult.Fail(fail) : FailAdo(AdoErrors.NoCurrentRecord);
@@ -3859,6 +3990,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _suspendedAfterForwardMoveLast = false;
         _position = 0;
         ResetServerValueReadState();
+        AdoEvents.MoveComplete(_events, AdoEventReason.MoveFirst, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -3876,6 +4008,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.MoveLast while editing (implicit Update on MoveLast is not recorded)");
         }
+        _initialPositionPending = false;
         ConsumeDeletedCurrent();
         if (_effectiveCursorType == 0)
         {
@@ -3895,6 +4028,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
+        AdoEvents.WillMove(_events, AdoEventReason.MoveLast, AdoEventStatus.Ok, this);
         int known = ViewKnownCount;
         int last;
         if (known >= 0)
@@ -3923,6 +4057,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _suspendedAfterForwardMoveLast = false;
         _position = last;
         ResetServerValueReadState();
+        AdoEvents.MoveComplete(_events, AdoEventReason.MoveLast, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -3932,13 +4067,29 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
-        if (FlushPendingEdit() is { } flushFail)
+        bool wasPending = _initialPositionPending;
+        _initialPositionPending = false;
+        // r-q2-ado-misc/ado-events-recordset-moves #19-20, #39-41, ado-events-recordset-edit #33:
+        // WillMove(adRsnMoveNext=13) fires before any implicit Update flush or row fetch.
+        AdoEvents.WillMove(_events, AdoEventReason.MoveNext, AdoEventStatus.Ok, this);
+        if (FlushPendingEdit(out bool flushProviderFailed) is { } flushFail)
         {
+            if (flushProviderFailed)
+            {
+                AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, _activeConnection?.FirstErrorObject, AdoEventStatus.ErrorsOccurred, this);
+            }
             return flushFail;
         }
         bool removedCurrent = ConsumeDeletedCurrent();
         if (!removedCurrent && ViewIsEmpty)
         {
+            if (_effectiveCursorType == 0 && wasPending)
+            {
+                AdoEvents.WillChangeRecordset(_events, AdoEventReason.Move, this);
+                AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Move, null, AdoEventStatus.ErrorsOccurred, this);
+            }
+            AdoEvents.EndOfRecordset(_events, this);
+            AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
         // r-fix-wire-ado/book-position-readback #69-73: MoveNext after failed ForwardOnly MoveLast resumes on _position.
@@ -3946,25 +4097,38 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             _suspendedAfterForwardMoveLast = false;
             ResetChunkState();
-            if (!TrySeekView(_position, out Failure? resumeFail))
+            if (!TrySeekView(_position, out MappedProviderError? resumeProvErr, out Failure? resumeFail))
             {
                 if (resumeFail is not null)
                 {
+                    if (resumeProvErr is { } resumeErr)
+                    {
+                        ReportProviderError(resumeErr);
+                        AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, _activeConnection?.FirstErrorObject, AdoEventStatus.ErrorsOccurred, this);
+                    }
                     return CallResult.Fail(resumeFail);
                 }
                 _bof = false;
                 _eof = true;
+                AdoEvents.EndOfRecordset(_events, this);
+                AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
                 return CallResult.Nothing;
             }
             _bof = false;
             _eof = false;
+            AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         // r-oledb-odbc/fetch-moves #63-67: on ForwardOnly after Move(100) left BOF=True & EOF=True, MoveNext lands on row index 1 (ID=2).
         if (_bothBofEofAfterForwardMove)
         {
-            if (!TrySeekView(1, out Failure? forwardResumeFail))
+            if (!TrySeekView(1, out MappedProviderError? forwardResumeProvErr, out Failure? forwardResumeFail))
             {
+                if (forwardResumeProvErr is { } forwardResumeErr)
+                {
+                    ReportProviderError(forwardResumeErr);
+                    AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, _activeConnection?.FirstErrorObject, AdoEventStatus.ErrorsOccurred, this);
+                }
                 return forwardResumeFail is not null
                     ? CallResult.Fail(forwardResumeFail)
                     : CallResult.Fail(Failure.NotModelled(
@@ -3977,30 +4141,71 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
             _position = 1;
             ResetChunkState();
+            AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         if (_eof)
         {
+            // r-q2-ado-misc/ado-events-recordset-moves #39-42, r-q2-cursor-dao/errnest-ado-recordset-event-error #30:
+            // MoveNext while already at EOF fires EndOfRecordset -> MoveComplete(13, null, 1) before returning 0x800A0BCD.
+            AdoEvents.EndOfRecordset(_events, this);
+            AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
         // When the current row was self-deleted and just removed from the keyset, the next live row shifted into _position.
         int target = removedCurrent ? _position : (_bof ? 0 : _position + 1);
-        if (!TrySeekView(target, out Failure? fail))
+        if (_effectiveCursorType == 0)
+        {
+            if (wasPending)
+            {
+                // r-q2-expr-sql/demand-ado-events-shapes ar6/ar7 #80/#89: MoveNext right after Open on ForwardOnly
+                // fetches row 0 first (WillChangeRecordset/RecordsetChangeComplete(10, Ok)) before advancing to row 1.
+                AdoEvents.WillChangeRecordset(_events, AdoEventReason.Move, this);
+                AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
+            }
+            AdoEvents.WillChangeRecordset(_events, AdoEventReason.Move, this);
+        }
+        if (!TrySeekView(target, out MappedProviderError? seekProvErr, out Failure? fail))
         {
             if (fail is not null)
             {
+                if (seekProvErr is { } seekErr)
+                {
+                    // r-q2-expr-sql/demand-ado-events-failing-row (bd544953d9.a1) ar2 seq 204-206:
+                    // MoveNext hitting a provider FetchFailure populates Connection.Errors and emits MoveComplete(13, pError, 2).
+                    ReportProviderError(seekErr);
+                    AdoErrorObject? errObj = _activeConnection?.FirstErrorObject;
+                    if (_effectiveCursorType == 0)
+                    {
+                        AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Move, errObj, AdoEventStatus.ErrorsOccurred, this);
+                    }
+                    AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, errObj, AdoEventStatus.ErrorsOccurred, this);
+                }
                 return CallResult.Fail(fail);
+            }
+            if (_effectiveCursorType == 0)
+            {
+                // r-q2-expr-sql/demand-ado-events-failing-row #21[4].3: hitting EOF on ForwardOnly emits
+                // RecordsetChangeComplete(10, null, adStatusErrorsOccurred=2) before EndOfRecordset.
+                AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Move, null, AdoEventStatus.ErrorsOccurred, this);
             }
             _bof = ViewIsEmpty;
             _eof = true;
             _position = target;
             ResetChunkState();
+            AdoEvents.EndOfRecordset(_events, this);
+            AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
+        }
+        if (_effectiveCursorType == 0)
+        {
+            AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
         }
         _bof = false;
         _eof = false;
         _position = target;
         ResetChunkState();
+        AdoEvents.MoveComplete(_events, AdoEventReason.MoveNext, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -4022,11 +4227,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
+        _initialPositionPending = false;
         bool removedCurrent = ConsumeDeletedCurrent();
         if ((!removedCurrent && ViewIsEmpty) || _bof)
         {
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
+        AdoEvents.WillMove(_events, AdoEventReason.MovePrevious, AdoEventStatus.Ok, this);
         int target;
         if (_eof)
         {
@@ -4055,6 +4262,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
             ResetServerValueReadState();
+            AdoEvents.MoveComplete(_events, AdoEventReason.MovePrevious, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         if (!TrySeekView(target, out Failure? fail))
@@ -4067,6 +4275,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _suspendedAfterForwardMoveLast = false;
         _position = target;
         ResetServerValueReadState();
+        AdoEvents.MoveComplete(_events, AdoEventReason.MovePrevious, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -4092,6 +4301,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.Move with a non-numeric NumRecords argument");
         }
+        _initialPositionPending = false;
         if (_effectiveCursorType == 0 && delta < 0)
         {
             // r-oledb-odbc/fetch-moves #48-51: ForwardOnly Move(-1) fails 0x80040E24 and leaves BOF=-1, EOF=0, AbsPos=-2.
@@ -4106,12 +4316,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(err.ComFailure);
         }
         bool removedCurrent = delta != 0 && ConsumeDeletedCurrent();
+        AdoEvents.WillMove(_events, AdoEventReason.Move, AdoEventStatus.Ok, this);
         if (ViewIsEmpty)
         {
             _bof = true;
             _eof = true;
             _suspendedAfterForwardMoveLast = false;
             ResetServerValueReadState();
+            AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         if (delta == 0)
@@ -4124,6 +4336,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 _bothBofEofAfterForwardMove = true;
                 ResetServerValueReadState();
             }
+            AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
 
@@ -4162,6 +4375,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _suspendedAfterForwardMoveLast = false;
             _position = -1;
             ResetServerValueReadState();
+            AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         if (!TrySeekView(target, out Failure? fail))
@@ -4187,6 +4401,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             int afterKnown = ViewKnownCount;
             _position = afterKnown >= 0 ? afterKnown : target;
             ResetServerValueReadState();
+            // r-q2-ado-misc/ado-events-recordset-moves #34-36: Move past end fires EndOfRecordset before MoveComplete.
+            AdoEvents.EndOfRecordset(_events, this);
+            AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         _bof = false;
@@ -4195,6 +4412,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _suspendedAfterForwardMoveLast = false;
         _position = target;
         ResetServerValueReadState();
+        AdoEvents.MoveComplete(_events, AdoEventReason.Move, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -4275,7 +4493,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     public CallResult ReadFieldValue(int ordinal, AdoFieldObject field)
     {
-        if (!IsOpen || (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast)))
+        if (!IsOpen)
+        {
+            ClearConnectionErrors();
+            return field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        EnsureInitialPositionRealized();
+        if (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast))
         {
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
@@ -4317,6 +4541,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 "NotModelled.AdoGetChunkClosed",
                 "Field.GetChunk on a closed Recordset is not recorded"));
         }
+        EnsureInitialPositionRealized();
         if (_isMdb)
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -4548,10 +4773,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Field.Value put on a non-updatable cursor");
         }
+        EnsureInitialPositionRealized();
         if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {
             return seekFail is not null ? CallResult.Fail(seekFail) : field.Fail(AdoErrors.NoCurrentRecord);
         }
+        // r-q2-ado-misc/ado-events-recordset-edit, r-q2-wire/events-ado-recordset, r-q2-cursor-dao/errnest-ado-recordset-event-error:
+        // First field write on an unmodified row wraps WillChangeField/FieldChangeComplete in
+        // WillChangeRecord(adRsnFirstChange=11, 1) / RecordChangeComplete(11, 1); subsequent writes emit only field events.
+        bool firstChange = ks.EditModeValue == 0;
+        if (firstChange)
+        {
+            AdoEvents.WillChangeRecord(_events, AdoEventReason.FirstChange, 1, this);
+        }
+        AdoEvents.WillChangeField(_events, field, this);
         if (!ks.TryWriteValue(ordinal, arg, AdoTypes.Field.Iid, out MappedProviderError? pe, out Failure? refFail))
         {
             if (pe is { } provErr)
@@ -4561,13 +4796,24 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             return CallResult.Fail(refFail!);
         }
+        AdoEvents.FieldChangeComplete(_events, field, null, AdoEventStatus.Ok, this);
+        if (firstChange)
+        {
+            AdoEvents.RecordChangeComplete(_events, AdoEventReason.FirstChange, 1, null, AdoEventStatus.Ok, this);
+        }
         // Note: successful Field.Value assignment intentionally does NOT clear Connection.Errors (r-ado-1b/fields-assign-conversion #199-215).
         return CallResult.Nothing;
     }
 
     public CallResult ReadFieldActualSize(int ordinal, AdoFieldObject field)
     {
-        if (!IsOpen || (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast)))
+        if (!IsOpen)
+        {
+            ClearConnectionErrors();
+            return field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        EnsureInitialPositionRealized();
+        if (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast))
         {
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
@@ -4641,6 +4887,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _fields?.Release();
         _fields = null;
         SetActiveConnectionInternal(null);
+        base.OnFinalRelease();
     }
 }
 

@@ -253,6 +253,10 @@ public static class ComIids
     public static readonly Guid IClassFactory = new("00000001-0000-0000-C000-000000000046");
     public static readonly Guid IErrorInfo = new("1CF2B120-547D-101B-8E65-08002B2BD119");
     public static readonly Guid ISupportErrorInfo = new("DF0B3D60-548F-101B-8E65-08002B2BD119");
+    public static readonly Guid IConnectionPointContainer = new("B196B284-BAB4-101A-B69C-00AA00341D07");
+    public static readonly Guid IEnumConnectionPoints = new("B196B285-BAB4-101A-B69C-00AA00341D07");
+    public static readonly Guid IConnectionPoint = new("B196B286-BAB4-101A-B69C-00AA00341D07");
+    public static readonly Guid IEnumConnections = new("B196B287-BAB4-101A-B69C-00AA00341D07");
 }
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Win32 HRESULT constant names.")]
@@ -267,6 +271,9 @@ public static class HResults
     public const int E_INVALIDARG = unchecked((int)0x80070057);
     public const int CLASS_E_NOAGGREGATION = unchecked((int)0x80040110);
     public const int CLASS_E_CLASSNOTAVAILABLE = unchecked((int)0x80040111);
+    public const int CONNECT_E_NOCONNECTION = unchecked((int)0x80040200);
+    public const int CONNECT_E_ADVISELIMIT = unchecked((int)0x80040201);
+    public const int CONNECT_E_CANNOTCONNECT = unchecked((int)0x80040202);
     public const int DISP_E_UNKNOWNINTERFACE = unchecked((int)0x80020001);
     public const int DISP_E_MEMBERNOTFOUND = unchecked((int)0x80020003);
     public const int DISP_E_PARAMNOTFOUND = unchecked((int)0x80020004);

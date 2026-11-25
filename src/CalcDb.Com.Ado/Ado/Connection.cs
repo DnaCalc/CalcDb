@@ -573,9 +573,15 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private AdoOpenSession? _session;
     private AdoErrorsObject? _errors;
     private PropertiesObject? _properties;
+    private readonly ConnectionPoint _events;
 
-    private ConnectionObject() : base(Decl, Vtable, "ADODB.Connection")
+    private ConnectionObject() : this(new ConnectionPoint(AdoTypes.ConnectionEventsMeta.Guid))
     {
+    }
+
+    private ConnectionObject(ConnectionPoint events) : base(Decl, Vtable, "ADODB.Connection", new ConnectionPointHub(events))
+    {
+        _events = events;
     }
 
     protected override OperationTable Table => Operations;
@@ -585,6 +591,41 @@ internal sealed unsafe class ConnectionObject : AdoObject
     public AdoOpenSession? OpenSession => _session;
 
     public int CursorLocationValue => _cursorLocation;
+
+    internal AdoErrorObject? FirstErrorObject => _errors?.FirstErrorObject;
+
+    internal void EmitWillExecute(
+        string source,
+        int cursorType,
+        int lockType,
+        int options,
+        CommandObject? command,
+        RecordsetObject? recordset) =>
+        AdoEvents.WillExecute(_events, source, cursorType, lockType, options, command, recordset, this);
+
+    internal void EmitExecuteComplete(
+        long recordsAffected,
+        AdoErrorObject? error,
+        int status,
+        CommandObject? command,
+        RecordsetObject? recordset)
+    {
+        if (!_events.HasSinks)
+        {
+            return;
+        }
+        // r-q2-cursor-dao/errado-warning-infomessage #19/#33/#47/#58, r-q2-ado-misc/ado-events-command-identity #55/#86:
+        // ExecuteComplete always delivers a non-null pCommand (explicit Command when used, otherwise a transient synthetic Command).
+        CommandObject? synthetic = command is null ? CommandObject.CreateSynthetic() : null;
+        try
+        {
+            AdoEvents.ExecuteComplete(_events, recordsAffected, error, status, command ?? synthetic, recordset, this);
+        }
+        finally
+        {
+            synthetic?.Release();
+        }
+    }
 
     public void ClearErrors() => ErrorsCollection.Clear();
 
@@ -1109,6 +1150,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return NotImplemented($"Connection.Open with Options={options} (not asked)");
         }
 
+        void EmitWillConnect() => AdoEvents.WillConnect(_events, openText, userArg, passwordArg, options, this);
+
         var initValues = new Dictionary<string, OwnedVariant>(StringComparer.Ordinal);
         bool propsModeModified = false;
         int propsModeValue = 16;
@@ -1177,6 +1220,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                         return NotImplemented($"Connection.Open with case-variant key '{key.Key}' (not asked)");
                     }
                     // r-str-ado-act/ado-connstring-keys kb: unknown ACE key fails with 3170 "Could not find installable ISAM."
+                    EmitWillConnect();
                     return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                         "Could not find installable ISAM.", 5003170, "3170", -69141536);
                 }
@@ -1231,6 +1275,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 // r-oledb-odbc/prop-modes (ma2=2, ma5=15, ma6=11, ma7=5), error-open-failures (fh1/fh4=15):
                 // these modes fail before engine init with Provider 0x80040E21.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailProviderOpen(openText, persistSecurityInfo, HResultErrorsOccurred, MultipleStepDescription);
             }
             if (effectiveMode is not (1 or 3 or 16 or 19))
@@ -1250,6 +1295,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-str-ado-act/ado-open-alt-orders cc, r-ado-1b/conn-set-while-open: missing Data Source -> Provider 0x80040E4D.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailProviderOpen(openText, persistSecurityInfo, HResultAuthFailed, "Authentication failed.");
             }
 
@@ -1264,6 +1310,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 }
                 // r-ado-1b/conn-open-args oc/og: non-Admin user -> ACE 3028.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
                     "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
                     5003028, "3028", -124520301);
@@ -1272,6 +1319,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-ado-1b/conn-open-args ob, r-oledb-odbc/error-open-failures ff: non-empty password -> ACE 3028.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultAuthFailed,
                     "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.",
                     5003028, "3028", -124520301);
@@ -1281,6 +1329,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-ado-1b/conn-datasource-spellings sp_extended: Win32 extended-length prefix -> ACE 3043.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     "Your network access was interrupted. To continue, close the database, and then open it again.",
                     5003043, "3043", -66913278);
@@ -1302,6 +1351,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-act-1-thread/ado-main-sta, r-oledb-odbc/error-open-failures fe: nonexistent directory -> ACE 3044.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     $"'{dataSource}' is not a valid path. Make sure that the path name is spelled correctly and that you are connected to the server on which the file resides.",
                     5003044, "3044", -534774783);
@@ -1311,6 +1361,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 // r-oledb-odbc/error-open-failures fa: nonexistent file -> ACE 3024.
                 DisposeValues(initValues);
+                EmitWillConnect();
                 return FailAceOpen(openText, persistSecurityInfo, HResultFail,
                     $"Could not find file '{dataSource}'.",
                     5003024, "3024", -534578963);
@@ -1442,6 +1493,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 SetInitValue(initValues, "Jet OLEDB:Database Locking Mode", OwnedVariant.FromInt32(knownLockingMode));
             }
 
+            EmitWillConnect();
             _session = new AdoOpenSession(
                 shared,
                 readOnly: effectiveMode == 1,
@@ -1460,6 +1512,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 _properties?.MarkUnrecorded(UnrecordedMdbOpenPropertiesReason);
             }
+            AdoEvents.ConnectComplete(_events, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
         catch
@@ -1489,6 +1542,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         ErrorsCollection.Clear();
         int closedMode = _mode == 0 ? 16 : _mode;
         _properties?.MarkStale(() => AceProperties.CreateClosed(closedMode));
+        if (closing.Failure is null)
+        {
+            AdoEvents.Disconnect(_events, this);
+        }
         return closing;
     }
 
@@ -1540,7 +1597,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(unmodelled!);
         }
         ClearErrors();
-        return Int32(_session.Transactions.Depth);
+        int depth = _session.Transactions.Depth;
+        AdoEvents.BeginTransComplete(_events, depth, null, AdoEventStatus.Ok, this);
+        return Int32(depth);
     }
 
     /// <summary>
@@ -1595,6 +1654,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(unmodelled!);
         }
         ClearErrors();
+        AdoEvents.CommitTransComplete(_events, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -1656,7 +1716,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             return CallResult.Fail(unmodelled!);
         }
-        ClearErrors();
+        // r-q2-cursor-dao/errnest-ado-connection-event-error #38-49: successful RollbackTrans preserves Connection.Errors.
+        AdoEvents.RollbackTransComplete(_events, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -1696,7 +1757,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         int defaultCommandType,
         nint recordsAffectedArg,
         nint optionsArg,
-        string callerName)
+        string callerName,
+        CommandObject? explicitCommand = null)
     {
         AdoOpenSession session = _session!;
         if (string.IsNullOrWhiteSpace(commandText))
@@ -1724,6 +1786,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             cmdType = defaultCommandType;
         }
 
+        void EmitWillExec() => AdoEvents.WillExecute(_events, commandText, -1, -1, options, explicitCommand, null, this);
+
         string effectiveText = cmdType switch
         {
             AdoSqlText.AdCmdTable => "select * from " + commandText,
@@ -1738,8 +1802,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (!AdoSqlText.IsSimpleQueryName(procArg, out string queryName))
             {
+                EmitWillExec();
                 MappedProviderError err = AdoSqlErrors.ExpectedQueryNameAfterExecute();
                 SetProviderError(err.ErrorEntry);
+                EmitFailedExecuteComplete(noRecords, explicitCommand);
                 return CallResult.Fail(err.ComFailure);
             }
             if (session.Queries is null)
@@ -1748,13 +1814,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (session.FindSavedQuery(queryName) is not { } saved)
             {
+                EmitWillExec();
                 MappedProviderError err = AdoSqlErrors.TableOrQueryNotFound(queryName);
                 SetProviderError(err.ErrorEntry);
+                EmitFailedExecuteComplete(noRecords, explicitCommand);
                 return CallResult.Fail(err.ComFailure);
             }
-            return saved.Family is QueryFamily.Select or QueryFamily.Union
-                ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
-                : ExecuteSavedAction(saved);
+            if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
+            {
+                return ExecuteSavedAction(saved);
+            }
+            EmitWillExec();
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
         }
 
         // TableDirect, adCmdTable, SELECT @@IDENTITY, or SELECT SQL -> row-returning.
@@ -1762,7 +1833,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             || AdoSqlText.IsSelectIdentity(effectiveText)
             || AdoSqlText.IsSelect(effectiveText))
         {
-            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
+            EmitWillExec();
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
         }
 
         // adCmdUnknown / adCmdUnspecified: bare local table or saved query name.
@@ -1770,30 +1842,60 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             if (session.Sql.Table(effectiveText) is not null)
             {
-                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg);
+                EmitWillExec();
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
             }
             if (session.FindSavedQuery(effectiveText) is { } saved)
             {
-                return saved.Family is QueryFamily.Select or QueryFamily.Union
-                    ? ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg)
-                    : ExecuteSavedAction(saved);
+                if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
+                {
+                    return ExecuteSavedAction(saved);
+                }
+                EmitWillExec();
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
             }
         }
 
         // Ad-hoc action DML or DDL; non-SQL garbage fails 3129 (r-str-ado-act/ado-execute-results #35).
         if (!DdlParser.IsDdlLeadingKeyword(effectiveText) && !ActionParser.IsAction(effectiveText))
         {
+            EmitWillExec();
             MappedProviderError err = AdoSqlErrors.InvalidSqlStatement();
             SetProviderError(err.ErrorEntry);
+            EmitFailedExecuteComplete(noRecords, explicitCommand);
             return CallResult.Fail(err.ComFailure);
         }
 
+        EmitWillExec();
         return ExecuteAction(
             session,
             effectiveText,
             allowAdoConnectionExecute: string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal),
             noRecords,
-            recordsAffectedArg);
+            recordsAffectedArg,
+            explicitCommand);
+    }
+
+    private void EmitFailedExecuteComplete(bool noRecords, CommandObject? explicitCommand)
+    {
+        if (!_events.HasSinks)
+        {
+            return;
+        }
+        RecordsetObject? failedRs = noRecords ? null : RecordsetObject.CreateClosedForExecute(this);
+        try
+        {
+            EmitExecuteComplete(
+                0,
+                ErrorsCollection.FirstErrorObject,
+                AdoEventStatus.ErrorsOccurred,
+                explicitCommand,
+                failedRs);
+        }
+        finally
+        {
+            failedRs?.Release();
+        }
     }
 
     private CallResult ExecuteRowReturning(
@@ -1803,7 +1905,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         string effectiveText,
         int cmdType,
         bool noRecords,
-        nint recordsAffectedArg)
+        nint recordsAffectedArg,
+        CommandObject? explicitCommand)
     {
         int loc = CursorLocationValue;
         bool isClient = loc == 3;
@@ -1832,6 +1935,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             if (providerError is { } err)
             {
                 SetProviderError(err.ErrorEntry);
+                EmitFailedExecuteComplete(noRecords, explicitCommand);
                 return CallResult.Fail(err.ComFailure);
             }
             return CallResult.Fail(refusal!);
@@ -1847,6 +1951,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (noRecords)
         {
             rowSource.Dispose();
+            EmitExecuteComplete(0, null, AdoEventStatus.Ok, explicitCommand, null);
             return Results.NullObject;
         }
 
@@ -1855,6 +1960,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return CallResult.Fail(createRefusal!);
         }
+        EmitExecuteComplete(0, null, AdoEventStatus.Ok, explicitCommand, rs);
         CallResult result = Object(rs);
         rs.Release();
         return result;
@@ -1883,7 +1989,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         string sql,
         bool allowAdoConnectionExecute,
         bool noRecords,
-        nint recordsAffectedArg)
+        nint recordsAffectedArg,
+        CommandObject? explicitCommand)
     {
         if (session.SchemaFailure is { } stale)
         {
@@ -1950,6 +2057,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             if (mapped is { } err)
             {
                 SetProviderError(err.ErrorEntry);
+                EmitFailedExecuteComplete(noRecords, explicitCommand);
                 return CallResult.Fail(err.ComFailure);
             }
             return CallResult.Fail(unmodelled!);
@@ -1969,10 +2077,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
         ClearErrors();
         if (noRecords)
         {
+            EmitExecuteComplete(affected, null, AdoEventStatus.Ok, explicitCommand, null);
             return Results.NullObject;
         }
 
         RecordsetObject closed = RecordsetObject.CreateClosedForExecute(this);
+        EmitExecuteComplete(affected, null, AdoEventStatus.Ok, explicitCommand, closed);
         CallResult result = Object(closed);
         closed.Release();
         return result;
@@ -2095,6 +2205,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         UpdateStateAfterFailedOpen(openText, persistSecurityInfo);
         ErrorsCollection.Replace(new AdoErrorEntry(scode, AceEngineSource, description, "", helpContext, sqlState, nativeError));
+        // r-q2-ado-misc/ado-events-connection-lifecycle #63-65: failed Open delivers ConnectComplete with pError=null and adStatus=adStatusErrorsOccurred (2).
+        AdoEvents.ConnectComplete(_events, null, AdoEventStatus.ErrorsOccurred, this);
         return CallResult.Fail(AceOpenFailure(scode, description, helpContext));
     }
 
@@ -2102,6 +2214,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         UpdateStateAfterFailedOpen(openText, persistSecurityInfo);
         ErrorsCollection.Replace(new AdoErrorEntry(scode, ProviderSource, description, "", ProviderHelpContext, "", scode));
+        AdoEvents.ConnectComplete(_events, null, AdoEventStatus.ErrorsOccurred, this);
         return CallResult.Fail(ProviderFailure(scode, description, Decl.Iid));
     }
 
@@ -2333,6 +2446,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         _session = null;
         _errors?.Release();
         _properties?.Release();
+        base.OnFinalRelease();
     }
 }
 

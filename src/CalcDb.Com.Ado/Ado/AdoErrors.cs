@@ -78,6 +78,9 @@ internal sealed unsafe class AdoErrorsObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
+    internal AdoErrorObject? FirstErrorObject =>
+        _entries.Length > 0 ? (_wrappers[0] ??= new AdoErrorObject(_entries[0])) : null;
+
     public void Clear() => Replace([]);
 
     public void Replace(params AdoErrorEntry[] entries)
