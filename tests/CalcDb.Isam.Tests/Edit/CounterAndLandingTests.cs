@@ -277,17 +277,51 @@ public sealed class CounterAndLandingTests
             Assert.Equal(beforeOverflow, rig3.File.Image.Snapshot());
         }
 
-        // 3. Jet 4 MDB: page 0 offset 3586 stays untouched
+        // 4. Jet 4 MDB: page 0 [3586, 3588) steps as u16LE (+1, carry 0x01FF -> 0x0200, refuse 0xFFFF; evidence/r-q40-mdb-counter)
         using (var mdb = new Rig(Jet4MdbFixture))
         {
             (TableDefinition lv, _) = mdb.Table("Lv");
             (EditFrame frame, TableCursor cursor) = mdb.OpenTable("Lv");
             cursor.MoveFirst();
-            byte beforeByte = mdb.Before[D.Header.CommitCounter.Offset];
+            ulong beforeCounter = D.Header.CommitCounter.Read(mdb.Before.AsSpan(0, D.PageSize));
             Assert.True(frame.Edit().Succeeded);
             Assert.True(frame.Assign(Col(lv, "V"), I4(77)).Succeeded);
             Assert.True(frame.Update().Succeeded);
-            Assert.Equal(beforeByte, mdb.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+            Assert.Equal(beforeCounter + 1, D.Header.CommitCounter.Read(mdb.File.Image.Snapshot().AsSpan(0, D.PageSize)));
+        }
+
+        using (var mdbCarry = new Rig(Jet4MdbFixture))
+        {
+            byte[] page0 = mdbCarry.File.Image.Snapshot().AsSpan(0, D.PageSize).ToArray();
+            D.Header.CommitCounter.Write(page0, 0x01FF);
+            WriteRawPage(mdbCarry.File, 0, page0);
+            (TableDefinition lv, _) = mdbCarry.Table("Lv");
+            (EditFrame frame, TableCursor cursor) = mdbCarry.OpenTable("Lv");
+            cursor.MoveFirst();
+            Assert.True(frame.Edit().Succeeded);
+            Assert.True(frame.Assign(Col(lv, "V"), I4(78)).Succeeded);
+            Assert.True(frame.Update().Succeeded);
+            byte[] afterCarry = mdbCarry.File.Image.Snapshot();
+            Assert.Equal(0x0200UL, D.Header.CommitCounter.Read(afterCarry.AsSpan(0, D.PageSize)));
+            Assert.Equal(0x00, afterCarry[D.Header.CommitCounter.Offset]);
+            Assert.Equal(0x02, afterCarry[D.Header.CommitCounter.Offset + 1]);
+        }
+
+        using (var mdbOverflow = new Rig(Jet4MdbFixture))
+        {
+            byte[] page0 = mdbOverflow.File.Image.Snapshot().AsSpan(0, D.PageSize).ToArray();
+            D.Header.CommitCounter.Write(page0, ushort.MaxValue);
+            WriteRawPage(mdbOverflow.File, 0, page0);
+            byte[] beforeOverflow = mdbOverflow.File.Image.Snapshot();
+            (TableDefinition lv, _) = mdbOverflow.Table("Lv");
+            (EditFrame frame, TableCursor cursor) = mdbOverflow.OpenTable("Lv");
+            cursor.MoveFirst();
+            Assert.True(frame.Edit().Succeeded);
+            Assert.True(frame.Assign(Col(lv, "V"), I4(79)).Succeeded);
+            UpdateOutcome overflow = frame.Update();
+            Assert.Equal(MutationOpen.Publication, overflow.Open);
+            Assert.Contains("65535", overflow.Detail, StringComparison.Ordinal);
+            Assert.Equal(beforeOverflow, mdbOverflow.File.Image.Snapshot());
         }
     }
 

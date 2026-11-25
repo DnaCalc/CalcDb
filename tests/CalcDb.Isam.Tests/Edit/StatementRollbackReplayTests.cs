@@ -45,7 +45,6 @@ public sealed partial class StatementRollbackReplayTests
     public void All_r_q29_records_match_ACE_kept_pages_byte_for_byte(string question, string recordFileName)
     {
         RecordPlan plan = LoadPlan(question, recordFileName);
-        bool isMdb = question.Contains("-mdb-", StringComparison.Ordinal);
         bool isLive = question.EndsWith("-live", StringComparison.Ordinal);
         string targetName = question.StartsWith("exp-sel-", StringComparison.Ordinal) ? "An" : "T";
 
@@ -189,16 +188,12 @@ public sealed partial class StatementRollbackReplayTests
             }
 
             byte[] afterNextImage = nextSession.Image.Snapshot();
-            // On Jet 4 MDB, normal INSERT + Close commit counter at page 0 offset 3586 is R-CRASH-1 open
-            // (same contract as AutonumberTxnReplayTests); every other kept byte (including TableDef, data, index,
-            // and page 1) must match ACE byte for byte.
             AssertMatchesCheckpoint(
                 question,
                 recordFileName,
                 "after-next",
                 plan.AfterNext!,
-                afterNextImage,
-                ignoreMdbCommitCounter: isMdb);
+                afterNextImage);
         }
     }
 
@@ -1862,11 +1857,9 @@ public sealed partial class StatementRollbackReplayTests
         string recordFileName,
         string label,
         Checkpoint expected,
-        byte[] actual,
-        bool ignoreMdbCommitCounter = false)
+        byte[] actual)
     {
         Assert.Equal(expected.Length, actual.Length);
-        int commitCounterOff = D.Header.CommitCounter.Offset;
         List<string> diffs = [];
         foreach ((long offset, byte[] expectedBytes) in expected.Reads)
         {
@@ -1874,10 +1867,6 @@ public sealed partial class StatementRollbackReplayTests
             for (int i = 0; i < expectedBytes.Length; i++)
             {
                 long abs = offset + i;
-                if (ignoreMdbCommitCounter && abs == commitCounterOff)
-                {
-                    continue;
-                }
                 if (mine[i] != expectedBytes[i])
                 {
                     long page = abs / D.PageSize;

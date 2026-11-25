@@ -301,8 +301,10 @@ public sealed class PublicationSliceTests
     }
 
     [Fact]
-    public void CommitCounterDelta_carries_accdb_u16LE_and_guards_jet4_mdb_low_byte_255()
+    public void CommitCounterDelta_carries_u16LE_and_guards_overflow_on_accdb_and_jet4_mdb()
     {
+        var delta = new CommitCounterDelta(D);
+
         // ACCDB carries across 255 as u16LE (evidence/r-q19-growth-open/split-uncovered-right-leaf-below: 0x05b5 -> ... -> 0x093b).
         byte[] accdb = new byte[D.PageSize];
         D.Header.MagicBytes.CopyTo(accdb);
@@ -310,31 +312,33 @@ public sealed class PublicationSliceTests
         D.Header.Version.Write(accdb, 2);
         D.Header.CommitCounter.Write(accdb, 0x05FF);
 
-        var accdbDelta = new CommitCounterDelta(D);
-        accdbDelta.Apply(accdb);
+        delta.Apply(accdb);
         Assert.Equal(0x0600UL, D.Header.CommitCounter.Read(accdb));
         Assert.Equal((byte)0x00, accdb[D.Header.CommitCounter.Offset]);
         Assert.Equal((byte)0x06, accdb[D.Header.CommitCounter.Offset + 1]);
 
         D.Header.CommitCounter.Write(accdb, ushort.MaxValue);
-        Assert.Throws<FormatViolationException>(() => accdbDelta.Apply(accdb));
+        Assert.Throws<FormatViolationException>(() => delta.Apply(accdb));
 
-        // Jet 4 MDB (allowJet4Mdb=true): increments low byte while preserving byte 3587 (0x0108 -> 0x0109),
-        // and still refuses when low byte is 255 (0x01FF) since MDB carry past 255 is unobserved.
+        // Jet 4 MDB carries across 255 as u16LE (evidence/r-q40-mdb-counter/carry-u16-mdb: 0x01FE -> 0x01FF -> 0x0200 -> 0x0201)
+        // and refuses at 0xFFFF (wrap past 65,535 is unobserved).
         byte[] mdb = new byte[D.PageSize];
         D.Header.MagicBytes.CopyTo(mdb);
         D.Header.JetSignature.CopyTo(mdb.AsSpan(D.Header.SignatureOffset));
         D.Header.Version.Write(mdb, 1);
-        D.Header.CommitCounter.Write(mdb, 0x0108);
+        D.Header.CommitCounter.Write(mdb, 0x01FE);
 
-        var mdbDelta = new CommitCounterDelta(D, allowJet4Mdb: true);
-        mdbDelta.Apply(mdb);
-        Assert.Equal(0x0109UL, D.Header.CommitCounter.Read(mdb));
-        Assert.Equal((byte)0x09, mdb[D.Header.CommitCounter.Offset]);
-        Assert.Equal((byte)0x01, mdb[D.Header.CommitCounter.Offset + 1]);
-
-        D.Header.CommitCounter.Write(mdb, 0x01FF);
-        Assert.Throws<FormatViolationException>(() => mdbDelta.Apply(mdb));
+        delta.Apply(mdb);
         Assert.Equal(0x01FFUL, D.Header.CommitCounter.Read(mdb));
+        delta.Apply(mdb);
+        Assert.Equal(0x0200UL, D.Header.CommitCounter.Read(mdb));
+        Assert.Equal((byte)0x00, mdb[D.Header.CommitCounter.Offset]);
+        Assert.Equal((byte)0x02, mdb[D.Header.CommitCounter.Offset + 1]);
+        delta.Apply(mdb);
+        Assert.Equal(0x0201UL, D.Header.CommitCounter.Read(mdb));
+
+        D.Header.CommitCounter.Write(mdb, ushort.MaxValue);
+        Assert.Throws<FormatViolationException>(() => delta.Apply(mdb));
+        Assert.Equal((ulong)ushort.MaxValue, D.Header.CommitCounter.Read(mdb));
     }
 }
