@@ -256,7 +256,7 @@ public sealed record HeaderRules
     public required FieldRule SortReserved { get; init; }
     public required FieldRule SortVersion { get; init; }
 
-    /// <summary>The ACCDB commit counter at page 0 offset 3586 (R-CRASH-1 CRASH-ORDER) and its 2-byte transfer bracket width.</summary>
+    /// <summary>The Jet 4 MDB / ACCDB commit counter at page 0 offset 3586 (R-CRASH-1 CRASH-ORDER) and its 2-byte transfer bracket width.</summary>
     public required FieldRule CommitCounter { get; init; }
     public required int CommitCounterBracketBytes { get; init; }
 
