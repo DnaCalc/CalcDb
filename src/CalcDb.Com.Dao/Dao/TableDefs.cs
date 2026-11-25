@@ -91,6 +91,60 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         }
     }
 
+    /// <summary>Return the currently held member wrapper for <paramref name="name"/>, or null if none is held.</summary>
+    public DaoObject? FindHeld(string name) =>
+        _lookup.Find(name) is int ordinal && _held.TryGetValue(ordinal, out DaoObject? held) ? held : null;
+
+    /// <summary>Snapshot all currently held members in ordinal order so an owner can rebind or invalidate them.</summary>
+    public IReadOnlyList<(string Name, DaoObject Wrapper)> SnapshotHeld()
+    {
+        if (_held.Count == 0)
+        {
+            return [];
+        }
+        List<(string Name, DaoObject Wrapper)> result = new(_held.Count);
+        foreach ((int ordinal, DaoObject wrapper) in _held.OrderBy(kv => kv.Key))
+        {
+            if ((uint)ordinal < (uint)_names.Count)
+            {
+                result.Add((_names[ordinal], wrapper));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Replace this collection's membership in place while keeping the collection's COM identity
+    /// (<c>r-cat-1/held-sql-replace</c>, <c>r-dao-1-err-1/query-sql-rewrite</c>: <c>QueryDef.Parameters</c> stays
+    /// the same COM object across <c>qd.SQL = ...</c>, preserving surviving held <c>Parameter</c> wrappers).
+    /// </summary>
+    public void Rebind(
+        IReadOnlyList<string> names,
+        Func<DefinitionCollection, int, DaoObject> make,
+        IReadOnlyDictionary<int, DaoObject>? preservedHeld = null,
+        string? gap = null,
+        (int Number, string Text)? countDenied = null,
+        string? itemGap = null)
+    {
+        _names = names;
+        _lookup = new CollectionNames(names);
+        _make = make;
+        Gap = gap;
+        CountDenied = countDenied;
+        ItemGap = itemGap;
+        _held.Clear();
+        if (preservedHeld is not null)
+        {
+            foreach ((int ordinal, DaoObject wrapper) in preservedHeld)
+            {
+                if ((uint)ordinal < (uint)_names.Count)
+                {
+                    _held[ordinal] = wrapper;
+                }
+            }
+        }
+    }
+
     /// <param name="holdsDatabase">False for the Database's own TableDefs, which the Database keeps (a reference back would be a cycle).</param>
     public DefinitionCollection(InterfaceDecl decl, string source, DatabaseObject database, IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, bool holdsDatabase = true)
         : this(decl, Shape(decl), source, database, names, make, holdsDatabase)
@@ -114,14 +168,20 @@ internal sealed unsafe class DefinitionCollection : DaoObject
 
     private readonly bool _holdsDatabase;
 
-    /// <summary>The collection's Append (TableDefs.Append, W-07/native-metadata-write); null where the slice has none.</summary>
+    /// <summary>The collection's Append (TableDefs.Append, QueryDefs.Append); null where the slice has none.</summary>
     public Func<DefinitionCollection, nint, CallResult>? Appender { get; init; }
+
+    /// <summary>The collection's Delete (QueryDefs.Delete, W-07/saved-definition); null where the slice has none.</summary>
+    public Func<DefinitionCollection, nint, CallResult>? Deleter { get; init; }
+
+    /// <summary>When set and returning true, the collection's owner (e.g. a deleted QueryDef) is invalid -> 3420.</summary>
+    public Func<bool>? IsOwnerInvalid { get; init; }
 
     /// <summary>The failure every member gives instead of an answer (number and text), or null.</summary>
     public (int Number, string Text)? Denied { get; init; }
 
     /// <summary>A named gap: when set, Count and Item give it as not implemented (a membership CalcDb cannot yet decide).</summary>
-    public string? Gap { get; init; }
+    public string? Gap { get; set; }
 
     /// <summary>
     /// The source of the 3420 a member gives after its Database closed, when it is the owner's rather than the
@@ -149,12 +209,12 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     public bool NameEndsAtNul { get; init; }
 
     /// <summary>ACE's failure of Count alone (Parameters.Count 3060, r-sql-1/b-parameters), or null.</summary>
-    public (int Number, string Text)? CountDenied { get; init; }
+    public (int Number, string Text)? CountDenied { get; set; }
 
     /// <summary>A named gap of Item alone, when Count answers (or fails as ACE does) and Item is not recorded.</summary>
-    public string? ItemGap { get; init; }
+    public string? ItemGap { get; set; }
 
-    public override bool Invalid => _database.Closed;
+    public override bool Invalid => _database.Closed || (IsOwnerInvalid?.Invoke() ?? false);
 
     public DatabaseObject Database => _database;
 
@@ -178,6 +238,10 @@ internal sealed unsafe class DefinitionCollection : DaoObject
                 {
                     operations = operations.Method("Append", (self, args) => { nint item = args[0]; return Live(self, c => c.Appender is { } append ? append(c, item) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Append"))); });
                 }
+                if (decl.MembersNamed("Delete").Length > 0)
+                {
+                    operations = operations.Method("Delete", (self, args) => { nint name = args[0]; return Live(self, c => c.Deleter is { } delete ? delete(c, name) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Delete"))); });
+                }
                 shape = (DualEntries.Build(decl), operations);
                 Shapes[decl] = shape;
             }
@@ -188,7 +252,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     private static CallResult Live(ComObject self, Func<DefinitionCollection, CallResult> op)
     {
         var c = (DefinitionCollection)self;
-        if (c._database.Closed)
+        if (c.Invalid)
         {
             return CallResult.Fail(Failure.Dao(3420, c.ClosedSource ?? c.Source, DaoErrors.ObjectInvalid));
         }

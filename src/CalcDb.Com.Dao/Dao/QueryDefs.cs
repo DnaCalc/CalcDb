@@ -64,7 +64,9 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private string _draftName = "";
     private string _rawSql = "";
     private string _connect = "";
-    private bool _createdInSession;
+    private bool _deleted;
+    private int? _sessionTypeOverride;
+    private string? _savedSqlOverride;
     private DefinitionCollection? _parameters;
     private PropertiesObject? _properties;
     private BoundSelect? _plan;
@@ -75,14 +77,21 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private NativeVariant?[] _values = [];
 
     /// <summary>Wrap an already-saved QueryDef owned by <paramref name="owner"/> (or created in this session).</summary>
-    public QueryDefObject(DefinitionCollection? owner, DatabaseObject database, SavedQuery query, bool createdInSession = false)
+    public QueryDefObject(
+        DefinitionCollection? owner,
+        DatabaseObject database,
+        SavedQuery query,
+        bool createdInSession = false,
+        int? sessionTypeOverride = null,
+        string? savedSqlOverride = null)
         : base(Decl, Vtable, database.Engine, "DAO.QueryDef")
     {
         _database = database;
         _owner = owner;
         _mode = QueryDefMode.Saved;
         _query = query;
-        _createdInSession = createdInSession;
+        _sessionTypeOverride = sessionTypeOverride ?? (createdInSession ? 0 : null);
+        _savedSqlOverride = savedSqlOverride;
         if (owner is not null)
         {
             owner.AddRef();
@@ -115,6 +124,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     public QueryDefMode Mode => _mode;
 
+    public int? ObjectId => _query?.Entry.Id;
+
+    public int? SessionTypeOverride => _sessionTypeOverride;
+
     public string DraftName => _draftName;
 
     public string DraftSql => _rawSql;
@@ -139,9 +152,16 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     private DatabaseObject Database => _database;
 
-    public override bool Invalid => Database.Closed;
+    public override bool Invalid => _deleted || Database.Closed;
 
     protected override OperationTable Table => Operations;
+
+    /// <summary>
+    /// Mark this saved QueryDef as deleted by <c>QueryDefs.Delete</c>: every subsequent member access on this
+    /// wrapper and on its held <c>Parameters</c>, <c>Parameter</c>, <c>Fields</c>, <c>Field</c>, and <c>Properties</c>
+    /// fails 3420 (<c>r-cat-1/held-querydef-lifetime</c>, <c>r-def-cursor-dao/err-held-querydef-after-delete</c>).
+    /// </summary>
+    public void MarkDeleted() => _deleted = true;
 
     /// <summary>
     /// Transition a Draft QueryDef to Saved in place when <c>QueryDefs.Append(draft)</c> publishes it, preserving
@@ -151,7 +171,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     {
         _mode = QueryDefMode.Saved;
         _query = saved;
-        _createdInSession = true;
+        _sessionTypeOverride = 0;
+        _savedSqlOverride = null;
         _stored = _database.StoredProperties(saved.Entry, out _storedFailure);
         _properties?.Release();
         _properties = null;
@@ -164,6 +185,150 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
     }
 
+    /// <summary>
+    /// Apply a published <c>QueryDef.SQL</c> put to this live saved wrapper: keeps pre-change session <c>Type</c>
+    /// until reopen (<c>r-cat-1b/qd-sql-change-type-tracking</c>, <c>r-q39/sql-put-type-change-accdb</c>), keeps the
+    /// verbatim SQL until reopen (<c>r-cat-1/held-sql-replace</c>, <c>r-dao-1-err-1/query-sql-rewrite</c>), reloads
+    /// the catalog row (<c>LastUpdated</c>) and <c>MSysQueries</c> plan, and rebinds held <c>Parameters</c> in place
+    /// so the collection keeps its COM identity, surviving held <c>Parameter</c> objects keep their identity, old
+    /// <c>Type</c>, and old <c>Value</c>, and removed <c>Parameter</c> objects become permanently invalid (3420).
+    /// </summary>
+    public void ApplySavedSqlUpdate(SavedQuery updated, string verbatimSql)
+    {
+        _sessionTypeOverride ??= _query?.Family is { } oldFamily ? (int)oldFamily : null;
+        _query = updated;
+        _savedSqlOverride = verbatimSql;
+        _stored = _database.StoredProperties(updated.Entry, out _storedFailure);
+        _properties?.Release();
+        _properties = null;
+        Opened = false;
+
+        IReadOnlyList<(string Name, DaoObject Wrapper)> priorHeld = _parameters?.SnapshotHeld() ?? [];
+        List<(string Name, ParameterObject Param, NativeVariant? Value)> priorParams = new(priorHeld.Count);
+        HashSet<int> transferredValueIndices = [];
+        foreach ((string name, DaoObject wrapper) in priorHeld)
+        {
+            if (wrapper is ParameterObject param)
+            {
+                NativeVariant? existingValue = null;
+                if ((uint)param.BoundIndex < (uint)_values.Length && transferredValueIndices.Add(param.BoundIndex))
+                {
+                    existingValue = _values[param.BoundIndex];
+                    _values[param.BoundIndex] = null;
+                }
+                priorParams.Add((name, param, existingValue));
+            }
+        }
+
+        for (int i = 0; i < _values.Length; i++)
+        {
+            if (_values[i] is { } leftover)
+            {
+                SqlParameters.Release(ref leftover);
+                _values[i] = null;
+            }
+        }
+        _values = [];
+        _plan?.Dispose();
+        _plan = null;
+        _action?.Dispose();
+        _action = null;
+        _planFailure = null;
+        _planMade = false;
+
+        if (_parameters is null)
+        {
+            return;
+        }
+
+        QueryFamily? family = EffectiveFamily;
+        if (family is QueryFamily.PassThrough or QueryFamily.DataDefinition)
+        {
+            InvalidatePriorParameters(priorParams);
+            _parameters.Rebind([], static (_, _) => throw new InvalidOperationException("no parameters"));
+            return;
+        }
+
+        Plan();
+        if (BoundParameters is not { } newBound)
+        {
+            InvalidatePriorParameters(priorParams);
+            string gap = _planFailure is { } f
+                ? $"the Parameters of '{CurrentName}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
+                : $"the Parameters of a {family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)";
+            _parameters.Rebind([], static (_, _) => throw new InvalidOperationException("no parameters"), gap: gap);
+            return;
+        }
+
+        Dictionary<string, int> newByName = new(newBound.Count, StringComparer.OrdinalIgnoreCase);
+        for (int b = 0; b < newBound.Count; b++)
+        {
+            newByName.TryAdd(Unbracketed(newBound[b].Name), b);
+        }
+
+        List<string> newNames = new(newBound.Count);
+        List<Sql.QueryParameter> effectiveParams = new(newBound.Count);
+        List<int> boundIndices = new(newBound.Count);
+        Dictionary<int, DaoObject> preserved = [];
+        HashSet<int> usedNewBound = [];
+
+        foreach ((string oldName, ParameterObject param, NativeVariant? oldValue) in priorParams)
+        {
+            if (newByName.TryGetValue(oldName, out int newBoundIndex) && usedNewBound.Add(newBoundIndex))
+            {
+                int collectionOrdinal = newNames.Count;
+                newNames.Add(oldName);
+                effectiveParams.Add(param.ParameterInfo);
+                boundIndices.Add(newBoundIndex);
+                param.Rebind(newBoundIndex);
+                preserved[collectionOrdinal] = param;
+                if (oldValue is { } carried)
+                {
+                    _values[newBoundIndex] = carried;
+                }
+            }
+            else
+            {
+                param.Invalidate();
+                if (oldValue is { } dropped)
+                {
+                    SqlParameters.Release(ref dropped);
+                }
+            }
+        }
+
+        for (int b = 0; b < newBound.Count; b++)
+        {
+            if (usedNewBound.Add(b))
+            {
+                newNames.Add(Unbracketed(newBound[b].Name));
+                effectiveParams.Add(newBound[b]);
+                boundIndices.Add(b);
+            }
+        }
+
+        SqlFailure? declarations = _plan?.ParametersFailure ?? _action?.ParametersFailure;
+        _parameters.Rebind(
+            newNames,
+            (c, i) => new ParameterObject(c, this, effectiveParams[i], boundIndices[i]),
+            preservedHeld: preserved,
+            gap: declarations is { IsNotModelled: true } open ? $"{open.NotModelled}: {open.Message}" : null,
+            countDenied: declarations is { IsNotModelled: false } ace ? (ace.Number, ace.Message) : null,
+            itemGap: declarations is { IsNotModelled: false } ? "Parameters.Item of a statement declaring one name with two types (Count fails 3060; Item is not recorded)" : null);
+    }
+
+    private static void InvalidatePriorParameters(List<(string Name, ParameterObject Param, NativeVariant? Value)> priorParams)
+    {
+        foreach ((_, ParameterObject param, NativeVariant? oldValue) in priorParams)
+        {
+            param.Invalidate();
+            if (oldValue is { } dropped)
+            {
+                SqlParameters.Release(ref dropped);
+            }
+        }
+    }
+
     private static CallResult Live(ComObject self, Func<QueryDefObject, CallResult> op)
     {
         var q = (QueryDefObject)self;
@@ -172,11 +337,12 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     private CallResult ReadType()
     {
-        // r-cat-1b/qd-view-*, r-fix-cat-txn/qd-view-writable-reopen, r-fix-expr-sql/querydef-create-texts-reopen:
-        // a QueryDef created in the current session reads Type = 0 (dbQSelect) until the database is closed and reopened.
-        if (_mode == QueryDefMode.Saved && _createdInSession)
+        // r-cat-1b/qd-view-*, r-cat-1b/qd-sql-change-type-tracking, r-q39/sql-put-type-change-accdb:
+        // a QueryDef created in the current session reads Type = 0 until reopen; a saved QueryDef whose SQL changes
+        // family keeps its pre-change session Type until the database is closed and reopened.
+        if (_mode == QueryDefMode.Saved && _sessionTypeOverride is int sessionType)
         {
-            return Int16(0);
+            return Int16(sessionType);
         }
         if (_mode == QueryDefMode.Draft)
         {
@@ -215,13 +381,13 @@ internal sealed unsafe class QueryDefObject : DaoObject
 
     private CallResult PutSql(nint value)
     {
-        if (_mode == QueryDefMode.Saved)
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefSqlPut", "QueryDef.SQL put on a saved QueryDef (stretch 2 of W-07/saved-definition)"));
-        }
         if (!TryReadText(value, out string text))
         {
             return Fail(3421, DaoErrors.ConversionError);
+        }
+        if (_mode == QueryDefMode.Saved)
+        {
+            return Database.UpdateQueryDefSql(this, _query!, text);
         }
         _rawSql = text;
         ResetPlan();
@@ -312,6 +478,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         if (_mode != QueryDefMode.Saved)
         {
             return Text(_rawSql);
+        }
+        if (_savedSqlOverride is not null)
+        {
+            return Text(_savedSqlOverride);
         }
         RenderedSql sql = QuerySql.Render(_query!);
         return sql.Text is { } text ? Text(text) : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"QueryDef.SQL of '{_query!.Name}': {sql.NotModelled}"));
@@ -416,7 +586,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         if (family is QueryFamily.Update or QueryFamily.Delete or QueryFamily.Append or QueryFamily.MakeTable
             or QueryFamily.DataDefinition or QueryFamily.PassThrough)
         {
-            var empty = new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", Database, [], (c, i) => throw new InvalidOperationException("no fields"));
+            var empty = new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", Database, [], (c, i) => throw new InvalidOperationException("no fields"))
+            {
+                IsOwnerInvalid = () => Invalid,
+            };
             CallResult emptyResult = Object(empty);
             empty.Release();
             return emptyResult;
@@ -498,6 +671,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
             return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
                 ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+                IsOwnerInvalid = () => Invalid,
             };
         }
         Plan();
@@ -506,6 +680,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
             return _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [], (c, i) => throw new InvalidOperationException("no parameters"))
             {
                 ClosedSource = "DAO.QueryDef",
+                IsOwnerInvalid = () => Invalid,
                 Gap = _planFailure is { } f
                     ? $"the Parameters of '{CurrentName}' whose SQL does not bind here: {f.NotModelled ?? f.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)} {f.Message}"
                     : $"the Parameters of a {family?.ToString() ?? "unclassified"} query (the binder reads SELECT; W-07/actions)",
@@ -513,9 +688,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
         SqlFailure? declarations = _plan?.ParametersFailure ?? _action?.ParametersFailure;
         _parameters = new DefinitionCollection(DaoTypes.Parameters, "DAO.Parameters", Database, [.. parameters.Select(p => Unbracketed(p.Name))],
-            (c, i) => new ParameterObject(c, this, i))
+            (c, i) => new ParameterObject(c, this, parameters[i], i))
         {
             ClosedSource = "DAO.QueryDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+            IsOwnerInvalid = () => Invalid,
             Gap = declarations is { IsNotModelled: true } open ? $"{open.NotModelled}: {open.Message}" : null,
             CountDenied = declarations is { IsNotModelled: false } ace ? (ace.Number, ace.Message) : null,
             ItemGap = declarations is { IsNotModelled: false } ? "Parameters.Item of a statement declaring one name with two types (Count fails 3060; Item is not recorded)" : null,
@@ -578,40 +754,50 @@ internal sealed unsafe class ParameterObject : DaoObject
     private static readonly InterfaceDecl Decl = DaoTypes.Parameter;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Live(self, p => Text(p.Parameter.Name)))
-        .Get("Type", (self, args) => Live(self, p => Int16(p.Parameter.DaoType)))
-        .Get("Direction", (self, args) => Live(self, p => p.Parameter.Declared ? Int16(1) : CallResult.Fail(Failure.NotModelled("NotModelled.ParameterDirection", "Direction of an implicit parameter (not recorded)"))))
-        .Get("Value", (self, args) => Live(self, p => p._query.ParameterValue(p._index) is { } value ? SqlResults.Of(value, "Parameter.Value") : CallResult.OfScalar(VarType.Empty, 0)))
+        .Get("Name", (self, args) => Live(self, p => Text(p._parameter.Name)))
+        .Get("Type", (self, args) => Live(self, p => Int16(p._parameter.DaoType)))
+        .Get("Direction", (self, args) => Live(self, p => p._parameter.Declared ? Int16(1) : CallResult.Fail(Failure.NotModelled("NotModelled.ParameterDirection", "Direction of an implicit parameter (not recorded)"))))
+        .Get("Value", (self, args) => Live(self, p => p._query.ParameterValue(p._boundIndex) is { } value ? SqlResults.Of(value, "Parameter.Value") : CallResult.OfScalar(VarType.Empty, 0)))
         .Put("Value", (self, args) => { nint value = args[^1]; return Live(self, p => p.Assign(value)); });
 
     private readonly DefinitionCollection _owner;
     private readonly QueryDefObject _query;
-    private readonly int _index;
+    private readonly Sql.QueryParameter _parameter;
+    private int _boundIndex;
+    private bool _invalidated;
 
-    public ParameterObject(DefinitionCollection owner, QueryDefObject query, int index) : base(Decl, Vtable, owner.Engine, "DAO.Parameter")
+    public ParameterObject(DefinitionCollection owner, QueryDefObject query, Sql.QueryParameter parameter, int boundIndex) : base(Decl, Vtable, owner.Engine, "DAO.Parameter")
     {
         _owner = owner;
         _query = query;
-        _index = index;
+        _parameter = parameter;
+        _boundIndex = boundIndex;
         owner.AddRef();
         query.AddRef(); // its value lives on the QueryDef (CAT-V: one instance's values are shared by its Parameters)
     }
 
-    private Sql.QueryParameter Parameter => _query.Parameter(_index);
+    public Sql.QueryParameter ParameterInfo => _parameter;
+
+    public int BoundIndex => _boundIndex;
+
+    public void Rebind(int boundIndex) => _boundIndex = boundIndex;
+
+    /// <summary>Permanently invalidate this Parameter wrapper after a SQL rewrite drops its name (r-dao-1-err-1/query-sql-rewrite).</summary>
+    public void Invalidate() => _invalidated = true;
 
     private CallResult Assign(nint value)
     {
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        SqlFailure? refused = SqlParameters.Adapt(Parameter, incoming, _owner.Database.Sql.Context, out NativeVariant adapted);
+        SqlFailure? refused = SqlParameters.Adapt(_parameter, incoming, _owner.Database.Sql.Context, out NativeVariant adapted);
         if (refused is not null)
         {
             return refused.IsNotModelled ? CallResult.Fail(Failure.NotModelled(refused.NotModelled!, refused.Message)) : Fail(refused.Number, refused.Message);
         }
-        _query.SetParameterValue(_index, adapted);
+        _query.SetParameterValue(_boundIndex, adapted);
         return CallResult.Nothing;
     }
 
-    public override bool Invalid => _owner.Database.Closed;
+    public override bool Invalid => _invalidated || _query.Invalid;
 
     protected override OperationTable Table => Operations;
 
@@ -643,6 +829,7 @@ internal sealed unsafe class QueryFieldsObject : DaoObject
         .Get("Item", (self, args) => { nint index = args[0]; return Live(self, f => f.Item(index)); })
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
+    private IReadOnlyList<ResultColumn>? _namesFor;
     private CollectionNames? _names;
 
     /// <summary>A collection per Fields get (its identity is not recorded); it holds its QueryDef, whose plan its columns are.</summary>
@@ -656,7 +843,7 @@ internal sealed unsafe class QueryFieldsObject : DaoObject
 
     public QueryDefObject Query { get; }
 
-    public IReadOnlyList<ResultColumn> Columns => Query.Plan()!.Columns;
+    public IReadOnlyList<ResultColumn> Columns => Query.Plan()?.Columns ?? [];
 
     public override bool Invalid => Query.Invalid;
 
@@ -675,8 +862,13 @@ internal sealed unsafe class QueryFieldsObject : DaoObject
 
     private CallResult Item(nint index)
     {
-        _names ??= new CollectionNames([.. Columns.Select(c => c.Name)]);
-        int? ordinal = CollectionLookup.Find(index, _names, out bool objectIndex);
+        IReadOnlyList<ResultColumn> cols = Columns;
+        if (!ReferenceEquals(_namesFor, cols))
+        {
+            _namesFor = cols;
+            _names = new CollectionNames([.. cols.Select(c => c.Name)]);
+        }
+        int? ordinal = CollectionLookup.Find(index, _names!, out bool objectIndex);
         if (objectIndex)
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.Fields.Item with an object index"));

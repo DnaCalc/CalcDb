@@ -1640,7 +1640,7 @@ public sealed class SchemaWriter
 
         bool isUnion = request.Family == QueryFamily.Union;
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        bool useSessionExtentReservation = !workspace.HasGlobalMapActivity(_cache);
+        bool useSessionExtentReservation = !workspace.HasGlobalMapAllocationOrReservation(_cache);
         workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
 
         TableDefinition objects = _catalog.ObjectTable;
@@ -1720,10 +1720,505 @@ public sealed class SchemaWriter
             }
             workspace.SetDeferredCatalogCommit(
                 _cache,
-                new DeferredCatalogCommit(deferredEdits, deferredFootprint, queryId, (int)request.Family));
+                new DeferredCatalogCommit(deferredEdits, deferredFootprint, queryId, (int)request.Family, FromCreateQueryDef: true));
         }
 
         return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
+    }
+
+    /// <summary>
+    /// DAO <c>QueryDef.SQL</c> put on a saved query (W-07/saved-definition, stretch 2; qualified.md
+    /// <c>R-CAT-1 CAT-Q r-q39</c>; <c>evidence/r-q39-querydef-bytes/sql-put-accdb</c>, <c>sql-put-mdb</c>,
+    /// <c>sql-put-type-change-accdb</c>): keeps the query's <c>Attribute 0x00</c> and <c>0xFF</c> rows in place,
+    /// deletes its old clause rows in <c>ObjectIdAttribute</c> index order, appends the new clause rows, updates
+    /// <c>MSysObjects.DateUpdate</c> immediately (+1 on page 0), and queues the deferred Close commit (+1 on page 0)
+    /// updating <c>MSysQueries</c> TableDef <c>RowCount</c>/<c>UniqueEntryCount</c> and (on a family change)
+    /// <c>MSysObjects.Flags</c>.
+    /// </summary>
+    public SchemaOutcome UpdateQueryDefSql(
+        TransactionCoordinator workspace,
+        UpdateQueryDefSqlRequest request,
+        ulong dateUpdateBits)
+    {
+        if (FileRefusal(allowJet4Mdb: true) is { } fileRefusal)
+        {
+            return new SchemaOutcome(fileRefusal, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO QueryDef.SQL put inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"), default, _pageCount);
+        }
+        if (FindQuery(request.Name) is not { } entry)
+        {
+            return new SchemaOutcome(new SchemaRefusal(3265, null), default, _pageCount);
+        }
+        workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
+        int currentFlags = priorDeferred is { PendingQueryObjectId: int pid, PendingQueryFlags: int pf } && pid == entry.Id
+            ? pf
+            : entry.Flags;
+        int existingFamilyFlags = currentFlags & 0xF0;
+        if (existingFamilyFlags == (int)QueryFamily.Union || request.Family == QueryFamily.Union)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO QueryDef.SQL put to or from a UNION query is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"), default, _pageCount);
+        }
+        if (existingFamilyFlags == (int)QueryFamily.PassThrough || request.Family == QueryFamily.PassThrough)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO QueryDef.SQL put to or from a pass-through query is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"), default, _pageCount);
+        }
+        if (request.Rows.Count < 3
+            || request.Rows[0].Attribute != QueryAttributes.Start
+            || request.Rows[1].Attribute != QueryAttributes.End)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO QueryDef.SQL put expects Start (0x00), End (0xFF), and at least one clause row"), default, _pageCount);
+        }
+        for (int i = 2; i < request.Rows.Count; i++)
+        {
+            if (request.Rows[i].Expression is { } expr && expr.Length * 2 > LongValuePlan.InlinePayloadMax)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO QueryDef.SQL put with an external LVAL Expression ({expr.Length} UTF-16 units) is not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open: a SQL put between inline and LVAL Expression)"), default, _pageCount);
+            }
+        }
+        if (SystemTable(_d.Catalog.QueryTableName, out string? queriesFailure) is not { } queries)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, queriesFailure), default, _pageCount);
+        }
+
+        TableDefinition objects = _catalog.ObjectTable;
+        int flagsFixedOffset = objects.Columns[Ordinal(objects, "Flags")].FixedOffset;
+        int deletedClauseCount = 0;
+        int insertedClauseCount = request.Rows.Count - 2;
+        ulong extent = _pageCount;
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileUpdateQueryDefSql(p, entry, request, queries, dateUpdateBits, priorDeferred, out deletedClauseCount, out extent),
+            allowPendingDeferredCatalogCommit: true);
+        if (!accepted.Accepted)
+        {
+            return new SchemaOutcome(null, accepted, _pageCount);
+        }
+        if (!Published(accepted))
+        {
+            return new SchemaOutcome(null, accepted, extent, PublishedAny: false);
+        }
+
+        if (priorDeferred is not null)
+        {
+            workspace.ClearDeferredCatalogCommit(_cache);
+        }
+
+        int netRowDelta = insertedClauseCount - deletedClauseCount;
+        int[] queryIndexIncrements = queries.PhysicalIndexes.Count > 0
+            ? [.. Enumerable.Repeat(queries.PhysicalIndexes[0].Number, insertedClauseCount)]
+            : [];
+        List<PageEdit> deferredEdits =
+        [
+            new PageEdit(queries.FirstPage, new TableDefUniqueCountsDelta(queryIndexIncrements, _d, rowCountDelta: netRowDelta), PageRole.Catalog),
+        ];
+        List<LockResource> deferredFootprint =
+        [
+            new LockResource(queries.FirstPage, LockPurpose.TableDef),
+        ];
+        int newFlags = (currentFlags & ~0xF0) | ((int)request.Family & 0xF0);
+        if (newFlags != currentFlags)
+        {
+            deferredEdits.Add(new PageEdit(entry.Root.Page, new ObjectFlagsDelta(entry.Root.Row, flagsFixedOffset, newFlags, _d), PageRole.Data));
+            deferredFootprint.Add(new LockResource(entry.Root.Page, LockPurpose.DataPage));
+        }
+        workspace.SetDeferredCatalogCommit(
+            _cache,
+            new DeferredCatalogCommit(deferredEdits, deferredFootprint, entry.Id, newFlags, FromCreateQueryDef: false));
+
+        return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
+    }
+
+    /// <summary>
+    /// DAO <c>QueryDefs.Delete(name)</c> on a saved query (W-07/saved-definition, stretch 2; qualified.md
+    /// <c>R-CAT-1 CAT-Q r-q39</c>; <c>evidence/r-q39-querydef-bytes/delete-querydef-accdb</c>, <c>delete-querydef-mdb</c>,
+    /// <c>delete-then-create-accdb</c>): deletes the query's <c>MSysObjects</c> row (releasing its emptied single-page
+    /// <c>LvProp</c> LVAL page as kind <c>0x09</c>, clearing its page-6 owned/free bits immediately, and queueing its
+    /// page-1 bit for Close), its <c>MSysACEs</c> rows, and all of its <c>MSysQueries</c> rows in
+    /// <c>ObjectIdAttribute</c> index order (keeping the emptied <c>MSysQueries</c> data page owned as kind <c>0x01</c>).
+    /// </summary>
+    public SchemaOutcome DeleteQueryDef(TransactionCoordinator workspace, string name, out int deletedObjectId)
+    {
+        deletedObjectId = 0;
+        if (FileRefusal(allowJet4Mdb: true) is { } fileRefusal)
+        {
+            return new SchemaOutcome(fileRefusal, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO QueryDefs.Delete inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"), default, _pageCount);
+        }
+        if (FindQuery(name) is not { } entry)
+        {
+            return new SchemaOutcome(new SchemaRefusal(3265, null), default, _pageCount);
+        }
+        if (SystemTable("MSysACEs", out string? acesFailure) is not { } aces)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, acesFailure), default, _pageCount);
+        }
+        if (SystemTable(_d.Catalog.QueryTableName, out string? queriesFailure) is not { } queries)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, queriesFailure), default, _pageCount);
+        }
+
+        workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred);
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileDeleteQueryDef(p, entry, aces, queries, priorDeferred),
+            allowPendingDeferredCatalogCommit: true);
+        if (!accepted.Accepted)
+        {
+            return new SchemaOutcome(null, accepted, _pageCount);
+        }
+        bool published = Published(accepted);
+        if (published)
+        {
+            if (priorDeferred is not null)
+            {
+                workspace.ClearDeferredCatalogCommit(_cache);
+            }
+            deletedObjectId = entry.Id;
+        }
+        return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: published);
+    }
+
+    private CatalogEntry? FindQuery(string name) =>
+        _catalog.Entries.FirstOrDefault(e => e.Type == QueryObjectType && e.ParentId == _catalog.TablesContainer && TablesContainerNamesEqual(e.Name, name));
+
+    private CompiledChange CompileUpdateQueryDefSql(
+        FileParticipant p,
+        CatalogEntry entry,
+        UpdateQueryDefSqlRequest request,
+        TableDefinition queries,
+        ulong dateUpdateBits,
+        DeferredCatalogCommit? priorDeferred,
+        out int deletedClauseCount,
+        out ulong extent)
+    {
+        deletedClauseCount = 0;
+        extent = _pageCount;
+        var work = new Work(p);
+        var source = new PageSource(_cache, p.Overlay);
+
+        if (priorDeferred is not null)
+        {
+            foreach (PageEdit edit in priorDeferred.Edits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
+
+        using (RowView? objResolved = RowResolver.Resolve(source, _d, entry.Root, out TraversalFailure? objFailure))
+        {
+            if (objResolved is not { } objRow)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root} cannot be read: {objFailure?.Predicate ?? "deleted"}");
+            }
+            if (objRow.Data != objRow.Root)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root} is an overflow row: updating it is not recorded");
+            }
+        }
+
+        if (!ReadQueryRowsInIndexOrder(source, queries, entry.Id, out List<ExistingQueryRow> existingRows, out string? readFailure))
+        {
+            return NotWritten(readFailure!);
+        }
+        int startCount = 0;
+        int endCount = 0;
+        List<ExistingQueryRow> clauseRows = [];
+        foreach (ExistingQueryRow qr in existingRows)
+        {
+            if (qr.IsOverflow)
+            {
+                return NotWritten($"query '{entry.Name}' MSysQueries row {qr.Root} is an overflow row: updating it is not recorded");
+            }
+            if (qr.Attribute == QueryAttributes.Start)
+            {
+                startCount++;
+                continue;
+            }
+            if (qr.Attribute == QueryAttributes.End)
+            {
+                endCount++;
+                continue;
+            }
+            if (qr.HasExternalExpression)
+            {
+                return NotWritten($"query '{entry.Name}' holds an external LVAL Expression on row {qr.Root}: replacing it is not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open: a SQL put between inline and LVAL Expression)");
+            }
+            clauseRows.Add(qr);
+        }
+        if (startCount != 1 || endCount != 1)
+        {
+            return NotWritten($"query '{entry.Name}' has {startCount} Start (0x00) and {endCount} End (0xFF) rows in MSysQueries: expected exactly 1 of each (r-q39)");
+        }
+
+        if (!work.SetDateUpdate(this, entry, dateUpdateBits, extent: _pageCount))
+        {
+            return work.NotWritten();
+        }
+
+        foreach (ExistingQueryRow oldClause in clauseRows)
+        {
+            if (!work.Delete(this, queries, oldClause.Root, extent: _pageCount, deferTableDefCounts: true, catalogDelete: true))
+            {
+                return work.NotWritten();
+            }
+        }
+        deletedClauseCount = clauseRows.Count;
+
+        var allocator = new PageAllocator(_cache, _d, _pageCount);
+        for (int i = 2; i < request.Rows.Count; i++)
+        {
+            NativeValue[] qRow = BuildQueryRowValues(queries, entry.Id, request.Rows[i]);
+            if (!work.Insert(this, queries, qRow, out _, extent: allocator.ExtentPages, externalAllocator: allocator, deferTableDefCountUpdate: true))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (allocator.AllocatedCount > 0)
+        {
+            return NotWritten($"DAO QueryDef.SQL put on '{entry.Name}' required allocating {allocator.AllocatedCount} page(s): page splits and LVAL Expression allocation on SQL put are not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open)");
+        }
+
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
+        return work.Change(_cache);
+    }
+
+    private CompiledChange CompileDeleteQueryDef(
+        FileParticipant p,
+        CatalogEntry entry,
+        TableDefinition aces,
+        TableDefinition queries,
+        DeferredCatalogCommit? priorDeferred)
+    {
+        var work = new Work(p);
+        var source = new PageSource(_cache, p.Overlay);
+        TableDefinition objects = _catalog.ObjectTable;
+        ColumnDescriptor lvPropCol = objects.Columns[Ordinal(objects, "LvProp")];
+
+        using (RowView? objResolved = RowResolver.Resolve(source, _d, entry.Root, out TraversalFailure? objFailure))
+        {
+            if (objResolved is not { } objRow)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root} cannot be read: {objFailure?.Predicate ?? "deleted"}");
+            }
+            if (objRow.Data != objRow.Root)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root} is an overflow row: deleting it is not recorded");
+            }
+            if (!RowEnvelope.TryOpen(objRow.Body, _d, out RowEnvelope env, out string? envFail))
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root}: {envFail}");
+            }
+            int knownFixedEnd = objects.KnownFixedEnd(env.ColumnCount, _d);
+            FieldRead lvRead = env.ReadField(lvPropCol, knownFixedEnd);
+            string? lvPlanFail = null;
+            if (lvRead.Outcome != FieldOutcome.Bytes
+                || LongValuePlan.Inspect(objRow.Body[lvRead.Start..lvRead.End], out lvPlanFail) is not { } lvPlan
+                || lvPlan.Form != LongValueForm.SingleRow)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects.LvProp is not a single-page LVAL ({(lvRead.Outcome == FieldOutcome.Bytes ? lvPlanFail ?? "non-SingleRow" : lvRead.Outcome.ToString())}): only single-page LVAL LvProp deletion is recorded (qualified.md R-CAT-1 CAT-Q r-q39)");
+            }
+            using PagePin? lvPin = source.Pin(lvPlan.First.Page).Pin;
+            if (lvPin is null)
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects.LvProp LVAL page {lvPlan.First.Page} could not be pinned");
+            }
+            byte[] lvCopy = lvPin.Bytes.ToArray();
+            if (!DataPages.TryDeleteSlot(lvCopy, lvPlan.First.Row, _d, out string? delLvFail, lval: true))
+            {
+                return NotWritten($"query '{entry.Name}' MSysObjects.LvProp LVAL page {lvPlan.First.Page} slot {lvPlan.First.Row}: {delLvFail}");
+            }
+            if (!DataPages.IsEmpty(lvCopy, _d, lval: true))
+            {
+                return NotWritten($"query '{entry.Name}' shares MSysObjects.LvProp LVAL page {lvPlan.First.Page} with another object: Delete of a query that shares its LvProp page is not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open)");
+            }
+        }
+
+        if (!ReadQueryRowsInIndexOrder(source, queries, entry.Id, out List<ExistingQueryRow> queryRows, out string? readFailure))
+        {
+            return NotWritten(readFailure!);
+        }
+        foreach (ExistingQueryRow qr in queryRows)
+        {
+            if (qr.IsOverflow)
+            {
+                return NotWritten($"query '{entry.Name}' MSysQueries row {qr.Root} is an overflow row: deleting it is not recorded");
+            }
+            if (qr.HasExternalExpression)
+            {
+                return NotWritten($"query '{entry.Name}' owns an external LVAL Expression on MSysQueries row {qr.Root}: Delete of a query that owns an Expression page is not recorded (qualified.md R-CAT-1 CAT-Q r-q39 Open)");
+            }
+        }
+
+        IReadOnlyList<SystemRow>? aceRows = SystemTables.Read(_cache, _d, _catalog, _pageCount, "MSysACEs", [("ObjectId", NativeTypes.Long)], out string? aceReadFailure);
+        if (aceRows is null)
+        {
+            return NotWritten("MSysACEs: " + aceReadFailure);
+        }
+
+        if (priorDeferred is not null)
+        {
+            foreach (PageEdit edit in priorDeferred.Edits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
+
+        List<uint> releasedAtClose = [];
+        if (!work.Delete(this, objects, entry.Root, extent: _pageCount, catalogDelete: true, releasedAtClose: releasedAtClose))
+        {
+            return work.NotWritten();
+        }
+        foreach (SystemRow ace in aceRows.Where(r => r[0].Kind == NativeKind.Long && r[0].Integer == entry.Id))
+        {
+            if (!work.Delete(this, aces, ace.Root, extent: _pageCount, catalogDelete: true, releasedAtClose: releasedAtClose))
+            {
+                return work.NotWritten();
+            }
+        }
+        foreach (ExistingQueryRow qr in queryRows)
+        {
+            if (!work.Delete(this, queries, qr.Root, extent: _pageCount, catalogDelete: true, releasedAtClose: releasedAtClose))
+            {
+                return work.NotWritten();
+            }
+        }
+        return work.Change(_cache, releasedAtClose);
+    }
+
+    private readonly record struct ExistingQueryRow(RowId Root, byte Attribute, bool IsOverflow, bool HasExternalExpression);
+
+    /// <summary>
+    /// Walk <c>MSysQueries</c>'s <c>ObjectIdAttribute</c> index for <paramref name="objectId"/> in exact B-tree order
+    /// (<c>(ObjectId, Attribute, Order)</c>), matching ACE's deletion order in
+    /// <c>evidence/r-q39-querydef-bytes/delete-querydef-*</c> and <c>sql-put-*</c>.
+    /// </summary>
+    private bool ReadQueryRowsInIndexOrder(
+        PageSource source,
+        TableDefinition queries,
+        int objectId,
+        out List<ExistingQueryRow> rows,
+        out string? failure)
+    {
+        rows = [];
+        failure = null;
+        if (queries.PhysicalIndexes.Count == 0)
+        {
+            failure = "MSysQueries TableDef defines no physical index";
+            return false;
+        }
+        PhysicalIndex phys = queries.PhysicalIndexes[0];
+        ColumnDescriptor objectIdCol = queries.Columns[Ordinal(queries, "ObjectId")];
+        ColumnDescriptor attributeCol = queries.Columns[Ordinal(queries, "Attribute")];
+        ColumnDescriptor expressionCol = queries.Columns[Ordinal(queries, "Expression")];
+        if (phys.Columns.Count == 0 || phys.Columns[0].PhysicalNumber != objectIdCol.PhysicalNumber)
+        {
+            failure = "MSysQueries physical index 0 does not lead with ObjectId";
+            return false;
+        }
+        byte[]? prefix = IndexEntryInsert.EncodeKey([objectIdCol], [phys.Columns[0]], [Long(objectId)], out string? keyFailure);
+        if (prefix is null)
+        {
+            failure = $"MSysQueries ObjectId key: {keyFailure}";
+            return false;
+        }
+        var navigator = new IndexNavigator(source, _d, phys, queries.FirstPage);
+        for (IndexPosition? pos = navigator.LowerBound(KeyBound.Low(prefix));
+             pos is { } at && navigator.KeyMatches(at, KeyBound.Low(prefix));
+             pos = navigator.Next(at))
+        {
+            using RowView? resolved = RowResolver.Resolve(source, _d, at.Row, out TraversalFailure? resolveFailure);
+            if (resolved is not { } row)
+            {
+                failure = $"MSysQueries row {at.Row} cannot be read: {resolveFailure?.Predicate ?? "deleted"}";
+                return false;
+            }
+            bool isOverflow = row.Data != row.Root;
+            NativeValue attrVal = FieldDecoder.Read(row, queries, attributeCol, source, _d);
+            if (attrVal.Kind != NativeKind.Byte)
+            {
+                failure = $"MSysQueries row {at.Row} Attribute has unexpected kind {attrVal.Kind}";
+                return false;
+            }
+            bool hasExternalExpression = false;
+            if (!isOverflow && RowEnvelope.TryOpen(row.Body, _d, out RowEnvelope env, out string? envFailure))
+            {
+                int knownFixedEnd = queries.KnownFixedEnd(env.ColumnCount, _d);
+                FieldRead exprRead = env.ReadField(expressionCol, knownFixedEnd);
+                if (exprRead.Outcome == FieldOutcome.Malformed)
+                {
+                    failure = $"MSysQueries row {at.Row} Expression: {exprRead.Failure}";
+                    return false;
+                }
+                if (exprRead.Outcome == FieldOutcome.Bytes)
+                {
+                    if (LongValuePlan.Inspect(row.Body[exprRead.Start..exprRead.End], out string? planFailure) is not { } plan)
+                    {
+                        failure = $"MSysQueries row {at.Row} Expression: {planFailure}";
+                        return false;
+                    }
+                    hasExternalExpression = plan.Form != LongValueForm.Inline;
+                }
+            }
+            else if (!isOverflow)
+            {
+                failure = $"MSysQueries row {at.Row} envelope could not be opened";
+                return false;
+            }
+            rows.Add(new ExistingQueryRow(at.Row, (byte)attrVal.Integer, isOverflow, hasExternalExpression));
+        }
+        if (navigator.LastFailure is { } navFailure)
+        {
+            failure = $"MSysQueries index traversal: {navFailure.Predicate}";
+            return false;
+        }
+        return true;
+    }
+
+    private static NativeValue[] BuildQueryRowValues(TableDefinition queries, int queryId, QueryRow qr)
+    {
+        NativeValue[] qRow = new NativeValue[queries.Columns.Count];
+        Array.Fill(qRow, NativeValue.Null);
+        Set(queries, qRow, "ObjectId", Long(queryId));
+        Set(queries, qRow, "Attribute", new NativeValue(NativeKind.Byte) { Integer = qr.Attribute });
+        if (qr.Expression is not null)
+        {
+            Set(queries, qRow, "Expression", new NativeValue(NativeKind.Text) { Text = qr.Expression });
+        }
+        if (qr.Flag is { } flag)
+        {
+            Set(queries, qRow, "Flag", new NativeValue(NativeKind.Integer) { Integer = flag });
+        }
+        if (qr.LvExtra is { } lvExtra)
+        {
+            Set(queries, qRow, "LvExtra", Long(lvExtra));
+        }
+        if (qr.Name1 is not null)
+        {
+            Set(queries, qRow, "Name1", new NativeValue(NativeKind.Text) { Text = qr.Name1 });
+        }
+        if (qr.Name2 is not null)
+        {
+            Set(queries, qRow, "Name2", new NativeValue(NativeKind.Text) { Text = qr.Name2 });
+        }
+        if (qr.Order is not null)
+        {
+            Set(queries, qRow, "Order", new NativeValue(NativeKind.Binary) { Bytes = qr.Order });
+        }
+        return qRow;
     }
 
     private CompiledChange CompileCreateQueryDef(
@@ -1806,34 +2301,7 @@ public sealed class SchemaWriter
 
         foreach (QueryRow qr in request.Rows)
         {
-            NativeValue[] qRow = new NativeValue[queries.Columns.Count];
-            Array.Fill(qRow, NativeValue.Null);
-            Set(queries, qRow, "ObjectId", Long(queryId));
-            Set(queries, qRow, "Attribute", new NativeValue(NativeKind.Byte) { Integer = qr.Attribute });
-            if (qr.Expression is not null)
-            {
-                Set(queries, qRow, "Expression", new NativeValue(NativeKind.Text) { Text = qr.Expression });
-            }
-            if (qr.Flag is { } flag)
-            {
-                Set(queries, qRow, "Flag", new NativeValue(NativeKind.Integer) { Integer = flag });
-            }
-            if (qr.LvExtra is { } lvExtra)
-            {
-                Set(queries, qRow, "LvExtra", Long(lvExtra));
-            }
-            if (qr.Name1 is not null)
-            {
-                Set(queries, qRow, "Name1", new NativeValue(NativeKind.Text) { Text = qr.Name1 });
-            }
-            if (qr.Name2 is not null)
-            {
-                Set(queries, qRow, "Name2", new NativeValue(NativeKind.Text) { Text = qr.Name2 });
-            }
-            if (qr.Order is not null)
-            {
-                Set(queries, qRow, "Order", new NativeValue(NativeKind.Binary) { Bytes = qr.Order });
-            }
+            NativeValue[] qRow = BuildQueryRowValues(queries, queryId, qr);
             if (!work.Insert(this, queries, qRow, out _, extent: allocator.ExtentPages, externalAllocator: allocator, deferTableDefCountUpdate: !isUnion))
             {
                 return work.NotWritten();
@@ -5177,10 +5645,31 @@ public sealed class SchemaWriter
         }
 
         /// <summary>Delete one catalog row through the one row compiler.</summary>
-        public bool Delete(SchemaWriter owner, TableDefinition table, RowId root, ulong? extent = null)
+        public bool Delete(
+            SchemaWriter owner,
+            TableDefinition table,
+            RowId root,
+            ulong? extent = null,
+            bool deferTableDefCounts = false,
+            bool catalogDelete = false,
+            List<uint>? releasedAtClose = null)
         {
             using MutationSemantics semantics = MutationSemantics.Compile(table.FirstPage.ToString(), table, null, NoRules.Instance, owner._d.IndexDescriptor);
-            return Take(owner.Writer(table, extent).CompileDelete(semantics, root, participant.Overlay), $"row {root} of TableDef {table.FirstPage}");
+            CompiledChange compiled = owner.Writer(table, extent).CompileDelete(
+                semantics,
+                root,
+                participant.Overlay,
+                deferTableDefCounts: deferTableDefCounts,
+                catalogDelete: catalogDelete);
+            if (!Take(compiled, $"row {root} of TableDef {table.FirstPage}"))
+            {
+                return false;
+            }
+            if (releasedAtClose is not null && compiled.Change!.ReleasedAtClose.Count > 0)
+            {
+                releasedAtClose.AddRange(compiled.Change.ReleasedAtClose);
+            }
+            return true;
         }
 
         /// <summary>The table's MSysObjects DateUpdate set in place, a same-width Edit of its row (r-q11 create-then-index).</summary>

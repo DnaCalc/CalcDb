@@ -121,17 +121,25 @@ public sealed class LvalAppendDelta(byte[] rowBytes, byte expectedSlot, FormatDe
 /// <summary>
 /// Delete one single long-value row from an LVAL page in place (<see cref="DataPages.TryDeleteSlot"/> with
 /// <c>lval: true</c>; R-FMT-2 "LV form selection and Overflow / deletion",
-/// <c>evidence/r-q19-growth-open/lv-op-single-*</c>, <c>lv-op-delete-row-single</c>).
+/// <c>evidence/r-q19-growth-open/lv-op-single-*</c>, <c>lv-op-delete-row-single</c>), optionally marking an emptied
+/// LVAL page released (<c>0x01 -&gt; 0x09</c>, <see cref="DataPages.MarkReleased"/>;
+/// <c>evidence/r-q39-querydef-bytes/delete-querydef-*</c>, <c>evidence/r-q37-valrule-put</c>).
 /// </summary>
-public sealed class LvalDeleteDelta(byte slot, FormatDescriptor d) : IPageDelta
+public sealed class LvalDeleteDelta(byte slot, FormatDescriptor d, bool release = false) : IPageDelta
 {
     public byte Slot => slot;
+
+    public bool Release => release;
 
     public void Apply(Span<byte> decodedPage)
     {
         if (!DataPages.TryDeleteSlot(decodedPage, slot, d, out string? failure, lval: true))
         {
             throw new FormatViolationException($"LVAL page delete: {failure}");
+        }
+        if (release)
+        {
+            DataPages.MarkReleased(decodedPage, d);
         }
     }
 }
@@ -1072,7 +1080,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// With <paramref name="deferTableDefCounts"/> (a dynaset's Delete) the TableDef is not written: its row count and
     /// the indexes' bulk-built counters change at the recordset's Close (<see cref="PhysicalChange.DeferredEntryDecrements"/>).
     /// </summary>
-    public CompiledChange CompileDelete(MutationSemantics semantics, RowId root, PrivateOverlay? seen = null, bool deferTableDefCounts = false, bool tableCursorDelete = false)
+    public CompiledChange CompileDelete(MutationSemantics semantics, RowId root, PrivateOverlay? seen = null, bool deferTableDefCounts = false, bool tableCursorDelete = false, bool catalogDelete = false)
     {
         if (_pageCount == 0)
         {
@@ -1117,6 +1125,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         var allocator = new PageAllocator(_cache, _d, ExtentOf(seen));
         List<PageEdit> lvEdits = [];
+        List<uint> lvReleasedAtClose = [];
         int knownFixedEnd = _table.KnownFixedEnd(envelope.ColumnCount, _d);
         for (int i = 0; i < columns.Count; i++)
         {
@@ -1129,10 +1138,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                     return NotWritten($"field {c.Name} of row {root}: {lvRead.Failure ?? $"unexpected field outcome {lvRead.Outcome}"}");
                 }
                 // R-FMT-2 "LV form selection and Overflow / deletion" (evidence/r-q19-growth-open/lv-op-delete-row-single,
-                // lv-op-delete-row-chain; evidence/r-q22-lv-open/lv-free-timing-delete-chain): DELETE removes a single
-                // LVAL row from its page, or clears a chain's pages from the LV owned map and frees them in page 1
-                // during the statement without writing their bytes (page 0 +1, Close writes nothing).
-                if (!RemoveLongValue(c, row.Body[lvRead.Start..lvRead.End], allocator, seen, lvEdits, clearedFreeLvalPages: null, out string? lvFailure))
+                // lv-op-delete-row-chain; evidence/r-q22-lv-open/lv-free-timing-delete-chain) and R-CAT-1 CAT-Q r-q39
+                // (evidence/r-q39-querydef-bytes/delete-querydef-*, sql-put-*): DELETE removes a single LVAL row from its
+                // page (or retires an emptied catalog LVAL page to Close), or clears a chain's pages from the LV owned map.
+                if (!RemoveLongValue(c, row.Body[lvRead.Start..lvRead.End], allocator, seen, lvEdits, clearedFreeLvalPages: null, out string? lvFailure, catalogDelete: catalogDelete, releasedAtClose: lvReleasedAtClose))
                 {
                     return NotWritten($"field {c.Name} of row {root}: {lvFailure}");
                 }
@@ -1165,12 +1174,12 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             {
                 return NotWritten($"table-type recordset Delete emptying data page {root.Page} of a {owned.Count}-page table is not recorded (R-FMT-2 Overflow / deletion and Map ownership)");
             }
+            releasePage = freePages.Any(q => q < root.Page);
             using PagePin? page0 = Seen(seen).Pin(0).Pin;
-            if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
+            if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d) && !(catalogDelete && !releasePage))
             {
                 return NotWritten($"emptying data page {root.Page} in an MDB file is not recorded (R-FMT-2 Overflow / deletion and Map ownership)");
             }
-            releasePage = freePages.Any(q => q < root.Page);
         }
 
         List<PageEdit> edits = [.. lvEdits, new PageEdit(root.Page, new DataPageDeleteDelta(root.Row, _d, releasePage), PageRole.Data)];
@@ -1179,7 +1188,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             AddUnique(footprint, new LockResource(e.Page, e.Role == PageRole.Map ? LockPurpose.Map : LockPurpose.DataPage));
         }
-        uint[] releasedAtClose = releasePage ? [root.Page] : [];
+        if (releasePage)
+        {
+            lvReleasedAtClose.Add(root.Page);
+        }
+        uint[] releasedAtClose = [.. lvReleasedAtClose];
         if (releasePage)
         {
             if (MapBit(_table.OwnedMap, root.Page, seen, out string? ownClearFailure, member: false) is not { } leaveOwned)
@@ -2436,18 +2449,25 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         PrivateOverlay? seen,
         List<PageEdit> edits,
         HashSet<uint>? clearedFreeLvalPages,
-        out string? failure)
+        out string? failure,
+        bool catalogDelete = false,
+        List<uint>? releasedAtClose = null)
     {
         if (LongValuePlan.Inspect(storedField, out failure) is not { } plan)
         {
             return false;
         }
+        bool isMdb = false;
         using (PagePin? page0 = Seen(seen).Pin(0).Pin)
         {
             if (page0 is not null && !DatabaseHeader.IsAccdb(page0.Bytes, _d))
             {
-                failure = "removing a long value in an MDB file is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
-                return false;
+                isMdb = true;
+                if (!catalogDelete || plan.Form == LongValueForm.Chain)
+                {
+                    failure = "removing a long value in an MDB file is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                    return false;
+                }
             }
         }
         if (plan.Form == LongValueForm.Inline)
@@ -2503,7 +2523,33 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             if (DataPages.IsEmpty(copy, _d, lval: true))
             {
-                failure = $"removing single-row LVAL slot {loc.Row} empties LVAL page {loc.Page}: retiring an emptied LVAL page is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                if (!catalogDelete || releasedAtClose is null)
+                {
+                    failure = $"removing single-row LVAL slot {loc.Row} empties LVAL page {loc.Page}: retiring an emptied LVAL page is not recorded (R-FMT-2 LV form selection and Overflow / deletion Open)";
+                    return false;
+                }
+                if (allocator.Free(seen, loc.Page, out failure) is null)
+                {
+                    return false;
+                }
+                if (MapBit(maps.OwnedMap, loc.Page, seen, out failure, member: false) is not { } leaveOwned
+                    || MapBit(maps.FreeMap, loc.Page, seen, out failure, member: false) is not { } leaveFree)
+                {
+                    return false;
+                }
+                // R-CAT-1 CAT-Q r-q39 (evidence/r-q39-querydef-bytes/delete-querydef-accdb, delete-querydef-mdb):
+                // an emptied MSysObjects.LvProp LVAL page becomes kind 0x09 (slot 0 0xD000), leaves its owned and free
+                // maps on page 6 immediately, and returns its bit in page 1 at Database.Close.
+                edits.Add(new PageEdit(loc.Page, new LvalDeleteDelta(loc.Row, _d, release: true), PageRole.Data));
+                edits.Add(leaveOwned);
+                edits.Add(leaveFree);
+                releasedAtClose.Add(loc.Page);
+                failure = null;
+                return true;
+            }
+            if (isMdb)
+            {
+                failure = $"removing a non-emptying single-row LVAL slot {loc.Row} on page {loc.Page} in an MDB file is not recorded";
                 return false;
             }
             edits.Add(new PageEdit(loc.Page, new LvalDeleteDelta(loc.Row, _d), PageRole.Data));

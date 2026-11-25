@@ -65,7 +65,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private QueryCatalog? _queries;
     private string? _queriesFailure;
     private List<string>? _queryOrder;
-    private readonly HashSet<int> _sessionCreatedQueryIds = [];
+    private readonly Dictionary<int, int> _sessionQueryTypeOverrides = [];
+    private readonly Dictionary<int, string> _sessionSavedSqlOverrides = [];
 
     /// <summary>
     /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
@@ -1029,8 +1030,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 QueryCatalog? read = QueryCatalog.Read(Cache, Format, Catalog, PageCount, out _queriesFailure);
                 if (read is not null
                     && _workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pending)
-                    && pending is { PendingQueryObjectId: int pendingId, PendingQueryFlags: int pendingFlags }
-                    && pendingFlags != 0)
+                    && pending is { PendingQueryObjectId: int pendingId, PendingQueryFlags: int pendingFlags })
                 {
                     read = read.WithPendingFamily(pendingId, (QueryFamily)(pendingFlags & 0xF0));
                 }
@@ -1069,6 +1069,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             _queryDefs = new DefinitionCollection(DaoTypes.QueryDefs, "DAO.QueryDefs", this, names, make, holdsDatabase: false)
             {
                 Appender = static (c, arg) => c.Database.AppendQueryDef(c, arg),
+                Deleter = static (c, arg) => c.Database.DeleteQueryDef(c, arg),
                 Membership = QueryDefsMembership,
                 PreserveHeldByName = true,
                 ClosedSource = "DAO.Database",
@@ -1114,7 +1115,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             ordered = [.. catalog.Queries.OrderBy(q => q.Name, StringComparer.OrdinalIgnoreCase)];
         }
-        return ([.. ordered.Select(q => q.Name)], (c, i) => new QueryDefObject(c, this, ordered[i], createdInSession: _sessionCreatedQueryIds.Contains(ordered[i].Entry.Id)), null);
+        return ([.. ordered.Select(q => q.Name)], (c, i) =>
+        {
+            SavedQuery q = ordered[i];
+            int? typeOverride = _sessionQueryTypeOverrides.TryGetValue(q.Entry.Id, out int t) ? t : null;
+            string? sqlOverride = _sessionSavedSqlOverrides.TryGetValue(q.Entry.Id, out string? s) ? s : null;
+            return new QueryDefObject(c, this, q, sessionTypeOverride: typeOverride, savedSqlOverride: sqlOverride);
+        }, null);
     }
 
     /// <summary>
@@ -1192,6 +1199,148 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("QueryDefs.Append of an already-saved QueryDef (not recorded)"));
         }
         return PersistQueryDef(qd.DraftName, qd.DraftSql, string.IsNullOrEmpty(qd.DraftConnect) ? null : qd.DraftConnect, existingDraft: qd, out _);
+    }
+
+    /// <summary>
+    /// QueryDef.SQL put on a saved QueryDef (W-07/saved-definition, stretch 2; qualified.md R-CAT-1 CAT-Q r-q39;
+    /// evidence/r-q39-querydef-bytes/sql-put-accdb, sql-put-mdb, sql-put-type-change-accdb;
+    /// r-cat-1/held-sql-replace, r-dao-1-err-1/query-sql-rewrite, r-cat-1b/qd-sql-change-type-tracking).
+    /// </summary>
+    internal CallResult UpdateQueryDefSql(QueryDefObject queryDef, SavedQuery existing, string sql)
+    {
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(sql, connect: null);
+        if (!compiled.Succeeded)
+        {
+            SqlFailure f = compiled.Failure!;
+            return f.IsNotModelled
+                ? CallResult.Fail(Failure.NotModelled(f.NotModelled!, f.Message))
+                : CallResult.Fail(Failure.Dao(f.Number, "DAO.QueryDef", f.Message));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put: " + writerFailure));
+        }
+        ulong nowBits = SchemaWriter.DateBits(DateTime.Now);
+        var request = new UpdateQueryDefSqlRequest(existing.Name, compiled.Family, compiled.Rows!);
+        SchemaOutcome outcome = writer.UpdateQueryDefSql(workspace, request, nowBits);
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3265 => CallResult.Fail(Failure.Dao(3265, "DAO.QueryDef", DaoErrors.ItemNotFound)),
+                _ => CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
+        {
+            return CallResult.Fail(Failure.NotImplemented(stale));
+        }
+        if (accepted.Error is { } error)
+        {
+            return EditPublication.Published(error);
+        }
+        if (accepted.Open != MutationOpen.None)
+        {
+            return EditPublication.Open(accepted.Open, accepted.Detail);
+        }
+
+        if (Queries?.Queries.FirstOrDefault(q => q.Entry.Id == existing.Entry.Id) is not { } updatedQuery)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put published the query, but it could not be read back from MSysQueries: " + _queriesFailure));
+        }
+
+        int? priorType = queryDef.SessionTypeOverride ?? (existing.Family is { } oldFamily ? (int)oldFamily : null);
+        if (priorType is int sessionType)
+        {
+            _sessionQueryTypeOverrides.TryAdd(existing.Entry.Id, sessionType);
+        }
+        _sessionSavedSqlOverrides[existing.Entry.Id] = sql;
+        queryDef.ApplySavedSqlUpdate(updatedQuery, sql);
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// QueryDefs.Delete(Name) on a saved QueryDef (W-07/saved-definition, stretch 2; qualified.md R-CAT-1 CAT-Q r-q39;
+    /// evidence/r-q39-querydef-bytes/delete-querydef-accdb, delete-querydef-mdb, delete-then-create-accdb;
+    /// r-cat-1/held-querydef-lifetime, r-def-cursor-dao/err-held-querydef-after-delete).
+    /// </summary>
+    public CallResult DeleteQueryDef(DefinitionCollection queryDefs, nint arg)
+    {
+        if (!QueryDefObject.TryReadText(arg, out string name))
+        {
+            return queryDefs.Fail(3421, DaoErrors.ConversionError);
+        }
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDefs.Delete on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDefs.Delete inside BeginTrans is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+        }
+        CatalogEntry? entry = Catalog.Entries.FirstOrDefault(e =>
+            e.Type == this.Format.Catalog.QueryObjectType
+            && e.ParentId == Catalog.TablesContainer
+            && SchemaWriter.TablesContainerNamesEqual(e.Name, name));
+        if (entry is null)
+        {
+            return queryDefs.Fail(3265, DaoErrors.ItemNotFound);
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("QueryDefs.Delete: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.DeleteQueryDef(workspace, entry.Name, out int deletedObjectId);
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3265 => queryDefs.Fail(3265, DaoErrors.ItemNotFound),
+                _ => CallResult.Fail(Failure.NotImplemented("QueryDefs.Delete: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
+        {
+            return CallResult.Fail(Failure.NotImplemented(stale));
+        }
+        if (accepted.Error is { } error)
+        {
+            return EditPublication.Published(error);
+        }
+        if (accepted.Open != MutationOpen.None)
+        {
+            return EditPublication.Open(accepted.Open, accepted.Detail);
+        }
+
+        if (queryDefs.FindHeld(entry.Name) is QueryDefObject held)
+        {
+            held.MarkDeleted();
+        }
+        _sessionQueryTypeOverrides.Remove(deletedObjectId);
+        _sessionSavedSqlOverrides.Remove(deletedObjectId);
+        _queryOrder?.RemoveAll(n => string.Equals(n, entry.Name, StringComparison.OrdinalIgnoreCase));
+        queryDefs.Relist();
+        return CallResult.Nothing;
     }
 
     private CallResult PersistQueryDef(string name, string sql, string? connect, QueryDefObject? existingDraft, out QueryDefObject? created)
@@ -1272,7 +1421,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("CreateQueryDef published the query, but it could not be read back from MSysQueries: " + _queriesFailure));
         }
 
-        _sessionCreatedQueryIds.Add(savedQuery.Entry.Id);
+        _sessionQueryTypeOverrides[savedQuery.Entry.Id] = 0;
+        _sessionSavedSqlOverrides.Remove(savedQuery.Entry.Id);
         if (_queryDefs is null)
         {
             EnsureQueryDefsCollection(out _);
