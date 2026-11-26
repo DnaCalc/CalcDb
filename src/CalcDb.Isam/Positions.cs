@@ -539,6 +539,8 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
 {
     private readonly IOrderedSource<T> _producer;
     private readonly List<T> _occurrences = [];
+    private readonly List<int> _keysetSlots = [];
+    private int _nextKeysetSlot;
     private bool _complete;
     private bool _firstMoveDone;
 
@@ -561,12 +563,20 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
 
     public T this[int ordinal] => _occurrences[ordinal];
 
+    /// <summary>
+    /// The monotonic keyset slot assigned when the occurrence at <paramref name="ordinal"/> entered the store.
+    /// Deleting earlier occurrences shifts ordinals down while preserving surviving occurrences' keyset bookmarks
+    /// and advancing new AddNew slots monotonically (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 138, 219).
+    /// </summary>
+    public int KeysetSlotAt(int ordinal) => _keysetSlots[ordinal];
+
     /// <summary>Remove a deleted occurrence from the populated keyset (CUR-POS: RecordCount drops by 1).</summary>
     public void RemoveAt(int ordinal)
     {
         if (ordinal >= 0 && ordinal < _occurrences.Count)
         {
             _occurrences.RemoveAt(ordinal);
+            _keysetSlots.RemoveAt(ordinal);
         }
     }
 
@@ -584,6 +594,8 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
             return false;
         }
         _occurrences.RemoveRange(count, _occurrences.Count - count);
+        _keysetSlots.RemoveRange(count, _keysetSlots.Count - count);
+        _nextKeysetSlot = _occurrences.Count == 0 ? 0 : _keysetSlots[^1] + 1;
         return true;
     }
 
@@ -596,6 +608,7 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
         }
         int ordinal = _occurrences.Count;
         _occurrences.Add(occurrence);
+        _keysetSlots.Add(_nextKeysetSlot++);
         return ordinal;
     }
 
@@ -649,6 +662,7 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
                 break;
             }
             _occurrences.Add(next.Value);
+            _keysetSlots.Add(_nextKeysetSlot++);
         }
     }
 }

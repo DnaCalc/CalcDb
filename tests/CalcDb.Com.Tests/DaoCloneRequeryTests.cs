@@ -191,16 +191,19 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         Ok(Method(sameRow, "MoveNext"));
         Assert.Equal(3, Int32Value(Ok(FieldValue(sameRow, "ID"))));
 
-        // Different-row sibling kept ID 4; keyset bookmarks refuse by name after cursor Delete until Requery.
+        // Different-row sibling kept ID 4 and its original keyset bookmark (abspos-delete-edit calls 138, 219);
+        // Bookmark put of a pre-delete bookmark after cursor Delete remains refused by name until Requery.
         Assert.Equal(4, Int32Value(Ok(FieldValue(laterRow, "ID"))));
-        AssertNotModelled(Get(laterRow, "Bookmark"), "NotModelled.BookmarkAfterDelete");
+        Assert.Equal(bmBeforeDelete, BytesValue(Ok(Get(laterRow, "Bookmark"))));
         AssertNotModelled(Put(laterRow, "Bookmark", bmBeforeDelete), "NotModelled.BookmarkAfterDelete");
 
-        // Deleting the last populated row refuses AbsolutePosition by name on a sibling sitting on that row.
+        // Deleting the last populated row keeps the deleted row's ordinal on a sibling sitting on that row
+        // (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} call 112: ordinal 5 at RecordCount 5).
         Ok(Method(parent, "MoveLast"));
         Ok(Method(sameRow, "MoveLast"));
+        int lastOrdinal = Int32Value(Ok(Get(sameRow, "AbsolutePosition")));
         Ok(Method(parent, "Delete"));
-        AssertNotModelled(Get(sameRow, "AbsolutePosition"), "NotModelled.AbsolutePositionDeletedLastRow");
+        Assert.Equal(lastOrdinal, Int32Value(Ok(Get(sameRow, "AbsolutePosition"))));
 
         Ok(Method(laterRow, "Close"));
         Ok(Method(sameRow, "Close"));
@@ -494,10 +497,12 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         Ok(Method(over, "Close"));
         Ok(Method(writer, "Close"));
 
-        // Query (SELECT) recordset Clone and Requery: closed is 3420; all live types (including forward-only) refuse by name.
+        // Query (SELECT) recordset Clone and Requery: single-table SELECT dynaset Clone succeeds (r-q53 filter-sort-openrs-read);
+        // closed is 3420; forward-only Clone and unrecorded Requery refuse by name.
         DatabaseObject defDb = Open(DefCursorMain, readOnly: true);
         SelectRecordsetObject qd = Recover<SelectRecordsetObject>(Ok(Method(defDb, "OpenRecordset", "SELECT ID, N FROM T", 2)));
-        AssertNotModelled(Method(qd, "Clone"), "NotModelled.QueryRecordsetClone");
+        SelectRecordsetObject qdc = Recover<SelectRecordsetObject>(Ok(Method(qd, "Clone")));
+        Ok(Method(qdc, "Close"));
         AssertNotModelled(Method(qd, "Requery"), "NotModelled.QueryRecordsetRequery");
         Ok(Method(qd, "Close"));
         AssertDaoError(Method(qd, "Clone"), 3420, "DAO.Recordset");

@@ -244,9 +244,10 @@ public sealed unsafe class DaoSelectPopulationTests : IDisposable
         DatabaseObject mdb = Open(Txn1bMdb, ".mdb");
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
-        // MDB RecordCount and Requery are unrecorded.
+        // MDB single-table SELECT RecordCount is recorded (r-q53-conv-abspos-subq-loc/abspos-get-put-read-mdb);
+        // MDB Requery remains unrecorded.
         SelectRecordsetObject mdbDyn = OpenSelect(mdb, "SELECT ID, V FROM R ORDER BY ID", 2);
-        AssertNotModelled(Get(mdbDyn, "RecordCount"), "NotModelled.QueryRecordCount.Mdb");
+        Assert.True(IntValue(Ok(Get(mdbDyn, "RecordCount"))) > 0);
         AssertNotModelled(Method(mdbDyn, "Requery"), "NotModelled.QueryRecordsetRequery");
         Ok(Method(mdbDyn, "Close"));
 

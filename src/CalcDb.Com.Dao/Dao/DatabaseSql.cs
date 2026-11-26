@@ -1,7 +1,9 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
+using CalcDb.Com.Declarations;
 using CalcDb.Expressions;
 using CalcDb.Format;
+using CalcDb.Foundation;
 using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
@@ -70,7 +72,7 @@ internal sealed class DatabaseSql(DatabaseObject database) : ComSqlDatabase(new 
 
         public PageCache Cache => database.Cache;
 
-        public ulong PageCount => database.PageCount;
+        public ulong PageCount => PageAllocator.ExtentOf(database.Cache, database.PageCount, database.Workspace.Transactions.OverlayOf(database.Cache));
 
         public bool ReadOnly => database.ReadOnly;
 
@@ -101,7 +103,7 @@ internal sealed class DatabaseSql(DatabaseObject database) : ComSqlDatabase(new 
 /// errors from DAO.Database with EXCEPINFO alone, for a QueryDef's OpenRecordset too (r-q3-sql/constant-phase,
 /// r-q-expr-sql/demand-saved-querydefs).
 /// </summary>
-internal static class SelectRoute
+internal static unsafe class SelectRoute
 {
     /// <summary>3065 (r-err-1b/sql-execute-select: Database.Execute; r-cat-1b/qd-execute-on-row-returning: QueryDef.Execute).</summary>
     public const string CannotExecuteSelect = "Cannot execute a select query.";
@@ -136,6 +138,7 @@ internal static class SelectRoute
             return Published(database, failure!);
         }
         bool hasOrderBy = syntax.OrderBy.Count > 0;
+        bool hasGroupBy = syntax.GroupBy.Count > 0;
         BoundSelect? plan = BoundSelect.Bind(syntax, database.Sql, out failure);
         if (plan is null)
         {
@@ -167,7 +170,8 @@ internal static class SelectRoute
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
             InnerJoinKeys? innerJoin = ExtractInnerJoinKeys(syntax, plan);
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin);
+            DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null) : null;
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin, hasGroupBy, derivedSpec);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -181,6 +185,201 @@ internal static class SelectRoute
                 snapshotView?.Dispose();
             }
         }
+    }
+
+    internal static DerivedSourceSpec? BuildDerivedSpec(BoundSelect plan, string? baseWhere, string? baseOrderBy, bool hasOriginalWhere = false)
+    {
+        if (plan.Sources.Count != 1 || plan.Sources[0].Table is null || hasOriginalWhere)
+        {
+            return null;
+        }
+        var cols = new List<string>(plan.Columns.Count);
+        foreach (ResultColumn col in plan.Columns)
+        {
+            if (col.Origin != ColumnOrigin.BaseColumn || col.SourceColumn is not { SourceIndex: 0 } sc)
+            {
+                return null;
+            }
+            string colName = sc.Column.Name;
+            cols.Add(string.Equals(col.Name, colName, StringComparison.OrdinalIgnoreCase)
+                ? $"[{colName}]"
+                : $"[{colName}] AS [{col.Name}]");
+        }
+        return new DerivedSourceSpec(plan.Sources[0].TableName, string.Join(", ", cols), baseWhere, baseOrderBy);
+    }
+
+    /// <summary>
+    /// Open a derived recordset via <c>Recordset.OpenRecordset([Type], [Options])</c> applying the parent's
+    /// <c>Filter</c> and <c>Sort</c> (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-{accdb,mdb},
+    /// filter-sort-edit-errors-{accdb,mdb}). Errors are published from <c>DAO.Recordset</c> without IErrorInfo.
+    /// </summary>
+    public static CallResult OpenDerived(
+        DatabaseObject database,
+        DaoObject caller,
+        DerivedSourceSpec source,
+        int parentType,
+        string filter,
+        string sort,
+        nint typeArg,
+        nint optionsArg)
+    {
+        if (database.PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
+        int? requestedType = Args.Int32(typeArg, omitted: null);
+        if (typeArg != 0 && !TypedCall.IsMissing(Args.Cell(typeArg)) && (Args.TypeOf(typeArg) & ~VarType.ByRef) != VarType.Empty && requestedType is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetTypeArg", "Recordset.OpenRecordset with a non-numeric Type argument (not recorded)"));
+        }
+        int recordsetType = requestedType ?? (parentType == 1 ? 2 : parentType);
+        if (recordsetType == 1)
+        {
+            return caller.Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (recordsetType is not (2 or 4))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetType", $"Recordset.OpenRecordset with Type {recordsetType} (only 2 dynaset and 4 snapshot are recorded)"));
+        }
+        int? requestedOptions = Args.Int32(optionsArg, omitted: 0);
+        if (requestedOptions is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetOptionsArg", "Recordset.OpenRecordset with a non-numeric Options argument (not recorded)"));
+        }
+        int options = requestedOptions.Value;
+        if (options is not (0 or 4))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetOptions", $"Recordset.OpenRecordset with Options {options} (only 0 and 4 dbReadOnly are recorded)"));
+        }
+
+        string trimmedFilter = filter.Trim();
+        string trimmedSort = sort.Trim();
+        if (trimmedSort.Length > 0 && trimmedSort.StartsWith("ORDER BY", StringComparison.OrdinalIgnoreCase)
+            && (trimmedSort.Length == 8 || char.IsWhiteSpace(trimmedSort[8])))
+        {
+            // filter-sort-edit-errors-{accdb,mdb} call 173: Sort = "ORDER BY ID" -> 3138 "Syntax error in ORDER BY clause."
+            return caller.Fail(3138, "Syntax error in ORDER BY clause.");
+        }
+
+        string? combinedWhere = (string.IsNullOrWhiteSpace(source.BaseWhere), trimmedFilter.Length == 0) switch
+        {
+            (true, true) => null,
+            (false, true) => source.BaseWhere,
+            (true, false) => trimmedFilter,
+            (false, false) => $"({source.BaseWhere}) AND ({trimmedFilter})",
+        };
+        string? combinedOrderBy = trimmedSort.Length > 0 ? trimmedSort : source.BaseOrderBy;
+
+        string sql = $"SELECT {source.SelectList} FROM [{source.TableName}]"
+            + (combinedWhere is not null ? $" WHERE {combinedWhere}" : "")
+            + (combinedOrderBy is not null ? $" ORDER BY {combinedOrderBy}" : "");
+
+        SelectSyntax? syntax = SqlParser.Parse(sql, out SqlFailure? failure);
+        if (syntax is null)
+        {
+            return PublishedDerived(caller, failure!, trimmedFilter, trimmedSort, fromParse: true);
+        }
+        bool hasOrderBy = syntax.OrderBy.Count > 0;
+        bool hasGroupBy = syntax.GroupBy.Count > 0;
+        BoundSelect? plan = BoundSelect.Bind(syntax, database.Sql, out failure);
+        if (plan is null)
+        {
+            return PublishedDerived(caller, failure!, trimmedFilter, trimmedSort);
+        }
+        if (plan.Parameters.Count > 0)
+        {
+            // filter-sort-edit-errors-{accdb,mdb} calls 140, 157: unknown column in Filter or Sort reports
+            // 3061 "Too few parameters. Expected 2." (ACE counts +1 on derived OpenRecordset).
+            int expected = plan.Parameters.Count + 1;
+            plan.Dispose();
+            return caller.Fail(3061, $"Too few parameters. Expected {expected}.");
+        }
+        foreach (SourceSlot slot in plan.Sources)
+        {
+            if (slot.TableName.Length > 0 && database.DenyReadTable(slot.TableName) is { } deniedRead)
+            {
+                plan.Dispose();
+                return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedRead));
+            }
+        }
+        ReadView? snapshotView = null;
+        PrivateOverlay? snapshotOverlay = null;
+        SelectCursor? cursor = null;
+        bool adopted = false;
+        try
+        {
+            database.EnsureReadOnlyFirstView();
+            bool singleTableRowSelect = IsSingleTableRowSelect(plan);
+            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values: null, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal);
+            if (cursor is null)
+            {
+                return viewRefusal ?? PublishedDerived(caller, failure!, trimmedFilter, trimmedSort);
+            }
+            if (recordsetType == 4)
+            {
+                database.Workspace.Transactions.EndLazyBurst(database.Cache);
+            }
+            if (hasOrderBy && !cursor.Eof)
+            {
+                // filter-sort-openrs-read-{accdb,mdb} calls 37, 77, 106, 129, 148:
+                // a derived recordset with Sort (ORDER BY) reports its full RecordCount immediately at open.
+                cursor.MoveLast();
+                cursor.MoveFirst();
+            }
+            var childSpec = new DerivedSourceSpec(source.TableName, source.SelectList, combinedWhere, combinedOrderBy);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin: null, hasGroupBy, childSpec);
+            adopted = true;
+            return database.Adopt(recordset);
+        }
+        finally
+        {
+            if (!adopted)
+            {
+                cursor?.Dispose();
+                plan.Dispose();
+                snapshotOverlay?.Dispose();
+                snapshotView?.Dispose();
+            }
+        }
+    }
+
+    private static CallResult PublishedDerived(DaoObject caller, SqlFailure failure, string filter, string sort, bool fromParse = false)
+    {
+        if (failure.IsNotModelled)
+        {
+            if (fromParse && sort.Length > 0 && filter.Length == 0)
+            {
+                // filter-sort-edit-errors-{accdb,mdb} call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
+                return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{sort}'.");
+            }
+            if (failure.NotModelled is "NotModelled.WhereFailureAtOpen" or "NotModelled.WhereRowFailure"
+                && failure.Message.Contains("3464", StringComparison.Ordinal))
+            {
+                // filter-sort-edit-errors-{accdb,mdb} call 148: Filter = "N = 'notanum'" fails 3464 at derived OpenRecordset.
+                return caller.Fail(3464, "Data type mismatch in criteria expression.");
+            }
+            return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
+        }
+        if (failure.Number == 3075)
+        {
+            string expr = filter.Length > 0 ? filter : sort;
+            return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{expr}'.");
+        }
+        if (failure.Number == 3138)
+        {
+            // filter-sort-edit-errors-{accdb,mdb} call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
+            if (sort.Length > 0 && !sort.StartsWith("ORDER BY", StringComparison.OrdinalIgnoreCase))
+            {
+                return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{sort}'.");
+            }
+            return caller.Fail(3138, "Syntax error in ORDER BY clause.");
+        }
+        if (failure.Number == 3061 && failure.Message.StartsWith("Too few parameters. Expected ", StringComparison.Ordinal)
+            && int.TryParse(failure.Message["Too few parameters. Expected ".Length..].TrimEnd('.'), out int expected))
+        {
+            return caller.Fail(3061, $"Too few parameters. Expected {expected + 1}.");
+        }
+        return caller.Fail(failure.Number, failure.Message);
     }
 
     /// <summary>
@@ -221,7 +420,7 @@ internal static class SelectRoute
         ISqlDatabase scanDatabase;
         if (recordsetType == 2 && singleTableRowSelect)
         {
-            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions), dynamicOverlay: true, snapshotOverlay: null);
         }
         else if (recordsetType == 4
             && singleTableRowSelect
@@ -232,7 +431,7 @@ internal static class SelectRoute
             && !ProjectsMemoOrOle(plan))
         {
             snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), staleRoView);
-            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay), dynamicOverlay: false, snapshotOverlay);
         }
         else if (recordsetType == 4
             && singleTableRowSelect
@@ -251,7 +450,7 @@ internal static class SelectRoute
             }
             snapshotView = registered.View!;
             snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), snapshotView);
-            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay), dynamicOverlay: false, snapshotOverlay);
         }
         else
         {
@@ -380,7 +579,7 @@ internal static class SelectRoute
     /// readers over a specific <see cref="PageSource"/> (such as a dynamic Workspace coordinator source) while
     /// forwarding all catalog, table and expression queries to the Database's <see cref="DatabaseSql"/>.
     /// </summary>
-    private sealed class SelectSourceDatabase(DatabaseSql inner, DatabaseObject database, PageSource source) : ISqlDatabase
+    private sealed class SelectSourceDatabase(DatabaseSql inner, DatabaseObject database, PageSource source, bool dynamicOverlay, PrivateOverlay? snapshotOverlay) : ISqlDatabase
     {
         public ExpressionContext Context => inner.Context;
 
@@ -392,7 +591,9 @@ internal static class SelectRoute
 
         public RowReader? OpenRows(TableDefinition table, out string? failure)
         {
-            RowReader? reader = RowReader.Open(source, database.Format, table, database.PageCount, out TraversalFailure? f);
+            PrivateOverlay? overlay = dynamicOverlay ? database.Workspace.Transactions.OverlayOf(database.Cache) : snapshotOverlay;
+            ulong extent = PageAllocator.ExtentOf(database.Cache, database.PageCount, overlay);
+            RowReader? reader = RowReader.Open(source, database.Format, table, extent, out TraversalFailure? f);
             failure = f?.Predicate;
             return reader;
         }

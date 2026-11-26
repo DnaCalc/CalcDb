@@ -10,10 +10,13 @@ using CalcDb.Isam.Transactions;
 using CalcDb.Sql;
 using CalcDb.Storage;
 using CalcDb.Values;
+using CalcDb.Values.Scalar;
 
 namespace CalcDb.Com.Dao;
 
 internal readonly record struct InnerJoinKeys(string LeftColumn, string RightColumn);
+
+internal sealed record DerivedSourceSpec(string TableName, string SelectList, string? BaseWhere, string? BaseOrderBy);
 
 /// <summary>
 /// A Recordset (Recordset2) over a SELECT's result (W-06/parser-binder-scan; II-11 §1 ExecutionInstance, II-12 §10): the
@@ -41,12 +44,24 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Get("EditMode", (self, args) => Live(self, r => r.EditModeValue()))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.IsAtEof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.IsAtBof)))
+        .Get("NoMatch", (self, args) => Live(self, r => Bool(r._noMatch)))
+        .Get("AbsolutePosition", (self, args) => Live(self, r => r.AbsolutePosition()))
+        .Put("AbsolutePosition", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetAbsolutePosition(value)); })
+        .Get("Filter", (self, args) => Live(self, r => Text(r._filter)))
+        .Put("Filter", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetText(ref r._filter, value)); })
+        .Get("Sort", (self, args) => Live(self, r => Text(r._sort)))
+        .Put("Sort", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetText(ref r._sort, value)); })
         .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
-        .Method("MoveFirst", (self, args) => Live(self, r => r.EditPending("MoveFirst") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.First) : r.Moved(r.Cursor.MoveFirst()))))
-        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.EditPending("MoveLast") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Last) : r.Moved(r.Cursor.MoveLast()))))
-        .Method("MoveNext", (self, args) => Live(self, r => r.EditPending("MoveNext") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Next) : r.Moved(r.Cursor.MoveNext()))))
-        .Method("MovePrevious", (self, args) => Live(self, r => r.EditPending("MovePrevious") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Previous) : r.Moved(r.Cursor.MovePrevious()))))
+        .Method("MoveFirst", (self, args) => Live(self, r => r.EditPending("MoveFirst") ?? r.MoveFirst()))
+        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.EditPending("MoveLast") ?? r.MoveLast()))
+        .Method("MoveNext", (self, args) => Live(self, r => r.EditPending("MoveNext") ?? r.MoveNext()))
+        .Method("MovePrevious", (self, args) => Live(self, r => r.EditPending("MovePrevious") ?? r.MovePrevious()))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.EditPending("Move") ?? r.Move(rows, start)); })
+        .Method("FindFirst", (self, args) => { nint criteria = args[0]; return Live(self, r => r.FindRow(FindDirection.First, criteria)); })
+        .Method("FindLast", (self, args) => { nint criteria = args[0]; return Live(self, r => r.FindRow(FindDirection.Last, criteria)); })
+        .Method("FindNext", (self, args) => { nint criteria = args[0]; return Live(self, r => r.FindRow(FindDirection.Next, criteria)); })
+        .Method("FindPrevious", (self, args) => { nint criteria = args[0]; return Live(self, r => r.FindRow(FindDirection.Previous, criteria)); })
+        .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, r => r.OpenDerivedRecordset(type, options)); })
         .Method("Edit", (self, args) => Live(self, r => r.Edit()))
         .Method("AddNew", (self, args) => Live(self, r => r.AddNew()))
         .Method("Delete", (self, args) => Live(self, r => r.Delete()))
@@ -115,6 +130,19 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private RowId? _seeChangesRow;
     private NativeValue[]? _seeChangesValues;
     private ulong _seeChangesSerial;
+    private readonly DerivedSourceSpec? _derivedSpec;
+    private string _filter = "";
+    private string _sort = "";
+    private bool _noMatch;
+    private int _selectOrdinal;
+    private List<RowId>? _addedRows;
+    private int _addedRowIndex = -1;
+    private bool _addedRowEof;
+    private HashSet<RowId>? _deletedRows;
+    private bool _deletedCurrent;
+    private FindCriteria? _criteria;
+    private ExpressionSchema? _schema;
+    private ExpressionContext? _context;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
     public SelectRecordsetObject(
@@ -128,7 +156,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         PrivateOverlay? snapshotOverlay = null,
         int options = 0,
         ulong openSequence = 0,
-        InnerJoinKeys? innerJoin = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        InnerJoinKeys? innerJoin = null,
+        bool hasGroupBy = false,
+        DerivedSourceSpec? derivedSpec = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
@@ -137,6 +167,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _options = options;
         _innerJoin = innerJoin;
         OpenSequence = openSequence;
+        HasGroupBy = hasGroupBy;
+        _derivedSpec = derivedSpec;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
         _snapshotView = snapshotView;
@@ -155,6 +187,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             && cursor.Updatable == true;
         _appendOnly = recordsetType == 2 && RecordsetOptions.IsAppendOnly(options);
         _appendOnlyRows = _appendOnly ? [] : null;
+        _selectOrdinal = cursor.Bof || cursor.Eof ? -1 : 0;
         if (recordsetType == 4 && _openOverlay is { } openOverlay)
         {
             _openOverlaySnapshot = CaptureOverlayPages(openOverlay);
@@ -165,32 +198,45 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     public ulong OpenSequence { get; }
 
+    internal bool HasGroupBy { get; }
+
     internal bool IsAppendOnly => _appendOnly;
 
-    internal CallResult ReadAppendOnlyField(int ordinal, bool fromCollect)
+    internal bool IsOnAddedRow => _addedRows is not null && _addedRowIndex >= 0 && _addedRowIndex < _addedRows.Count;
+
+    internal bool IsOnDeletedRow => _deletedCurrent;
+
+    internal CallResult ReadAppendOnlyField(int ordinal, bool fromCollect) =>
+        ReadRowIdField(_appendOnlyRows is not null && _appendOnlyIndex >= 0 && _appendOnlyIndex < _appendOnlyRows.Count ? _appendOnlyRows[_appendOnlyIndex] : null, ordinal, fromCollect);
+
+    internal CallResult ReadAddedRowField(int ordinal, bool fromCollect) =>
+        ReadRowIdField(IsOnAddedRow ? _addedRows![_addedRowIndex] : null, ordinal, fromCollect);
+
+    private CallResult ReadRowIdField(RowId? rowId, int ordinal, bool fromCollect)
     {
         if (fromCollect)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyCollect", "Recordset.Collect on a dbAppendOnly SELECT recordset (not recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyCollect", "Recordset.Collect on an appended SELECT recordset row (not recorded)"));
         }
         if (!_isSingleTableRowSelect || Plan.Sources[0].Table is not { } table)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyRead", "Field.Value on a non-single-table dbAppendOnly SELECT recordset (not recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyRead", "Field.Value on a non-single-table appended SELECT recordset row (not recorded)"));
         }
         if (Cursor.Columns[ordinal] is not { Origin: ColumnOrigin.BaseColumn, SourceColumn: { SourceIndex: 0 } sc })
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyNonBaseColumn", $"Field.Value of non-base column {Cursor.Columns[ordinal].Name} on a dbAppendOnly SELECT recordset (not recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyNonBaseColumn", $"Field.Value of non-base column {Cursor.Columns[ordinal].Name} on an appended SELECT recordset row (not recorded)"));
         }
-        if (_appendOnlyIndex < 0 || _appendOnlyIndex >= _appendOnlyRows!.Count)
+        if (rowId is not { } row)
         {
             return CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
         }
-        _appendOnlyReader ??= RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        ulong extent = PageAllocator.ExtentOf(Database.Cache, Database.PageCount, Database.Workspace.Transactions.OverlayOf(Database.Cache));
+        _appendOnlyReader ??= RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, extent, out _);
         if (_appendOnlyReader is not { } reader)
         {
-            return CallResult.Fail(Failure.NotImplemented("Field.Value on a dbAppendOnly SELECT recordset when the table reader could not be opened"));
+            return CallResult.Fail(Failure.NotImplemented("Field.Value on an appended SELECT recordset row when the table reader could not be opened"));
         }
-        reader.Position(_appendOnlyRows[_appendOnlyIndex]);
+        reader.Position(row);
         if (sc.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo)
         {
             TextFieldRead text = reader.ReadText(sc.Column);
@@ -207,9 +253,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     internal bool IsUpdatableInnerJoin => _isUpdatableInnerJoin;
 
-    internal bool IsAtEof => _appendOnly ? _appendOnlyEof : Cursor.Eof;
+    internal bool IsAtEof => _appendOnly ? _appendOnlyEof
+        : _deletedCurrent ? false
+        : _addedRows is { Count: > 0 } ? (_addedRowIndex >= 0 ? false : (_addedRowEof || (Cursor.Eof && _addedRowIndex < 0)))
+        : Cursor.Eof;
 
-    internal bool IsAtBof => _appendOnly ? _appendOnlyBof : Cursor.Bof;
+    internal bool IsAtBof => _appendOnly ? _appendOnlyBof
+        : _deletedCurrent ? false
+        : _addedRowIndex >= 0 ? false
+        : Cursor.Bof;
 
     internal bool AllowsOtherWorkspaceRollback(ulong frameBeginSeq) =>
         !Closed
@@ -544,15 +596,18 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 tmpView?.Dispose();
             }
         }
-        if (IsMdb && !(Database.Workspace.Transactions.Depth > 0 && _isSingleTableRowSelect))
+        if (IsMdb && !(_isSingleTableRowSelect && RecordsetType is 2 or 4))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordCount.Mdb",
                 "RecordCount: RecordCount on an MDB DAO SELECT recordset is not recorded (CUR-POP)"));
         }
-        return Cursor.TryRecordCount(out long count, out string? openName, out string? openDetail)
-            ? Int32((int)count)
-            : CallResult.Fail(Failure.NotModelled(openName!, "RecordCount: " + openDetail));
+        if (!Cursor.TryRecordCount(out long count, out string? openName, out string? openDetail))
+        {
+            return CallResult.Fail(Failure.NotModelled(openName!, "RecordCount: " + openDetail));
+        }
+        long adjusted = count + (_addedRows?.Count ?? 0) - (_deletedRows?.Count ?? 0);
+        return Int32((int)Math.Max(0, adjusted));
     }
 
     public DatabaseObject Database { get; }
@@ -578,17 +633,466 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
     /// <summary>
-    /// Refuse unrecorded Move(Rows) source VarTypes before IDispatch coercion, matching Dao.RecordsetObject.Move
-    /// (r-cursor-1b/move-argument-forms).
+    /// Refuse unrecorded Move(Rows) and AbsolutePosition put source VarTypes before IDispatch coercion, matching
+    /// Dao.RecordsetObject (r-cursor-1b/move-argument-forms, r-q53-conv-abspos-subq-loc/abspos-get-put-read-{accdb,mdb}).
     /// </summary>
-    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
-        member.Name == "Move" && parameter == 0 && sourceType is not (
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
+    {
+        ("Move", 0) when sourceType is not (
             VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or
-            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr)
-            ? Failure.NotModelled(
+            VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr) =>
+            Failure.NotModelled(
                 "NotModelled.MoveArgumentType",
-                $"Recordset.Move with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)")
-            : null;
+                $"Recordset.Move with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)"),
+        ("AbsolutePosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (
+            VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or
+            VarType.R4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
+            Failure.NotModelled(
+                "NotModelled.AbsolutePositionArgumentType",
+                $"Recordset.AbsolutePosition put with {sourceType} argument (only I4, I2, UI1, Bool, R4, R8, BSTR, Empty and Null are recorded)"),
+        _ => null,
+    };
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => conversion.Reason switch
+    {
+        ArgumentConversionReason.Missing => InvalidArgumentCount(),
+        ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        _ => Failure.NotModelled(
+            "NotModelled.RecordsetArgumentConversion",
+            $"Recordset.{member.Name} parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
+    };
+
+    private CallResult SetText(ref string kept, nint value)
+    {
+        kept = Args.Text(value) ?? "";
+        return CallResult.Nothing;
+    }
+
+    private CallResult AbsolutePosition()
+    {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (_appendOnly)
+        {
+            return Int32(_appendOnlyIndex);
+        }
+        if (_deletedCurrent || IsAtBof || IsAtEof)
+        {
+            return Int32(-1);
+        }
+        return Int32(_selectOrdinal);
+    }
+
+    private CallResult SetAbsolutePosition(nint value)
+    {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        int target = Args.Int32(value, omitted: 0) ?? 0;
+        if (target < 0)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (_appendOnly)
+        {
+            int count = _appendOnlyRows!.Count;
+            if (count == 0)
+            {
+                return target == 0 ? Fail(3021, DaoErrors.NoCurrentRecord) : Fail(3001, DaoErrors.InvalidArgument);
+            }
+            if (target > count)
+            {
+                return Fail(3001, DaoErrors.InvalidArgument);
+            }
+            _frame?.Discard();
+            _appendOnlyIndex = Math.Min(target, count - 1);
+            _appendOnlyBof = false;
+            _appendOnlyEof = false;
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+            return CallResult.Nothing;
+        }
+        if (!Cursor.TryRecordCount(out long cursorCount, out string? openName, out string? openDetail))
+        {
+            return CallResult.Fail(Failure.NotModelled(openName!, "AbsolutePosition put: " + openDetail));
+        }
+        long totalCount = Math.Max(0, cursorCount + (_addedRows?.Count ?? 0) - (_deletedRows?.Count ?? 0));
+        if (totalCount == 0)
+        {
+            return target == 0 ? Fail(3021, DaoErrors.NoCurrentRecord) : Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (target > totalCount)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        int clamped = (int)Math.Min(target, totalCount - 1);
+        _frame?.Discard();
+        _deletedCurrent = false;
+        _addedRowIndex = -1;
+        _addedRowEof = false;
+        _noMatch = false;
+        long liveCursorCount = Math.Max(0, cursorCount - (_deletedRows?.Count ?? 0));
+        if (clamped < liveCursorCount)
+        {
+            MoveOutcome m;
+            if (Cursor.Bof || Cursor.Eof || _selectOrdinal < 0 || _deletedRows is { Count: > 0 })
+            {
+                m = Cursor.MoveFirst();
+                if (m is MoveOutcome.Moved or MoveOutcome.ReachedBoundary && clamped > 0)
+                {
+                    m = Cursor.Move(clamped);
+                }
+            }
+            else if (clamped != _selectOrdinal)
+            {
+                m = Cursor.Move(clamped - _selectOrdinal);
+            }
+            else
+            {
+                m = MoveOutcome.Moved;
+            }
+            if (Cursor.FetchFailure is { } fetch)
+            {
+                return CallResult.Fail(fetch.IsNotModelled ? Failure.NotModelled(fetch.NotModelled!, fetch.Message) : Failure.Dao(fetch.Number, Source, fetch.Message));
+            }
+            if (m is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
+            {
+                return Moved(m);
+            }
+            _selectOrdinal = clamped;
+        }
+        else
+        {
+            _addedRowIndex = (int)(clamped - liveCursorCount);
+            _selectOrdinal = clamped;
+        }
+        _movedSinceOpen = true;
+        CaptureSeeChangesRow();
+        return CallResult.Nothing;
+    }
+
+    private CallResult OpenDerivedRecordset(nint typeArg, nint optionsArg)
+    {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (EditPending("OpenRecordset") is { } pending)
+        {
+            return pending;
+        }
+        if (_derivedSpec is not { } spec)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.DerivedOpenRecordsetShape",
+                "Recordset.OpenRecordset on a non-single-table or complex SELECT recordset (not recorded)"));
+        }
+        return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, _filter, _sort, typeArg, optionsArg);
+    }
+
+    private CallResult MoveFirst()
+    {
+        if (_appendOnly)
+        {
+            return MoveAppendOnly(AppendOnlyMove.First);
+        }
+        _deletedCurrent = false;
+        _addedRowIndex = -1;
+        _addedRowEof = false;
+        _noMatch = false;
+        MoveOutcome outcome = Cursor.MoveFirst();
+        if (outcome == MoveOutcome.NoCurrentRecord && _addedRows is { Count: > 0 })
+        {
+            _addedRowIndex = 0;
+            _selectOrdinal = 0;
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+            return CallResult.Nothing;
+        }
+        CallResult result = Moved(outcome);
+        if (result.Failure is null)
+        {
+            _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : 0;
+        }
+        return result;
+    }
+
+    private CallResult MoveLast()
+    {
+        if (_appendOnly)
+        {
+            return MoveAppendOnly(AppendOnlyMove.Last);
+        }
+        _deletedCurrent = false;
+        _noMatch = false;
+        if (_addedRows is { Count: > 0 })
+        {
+            MoveOutcome lastCursor = Cursor.MoveLast();
+            if (Cursor.FetchFailure is { } fetch)
+            {
+                return CallResult.Fail(fetch.IsNotModelled ? Failure.NotModelled(fetch.NotModelled!, fetch.Message) : Failure.Dao(fetch.Number, Source, fetch.Message));
+            }
+            if (lastCursor == MoveOutcome.NotSupported && RecordsetType == 8)
+            {
+                return Fail(3219, DaoErrors.InvalidOperation);
+            }
+            _addedRowIndex = _addedRows.Count - 1;
+            _addedRowEof = false;
+            _selectOrdinal = (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0)) + _addedRowIndex;
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+            return CallResult.Nothing;
+        }
+        _addedRowIndex = -1;
+        _addedRowEof = false;
+        CallResult result = Moved(Cursor.MoveLast());
+        if (result.Failure is null)
+        {
+            _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0) - 1);
+        }
+        return result;
+    }
+
+    private CallResult MoveNext()
+    {
+        if (_appendOnly)
+        {
+            return MoveAppendOnly(AppendOnlyMove.Next);
+        }
+        _noMatch = false;
+        if (_addedRows is { Count: > 0 })
+        {
+            if (_addedRowEof)
+            {
+                return Fail(3021, DaoErrors.NoCurrentRecord);
+            }
+            if (_addedRowIndex >= 0)
+            {
+                if (_addedRowIndex + 1 < _addedRows.Count)
+                {
+                    _addedRowIndex++;
+                    _selectOrdinal++;
+                }
+                else
+                {
+                    _addedRowIndex = -1;
+                    _addedRowEof = true;
+                    _selectOrdinal = -1;
+                }
+                _movedSinceOpen = true;
+                CaptureSeeChangesRow();
+                return CallResult.Nothing;
+            }
+        }
+        _deletedCurrent = false;
+        int prevOrdinal = _selectOrdinal;
+        bool wasBof = Cursor.Bof;
+        MoveOutcome outcome = Cursor.MoveNext();
+        if (outcome == MoveOutcome.ReachedBoundary && Cursor.Eof && _addedRows is { Count: > 0 })
+        {
+            _addedRowIndex = 0;
+            _addedRowEof = false;
+            _selectOrdinal = (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0));
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+            return CallResult.Nothing;
+        }
+        CallResult result = Moved(outcome);
+        if (result.Failure is null)
+        {
+            _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (wasBof ? 0 : prevOrdinal + 1);
+        }
+        return result;
+    }
+
+    private CallResult MovePrevious()
+    {
+        if (_appendOnly)
+        {
+            return MoveAppendOnly(AppendOnlyMove.Previous);
+        }
+        _noMatch = false;
+        if (_addedRows is { Count: > 0 } && (_addedRowIndex >= 0 || _addedRowEof))
+        {
+            if (RecordsetType == 8)
+            {
+                return Fail(3219, DaoErrors.InvalidOperation);
+            }
+            if (_addedRowEof)
+            {
+                _addedRowEof = false;
+                _addedRowIndex = _addedRows.Count - 1;
+                _selectOrdinal = (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0)) + _addedRowIndex;
+                _movedSinceOpen = true;
+                CaptureSeeChangesRow();
+                return CallResult.Nothing;
+            }
+            if (_addedRowIndex > 0)
+            {
+                _addedRowIndex--;
+                _selectOrdinal--;
+                _movedSinceOpen = true;
+                CaptureSeeChangesRow();
+                return CallResult.Nothing;
+            }
+            _addedRowIndex = -1;
+            MoveOutcome toLast = Cursor.MoveLast();
+            CallResult lastRes = Moved(toLast);
+            if (lastRes.Failure is null)
+            {
+                _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0) - 1);
+            }
+            return lastRes;
+        }
+        _deletedCurrent = false;
+        int prevOrdinal = _selectOrdinal;
+        bool wasEof = Cursor.Eof;
+        CallResult result = Moved(Cursor.MovePrevious());
+        if (result.Failure is null)
+        {
+            _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (wasEof ? (int)Math.Max(0, Cursor.RecordCount - (_deletedRows?.Count ?? 0) - 1) : prevOrdinal - 1);
+        }
+        return result;
+    }
+
+    private CallResult FindRow(FindDirection direction, nint argument)
+    {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!_isSingleTableRowSelect || Plan.Sources[0].Table is not { } table)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetFind",
+                $"Recordset.Find{direction} on a non-single-table SELECT recordset (not recorded)"));
+        }
+        ReadOnlySpan<char> text = argument != 0 && Args.TypeOf(argument) == VarType.Bstr
+            ? Bstrs.Chars(Args.Cell(argument)->Pointer)
+            : (Args.Text(argument) ?? "").AsSpan();
+        FindCriteria? criteria = BindCriteria(table, text, out ExpressionFailure? exprFailure);
+        if (criteria is null)
+        {
+            return exprFailure!.IsNotModelled
+                ? CallResult.Fail(Failure.NotModelled(exprFailure.NotModelled!, exprFailure.Message))
+                : Fail(exprFailure.Number, exprFailure.Message);
+        }
+        _frame?.Discard();
+        if (direction != FindDirection.First)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetFindDirection",
+                $"Recordset.Find{direction} on a SELECT recordset (only FindFirst is recorded)"));
+        }
+        int savedOrdinal = _selectOrdinal;
+        int savedAddedIndex = _addedRowIndex;
+        bool savedAddedEof = _addedRowEof;
+        bool savedDeleted = _deletedCurrent;
+        ulong extent = PageAllocator.ExtentOf(Database.Cache, Database.PageCount, Database.Workspace.Transactions.OverlayOf(Database.Cache));
+        if (RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, extent, out TraversalFailure? openFailure) is not { } reader)
+        {
+            return CallResult.Fail(Failure.NotImplemented("FindFirst when the table reader cannot be opened: " + openFailure?.Predicate));
+        }
+        try
+        {
+            CallResult firstRes = MoveFirst();
+            if (firstRes.Failure is not null && !IsAtEof)
+            {
+                _noMatch = true;
+                return CallResult.Nothing;
+            }
+            while (!IsAtEof)
+            {
+                RowId? rowId = CurrentSingleTableRowId();
+                if (rowId is { } rid && (_deletedRows is null || !_deletedRows.Contains(rid)))
+                {
+                    reader.Position(rid);
+                    RowTest tested = criteria.Test(reader);
+                    if (tested == RowTest.Match)
+                    {
+                        _noMatch = false;
+                        CaptureSeeChangesRow();
+                        return CallResult.Nothing;
+                    }
+                    if (tested == RowTest.Failed && criteria.LastFailure is { } evalFailure)
+                    {
+                        return evalFailure.IsNotModelled
+                            ? CallResult.Fail(Failure.NotModelled(evalFailure.NotModelled!, evalFailure.Message))
+                            : Fail(evalFailure.Number, evalFailure.Message);
+                    }
+                }
+                CallResult nextRes = MoveNext();
+                if (nextRes.Failure is not null)
+                {
+                    break;
+                }
+            }
+            // NoMatch: restore first row (or empty) matching CUR-FIND FindFirst miss semantics.
+            _noMatch = true;
+            _deletedCurrent = savedDeleted;
+            _addedRowIndex = savedAddedIndex;
+            _addedRowEof = savedAddedEof;
+            _selectOrdinal = savedOrdinal;
+            MoveFirst();
+            _noMatch = true;
+            return CallResult.Nothing;
+        }
+        finally
+        {
+            reader.Dispose();
+        }
+    }
+
+    private FindCriteria? BindCriteria(TableDefinition table, ReadOnlySpan<char> text, out ExpressionFailure? failure)
+    {
+        failure = null;
+        if (_criteria is { } kept && text.SequenceEqual(kept.Text))
+        {
+            return kept;
+        }
+        _schema ??= new ExpressionSchema(table);
+        _context ??= Database.CreateExpressionContext(ExpressionUse.Find);
+        FindCriteria? bound = FindCriteria.Bind(text.ToString(), _schema, _context, out failure);
+        if (bound is not null)
+        {
+            _criteria?.Dispose();
+            _criteria = bound;
+        }
+        return bound;
+    }
+
+    private RowId? CurrentSingleTableRowId()
+    {
+        if (IsOnAddedRow)
+        {
+            return _addedRows![_addedRowIndex];
+        }
+        if (_appendOnly)
+        {
+            return _appendOnlyIndex >= 0 && _appendOnlyIndex < _appendOnlyRows!.Count ? _appendOnlyRows[_appendOnlyIndex] : null;
+        }
+        if (!_isSingleTableRowSelect || Cursor.Bof || Cursor.Eof)
+        {
+            return null;
+        }
+        int baseOrdinal = -1;
+        for (int i = 0; i < Cursor.Columns.Count; i++)
+        {
+            if (Cursor.Columns[i] is { Origin: ColumnOrigin.BaseColumn, SourceColumn.SourceIndex: 0 })
+            {
+                baseOrdinal = i;
+                break;
+            }
+        }
+        if (baseOrdinal < 0 || !Cursor.Read(baseOrdinal, out _, out _))
+        {
+            return null;
+        }
+        return (((IExpressionRow)Cursor).Source(0) as RowReader)?.Current;
+    }
 
     private SelectFieldsObject FieldsCollection => _fields ??= new SelectFieldsObject(this);
 
@@ -744,7 +1248,38 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number"));
         }
-        return _appendOnly ? MoveAppendOnly(AppendOnlyMove.Relative, rows.Value) : Moved(Cursor.Move(rows.Value));
+        if (_appendOnly)
+        {
+            return MoveAppendOnly(AppendOnlyMove.Relative, rows.Value);
+        }
+        _deletedCurrent = false;
+        _addedRowIndex = -1;
+        _addedRowEof = false;
+        _noMatch = false;
+        int prevOrdinal = _selectOrdinal;
+        bool wasBof = Cursor.Bof;
+        bool wasEof = Cursor.Eof;
+        CallResult result = Moved(Cursor.Move(rows.Value));
+        if (result.Failure is null)
+        {
+            if (Cursor.Bof || Cursor.Eof)
+            {
+                _selectOrdinal = -1;
+            }
+            else if (wasBof)
+            {
+                _selectOrdinal = Math.Max(0, rows.Value - 1);
+            }
+            else if (wasEof)
+            {
+                _selectOrdinal = Math.Max(0, (int)Cursor.RecordCount + rows.Value);
+            }
+            else
+            {
+                _selectOrdinal = Math.Max(0, prevOrdinal + rows.Value);
+            }
+        }
+        return result;
     }
 
     /// <summary>
@@ -964,6 +1499,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 {
                     return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsFetchFailure", "GetRows met a WHERE fetch failure while advancing (not recorded)"));
                 }
+                _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (_selectOrdinal < 0 ? 0 : _selectOrdinal + 1);
                 if (move is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
                 {
                     break;
@@ -1010,8 +1546,22 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
     }
 
-    private CallResult Clone() =>
-        CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on a SELECT query recordset (SelectCursor has no Clone yet)"));
+    private CallResult Clone()
+    {
+        if (RecordsetType == 8
+            || !_isSingleTableRowSelect
+            || Plan.Parameters.Count > 0
+            || _appendOnly
+            || Database.Workspace.Transactions.Depth > 0
+            || _derivedSpec is not { } spec)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on this SELECT query recordset shape, cursor type, or transaction depth (not recorded)"));
+        }
+        // r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-{accdb,mdb} calls 55-84:
+        // Clone of a derived/single-table SELECT dynaset or snapshot opens an independent cursor at row 0
+        // with Filter = "", Sort = "", surviving parent Close().
+        return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, filter: "", sort: "", typeArg: 0, optionsArg: 0);
+    }
 
     /// <summary>
     /// Requery(NewQueryDef) on a SELECT recordset (docs/work/qualified.md R-CURSOR-1 CUR-POP): reopens the bound
@@ -1075,6 +1625,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _openOverlaySnapshot = RecordsetType == 4 && _openOverlay is { } overlay ? CaptureOverlayPages(overlay) : null;
         _openPublishedSerial = Database.Cache.PublishedSerial;
         _movedSinceOpen = false;
+        _deletedCurrent = false;
+        _deletedRows = null;
+        _addedRows = null;
+        _addedRowIndex = -1;
+        _addedRowEof = false;
+        _noMatch = false;
+        _selectOrdinal = next.Bof || next.Eof ? -1 : 0;
         previousCursor.Dispose();
         previousSnapshotOverlay?.Dispose();
         previousSnapshotView?.Dispose();
@@ -1333,7 +1890,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (Database.ReadOnly || !RecordsetOptions.Updatable(RecordsetType, _options, readOnlyDatabase: false) || Cursor.Updatable != true)
         {
-            refused = Database.ReadOnly && member is "Edit" or "AddNew" or "Delete"
+            refused = (Database.ReadOnly || RecordsetOptions.ReadOnlyOnly(_options)) && member is "Edit" or "AddNew" or "Delete"
                 ? Fail(MutationError.ReadOnly, "Cannot update. Database or object is read-only.")
                 : CallResult.Fail(Failure.NotModelled(
                     "NotModelled.QueryRecordsetEditReadOnly",
@@ -1371,7 +1928,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' edit semantics cannot be compiled: {contextFailure}"));
             return null;
         }
-        if (RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, Database.PageCount, out TraversalFailure? openFailure) is not { } reader)
+        ulong editExtent = PageAllocator.ExtentOf(Database.Cache, Database.PageCount, Database.Workspace.Transactions.OverlayOf(Database.Cache));
+        if (RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, editExtent, out TraversalFailure? openFailure) is not { } reader)
         {
             refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' cannot be opened for edit: {openFailure?.Predicate}"));
             return null;
@@ -1566,11 +2124,47 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return pending;
         }
-        if (EditFrameForSource("Delete", 0, out CallResult refused) is not { } _)
+        if (EditFrameForSource("Delete", 0, out CallResult refused) is not { } frame)
         {
             return refused;
         }
-        return CallResult.Fail(Failure.NotImplemented("Recordset.Delete on a writable SELECT dynaset (only read-only 3027 is recorded)"));
+        if (IsAtBof || IsAtEof || _deletedCurrent)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        RowId? currentRow = CurrentSingleTableRowId();
+        if (currentRow is not { } rowId)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        _editReader!.Position(rowId);
+        UpdateOutcome outcome = frame.Delete();
+        CallResult result = EditPublication.Of(outcome);
+        if (result.Failure is null)
+        {
+            if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
+            {
+                Database.Engine.Changes.MarkPublished([change]);
+            }
+            if (IsOnAddedRow)
+            {
+                _addedRows!.RemoveAt(_addedRowIndex);
+                _addedRowIndex = -1;
+            }
+            else
+            {
+                _deletedRows ??= [];
+                _deletedRows.Add(rowId);
+            }
+            _deletedCurrent = true;
+            _selectOrdinal = -1;
+            _editReader.Position(null);
+            if (((IExpressionRow)Cursor).Source(0) is RowReader sourceReader)
+            {
+                sourceReader.Position(null);
+            }
+        }
+        return result;
     }
 
     /// <summary>
@@ -1642,6 +2236,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     _appendOnlyBof = false;
                     _appendOnlyEof = true;
                 }
+            }
+            else if (mode == EditMode.AddNew && _isSingleTableRowSelect && outcome.Change?.Inserted is { } addedRow)
+            {
+                // filter-sort-edit-errors-{accdb,mdb} calls 30-56: AddNew+Update on a derived/SELECT dynaset
+                // appends the new row (even when it does not match Filter) so a subsequent MoveFirst walk sees it.
+                _addedRows ??= [];
+                _addedRows.Add(addedRow);
             }
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
             {
@@ -1720,6 +2321,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _seeChangesRow = null;
             _seeChangesValues = null;
             Cursor.Dispose();
+            _criteria?.Dispose();
+            _criteria = null;
             Plan.Dispose();
             _snapshotOverlay?.Dispose();
             _snapshotView?.Dispose();
@@ -2334,7 +2937,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                     "NotModelled.FieldSize.Decimal38CursorType",
                     $"Field.Size of Decimal(38) base column {Column.Name} on cursor type {Recordset.RecordsetType} (only dynaset 2, snapshot 4 and forward-only 8 are recorded)"));
         }
-        if (Column.Origin == ColumnOrigin.Expression)
+        if (Column.Origin == ColumnOrigin.Expression || (Column.Origin == ColumnOrigin.GroupKey && Column.IsGroupExpressionKey))
         {
             if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
             {
@@ -2432,6 +3035,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                     : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"Field.Attributes of the column {Column.Name} (calculated, auto-GUID or hyperlink: not recorded)"));
             }
             case ColumnOrigin.Expression:
+            case ColumnOrigin.GroupKey when Column.IsGroupExpressionKey:
             {
                 if (Recordset.Cursor.FieldType(_ordinal, out string? open) is not int type)
                 {
@@ -2452,7 +3056,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 }
                 return type switch
                 {
-                    3 or 4 or 7 or 8 => Int32(1),
+                    3 or 4 or 7 or 8 or 20 => Int32(1),
                     10 or 16 or 26 => Int32(2),
                     _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.AggregateType", $"Field.Attributes of an aggregate column of DAO type {type} ({Column.Name}: not recorded)")),
                 };
@@ -2517,15 +3121,20 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// </summary>
     private CallResult PropertiesCollection()
     {
-        if (Recordset.RecordsetType != 2)
+        if (Recordset.RecordsetType is not (2 or 4))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CursorType", $"Field.Properties on a type {Recordset.RecordsetType} query recordset (only dynaset is recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CursorType", $"Field.Properties on a type {Recordset.RecordsetType} query recordset (only dynaset and snapshot are recorded)"));
         }
         bool isBase = Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null;
         bool isSingleColumnExpr = Column.Origin == ColumnOrigin.Expression
             && Column.SourceTable is { Length: > 0 }
             && Column.SourceField is { Length: > 0 };
-        if (!isBase && !isSingleColumnExpr)
+        bool isSnapshotMeta = Recordset.RecordsetType == 4 && (
+            isBase
+            || (Column.Origin == ColumnOrigin.Expression && Column.IsScalarSubquery)
+            || (Column.Origin == ColumnOrigin.GroupKey && Column.SourceColumn is not null)
+            || Column.Origin == ColumnOrigin.Aggregate);
+        if (Recordset.RecordsetType == 2 ? (!isBase && !isSingleColumnExpr) : !isSnapshotMeta)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.ColumnOrigin", $"Field.Properties of a {Column.Origin} column ({Column.Name}: not recorded)"));
         }
@@ -2533,20 +3142,23 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotModelled(typeOpen ?? "NotModelled.FieldProperties.FieldType", $"Field.Properties of the column {Column.Name}, whose type is not identified"));
         }
-        if (Column.SourceColumn is { } sc)
+        if (Recordset.RecordsetType == 2)
         {
-            if (sc.Column.CalculatedResultType is not null)
+            if (Column.SourceColumn is { } sc)
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CalculatedColumn", $"Field.Properties of the calculated column {Column.Name} (not recorded)"));
+                if (sc.Column.CalculatedResultType is not null)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CalculatedColumn", $"Field.Properties of the calculated column {Column.Name} (not recorded)"));
+                }
+                if (HasStoredColumnProperties(sc.TableName, sc.Column.Name) is { } refused)
+                {
+                    return refused;
+                }
             }
-            if (HasStoredColumnProperties(sc.TableName, sc.Column.Name) is { } refused)
+            else if (HasStoredColumnProperties(Column.SourceTable!, Column.SourceField!) is { } refused)
             {
                 return refused;
             }
-        }
-        else if (HasStoredColumnProperties(Column.SourceTable!, Column.SourceField!) is { } refused)
-        {
-            return refused;
         }
         _properties ??= new PropertiesObject(this, BuildPropertySpecs((short)fieldType));
         return Object(_properties);
@@ -2609,13 +3221,79 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             PropertySpec.BuiltIn("FieldSize", Long),
             PropertySpec.BuiltIn("OriginalValue", Long, owner => Live(owner, f => f.Fail(3251, DaoErrors.NotSupportedForType))),
             PropertySpec.BuiltIn("VisibleValue", Long, owner => Live(owner, f => f.Fail(3251, DaoErrors.NotSupportedForType))),
-            PropertySpec.BuiltIn("Precision", fieldType, owner => Live(owner, f => fieldType is 4 or 10 && f.PropertyCollatingOrder(fieldType) == 1033
-                ? Int16(1033)
-                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Precision", $"Field.Properties(\"Precision\") of {f.Column.Name} (DAO type {fieldType}: not recorded)")))),
-            PropertySpec.BuiltIn("Scale", fieldType, owner => Live(owner, f => fieldType != 20
-                ? Int16(0)
-                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Scale", $"Field.Properties(\"Scale\") of Decimal query column {f.Column.Name} (not recorded)")))),
+            PropertySpec.BuiltIn("Precision", fieldType, owner => Live(owner, f => f.PropertyPrecision(fieldType))),
+            PropertySpec.BuiltIn("Scale", fieldType, owner => Live(owner, f => f.PropertyScale(fieldType))),
         ];
+    }
+
+    /// <summary>
+    /// Built-in <c>Precision</c> property on a SELECT query field:
+    /// <list type="bullet">
+    /// <item>Ungrouped aggregate snapshot (<c>!HasGroupBy</c>, <see cref="ColumnOrigin.Aggregate"/>): fails 3021
+    /// (<c>"No current record."</c>, source <c>DAO.Field</c>, no IErrorInfo) across ACCDB and Jet 4 MDB
+    /// (<c>evidence/r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-{accdb,mdb}</c> calls 94, 136, 150).</item>
+    /// <item>Grouped Decimal aggregate snapshot (<c>HasGroupBy</c>, <c>Type == 20</c>, <c>DECIMAL(18,4)</c> source):
+    /// <c>SUM</c>/<c>AVG</c> return <c>VT_I2 28</c>, <c>MIN</c>/<c>MAX</c> return <c>VT_I2 18</c>
+    /// (<c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 108, 122).</item>
+    /// <item>Long (4) and Text (10) with collating order 1033 (base, group key, single-column expression, scalar subquery):
+    /// <c>VT_I2 1033</c> (<c>r-sql-1/sub-scalar</c> calls 8, 18, 48; <c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 108[0], 122[0];
+    /// <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
+    /// </list>
+    /// </summary>
+    private CallResult PropertyPrecision(short fieldType)
+    {
+        if (Recordset.RecordsetType == 4 && !Recordset.HasGroupBy && Column.Origin == ColumnOrigin.Aggregate)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (fieldType == 20
+            && Recordset.RecordsetType == 4
+            && Recordset.HasGroupBy
+            && Column.Origin == ColumnOrigin.Aggregate
+            && Column.AggregateColumn is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null } decCol)
+        {
+            return Column.Aggregate switch
+            {
+                ResultAggregateKind.Sum or ResultAggregateKind.Avg => Int16(28),
+                ResultAggregateKind.Min or ResultAggregateKind.Max => Int16(decCol.NumericPrecision),
+                _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Precision", $"Field.Properties(\"Precision\") of grouped {Column.Aggregate} Decimal column {Column.Name} (not recorded)")),
+            };
+        }
+        return fieldType is 4 or 10 && PropertyCollatingOrder(fieldType) == 1033
+            ? Int16(1033)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Precision", $"Field.Properties(\"Precision\") of {Column.Name} (DAO type {fieldType}: not recorded)"));
+    }
+
+    /// <summary>
+    /// Built-in <c>Scale</c> property on a SELECT query field:
+    /// <list type="bullet">
+    /// <item>Ungrouped aggregate snapshot: fails 3021 (<c>"No current record."</c>, source <c>DAO.Field</c>, no IErrorInfo;
+    /// <c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 94, 136, 150).</item>
+    /// <item>Grouped Decimal aggregate snapshot (<c>SUM</c>/<c>AVG</c>/<c>MIN</c>/<c>MAX</c> over <c>DECIMAL(18,4)</c>):
+    /// returns the source column's scale <c>VT_I2 4</c> — notably DAO <c>AVG</c> reports <c>Scale=4</c>
+    /// (<c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 108, 122).</item>
+    /// <item>Non-Decimal types: <c>VT_I2 0</c> (<c>r-sql-1/sub-scalar</c>, <c>groupby-expr-decagg-dao-{accdb,mdb}</c>,
+    /// <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
+    /// </list>
+    /// </summary>
+    private CallResult PropertyScale(short fieldType)
+    {
+        if (Recordset.RecordsetType == 4 && !Recordset.HasGroupBy && Column.Origin == ColumnOrigin.Aggregate)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (fieldType == 20
+            && Recordset.RecordsetType == 4
+            && Recordset.HasGroupBy
+            && Column.Origin == ColumnOrigin.Aggregate
+            && Column.AggregateColumn is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null } decCol
+            && Column.Aggregate is ResultAggregateKind.Sum or ResultAggregateKind.Avg or ResultAggregateKind.Min or ResultAggregateKind.Max)
+        {
+            return Int16(decCol.NumericScale);
+        }
+        return fieldType != 20
+            ? Int16(0)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.Scale", $"Field.Properties(\"Scale\") of Decimal query column {Column.Name} (not recorded)"));
     }
 
     private CallResult Value() => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : ReadValue(Recordset, _ordinal);
@@ -2699,6 +3377,16 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryFieldValueReadDuringEdit",
                 $"Field.Value read of non-base column {recordset.Cursor.Columns[ordinal].Name} while an edit is pending on a SELECT recordset (not recorded)"));
+        }
+        if (recordset.IsOnDeletedRow)
+        {
+            return fromCollect
+                ? CallResult.Fail(Failure.Dao(3021, "DAO.Recordset", DaoErrors.NoCurrentRecord))
+                : CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
+        }
+        if (recordset.IsOnAddedRow)
+        {
+            return recordset.ReadAddedRowField(ordinal, fromCollect);
         }
         if (recordset.IsAppendOnly && (recordset.IsAtBof || recordset.IsAtEof))
         {

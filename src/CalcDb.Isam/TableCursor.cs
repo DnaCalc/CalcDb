@@ -1531,12 +1531,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
 
     /// <summary>
     /// The zero-based ordinal of the current occurrence (DAO AbsolutePosition), the pre-failure ordinal after a rejected
-    /// Bookmark assignment (r-q2-cursor-dao/id-bookmark-requery-populated), or the deleted row's ordinal while in range
-    /// after a sibling delete (r-def-cursor-dao/delete-by-other-cursor-current-row), or null without a current row.
+    /// Bookmark assignment (r-q2-cursor-dao/id-bookmark-requery-populated), or the deleted row's ordinal after a sibling
+    /// delete — including when the sibling deleted the last populated row (r-def-cursor-dao/delete-by-other-cursor-current-row;
+    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} call 112: ordinal 5 at RecordCount 5), or null without a current row.
     /// </summary>
     public int? Ordinal => _position.Current
         ?? _position.BookmarkInvalidAnchor
-        ?? (_position.DeletedBySiblingAnchor is int anchor && anchor < _family.Store.ObservedCount ? anchor : null);
+        ?? _position.DeletedBySiblingAnchor;
 
     public void OnRowDeleted()
     {
@@ -1658,11 +1659,43 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         return appended;
     }
 
-    /// <summary>The keyset bookmark for an already-populated ordinal, or null without a known base or after a delete.</summary>
+    /// <summary>The keyset bookmark for an already-populated ordinal, preserving monotonic keyset slots across deletes (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 138, 219).</summary>
     public byte[]? BookmarkForOrdinal(int ordinal) =>
-        !_family.BookmarksInvalidatedByDelete && _family.BookmarkBase is uint @base && ordinal >= 0 && ordinal < _family.Store.ObservedCount
-            ? KeysetBookmark.Encode(@base, ordinal)
+        _family.BookmarkBase is uint @base && ordinal >= 0 && ordinal < _family.Store.ObservedCount
+            ? KeysetBookmark.Encode(@base, _family.Store.KeysetSlotAt(ordinal))
             : null;
+
+    /// <summary>
+    /// AbsolutePosition assignment on a dynaset or snapshot (r-q53-conv-abspos-subq-loc/abspos-get-put-read-{accdb,mdb},
+    /// abspos-delete-edit-{accdb,mdb}): operates over the populated frontier without populating forward.
+    /// Negative targets fail OutOfRange (3001) even on an empty recordset; on an empty recordset 0 fails NoCurrentRecord
+    /// (3021); targets &gt; ObservedCount fail OutOfRange (3001); target == ObservedCount clamps to ObservedCount - 1.
+    /// Valid targets reposition from At, BOF, EOF, Deleted, DeletedBySibling and BookmarkInvalid.
+    /// </summary>
+    public CursorFailure? SetAbsolutePosition(int target)
+    {
+        if (_family.UnrecordedRollback is not null || _family.PureNavigationRollback)
+        {
+            return CursorFailure.NotObserved;
+        }
+        if (target < 0)
+        {
+            return CursorFailure.OutOfRange;
+        }
+        long count = _family.Store.ObservedCount;
+        if (count == 0)
+        {
+            return target == 0 ? CursorFailure.NoCurrentRecord : CursorFailure.OutOfRange;
+        }
+        if (target > count)
+        {
+            return CursorFailure.OutOfRange;
+        }
+        int clamped = (int)Math.Min(target, count - 1);
+        _bookmarkInvalidAnchorDeleted = false;
+        _row.Unbind();
+        return _position.Seek(clamped) ? null : CursorFailure.OutOfRange;
+    }
 
     /// <summary>
     /// PercentPosition on a dynaset or snapshot (R-CURSOR-1 CUR-POP, qualified): 100 * ordinal / the populated count, so a
@@ -1746,13 +1779,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             failure = CursorFailure.NoCurrentRecord;
             return null;
         }
-        if (_family.BookmarksInvalidatedByDelete || _family.BookmarkBase is not uint @base)
+        if (_family.BookmarkBase is not uint @base)
         {
             failure = CursorFailure.NotObserved;
             return null;
         }
         failure = null;
-        return KeysetBookmark.Encode(@base, ordinal);
+        return KeysetBookmark.Encode(@base, _family.Store.KeysetSlotAt(ordinal));
     }
 
     /// <summary>
@@ -1775,6 +1808,15 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         if (bookmark.IsEmpty)
         {
             return null;
+        }
+        if (_position.Tag == PositionTag.DeletedBySibling
+            && bookmark.Length == 4
+            && bookmark[0] == 0xFF && bookmark[1] == 0xFF && bookmark[2] == 0xFF && bookmark[3] == 0xFF)
+        {
+            // r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 144-153:
+            // assigning 0xFFFFFFFF after a sibling deleted the current row fails 3001 ("Invalid argument.")
+            // and keeps BOF/EOF false and AbsolutePosition at the deleted anchor ordinal.
+            return CursorFailure.OutOfRange;
         }
         if (_family.BookmarksInvalidatedByDelete || _family.SnapshotRequeried || _family.BookmarkBase is not uint @base)
         {
