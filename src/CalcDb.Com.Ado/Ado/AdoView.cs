@@ -190,6 +190,23 @@ internal sealed unsafe class AdoFilterExpression
         return false;
     }
 
+    public bool ReferencesBinaryColumn(AdoFieldDescriptor[] columns, out string? columnName)
+    {
+        foreach (List<AdoFilterPredicate> andClause in _orBranches)
+        {
+            foreach (AdoFilterPredicate pred in andClause)
+            {
+                if ((uint)pred.ColumnOrdinal < (uint)columns.Length && columns[pred.ColumnOrdinal].AdoType is 204 or 205)
+                {
+                    columnName = columns[pred.ColumnOrdinal].Name;
+                    return true;
+                }
+            }
+        }
+        columnName = null;
+        return false;
+    }
+
     private static bool EvaluatePredicate(OwnedVariant cell, in AdoFilterPredicate pred, out Failure? failure)
     {
         failure = null;

@@ -585,6 +585,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
     private int _attributes;
     private bool _failedOpenModeRefreshPending;
     private bool _connectionStringFromFailedOpen;
+    private bool _isPersistenceOpen;
     private AdoOpenSession? _session;
     private AdoErrorsObject? _errors;
     private PropertiesObject? _properties;
@@ -601,7 +602,9 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
-    public bool IsOpen => _session is not null;
+    public bool IsOpen => _session is not null || _isPersistenceOpen;
+
+    public bool IsPersistenceOpen => _isPersistenceOpen;
 
     public AdoOpenSession? OpenSession => _session;
 
@@ -893,6 +896,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         if (IsOpen)
         {
+            if (_isPersistenceOpen)
+            {
+                return NotImplemented("Connection.ConnectionString while open on MSPersist (not recorded)");
+            }
             AdoOpenSession s = _session!;
             if (s.LockingMode is not int lockingMode)
             {
@@ -993,9 +1000,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return NotImplemented("Connection.Attributes = a value that is not a number");
         }
-        if (IsOpen && _session!.Transactions.Depth > 0)
+        if (IsOpen && !_isPersistenceOpen && _session!.Transactions.Depth > 0)
         {
             return NotImplemented("Connection.Attributes mutation inside an active transaction (not recorded)");
+        }
+        if (_isPersistenceOpen)
+        {
+            return NotImplemented("Connection.Attributes mutation on an open MSPersist connection (not recorded)");
         }
         if (attrs is not (0 or 131072 or (131072 | 262144)))
         {
@@ -1016,6 +1027,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (!IsOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isPersistenceOpen)
+        {
+            return NotImplemented("Connection.DefaultDatabase put on an open MSPersist connection (not recorded)");
         }
         if (Args.Text(arg) is null)
         {
@@ -1042,6 +1057,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         if (IsOpen)
         {
+            if (_isPersistenceOpen)
+            {
+                return NotImplemented("Connection.Properties while open on MSPersist (not recorded)");
+            }
             if (_session!.LockingMode is null)
             {
                 return NotImplemented(UnrecordedOpenPropertiesReason(_session.EffectiveMode, _session.Profile.IsAce));
@@ -1105,7 +1124,17 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
         if (effective.Route == ProviderRoute.Persistence)
         {
-            return NotImplemented("Connection.Open of the MSPersist route (ADO-PERSIST, W-09/events-persistence-inventory)");
+            // r-str-ado-act/ado-persist #60-63: Provider="MSPersist"; Open() -> State=1, Provider="MSPersist.1".
+            if (args[1] != 0 || args[2] != 0 || (args[3] != 0 && AdoArgs.Int32(args[3]) != -1))
+            {
+                return NotImplemented("Connection.Open of MSPersist with UserID, Password, or non-default Options (not recorded)");
+            }
+            _isPersistenceOpen = true;
+            _pinned = new EffectiveProvider(ProviderRoute.Persistence, "MSPersist.1", "MSPersist open");
+            _failedOpenModeRefreshPending = false;
+            _connectionStringFromFailedOpen = false;
+            ErrorsCollection.Clear();
+            return CallResult.Nothing;
         }
         if (effective.Route != ProviderRoute.Ace)
         {
@@ -1579,6 +1608,13 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             return Fail(AdoErrors.ObjectClosed);
         }
+        if (_isPersistenceOpen)
+        {
+            // r-str-ado-act/ado-persist #77: Close() on open MSPersist connection succeeds and resets State to 0.
+            _isPersistenceOpen = false;
+            ErrorsCollection.Clear();
+            return CallResult.Nothing;
+        }
         if (_session!.Transactions.Depth > 0)
         {
             // r-oledb-odbc/txn-held-rows #248: explicit Close while in a transaction fails 0x800A0CAE.
@@ -1610,6 +1646,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (!IsOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isPersistenceOpen)
+        {
+            return NotImplemented("Connection.BeginTrans on an open MSPersist connection (not recorded)");
         }
         if (_session!.ReadOnly)
         {
@@ -1662,6 +1702,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (!IsOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isPersistenceOpen)
+        {
+            return NotImplemented("Connection.CommitTrans on an open MSPersist connection (not recorded)");
         }
         if (_session!.ReadOnly)
         {
@@ -1719,6 +1763,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (!IsOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isPersistenceOpen)
+        {
+            return NotImplemented("Connection.RollbackTrans on an open MSPersist connection (not recorded)");
         }
         if (_session!.ReadOnly)
         {
@@ -1795,6 +1843,27 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (commandText is null)
         {
             return NotImplemented("Connection.Execute with a null or non-text CommandText");
+        }
+        if (_isPersistenceOpen)
+        {
+            // r-str-ado-act/ado-persist #70-73: cm.Execute(filePath) loads a persisted Recordset file.
+            int pOpt = args[2] == 0 ? AdoSqlText.AdCmdUnspecified : (AdoArgs.Int32(args[2]) ?? int.MinValue);
+            if (pOpt is not (AdoSqlText.AdCmdUnspecified or AdoSqlText.AdCmdFile))
+            {
+                return NotImplemented($"Connection.Execute on MSPersist with Options={pOpt} (not recorded)");
+            }
+            if (!AdoPersistence.TryLoadFile(commandText, out PersistedRecordsetData? data, out Failure? persistFail))
+            {
+                return CallResult.Fail(persistFail!);
+            }
+            using (data!)
+            {
+                ClearErrors();
+                RecordsetObject rs = RecordsetObject.CreateOpenFromPersisted(data!, activeConnection: null, requestedLockType: 4);
+                CallResult res = Object(rs);
+                rs.Release();
+                return res;
+            }
         }
         return ExecuteCommandText(commandText, AdoSqlText.AdCmdUnspecified, args[1], args[2], "Connection.Execute");
     }

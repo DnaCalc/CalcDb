@@ -472,7 +472,7 @@ internal static class AceProperties
         ("Cache Child Rows", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
         ("Maintain Change Status", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
         ("Auto Recalc", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetRecordedRead),
-        ("Unique Table", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Unique Table", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetWritable),
         ("Unique Schema", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
         ("Unique Catalog", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
         ("Resync Command", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
@@ -629,6 +629,24 @@ internal sealed class PropertiesObject : AdoObject
             {
                 OwnedVariant v = _slots[i].Value;
                 return v.Type == VarType.I4 ? (int)v.Pointer->Int64 : fallback;
+            }
+        }
+        return fallback;
+    }
+
+    /// <summary>Read a BSTR slot by exact name from an open client Recordset Properties collection (e.g. "Unique Table").</summary>
+    public unsafe string ReadClientText(string name, string fallback)
+    {
+        if (_invalid)
+        {
+            return fallback;
+        }
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            if (string.Equals(_names[i], name, StringComparison.Ordinal))
+            {
+                OwnedVariant v = _slots[i].Value;
+                return v.Type == VarType.Bstr ? (Args.Text((nint)v.Pointer) ?? fallback) : fallback;
             }
         }
         return fallback;
@@ -871,6 +889,19 @@ internal sealed unsafe class PropertyObject : AdoObject
         }
         if (_slot.Kind == PropertySlotKind.ClientRecordsetWritable)
         {
+            if (_slot.Descriptor.Name == "Unique Table")
+            {
+                // r-ado-1b/persist-reconnect-adtg #53, r-ado-1b/persist-reconnect-xml #53:
+                // "Unique Table" accepts a BSTR table name on an open client batch Recordset.
+                if (Args.Text(arg) is not string tableText)
+                {
+                    return NotImplemented("Client Recordset.Properties(\"Unique Table\").Value = non-BSTR (not recorded)");
+                }
+                _slot.Value.Dispose();
+                _slot.Value = OwnedVariant.FromText(tableText);
+                _slot.Modified = true;
+                return CallResult.Nothing;
+            }
             // r-q48-ado-batch-edits/client-props-inventory-accdb #26-#40, #50-#85:
             // non-integer -> 0x800A0D5D (ADODB.Property, helpContext 1240652, IErrorInfo absent, Errors.Count 0);
             // out-of-range Int32 -> 0x80040E21 (ADODB.Property, helpContext 1240640, IErrorInfo absent) + 2 Connection.Errors.

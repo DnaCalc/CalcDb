@@ -732,7 +732,7 @@ internal static class AdoSqlText
     /// Split an ADO Options integer into its command-type part and execution flags.
     /// Returns false with <paramref name="refusal"/> for async options, stream/record options, or unrecorded option bits.
     /// </summary>
-    public static bool TryDecodeOptions(int options, string member, bool allowNoRecords, out int cmdType, out bool noRecords, out Failure? refusal)
+    public static bool TryDecodeOptions(int options, string member, bool allowNoRecords, out int cmdType, out bool noRecords, out Failure? refusal, bool allowCmdFile = false)
     {
         cmdType = AdCmdUnspecified;
         noRecords = false;
@@ -752,7 +752,7 @@ internal static class AdoSqlText
             refusal = Failure.NotImplemented($"{member} with adExecuteStream/adExecuteRecord options (0x{options:X})");
             return false;
         }
-        if ((options & AdCmdFile) != 0)
+        if ((options & AdCmdFile) != 0 && !allowCmdFile)
         {
             refusal = Failure.NotImplemented($"{member} with adCmdFile (persisted local store)");
             return false;
@@ -766,7 +766,8 @@ internal static class AdoSqlText
         }
 
         int commandBits = options & ~AdExecuteNoRecords;
-        if (commandBits is 0 or AdCmdText or AdCmdTable or AdCmdStoredProc or AdCmdUnknown or AdCmdTableDirect)
+        if (commandBits is 0 or AdCmdText or AdCmdTable or AdCmdStoredProc or AdCmdUnknown or AdCmdTableDirect
+            || (allowCmdFile && commandBits == AdCmdFile))
         {
             cmdType = commandBits == 0 ? AdCmdUnspecified : commandBits;
             return true;
