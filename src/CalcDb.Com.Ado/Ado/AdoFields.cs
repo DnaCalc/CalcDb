@@ -93,6 +93,13 @@ internal sealed record AdoFieldDescriptor(
             return FromTableColumn(src.Column, col.Name, src.SourceIndex);
         }
 
+        if (col.Origin == ColumnOrigin.GroupKey && col.SourceColumn is { } groupSrc)
+        {
+            // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*: bare GROUP BY key preserves base column ADO type/size
+            // (e.g. Grp VARCHAR(10) -> adVarWChar(202), DefinedSize=10), reading its value from SelectCursor group slots.
+            return FromTableColumn(groupSrc.Column, col.Name, -1) with { IsBaseTableColumn = false, BaseColumn = null };
+        }
+
         if (col.Origin == ColumnOrigin.Aggregate)
         {
             return FromAggregateColumn(col, daoType, typeOpen);
@@ -138,7 +145,11 @@ internal sealed record AdoFieldDescriptor(
             8 => new(col.Name, 7, 8, 255, 255, AttrExprFixed, false, null, -1),
             // r-ado-1b/fields-meta-expressions: Null literal / binary expression -> adVarBinary (204), DefinedSize=510, Attr=98
             9 => new(col.Name, 204, 510, 255, 255, AttrExprVar, false, null, -1),
-            // r-ado-1b/fields-meta-expressions: text/memo expressions -> adLongVarWChar (203), DefinedSize=536870910, Attr=226
+            // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*: GROUP BY text expression (Left(S,1)) -> adVarWChar(202), DefinedSize=255;
+            // bare scalar subquery over a Text column ((SELECT Label FROM Cats ...)) -> adVarWChar(202), DefinedSize=col.Size.
+            10 when col.IsGroupExpressionKey => new(col.Name, 202, 255, 255, 255, AttrExprVar, false, null, -1),
+            10 when col.IsScalarSubquery && col.Size is int subSize and > 0 => new(col.Name, 202, subSize, 255, 255, AttrExprVar, false, null, -1),
+            // r-ado-1b/fields-meta-expressions, r-q52-ddl-make-domain/domain-ado-*: text/memo/domain expressions -> adLongVarWChar (203), DefinedSize=536870910, Attr=226
             10 or 12 => new(col.Name, 203, 536870910, 255, 255, AttrExprLong, false, null, -1),
             11 => new(col.Name, 205, 1073741823, 255, 255, AttrExprLong, false, null, -1),
             15 => new(col.Name, 72, 16, 255, 255, AttrExprFixed, false, null, -1),
@@ -148,9 +159,10 @@ internal sealed record AdoFieldDescriptor(
 
     /// <summary>
     /// Exact recorded ADO metadata for bare SQL aggregates (r-ado-1b/fields-meta-expressions #495-567,
-    /// r-fix-wire-ado/fields-meta-decimal-expressions #436-670):
+    /// r-fix-wire-ado/fields-meta-decimal-expressions #436-670, r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*):
     /// Count/Sum/Min/Max/First carry adFldUnknownUpdatable (122/106/234), Avg carries 114, Min(Text) is adVarWChar(255)
-    /// with Attr=106, and First(Memo) is adLongVarWChar with Attr=234.
+    /// with Attr=106, First(Memo) is adLongVarWChar with Attr=234, and Decimal aggregates report adNumeric(131),
+    /// DefinedSize=19 with Sum (28,s), Avg (28,10) for (18,4), and Min/Max/First/Last (p,s).
     /// </summary>
     private static AdoFieldDescriptor FromAggregateColumn(ResultColumn col, int? daoType, string? typeOpen)
     {
@@ -169,12 +181,19 @@ internal sealed record AdoFieldDescriptor(
                 new(col.Name, 5, 8, 15, 255, AttrBaseFixedNullable, false, null, -1),
             (ResultAggregateKind.Sum, 5) =>
                 new(col.Name, 6, 8, 19, 255, AttrBaseFixedNullable, false, null, -1),
+            (ResultAggregateKind.Sum, 20) when col.DecimalPrecision is byte sp && col.DecimalScale is byte ss =>
+                new(col.Name, 131, 19, sp, ss, AttrBaseFixedNullable, false, null, -1, DecimalActualSize19OnServer: true),
             (ResultAggregateKind.Avg, 7) =>
                 new(col.Name, 5, 8, 15, 255, AttrExprFixed, false, null, -1),
+            (ResultAggregateKind.Avg, 20) when col.DecimalPrecision is byte ap && col.DecimalScale is byte aScale =>
+                new(col.Name, 131, 19, ap, aScale, AttrExprFixed, false, null, -1, DecimalActualSize19OnServer: false),
             (ResultAggregateKind.Min or ResultAggregateKind.Max, 10) =>
                 new(col.Name, 202, 255, 255, 255, AttrBaseVarNullable, false, null, -1),
             (ResultAggregateKind.Min or ResultAggregateKind.Max, 8) =>
                 new(col.Name, 7, 8, 255, 255, AttrBaseFixedNullable, false, null, -1),
+            (ResultAggregateKind.Min or ResultAggregateKind.Max or ResultAggregateKind.First or ResultAggregateKind.Last, 20)
+                when col.DecimalPrecision is byte mp && col.DecimalScale is byte ms =>
+                new(col.Name, 131, 19, mp, ms, AttrBaseFixedNullable, false, null, -1, DecimalActualSize19OnServer: true),
             (ResultAggregateKind.First or ResultAggregateKind.Last, 12) =>
                 new(col.Name, 203, 536870910, 255, 255, AttrBaseLongNullable, false, null, -1),
             _ => Refused(
@@ -188,7 +207,7 @@ internal sealed record AdoFieldDescriptor(
     /// Resolve recorded ADO metadata for unary negation of a stored Decimal column (<c>-N</c>, which CalcDb.Sql
     /// evaluates end-to-end; evidence/r-fix-wire-ado/fields-meta-decimal-expressions #151-168):
     /// <c>adNumeric(131)</c> (DefinedSize=19, Precision=col.Precision, NumericScale=col.Scale, Attr=114, server ActualSize=16).
-    /// Binary Decimal arithmetic and Decimal aggregates are currently refused by CalcDb.Sql and are not resolved here.
+    /// Binary Decimal arithmetic expressions remain refused by CalcDb.Sql and are not resolved here.
     /// </summary>
     private static AdoFieldDescriptor? TryResolveDecimalExpression(
         string name,
@@ -577,6 +596,19 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
         _columns = [];
         _wrappers = [];
         _pendingPrepareError = prepareError;
+    }
+
+    /// <summary>
+    /// Record a failed <c>Recordset.Open</c> whose statement prepared a valid column schema before execution failed
+    /// (r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-* 3354/overflow, r-q52-ddl-make-domain/domain-ado-* 3078/3061/3075):
+    /// ACE retains the prepared <c>Fields</c> descriptors on the closed Recordset without pending prepare errors.
+    /// </summary>
+    public void RecordFailedOpenWithSchema(AdoFieldDescriptor[] columns)
+    {
+        InvalidateWrappers();
+        _pendingPrepareError = null;
+        _columns = columns;
+        _wrappers = columns.Length == 0 ? [] : new AdoFieldObject?[columns.Length];
     }
 
     /// <summary>

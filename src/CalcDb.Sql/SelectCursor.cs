@@ -94,10 +94,14 @@ public readonly record struct ResultRow(RowId Root, int Group, int Index, int Tu
 public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 {
     private readonly BoundSelect _plan;
+    private readonly ISqlDatabase _database;
     private readonly RowReader?[] _readers;
     private readonly List<RowId?> _tuples;
     private readonly bool[] _nullExtended;
     private readonly NativeVariant[] _parameters;
+    private readonly NativeVariant[] _outerValues;
+    private readonly NativeVariant[]? _subqueryCells;
+    private readonly bool _isSubquery;
     private readonly IOrderedSource<ResultRow> _producer;
     private readonly OccurrenceStore<ResultRow> _store;
     private readonly PositionState<int> _position;
@@ -123,11 +127,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private SelectCursor(BoundSelect plan, RowReader?[] readers, Prepared prepared, ResultKind kind)
     {
         _plan = plan;
+        _database = prepared.Database;
         Kind = kind;
         _readers = readers;
         _tuples = prepared.Tuples;
         _nullExtended = new bool[readers.Length];
         _parameters = prepared.Parameters;
+        _outerValues = prepared.OuterValues;
+        _subqueryCells = prepared.SubqueryCells;
+        _isSubquery = prepared.IsSubquery;
         _constants = prepared.Constants;
         _projected = new NativeVariant[plan.ColumnList.Count];
         _types = prepared.Types;
@@ -305,19 +313,19 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             RowReader? reader = database.OpenRows(plan.Sources[s].Table, out string? storage);
             if (reader is null)
             {
-                Close(readers, values);
+                Close(readers, values, []);
                 failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
                 return null;
             }
             reader.QueryTextRoundTrip = true;
             readers[s] = reader;
         }
-        var preparing = new Preparer(plan, readers, kind, values, database, observableColumns);
+        var preparing = new Preparer(plan, readers, kind, values, database, observableColumns, outerValues: [], isSubquery: false);
         Prepared? prepared = preparing.Run(out failure);
         if (prepared is null)
         {
             preparing.Release();
-            Close(readers, values);
+            Close(readers, values, []);
             return null;
         }
         var cursor = new SelectCursor(plan, readers, prepared, kind);
@@ -330,7 +338,61 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         return cursor;
     }
 
-    private static void Close(RowReader?[] readers, NativeVariant[] parameters)
+    internal static SelectCursor? OpenSubquery(
+        BoundSelect plan,
+        ISqlDatabase database,
+        NativeVariant[] parameters,
+        NativeVariant[]? outerValues,
+        out SqlFailure? failure)
+    {
+        var values = new NativeVariant[plan.Parameters.Count];
+        for (int i = 0; i < values.Length; i++)
+        {
+            values[i] = SelectValues.Copy(parameters[i]);
+        }
+        NativeVariant[] outerCopy = outerValues is null || outerValues.Length == 0
+            ? []
+            : new NativeVariant[outerValues.Length];
+        for (int i = 0; i < outerCopy.Length; i++)
+        {
+            outerCopy[i] = SelectValues.Copy(outerValues![i]);
+        }
+        var readers = new RowReader?[plan.Sources.Count];
+        for (int s = 0; s < readers.Length; s++)
+        {
+            if (plan.Sources[s].Subquery is not null)
+            {
+                continue;
+            }
+            RowReader? reader = database.OpenRows(plan.Sources[s].Table, out string? storage);
+            if (reader is null)
+            {
+                Close(readers, values, outerCopy);
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
+                return null;
+            }
+            reader.QueryTextRoundTrip = true;
+            readers[s] = reader;
+        }
+        var preparing = new Preparer(plan, readers, ResultKind.Snapshot, values, database, observableColumns: null, outerCopy, isSubquery: true);
+        Prepared? prepared = preparing.Run(out failure);
+        if (prepared is null)
+        {
+            preparing.Release();
+            Close(readers, values, outerCopy);
+            return null;
+        }
+        var cursor = new SelectCursor(plan, readers, prepared, ResultKind.Snapshot);
+        failure = cursor.FetchFailure;
+        if (failure is not null)
+        {
+            cursor.Dispose();
+            return null;
+        }
+        return cursor;
+    }
+
+    private static void Close(RowReader?[] readers, NativeVariant[] parameters, NativeVariant[] outerValues)
     {
         foreach (RowReader? r in readers)
         {
@@ -339,6 +401,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         for (int i = 0; i < parameters.Length; i++)
         {
             SelectValues.Clear(ref parameters[i]);
+        }
+        for (int i = 0; i < outerValues.Length; i++)
+        {
+            SelectValues.Clear(ref outerValues[i]);
         }
     }
 
@@ -464,8 +530,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 return false;
             }
         }
-        Stand(row);
         ResultColumn col = _plan.ColumnList[column];
+        if (_subqueryCells is not null && col.Program.UsesSubqueries)
+        {
+            value = _subqueryCells[(row.Index * _plan.ColumnList.Count) + column];
+            return true;
+        }
+        Stand(row);
         BoundExpression program = col.Program;
         if (!program.Evaluate(this))
         {
@@ -529,6 +600,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         if (fieldType is not int ft || source.Vt is (ushort)VarType.Null or (ushort)VarType.Empty)
         {
             return false;
+        }
+        if (ft == 10 && source.Vt == (ushort)VarType.Bool)
+        {
+            // r-q52-ddl-make-domain/domain-all-scalar-dao-* (#74 DLookup('Active', 'Items')):
+            // Yes/No projected through a Text column (domain function) formats as "-1" / "0", not "True" / "False".
+            string text = (short)source.Int64 != 0 ? "-1" : "0";
+            nint bstr = Bstrs.FromUnits(text.Length, text, static (dest, s) => s.AsSpan().CopyTo(dest));
+            converted = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr };
+            return true;
         }
         if (ft == 16)
         {
@@ -594,6 +674,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             group = row.Group;
             return;
         }
+        if (readers.Length == 0)
+        {
+            return;
+        }
         if (readers.Length == 1 && readers[0] is null)
         {
             derivedRow = row.Tuple;
@@ -621,7 +705,296 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     NativeVariant IExpressionRow.Slot(int slot) =>
         slot >= BoundSelect.ParameterSlot0 ? _parameters[slot - BoundSelect.ParameterSlot0]
         : slot >= BoundSelect.DerivedSlot0 ? _derivedSlots[(_derivedRow * _derivedWidth) + (slot - BoundSelect.DerivedSlot0)]
+        : slot >= BoundSelect.OuterSlot0 ? _outerValues[slot - BoundSelect.OuterSlot0]
         : _slots[(_group * _slotWidth) + slot];
+
+    bool IExpressionRow.EvaluateSubquery(int subqueryId, in NativeVariant leftOperand, out NativeVariant result, out ExpressionFailure? failure) =>
+        EvaluateSubquery(_plan.Subqueries[subqueryId], this, _parameters, _database, leftOperand, out result, out failure);
+
+    bool IExpressionRow.EvaluateDomain(DomainFunction function, ReadOnlySpan<NativeVariant> args, int site, out NativeVariant result, out ExpressionFailure? failure) =>
+        DomainEvaluator.Evaluate(_database, function, args, site, out result, out failure);
+
+    internal static bool EvaluateSubquery(
+        BoundSubquery sub,
+        IExpressionRow outerRow,
+        NativeVariant[] parameters,
+        ISqlDatabase database,
+        in NativeVariant leftOperand,
+        out NativeVariant result,
+        out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = null;
+        NativeVariant[]? outerValues = sub.OuterBindings.Count == 0 ? null : new NativeVariant[sub.OuterBindings.Count];
+        try
+        {
+            if (outerValues is not null)
+            {
+                for (int i = 0; i < sub.OuterBindings.Count; i++)
+                {
+                    BoundExpression expr = sub.OuterBindings[i].Expression;
+                    if (!expr.Evaluate(outerRow))
+                    {
+                        failure = expr.LastFailure!;
+                        return false;
+                    }
+                    outerValues[i] = SelectValues.Copy(expr.Value);
+                }
+            }
+            return sub.Kind switch
+            {
+                SubqueryKind.Exists => EvaluateExists(sub, parameters, outerValues, database, out result, out failure),
+                SubqueryKind.Scalar => EvaluateScalar(sub, parameters, outerValues, database, out result, out failure),
+                SubqueryKind.In or SubqueryKind.NotIn or SubqueryKind.Any or SubqueryKind.All =>
+                    EvaluateSetOrQuantified(sub, parameters, outerValues, database, leftOperand, out result, out failure),
+                _ => FailUnmodelled(sub, out result, out failure),
+            };
+        }
+        finally
+        {
+            if (outerValues is not null)
+            {
+                for (int i = 0; i < outerValues.Length; i++)
+                {
+                    SelectValues.Clear(ref outerValues[i]);
+                }
+            }
+        }
+
+        static bool FailUnmodelled(BoundSubquery s, out NativeVariant r, out ExpressionFailure? f)
+        {
+            r = default;
+            f = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Subquery", $"subquery kind {s.Kind}");
+            return false;
+        }
+    }
+
+    private static bool EvaluateExists(
+        BoundSubquery sub,
+        NativeVariant[] parameters,
+        NativeVariant[]? outerValues,
+        ISqlDatabase database,
+        out NativeVariant result,
+        out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = null;
+        BoundSelect plan = sub.Plan;
+        // r-sql-1/sub-exists-demand, r-q-expr-sql/sub-corr-shapes: plain single-table EXISTS never evaluates SELECT
+        // projections (e.g. SELECT CLng(t), SELECT 1 / x.Denominator) and stops at the first matching row.
+        if (!plan.IsUnion && !plan.Grouped && plan.Predicate == SelectPredicate.All && plan.Top is null
+            && plan.Tree is null && plan.Sources.Count == 1 && plan.Sources[0].Subquery is null)
+        {
+            RowReader? reader = database.OpenRows(plan.Sources[0].Table, out string? storage);
+            if (reader is null)
+            {
+                failure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Storage", storage ?? "the table cannot be read");
+                return false;
+            }
+            reader.QueryTextRoundTrip = true;
+            using (reader)
+            {
+                var row = new ExistsRow(reader, parameters, outerValues ?? [], plan, database);
+                for (RowId? rid = reader.Scan.Next(null); rid is { } r; rid = reader.Scan.Next(r))
+                {
+                    reader.Position(r);
+                    if (plan.Where is null)
+                    {
+                        result = ScalarLiterals.Boolean(true);
+                        return true;
+                    }
+                    RowTest test = plan.Where.Test(row);
+                    if (test == RowTest.Failed)
+                    {
+                        failure = plan.Where.LastFailure!;
+                        return false;
+                    }
+                    if (test == RowTest.Match)
+                    {
+                        result = ScalarLiterals.Boolean(true);
+                        return true;
+                    }
+                }
+                if (reader.Scan.LastFailure is { } st)
+                {
+                    failure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Storage", st.Predicate);
+                    return false;
+                }
+                result = ScalarLiterals.Boolean(false);
+                return true;
+            }
+        }
+
+        SelectCursor? child = OpenSubquery(plan, database, parameters, outerValues, out SqlFailure? sf);
+        if (child is null)
+        {
+            failure = ToExpressionFailure(sf!, sub.Site);
+            return false;
+        }
+        using (child)
+        {
+            result = ScalarLiterals.Boolean(!child.Eof);
+            return true;
+        }
+    }
+
+    private static bool EvaluateScalar(
+        BoundSubquery sub,
+        NativeVariant[] parameters,
+        NativeVariant[]? outerValues,
+        ISqlDatabase database,
+        out NativeVariant result,
+        out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = null;
+        SelectCursor? child = OpenSubquery(sub.Plan, database, parameters, outerValues, out SqlFailure? sf);
+        if (child is null)
+        {
+            failure = ToExpressionFailure(sf!, sub.Site);
+            return false;
+        }
+        using (child)
+        {
+            if (child.Eof)
+            {
+                // r-q53-conv-abspos-subq-loc/subq-scalar-corr-dao-*, r-sql-1/sub-scalar: 0-row scalar subquery -> Null.
+                result = ScalarLiterals.Null;
+                return true;
+            }
+            if (!child.Read(0, out NativeVariant v, out SqlFailure? rf, anyOrder: true, out _))
+            {
+                failure = ToExpressionFailure(rf!, sub.Site);
+                return false;
+            }
+            NativeVariant copy = SelectValues.Copy(v);
+            child.MoveNext();
+            if (child.FetchFailure is { } ff)
+            {
+                SelectValues.Clear(ref copy);
+                failure = ToExpressionFailure(ff, sub.Site);
+                return false;
+            }
+            if (!child.Eof)
+            {
+                SelectValues.Clear(ref copy);
+                // r-q53-conv-abspos-subq-loc/subq-scalar-corr-dao-*, subq-grp-decagg-ado-*, r-sql-1/sub-scalar:
+                // >1 row returned by a scalar subquery fails 3354.
+                failure = ExpressionFailure.Ace(ExpressionPhase.Evaluate, 3354, SqlMessages.SubqueryMultipleRows) with { Site = sub.Site };
+                return false;
+            }
+            result = copy;
+            return true;
+        }
+    }
+
+    private static bool EvaluateSetOrQuantified(
+        BoundSubquery sub,
+        NativeVariant[] parameters,
+        NativeVariant[]? outerValues,
+        ISqlDatabase database,
+        in NativeVariant leftOperand,
+        out NativeVariant result,
+        out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = null;
+        SelectCursor? child = OpenSubquery(sub.Plan, database, parameters, outerValues, out SqlFailure? sf);
+        if (child is null)
+        {
+            failure = ToExpressionFailure(sf!, sub.Site);
+            return false;
+        }
+        using (child)
+        {
+            // r-sql-1/sub-in-quantified: empty subquery yields False for IN/ANY and True for NOT IN/ALL even when left is Null.
+            if (child.Eof)
+            {
+                result = ScalarLiterals.Boolean(sub.Kind is SubqueryKind.NotIn or SubqueryKind.All);
+                return true;
+            }
+            if (leftOperand.Vt == (ushort)VarType.Null)
+            {
+                result = ScalarLiterals.Null;
+                return true;
+            }
+            ScalarDescriptor desc = ScalarDescriptor.Binary(sub.Comparison, sub.Site, sub.LeftContract, sub.RightContract);
+            bool sawNull = false;
+            while (!child.Eof)
+            {
+                if (!child.Read(0, out NativeVariant elem, out SqlFailure? rf, anyOrder: true, out _))
+                {
+                    failure = ToExpressionFailure(rf!, sub.Site);
+                    return false;
+                }
+                if (elem.Vt == (ushort)VarType.Null)
+                {
+                    sawNull = true;
+                }
+                else
+                {
+                    ScalarOutcome cmp = ScalarKernel.Apply(desc, leftOperand, elem, sub.Plan.Context);
+                    if (!cmp.Succeeded)
+                    {
+                        ScalarFailure f = cmp.Failure;
+                        failure = f.Kind == ScalarFailureKind.NotModelled
+                            ? ExpressionFailure.Open(ExpressionPhase.Evaluate, $"NotModelled.{f.Case}", f.Describe()) with { Site = sub.Site }
+                            : ExpressionFailure.Ace(ExpressionPhase.Evaluate, f.Number, AceError.Describe(f.Number)) with { Site = sub.Site };
+                        return false;
+                    }
+                    if (cmp.Value.Vt == (ushort)VarType.Null)
+                    {
+                        sawNull = true;
+                    }
+                    else
+                    {
+                        bool matched = (short)cmp.Value.Int64 != 0;
+                        switch (sub.Kind)
+                        {
+                            case SubqueryKind.In or SubqueryKind.Any when matched:
+                                result = ScalarLiterals.Boolean(true);
+                                return true;
+                            case SubqueryKind.NotIn when matched:
+                                result = ScalarLiterals.Boolean(false);
+                                return true;
+                            case SubqueryKind.All when !matched:
+                                result = ScalarLiterals.Boolean(false);
+                                return true;
+                        }
+                    }
+                }
+                child.MoveNext();
+                if (child.FetchFailure is { } ff)
+                {
+                    failure = ToExpressionFailure(ff, sub.Site);
+                    return false;
+                }
+            }
+            result = sawNull ? ScalarLiterals.Null : ScalarLiterals.Boolean(sub.Kind is SubqueryKind.NotIn or SubqueryKind.All);
+            return true;
+        }
+    }
+
+    private static ExpressionFailure ToExpressionFailure(SqlFailure sf, int site) =>
+        sf.IsNotModelled
+            ? ExpressionFailure.Open(ExpressionPhase.Evaluate, sf.NotModelled!, sf.Message) with { Site = site, FromDomainFunction = sf.FromDomainFunction }
+            : ExpressionFailure.Ace(ExpressionPhase.Evaluate, sf.Number, sf.Message) with { Site = site, FromDomainFunction = sf.FromDomainFunction };
+
+    private sealed class ExistsRow(RowReader reader, NativeVariant[] parameters, NativeVariant[] outerValues, BoundSelect plan, ISqlDatabase database) : IExpressionRow
+    {
+        public IRecordCursor? Source(int source) => source == 0 ? reader : null;
+
+        public NativeVariant Slot(int slot) =>
+            slot >= BoundSelect.ParameterSlot0 ? parameters[slot - BoundSelect.ParameterSlot0]
+            : slot >= BoundSelect.OuterSlot0 ? outerValues[slot - BoundSelect.OuterSlot0]
+            : ScalarLiterals.Null;
+
+        public bool EvaluateSubquery(int subqueryId, in NativeVariant leftOperand, out NativeVariant result, out ExpressionFailure? failure) =>
+            SelectCursor.EvaluateSubquery(plan.Subqueries[subqueryId], this, parameters, database, leftOperand, out result, out failure);
+
+        public bool EvaluateDomain(DomainFunction function, ReadOnlySpan<NativeVariant> args, int site, out NativeVariant result, out ExpressionFailure? failure) =>
+            DomainEvaluator.Evaluate(database, function, args, site, out result, out failure);
+    }
 
     public void Dispose()
     {
@@ -633,9 +1006,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             SelectValues.Clear(ref _projected[i]);
         }
+        if (_subqueryCells is not null)
+        {
+            for (int i = 0; i < _subqueryCells.Length; i++)
+            {
+                SelectValues.Clear(ref _subqueryCells[i]);
+            }
+        }
         ClearSlots(_slots);
         ClearSlots(_derivedSlots);
-        Close(_readers, _parameters);
+        Close(_readers, _parameters, _outerValues);
     }
 
     private static void ClearSlots(List<NativeVariant> slots)
@@ -730,6 +1110,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// <summary>What an open computed: constant values and types, and the materialized rows with their group slots.</summary>
     private sealed class Prepared
     {
+        public required ISqlDatabase Database { get; init; }
+
         public required NativeVariant[] Constants { get; init; }
 
         public required int?[] Types { get; init; }
@@ -753,6 +1135,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         public required List<RowId?> Tuples { get; init; }
 
         public required NativeVariant[] Parameters { get; init; }
+
+        public required NativeVariant[] OuterValues { get; init; }
+
+        public NativeVariant[]? SubqueryCells { get; init; }
+
+        public bool IsSubquery { get; init; }
 
         public Ambiguity? Ambiguity { get; init; }
 
@@ -795,9 +1183,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     case RowTest.Match:
                         return new ResultRow(r, -1, -1);
                     case RowTest.Failed:
-                        // EXPR-STAGE: a failing WHERE term makes MoveNext fail at the bad row; where the cursor then
-                        // stands and how population continues are not identified.
-                        owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
+                        if (owner._isSubquery || where.LastFailureWasSubqueryOrDomain)
+                        {
+                            owner.RecordFetchFailure(SqlFailure.Of(where.LastFailure!, SqlPhase.Open, owner._plan.Source, 0, owner._plan.Source.Length));
+                        }
+                        else
+                        {
+                            // EXPR-STAGE: a failing WHERE term makes MoveNext fail at the bad row; where the cursor then
+                            // stands and how population continues are not identified.
+                            owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
+                        }
                         return null;
                 }
             }
@@ -835,7 +1230,14 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         _last = p;
                         return new ResultRow(p.Row, -1, -1);
                     case RowTest.Failed:
-                        owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
+                        if (owner._isSubquery || where.LastFailureWasSubqueryOrDomain)
+                        {
+                            owner.RecordFetchFailure(SqlFailure.Of(where.LastFailure!, SqlPhase.Open, owner._plan.Source, 0, owner._plan.Source.Length));
+                        }
+                        else
+                        {
+                            owner.RecordFetchFailure(SqlFailure.Open(SqlPhase.Fetch, "NotModelled.WhereRowFailure", where.LastFailure!.ToString()));
+                        }
                         return null;
                 }
             }
@@ -866,7 +1268,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     }
 
     /// <summary>The work of an open (II-11 §§11–14), as a small object whose failures release what it copied.</summary>
-    private sealed class Preparer(BoundSelect plan, RowReader?[] readers, ResultKind kind, NativeVariant[] parameters, ISqlDatabase database, bool[]? observableColumns) : IExpressionRow
+    private sealed class Preparer(
+        BoundSelect plan,
+        RowReader?[] readers,
+        ResultKind kind,
+        NativeVariant[] parameters,
+        ISqlDatabase database,
+        bool[]? observableColumns,
+        NativeVariant[] outerValues,
+        bool isSubquery) : IExpressionRow
     {
         private readonly List<NativeVariant> _slots = [];
         private readonly List<NativeVariant> _derivedSlots = [];
@@ -875,6 +1285,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private readonly bool[] _nullExtended = new bool[readers.Length];
         private readonly List<(int Start, int Count, string Reason)> _runs = [];
         private NativeVariant[] _constants = [];
+        private NativeVariant[]? _subqueryCells;
         private int?[] _types = [];
         private int _slotWidth;
         private int _derivedWidth;
@@ -889,7 +1300,14 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         NativeVariant IExpressionRow.Slot(int slot) =>
             slot >= BoundSelect.ParameterSlot0 ? parameters[slot - BoundSelect.ParameterSlot0]
             : slot >= BoundSelect.DerivedSlot0 ? _derivedSlots[(_derivedRow * _derivedWidth) + (slot - BoundSelect.DerivedSlot0)]
+            : slot >= BoundSelect.OuterSlot0 ? outerValues[slot - BoundSelect.OuterSlot0]
             : _slots[(_group * _slotWidth) + slot];
+
+        bool IExpressionRow.EvaluateSubquery(int subqueryId, in NativeVariant leftOperand, out NativeVariant result, out ExpressionFailure? failure) =>
+            SelectCursor.EvaluateSubquery(plan.Subqueries[subqueryId], this, parameters, database, leftOperand, out result, out failure);
+
+        bool IExpressionRow.EvaluateDomain(DomainFunction function, ReadOnlySpan<NativeVariant> args, int site, out NativeVariant result, out ExpressionFailure? failure) =>
+            DomainEvaluator.Evaluate(database, function, args, site, out result, out failure);
 
         public void Release()
         {
@@ -899,6 +1317,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             for (int i = 0; i < _constants.Length; i++)
             {
                 SelectValues.Clear(ref _constants[i]);
+            }
+            if (_subqueryCells is not null)
+            {
+                for (int i = 0; i < _subqueryCells.Length; i++)
+                {
+                    SelectValues.Clear(ref _subqueryCells[i]);
+                }
             }
         }
 
@@ -957,7 +1382,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 // r-expr-1/b-numeric-text-compare (pn = pt fails 3464 at open), r-expr-1/b-fixed-point-fidelity (pc +
                 // CCur(0.0001) overflows at open): a column over parameters and no field is computed once at open. In a
                 // plain SELECT over base tables the only slots are the parameters.
-                bool parametersOnly = !c.Program.IsConstant && c.Program.Fields.Count == 0 && !plan.Grouped && !plan.IsUnion && !hasSubquery;
+                bool parametersOnly = !c.Program.IsConstant && c.Program.Fields.Count == 0 && !c.Program.UsesSubqueries && outerValues.Length == 0 && !plan.Grouped && !plan.IsUnion && !hasSubquery;
                 if (!c.Program.IsConstant && !parametersOnly)
                 {
                     continue;
@@ -1019,7 +1444,25 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             failure = null;
-            bool streams = !plan.IsUnion && !hasSubquery && plan.Tree is null && !plan.Grouped && plan.Order.Count == 0 && plan.Predicate != SelectPredicate.Distinct && plan.Top is null;
+            bool hasSelectSubquery = false;
+            for (int i = 0; i < n; i++)
+            {
+                if (plan.ColumnList[i].Program.UsesSubqueries && _constants[i].Vt == (ushort)VarType.Empty)
+                {
+                    hasSelectSubquery = true;
+                    break;
+                }
+            }
+            bool streams = !plan.IsUnion
+                && !hasSubquery
+                && plan.Sources.Count > 0
+                && plan.Subqueries.Count == 0
+                && !hasSelectSubquery
+                && plan.Tree is null
+                && !plan.Grouped
+                && plan.Order.Count == 0
+                && plan.Predicate != SelectPredicate.Distinct
+                && plan.Top is null;
             List<ResultRow>? rows = null;
             IndexNavigator? streamIndex = null;
             Ambiguity? ambiguity = null;
@@ -1033,6 +1476,28 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 for (int i = 0; i < rows.Count; i++)
                 {
                     rows[i] = rows[i] with { Index = i };
+                }
+                // r-q53-conv-abspos-subq-loc/subq-scalar-corr-dao-*, r-sql-1/sub-scalar:
+                // evaluate SELECT-list subqueries at Open so multi-row scalar 3354 fails OpenRecordset.
+                if (hasSelectSubquery && rows.Count > 0)
+                {
+                    _subqueryCells = new NativeVariant[rows.Count * n];
+                    for (int r = 0; r < rows.Count; r++)
+                    {
+                        Stand(rows[r]);
+                        for (int c = 0; c < n; c++)
+                        {
+                            if (!plan.ColumnList[c].Program.UsesSubqueries || _constants[c].Vt != (ushort)VarType.Empty)
+                            {
+                                continue;
+                            }
+                            if (!EvaluateProjected(c, SqlPhase.Open, out NativeVariant cell, out failure))
+                            {
+                                return null;
+                            }
+                            _subqueryCells[(r * n) + c] = cell;
+                        }
+                    }
                 }
                 ambiguity = Ambiguous(rows, out failure);
                 if (failure is not null)
@@ -1051,8 +1516,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             (PopulationMode popMode, string? popOpenName, string? popOpenDetail) = ClassifyPopulation(plan, kind, hasSubquery);
             return new Prepared
             {
+                Database = database,
                 Constants = _constants, Types = _types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
-                DerivedSlots = _derivedSlots, DerivedWidth = _derivedWidth, Tuples = _tuples, Parameters = parameters, Ambiguity = ambiguity,
+                DerivedSlots = _derivedSlots, DerivedWidth = _derivedWidth, Tuples = _tuples, Parameters = parameters, OuterValues = outerValues,
+                SubqueryCells = _subqueryCells, IsSubquery = isSubquery, Ambiguity = ambiguity,
                 PopulationMode = popMode, PopulationOpenName = popOpenName, PopulationOpenDetail = popOpenDetail, StreamIndex = streamIndex,
             };
         }
@@ -1715,6 +2182,20 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             failure = null;
             var roots = new List<ResultRow>();
+            if (plan.Sources.Count == 0)
+            {
+                // r-q52-ddl-make-domain/domain-all-scalar-dao-*: FROM-less SELECT produces one synthetic row.
+                var synthetic = new ResultRow(default, -1, 0);
+                if (Where(synthetic, out failure) is not bool keep)
+                {
+                    return null;
+                }
+                if (keep)
+                {
+                    roots.Add(synthetic);
+                }
+                return roots;
+            }
             if (plan.Sources.Count == 1 && plan.Sources[0].Subquery is { } sub)
             {
                 bool[] referenced = plan.Sources[0].ReferencedColumns!;
@@ -1844,7 +2325,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             if (t == RowTest.Failed)
             {
                 ExpressionFailure wf = where.LastFailure!;
-                if (wf.IsNotModelled)
+                if (wf.IsNotModelled || isSubquery || where.LastFailureWasSubqueryOrDomain)
                 {
                     failure = At(wf);
                     return null;
@@ -3139,6 +3620,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             public long Count;
             public double Sum;
             public long Money;
+            public decimal DecimalSum;
             public NativeVariant Value;
             public bool Seen;
         }
@@ -3211,6 +3693,28 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         }
                         s.Money = next;
                     }
+                    else if (a.Result == VarType.Decimal)
+                    {
+                        if (v.Vt != (ushort)VarType.Decimal)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", "a Decimal Sum or Avg over a value that is not VT_DECIMAL");
+                            return false;
+                        }
+                        decimal d = OwnedVariant.ReadDecimal(v).ToDecimal();
+                        decimal next;
+                        try
+                        {
+                            next = s.Count == 1 ? d : checked(s.DecimalSum + d);
+                        }
+                        catch (OverflowException)
+                        {
+                            // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*:
+                            // Decimal Sum/Avg exceeding 96-bit Decimal range overflows (6 DAO / 0x80040E57 ADO) at open.
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                        s.DecimalSum = next;
+                    }
                     else
                     {
                         if (!RelationalOrder.Number(v, out double d))
@@ -3270,15 +3774,64 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             slot = Copy(value);
         }
 
-        private static NativeVariant Finish(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
+        private static bool Exceeds28Digits(decimal value)
+        {
+            Span<int> bits = stackalloc int[4];
+            decimal.GetBits(value, bits);
+            uint hi = (uint)bits[2];
+            uint mid = (uint)bits[1];
+            uint lo = (uint)bits[0];
+            // 10^28 = 0x204FCE5E_3E250261_10000000: 29 decimal digits in 96-bit Decimal exceeds ACE's 28-digit ceiling (3761).
+            return hi > 0x204FCE5Eu
+                || (hi == 0x204FCE5Eu && (mid > 0x3E250261u || (mid == 0x3E250261u && lo >= 0x10000000u)));
+        }
+
+        private NativeVariant Finish(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
         {
             failure = null;
             switch (a.Kind)
             {
                 case AggregateKind.CountRows or AggregateKind.Count:
                     return new NativeVariant { Vt = (ushort)VarType.I4, Int64 = (uint)(int)s.Count };
+                case AggregateKind.Sum when s.Seen && a.Result == VarType.Decimal:
+                    if (Exceeds28Digits(s.DecimalSum))
+                    {
+                        // r-fix-expr-sql/fold-decimal-28-digits: 29-digit sum within 96 bits fails 3761 at open.
+                        failure = SqlFailure.Ace(SqlPhase.Open, 3761, SqlMessages.DecimalPrecisionTooSmall);
+                        return ScalarLiterals.Null;
+                    }
+                    return OwnedVariant.DecimalCell(DecimalValue.FromDecimal(s.DecimalSum));
                 case AggregateKind.Sum when s.Seen:
                     return a.Result == VarType.Currency ? new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = s.Money } : new NativeVariant { Vt = (ushort)VarType.R8, Double = s.Sum };
+                case AggregateKind.Avg when s.Seen && a.Result == VarType.Decimal:
+                {
+                    if (Exceeds28Digits(s.DecimalSum))
+                    {
+                        // r-fix-expr-sql/fold-decimal-avg-var-forms call 97: AVG fails 3761 when the running sum before
+                        // division exceeds 28 decimal digits (10^28), even though the value fits in 96 bits.
+                        failure = SqlFailure.Ace(SqlPhase.Open, 3761, SqlMessages.DecimalPrecisionTooSmall);
+                        return ScalarLiterals.Null;
+                    }
+                    // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*, r-fix-expr-sql/fold-decimal-avg-var-forms:
+                    // full 96-bit oleaut32 VarDiv quotient with trailing-zero stripping (up to 29 significant digits, e.g.
+                    // 1.5 scale 1, 25.571442857142857142857142857 scale 27, 1.3333333333333333333333333333 scale 28).
+                    NativeVariant sumVar = OwnedVariant.DecimalCell(DecimalValue.FromDecimal(s.DecimalSum));
+                    NativeVariant countVar = OwnedVariant.DecimalCell(DecimalValue.FromDecimal(s.Count));
+                    ScalarOutcome div = ScalarKernel.Apply(
+                        ScalarDescriptor.Binary(ScalarOperation.Divide, 0, OperandContract.Expression, OperandContract.Expression),
+                        sumVar,
+                        countVar,
+                        plan.Context);
+                    if (!div.Succeeded)
+                    {
+                        ScalarFailure df = div.Failure;
+                        failure = df.Kind == ScalarFailureKind.NotModelled
+                            ? SqlFailure.Open(SqlPhase.Open, $"NotModelled.{df.Case}", df.Describe())
+                            : SqlFailure.Ace(SqlPhase.Open, df.Number, AceError.Describe(df.Number));
+                        return ScalarLiterals.Null;
+                    }
+                    return div.Value;
+                }
                 case AggregateKind.Avg when s.Seen && a.Result == VarType.Currency:
                     // PAR-FOLD (r-par-1/fold-currency-avg-minmax): the exact Currency total as a Double, divided by the count
                     // in Double and rounded back to Currency. g 3 [-1, 1, 922337203685477.5807] gives 307445734561825.875

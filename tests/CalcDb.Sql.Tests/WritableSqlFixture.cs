@@ -186,7 +186,9 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
 
     public RowReader? OpenRows(TableDefinition table, TransactionCoordinator workspace, out string? failure)
     {
-        RowReader? reader = RowReader.Open(SourceOf(workspace), D, table, PageCount, out TraversalFailure? f);
+        PrivateOverlay? overlay = workspace.OverlayOf(_cache);
+        ulong extent = PageAllocator.ExtentOf(_cache, PageCount, overlay);
+        RowReader? reader = RowReader.Open(new PageSource(_cache, overlay), D, table, extent, out TraversalFailure? f);
         failure = f?.Predicate;
         return reader;
     }
@@ -306,7 +308,9 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
 
     public TableCursor? OpenCursor(TableDefinition table, TransactionCoordinator workspace, out string? failure)
     {
-        TableCursor? cursor = TableCursor.Open(SourceOf(workspace), D, table, PageCount, 0, out TraversalFailure? f);
+        PrivateOverlay? overlay = workspace.OverlayOf(_cache);
+        ulong extent = PageAllocator.ExtentOf(_cache, PageCount, overlay);
+        TableCursor? cursor = TableCursor.Open(new PageSource(_cache, overlay), D, table, extent, 0, out TraversalFailure? f);
         failure = f?.Predicate;
         return cursor;
     }

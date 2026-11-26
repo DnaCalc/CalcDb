@@ -451,6 +451,15 @@ public static class SqlParser
         return new CrosstabSyntax(transform!, transformAlias, statement, pivot!, hasPivotIn);
     }
 
+    /// <summary>
+    /// Parse a nested SQL <c>SELECT</c> (including <c>UNION</c> arms) inside an expression (<c>(SELECT …)</c>,
+    /// <c>EXISTS (SELECT …)</c>, <c>IN (SELECT …)</c>, <c>ANY</c>/<c>ALL (SELECT …)</c>). Used as the
+    /// <see cref="SubqueryParser"/> callback for <see cref="ExpressionSyntax.Parse"/> and
+    /// <see cref="ExpressionSyntax.ParseFragment"/>.
+    /// </summary>
+    internal static bool TryParseNestedSelect(string source, int start, out object? subquery, out int end, out ExpressionFailure? failure) =>
+        Parser.ParseNestedSelect(source, start, armDepth: 1, out subquery, out end, out failure);
+
     private sealed class Parser(string s, int start = 0)
     {
         private int _p = start;
@@ -459,6 +468,34 @@ public static class SqlParser
 
         /// <summary>The depth of parenthesized arms the position is inside: there a ')' ends a clause.</summary>
         private int _armDepth;
+
+        internal static bool ParseNestedSelect(string source, int start, int armDepth, out object? subquery, out int end, out ExpressionFailure? failure)
+        {
+            subquery = null;
+            end = start;
+            failure = null;
+            var subParser = new Parser(source, start) { _armDepth = armDepth };
+            var inner = new SelectSyntax(source);
+            SqlFailure? sf = subParser.QueryBody(inner);
+            if (sf is null && subParser.BadName)
+            {
+                sf = SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+            }
+            if (sf is not null)
+            {
+                inner.Dispose();
+                failure = sf.IsNotModelled
+                    ? ExpressionFailure.Open(ExpressionPhase.Parse, sf.NotModelled!, sf.Message) with { Site = subParser.Position }
+                    : ExpressionFailure.Ace(ExpressionPhase.Parse, sf.Number, sf.Message) with { Site = subParser.Position };
+                return false;
+            }
+            subquery = inner;
+            end = subParser.Position;
+            return true;
+        }
+
+        private bool ParseSubquery(string source, int start, out object? subquery, out int end, out ExpressionFailure? failure) =>
+            ParseNestedSelect(source, start, _armDepth + 1, out subquery, out end, out failure);
 
         private static SqlFailure Open(string name, string detail) => SqlFailure.Open(SqlPhase.Parse, name, detail);
 
@@ -560,7 +597,7 @@ public static class SqlParser
         {
             Skip();
             int start = _p;
-            ExpressionSyntax syntax = ExpressionSyntax.ParseFragment(s, start, out int end);
+            ExpressionSyntax syntax = ExpressionSyntax.ParseFragment(s, start, ParseSubquery, out int end);
             if (syntax.Failure is { } f)
             {
                 fragment = null;
@@ -975,15 +1012,34 @@ public static class SqlParser
                 {
                     return null;
                 }
-                if (_armDepth == 0 && TakeSymbol(';'))
+                if (_armDepth == 0 && IsSymbol(';'))
                 {
-                    // r-fix-wire-ado/ado-execute-update-compound (#29), r-str-ado-act/ado-execute-results (#42):
-                    // "SELECT 1 AS A; SELECT 2 AS B" -> 3142; bare "SELECT 1 AS v;" -> NotModelled.NoFrom (r-def-expr-sql/sql-text-framing-forms #42).
-                    return !AtEnd()
-                        ? SqlFailure.Ace(SqlPhase.Parse, 3142, SqlMessages.CharactersAfterEnd)
-                        : Open("NotModelled.NoFrom", "a SELECT without FROM");
+                    int saved = _p;
+                    TakeSymbol(';');
+                    if (!AtEnd())
+                    {
+                        // r-fix-wire-ado/ado-execute-update-compound (#29), r-str-ado-act/ado-execute-results (#42):
+                        // "SELECT 1 AS A; SELECT 2 AS B" -> 3142.
+                        return SqlFailure.Ace(SqlPhase.Parse, 3142, SqlMessages.CharactersAfterEnd);
+                    }
+                    _p = saved;
                 }
-                return AtEnd() ? Open("NotModelled.NoFrom", "a SELECT without FROM") : MissingOperator(statement.Items[^1].Offset);
+                // r-q52-ddl-make-domain/domain-all-scalar-dao-* (SELECT DCount(...), DSum(...), DLookup(...)),
+                // r-def-expr-sql/sql-text-framing-forms (SELECT 1, SELECT 1 AS v, SELECT 1 AS v;):
+                // plain FROM-less SELECT with no *, DISTINCT/DISTINCTROW, or TOP produces 1 row.
+                bool plainNoFrom = statement.Predicate == SelectPredicate.All
+                    && statement.Top is null
+                    && statement.IntoTarget is null
+                    && !statement.Items.Any(static i => i.Star);
+                if (plainNoFrom && (AtEnd() || (_armDepth == 0 && IsSymbol(';')) || (_armDepth > 0 && IsSymbol(')'))))
+                {
+                    return null;
+                }
+                if (AtEnd() || (_armDepth == 0 && IsSymbol(';')) || (_armDepth > 0 && IsSymbol(')')))
+                {
+                    return Open("NotModelled.NoFrom", "a SELECT without FROM");
+                }
+                return MissingOperator(statement.Items[^1].Offset);
             }
             hasFrom = true;
             do
@@ -1047,6 +1103,14 @@ public static class SqlParser
                     if (Clause(statement, out Fragment? key, orderFollowers) is { } f)
                     {
                         return f;
+                    }
+                    if (FindSubquery(key!.Syntax.Root!) is { } orderSub)
+                    {
+                        // r-sql-13b/order-expression-forms #643, sub-correlated-select-list #695:
+                        // a subquery in ORDER BY fails 3075 with quote ending before the closing ')'.
+                        int stop = orderSub.CloseOffset > key.Start && orderSub.CloseOffset <= s.Length ? orderSub.CloseOffset : key.End;
+                        string quote = s[key.Start..Math.Max(key.Start, stop)].TrimEnd();
+                        return new SqlFailure(SqlPhase.Parse, 3075, $"Syntax error{SqlFailure.QueryExpression}{quote}'.") { ExcerptExact = false };
                     }
                     bool descending = TakeWord("DESC");
                     if (!descending)
@@ -1129,7 +1193,7 @@ public static class SqlParser
                 }
             }
             statement.Items.Add(new SelectItem(expression, false, null, alias, offset));
-            if (!IsSymbol(',') && !IsWord("FROM") && !(allowInto && IsWord("INTO")) && !AtEnd() && !(_armDepth == 0 && IsSymbol(';')) && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
+            if (!IsSymbol(',') && !IsWord("FROM") && !(allowInto && IsWord("INTO")) && !AtEnd() && !(_armDepth == 0 && IsSymbol(';')) && !(_armDepth > 0 && IsSymbol(')')) && !(allowWith && (IsSymbol(';') || IsWord("WITH"))))
             {
                 return MissingOperator(offset);
             }
@@ -1251,6 +1315,30 @@ public static class SqlParser
                 _p = savedP;
                 BadName = savedBad;
             }
+        }
+
+        private static SyntaxNode? FindSubquery(SyntaxNode node)
+        {
+            if (node.Kind is SyntaxKind.Subquery or SyntaxKind.Exists or SyntaxKind.InSubquery or SyntaxKind.QuantifiedComparison)
+            {
+                return node;
+            }
+            if (node.Left is { } l && FindSubquery(l) is { } fl)
+            {
+                return fl;
+            }
+            if (node.Right is { } r && FindSubquery(r) is { } fr)
+            {
+                return fr;
+            }
+            for (int i = 0; i < node.Items.Count; i++)
+            {
+                if (FindSubquery(node.Items[i]) is { } fi)
+                {
+                    return fi;
+                }
+            }
+            return null;
         }
 
         /// <summary>A clause expression that one of <paramref name="followers"/>, a comma, <c>;</c> or the end must follow.</summary>

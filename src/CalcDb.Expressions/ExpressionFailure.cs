@@ -25,6 +25,9 @@ public sealed record ExpressionFailure(ExpressionPhase Phase, int Number, string
     /// <summary>The name a failure is about (an unknown function, an unresolved name), when it has one.</summary>
     public string? Subject { get; init; }
 
+    /// <summary>Whether this failure originated inside a SQL domain function (<c>DLookup</c>, <c>DCount</c>, …).</summary>
+    public bool FromDomainFunction { get; init; }
+
     /// <summary>ACE's error with its message (3077, 3070, 3072, 3001, 3464, …).</summary>
     public static ExpressionFailure Ace(ExpressionPhase phase, int number, string message) => new(phase, number, message);
 

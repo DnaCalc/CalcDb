@@ -49,6 +49,9 @@ public sealed record SqlFailure(SqlPhase Phase, int Number, string Message, stri
     /// </summary>
     public ReadOnlyActionInfo? ReadOnlyInfo { get; init; }
 
+    /// <summary>Whether this failure originated inside a SQL domain function (<c>DLookup</c>, <c>DCount</c>, …).</summary>
+    public bool FromDomainFunction { get; init; }
+
     public static SqlFailure Ace(SqlPhase phase, int number, string message) => new(phase, number, message);
 
     public static SqlFailure Open(SqlPhase phase, string name, string detail) => new(phase, 0, detail, name);
@@ -69,9 +72,9 @@ public sealed record SqlFailure(SqlPhase Phase, int Number, string Message, stri
         {
             int stop = failure.Site > start && failure.Site <= source.Length ? failure.Site : end;
             string quote = source[start..Math.Max(start, stop)].TrimEnd();
-            return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{quote}'.") { ExcerptExact = false };
+            return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{quote}'.") { ExcerptExact = false, FromDomainFunction = failure.FromDomainFunction };
         }
-        return Ace(phase, failure.Number, failure.Message);
+        return Ace(phase, failure.Number, failure.Message) with { FromDomainFunction = failure.FromDomainFunction };
     }
 
     public override string ToString() => IsNotModelled ? $"{NotModelled}: {Message}" : $"{Number}: {Message}";
@@ -250,4 +253,13 @@ public static class SqlMessages
 
     /// <summary>3755 when ALTER TABLE DROP CONSTRAINT names a constraint not found on the table (r-def-expr-sql/ddl-drop-and-missing-objects).</summary>
     public static string CheckConstraintDoesNotExist(string name) => $"CHECK constraint '{name}' does not exist.";
+
+    /// <summary>3306 when a non-EXISTS subquery returns more than one column (r-sql-1/sub-scalar, r-q53-conv-abspos-subq-loc/subq-in-exists-dao-*).</summary>
+    public const string SubqueryMultipleColumns = "You have written a subquery that can return more than one field without using the EXISTS reserved word in the main query's FROM clause. Revise the SELECT statement of the subquery to request only one field.";
+
+    /// <summary>3354 when a scalar subquery returns more than one row (r-sql-1/sub-scalar, r-q53-conv-abspos-subq-loc/subq-scalar-corr-dao-*, subq-grp-decagg-ado-*).</summary>
+    public const string SubqueryMultipleRows = "At most one record can be returned by this subquery.";
+
+    /// <summary>3761 when a DECIMAL aggregate exceeds 28 decimal digits within 96 bits (r-fix-expr-sql/fold-decimal-28-digits, fold-decimal-avg-var-forms).</summary>
+    public const string DecimalPrecisionTooSmall = "The decimal field's precision is too small to accept the numeric you attempted to add.";
 }
