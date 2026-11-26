@@ -315,7 +315,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
 /// </summary>
 internal sealed unsafe class TableDefObject : DaoObject
 {
-    private const int SystemObjectFlag = unchecked((int)0x80000000);
+    internal const int SystemObjectFlag = unchecked((int)0x80000000);
 
     private static readonly InterfaceDecl Decl = DaoTypes.TableDef;
     private static readonly nint Vtable = DualEntries.Build(Decl);
@@ -335,7 +335,8 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("ConflictTable", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
         .Get("ReplicaFilter", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
         .Get("Fields", (self, args) => Live(self, t => t.FieldsCollection()))
-        .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()));
+        .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()))
+        .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, t => t.OpenRecordset(type, options)); });
 
     private readonly DefinitionCollection _owner;
     private CatalogEntry _entry;
@@ -492,6 +493,53 @@ internal sealed unsafe class TableDefObject : DaoObject
             };
         }
         return Object(_indexes);
+    }
+
+    /// <summary>
+    /// <c>_TableDef.OpenRecordset(Type, Options)</c> (dispid 1610809362; W-08 / R-DAO-1 / R-FMT-1): opens a snapshot
+    /// (<c>VT_I4 4</c>, omitted <c>Options</c>) over a live local table via <see cref="DatabaseObject.OpenLocalTableRecordset"/>
+    /// (<c>r-fmt-1/read-accdb-*</c>, <c>r-fmt-1/read-mdb-*</c>, <c>r-wire/ident-tabledef-vs-recordset</c> call 15,
+    /// <c>r-fix-fmt-sort/fmt1-*</c>; system tables fail 3112 from <c>DAO.Database</c>). Deleted/stale TableDefs,
+    /// omitted or non-<c>dbOpenSnapshot</c> <c>Type</c>, non-numeric <c>Type</c>, and explicit <c>Options</c> have no
+    /// retained ACE record and stay refused by name.
+    /// </summary>
+    private CallResult OpenRecordset(nint typeArg, nint optionsArg)
+    {
+        CatalogEntry? liveEntry = _owner.Database.Catalog.LocalTables(_owner.Database.Format)
+            .FirstOrDefault(e => e.Id == _entry.Id && string.Equals(e.Name, _entry.Name, StringComparison.OrdinalIgnoreCase));
+        if (liveEntry is null)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableDefOpenRecordsetStale",
+                $"TableDef.OpenRecordset on deleted or stale TableDef '{_entry.Name}' (3265/3420/3011 is not recorded)"));
+        }
+        if (optionsArg != 0 && !TypedCall.IsMissing(Args.Cell(optionsArg)))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableDefOpenRecordsetOptions",
+                $"TableDef.OpenRecordset with explicit Options ({Args.TypeOf(optionsArg)}) is not recorded (only omitted Options is recorded)"));
+        }
+        if (typeArg == 0 || TypedCall.IsMissing(Args.Cell(typeArg)))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableDefOpenRecordsetType",
+                "TableDef.OpenRecordset with omitted Type is not recorded (only VT_I4 dbOpenSnapshot (4) is recorded)"));
+        }
+        Foundation.VarType typeVt = Args.TypeOf(typeArg);
+        if (typeVt != Foundation.VarType.I4)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableDefOpenRecordsetArguments",
+                $"TableDef.OpenRecordset with Type of variant type {typeVt} is not recorded (only VT_I4 dbOpenSnapshot (4) is recorded)"));
+        }
+        int recordsetType = (int)Args.Cell(typeArg)->Int64;
+        if (recordsetType != 4)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableDefOpenRecordsetType",
+                $"TableDef.OpenRecordset with Type {recordsetType} is not recorded (only dbOpenSnapshot (4) is recorded)"));
+        }
+        return _owner.Database.OpenLocalTableRecordset(liveEntry, type: 4, options: 0, lockEdit: null, fromTableDef: true);
     }
 
     protected override void OnFinalRelease()

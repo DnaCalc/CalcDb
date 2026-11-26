@@ -54,8 +54,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static List<DatabaseObject>? _openOnThread;
 
     private readonly WorkspaceObject _workspace;
+    private readonly SharedDatabaseSession _sharedSession;
     private readonly ComDatabaseSession _session;
     private readonly List<IDatabaseRecordset> _recordsets = [];
+    private bool _closed;
     private DefinitionCollection? _tableDefs;
     private DefinitionCollection? _queryDefs;
     private DefinitionCollection? _containers;
@@ -84,7 +86,28 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         _workspace = workspace;
         Name = name;
+        ReadOnly = readOnly;
         _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated, exclusive: exclusive);
+        _sharedSession = new SharedDatabaseSession(_session);
+        (_openOnThread ??= []).Add(this);
+        workspace.Engine.Sessions.Add(this);
+    }
+
+    /// <summary>
+    /// Attach a read-only shared <see cref="DatabaseObject"/> to an already-open writable shared session of the same
+    /// <see cref="WorkspaceObject"/> and canonical file so both handles share one OS handle, page cache and catalog
+    /// (<c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 20–29, <c>r-err-1b/lock-readonly-db-insert</c>,
+    /// <c>r-fix-cursor-dao/lock-readonly-db-insert-failonerror</c>).
+    /// </summary>
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, SharedDatabaseSession sharedSession)
+        : base(Decl, Vtable, workspace.Engine, "DAO.Database")
+    {
+        _workspace = workspace;
+        Name = name;
+        ReadOnly = readOnly;
+        WasSharedWithWritablePeer = readOnly;
+        _sharedSession = sharedSession;
+        _session = sharedSession.Session;
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -109,8 +132,26 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public static (long Probes, long Hits, long Misses, long Loads) LiveCacheWork()
     {
         (long p, long h, long m, long l) sum = default;
-        foreach (DatabaseObject d in _openOnThread ?? [])
+        if (_openOnThread is not { Count: > 0 } open)
         {
+            return sum;
+        }
+        for (int i = 0; i < open.Count; i++)
+        {
+            DatabaseObject d = open[i];
+            bool duplicate = false;
+            for (int j = 0; j < i; j++)
+            {
+                if (ReferenceEquals(open[j].Cache, d.Cache))
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate)
+            {
+                continue;
+            }
             CacheCounters c = d.Cache.Counters;
             sum = (sum.p + c.Probes, sum.h + c.Hits, sum.m + c.Misses, sum.l + c.Loads);
         }
@@ -187,15 +228,22 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// </summary>
     public ExpressionContext CreateExpressionContext(ExpressionUse use) => _session.CreateExpressionContext(use);
 
-    public bool Closed => _session.Closed;
+    public bool Closed => _closed || _session.Closed;
 
     public override bool Invalid => Closed;
 
     /// <summary>
-    /// Whether the session was opened read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE: ReadOnly counts
-    /// only when Options is given). CalcDb reads either way (W-10/native-readers-only); writes are W-05.
+    /// Whether this Database handle was opened read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE:
+    /// ReadOnly counts only when Options is given). Stored per handle so a shared read-only handle beside a same-
+    /// workspace writable peer keeps <c>Updatable = False</c> while sharing the peer's session and cache.
     /// </summary>
-    public bool ReadOnly => _session.ReadOnly;
+    public bool ReadOnly { get; }
+
+    /// <summary>
+    /// True when this read-only handle attached to an open same-workspace writable peer at open; whether it remains
+    /// writable or reverts to 3370/3073/3086 after that peer closes is not recorded.
+    /// </summary>
+    internal bool WasSharedWithWritablePeer { get; }
 
     /// <summary>
     /// Whether this Database was opened or created exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file), selecting
@@ -242,6 +290,27 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (!File.Exists(full))
         {
             return workspace.Fail(3024, DaoErrors.FileNotFound(name));
+        }
+        // An in-process shared read-only ACCDB open in the same Workspace beside an open shared writable handle shares
+        // that peer's ComDatabaseSession (one OS file handle, page cache, lock-file slot and catalog) so recorded
+        // peer-RW Execute writes succeed without self-sharing violations and stay immediately visible to both handles
+        // (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 20-29, r-err-1b/lock-readonly-db-insert,
+        // r-fix-cursor-dao/lock-readonly-db-insert-failonerror).
+        if (!exclusive && readOnly)
+        {
+            DatabaseObject? peer = workspace.Engine.Sessions.FirstOrDefault(d =>
+                !d.Closed
+                && ReferenceEquals(d.Workspace, workspace)
+                && !d.Exclusive
+                && !d.ReadOnly
+                && d.Profile.IsAce
+                && string.Equals(d.Name, full, StringComparison.OrdinalIgnoreCase));
+            if (peer is not null)
+            {
+                peer._sharedSession.AddHolder();
+                database = new DatabaseObject(workspace, full, readOnly: true, peer._sharedSession);
+                return CallResult.Nothing;
+            }
         }
         if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
         {
@@ -429,6 +498,33 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return hold;
     }
 
+    /// <summary>How the open recordsets of every Database handle sharing this session hold <paramref name="table"/>.</summary>
+    internal TableHold SharedHold(string table)
+    {
+        if (_sharedSession.Holders == 1)
+        {
+            return Hold(table);
+        }
+        TableHold hold = TableHold.None;
+        foreach (DatabaseObject d in Engine.Sessions)
+        {
+            if (d.Closed || !ReferenceEquals(d._sharedSession, _sharedSession))
+            {
+                continue;
+            }
+            TableHold h = d.Hold(table);
+            if (h == TableHold.Locked)
+            {
+                return h;
+            }
+            if (h != TableHold.None && hold == TableHold.None)
+            {
+                hold = h;
+            }
+        }
+        return hold;
+    }
+
     /// <summary>The database as the SQL layer binds and runs against it, made once per Database.</summary>
     public DatabaseSql Sql => _sql ??= new DatabaseSql(this);
 
@@ -502,9 +598,38 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             return Fail(3011, DaoErrors.ObjectNotFound(name));
         }
+        return OpenLocalTableRecordset(entry, type, options.Value, lockEdit, fromTableDef: false);
+    }
+
+    /// <summary>
+    /// Shared local-table recordset open used by both <c>Database.OpenRecordset</c> and <c>_TableDef.OpenRecordset</c>
+    /// (one open path; W-08 / R-DAO-1 / R-FMT-1): system tables fail 3112 from <c>DAO.Database</c> for recorded forms
+    /// (<c>r-fmt-1/read-accdb-*</c> and <c>read-mdb-*</c> <c>_TableDef.OpenRecordset(4)</c>; <c>r-cat-1/msys-queries*</c>
+    /// <c>Database.OpenRecordset("MSysQueries", 1)</c>); user tables open table-type (1), dynaset (2), snapshot (4) or
+    /// forward-only (8).
+    /// </summary>
+    internal CallResult OpenLocalTableRecordset(CatalogEntry entry, int? type, int options, int? lockEdit, bool fromTableDef)
+    {
+        if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        {
+            return deferredRefusal;
+        }
         if (type is not (null or 1 or 2 or 4 or 8))
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {type}"));
+        }
+        if ((entry.Flags & TableDefObject.SystemObjectFlag) != 0)
+        {
+            // r-fmt-1/read-accdb-* and read-mdb-* (52 records, tdf.OpenRecordset(4)): 3112 from DAO.Database;
+            // r-cat-1/msys-queries and msys-queries-compacted (call 19, db.OpenRecordset("MSysQueries", 1)): 3112 from DAO.Database.
+            bool recordedSystemOpen = fromTableDef ? type == 4 : type == 1;
+            if (recordedSystemOpen && options == 0 && lockEdit is null)
+            {
+                return Fail(3112, SqlMessages.NoReadPermission(entry.Name));
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.SystemTableOpenRecordset",
+                $"OpenRecordset on system table '{entry.Name}' (fromTableDef={fromTableDef}) with Type={type?.ToString() ?? "(omitted)"}, Options={options}, LockEdit={lockEdit?.ToString() ?? "(omitted)"} is not recorded"));
         }
         if (Definition(entry, out string? viewFailure) is not { } table)
         {
@@ -513,7 +638,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // A local table opens table-type when no type is given (dbOpenTable 1); dynaset 2, snapshot 4 and forward-only 8
         // populate through the occurrence store (CUR-POP).
         int recordsetType = type ?? 1;
-        switch (RecordsetOptions.Admit(recordsetType, options.Value))
+        switch (RecordsetOptions.Admit(recordsetType, options))
         {
             case OptionAdmission.InvalidArgument:
                 return Fail(3001, DaoErrors.InvalidArgument);
@@ -548,7 +673,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options.Value, lockEdit != 3, tempSlot, bookmarkBaseRefusal);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options, lockEdit != 3, tempSlot, bookmarkBaseRefusal);
         if (tempSlot is int claimedSlot)
         {
             Engine.OccupyTempSlot(claimedSlot, recordset);
@@ -746,7 +871,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="SchemaFailure"/>).
     /// </summary>
     public void SqlSchemaPublished(ulong extentPages) =>
-        _session.SqlSchemaPublished(extentPages, IsTableHeld, OnCatalogReloaded);
+        _session.SqlSchemaPublished(extentPages, IsTableHeld, OnSharedCatalogReloaded);
 
     /// <summary>The reason a statement cannot run against this Database's current catalog, or null.</summary>
     public string? SchemaFailure => _session.SchemaFailure;
@@ -762,7 +887,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         foreach (string table in DdlTargets(DdlParser.Parse(sql, out _)))
         {
-            switch (Hold(table))
+            switch (SharedHold(table))
             {
                 case TableHold.TableSnapshot:
                     return Failure.NotModelled("NotModelled.DdlBesideTableSnapshot", $"DDL on '{table}' while a snapshot opened on the table is open: whether it locks the table (3211) is not recorded");
@@ -1001,7 +1126,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put inside a transaction (qualified.md r-q37 Open)"));
         }
-        if (Hold(tableDef.Name) != TableHold.None)
+        if (SharedHold(tableDef.Name) != TableHold.None)
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put on '{tableDef.Name}' while a recordset of it is open (qualified.md r-q37 Open)"));
         }
@@ -1047,9 +1172,25 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
     /// </summary>
     private string? SchemaPublished(ulong extentPages) =>
-        _session.SchemaPublished(extentPages, IsTableHeld, OnCatalogReloaded);
+        _session.SchemaPublished(extentPages, IsTableHeld, OnSharedCatalogReloaded);
 
-    private bool IsTableHeld(string table) => Hold(table) != TableHold.None;
+    private bool IsTableHeld(string table) => SharedHold(table) != TableHold.None;
+
+    private void OnSharedCatalogReloaded()
+    {
+        if (_sharedSession.Holders == 1)
+        {
+            OnCatalogReloaded();
+            return;
+        }
+        foreach (DatabaseObject d in Engine.Sessions)
+        {
+            if (!d.Closed && ReferenceEquals(d._sharedSession, _sharedSession))
+            {
+                d.OnCatalogReloaded();
+            }
+        }
+    }
 
     private void OnCatalogReloaded()
     {
@@ -1648,7 +1789,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
     }
 
-    /// <summary>Close: every recordset of this Database closes, the file is released, the Workspace forgets it.</summary>
+    /// <summary>Close: every recordset of this Database closes, the file is released once the last holder closes, the Workspace forgets it.</summary>
     private CallResult Close()
     {
         foreach (IDatabaseRecordset r in _recordsets.ToArray())
@@ -1657,18 +1798,23 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _recordsets.Clear();
         CallResult closing = CallResult.Nothing;
-        // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
-        // ReleasedAtClose pages (deferred page frees or page-1 reservation return): Close commits once more and sets
-        // those global-map free bits (jh6s, nv5x, zfrp; R-CRASH-1, R-FMT-2; evidence/r-q11-ddl-closure,
-        // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
-        // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
-        // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
-        (MutationOpen open, string? detail) = _session.CloseCommit(_workspace.Transactions);
-        if (open != MutationOpen.None)
+        bool lastHolder = _sharedSession.ReleaseHolder();
+        if (lastHolder)
         {
-            closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
+            // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
+            // ReleasedAtClose pages (deferred page frees or page-1 reservation return): Close commits once more and sets
+            // those global-map free bits (jh6s, nv5x, zfrp; R-CRASH-1, R-FMT-2; evidence/r-q11-ddl-closure,
+            // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
+            // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
+            // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
+            (MutationOpen open, string? detail) = _session.CloseCommit(_workspace.Transactions);
+            if (open != MutationOpen.None)
+            {
+                closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
+            }
         }
-        if (_openOnThread?.Remove(this) == true)
+        bool removedFromThread = _openOnThread?.Remove(this) == true;
+        if (lastHolder && removedFromThread)
         {
             CacheCounters c = Cache.Counters;
             CostCounters counters = CostCounters.Current;
@@ -1677,9 +1823,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
             counters.CacheMisses += c.Misses;
             counters.CacheLoads += c.Loads;
         }
-        _session.DisposeFile();
+        _closed = true;
+        if (lastHolder)
+        {
+            _session.DisposeFile();
+        }
         Engine.Sessions.Remove(this);
-        _session.DisposeLockFile();
+        if (lastHolder)
+        {
+            _session.DisposeLockFile();
+        }
         _workspace.Forget(this);
         _tableDefs?.Release();
         _tableDefs = null;
@@ -1692,7 +1845,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _properties?.Release();
         _properties = null;
         // Database.Close keeps the Workspace's level (TXN-CLOSE): accepted changes keep their semantics; the bound rules go.
-        _session.DisposeEditContexts();
+        if (lastHolder)
+        {
+            _session.DisposeEditContexts();
+        }
         return closing;
     }
 
@@ -1704,4 +1860,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
             Close();
         }
     }
+}
+
+/// <summary>Reference-counted owner of one <see cref="ComDatabaseSession"/> shared across same-workspace peer handles.</summary>
+internal sealed class SharedDatabaseSession(ComDatabaseSession session)
+{
+    public ComDatabaseSession Session { get; } = session;
+
+    public int Holders { get; private set; } = 1;
+
+    public void AddHolder() => Holders++;
+
+    public bool ReleaseHolder() => --Holders == 0;
 }

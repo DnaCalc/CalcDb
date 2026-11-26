@@ -84,8 +84,8 @@ internal sealed class DatabaseSql(DatabaseObject database) : ComSqlDatabase(new 
 
         public IReadOnlyList<Relationship>? Relationships(out string? failure) => database.Relationships(out failure);
 
-        /// <summary>An open recordset of this Database locks the table (<see cref="TableHold.Locked"/>; ACE's 3211).</summary>
-        public bool IsTableInUse(string tableName) => database.Hold(tableName) == TableHold.Locked;
+        /// <summary>An open recordset of this Database (or a peer sharing its session) locks the table (<see cref="TableHold.Locked"/>; ACE's 3211).</summary>
+        public bool IsTableInUse(string tableName) => database.SharedHold(tableName) == TableHold.Locked;
     }
 }
 
@@ -356,7 +356,21 @@ internal static class ActionRoute
             return CallResult.Fail(refused);
         }
         ActionOutcome outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
-        return Published(database, caller, outcome, !ddl && IsInsert(sql), ref recordsAffected);
+        // When a shared read-only ACCDB handle runs a recorded peer-RW statement beside an open shared writable peer
+        // in the same Workspace (sharing the same ComDatabaseSession), ACE performs the write through the in-process
+        // writable session (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 23-25: CREATE TABLE, CREATE INDEX, DROP TABLE;
+        // r-err-1b/lock-readonly-db-insert calls 8 & 16 and r-fix-cursor-dao/lock-readonly-db-insert-failonerror call 17:
+        // INSERT ... VALUES with options 0 and dbFailOnError). Unrecorded peer-RW DDL/DML neighbours (UPDATE, DELETE,
+        // INSERT ... SELECT, ALTER TABLE, DROP INDEX, MDB, other Workspaces, inside BeginTrans) keep NotModelled.ReadOnlyAction.
+        if (outcome.Failure is { IsNotModelled: true, NotModelled: "NotModelled.ReadOnlyAction", ReadOnlyInfo: not null }
+            && source == ActionErrorSource.Database
+            && PeerWritableFor(database) is { } peer
+            && IsRecordedPeerReadWriteStatement(sql, ddl, options))
+        {
+            outcome = ActionExecutor.Execute(sql, peer.Sql, options, values, source);
+        }
+        bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
+        return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
     }
 
     /// <summary>Run a QueryDef's bound action plan with the QueryDef's parameter values (missing ones: 3061, SQL-B).</summary>
@@ -376,7 +390,7 @@ internal static class ActionRoute
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;
-        CallResult result = Published(database, caller, outcome, plan.Kind is ActionKind.InsertValues or ActionKind.InsertSelect, ref state);
+        CallResult result = Published(database, caller, outcome, ActionErrorSource.QueryDef, options, isInsertValues: false, ref state);
         if (result.Failure?.Kind != FailureKind.NotModelled)
         {
             recordsAffected = state.Current;
@@ -458,7 +472,7 @@ internal static class ActionRoute
     public static CallResult Failed(DatabaseObject database, DaoObject caller, SqlFailure failure, ref int recordsAffected)
     {
         RecordsAffectedState state = default;
-        CallResult result = Published(database, caller, ActionOutcome.Fail(failure), insert: false, ref state);
+        CallResult result = Published(database, caller, ActionOutcome.Fail(failure), ActionErrorSource.QueryDef, options: 0, isInsertValues: false, ref state);
         if (result.Failure?.Kind != FailureKind.NotModelled)
         {
             recordsAffected = state.Current;
@@ -466,7 +480,7 @@ internal static class ActionRoute
         return result;
     }
 
-    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, bool insert, ref RecordsAffectedState recordsAffected)
+    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, ActionErrorSource source, int options, bool isInsertValues, ref RecordsAffectedState recordsAffected)
     {
         if (outcome.Failure is not { } failure)
         {
@@ -475,13 +489,24 @@ internal static class ActionRoute
         }
         if (failure.IsNotModelled)
         {
-            // r-q18-statements/ro-ins-fail, ro-ins-plain, ro-excl-ins-fail: an INSERT on a Database opened read-only is 3073,
-            // shared or exclusive, with or without dbFailOnError, when no read/write handle of the file is open in the
-            // process (with one it succeeded: r-fix-cursor-dao/lock-readonly-db-insert-failonerror, still named).
-            if (failure.NotModelled == "NotModelled.ReadOnlyAction" && insert && !ReadWriteBeside(database))
+            // Read-only ACCDB alone (!ReadWriteBeside, !WasSharedWithWritablePeer): surface the SQL layer's structured
+            // ReadOnlyInfo for recorded Database.Execute forms:
+            // - INSERT ... VALUES (3073): shared options 0 / 128 (r-q18-statements/ro-ins-plain, ro-ins-fail) and
+            //   exclusive options 128 (r-q18-statements/ro-excl-ins-fail).
+            // - DDL (3370: DROP/CREATE TABLE, CREATE INDEX, ALTER TABLE ADD COLUMN), UPDATE (3073), DELETE (3086):
+            //   shared open with options 0 (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 11-16).
+            // Unrecorded cases (ReadOnlyInfo null, unrecorded options/exclusive combinations, QueryDef.Execute, MDB,
+            // post-peer-close, or unrecorded peer-RW forms) stay refused by name as NotModelled.ReadOnlyAction.
+            if (failure.NotModelled == "NotModelled.ReadOnlyAction"
+                && failure.ReadOnlyInfo is { } readOnlyInfo
+                && source == ActionErrorSource.Database
+                && database.Profile.IsAce
+                && !database.WasSharedWithWritablePeer
+                && !ReadWriteBeside(database)
+                && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues))
             {
                 recordsAffected.Fail();
-                return caller.Fail(3073, SqlMessages.NotUpdateable);
+                return caller.Fail(readOnlyInfo.Number, readOnlyInfo.Message);
             }
             return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
         }
@@ -489,7 +514,49 @@ internal static class ActionRoute
         return caller.Fail(failure.Number, failure.Message);
     }
 
-    private static bool IsInsert(string sql) => sql.AsSpan().TrimStart().StartsWith("INSERT", StringComparison.OrdinalIgnoreCase);
+    private static bool IsRecordedReadOnlyAloneMode(bool exclusive, int options, bool isInsertValues) =>
+        isInsertValues
+            ? (!exclusive && options is 0 or 128) || (exclusive && options == 128)
+            : !exclusive && options == 0;
+
+    private static bool IsInsertValues(string sql)
+    {
+        using ActionSyntax? action = ActionParser.Parse(sql, out _);
+        return action is { Kind: ActionKind.InsertValues };
+    }
+
+    private static bool IsRecordedPeerReadWriteStatement(string sql, bool ddl, int options)
+    {
+        if (ddl)
+        {
+            return options == 0
+                && DdlParser.Parse(sql, out _, allowAdoCheck: false) is
+                    CreateTableStatement
+                    or CreateIndexStatement
+                    or DropTableStatement { TableNames.Count: 1 };
+        }
+        return options is 0 or 128 && IsInsertValues(sql);
+    }
+
+    /// <summary>
+    /// The open shared writable peer <see cref="DatabaseObject"/> in the same Workspace and shared session when
+    /// <paramref name="database"/> is a shared read-only ACCDB handle at transaction depth 0; otherwise null.
+    /// </summary>
+    private static DatabaseObject? PeerWritableFor(DatabaseObject database)
+    {
+        if (!database.ReadOnly || database.Exclusive || !database.Profile.IsAce || database.Workspace.Transactions.Depth != 0)
+        {
+            return null;
+        }
+        return database.Engine.Sessions.FirstOrDefault(d =>
+            !ReferenceEquals(d, database)
+            && !d.Closed
+            && !d.ReadOnly
+            && !d.Exclusive
+            && ReferenceEquals(d.Workspace, database.Workspace)
+            && ReferenceEquals(d.Cache, database.Cache)
+            && string.Equals(d.Name, database.Name, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Whether another open Database of the process has the same file open read/write.</summary>
     private static bool ReadWriteBeside(DatabaseObject database) =>

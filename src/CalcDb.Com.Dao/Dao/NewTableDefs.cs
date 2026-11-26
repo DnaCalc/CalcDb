@@ -22,7 +22,8 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         // A draft's Name put is kept and read back (draft-tabledef-field: Name = "D1x", then "D1x"); a name is checked at Append.
         .Put("Name", (self, args) => { nint value = args[^1]; return Live(self, t => { t.Name = Args.Text(value) ?? ""; return CallResult.Nothing; }); })
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
-        .Get("Fields", (self, args) => Live(self, t => Object(t.Fields)));
+        .Get("Fields", (self, args) => Live(self, t => Object(t.Fields)))
+        .Method("OpenRecordset", static (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.DraftTableDefOpenRecordset", "TableDef.OpenRecordset on a draft (unappended) TableDef is not recorded")));
 
     private readonly DatabaseObject _database;
 
