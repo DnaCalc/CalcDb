@@ -1,6 +1,7 @@
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Format;
 using CalcDb.Foundation;
 
 namespace CalcDb.Com.Dao;
@@ -53,31 +54,13 @@ internal sealed unsafe class NewTableDefObject : DaoObject
     }
 
     /// <summary>
-    /// CreateField(Name, Type, Size) on a draft (r-dao-1-err-1/draft-tabledef-field): omitted arguments read "", 0 and 0;
-    /// Type 9999 is 3259 from DAO.Field; dbLong (4) and dbText (10), with any Size, are recorded as accepted.
+    /// CreateField(Name, Type, Size) on a draft TableDef (r-dao-1-err-1/draft-tabledef-field,
+    /// r-q46-dao-ddl-multi/cf-*): omitted arguments read "", 0 and 0; Type 9999 is 3259 from DAO.Field;
+    /// complex types 101..109, dbBigInt (16), and draft dbDecimal (20) are refused by name; the 13 non-Decimal
+    /// DAO types (1..12, 15) are accepted with ACE's exact default Size.
     /// </summary>
-    private CallResult CreateField(nint name, nint type, nint size)
-    {
-        string fieldName = name == 0 ? "" : Args.Text(name) ?? "";
-        int? fieldType = Args.Int32(type, 0);
-        int? fieldSize = Args.Int32(size, 0);
-        if (fieldType is not int t || fieldSize is not int s)
-        {
-            return CallResult.Fail(Failure.NotImplemented("CreateField with a Type or Size that does not convert to a number"));
-        }
-        if (t == 9999)
-        {
-            return CallResult.Fail(Failure.Dao(3259, "DAO.Field", DaoErrors.InvalidFieldType));
-        }
-        if (t is not (0 or NewFieldObject.DbLong or NewFieldObject.DbText))
-        {
-            return CallResult.Fail(Failure.NotImplemented($"CreateField of DAO type {t} (only dbLong, dbText and 9999 are recorded)"));
-        }
-        var field = new NewFieldObject(this, fieldName, (short)t, s);
-        CallResult result = Object(field);
-        field.Release();
-        return result;
-    }
+    private CallResult CreateField(nint name, nint type, nint size) =>
+        NewFieldObject.Create(Engine, forAttachedTable: false, name, type, size);
 
     /// <summary>The typed request this draft appends as: its fields in Append order, by the DAO route.</summary>
     public CreateTableRequest? Request(out string? notWritten)
@@ -86,23 +69,12 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         List<NewField> fields = [];
         foreach (NewFieldObject f in Fields.Members)
         {
-            if (f.PropertiesPut.Count > 0)
+            if (f.ToNewField(forAttachedTable: false, out string? fieldNotWritten) is not { } field)
             {
-                notWritten = $"TableDefs.Append of a field with {string.Join(", ", f.PropertiesPut.Keys)} put (the schema writer writes no field properties or attributes yet: W-07/native-metadata-write)";
+                notWritten = fieldNotWritten;
                 return null;
             }
-            switch (f.Type)
-            {
-                case NewFieldObject.DbLong:
-                    fields.Add(new NewField(f.Name, NewFieldType.Long));
-                    break;
-                case NewFieldObject.DbText:
-                    fields.Add(new NewField(f.Name, NewFieldType.Text, f.Size));
-                    break;
-                default:
-                    notWritten = $"TableDefs.Append of a field of DAO type {f.Type}";
-                    return null;
-            }
+            fields.Add(field);
         }
         return new CreateTableRequest(Name, fields, SchemaRoute.Dao);
     }
@@ -170,39 +142,288 @@ internal sealed unsafe class NewFieldsObject : DaoObject
 }
 
 /// <summary>
-/// A Field made by a draft TableDef's CreateField (r-dao-1-err-1/draft-tabledef-field: Name, Type and Size as given;
-/// omitted "", 0, 0). Before the TableDef is appended, a Type put of dbLong or dbText is kept (draft-tabledef-field: Type =
-/// 10 on an appended draft field), and the puts r-cat-1b/create-props makes are accepted and kept for Append: Attributes
-/// dbAutoIncrField (16), DefaultValue, Required, AllowZeroLength, ValidationRule and ValidationText. Their reads before
-/// Append and other Attributes and Type values are not recorded.
+/// A Field made by a draft or attached TableDef's CreateField (r-dao-1-err-1/draft-tabledef-field,
+/// r-q46-dao-ddl-multi/cf-*, r-dao-1b/coll-append-field-existing-rows). Before Append, it exposes Name, Type, Size,
+/// and Attributes (with ACE's exact default Size per DAO type; attached dbDecimal(20) exposes Type=16, Size=8,
+/// Attributes=0 before Append) and accepts puts for Type (dbLong/dbText), Attributes (dbAutoIncrField=16), Required,
+/// AllowZeroLength, DefaultValue, ValidationRule, and ValidationText. Once appended to an attached TableDef's Fields
+/// collection, it binds to the live column and keeps its COM identity (coll-append-field-existing-rows: u6).
 /// </summary>
 internal sealed unsafe class NewFieldObject : DaoObject
 {
+    public const short DbBoolean = 1;
+    public const short DbByte = 2;
+    public const short DbInteger = 3;
     public const short DbLong = 4;
+    public const short DbCurrency = 5;
+    public const short DbSingle = 6;
+    public const short DbDouble = 7;
+    public const short DbDate = 8;
+    public const short DbBinary = 9;
     public const short DbText = 10;
+    public const short DbLongBinary = 11;
+    public const short DbMemo = 12;
+    public const short DbGUID = 15;
+    public const short DbBigInt = 16;
+    public const short DbDecimal = 20;
 
     private static readonly InterfaceDecl Decl = DaoTypes.Field3;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Text(((NewFieldObject)self).Name))
-        .Get("Type", (self, args) => Int16(((NewFieldObject)self).Type))
-        .Get("Size", (self, args) => Int32(((NewFieldObject)self).Size))
+        .Get("Name", (self, args) => Live(self, f => Text(f._attachedColumn?.Name ?? f.Name)))
+        .Get("Type", (self, args) => Live(self, f => f._attachedColumn is { } col
+            ? (ColumnFacts.DaoType(col) is int dt ? Int16(dt) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {col.TypeCode}")))
+            : Int16(f.Type)))
+        .Get("Size", (self, args) => Live(self, f => f._attachedColumn is { } col
+            ? (ColumnFacts.Size(col) is int sz ? Int32(sz) : CallResult.Fail(Failure.NotImplemented($"Field.Size of native type {col.TypeCode}")))
+            : Int32(f.Size)))
+        .Get("Attributes", (self, args) => Live(self, f => f._attachedColumn is { } col
+            ? (ColumnFacts.Attributes(col, updatable: false) is int attr ? Int32(attr) : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"Field.Attributes of the column {col.Name}")))
+            : Int32(f._attributes)))
+        .Get("OrdinalPosition", (self, args) => Live(self, f => f._attachedTable is not null
+            ? Int16(f._attachedOrdinal)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldOrdinalPosition", "Field.OrdinalPosition on an unappended draft Field is not recorded"))))
+        .Get("Required", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
+            ? ColumnFacts.Stored(t.Blob, col, "Required", Bool(false))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldRequiredGet", "Field.Required get on an unappended draft Field is not recorded"))))
+        .Get("AllowZeroLength", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
+            ? ColumnFacts.Stored(t.Blob, col, "AllowZeroLength", Bool(false))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAllowZeroLengthGet", "Field.AllowZeroLength get on an unappended draft Field is not recorded"))))
+        .Get("CollatingOrder", (self, args) => Live(self, f => f._attachedColumn is { } col
+            ? Int32(ColumnFacts.CollatingOrder(col))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollatingOrder", "Field.CollatingOrder on an unappended draft Field is not recorded"))))
+        .Get("SourceTable", (self, args) => Live(self, f => f._attachedTable is { } t
+            ? Text(t.Name)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceTable", "Field.SourceTable on an unappended draft Field is not recorded"))))
+        .Get("SourceField", (self, args) => Live(self, f => f._attachedColumn is { } col
+            ? Text(col.Name)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceField", "Field.SourceField on an unappended draft Field is not recorded"))))
+        .Get("DefaultValue", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
+            ? ColumnFacts.Stored(t.Blob, col, "DefaultValue", Text(""))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldDefaultValueGet", "Field.DefaultValue get on an unappended draft Field is not recorded"))))
+        .Get("ValidationRule", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
+            ? ColumnFacts.Stored(t.Blob, col, "ValidationRule", Text(""))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationRuleGet", "Field.ValidationRule get on an unappended draft Field is not recorded"))))
+        .Get("ValidationText", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
+            ? ColumnFacts.Stored(t.Blob, col, "ValidationText", Text(""))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationTextGet", "Field.ValidationText get on an unappended draft Field is not recorded"))))
         .Put("Type", (self, args) => ((NewFieldObject)self).SetType(args[^1]))
-        .Put("Attributes", (self, args) => ((NewFieldObject)self).Keep("Attributes", args[^1], v => Args.Int32(v, null) == 16))
+        .Put("Attributes", (self, args) => ((NewFieldObject)self).SetAttributes(args[^1]))
         .Put("DefaultValue", (self, args) => ((NewFieldObject)self).Keep("DefaultValue", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
         .Put("ValidationRule", (self, args) => ((NewFieldObject)self).Keep("ValidationRule", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
         .Put("ValidationText", (self, args) => ((NewFieldObject)self).Keep("ValidationText", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
-        .Put("Required", (self, args) => ((NewFieldObject)self).Keep("Required", args[^1], v => Args.TypeOf(v) == VarType.Bool))
-        .Put("AllowZeroLength", (self, args) => ((NewFieldObject)self).Keep("AllowZeroLength", args[^1], v => Args.TypeOf(v) == VarType.Bool));
+        .Put("Required", (self, args) => ((NewFieldObject)self).SetRequired(args[^1]))
+        .Put("AllowZeroLength", (self, args) => ((NewFieldObject)self).SetAllowZeroLength(args[^1]));
+
+    private int _attributes;
+    private TableDefObject? _attachedTable;
+    private DefinitionCollection? _attachedOwner;
+    private ColumnDescriptor? _attachedColumn;
+    private int _attachedOrdinal;
 
     /// <summary>The draft Fields this field was appended to, or null.</summary>
     public NewFieldsObject? AppendedTo { get; set; }
 
-    /// <summary>The property puts kept for Append, by name, as their text.</summary>
+    /// <summary>True once this field has been appended to an attached TableDef's Fields collection.</summary>
+    public bool IsAttached => _attachedTable is not null;
+
+    /// <summary>True when created via attached <c>TableDef.CreateField(name, 20)</c> (dbDecimal).</summary>
+    public bool IsAttachedDecimal { get; }
+
+    /// <summary>Explicit <c>Required</c> put on the draft field, or null if unset.</summary>
+    public bool? RequiredPut { get; private set; }
+
+    /// <summary>Explicit <c>AllowZeroLength</c> put on the draft field, or null if unset.</summary>
+    public bool? AllowZeroLengthPut { get; private set; }
+
+    /// <summary>Other property puts kept for Append (DefaultValue, ValidationRule, ValidationText), by name.</summary>
     public Dictionary<string, string> PropertiesPut { get; } = [];
+
+    public override bool Invalid => _attachedOwner is { } owner && owner.Database.Closed;
+
+    private static CallResult Live(ComObject self, Func<NewFieldObject, CallResult> op)
+    {
+        var f = (NewFieldObject)self;
+        return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+    }
+
+    /// <summary>
+    /// Shared factory for draft (<c>NewTableDefObject.CreateField</c>) and attached (<c>TableDefObject.CreateField</c>)
+    /// fields (r-dao-1-err-1/draft-tabledef-field, r-q46-dao-ddl-multi/cf-*).
+    /// </summary>
+    public static CallResult Create(EngineState engine, bool forAttachedTable, nint name, nint type, nint size)
+    {
+        string fieldName = name == 0 ? "" : Args.Text(name) ?? "";
+        int? fieldType = Args.Int32(type, 0);
+        int? fieldSize = Args.Int32(size, 0);
+        if (fieldType is not int t || fieldSize is not int s)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateField with a Type or Size that does not convert to a number"));
+        }
+        if (t == 9999)
+        {
+            return CallResult.Fail(Failure.Dao(3259, "DAO.Field", DaoErrors.InvalidFieldType));
+        }
+        if (t is >= 101 and <= 109)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldComplexType", $"TableDef.CreateField of complex DAO type {t} (101..109) is not modelled"));
+        }
+        if (t == DbBigInt)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldBigInt", "TableDef.CreateField of dbBigInt (16) is not modelled (BIGINT DAO write path belongs to a follow-up slice)"));
+        }
+        if (t == DbDecimal)
+        {
+            if (!forAttachedTable)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldDraftDecimal", "draft TableDef.CreateField of dbDecimal (20) is not recorded (only attached TableDef.CreateField(..., 20) is recorded in evidence/r-q46-dao-ddl-multi/cf-attached-decimal-*)"));
+            }
+            // evidence/r-q46-dao-ddl-multi/cf-attached-decimal-accdb, cf-attached-decimal-mdb:
+            // attached CreateField("FDec", 20) returns a draft Field with Type=16, Size=8, Attributes=0 before Append.
+            var decField = new NewFieldObject(engine, fieldName, type: DbBigInt, size: 8, isAttachedDecimal: true);
+            CallResult decResult = Object(decField);
+            decField.Release();
+            return decResult;
+        }
+        bool sizeOmitted = size == 0 || TypedCall.IsMissing(Args.Cell(size));
+        int resolvedSize;
+        switch (t)
+        {
+            case 0:
+                resolvedSize = s;
+                break;
+            case DbBoolean:
+            case DbByte:
+                resolvedSize = 1;
+                break;
+            case DbInteger:
+                resolvedSize = 2;
+                break;
+            case DbLong:
+            case DbSingle:
+                resolvedSize = 4;
+                break;
+            case DbCurrency:
+            case DbDouble:
+            case DbDate:
+                resolvedSize = 8;
+                break;
+            case DbBinary:
+                resolvedSize = sizeOmitted ? 0 : s;
+                break;
+            case DbText:
+                // evidence/r-q46-dao-ddl-multi/cf-text-default-accdb: omitted Size reads 0 on draft, writes 0x01FE (255 chars).
+                resolvedSize = sizeOmitted ? 0 : s;
+                break;
+            case DbLongBinary:
+            case DbMemo:
+                resolvedSize = 0;
+                break;
+            case DbGUID:
+                resolvedSize = 16;
+                break;
+            default:
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldType", $"CreateField of DAO type {t} is not recorded"));
+        }
+        var field = new NewFieldObject(engine, fieldName, (short)t, resolvedSize, isAttachedDecimal: false);
+        CallResult result = Object(field);
+        field.Release();
+        return result;
+    }
+
+    public NewField? ToNewField(bool forAttachedTable, out string? notWritten)
+    {
+        notWritten = null;
+        if (PropertiesPut.Count > 0)
+        {
+            notWritten = $"{(forAttachedTable ? "Fields.Append" : "TableDefs.Append")} of a field with {string.Join(", ", PropertiesPut.Keys)} put (not written yet: W-07/native-metadata-write)";
+            return null;
+        }
+        bool isAutoIncr = (_attributes & 16) != 0;
+        if (!forAttachedTable)
+        {
+            if (RequiredPut == true || AllowZeroLengthPut == true)
+            {
+                notWritten = "TableDefs.Append of a draft field with Required=True or AllowZeroLength=True is not recorded (only attached Fields.Append records Required=True and AllowZeroLength=True in cf-attached-scalar-*)";
+                return null;
+            }
+            if (isAutoIncr && Type != DbLong)
+            {
+                notWritten = $"TableDefs.Append of a field of DAO type {Type} with dbAutoIncrField (16) is not recorded";
+                return null;
+            }
+        }
+        else
+        {
+            if (isAutoIncr)
+            {
+                notWritten = "attached TableDef.Fields.Append of an AutoNumber (dbAutoIncrField) field is not recorded";
+                return null;
+            }
+            if (IsAttachedDecimal)
+            {
+                if (AllowZeroLengthPut == true)
+                {
+                    notWritten = "attached TableDef.Fields.Append of dbDecimal with AllowZeroLength=True is not recorded";
+                    return null;
+                }
+                return new NewField(Name, NewFieldType.Decimal, Precision: 38, Scale: 0, Required: RequiredPut ?? false);
+            }
+        }
+
+        bool required = RequiredPut ?? false;
+        bool azl = AllowZeroLengthPut ?? false;
+        switch (Type)
+        {
+            case DbBoolean:
+                return new NewField(Name, NewFieldType.YesNo, Required: required, AllowZeroLength: azl);
+            case DbByte:
+                return new NewField(Name, NewFieldType.Byte, Required: required, AllowZeroLength: azl);
+            case DbInteger:
+                return new NewField(Name, NewFieldType.Short, Required: required, AllowZeroLength: azl);
+            case DbLong:
+                return new NewField(Name, isAutoIncr ? NewFieldType.Counter : NewFieldType.Long, Required: required, AllowZeroLength: azl);
+            case DbCurrency:
+                return new NewField(Name, NewFieldType.Currency, Required: required, AllowZeroLength: azl);
+            case DbSingle:
+                return new NewField(Name, NewFieldType.Single, Required: required, AllowZeroLength: azl);
+            case DbDouble:
+                return new NewField(Name, NewFieldType.Double, Required: required, AllowZeroLength: azl);
+            case DbDate:
+                return new NewField(Name, NewFieldType.DateTime, Required: required, AllowZeroLength: azl);
+            case DbBinary:
+                return new NewField(Name, NewFieldType.VarBinary, Size: Size, Required: required, AllowZeroLength: azl);
+            case DbText:
+                return new NewField(Name, NewFieldType.Text, Size: Size == 0 ? 255 : Size, Required: required, AllowZeroLength: azl);
+            case DbLongBinary:
+                return new NewField(Name, NewFieldType.Ole, Required: required, AllowZeroLength: azl);
+            case DbMemo:
+                return new NewField(Name, NewFieldType.Memo, Required: required, AllowZeroLength: azl);
+            case DbGUID:
+                return new NewField(Name, NewFieldType.Guid, Required: required, AllowZeroLength: azl);
+            default:
+                notWritten = $"{(forAttachedTable ? "Fields.Append" : "TableDefs.Append")} of a field of DAO type {Type}";
+                return null;
+        }
+    }
+
+    /// <summary>Bind this Field to its persisted column after an attached <c>TableDef.Fields.Append</c> succeeds.</summary>
+    public void Attach(TableDefObject table, DefinitionCollection owner, ColumnDescriptor column, int ordinal)
+    {
+        _attachedTable = table;
+        _attachedOwner = owner;
+        _attachedColumn = column;
+        _attachedOrdinal = ordinal;
+        owner.AddRef();
+        table.AddRef();
+    }
 
     private CallResult SetType(nint value)
     {
+        if (IsAttached)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
         if (Args.Int32(value, null) is not (DbLong or DbText) and var type)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldType", $"a draft field's Type put of {type?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "a value that is not a number"} (dbText is recorded)"));
@@ -211,8 +432,54 @@ internal sealed unsafe class NewFieldObject : DaoObject
         return CallResult.Nothing;
     }
 
+    private CallResult SetAttributes(nint value)
+    {
+        if (IsAttached)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (Args.Int32(value, null) != 16)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's Attributes put of a value other than dbAutoIncrField (16) is not recorded"));
+        }
+        _attributes = 16;
+        return CallResult.Nothing;
+    }
+
+    private CallResult SetRequired(nint value)
+    {
+        if (IsAttached)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (Args.TypeOf(value) != VarType.Bool)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's Required put of a {Args.TypeOf(value)} value is not recorded"));
+        }
+        RequiredPut = Args.Bool(value, omitted: false)!.Value;
+        return CallResult.Nothing;
+    }
+
+    private CallResult SetAllowZeroLength(nint value)
+    {
+        if (IsAttached)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (Args.TypeOf(value) != VarType.Bool)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's AllowZeroLength put of a {Args.TypeOf(value)} value is not recorded"));
+        }
+        AllowZeroLengthPut = Args.Bool(value, omitted: false)!.Value;
+        return CallResult.Nothing;
+    }
+
     private CallResult Keep(string name, nint value, Func<nint, bool> recorded)
     {
+        if (IsAttached)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
         if (!recorded(value))
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's {name} put of a {Args.TypeOf(value)} value or one not recorded (r-cat-1b/create-props)"));
@@ -221,11 +488,13 @@ internal sealed unsafe class NewFieldObject : DaoObject
         return CallResult.Nothing;
     }
 
-    public NewFieldObject(NewTableDefObject table, string name, short type, int size) : base(Decl, Vtable, table.Engine, "DAO.Field")
+    public NewFieldObject(EngineState engine, string name, short type, int size, bool isAttachedDecimal = false)
+        : base(Decl, Vtable, engine, "DAO.Field")
     {
         Name = name;
         Type = type;
         Size = size;
+        IsAttachedDecimal = isAttachedDecimal;
     }
 
     public string Name { get; }
@@ -235,4 +504,19 @@ internal sealed unsafe class NewFieldObject : DaoObject
     public int Size { get; }
 
     protected override OperationTable Table => Operations;
+
+    protected override void OnFinalRelease()
+    {
+        if (_attachedTable is not null)
+        {
+            _attachedTable.Release();
+            _attachedTable = null;
+        }
+        if (_attachedOwner is not null)
+        {
+            _attachedOwner.Released(this);
+            _attachedOwner.Release();
+            _attachedOwner = null;
+        }
+    }
 }

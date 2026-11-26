@@ -336,6 +336,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("ReplicaFilter", (self, args) => Live(self, t => t.Fail(3032, DaoErrors.CannotPerform)))
         .Get("Fields", (self, args) => Live(self, t => t.FieldsCollection()))
         .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()))
+        .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
         .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, t => t.OpenRecordset(type, options)); });
 
     private readonly DefinitionCollection _owner;
@@ -353,7 +354,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         Blob = owner.Database.Blob(entry, out _blobFailure);
     }
 
-    private readonly string? _definitionFailure;
+    private string? _definitionFailure;
     private string? _blobFailure;
 
     /// <summary>The table's MR2 property blob (CAT-P): its own map and one map per column with stored properties.</summary>
@@ -363,9 +364,9 @@ internal sealed unsafe class TableDefObject : DaoObject
 
     public override bool Invalid => _owner.Database.Closed;
 
-    public TableDefinition? Definition { get; }
+    public TableDefinition? Definition { get; private set; }
 
-    private bool IsSystem => (_entry.Flags & SystemObjectFlag) != 0;
+    internal bool IsSystem => (_entry.Flags & SystemObjectFlag) != 0;
 
     protected override OperationTable Table => Operations;
 
@@ -375,8 +376,9 @@ internal sealed unsafe class TableDefObject : DaoObject
             : null;
 
     /// <summary>
-    /// Reload this TableDef's catalog row and MR2 property blob after a property put published a new catalog image,
-    /// keeping held <see cref="DefinitionFieldObject"/> wrappers live against the updated blob (W-08, r-q37).
+    /// Reload this TableDef's catalog row, TableDef page, and MR2 property blob after a property put or catalog DDL
+    /// published a new catalog image, keeping held <see cref="DefinitionFieldObject"/> wrappers live against the
+    /// updated blob (W-08, r-q37; W-07, r-q46).
     /// </summary>
     internal void Refresh()
     {
@@ -386,6 +388,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         {
             _entry = updated;
         }
+        Definition = _owner.Database.Definition(_entry, out _definitionFailure);
         Blob = _owner.Database.Blob(_entry, out _blobFailure);
         _properties?.Release();
         _properties = null;
@@ -450,19 +453,41 @@ internal sealed unsafe class TableDefObject : DaoObject
         return Object(_properties);
     }
 
+    private CallResult CreateField(nint name, nint type, nint size) =>
+        NewFieldObject.Create(Engine, forAttachedTable: true, name, type, size);
+
     private CallResult FieldsCollection()
     {
         if (Definition is not { } d)
         {
             return DefinitionFailure();
         }
-        IReadOnlyList<ColumnDescriptor> columns = IsSystem ? [] : d.Columns;
-        _fields ??= new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, [.. columns.Select(c => c.Name)],
-            (c, i) => new DefinitionFieldObject(c, this, columns[i], null, i))
+        if (_fields is null)
         {
-            EmptyNameSource = "DAO.TableDef", // r-dao-1-err-1/coll-name-variants: Item("") of a TableDef's Fields
-        };
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, _) = FieldsMembership(reload: false);
+            _fields = new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, names, make)
+            {
+                EmptyNameSource = "DAO.TableDef", // r-dao-1-err-1/coll-name-variants: Item("") of a TableDef's Fields
+                Membership = () => FieldsMembership(reload: true),
+                PreserveHeldByName = true,
+                Appender = (c, arg) => c.Database.AppendField(this, c, arg),
+            };
+        }
         return Object(_fields);
+    }
+
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) FieldsMembership(bool reload)
+    {
+        if (reload)
+        {
+            Refresh();
+        }
+        if (Definition is not { } d)
+        {
+            return ([], static (_, _) => throw new InvalidOperationException(), "TableDef cannot be read: " + _definitionFailure);
+        }
+        IReadOnlyList<ColumnDescriptor> columns = IsSystem ? [] : d.Columns;
+        return ([.. columns.Select(c => c.Name)], (c, i) => new DefinitionFieldObject(c, this, columns[i], null, i), null);
     }
 
     private CallResult IndexesCollection()
@@ -473,26 +498,44 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         if (_indexes is null)
         {
-            LogicalIndex[] listed = [];
-            if (!IsSystem)
+            (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, string? fail) = IndexesMembership(reload: false);
+            if (fail is not null)
             {
-                LogicalIndex[]? sorted = _owner.Database.Collation is { } order
-                    ? ListedIndexes.Of(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor, order)
-                    : ListedIndexes.OfPlainNames(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor);
-                if (sorted is null)
-                {
-                    return CallResult.Fail(Failure.NotModelled("NotModelled.IndexNameOrder", $"the Indexes of '{_entry.Name}' in a sort order outside the General family, with names whose order depends on it (FMT1-INDEX-ENUM was asked under General)"));
-                }
-                listed = sorted;
+                return CallResult.Fail(Failure.NotModelled("NotModelled.IndexNameOrder", fail));
             }
-            _indexes = new DefinitionCollection(DaoTypes.Indexes, "DAO.Indexes", _owner.Database, [.. listed.Select(i => i.Name)],
-                (c, i) => new IndexObject(c, d, listed[i]))
+            _indexes = new DefinitionCollection(DaoTypes.Indexes, "DAO.Indexes", _owner.Database, names, make)
             {
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
                 ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+                Membership = () => IndexesMembership(reload: true),
             };
         }
         return Object(_indexes);
+    }
+
+    private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) IndexesMembership(bool reload)
+    {
+        if (reload)
+        {
+            Refresh();
+        }
+        if (Definition is not { } d)
+        {
+            return ([], static (_, _) => throw new InvalidOperationException(), "TableDef cannot be read: " + _definitionFailure);
+        }
+        LogicalIndex[] listed = [];
+        if (!IsSystem)
+        {
+            LogicalIndex[]? sorted = _owner.Database.Collation is { } order
+                ? ListedIndexes.Of(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor, order)
+                : ListedIndexes.OfPlainNames(d.LogicalIndexes, _owner.Database.Format.IndexDescriptor);
+            if (sorted is null)
+            {
+                return ([], static (_, _) => throw new InvalidOperationException(), $"the Indexes of '{_entry.Name}' in a sort order outside the General family, with names whose order depends on it (FMT1-INDEX-ENUM was asked under General)");
+            }
+            listed = sorted;
+        }
+        return ([.. listed.Select(i => i.Name)], (c, i) => new IndexObject(c, d, listed[i]), null);
     }
 
     /// <summary>
@@ -925,8 +968,10 @@ internal static class ColumnFacts
         {
             return null;
         }
-        // A GUID column reads dbVariableField whatever its stored length flag (field-members-typed-each: TGuid 2).
-        int attributes = column.IsFixed && column.TypeCode != NativeTypes.Guid ? 1 : 2;
+        // Fixed vs variable follows the stored TableDef column flag directly: SQL-created GUID has Flags=0x02
+        // (IsFixed=false -> dbVariableField 2 in r-dao-1b/field-members-typed-each), while DAO-created GUID has
+        // Flags=0x03 (IsFixed=true -> dbFixedField 1 in r-q46-dao-ddl-multi/cf-guid-accdb, cf-guid-mdb, cf-multi-mixed-*).
+        int attributes = column.IsFixed ? 1 : 2;
         return attributes | (column.IsAutoNumber ? 16 : 0) | (updatable ? 32 : 0);
     }
 

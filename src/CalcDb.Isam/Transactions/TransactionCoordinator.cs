@@ -557,6 +557,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _sessionReservedExtent = [];
     private readonly HashSet<PageCache> _rollbackExtentPending = [];
     private readonly Dictionary<PageCache, List<uint>> _pendingGroup2AllocatedPages = [];
+    private readonly HashSet<PageCache> _closeCommitRequired = [];
+    private readonly Dictionary<PageCache, List<PageEdit>> _deferredCloseEdits = [];
+    private readonly Dictionary<PageCache, List<uint>> _pendingRolledBackPages = [];
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
     private readonly HashSet<PageCache> _pendingCloseCommit = [];
     private readonly HashSet<PageCache> _jet4MdbRollbackPending = [];
@@ -675,7 +678,75 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public bool NeedsCloseCommit(PageCache cache) =>
         _allocatedGlobalMap.Contains(cache)
         || _releaseAtClose.ContainsKey(cache)
-        || _deferredCatalogCommit.ContainsKey(cache);
+        || _deferredCatalogCommit.ContainsKey(cache)
+        || _closeCommitRequired.Contains(cache)
+        || _deferredCloseEdits.ContainsKey(cache);
+
+    /// <summary>
+    /// Require a closing counter commit (+1 on page 0) at <see cref="PublishCloseCommit"/> even when page 1 was not
+    /// touched (<c>evidence/r-q47-bigint-expr-edges/reldel-noenforce-accdb</c>, <c>reldel-noenforce-mdb</c>).
+    /// </summary>
+    public void MarkCloseCommitRequired(PageCache cache) => _closeCommitRequired.Add(cache);
+
+    /// <summary>
+    /// Buffer catalog count edits (e.g. rolled-back <c>MSysObjects</c>/<c>MSysACEs</c> increments from failed
+    /// <c>Relations.Append</c> 3011/3201/3368: <c>evidence/r-q46-dao-ddl-multi/rel-errors-*</c>,
+    /// <c>evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*</c>) to flush in the next catalog commit or at Close.
+    /// </summary>
+    public void AppendDeferredCloseEdits(PageCache cache, IReadOnlyList<PageEdit> edits)
+    {
+        if (edits.Count == 0)
+        {
+            return;
+        }
+        if (!_deferredCloseEdits.TryGetValue(cache, out List<PageEdit>? list))
+        {
+            list = [];
+            _deferredCloseEdits[cache] = list;
+        }
+        list.AddRange(edits);
+    }
+
+    /// <summary>Inspect buffered deferred close edits on <paramref name="cache"/> without removing them.</summary>
+    public IReadOnlyList<PageEdit> PeekDeferredCloseEdits(PageCache cache) =>
+        _deferredCloseEdits.TryGetValue(cache, out List<PageEdit>? list) ? [.. list] : [];
+
+    /// <summary>Clear buffered deferred close edits on <paramref name="cache"/> once folded into a published commit.</summary>
+    public void ClearDeferredCloseEdits(PageCache cache) => _deferredCloseEdits.Remove(cache);
+
+    /// <summary>Rolled-back pages from an earlier failed <c>Relations.Append</c> awaiting page-1 free on the next op or Close.</summary>
+    public IReadOnlyList<uint> PendingRolledBackPages(PageCache cache) =>
+        _pendingRolledBackPages.TryGetValue(cache, out List<uint>? pages) ? [.. pages] : [];
+
+    /// <summary>Record the current set of rolled-back pages awaiting page-1 free on the next op or Close.</summary>
+    public void SetPendingRolledBackPages(PageCache cache, IReadOnlyList<uint> pages)
+    {
+        if (pages.Count == 0)
+        {
+            _pendingRolledBackPages.Remove(cache);
+        }
+        else
+        {
+            _pendingRolledBackPages[cache] = [.. pages];
+        }
+    }
+
+    /// <summary>Remove pages already freed mid-session from <paramref name="cache"/>'s Close-time release list.</summary>
+    public void RemoveReleasedAtClose(PageCache cache, IReadOnlyList<uint> freedPages)
+    {
+        if (freedPages.Count == 0 || !_releaseAtClose.TryGetValue(cache, out List<uint>? list))
+        {
+            return;
+        }
+        for (int i = 0; i < freedPages.Count; i++)
+        {
+            list.Remove(freedPages[i]);
+        }
+        if (list.Count == 0)
+        {
+            _releaseAtClose.Remove(cache);
+        }
+    }
 
     /// <summary>
     /// Report which kinds of deferred catalog commit are currently queued across all caches on this Workspace
@@ -3531,12 +3602,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 return (defOpen, defDetail);
             }
-            if (!_allocatedGlobalMap.Contains(cache) && !_releaseAtClose.ContainsKey(cache))
+            if (!_allocatedGlobalMap.Contains(cache)
+                && !_releaseAtClose.ContainsKey(cache)
+                && !_closeCommitRequired.Contains(cache)
+                && !_deferredCloseEdits.ContainsKey(cache))
             {
                 return (MutationOpen.None, null);
             }
         }
         List<PageEdit> frees = [];
+        List<LockResource> footprint = [];
         if (_releaseAtClose.TryGetValue(cache, out List<uint>? released) && released.Count > 0)
         {
             if (cache.HasOtherRollbackExtentOwner(Locker))
@@ -3552,12 +3627,24 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 frees.Add(free);
             }
+            footprint.Add(new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map));
         }
-        LockResource[] footprint = frees.Count > 0 ? [new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map)] : [];
+        if (_deferredCloseEdits.TryGetValue(cache, out List<PageEdit>? closeEdits) && closeEdits.Count > 0)
+        {
+            HashSet<ulong> lockedCatalogPages = [];
+            foreach (PageEdit edit in closeEdits)
+            {
+                frees.Add(edit);
+                if (lockedCatalogPages.Add(edit.Page))
+                {
+                    footprint.Add(new LockResource(edit.Page, LockPurpose.TableDef));
+                }
+            }
+        }
         (MutationOpen open, string? detail) = PublishNonTransactional(
             cache,
             frees,
-            footprint,
+            [.. footprint],
             CommitMode.Immediate,
             MutationErrorSource.Workspace,
             out MutationError? error,
@@ -3571,6 +3658,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _sessionReservedExtent.Remove(cache);
             _rollbackExtentPending.Remove(cache);
             _pendingGroup2AllocatedPages.Remove(cache);
+            _closeCommitRequired.Remove(cache);
+            _deferredCloseEdits.Remove(cache);
+            _pendingRolledBackPages.Remove(cache);
             cache.UnregisterRollbackExtentOwner(Locker);
         }
         return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
