@@ -3307,9 +3307,11 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Long, OperandKind.LongLiteral)
                     or (OperandKind.LongLiteral, OperandKind.Long)
                     or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
-                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B + 1 and B + B are 16 (BigInt).
+                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb,
+                // r-expr-1/b-integer-widening (#330 LL + CLng(1)): B + 1, B + B, and B + CLng(1) are 16 (BigInt).
                 (OperandKind.BigInt, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
+                    or (OperandKind.BigInt, OperandKind.LongLiteral)
+                    or (OperandKind.BigInt, OperandKind.Long) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity, r-expr-1b/meta-conversion-field-types, r-expr-1/b-mixed-precedence,
                 // r-fix-expr-sql/dec-mixed-precedence: Currency + Currency/Long is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)
