@@ -1340,6 +1340,24 @@ public static class DdlBinder
         string? fkParentName = stmt.Action is AddConstraintAlterAction { Constraint: { Kind: DdlConstraintKind.ForeignKey, RefTable: { } refTable } }
             ? refTable
             : null;
+        SqlFailure? dropFkParentErr = null;
+        if (fkParentName is null && stmt.Action is DropConstraintAlterAction dropConAction)
+        {
+            LogicalIndex? dropFkIdx = table.LogicalIndexes.FirstOrDefault(li =>
+                li.IndexType == 2 && li.RelatedTableType == 0x02 && NamesEqual(li.Name, dropConAction.ConstraintName));
+            if (dropFkIdx is not null && database is ISqlSchemaDatabase sdRel)
+            {
+                SchemaWriter? relWriter = sdRel.OpenSchemaWriter(out string? relWriterFail);
+                if (relWriter is null)
+                {
+                    dropFkParentErr = BindOpen("NotModelled.DdlAlterTable", $"cannot resolve parent table for FK constraint '{dropFkIdx.Name}': {relWriterFail}");
+                }
+                else if (!relWriter.TryGetRelationParentTable(dropFkIdx.Name, out fkParentName, out string? relLookupFail))
+                {
+                    dropFkParentErr = BindOpen("NotModelled.DdlAlterTable", $"cannot resolve parent table for FK constraint '{dropFkIdx.Name}': {relLookupFail}");
+                }
+            }
+        }
         bool parentInUse = fkParentName is not null && database is ISqlSchemaDatabase sdParentUse && sdParentUse.IsTableInUse(fkParentName);
         SqlFailure? actionErr = ValidateAlterAction(stmt, table, database, route, out BoundDdl? boundPlan);
         if (inUse)
@@ -1356,14 +1374,19 @@ public static class DdlBinder
         }
         if (parentInUse)
         {
+            string fkKind = stmt.Action is DropConstraintAlterAction ? "DROP CONSTRAINT FOREIGN KEY" : "ADD CONSTRAINT FOREIGN KEY";
             string detail = actionErr is null || actionErr.IsNotModelled
-                ? $"held referenced parent table '{fkParentName}' in ALTER TABLE ADD CONSTRAINT FOREIGN KEY"
+                ? $"held referenced parent table '{fkParentName}' in ALTER TABLE {fkKind}"
                 : $"held referenced parent table '{fkParentName}' meets ALTER TABLE error ({actionErr.Number})";
             return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", detail), out failure);
         }
         if (actionErr is not null)
         {
             return Fail(actionErr, out failure);
+        }
+        if (dropFkParentErr is not null)
+        {
+            return Fail(dropFkParentErr, out failure);
         }
         failure = null;
         return boundPlan;
@@ -1879,13 +1902,22 @@ public static class DdlBinder
 
             case DropConstraintAlterAction dropCon:
             {
-                LogicalIndex? idx = table.LogicalIndexes.FirstOrDefault(li => NamesEqual(li.Name, dropCon.ConstraintName));
+                // Skip hidden parent-side relationship link indexes (IndexType == 2, RelatedTableType == 0x01, e.g. ".rB");
+                // only user indexes and child-side FK indexes (IndexType == 2, RelatedTableType == 0x02) are constraints on this table.
+                LogicalIndex? idx = table.LogicalIndexes.FirstOrDefault(li =>
+                    !(li.IndexType == 2 && li.RelatedTableType == 0x01)
+                    && NamesEqual(li.Name, dropCon.ConstraintName));
                 if (idx is not null)
                 {
-                    // r-txn-1/ddl-relation-querydef-property-rollback, r-q44/dropcon-fk-*: dropping a foreign-key constraint (IndexType == 2)
-                    // removes the relationship itself; dropping a primary/unique index referenced by a relationship fails 3281.
+                    // r-txn-1/ddl-relation-querydef-property-rollback, r-q44/dropcon-fk-*: dropping a child foreign-key constraint
+                    // (IndexType == 2, RelatedTableType == 0x02) removes the relationship itself; dropping a primary/unique index
+                    // referenced by a relationship fails 3281.
                     if (idx.IndexType == 2)
                     {
+                        if (idx.RelatedTableType != 0x02)
+                        {
+                            return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT on FK index '{idx.Name}' with RelatedTableType=0x{idx.RelatedTableType:X2} is not recorded");
+                        }
                         if (route != SchemaRoute.Sql)
                         {
                             return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT (foreign key) on {route} route is not recorded (evidence/r-q44-ddl-alter-types/dropcon-fk-* records DAO/SQL only)");
@@ -1915,17 +1947,29 @@ public static class DdlBinder
                 {
                     return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP CONSTRAINT (foreign key without matching child FK index) is not modelled in SchemaWriter");
                 }
-                if (database is ISqlSchemaDatabase sdCheck && sdCheck.OpenSchemaWriter(out _)?.HasCheckConstraint(stmt.TableName, dropCon.ConstraintName) == true)
+                if (database is ISqlSchemaDatabase sdCheck)
                 {
-                    if (route != SchemaRoute.Ado)
+                    SchemaWriter? checkWriter = sdCheck.OpenSchemaWriter(out string? checkWriterFail);
+                    if (checkWriter is null)
                     {
-                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT on CHECK constraint '{dropCon.ConstraintName}' via {route} is not recorded (evidence/r-q44-ddl-alter-types/dropcon-check-* records ADO only)");
+                        return BindOpen("NotModelled.DdlAlterTable", $"cannot inspect CHECK constraints on '{stmt.TableName}': {checkWriterFail}");
                     }
-                    boundPlan = new BoundDdl(
-                        stmt,
-                        BoundDdlKind.DropCheckConstraint,
-                        DropCheckConstraint: new DropCheckConstraintRequest(stmt.TableName, dropCon.ConstraintName, route));
-                    return null;
+                    if (!checkWriter.TryHasCheckConstraint(stmt.TableName, dropCon.ConstraintName, out bool hasCheck, out string? checkFail))
+                    {
+                        return BindOpen("NotModelled.DdlAlterTable", $"cannot inspect CHECK constraints on '{stmt.TableName}': {checkFail}");
+                    }
+                    if (hasCheck)
+                    {
+                        if (route != SchemaRoute.Ado)
+                        {
+                            return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT on CHECK constraint '{dropCon.ConstraintName}' via {route} is not recorded (evidence/r-q44-ddl-alter-types/dropcon-check-* records ADO only)");
+                        }
+                        boundPlan = new BoundDdl(
+                            stmt,
+                            BoundDdlKind.DropCheckConstraint,
+                            DropCheckConstraint: new DropCheckConstraintRequest(stmt.TableName, dropCon.ConstraintName, route));
+                        return null;
+                    }
                 }
                 // r-def-expr-sql/ddl-drop-and-missing-objects: ALTER TABLE Dp2 DROP CONSTRAINT Nope -> 3755.
                 return BindAce(3755, SqlMessages.CheckConstraintDoesNotExist(dropCon.ConstraintName));

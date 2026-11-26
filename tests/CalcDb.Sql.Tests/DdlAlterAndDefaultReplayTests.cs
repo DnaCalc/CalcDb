@@ -90,7 +90,7 @@ public sealed class DdlAlterAndDefaultReplayTests
             }
 
             byte[] actual = db.Image.Snapshot();
-            List<(long Page, int Start, int Length)> ignoreSpans = FindMsysDbDateUpdateSpanIfDifferent(step.ExpectedImage, actual, stepDate);
+            List<(long Page, int Start, int Length)> ignoreSpans = FindMsysDbDateUpdateSpanIfDifferent(currentImage, step.ExpectedImage, actual, stepDate);
             AssertImagesEqual($"{question} [{step.Label}]", step.ExpectedImage, actual, ignoreSpans);
             currentImage = actual;
         }
@@ -330,22 +330,31 @@ public sealed class DdlAlterAndDefaultReplayTests
         ExpectRefused("ALTER TABLE T ADD COLUMN X1 LONG, COLUMN X2 LONG", "NotModelled.DdlAlterTable");
         ExpectRefused("ALTER TABLE T ADD COLUMN X SINGLE", "NotModelled.DdlAlterTable");
         ExpectRefused("ALTER TABLE T ADD COLUMN X DATETIME NOT NULL", "NotModelled.DdlAlterTable");
+        ExpectRefused("ALTER TABLE T ADD COLUMN X DATETIME", "NotModelled.SchemaWriter"); // DATETIME without DEFAULT not recorded
         ExpectRefused("ALTER TABLE T ADD COLUMN X TEXT(10) NOT NULL", "NotModelled.SchemaWriter"); // populated table TEXT NOT NULL not recorded
         ExpectRefused("ALTER TABLE T ADD COLUMN X LONG NULL", "NotModelled.DdlAlterTable");
         ExpectRefused("ALTER TABLE T ADD COLUMN X LONG CONSTRAINT UQ_X UNIQUE", "NotModelled.DdlAlterTable");
         ExpectRefused("ALTER TABLE T ADD COLUMN M MEMO", "NotModelled.SchemaWriter"); // populated table Memo ADD not recorded
+        ExpectRefused("ALTER TABLE TEmpty ADD COLUMN M MEMO", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // ADO Memo ADD not recorded
         ExpectRefused("ALTER TABLE T ADD COLUMN B BIGINT", "NotModelled.SchemaWriter"); // populated table BigInt ADD not recorded
+        ExpectRefused("ALTER TABLE T ADD COLUMN R LONG NOT NULL DEFAULT 42", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // 2-step NOT NULL DEFAULT when LvProp == null (F3)
+        ExpectRefused("ALTER TABLE TEmpty ADD COLUMN R LONG NOT NULL DEFAULT 42", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // LvProp holds CheckConstraints ObjectValues
 
         // Unrecorded ALTER COLUMN shapes:
         ExpectRefused("ALTER TABLE T ALTER COLUMN V LONG NOT NULL", "NotModelled.SchemaWriter"); // populated NOT NULL toggle not recorded
         ExpectRefused("ALTER TABLE T ALTER COLUMN S LONG", "NotModelled.SchemaWriter"); // Text -> Long not recorded
         ExpectRefused("ALTER TABLE T ALTER COLUMN D LONG", "NotModelled.SchemaWriter"); // Double -> Long not recorded
+        ExpectRefused("ALTER TABLE T ALTER COLUMN D TEXT(20)", "NotModelled.SchemaWriter"); // Double(2.5) fractional -> Text not recorded (F6)
+        ExpectRefused("ALTER TABLE T ALTER COLUMN V TEXT(20)", "NotModelled.SchemaWriter"); // ACCDB SQL Long -> Text not recorded (F7)
         ExpectRefused("ALTER TABLE T ALTER COLUMN ID DOUBLE", "NotModelled.SchemaWriter"); // indexed column alter not recorded
         ExpectRefused("ALTER TABLE T ALTER COLUMN V DOUBLE NOT NULL", "NotModelled.DdlAlterTable"); // combined type + NOT NULL
         ExpectRefused("ALTER TABLE T ALTER COLUMN V LONG", "NotModelled.DdlAlterTable"); // no-op same type/size
         ExpectRefused("ALTER TABLE T ALTER COLUMN S TEXT(20) DEFAULT 'abc'", "NotModelled.DdlAlterTable", ActionErrorSource.Ado); // same size + DEFAULT
+        ExpectRefused("ALTER TABLE T ALTER COLUMN S TEXT(10) DEFAULT 'abc'", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // narrowing + DEFAULT not recorded
         ExpectRefused("ALTER TABLE T ALTER COLUMN V DEFAULT 5", "NotModelled.DdlAlterDefaultSyntax", ActionErrorSource.Ado);
         ExpectRefused("ALTER TABLE T ALTER COLUMN Nope SET DEFAULT 5", "NotModelled.DdlAlterTable", ActionErrorSource.Ado);
+        ExpectRefused("ALTER TABLE T ALTER COLUMN ID SET DEFAULT 5", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // indexed/PK SET DEFAULT not recorded
+        ExpectRefused("ALTER TABLE T ALTER COLUMN V SET DEFAULT 5", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // LvProp not SingleRow LVAL
         ExpectRefused("ALTER TABLE T ALTER COLUMN V DROP DEFAULT", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // no existing DefaultValue
 
         // Unrecorded DROP COLUMN / DROP CONSTRAINT shapes:
@@ -353,14 +362,44 @@ public sealed class DdlAlterAndDefaultReplayTests
         ExpectRefused("ALTER TABLE TEmpty DROP CONSTRAINT CK_1", "NotModelled.DdlAlterTable", ActionErrorSource.Database); // DAO DROP CHECK not recorded
         ExpectRefused("ALTER TABLE T DROP CONSTRAINT PK_T", "NotModelled.DdlAlterTable", ActionErrorSource.Ado); // ADO DROP PK not recorded
 
-        // Unrecorded DEFAULT expressions & types:
+        // Unrecorded DEFAULT expressions, order & types:
         ExpectRefused("CREATE TABLE BadDef1 (ID LONG, D DATETIME DEFAULT Now())", "NotModelled.DdlDefaultExpr", ActionErrorSource.Ado);
         ExpectRefused("CREATE TABLE BadDef2 (ID LONG, A LONG DEFAULT ID)", "NotModelled.DdlDefaultExpr", ActionErrorSource.Ado);
         ExpectRefused("CREATE TABLE BadDef3 (ID LONG, M MEMO DEFAULT 'x')", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
         ExpectRefused("CREATE TABLE BadDef4 (ID LONG CONSTRAINT PK_BD4 PRIMARY KEY DEFAULT 1)", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
+        ExpectRefused("CREATE TABLE BadDef5 (ID LONG, A LONG DEFAULT 1 NOT NULL)", "NotModelled.DdlDefaultOrder", ActionErrorSource.Ado);
+        ExpectRefused("CREATE TABLE BadDef6 (ID LONG, A DOUBLE DEFAULT .5)", "NotModelled.DdlDefaultExpr", ActionErrorSource.Ado);
+        ExpectRefused("CREATE TABLE BadDef7 (ID LONG, A LONG DEFAULT - 5)", "NotModelled.DdlDefaultExpr", ActionErrorSource.Ado);
+        ExpectRefused("CREATE TABLE BadDef8 (ID LONG, A LONG DEFAULT 7)", "NotModelled.SchemaWriter", ActionErrorSource.Ado); // prior global-map activity without pending reservation (F11)
 
         // Zero bytes written by any refusal:
         Assert.Equal(snap, db.Image.Snapshot());
+
+        // F1: Rewriting UPDATE (e.g. variable-column update) on a table with dropped columns stays refused honestly without mutating pages.
+        Assert.True(ActionExecutor.Execute("ALTER TABLE T DROP COLUMN D", db).Succeeded);
+        byte[] afterDrop = db.Image.Snapshot();
+        ActionOutcome updAfterDrop = ActionExecutor.Execute("UPDATE T SET S = 'updated' WHERE ID = 1", db);
+        Assert.False(updAfterDrop.Succeeded);
+        Assert.True(updAfterDrop.Failure?.IsNotModelled);
+        Assert.Equal(afterDrop, db.Image.Snapshot());
+
+        // F4: AutoNumber/COUNTER columns stay refused on ALTER COLUMN and DROP COLUMN.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE TAuto (C COUNTER, V LONG)", db).Succeeded);
+        byte[] afterAuto = db.Image.Snapshot();
+        ExpectRefused("ALTER TABLE TAuto ALTER COLUMN C DOUBLE", "NotModelled.SchemaWriter");
+        ExpectRefused("ALTER TABLE TAuto DROP COLUMN C", "NotModelled.SchemaWriter");
+        Assert.Equal(afterAuto, db.Image.Snapshot());
+
+        // F2: Parent-side hidden relationship link index (.rB) yields ACE 3755 on Parent DROP CONSTRAINT, not 3265.
+        using var fkDb = new WritableSqlFixture(EmptyAccdbSha);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY)", fkDb).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE C (ID LONG CONSTRAINT PK_C PRIMARY KEY, PID LONG CONSTRAINT FK_CP REFERENCES P (ID))", fkDb).Succeeded);
+        byte[] afterFk = fkDb.Image.Snapshot();
+        ActionOutcome dropHiddenParent = ActionExecutor.Execute("ALTER TABLE P DROP CONSTRAINT [.rB]", fkDb);
+        Assert.False(dropHiddenParent.Succeeded);
+        Assert.False(dropHiddenParent.Failure?.IsNotModelled);
+        Assert.Equal(3755, dropHiddenParent.Failure?.Number);
+        Assert.Equal(afterFk, fkDb.Image.Snapshot());
     }
 
     // ---- Helpers ---------------------------------------------------------------------------------------------------
@@ -641,20 +680,29 @@ public sealed class DdlAlterAndDefaultReplayTests
     /// <summary>
     /// When a single <c>ALTER TABLE ADD COLUMN BIGINT/DATETIME2</c> updates both <c>T.DateUpdate</c> and
     /// <c>MSysDb.DateUpdate</c>, ACE takes two clock readings a few ms apart while <see cref="SchemaWriter"/> receives
-    /// one <c>dateUpdateBits</c>. If the ONLY difference inside <c>MSysDb</c>'s 8-byte <c>DateUpdate</c> field is that
-    /// second clock tick, allow only those exact 8 bytes.
+    /// one <c>dateUpdateBits</c>. Allow ONLY those exact 8 bytes when ACE actually changed <c>MSysDb.DateUpdate</c>
+    /// in this step (<paramref name="beforeImage"/> vs <paramref name="expected"/>) AND <paramref name="actual"/>
+    /// wrote <paramref name="tableDate"/> there.
     /// </summary>
-    private static List<(long Page, int Start, int Length)> FindMsysDbDateUpdateSpanIfDifferent(byte[] expected, byte[] actual, ulong tableDate)
+    private static List<(long Page, int Start, int Length)> FindMsysDbDateUpdateSpanIfDifferent(byte[] beforeImage, byte[] expected, byte[] actual, ulong tableDate)
     {
         if (expected.Length != actual.Length)
         {
             return [];
         }
+        using var beforeFile = new MemoryDatabaseFile(beforeImage, D.PageSize);
+        var beforeCache = new PageCache(beforeFile, beforeFile.Incarnation, D.PageSize, 64);
+        CatalogSnapshot beforeCatalog = CatalogBootstrap.Open(beforeCache, D, beforeFile.PageCount, out _)!;
+        CatalogEntry? msysDbBefore = beforeCatalog.Entries.FirstOrDefault(e => string.Equals(e.Name, "MSysDb", StringComparison.OrdinalIgnoreCase));
+
         using var file = new MemoryDatabaseFile(expected, D.PageSize);
         var cache = new PageCache(file, file.Incarnation, D.PageSize, 64);
         CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, file.PageCount, out _)!;
         CatalogEntry? msysDb = catalog.Entries.FirstOrDefault(e => string.Equals(e.Name, "MSysDb", StringComparison.OrdinalIgnoreCase));
-        if (msysDb is null || msysDb.DateUpdateBits is not ulong msysDbDate || msysDbDate == tableDate)
+        if (msysDb is null
+            || msysDb.DateUpdateBits is not ulong msysDbDate
+            || msysDbBefore?.DateUpdateBits == msysDbDate
+            || msysDbDate == tableDate)
         {
             return [];
         }
@@ -665,13 +713,19 @@ public sealed class DdlAlterAndDefaultReplayTests
         }
         ColumnDescriptor dateUpdateCol = catalog.ObjectTable.Columns.Single(c => c.Name == "DateUpdate");
         int offset = slot.Start + D.Row.FixedBase + dateUpdateCol.FixedOffset;
+        ulong actualMsysDbDate = BitConverter.ToUInt64(actual.AsSpan((int)(msysDb.Root.Page * D.PageSize) + offset, 8));
+        if (actualMsysDbDate != tableDate)
+        {
+            return [];
+        }
         return [(msysDb.Root.Page, offset, 8)];
     }
 
     /// <summary>
     /// In <c>ddl-default-alter-ado-*</c> <c>after-add-s-live</c>, ACE updates <c>DateUpdate</c> on the inline
     /// <c>MSysObjects</c> row before spilling <c>LvProp</c> to LVAL, then takes a second clock tick a few ms later on
-    /// the rewritten row. Allow only the 8-byte vacated <c>DateUpdate</c> clock tick on page 17 when both differ only there.
+    /// the rewritten row. Allow only the 8-byte vacated (outside every live slot) <c>DateUpdate</c> clock tick on
+    /// page 17 when both differ only there.
     /// </summary>
     private static List<(long Page, int Start, int Length)> FindVacatedInlineDateUpdateSpan(byte[] expected, byte[] actual, string tableName = "T")
     {
@@ -700,10 +754,24 @@ public sealed class DdlAlterAndDefaultReplayTests
         }
         if (first >= 0 && last - first < 8)
         {
-            // Verify both 8-byte regions decode as plausible OLE Automation DATE values within 1 second of T.DateUpdate.
+            int liveRowCount = (int)D.DataPage.RowCount.Read(expPage);
+            List<(int Start, int End)> liveSlots = [];
+            for (int r = 0; r < liveRowCount; r++)
+            {
+                if (DataPages.CheckedSlot(expPage, r, D, out _) is { } liveSlot)
+                {
+                    liveSlots.Add((liveSlot.Start, liveSlot.End));
+                }
+            }
+            // Verify both 8-byte regions decode as plausible OLE Automation DATE values within 1 second of T.DateUpdate
+            // and lie strictly outside every live row slot on the page (vacated inline bytes only).
             double tDate = BitConverter.Int64BitsToDouble((long)t.DateUpdateBits!.Value);
             for (int candStart = Math.Max(0, last - 7); candStart <= Math.Min(first, D.PageSize - 8); candStart++)
             {
+                if (liveSlots.Any(s => candStart < s.End && candStart + 8 > s.Start))
+                {
+                    continue;
+                }
                 double expDt = BitConverter.Int64BitsToDouble(BitConverter.ToInt64(expPage.Slice(candStart, 8)));
                 double actDt = BitConverter.Int64BitsToDouble(BitConverter.ToInt64(actPage.Slice(candStart, 8)));
                 if (Math.Abs(expDt - tDate) < 1.0 / 86400.0 && Math.Abs(actDt - tDate) < 1.0 / 86400.0)

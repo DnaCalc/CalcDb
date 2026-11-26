@@ -716,6 +716,11 @@ public static class DdlParser
                         failure = Open("NotModelled.DdlNotWithoutNull", "NOT without NULL in column definition");
                         return null;
                     }
+                    if (defaultExpression is not null)
+                    {
+                        failure = Open("NotModelled.DdlDefaultOrder", "NOT NULL after DEFAULT in column definition is not recorded (evidence/r-q49-dt2-draftprops records NOT NULL DEFAULT <expr>)");
+                        return null;
+                    }
                     if (nullability != DdlNullability.Unspecified)
                     {
                         // r-def-expr-sql/ddl-column-clauses: Cc34 (A LONG NOT NULL NULL) -> 3292.
@@ -727,6 +732,11 @@ public static class DdlParser
                 }
                 if (TakeWord("NULL"))
                 {
+                    if (defaultExpression is not null)
+                    {
+                        failure = Open("NotModelled.DdlDefaultOrder", "NULL after DEFAULT in column definition is not recorded");
+                        return null;
+                    }
                     if (nullability != DdlNullability.Unspecified)
                     {
                         failure = Syntax(3292, SqlMessages.FieldDefinitionSyntaxError);
@@ -908,7 +918,7 @@ public static class DdlParser
                 }
                 if (_p == intStart)
                 {
-                    failure = BadDefaultSyntax();
+                    failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded signed DEFAULT expression starting at '{s[start..Math.Min(s.Length, start + 8)]}'");
                     return false;
                 }
                 if (_p < s.Length && s[_p] == '.')
@@ -921,7 +931,7 @@ public static class DdlParser
                     }
                     if (_p == fracStart)
                     {
-                        failure = BadDefaultSyntax();
+                        failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded trailing-dot numeric DEFAULT literal starting at '{s[start..Math.Min(s.Length, _p + 4)]}'");
                         return false;
                     }
                 }
@@ -932,6 +942,11 @@ public static class DdlParser
                 }
                 expression = s[start.._p];
                 return true;
+            }
+            if (ch == '.')
+            {
+                failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded leading-dot numeric DEFAULT literal starting at '{s[start..Math.Min(s.Length, start + 8)]}'");
+                return false;
             }
             if (char.IsLetter(ch) || ch == '_')
             {

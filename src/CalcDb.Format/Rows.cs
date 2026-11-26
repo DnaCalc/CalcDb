@@ -186,7 +186,7 @@ public static class RowEncoder
     /// <summary>Maximum ordinary in-page row body length (II-04 §2).</summary>
     public const int MaxOrdinaryRowBytes = 4060;
 
-    public static bool TryEncode(TableDefinition table, IReadOnlyList<EncodedField> fields, FormatDescriptor d, out byte[]? body, out string? failure)
+    public static bool TryEncode(TableDefinition table, IReadOnlyList<EncodedField> fields, FormatDescriptor d, out byte[]? body, out string? failure, bool allowDroppedColumns = false)
     {
         body = null;
         failure = null;
@@ -200,6 +200,11 @@ public static class RowEncoder
         if (c <= 0 || columns.Count == 0 || columns.Count > c)
         {
             failure = $"table has ColumnCount={columns.Count} and MaxColumns={c}: invalid column counts for row encoding";
+            return false;
+        }
+        if (!allowDroppedColumns && columns.Count != c)
+        {
+            failure = $"table has ColumnCount={columns.Count} and MaxColumns={c}: encoding rows on a table with dropped or altered columns is not enabled for this caller";
             return false;
         }
         int fixedEnd = table.KnownFixedEnd(c, d);
@@ -382,6 +387,13 @@ public static class RowEncoder
         }
         int oldColCount = oldEnvelope.ColumnCount;
         int oldKnownFixedEnd = oldTable.KnownFixedEnd(oldColCount, d);
+        if (oldTable.VariableColumns > 0
+            && oldTable.Columns.Count(c => !c.IsFixed) < oldTable.VariableColumns
+            && oldColCount < oldTable.MaxColumns)
+        {
+            failure = $"existing row has ColumnCount={oldColCount} < MaxColumns={oldTable.MaxColumns} on a table with dropped/altered variable column(s): abandoned fixed vs variable trailer boundary is not recorded";
+            return false;
+        }
         int oldV = 0;
         int oldFixedAreaEnd = oldEnvelope.MaskStart;
         int oldVarEnd = oldEnvelope.MaskStart;

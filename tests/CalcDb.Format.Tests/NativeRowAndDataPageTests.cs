@@ -239,14 +239,51 @@ public sealed class NativeRowAndDataPageTests
                 FixedCol("ID", 0, NativeTypes.Long, 4, 0),
                 FixedCol("C", 3, NativeTypes.Long, 4, 8),
             ]);
+        Assert.False(RowEncoder.TryEncode(
+            droppedFixed,
+            [EncodedField.OfBytes([4, 0, 0, 0]), EncodedField.OfBytes([0x90, 0x01, 0, 0])],
+            D,
+            out _,
+            out string? defaultDroppedErr));
+        Assert.Contains("dropped or altered", defaultDroppedErr);
         Assert.True(RowEncoder.TryEncode(
             droppedFixed,
             [EncodedField.OfBytes([4, 0, 0, 0]), EncodedField.OfBytes([0x90, 0x01, 0, 0])],
             D,
             out byte[]? droppedRow,
-            out string? droppedErr), droppedErr);
+            out string? droppedErr,
+            allowDroppedColumns: true), droppedErr);
         // Matches evidence/r-q44-ddl-alter-types/dropcol-unindexed-rows-accdb-dao after-ddl-3 page 45 offset 4000.
         Assert.Equal("04000400000000000000900100000e000e00010009", Convert.ToHexStringLower(droppedRow!));
+
+        // F9: TryRewriteAlteredColumn refuses oldColCount < oldTable.MaxColumns when a variable column was previously dropped/altered.
+        TableDefinition droppedVarOld = MakeTable(
+            maxColumns: 3,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 1, NativeTypes.Long, 4, 4),
+            ]);
+        TableDefinition droppedVarNew = MakeTable(
+            maxColumns: 4,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 3, NativeTypes.Double, 8, 8),
+            ]);
+        Assert.False(RowEncoder.TryRewriteAlteredColumn(
+            Convert.FromHexString("0200010000000a00000003"),
+            droppedVarOld,
+            droppedVarNew,
+            droppedVarNew.Columns[1],
+            EncodedField.OfBytes(BitConverter.GetBytes(10.0)),
+            D,
+            new byte[RowEncoder.MaxOrdinaryRowBytes],
+            out _,
+            out string? droppedVarErr));
+        Assert.Contains("dropped/altered variable", droppedVarErr);
 
         // RowEncoder.TryRewriteAlteredColumn preserves ACE's reused 4096-byte scratch buffer bytes across rows
         // (evidence/r-q44-ddl-alter-types/alt-long-double-text-rows-accdb-dao after-ddl-1 page 45 slots 0..2).

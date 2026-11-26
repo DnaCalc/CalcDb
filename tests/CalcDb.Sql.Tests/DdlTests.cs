@@ -1405,8 +1405,11 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE C2 (ID LONG CONSTRAINT PKC2 PRIMARY KEY, K LONG CONSTRAINT FK_C2_P REFERENCES P(ID))", "NotModelled.SchemaWriter");
         AssertNotModelled(db, "CREATE TABLE SelfT (ID LONG CONSTRAINT PKS PRIMARY KEY, K LONG CONSTRAINT FK_SELF REFERENCES SelfT(ID))", "NotModelled.DdlForeignKey");
         AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_P2 FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.SchemaWriter");
-        // ADO DROP CONSTRAINT on FK is unrecorded (DAO FK drop is recorded in r-q44/dropcon-fk-accdb-dao & mdb-dao).
+        // ADO DROP CONSTRAINT on FK is unrecorded (DAO FK drop is recorded in r-q44/dropcon-fk-accdb-dao & mdb-dao),
+        // and held parent table refuses DROP CONSTRAINT FK by name before rewriting the parent TableDef.
         AssertNotModelled(db, "ALTER TABLE C DROP CONSTRAINT FK_C_P", "NotModelled.DdlAlterTable", ActionErrorSource.Ado);
+        var lockedFkParent = new LockedTableDatabase(db, "P");
+        AssertNotModelled(lockedFkParent, "ALTER TABLE C DROP CONSTRAINT FK_C_P", "NotModelled.DdlTableInUsePrecedence");
         Assert.Equal(beforeRefusals, db.Image.Snapshot());
 
         // DAO DROP CONSTRAINT on FK succeeds and removes the relationship (r-q44/dropcon-fk-accdb-dao).
