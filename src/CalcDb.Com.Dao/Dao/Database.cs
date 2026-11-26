@@ -735,6 +735,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(denyReadTable));
         }
+        if (recordsetType == 1 && DenyWriteTable(entry.Name) is { } denyWriteTable)
+        {
+            return Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(denyWriteTable));
+        }
         TraversalFailure? traversal;
         // A table-type, dynaset or forward-only recordset reads this Workspace's own unpublished rows through its live
         // overlay while a level has changed the file and the committed images before the first change and after the level
@@ -755,7 +759,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
                 bookmarkBase: bookmarkBase,
                 snapshot: recordsetType == 4,
-                appendOnly: RecordsetOptions.IsAppendOnly(options));
+                appendOnly: recordsetType == 2 && RecordsetOptions.IsAppendOnly(options));
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
@@ -2343,20 +2347,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 !ReferenceEquals(d, this) && !d.Closed && ReferenceEquals(d.Cache, Cache) && ReferenceEquals(d.Workspace, _workspace));
             if (!sameWorkspaceStillOpen)
             {
-                if (_workspace.Transactions.HasNonReleaseCloseCommit(Cache))
+                (MutationOpen defOpen, string? defDetail) = _workspace.Transactions.FlushDeferredCatalogCommitIfAny(Cache);
+                if (defOpen != MutationOpen.None)
                 {
-                    (MutationOpen nonLastOpen, string? nonLastDetail) = _workspace.Transactions.PublishNonLastCloseCommit(Cache);
-                    if (nonLastOpen != MutationOpen.None)
-                    {
-                        closing = EditPublication.Open(nonLastOpen, "Database.Close could not write its closing commit: " + nonLastDetail);
-                    }
+                    closing = EditPublication.Open(defOpen, "Database.Close could not write its closing commit: " + defDetail);
                 }
-                foreach (uint page in _workspace.Transactions.TransferReleaseAtClose(Cache))
+                else
                 {
-                    if (!_pooled.DeferredReleaseAtClose.Contains(page))
-                    {
-                        _pooled.DeferredReleaseAtClose.Add(page);
-                    }
+                    _workspace.Transactions.TransferCloseObligationsTo(Cache, _pooled.DeferredObligations);
                 }
             }
         }
@@ -2410,8 +2408,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     /// <summary>
     /// The closing commit of the file's last binding: ends every attached Workspace's lazy burst on this cache, flushes any
-    /// remaining secondary Workspaces' non-release commits, and frees all accumulated <c>_releaseAtClose</c> pages across
-    /// closed Workspaces in a single closing commit (<c>evidence/r-q52-ddl-make-domain/mh-twows-both-close-commit-*</c>).
+    /// remaining deferred catalog commits, and consolidates all close-commit obligations across closed Workspaces into a
+    /// single closing commit (<c>evidence/r-q52-ddl-make-domain/mh-twows-both-close-commit-accdb</c>, <c>-mdb</c>).
     /// </summary>
     private CallResult CloseCommitAll()
     {
@@ -2424,41 +2422,32 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 (owing ??= []).Add(coordinator);
             }
         }
-        List<uint> extraReleased = _pooled.DeferredReleaseAtClose;
-        if (owing is null && extraReleased.Count == 0)
+        if (owing is null && !_pooled.DeferredObligations.HasWork)
         {
             return CallResult.Nothing;
         }
+        TransactionCoordinator primary = owing is { Count: > 0 } ? owing[0] : _workspace.Transactions;
+        primary.AdoptCloseObligations(Cache, _pooled.DeferredObligations);
         if (owing is { Count: > 1 })
         {
+            var transferred = new PooledCloseObligations();
             for (int i = 1; i < owing.Count; i++)
             {
                 TransactionCoordinator secondary = owing[i];
-                if (secondary.HasNonReleaseCloseCommit(Cache))
+                (MutationOpen defOpen, string? defDetail) = secondary.FlushDeferredCatalogCommitIfAny(Cache);
+                if (defOpen != MutationOpen.None)
                 {
-                    (MutationOpen secOpen, string? secDetail) = secondary.PublishNonLastCloseCommit(Cache);
-                    if (secOpen != MutationOpen.None)
-                    {
-                        return EditPublication.Open(secOpen, "Database.Close could not write its closing commit: " + secDetail);
-                    }
+                    return EditPublication.Open(defOpen, "Database.Close could not write its closing commit: " + defDetail);
                 }
-                foreach (uint page in secondary.TransferReleaseAtClose(Cache))
-                {
-                    if (!extraReleased.Contains(page))
-                    {
-                        extraReleased.Add(page);
-                    }
-                }
+                secondary.TransferCloseObligationsTo(Cache, transferred);
+                primary.AdoptCloseObligations(Cache, transferred);
             }
         }
-        TransactionCoordinator primary = owing is { Count: > 0 } ? owing[0] : _workspace.Transactions;
-        IReadOnlyList<uint>? extra = extraReleased.Count > 0 ? [.. extraReleased] : null;
-        (MutationOpen open, string? detail) = _session.CloseCommit(primary, extra);
+        (MutationOpen open, string? detail) = _session.CloseCommit(primary);
         if (open != MutationOpen.None)
         {
             return EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
         }
-        extraReleased.Clear();
         return CallResult.Nothing;
     }
 }

@@ -219,6 +219,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _pessimistic = pessimistic;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         database.AddRef(); // a recordset keeps its Database object alive
+        CaptureSeeChangesRow();
     }
 
     private RecordsetObject(RecordsetObject parent, IRecordCursor cursor) : base(Decl, Vtable, parent.Engine, "DAO.Recordset")
@@ -234,6 +235,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _openLevels = [.. Database.Workspace.Transactions.Frames];
         _family.AddClone(this);
         Database.AddRef(); // each clone keeps its Database object alive independently
+        CaptureSeeChangesRow();
     }
 
     /// <summary>
@@ -281,7 +283,101 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     public bool DeniesWrite(string table) => !Closed && (_options & 1) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
 
-    public bool DeniesRead(string table) => !Closed && (_options & 2) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
+    public bool DeniesRead(string table) => !Closed && RecordsetType == 1 && (_options & 2) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
+
+    private RowReader? _seeChangesReader;
+    private RowId? _seeChangesRow;
+    private NativeValue[]? _seeChangesValues;
+    private ulong _seeChangesSerial;
+
+    private void CaptureSeeChangesRow()
+    {
+        if (RecordsetType != 2 || !RecordsetOptions.HasSeeChanges(_options) || Closed || Cursor.Bof || Cursor.Eof
+            || (Cursor as IRowPositioned)?.CurrentRow is not { } rowId)
+        {
+            _seeChangesRow = null;
+            _seeChangesValues = null;
+            return;
+        }
+        _seeChangesReader ??= RowReader.Open(new PageSource(Database.Cache), Database.Format, Cursor.Table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        if (_seeChangesReader is not { } reader)
+        {
+            _seeChangesRow = null;
+            _seeChangesValues = null;
+            return;
+        }
+        reader.Position(rowId);
+        IReadOnlyList<ColumnDescriptor> columns = Cursor.Table.Columns;
+        var values = new NativeValue[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            FieldResult read = reader.Read(columns[i]);
+            if (!read.Succeeded)
+            {
+                _seeChangesRow = null;
+                _seeChangesValues = null;
+                return;
+            }
+            values[i] = read.Value;
+        }
+        _seeChangesRow = rowId;
+        _seeChangesValues = values;
+        _seeChangesSerial = Database.Cache.PublishedSerial;
+    }
+
+    private bool HasSeeChangesConflict()
+    {
+        if (RecordsetType != 2
+            || !RecordsetOptions.HasSeeChanges(_options)
+            || _seeChangesRow is not { } row
+            || _seeChangesValues is not { } snapshot
+            || Database.Cache.PublishedSerial == _seeChangesSerial)
+        {
+            return false;
+        }
+        _seeChangesReader?.Dispose();
+        _seeChangesReader = RowReader.Open(new PageSource(Database.Cache), Database.Format, Cursor.Table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        if (_seeChangesReader is not { } reader)
+        {
+            return false;
+        }
+        reader.Position(row);
+        IReadOnlyList<ColumnDescriptor> columns = Cursor.Table.Columns;
+        var refreshed = new NativeValue[columns.Count];
+        bool changed = false;
+        bool allRead = true;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            FieldResult current = reader.Read(columns[i]);
+            if (!current.Succeeded)
+            {
+                allRead = false;
+                changed = true;
+                break;
+            }
+            refreshed[i] = current.Value;
+            if (!NativeValue.SameStored(current.Value, snapshot[i]))
+            {
+                changed = true;
+            }
+        }
+        if (!changed)
+        {
+            _seeChangesSerial = Database.Cache.PublishedSerial;
+            return false;
+        }
+        if (allRead)
+        {
+            _seeChangesValues = refreshed;
+            _seeChangesSerial = Database.Cache.PublishedSerial;
+        }
+        else
+        {
+            _seeChangesRow = null;
+            _seeChangesValues = null;
+        }
+        return true;
+    }
 
     /// <summary>The table's property blob (CAT-P), read once; null with <paramref name="failure"/> when it cannot be read.</summary>
     public PropertyBlob? Blob(out string? failure)
@@ -822,6 +918,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         _frame?.Discard(); // FindFirst and its siblings discard a pending edit (CUR-EDIT)
         _staleEditModeAfterCloneCloseAbort = false;
         FindResult result = criteria is null ? cursor.CriteriaFailed(direction) : cursor.Find(direction, criteria);
+        if (result.Outcome is FindOutcome.Found or FindOutcome.NotFound)
+        {
+            CaptureSeeChangesRow();
+        }
         return result.Outcome switch
         {
             FindOutcome.Found or FindOutcome.NotFound => CallResult.Nothing,
@@ -1215,7 +1315,15 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return refused;
         }
-        return (frame.Updatable ? UnpublishedRead("Edit", frame.Table.Semantics) : null) ?? EditPublication.Of(frame.Edit());
+        if (frame.Updatable && UnpublishedRead("Edit", frame.Table.Semantics) is { } unpublished)
+        {
+            return unpublished;
+        }
+        if (HasSeeChangesConflict())
+        {
+            return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
+        }
+        return EditPublication.Of(frame.Edit());
     }
 
     /// <summary>
@@ -1301,6 +1409,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 }
             }
             Modified(mode, outcome);
+            CaptureSeeChangesRow();
         }
         return result;
     }
@@ -1773,19 +1882,26 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>The movement outcome as DAO publishes it: NoCurrentRecord is 3021 (CUR-POS).</summary>
-    private CallResult Moved(MoveOutcome outcome) => outcome switch
+    private CallResult Moved(MoveOutcome outcome)
     {
-        MoveOutcome.Moved or MoveOutcome.ReachedBoundary => CallResult.Nothing,
-        MoveOutcome.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
-        // Forward-only refuses backward movement with 3219 (CUR-POS, r-cursor-1/pos-moves-forwardonly).
-        MoveOutcome.NotSupported when RecordsetType == 8 => Fail(3219, DaoErrors.InvalidOperation),
-        MoveOutcome.NotModelled => Cursor is PopulationCursor { PositionTag: PositionTag.Requeried }
-            ? CallResult.Fail(Failure.NotModelled("NotModelled.RequeriedMove", "MovePrevious or negative Move from Requeried state (not recorded)"))
-            : Cursor is PopulationCursor { PositionTag: PositionTag.RolledBackNoCurrent }
-                ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "relative Move after a Rollback that lost the current record (not recorded)"))
-                : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkInvalidMove", "relative Move after a failed Bookmark assignment (not recorded)")),
-        _ => CallResult.Fail(Failure.NotImplemented($"Recordset movement outcome {outcome}")),
-    };
+        if (outcome is MoveOutcome.Moved or MoveOutcome.ReachedBoundary)
+        {
+            CaptureSeeChangesRow();
+        }
+        return outcome switch
+        {
+            MoveOutcome.Moved or MoveOutcome.ReachedBoundary => CallResult.Nothing,
+            MoveOutcome.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
+            // Forward-only refuses backward movement with 3219 (CUR-POS, r-cursor-1/pos-moves-forwardonly).
+            MoveOutcome.NotSupported when RecordsetType == 8 => Fail(3219, DaoErrors.InvalidOperation),
+            MoveOutcome.NotModelled => Cursor is PopulationCursor { PositionTag: PositionTag.Requeried }
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.RequeriedMove", "MovePrevious or negative Move from Requeried state (not recorded)"))
+                : Cursor is PopulationCursor { PositionTag: PositionTag.RolledBackNoCurrent }
+                    ? CallResult.Fail(Failure.NotModelled("NotModelled.Txn.RecordsetAfterRollback", "relative Move after a Rollback that lost the current record (not recorded)"))
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkInvalidMove", "relative Move after a failed Bookmark assignment (not recorded)")),
+            _ => CallResult.Fail(Failure.NotImplemented($"Recordset movement outcome {outcome}")),
+        };
+    }
 
     /// <summary>
     /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, the deleted ordinal while in range after a
@@ -1997,6 +2113,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             member._staleEditModeAfterCloneCloseAbort = false;
         }
+        CaptureSeeChangesRow();
         return CallResult.Nothing;
     }
 
@@ -2120,6 +2237,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                     "Bookmark put on a snapshot after Requery (not recorded; r-cursor-1/life-requery, r-q24-bookmarks/q1f-snap-w-requery-with-dynaset, and r-q24-bookmarks/r2-q1-requery-partial-close record only Bookmark gets after Requery)"));
             }
         }
+        if (failure is null)
+        {
+            CaptureSeeChangesRow();
+        }
         return failure switch
         {
             null => CallResult.Nothing,
@@ -2183,6 +2304,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             _staleEditModeAfterCloneCloseAbort = false;
             _frame?.Dispose();
             _frame = null;
+            _seeChangesReader?.Dispose();
+            _seeChangesReader = null;
+            _seeChangesRow = null;
+            _seeChangesValues = null;
             Cursor.Dispose();
             _criteria?.Dispose();
             _criteria = null;

@@ -494,6 +494,11 @@ public sealed unsafe class DaoBigIntDateTime2Tests : IDisposable
             NativeVariant res = default;
             ExcepInfo ex = default;
             uint argErr = 0;
+            if (NativeRoute.GetErrorInfo(0, out nint stale) == 0 && stale != 0)
+            {
+                Marshal.Release(stale);
+            }
+
             int hr = fDt.Invoke(fDt.Declaration.Member("Value", InvokeKind.PropertyPut).MemberId, (ushort)InvokeKind.PropertyPut, &dp, &res, &ex, &argErr);
             Assert.Equal(HResults.DISP_E_EXCEPTION, hr);
             Assert.Equal(unchecked((int)0x800A000D), ex.Scode);

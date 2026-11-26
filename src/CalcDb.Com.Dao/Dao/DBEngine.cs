@@ -1271,13 +1271,13 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             }
             bool accdbOverlayOnly = level.Level == 1
                 && d.Profile.Format != FileFormat.Jet4
-                && !level.HasConsumedAutoNumbers
+                && Transactions.IsDepth1OverlayModifyOnly(d.Cache)
                 && frameSeq is not null;
             foreach (DatabaseObject other in Engine.Sessions)
             {
                 if (!other.Closed && !ReferenceEquals(other.Workspace, this) && ReferenceEquals(other.Cache, d.Cache) && other.HasOpenRecordsets)
                 {
-                    if (accdbOverlayOnly && other.AllowsOtherWorkspaceRollback(frameSeq!.Value))
+                    if (accdbOverlayOnly && other.Workspace.Transactions.Depth == 0 && other.AllowsOtherWorkspaceRollback(frameSeq!.Value))
                     {
                         continue;
                     }

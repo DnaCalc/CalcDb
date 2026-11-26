@@ -220,6 +220,19 @@ public sealed class PositionState<T> where T : struct
         Tag = PositionTag.RolledBackNoCurrent;
     }
 
+    /// <summary>Transition an empty append-only cursor to EOF after its first AddNew+Update row is appended (r-cursor-1b/option-append-only: BOF False, EOF True).</summary>
+    public void MarkAfterAppend()
+    {
+        if (Tag == PositionTag.Empty)
+        {
+            NoMatch = false;
+            _deletedAnchor = null;
+            _invalidAnchor = null;
+            Current = null;
+            Tag = PositionTag.After;
+        }
+    }
+
     /// <summary>Update any stored occurrence after a sibling removed an occurrence from the shared store.</summary>
     public void AdjustAfterRemove(Func<T, T> adjust)
     {

@@ -198,7 +198,8 @@ internal static class SelectRoute
         out ReadView? snapshotView,
         out PrivateOverlay? snapshotOverlay,
         out SqlFailure? failure,
-        out CallResult? viewRefusal)
+        out CallResult? viewRefusal,
+        bool useReadOnlyFirstView = true)
     {
         snapshotView = null;
         snapshotOverlay = null;
@@ -225,6 +226,7 @@ internal static class SelectRoute
         else if (recordsetType == 4
             && singleTableRowSelect
             && hasOrderBy
+            && useReadOnlyFirstView
             && database.ReadOnlyFirstView is { } staleRoView
             && database.Workspace.Transactions.Depth == 0
             && !ProjectsMemoOrOle(plan))
@@ -412,37 +414,140 @@ internal static class SelectRoute
 internal static class ActionRoute
 {
     /// <summary>Run <paramref name="sql"/>; <paramref name="recordsAffected"/> tracks the caller's RecordsAffected.</summary>
-    public static CallResult Execute(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
+    public static CallResult Execute(DatabaseObject database, DaoObject caller, string sql, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected) =>
+        ExecuteCore(database, caller, sql, preParsed: null, options, values, source, ref recordsAffected);
+
+    private static CallResult ExecuteCore(DatabaseObject database, DaoObject caller, string sql, ActionSyntax? preParsed, int options, IReadOnlyList<NativeVariant?>? values, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
     {
         if (database.PendingDeferredTableDefRefusal("NotModelled.ExecuteWithPendingDeferredTableDef", "Execute") is { } deferredRefusal)
         {
+            preParsed?.Dispose();
             return deferredRefusal;
         }
         if (database.SchemaFailure is { } stale)
         {
+            preParsed?.Dispose();
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
         }
         bool ddl = DdlParser.IsDdlLeadingKeyword(sql);
         if (InheritedRefusal(database, sql, ddl, options, source) is { } inheritedRefused)
         {
+            preParsed?.Dispose();
             return inheritedRefused;
         }
         if (ddl && database.DdlRefusal(sql) is { } refused)
         {
+            preParsed?.Dispose();
             return CallResult.Fail(refused);
         }
-        if (!ddl)
+        ActionOutcome outcome;
+        if (!ddl && (preParsed is not null || ActionParser.IsSqlStatement(sql.TrimStart())))
         {
-            using ActionSyntax? parsedAction = ActionParser.Parse(sql, out _);
-            if (parsedAction is not null && database.DenyWriteTable(parsedAction.TargetName) is { } deniedWrite)
+            SqlFailure? parseFailure = null;
+            ActionSyntax? syntax = preParsed ?? ActionParser.Parse(sql, out parseFailure);
+            if (syntax is null)
             {
+                return Published(database, caller, ActionOutcome.Fail(parseFailure!), source, options, isInsertValues: false, ref recordsAffected);
+            }
+            if (DenySyntaxLockRefusal(database, caller, syntax) is { } lockRefusal)
+            {
+                syntax.Dispose();
                 recordsAffected.Fail();
-                return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedWrite));
+                return lockRefusal;
+            }
+            BoundAction? plan = BoundAction.Bind(syntax, database.Sql, out SqlFailure? bindFailure);
+            if (plan is null)
+            {
+                outcome = ActionOutcome.Fail(bindFailure!);
+            }
+            else
+            {
+                using (plan)
+                {
+                    if (DenyPlanLockRefusal(database, caller, plan) is { } boundLockRefusal)
+                    {
+                        recordsAffected.Fail();
+                        return boundLockRefusal;
+                    }
+                    outcome = ActionExecutor.Execute(plan, database.Sql, options, values, source);
+                }
             }
         }
-        ActionOutcome outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
+        else
+        {
+            preParsed?.Dispose();
+            outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
+        }
         bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
         return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
+    }
+
+    private static CallResult? DenySyntaxLockRefusal(DatabaseObject database, DaoObject caller, ActionSyntax syntax)
+    {
+        if (DenyTargetTable(database, syntax.TargetName) is { } targetDenied)
+        {
+            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(targetDenied));
+        }
+        if (syntax.SourceSelect is { } src && DenyReadSelectSyntax(database, src) is { } readDenied)
+        {
+            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(readDenied));
+        }
+        return null;
+    }
+
+    private static CallResult? DenyPlanLockRefusal(DatabaseObject database, DaoObject caller, BoundAction plan)
+    {
+        if (DenyTargetTable(database, plan.TargetName) is { } targetDenied)
+        {
+            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(targetDenied));
+        }
+        if (plan.SourceSelect is { } src && DenyReadBoundSelect(database, src) is { } readDenied)
+        {
+            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(readDenied));
+        }
+        return null;
+    }
+
+    private static string? DenyTargetTable(DatabaseObject database, string tableName) =>
+        database.DenyWriteTable(tableName) ?? database.DenyReadTable(tableName);
+
+    private static string? DenyReadSelectSyntax(DatabaseObject database, SelectSyntax select)
+    {
+        foreach (SourceSyntax source in select.From)
+        {
+            if (DenyReadSourceSyntax(database, source) is { } denied)
+            {
+                return denied;
+            }
+        }
+        foreach (UnionArm arm in select.Unions)
+        {
+            if (DenyReadSelectSyntax(database, arm.Select) is { } denied)
+            {
+                return denied;
+            }
+        }
+        return null;
+    }
+
+    private static string? DenyReadSourceSyntax(DatabaseObject database, SourceSyntax source) => source switch
+    {
+        NamedSource named => database.DenyReadTable(named.Name),
+        SubquerySource sub => DenyReadSelectSyntax(database, sub.Query),
+        JoinSource join => DenyReadSourceSyntax(database, join.Left) ?? DenyReadSourceSyntax(database, join.Right),
+        _ => null,
+    };
+
+    private static string? DenyReadBoundSelect(DatabaseObject database, BoundSelect select)
+    {
+        foreach (SourceSlot slot in select.Sources)
+        {
+            if (slot.TableName.Length > 0 && database.DenyReadTable(slot.TableName) is { } denied)
+            {
+                return denied;
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -502,10 +607,10 @@ internal static class ActionRoute
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.ReadOnlyAction", "QueryDef.Execute through a read-only handle that inherited read/write from the file's writable binding is not recorded (r-q46-dao-ddl-multi/mh-rwro-* record Database.Execute only)"));
         }
-        if (database.DenyWriteTable(plan.TargetName) is { } deniedWrite)
+        if (DenyPlanLockRefusal(database, caller, plan) is { } denied)
         {
             recordsAffected = 0;
-            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedWrite));
+            return denied;
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;
@@ -548,16 +653,17 @@ internal static class ActionRoute
         {
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
         }
-        using ActionSyntax? parsed = ActionParser.Parse(sql, out _);
+        ActionSyntax? parsed = ActionParser.Parse(sql, out _);
         if (parsed is not null)
         {
             string routeName = caller is QueryDefObject ? "QueryDef.Execute" : "Database.Execute of a saved query";
             if (CheckConstraintRefusal(database, parsed.TargetName, routeName) is { } checkRefused)
             {
+                parsed.Dispose();
                 return checkRefused;
             }
         }
-        return Execute(database, caller, sql, options, values, ActionErrorSource.QueryDef, ref recordsAffected);
+        return ExecuteCore(database, caller, sql, parsed, options, values, ActionErrorSource.QueryDef, ref recordsAffected);
     }
 
     /// <summary>QueryDef overload forwarding to <see cref="RecordsAffectedState"/> (a saved QueryDef runs one query family).</summary>

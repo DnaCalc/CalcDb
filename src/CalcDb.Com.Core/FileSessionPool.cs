@@ -75,8 +75,8 @@ public sealed class PooledFileSession
     /// <summary>Whether the pooled session started shared ReadOnly, selecting header commit counter slot 0x0E04 (r-q52/mh-rofirst).</summary>
     public bool ReadOnlyFirst => First.ReadOnly && !First.Exclusive;
 
-    /// <summary>Pages scheduled for ReleaseAtClose by non-last closing Workspaces awaiting the final handle's Close commit (r-q52/mh-twows-both-close-commit).</summary>
-    public List<uint> DeferredReleaseAtClose { get; } = [];
+    /// <summary>Close-commit obligations transferred from non-last closing Workspaces awaiting the final handle's Close commit (r-q52/mh-twows-both-close-commit).</summary>
+    public PooledCloseObligations DeferredObligations { get; } = new();
 
     /// <summary>
     /// Whether a further in-process binding of mode <paramref name="next"/> is admitted beside the first

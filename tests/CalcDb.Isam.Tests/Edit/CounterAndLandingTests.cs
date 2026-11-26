@@ -1931,6 +1931,49 @@ public sealed class CounterAndLandingTests
         Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
     }
 
+    [Fact]
+    public void Nested_non_auto_rollback_guards_mixed_tables_and_refuses_outer_rollback()
+    {
+        // Gate 4 Finding 8: PlanNestedRollbackCounters only carries depth-2 counts for a single non-AutoNumber table,
+        // and outer Rollback after carrying non-AutoNumber inner counts refuses by name instead of dropping silently.
+        using var rig = new Rig(Txn1bMainFixture);
+        (TableDefinition r, _) = rig.Table("R");
+        (TableDefinition t, _) = rig.Table("T");
+        (EditFrame frameR, _) = rig.OpenTable("R");
+        (EditFrame frameT, TableCursor cursorT) = rig.OpenTable("T");
+        byte initial = rig.Before[D.Header.CommitCounter.Offset];
+
+        // Mixed-table inner Rollback (Modify on T + Insert on R) must not carry non-AutoNumber close commit.
+        Assert.Null(rig.A.BeginTrans());
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(cursorT.MoveFirst() == MoveOutcome.Moved);
+        Assert.True(frameT.Edit().Succeeded);
+        Assert.True(frameT.Assign(Col(t, "V"), I4(777)).Succeeded);
+        Assert.True(frameT.Update().Succeeded);
+        Assert.True(frameR.AddNew().Succeeded);
+        Assert.True(frameR.Assign(Col(r, "ID"), I4(20)).Succeeded);
+        Assert.True(frameR.Assign(Col(r, "V"), I4(200)).Succeeded);
+        AssignText(frameR, Col(r, "Z"), "mix");
+        Assert.True(frameR.Update().Succeeded);
+        Assert.True(rig.A.Rollback().Succeeded);
+        Assert.True(rig.A.CommitTrans().Succeeded);
+        Assert.Equal(initial, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+        Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+
+        // Single-table non-AutoNumber inner Rollback followed by outer Rollback must refuse by name.
+        Assert.Null(rig.A.BeginTrans());
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frameR.AddNew().Succeeded);
+        Assert.True(frameR.Assign(Col(r, "ID"), I4(21)).Succeeded);
+        Assert.True(frameR.Assign(Col(r, "V"), I4(210)).Succeeded);
+        AssignText(frameR, Col(r, "Z"), "rb");
+        Assert.True(frameR.Update().Succeeded);
+        Assert.True(rig.A.Rollback().Succeeded);
+        ResolutionOutcome outerRb = rig.A.Rollback();
+        Assert.False(outerRb.Succeeded);
+        Assert.Equal(MutationOpen.Publication, outerRb.Open);
+    }
+
     private sealed class NullDefaultBinder : IMutationRuleBinder
     {
         private sealed class NullDefault : IFieldDefault

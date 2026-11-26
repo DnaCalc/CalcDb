@@ -1022,6 +1022,8 @@ internal sealed class PopulationFamily : IDisposable
 
     public bool ForwardOnly => _forwardOnly;
 
+    public bool AppendOnly => _appendOnly;
+
     public uint? BookmarkBase => _bookmarkBase;
 
     public bool SnapshotRequeried => _snapshotRequeried;
@@ -1648,6 +1650,10 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         if (appended is not null)
         {
             _family.MarkAddNewInCurrentLevel();
+            if (_family.AppendOnly && _position.Tag == PositionTag.Empty)
+            {
+                _position.MarkAfterAppend();
+            }
         }
         return appended;
     }

@@ -400,11 +400,13 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     public void Dao_open_recordset_options_deny_append_join_and_seechanges(bool mdb)
     {
         // R-LOCK-4 / R-CURSOR-1 / R-DAO-1 (evidence/r-q50-jk44-ddl-vis/dao-opt-deny-append-accdb, -mdb,
-        // dao-opt-join-seechanges-accdb, -mdb):
-        // dbDenyWrite(1) and dbDenyRead(2) block writes/reads with 3008 across both Workspaces; dbAppendOnly(8) opens
-        // empty (RecordCount 0) for AddNew+Edit; join dbConsistent(32) fails 3164 on FK put vs dbInconsistent(16)
-        // failing 3200 on Update and dbConsistent|dbInconsistent failing 3001; dbSeeChanges(512) fails 3197 at Edit.
-        string path = CopyFixturePath(mdb ? VisMdb : VisAccdb);
+        // dao-opt-join-seechanges-accdb, -mdb, evidence/r-cursor-1b/option-deny-open, option-seechanges,
+        // option-append-only):
+        // dbDenyWrite(1) blocks table-type OpenRecordset & Execute(3008); dbDenyRead(2) on table-type blocks Execute,
+        // query & table opens(3008), while dbDenyRead on dynaset is a no-op; dbAppendOnly(8) opens empty and navigates
+        // only newly appended rows; join defaults to dbConsistent (0 & 32 -> 3164) vs dbInconsistent (16 -> 3200);
+        // dbSeeChanges(512) fails 3197 at Edit on both SELECT and table dynasets and refreshes current field values.
+        string path = CopyFixture(mdb ? VisMdb : VisAccdb, mdb ? ".mdb" : ".accdb");
         DBEngineObject eng = CreateEngine();
         DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path, false, false)));
         WorkspaceObject ws2 = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "ws2", "admin", "", 2)));
@@ -413,14 +415,29 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         DispatchObject rdw = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 1, 1)));
         AssertDaoError(Method(db2, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", 128), 3008, "DAO.Database");
         AssertDaoError(Method(db1, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", 128), 3008, "DAO.Database");
+        AssertDaoError(Method(db2, "OpenRecordset", "T", 1), 3008, "DAO.Database");
+        DispatchObject dynDuringDenyWrite = Recover<DispatchObject>(Ok(Method(db2, "OpenRecordset", "T", 2)));
+        Ok(Method(dynDuringDenyWrite, "Close"));
         SelectRecordsetObject snapDuringDenyWrite = OpenSelect(db2, "SELECT ID, V FROM T ORDER BY ID", 4);
         Assert.Equal(4, ReadIdV(snapDuringDenyWrite).Count);
         Ok(Method(snapDuringDenyWrite, "Close"));
         Ok(Method(rdw, "Close"));
 
+        DispatchObject rdwDyn = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 1)));
+        AssertDaoError(Method(db2, "OpenRecordset", "T", 1), 3008, "DAO.Database");
+        Ok(Method(rdwDyn, "Close"));
+
+        DispatchObject rdrDyn = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 2)));
+        DispatchObject peerTbl = Recover<DispatchObject>(Ok(Method(db2, "OpenRecordset", "T", 1)));
+        Ok(Method(peerTbl, "Close"));
+        Ok(Method(db2, "Execute", "UPDATE T SET V = V WHERE ID = 1", 128));
+        Ok(Method(rdrDyn, "Close"));
+
         DispatchObject rdr = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 1, 2)));
         AssertDaoError(Method(db2, "OpenRecordset", "SELECT ID, V FROM T ORDER BY ID", 4), 3008, "DAO.Database");
         AssertDaoError(Method(db1, "OpenRecordset", "SELECT ID, V FROM T ORDER BY ID", 4), 3008, "DAO.Database");
+        AssertDaoError(Method(db2, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", 128), 3008, "DAO.Database");
+        AssertDaoError(Method(db2, "Execute", "INSERT INTO T2 (ID, V) SELECT ID, V FROM T", 128), 3008, "DAO.Database");
         Ok(Method(rdr, "Close"));
 
         DispatchObject rApp = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 8)));
@@ -439,8 +456,41 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(rApp, "Update"));
         Ok(Method(rApp, "Close"));
 
+        // Finding 5.2: SQL-SELECT dbAppendOnly(8) opens empty and navigates only newly appended rows.
+        SelectRecordsetObject rSelApp = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2, 8)));
+        Assert.True(BoolValue(Ok(Get(rSelApp, "BOF"))));
+        Assert.True(BoolValue(Ok(Get(rSelApp, "EOF"))));
+        Assert.Equal(0, IntValue(Ok(Get(rSelApp, "RecordCount"))));
+        AssertDaoError(FieldValue(rSelApp, "ID"), 3021, "DAO.Field", publishesErrorInfo: true);
+        Ok(Method(rSelApp, "AddNew"));
+        Ok(Call(GetField(rSelApp, "ID"), "Value", InvokeKind.PropertyPut, 51));
+        Ok(Call(GetField(rSelApp, "V"), "Value", InvokeKind.PropertyPut, 510));
+        Ok(Call(GetField(rSelApp, "S"), "Value", InvokeKind.PropertyPut, "a51"));
+        Ok(Method(rSelApp, "Update"));
+        Assert.False(BoolValue(Ok(Get(rSelApp, "BOF"))));
+        Assert.True(BoolValue(Ok(Get(rSelApp, "EOF"))));
+        AssertDaoError(FieldValue(rSelApp, "ID"), 3021, "DAO.Field", publishesErrorInfo: true);
+        Assert.Equal(1, IntValue(Ok(Get(rSelApp, "RecordCount"))));
+        Ok(Method(rSelApp, "MoveFirst"));
+        Assert.False(BoolValue(Ok(Get(rSelApp, "BOF"))));
+        Assert.False(BoolValue(Ok(Get(rSelApp, "EOF"))));
+        Assert.Equal(51, IntValue(Ok(FieldValue(rSelApp, "ID"))));
+        Ok(Method(rSelApp, "Edit"));
+        Ok(Call(GetField(rSelApp, "V"), "Value", InvokeKind.PropertyPut, 515));
+        Ok(Method(rSelApp, "Update"));
+        Assert.Equal(515, IntValue(Ok(FieldValue(rSelApp, "V"))));
+        Ok(Method(rSelApp, "Close"));
+
         const string joinSql = "SELECT P.ID AS PID, P.Name, C.ID AS CID, C.PID AS CPID, C.Tag FROM P INNER JOIN C ON P.ID = C.PID ORDER BY C.ID";
         AssertDaoError(Method(db1, "OpenRecordset", joinSql, 2, 48), 3001, "DAO.Database");
+
+        // Finding 6: default join options==0 is dbConsistent (3164 on parent join key put).
+        SelectRecordsetObject rDefCon = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", joinSql, 2, 0)));
+        Assert.Equal(3, IntValue(Ok(Get(rDefCon, "RecordCount"))));
+        Ok(Method(rDefCon, "Edit"));
+        AssertDaoError(Call(GetField(rDefCon, "PID"), "Value", InvokeKind.PropertyPut, 99), 3164, "DAO.Field");
+        Ok(Method(rDefCon, "CancelUpdate"));
+        Ok(Method(rDefCon, "Close"));
 
         SelectRecordsetObject rCon = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", joinSql, 2, 32)));
         Assert.Equal(3, IntValue(Ok(Get(rCon, "RecordCount"))));
@@ -460,10 +510,21 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         SelectRecordsetObject rSee = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2, 512)));
         Ok(Method(db2, "Execute", "UPDATE T SET V = 777 WHERE ID = 1", 128));
         AssertDaoError(Method(rSee, "Edit"), 3197, "DAO.Recordset");
+        Assert.Equal(777, IntValue(Ok(FieldValue(rSee, "V"))));
         Ok(Method(rSee, "Move", 0));
         Ok(Method(rSee, "Edit"));
         Ok(Method(rSee, "CancelUpdate"));
         Ok(Method(rSee, "Close"));
+
+        // Finding 5.1: table-name dynaset dbSeeChanges(512) raises 3197 at Edit, keeps EditMode=0, and exposes updated value.
+        DispatchObject rTblSee = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 512)));
+        Ok(Method(db2, "Execute", "UPDATE T SET V = 888 WHERE ID = 1", 128));
+        AssertDaoError(Method(rTblSee, "Edit"), 3197, "DAO.Recordset");
+        Assert.Equal(0, Int16Value(Ok(Get(rTblSee, "EditMode"))));
+        Assert.Equal(888, ReadDispatchIntField(rTblSee, "V"));
+        Ok(Method(rTblSee, "Edit"));
+        Ok(Method(rTblSee, "CancelUpdate"));
+        Ok(Method(rTblSee, "Close"));
 
         Ok(Method(db2, "Close"));
         Ok(Method(ws2, "Close"));
@@ -479,9 +540,10 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         // dao-edit-buf-nested-partial-accdb, -mdb):
         // held Edit()/AddNew() buffers survive CommitTrans, are cleared on outer and inner Rollback (EditMode=0,
         // Update=3020), fail Close 3246 inside txn / 3420 after Database.Close, and nested non-AutoNumber inner Rollback
-        // preserves the p42 rowCount bump across outer CommitTrans + Close.
-        DatabaseObject db = Open(mdb ? VisMdb : VisAccdb);
+        // preserves the TableDef rowCount/PK bump across outer CommitTrans + Close.
+        DatabaseObject db = Open(mdb ? VisMdb : VisAccdb, mdb ? ".mdb" : ".accdb");
         string path = TextValue(Ok(Get(db, "Name")));
+        int tdefPage = (int)db.Catalog.LocalTables(db.Format).First(e => string.Equals(e.Name, "T", StringComparison.OrdinalIgnoreCase)).Id;
         WorkspaceObject ws = _engine.DefaultWorkspace;
         SelectRecordsetObject rsOut = OpenSelect(db, "SELECT ID, V, S FROM T ORDER BY ID", 2);
 
@@ -537,14 +599,71 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(ws, "CommitTrans"));
 
         Ok(Method(rsIn1, "Close"));
+        byte afterOuterCommitCounter;
+        using (var pin = db.Cache.Pin(0).Pin!)
+        {
+            afterOuterCommitCounter = pin.Bytes[CalcDb.Format.FormatDescriptor.Jet4Family.Header.CommitCounter.Offset];
+        }
         Ok(Method(db, "Close"));
         AssertDaoError(Get(rsOut, "EditMode"), 3420, "DAO.Recordset");
 
-        if (!mdb)
-        {
-            Assert.Equal(5, ReadFileByte(path, 42, 16));
-            Assert.Equal(5, ReadFileByte(path, 42, 67));
-        }
+        byte afterCloseCounter = ReadFileByte(path, 0, CalcDb.Format.FormatDescriptor.Jet4Family.Header.CommitCounter.Offset);
+        Assert.Equal((byte)(afterOuterCommitCounter + 1), afterCloseCounter);
+        Assert.Equal(5, ReadFileByte(path, tdefPage, 16));
+        Assert.Equal(5, ReadFileByte(path, tdefPage, 67));
+    }
+
+    [Fact]
+    public void Depth0_select_dynaset_autonumber_addnew_persists_and_in_txn_reedit_preserves_overlay()
+    {
+        // Gate 4 Findings 2 & 3:
+        // (1) Depth-0 SELECT dynaset AddNew/Update on an AutoNumber table must persist TableDef 0x14 rather than
+        // dropping AutoNumber counter advance under DeferInsertTableDefCounts;
+        // (2) AllowExplicitTxnReedit must capture originals from the Workspace overlay so editing a second column does
+        // not clobber an earlier in-transaction SQL UPDATE on another column.
+        string path = CopyFixture(VisAccdb);
+        DBEngineObject eng1 = CreateEngine();
+        DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng1, "OpenDatabase", path, false, false)));
+        Ok(Method(db1, "Execute", "CREATE TABLE AN (ID AUTOINCREMENT CONSTRAINT PK_AN PRIMARY KEY, V LONG, S TEXT(20))", 128));
+        SelectRecordsetObject rsAuto = OpenSelect(db1, "SELECT ID, V, S FROM AN ORDER BY ID", 2);
+        Ok(Method(rsAuto, "AddNew"));
+        Ok(Call(GetField(rsAuto, "V"), "Value", InvokeKind.PropertyPut, 10));
+        Ok(Call(GetField(rsAuto, "S"), "Value", InvokeKind.PropertyPut, "first"));
+        Ok(Method(rsAuto, "Update"));
+        Ok(Method(rsAuto, "AddNew"));
+        Ok(Call(GetField(rsAuto, "V"), "Value", InvokeKind.PropertyPut, 20));
+        Ok(Call(GetField(rsAuto, "S"), "Value", InvokeKind.PropertyPut, "second"));
+        Ok(Method(rsAuto, "Update"));
+        Ok(Method(rsAuto, "Close"));
+        Ok(Method(db1, "Close"));
+
+        DBEngineObject eng2 = CreateEngine();
+        DatabaseObject db2 = Recover<DatabaseObject>(Ok(Method(eng2, "OpenDatabase", path, false, false)));
+        SelectRecordsetObject rsAuto2 = OpenSelect(db2, "SELECT ID, V, S FROM AN ORDER BY ID", 2);
+        Ok(Method(rsAuto2, "AddNew"));
+        Assert.Equal(3, IntValue(Ok(FieldValue(rsAuto2, "ID"))));
+        Ok(Call(GetField(rsAuto2, "V"), "Value", InvokeKind.PropertyPut, 30));
+        Ok(Method(rsAuto2, "Update"));
+        Ok(Method(rsAuto2, "Close"));
+
+        // Re-edit in explicit transaction preserves earlier SQL overlay column edits.
+        WorkspaceObject ws2 = DefaultWorkspace(eng2);
+        SelectRecordsetObject rsOut = OpenSelect(db2, "SELECT ID, V, S FROM T ORDER BY ID", 2);
+        Ok(Method(ws2, "BeginTrans"));
+        Ok(Method(db2, "Execute", "UPDATE T SET S = 'overlay_kept' WHERE ID = 2", 128));
+        Ok(Method(rsOut, "MoveFirst"));
+        Ok(Method(rsOut, "Move", 1));
+        Ok(Method(rsOut, "Edit"));
+        Ok(Call(GetField(rsOut, "V"), "Value", InvokeKind.PropertyPut, 222));
+        Ok(Method(rsOut, "Update"));
+        Assert.Equal("overlay_kept", TextValue(Ok(FieldValue(rsOut, "S"))));
+        Ok(Method(ws2, "CommitTrans"));
+        Ok(Method(rsOut, "MoveFirst"));
+        Ok(Method(rsOut, "Move", 1));
+        Assert.Equal("overlay_kept", TextValue(Ok(FieldValue(rsOut, "S"))));
+        Assert.Equal(222, IntValue(Ok(FieldValue(rsOut, "V"))));
+        Ok(Method(rsOut, "Close"));
+        Ok(Method(db2, "Close"));
     }
 
     [Fact]
