@@ -165,7 +165,8 @@ public sealed unsafe class DaoDynamicOverlayTests : IDisposable
         // Snapshots over an active overlay stay named with NotModelled.Edit.UnpublishedRows
         // (r-def-cursor-dao/assign-without-edit-by-type call 56). A second Database of the same Workspace on the same file
         // shares the pooled session and the Workspace's overlay, so it reads the uncommitted change (W-05 6xzx:
-        // r-q46-dao-ddl-multi/mh-rwrw-samews-* calls 66-67, db2 sees db1's uncommitted row under ws0.BeginTrans).
+        // r-q46-dao-ddl-multi/mh-rwrw-samews-accdb calls 65-66 for snapshot visibility, and
+        // r-q2-cursor-dao/life-clone-close-second-database-enlisted calls 9-26 for same-Workspace dynasets).
         string path = CopyFixture(EditFixture);
         DatabaseObject db1 = OpenPath(path);
         DatabaseObject db2 = OpenPath(path);

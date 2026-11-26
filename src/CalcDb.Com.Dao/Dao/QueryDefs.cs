@@ -39,7 +39,9 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Put("Connect", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutConnect(value)); })
         .Get("ReturnsRecords", (self, args) => Live(self, q => Bool(true)))
         .Put("ReturnsRecords", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutReturnsRecords(value)); })
-        .Get("Updatable", (self, args) => Live(self, q => Bool(!q.Database.ReadOnly)))
+        .Get("Updatable", (self, args) => Live(self, q => q.Database.InheritedWritable
+            ? DatabaseObject.InheritedWriteRefusal("QueryDef.Updatable")
+            : Bool(!q.Database.ReadOnly)))
         .Get("DateCreated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateCreateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "DateCreated on an unsaved QueryDef"))))
         .Get("LastUpdated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateUpdateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "LastUpdated on an unsaved QueryDef"))))
         .Get("ODBCTimeout", (self, args) => Live(self, q => q.StoredOr("ODBCTimeout", Int16(60))))

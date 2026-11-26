@@ -105,9 +105,6 @@ public sealed class ComDatabaseSession : IPublicationTarget
         _writerLockFile = writerSlot;
     }
 
-    /// <summary>The lock-file slot of a writer admitted beside a read-only first binding (<see cref="AdmitWriter"/>), or null.</summary>
-    public LockFile? WriterLockFile => _writerLockFile;
-
     /// <summary>
     /// Whether this session opened or created the database exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file),
     /// selecting page-0 commit counter slot <c>[0x0E00, 0x0E02)</c> instead of the shared slot <c>[0x0E02, 0x0E04)</c>

@@ -617,4 +617,151 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Assert.Equal([(1, 10), (2, 20)], Rows(verify));
         Ok(Method(verify, "Close"));
     }
+
+    [Fact]
+    public void Inherited_writable_refuses_unrecorded_tuples_and_non_Execute_writes_by_name()
+    {
+        // Gate 4 Finding 1: only recorded Execute tuples (shared ACCDB same-WS DDL/INSERT Options 0 with own writer open;
+        // shared ACCDB/MDB INSERT Options 128) and shared SELECT dynaset Edit/Update are admitted on InheritedWritable.
+        DBEngineObject eng = Engine();
+        string accdb = Seeded(eng, mdb: false);
+        string mdb = Seeded(eng, mdb: true);
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace;
+        WorkspaceObject ws2 = Workspace2(eng);
+
+        // Two-WS ACCDB: DDL Options 0 and INSERT Options 0 stay refused; non-Execute DAO writes stay refused.
+        DatabaseObject db1 = Open(ws0, accdb, exclusive: false, readOnly: false);
+        DatabaseObject db2 = Open(ws2, accdb, exclusive: false, readOnly: true);
+        FailsNotModelled(Method(db2, "Execute", "CREATE TABLE U9 (ID LONG)"), "NotModelled.ReadOnlyAction");
+        FailsNotModelled(Method(db2, "Execute", "INSERT INTO T VALUES (50, 500, 'opt0')"), "NotModelled.ReadOnlyAction");
+        DispatchObject tds2 = Recover<DispatchObject>(Ok(Get(db2, "TableDefs")));
+        DispatchObject tdT = Recover<DispatchObject>(Ok(Get(tds2, "Item", "T")));
+        FailsNotModelled(Get(tdT, "Updatable"), "NotModelled.InheritedReadOnlyWrite");
+        DispatchObject rsTbl = Recover<DispatchObject>(Ok(Method(db2, "OpenRecordset", "T", 2)));
+        FailsNotModelled(Get(rsTbl, "Updatable"), "NotModelled.InheritedReadOnlyWrite");
+        FailsNotModelled(Method(rsTbl, "Edit"), "NotModelled.InheritedReadOnlyWrite");
+        Ok(Method(rsTbl, "Close"));
+        DispatchObject rsSel = Recover<DispatchObject>(Ok(Method(db2, "OpenRecordset", "SELECT ID, V FROM T WHERE ID = 1", 2)));
+        FailsNotModelled(Get(rsSel, "Updatable"), "NotModelled.InheritedReadOnlyWrite");
+        FailsNotModelled(Method(rsSel, "CancelUpdate"), "NotModelled.InheritedReadOnlyWrite");
+        Ok(Method(rsSel, "Close"));
+        Ok(Method(db2, "Close"));
+        Ok(Method(db1, "Close"));
+
+        // Same-WS MDB: DDL Options 0 and INSERT Options 0 stay refused while INSERT Options 128 succeeds.
+        DatabaseObject m1 = Open(ws0, mdb, exclusive: false, readOnly: false);
+        DatabaseObject m2 = Open(ws0, mdb, exclusive: false, readOnly: true);
+        FailsNotModelled(Method(m2, "Execute", "CREATE TABLE UM (ID LONG)"), "NotModelled.ReadOnlyAction");
+        FailsNotModelled(Method(m2, "Execute", "INSERT INTO T VALUES (51, 510, 'm0')"), "NotModelled.ReadOnlyAction");
+        Ok(Method(m2, "Execute", "INSERT INTO T VALUES (52, 520, 'm128')", 128));
+        Ok(Method(m2, "Close"));
+        Ok(Method(m1, "Close"));
+
+        // Beside Exclusive RW: ReadOnly handle reads cleanly, refuses Updatable and Execute by name.
+        DatabaseObject e1 = Open(ws0, accdb, exclusive: true, readOnly: false);
+        DatabaseObject e2ro = Open(ws0, accdb, exclusive: false, readOnly: true);
+        Assert.Equal([(1, 10), (2, 20)], Rows(e2ro));
+        FailsNotModelled(Get(e2ro, "Updatable"), "NotModelled.InheritedReadOnlyExclusive");
+        FailsNotModelled(Method(e2ro, "Execute", "INSERT INTO T VALUES (60, 600, 'exro')", 128), "NotModelled.ReadOnlyAction");
+        Ok(Method(e2ro, "Close"));
+        Ok(Method(e1, "Close"));
+    }
+
+    [Fact]
+    public void Held_TableDef_and_Index_still_invalidate_after_prior_Refresh_before_peer_DROP()
+    {
+        // Gate 4 Finding 2: a prior TableDefs.Refresh() before peer DROP TABLE must not lose the held TableDefObject
+        // from post-drop invalidation, and a held IndexObject and its Fields must also invalidate (3420).
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb: false);
+        DatabaseObject setup = Open(eng.Engine.DefaultWorkspace, path, exclusive: false, readOnly: false);
+        Ok(Method(setup, "Execute", "CREATE TABLE U (V LONG)", 128));
+        Ok(Method(setup, "Close"));
+
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace;
+        DatabaseObject db1 = Open(ws0, path, exclusive: false, readOnly: false);
+        DatabaseObject db2 = Open(ws0, path, exclusive: false, readOnly: false);
+        DispatchObject tds2 = Recover<DispatchObject>(Ok(Get(db2, "TableDefs")));
+        TableDefObject tdU = Recover<TableDefObject>(Ok(Get(tds2, "Item", "U")));
+
+        // An earlier Refresh before peer DROP relists tds2; tdU must stay tracked for later invalidation.
+        Ok(Method(tds2, "Refresh"));
+        Ok(Method(db1, "Execute", "DROP TABLE U", 128));
+        Assert.Equal("U", TextResult(Get(tdU, "Name")));
+        Ok(Method(tds2, "Refresh"));
+        FailsDao(Get(tdU, "Name"), 3420, "DAO.TableDef", DaoErrors.ObjectInvalid);
+
+        // IndexObject and its Fields on a peer-dropped TableDef invalidate (3420) when the owner TableDef invalidates.
+        TableDefObject tdT = Recover<TableDefObject>(Ok(Get(tds2, "Item", "T")));
+        DispatchObject ixsT = Recover<DispatchObject>(Ok(Get(tdT, "Indexes")));
+        DispatchObject ixPk = Recover<DispatchObject>(Ok(Get(ixsT, "Item", 0)));
+        DispatchObject ixFields = Recover<DispatchObject>(Ok(Get(ixPk, "Fields")));
+        DispatchObject ixField = Recover<DispatchObject>(Ok(Get(ixFields, "Item", 0)));
+        tdT.InvalidateDropped();
+        FailsDao(Get(ixPk, "Name"), 3420, "DAO.Index", DaoErrors.ObjectInvalid);
+        FailsDao(Get(ixFields, "Count"), 3420, "DAO.Fields", DaoErrors.ObjectInvalid);
+        FailsDao(Get(ixField, "Name"), 3420, "DAO.Field", DaoErrors.ObjectInvalid);
+
+        Ok(Method(db1, "Close"));
+        Ok(Method(db2, "Close"));
+    }
+
+    [Fact]
+    public void Closing_commit_survives_non_default_Workspace_release_and_refuses_two_owing_Workspaces()
+    {
+        // Gate 4 Finding 3a: non-default Workspace ws2 creates & drops U, closes db1 and ws2, and releases ws2 before
+        // db2 (on ws0) closes; db2.Close still publishes ws2's closing commit.
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb: false);
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace;
+        DatabaseObject db2 = Open(ws0, path, exclusive: false, readOnly: false);
+        nint ws2Ptr;
+        {
+            CallResult ws2Res = Ok(Method(eng, "CreateWorkspace", "w2-temp", "Admin", "", 2));
+            ws2Ptr = ws2Res.Scalar.Pointer;
+            WorkspaceObject ws2 = ComObject.Recover<WorkspaceObject>(ws2Ptr);
+            DatabaseObject db1 = Open(ws2, path, exclusive: false, readOnly: false);
+            Ok(Method(db1, "Execute", "CREATE TABLE U (V LONG)", 128));
+            Ok(Method(db1, "Execute", "DROP TABLE U", 128));
+            Ok(Method(db1, "Close"));
+            Ok(Method(ws2, "Close"));
+            Marshal.Release(ws2Ptr);
+        }
+        byte[] page0 = Page(db2, 0), page1 = Page(db2, 1);
+        Ok(Method(db2, "Close"));
+        byte[] disk0 = FilePage(path, 0, page0.Length), disk1 = FilePage(path, 1, page0.Length);
+        Assert.NotEqual(page1, disk1);
+        Assert.Equal(D.Header.CommitCounter.Read(page0) + 1, D.Header.CommitCounter.Read(disk0));
+
+        // Gate 4 Finding 3b: two Workspaces both owing a closing commit on the same file refuse by name instead of writing two commits.
+        string path2 = Seeded(eng, mdb: false);
+        WorkspaceObject wsB = Workspace2(eng);
+        DatabaseObject da = Open(ws0, path2, exclusive: false, readOnly: false);
+        DatabaseObject db = Open(wsB, path2, exclusive: false, readOnly: false);
+        Ok(Method(da, "Execute", "CREATE TABLE UA (V LONG)", 128));
+        Ok(Method(db, "Execute", "CREATE TABLE UB (V LONG)", 128));
+        Ok(Method(da, "Close"));
+        FailsNotModelled(Method(db, "Close"), "NotModelled.MultiWorkspaceCloseCommit");
+    }
+
+    [Fact]
+    public void Read_only_first_after_writer_closes_refuses_unrecorded_action_and_keeps_third_read_only_handle_read_only()
+    {
+        // Gate 4 Finding 4: RO-first + RW-second, then RW closes while RO stays open: RO Execute stays refused by name
+        // (post-writer-close RO is unrecorded), and a third ReadOnly open does not inherit writable.
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb: false);
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace;
+        DatabaseObject dbRo = Open(ws0, path, exclusive: false, readOnly: true);
+        DatabaseObject dbRw = Open(ws0, path, exclusive: false, readOnly: false);
+        Ok(Method(dbRw, "Execute", "INSERT INTO T VALUES (20, 200, 'rw')", 128));
+        Ok(Method(dbRw, "Close"));
+
+        FailsNotModelled(Method(dbRo, "Execute", "INSERT INTO T VALUES (21, 210, 'ro-after')", 128), "NotModelled.ReadOnlyAction");
+        DatabaseObject dbRo2 = Open(ws0, path, exclusive: false, readOnly: true);
+        Assert.False(BoolResult(Get(dbRo2, "Updatable")));
+        FailsNotModelled(Method(dbRo2, "Execute", "INSERT INTO T VALUES (22, 220, 'ro2')", 128), "NotModelled.ReadOnlyAction");
+        Ok(Method(dbRo2, "Close"));
+        Ok(Method(dbRo, "Close"));
+    }
 }

@@ -368,13 +368,17 @@ internal static class ActionRoute
     /// A statement through a handle that asked for ReadOnly but inherited read/write from the file's writable binding
     /// (<see cref="DatabaseObject.InheritedWritable"/>) runs as on a read/write handle when its form is one the records show
     /// through such a handle, and is refused by name otherwise (W-05 <c>6xzx</c>):
-    /// beside the writer, CREATE TABLE, CREATE INDEX and single-table DROP TABLE with Options 0
-    /// (<c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 22–25) and INSERT ... VALUES with Options 0 or 128
-    /// (<c>r-err-1b/lock-readonly-db-insert</c> calls 8, 16; <c>r-fix-cursor-dao/lock-readonly-db-insert-failonerror</c>
-    /// call 17; <c>r-q46-dao-ddl-multi/mh-rwro-*</c> call 54, same and two Workspaces, ACCDB and Jet 4 MDB); after the
-    /// writer closed, INSERT ... VALUES with Options 128 (<c>r-q47-bigint-expr-edges/mh-rwro-close-rw-first-*</c> call 38).
-    /// UPDATE, DELETE, ALTER TABLE, DROP INDEX, INSERT ... SELECT, other Options, DDL after the writer closed and
-    /// QueryDef.Execute through such a handle are not recorded.
+    /// <list type="bullet">
+    /// <item>Shared ACCDB, same Workspace, own writer open beside, depth 0: CREATE TABLE, CREATE INDEX and single-table DROP
+    /// TABLE with Options 0 (<c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 22–25) and INSERT ... VALUES with
+    /// Options 0 (<c>r-err-1b/lock-readonly-db-insert</c> calls 8, 16).</item>
+    /// <item>Shared ACCDB or Jet 4 MDB, same or second Workspace, depth 0, writer open or closed: INSERT ... VALUES with
+    /// Options 128 (<c>r-fix-cursor-dao/lock-readonly-db-insert-failonerror</c> call 17,
+    /// <c>r-q46-dao-ddl-multi/mh-rwro-samews-accdb</c> call 54,
+    /// <c>r-q47-bigint-expr-edges/mh-rwro-close-rw-first-accdb</c> calls 38 and 101).</item>
+    /// </list>
+    /// Exclusive sessions, UPDATE, DELETE, ALTER TABLE, DROP INDEX, INSERT ... SELECT, other Options, MDB/two-WS DDL or
+    /// Options-0 INSERT, DDL after the writer closed, inside transactions, and QueryDef.Execute stay refused by name.
     /// </summary>
     private static CallResult? InheritedRefusal(DatabaseObject database, string sql, bool ddl, int options, ActionErrorSource source)
     {
@@ -382,15 +386,20 @@ internal static class ActionRoute
         {
             return null;
         }
-        bool writerBeside = database.HasOwnWriterBeside;
-        bool recorded = source == ActionErrorSource.Database && database.Workspace.Transactions.Depth == 0 && (ddl
-            ? writerBeside && options == 0 && DdlParser.Parse(sql, out _, allowAdoCheck: false) is CreateTableStatement or CreateIndexStatement or DropTableStatement { TableNames.Count: 1 }
-            : IsInsertValues(sql) && (writerBeside ? options is 0 or 128 : options == 128));
+        bool sameWsWriter = database.HasOwnSameWorkspaceWriterBeside;
+        bool shared = !database.Exclusive;
+        bool recorded = shared
+            && source == ActionErrorSource.Database
+            && database.Workspace.Transactions.Depth == 0
+            && (ddl
+                ? database.Profile.IsAce && sameWsWriter && options == 0
+                    && DdlParser.Parse(sql, out _, allowAdoCheck: false) is CreateTableStatement or CreateIndexStatement or DropTableStatement { TableNames.Count: 1 }
+                : IsInsertValues(sql) && (options == 128 || (options == 0 && database.Profile.IsAce && sameWsWriter)));
         return recorded
             ? null
             : CallResult.Fail(Failure.NotModelled(
                 "NotModelled.ReadOnlyAction",
-                $"{(source == ActionErrorSource.Database ? "Database" : "QueryDef")}.Execute with Options {options} through a read-only handle that inherited read/write from the file's writable binding{(writerBeside ? "" : " after that binding closed")}: only CREATE TABLE, CREATE INDEX and single-table DROP TABLE (Options 0, writer open) and INSERT ... VALUES (Options 0 or 128 with the writer open, 128 after) are recorded (r-q43-schema-lval-index/ro-ddl-disc-accdb, r-q46-dao-ddl-multi/mh-rwro-*, r-q47-bigint-expr-edges/mh-rwro-close-rw-first-*)"));
+                $"{(source == ActionErrorSource.Database ? "Database" : "QueryDef")}.Execute with Options {options} through a read-only handle that inherited read/write from the file's writable binding: only shared ACCDB same-Workspace DDL/INSERT with Options 0 while the writer is open, and shared ACCDB/MDB INSERT ... VALUES with Options 128, are recorded (r-q43-schema-lval-index/ro-ddl-disc-accdb, r-q46-dao-ddl-multi/mh-rwro-samews-accdb, r-q47-bigint-expr-edges/mh-rwro-close-rw-first-accdb)"));
     }
 
     /// <summary>Run a QueryDef's bound action plan with the QueryDef's parameter values (missing ones: 3061, SQL-B).</summary>
@@ -529,7 +538,7 @@ internal static class ActionRoute
                 && database.ReadOnly
                 && (ReadWriteBeside(database)
                     ? isInsertValues && options == 128
-                    : database.Profile.IsAce && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues)))
+                    : !database.EverHadWriterPeer && database.Profile.IsAce && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues)))
             {
                 recordsAffected.Fail();
                 return caller.Fail(readOnlyInfo.Number, readOnlyInfo.Message);

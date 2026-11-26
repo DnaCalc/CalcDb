@@ -537,7 +537,8 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     public void Select_dynaset_on_second_Database_of_the_Workspace_reads_its_unpublished_overlay()
     {
         // A second Database of the same Workspace on the same file shares the pooled session and the Workspace's overlay
-        // (W-05 6xzx: r-q46-dao-ddl-multi/mh-rwrw-samews-* calls 66-67, db2 sees db1's uncommitted change under BeginTrans).
+        // (W-05 6xzx: r-q46-dao-ddl-multi/mh-rwrw-samews-accdb calls 65-66 for snapshot visibility, and
+        // r-q2-cursor-dao/life-clone-close-second-database-enlisted calls 9-26 for same-Workspace dynasets).
         string path = CopyFixture(Txn1bAccdb);
         DatabaseObject db1 = OpenPath(path);
         DatabaseObject db2 = OpenPath(path);

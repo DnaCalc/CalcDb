@@ -348,7 +348,9 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Attributes", (self, args) => Live(self, t => Int32(t._entry.Flags)))
         .Get("Connect", (self, args) => Live(self, t => Text("")))
         .Get("SourceTableName", (self, args) => Live(self, t => Text("")))
-        .Get("Updatable", (self, args) => Live(self, t => Bool(!t._owner.Database.ReadOnly)))
+        .Get("Updatable", (self, args) => Live(self, t => t._owner.Database.InheritedWritable
+            ? DatabaseObject.InheritedWriteRefusal("TableDef.Updatable")
+            : Bool(!t._owner.Database.ReadOnly)))
         .Get("DateCreated", (self, args) => Live(self, t => t.DroppedByPeer ? DroppedDate : CatalogDates.Date(t._entry.DateCreateBits)))
         .Get("LastUpdated", (self, args) => Live(self, t => t.DroppedByPeer ? DroppedDate : CatalogDates.Date(t._entry.DateUpdateBits)))
         .Get("RecordCount", (self, args) => Live(self, t => t.Definition is { } d ? Int32((int)d.RowCount) : t.DefinitionFailure()))
@@ -374,6 +376,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         _owner = owner;
         _entry = entry;
         owner.AddRef();
+        owner.Database.TrackTableDef(this);
         Definition = owner.Database.Definition(entry, out _definitionFailure);
         Blob = owner.Database.Blob(entry, out _blobFailure);
     }
@@ -466,6 +469,10 @@ internal sealed unsafe class TableDefObject : DaoObject
         if (_owner.Database.ReadOnly)
         {
             return CallResult.Fail(Failure.NotImplemented("TableDef.ValidationRule put on a read-only Database (not recorded)"));
+        }
+        if (_owner.Database.InheritedWritable)
+        {
+            return DatabaseObject.InheritedWriteRefusal("TableDef.ValidationRule put");
         }
         if (IsSystem)
         {
@@ -602,7 +609,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         if (liveEntry is null)
         {
             // Another binding of the file dropped the table: dbOpenSnapshot (VT_I4 4) with Options omitted fails 3078 from
-            // DAO.Database (r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* calls 75, 133, 202).
+            // DAO.Database (r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb calls 75, 102, 202).
             if (DroppedByPeer && optionsArg == 0 && typeArg != 0 && Args.TypeOf(typeArg) == Foundation.VarType.I4 && (int)Args.Cell(typeArg)->Int64 == 4)
             {
                 return CallResult.Fail(Failure.Dao(3078, "DAO.Database", global::CalcDb.Sql.SqlMessages.NoInputTable(_entry.Name)));
@@ -645,6 +652,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         _fields?.Release();
         _indexes?.Release();
         _properties?.Release();
+        _owner.Database.UntrackTableDef(this);
         _owner.Released(this);
         _owner.Release();
     }
@@ -728,7 +736,7 @@ internal sealed unsafe class IndexObject : DaoObject
     private DefinitionCollection? _fields;
     private PropertiesObject? _properties;
 
-    public override bool Invalid => _owner.Database.Closed;
+    public override bool Invalid => _owner.Invalid;
 
     public IndexObject(DefinitionCollection owner, TableDefinition table, LogicalIndex logical) : base(Decl, Vtable, owner.Engine, "DAO.Index")
     {
@@ -746,7 +754,7 @@ internal sealed unsafe class IndexObject : DaoObject
     private static CallResult Live(ComObject self, Func<IndexObject, CallResult> op)
     {
         var x = (IndexObject)self;
-        return x._owner.Database.Closed ? x.Fail(3420, DaoErrors.ObjectInvalid) : op(x);
+        return x.Invalid ? x.Fail(3420, DaoErrors.ObjectInvalid) : op(x);
     }
 
     private CallResult DistinctCount()
@@ -764,7 +772,10 @@ internal sealed unsafe class IndexObject : DaoObject
         ColumnDescriptor[] columns = [.. _physical.Columns.Select(ic => _table.Columns.First(c => c.PhysicalNumber == ic.PhysicalNumber))];
         _fields ??= new DefinitionCollection(DaoTypes.IndexFields, "DAO.Fields", // an index field's Item(99) is 3265 from DAO.Fields (r-dao-1b/coll-item-table-family)
              _owner.Database, [.. columns.Select(c => c.Name)],
-            (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i));
+            (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i))
+        {
+            IsOwnerInvalid = () => Invalid,
+        };
         return Object(_fields);
     }
 
