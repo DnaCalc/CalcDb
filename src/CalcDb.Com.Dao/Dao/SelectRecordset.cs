@@ -335,7 +335,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// open, the SQL cursor's <see cref="SelectCursor.Updatable"/> by query shape and cursor kind, or named via
     /// <see cref="SelectCursor.UpdatableOpen"/> when no retained record decides the shape.
     /// </summary>
-    private CallResult Updatable() => Database.ReadOnly ? Bool(false)
+    private CallResult Updatable() => Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Recordset.Updatable")
+        : Database.ReadOnly ? Bool(false)
         : Cursor.Updatable is bool updatable ? Bool(updatable)
         : CallResult.Fail(Failure.NotModelled(Cursor.UpdatableOpen ?? "NotModelled.QueryUpdatable", $"Recordset.Updatable: {Cursor.UpdatableOpen ?? "unrecorded query shape"}"));
 
@@ -828,6 +829,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 $"{member} on a non-single-table SELECT recordset (not recorded)"));
             return null;
         }
+        if (Database.InheritedWritable && (Database.Exclusive || member is not ("Edit" or "Update" or "Field.Value put")))
+        {
+            refused = DatabaseObject.InheritedWriteRefusal($"SELECT Recordset.{member}");
+            return null;
+        }
         if (Cursor.Updatable != true || Database.ReadOnly)
         {
             refused = CallResult.Fail(Failure.NotModelled(
@@ -877,6 +883,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             || Plan.Sources[0].Table is null
             || Cursor.Updatable != true
             || Database.ReadOnly
+            || Database.InheritedWritable
             || Database.Workspace.Transactions.Depth > 0
             || _openLevels.Length > 0)
         {
@@ -1661,6 +1668,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         if (Column.SourceColumn?.Column is { CalculatedResultType: not null })
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldDataUpdatable.CalculatedColumn", $"Field.DataUpdatable of the calculated column {Column.Name} (not recorded)"));
+        }
+        if (Recordset.Database.InheritedWritable)
+        {
+            return DatabaseObject.InheritedWriteRefusal("SELECT Field.DataUpdatable");
         }
         if (Recordset.Database.ReadOnly)
         {

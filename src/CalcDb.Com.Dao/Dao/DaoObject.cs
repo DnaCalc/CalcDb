@@ -95,6 +95,20 @@ internal static class DaoErrors
     /// <summary>3204 (r-cat-1/create-accdb-existing-destination).</summary>
     public const string DatabaseAlreadyExists = "Database already exists.";
 
+    /// <summary>
+    /// 3045 (R-LOCK-1 EX-PUBLIC: evidence/r-lock-1-2/*-inproc-*-excl-ro-then-*-rw, mdb-inproc-*-shared-ro-then-excl-rw;
+    /// evidence/r-q46-dao-ddl-multi/mh-excl-* calls 52-61): the path as OpenDatabase was given it.
+    /// </summary>
+    public static string FileAlreadyInUse(string path) => $"Could not use '{path}'; file already in use.";
+
+    /// <summary>
+    /// 3704 (R-LOCK-2 RO-INPROC: evidence/r-lock-1-2/accdb-inproc-ws1-shared-ro-then-excl-rw and
+    /// accdb-inproc-ws2-shared-ro-then-excl-rw; evidence/r-q46-dao-ddl-multi/mh-excl-samews-accdb call 79): the first
+    /// binding's user and this computer's name.
+    /// </summary>
+    public static string AlreadyOpenedByUser(string user, string machine) =>
+        $"You attempted to open a database that is already opened by user '{user}' on machine '{machine}'. Try again when the database is available.";
+
     /// <summary>3246 (r-cat-1/create-accdb-in-transaction).</summary>
     public const string NotSupportedInTransactions = "Operation not supported in transactions.";
 

@@ -396,6 +396,17 @@ public abstract unsafe class DispatchObject : ComObject
         }
         if (count > declared)
         {
+            if (named == 0 && member.Kind == InvokeKind.PropertyGet && ExtraArgumentGet(member) is { } extra)
+            {
+                // The arguments go to the returned object's default member (DBEngine.Workspaces(0)); positional only.
+                Span<nint> extraArgs = stackalloc nint[(int)count];
+                NativeVariant* given = (NativeVariant*)parameters->Args;
+                for (uint i = 0; i < count; i++)
+                {
+                    extraArgs[(int)i] = (nint)(given + (count - 1 - i));
+                }
+                return Publish(RunOperation(extra, extraArgs), result, info);
+            }
             return ArgumentCount(member, HResults.DISP_E_BADPARAMCOUNT, info);
         }
         Span<nint> args = stackalloc nint[declared];
@@ -491,33 +502,7 @@ public abstract unsafe class DispatchObject : ComObject
                     }
                 }
             }
-            CallResult outcome = Run(member, args);
-            if (outcome.Failure is { } failure)
-            {
-                return ErrorPublication.ToExcepInfo(failure, info);
-            }
-            if (outcome.HasScalar)
-            {
-                if (result is not null)
-                {
-                    *result = outcome.Scalar;
-                    CostCounters.Current.ResultValues++;
-                }
-                else
-                {
-                    outcome.ReleaseUntaken();
-                }
-            }
-            else if (outcome.Value is { } value)
-            {
-                if (result is not null)
-                {
-                    value.TransferTo(result);
-                    CostCounters.Current.ResultValues++;
-                }
-                value.Dispose();
-            }
-            return HResults.S_OK;
+            return Publish(Run(member, args), result, info);
         }
         finally
         {
@@ -526,6 +511,63 @@ public abstract unsafe class DispatchObject : ComObject
                 c.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// The operation a property get answers when it is invoked with more arguments than it declares, or null for the
+    /// standard DISP_E_BADPARAMCOUNT. ACE's DAO applies such arguments to the default member of the object the property
+    /// returns (r-lock-1-2/*-inproc-*, r-q46-dao-ddl-multi/mh-*: <c>eng.Workspaces(VT_I4 0)</c> returns the default
+    /// Workspace); the operation receives the positional arguments in declaration order, unconverted.
+    /// </summary>
+    protected virtual Operation? ExtraArgumentGet(MemberDecl member) => null;
+
+    private CallResult RunOperation(Operation op, ReadOnlySpan<nint> args)
+    {
+        CallResult result;
+        try
+        {
+            result = op(this, args);
+        }
+        catch (Exception e)
+        {
+            result = CallResult.Fail(Failure.Defect(e));
+        }
+        if (result.Failure is { } failure)
+        {
+            OnFailure(failure);
+        }
+        return result;
+    }
+
+    /// <summary>An operation's outcome as Invoke returns it: the failure through EXCEPINFO, else the result VARIANT.</summary>
+    private static int Publish(CallResult outcome, NativeVariant* result, ExcepInfo* info)
+    {
+        if (outcome.Failure is { } failure)
+        {
+            return ErrorPublication.ToExcepInfo(failure, info);
+        }
+        if (outcome.HasScalar)
+        {
+            if (result is not null)
+            {
+                *result = outcome.Scalar;
+                CostCounters.Current.ResultValues++;
+            }
+            else
+            {
+                outcome.ReleaseUntaken();
+            }
+        }
+        else if (outcome.Value is { } value)
+        {
+            if (result is not null)
+            {
+                value.TransferTo(result);
+                CostCounters.Current.ResultValues++;
+            }
+            value.Dispose();
+        }
+        return HResults.S_OK;
     }
 
     /// <summary>A member by its live DISPID (<see cref="LiveDispatchId"/>), searched only when the declared one names none.</summary>

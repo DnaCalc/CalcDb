@@ -160,11 +160,13 @@ public sealed unsafe class DaoDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Snapshot_and_second_Database_on_same_file_stay_refused_over_unpublished_overlay()
+    public void Snapshot_over_unpublished_overlay_stays_refused_and_second_Database_of_the_Workspace_sees_it()
     {
-        // Snapshots over an active overlay and a second Database (separate PageCache) on the same file stay named
-        // with NotModelled.Edit.UnpublishedRows (r-def-cursor-dao/assign-without-edit-by-type call 56,
-        // r-q2-cursor-dao/life-clone-close-second-database-enlisted).
+        // Snapshots over an active overlay stay named with NotModelled.Edit.UnpublishedRows
+        // (r-def-cursor-dao/assign-without-edit-by-type call 56). A second Database of the same Workspace on the same file
+        // shares the pooled session and the Workspace's overlay, so it reads the uncommitted change (W-05 6xzx:
+        // r-q46-dao-ddl-multi/mh-rwrw-samews-accdb calls 65-66 for snapshot visibility, and
+        // r-q2-cursor-dao/life-clone-close-second-database-enlisted calls 9-26 for same-Workspace dynasets).
         string path = CopyFixture(EditFixture);
         DatabaseObject db1 = OpenPath(path);
         DatabaseObject db2 = OpenPath(path);
@@ -180,8 +182,9 @@ public sealed unsafe class DaoDynamicOverlayTests : IDisposable
         RecordsetObject snap = OpenRecordset(db1, "G", 4);
         AssertNotModelled(FieldValue(snap, "U"), "NotModelled.Edit.UnpublishedRows");
 
+        Assert.Same(db1.Cache, db2.Cache);
         RecordsetObject r2 = OpenRecordset(db2, "G", 2);
-        AssertNotModelled(FieldValue(r2, "U"), "NotModelled.Edit.UnpublishedRows");
+        Assert.Equal("u9", TextValue(Ok(FieldValue(r2, "U"))));
 
         Ok(Method(ws, "Rollback"));
         Ok(Method(r2, "Close"));

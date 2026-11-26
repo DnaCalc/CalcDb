@@ -57,7 +57,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Method("FindNext", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Next, args[0]))
         .Method("FindPrevious", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Previous, args[0]))
         .Method("Close", (self, args) => Live(self, r => r.Close()))
-        .Get("Updatable", (self, args) => Live(self, r => Bool(r.Updatable)))
+        .Get("Updatable", (self, args) => Live(self, r => r.Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Recordset.Updatable") : Bool(r.Updatable)))
         .Get("Bookmarkable", (self, args) => Live(self, r => Bool(r.Bookmarkable)))
         .Get("LockEdits", (self, args) => Live(self, r => r.RecordsetType is 1 or 2 ? Bool(r._pessimistic) : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Put("LockEdits", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetLockEdits(value)); })
@@ -805,6 +805,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         if (_frame is { } frame)
         {
             return frame;
+        }
+        if (Database.InheritedWritable)
+        {
+            refused = DatabaseObject.InheritedWriteRefusal("Table Recordset edit");
+            return null;
         }
         if (RecordsetType is 1 or 2 && !Updatable)
         {
@@ -2217,8 +2222,8 @@ internal sealed unsafe class FieldObject : DaoObject
         .Put("ValidateOnSet", (self, args) => { nint value = args[^1]; return Live(self, f => f.SetValidateOnSet(value)); })
         // The members below follow r-dao-1b/recordset-fields-members-each (a dynaset of every family, read-only open),
         // r-fix-cursor-dao/updatable-members-rw and r-cursor-1b/option-readonly-write (writable opens).
-        .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable() is bool u ? Bool(u) : f.CalculatedNamed("DataUpdatable")))
-        .Get("Attributes", (self, args) => Live(self, f => f.DataUpdatable() is bool u && ColumnFacts.Attributes(f.Column, u) is int a ? Int32(a) : f.CalculatedNamed("Attributes")))
+        .Get("DataUpdatable", (self, args) => Live(self, f => f.Recordset.Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Field.DataUpdatable") : f.DataUpdatable() is bool u ? Bool(u) : f.CalculatedNamed("DataUpdatable")))
+        .Get("Attributes", (self, args) => Live(self, f => f.Recordset.Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Field.Attributes") : f.DataUpdatable() is bool u && ColumnFacts.Attributes(f.Column, u) is int a ? Int32(a) : f.CalculatedNamed("Attributes")))
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
         .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))

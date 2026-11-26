@@ -47,7 +47,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return Live(self, d => d.CreateRelation(name, table, foreignTable, attributes));
         })
         .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()))
-        .Get("Updatable", (self, args) => Live(self, d => Bool(!d.ReadOnly)))
+        .Get("Updatable", (self, args) => Live(self, d => d.UpdatableResult()))
         .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
         .Get("Connect", (self, args) => Live(self, d => Text("")))
         .Get("QueryTimeout", (self, args) => Live(self, d => Int16(60)))
@@ -62,7 +62,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static List<DatabaseObject>? _openOnThread;
 
     private readonly WorkspaceObject _workspace;
-    private readonly SharedDatabaseSession _sharedSession;
+    private readonly PooledFileSession _pooled;
     private readonly ComDatabaseSession _session;
     private readonly List<IDatabaseRecordset> _recordsets = [];
     private bool _closed;
@@ -77,6 +77,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private List<string>? _queryOrder;
     private readonly Dictionary<int, int> _sessionQueryTypeOverrides = [];
     private readonly Dictionary<int, string> _sessionSavedSqlOverrides = [];
+    private readonly List<TableDefObject> _heldTableDefs = [];
+    private HashSet<int>? _peerDropped;
 
     /// <summary>
     /// The RecordsAffected of this Database's Execute calls (R-SQL-2; r-sql-2-3/act-records-affected;
@@ -96,26 +98,28 @@ internal sealed unsafe class DatabaseObject : DaoObject
         Name = name;
         ReadOnly = readOnly;
         _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated, exclusive: exclusive);
-        _sharedSession = new SharedDatabaseSession(_session);
+        _pooled = FileSessionPool.Register(name, workspace.Engine.Binding.Identity, _session, new FileBinding(exclusive, readOnly, workspace.UserName));
+        _pooled.AttachCoordinator(workspace.Transactions);
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
 
     /// <summary>
-    /// Attach a read-only shared <see cref="DatabaseObject"/> to an already-open writable shared session of the same
-    /// <see cref="WorkspaceObject"/> and canonical file so both handles share one OS handle, page cache and catalog
-    /// (<c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 20–29, <c>r-err-1b/lock-readonly-db-insert</c>,
-    /// <c>r-fix-cursor-dao/lock-readonly-db-insert-failonerror</c>).
+    /// A further binding of a file the process already has open (W-05 <c>6xzx</c>; R-LOCK-1 EX-PUBLIC, R-LOCK-2
+    /// RO-INPROC): it shares the pooled session — one OS handle, page cache, local lock manager, lock-file slot and catalog —
+    /// with every other binding of the file, in this Workspace or another (<c>evidence/r-q46-dao-ddl-multi/mh-rwrw-samews-accdb</c>,
+    /// <c>evidence/r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 20–29, <c>r-err-1b/lock-readonly-db-insert</c>).
     /// </summary>
-    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, SharedDatabaseSession sharedSession)
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, bool inheritedWritable, PooledFileSession pooled)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
         Name = name;
         ReadOnly = readOnly;
-        WasSharedWithWritablePeer = readOnly;
-        _sharedSession = sharedSession;
-        _session = sharedSession.Session;
+        InheritedWritable = inheritedWritable;
+        _pooled = pooled;
+        _pooled.AttachCoordinator(workspace.Transactions);
+        _session = pooled.Session;
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -241,17 +245,43 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public override bool Invalid => Closed;
 
     /// <summary>
-    /// Whether this Database handle was opened read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE:
-    /// ReadOnly counts only when Options is given). Stored per handle so a shared read-only handle beside a same-
-    /// workspace writable peer keeps <c>Updatable = False</c> while sharing the peer's session and cache.
+    /// Whether this Database handle is read-only, as Database.Updatable reports it (R-ORACLE-1 OR-WIRE: ReadOnly counts
+    /// only when Options is given). Stored per handle: a read-only binding beside a writable session inherits read/write
+    /// (<see cref="InheritedWritable"/>), and a read-only binding stays read-only when a later read/write binding makes the
+    /// shared session writable (<c>evidence/r-q46-dao-ddl-multi/mh-rwro-*</c>: <c>dbRo.Updatable</c> 0 beside <c>dbRw</c>).
     /// </summary>
     public bool ReadOnly { get; }
 
     /// <summary>
-    /// True when this read-only handle attached to an open same-workspace writable peer at open; whether it remains
-    /// writable or reverts to 3370/3073/3086 after that peer closes is not recorded.
+    /// True when this handle asked for ReadOnly but joined a writable session, so it reads and writes as read/write
+    /// (<c>evidence/r-q46-dao-ddl-multi/mh-rwro-*</c>: <c>db2.Updatable</c> -1, INSERT and dynaset Edit/Update succeed;
+    /// <c>evidence/r-q47-bigint-expr-edges/mh-rwro-close-rw-first-*</c>: still so after the writer closed;
+    /// <c>evidence/r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 23–25). Its Execute admits only the statement forms
+    /// those records show (<see cref="ActionRoute"/>).
     /// </summary>
-    internal bool WasSharedWithWritablePeer { get; }
+    internal bool InheritedWritable { get; }
+
+    /// <summary>True when this binding itself asked for read/write (not read-only and not inherited).</summary>
+    internal bool IsOwnWriter => !ReadOnly && !InheritedWritable;
+
+    /// <summary>Whether another open binding of this file in the same Workspace is an own read/write binding.</summary>
+    internal bool HasOwnSameWorkspaceWriterBeside => Engine.Sessions.Any(d =>
+        !ReferenceEquals(d, this) && !d.Closed && ReferenceEquals(d._pooled, _pooled) && ReferenceEquals(d.Workspace, _workspace) && d.IsOwnWriter);
+
+    /// <summary>True if the pooled session has ever held an own read/write binding (whether still open or since closed).</summary>
+    internal bool EverHadWriterPeer => _pooled.EverAdmittedWriter;
+
+    /// <summary>Named refusal for DAO write or updatable-query members not recorded on a ReadOnly handle that inherited read/write.</summary>
+    internal static CallResult InheritedWriteRefusal(string member) => CallResult.Fail(Failure.NotModelled(
+        "NotModelled.InheritedReadOnlyWrite",
+        $"{member} on a ReadOnly handle that inherited read/write from an open writable binding is not recorded (only Database.Updatable, recorded Database.Execute forms, and shared SELECT dynaset Edit/Update are recorded)"));
+
+    private CallResult UpdatableResult() =>
+        InheritedWritable && Exclusive
+            ? CallResult.Fail(Failure.NotModelled(
+                "NotModelled.InheritedReadOnlyExclusive",
+                "Database.Updatable on a ReadOnly handle opened beside an exclusive read/write binding is not recorded"))
+            : Bool(!ReadOnly);
 
     /// <summary>
     /// Whether this Database was opened or created exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file), selecting
@@ -299,26 +329,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return workspace.Fail(3024, DaoErrors.FileNotFound(name));
         }
-        // An in-process shared read-only ACCDB open in the same Workspace beside an open shared writable handle shares
-        // that peer's ComDatabaseSession (one OS file handle, page cache, lock-file slot and catalog) so recorded
-        // peer-RW Execute writes succeed without self-sharing violations and stay immediately visible to both handles
-        // (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 20-29, r-err-1b/lock-readonly-db-insert,
-        // r-fix-cursor-dao/lock-readonly-db-insert-failonerror).
-        if (!exclusive && readOnly)
+        if (FileSessionPool.Find(full, workspace.Engine.Binding.Identity) is { } pooled)
         {
-            DatabaseObject? peer = workspace.Engine.Sessions.FirstOrDefault(d =>
-                !d.Closed
-                && ReferenceEquals(d.Workspace, workspace)
-                && !d.Exclusive
-                && !d.ReadOnly
-                && d.Profile.IsAce
-                && string.Equals(d.Name, full, StringComparison.OrdinalIgnoreCase));
-            if (peer is not null)
-            {
-                peer._sharedSession.AddHolder();
-                database = new DatabaseObject(workspace, full, readOnly: true, peer._sharedSession);
-                return CallResult.Nothing;
-            }
+            return Join(workspace, name, full, exclusive, readOnly, pooled, out database);
         }
         if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
         {
@@ -358,6 +371,48 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
         }
         database = new DatabaseObject(workspace, full, readOnly, exclusive, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// A further OpenDatabase of a file the process already has open (W-05 <c>6xzx</c>; qualified.md R-LOCK-1 EX-PUBLIC,
+    /// R-LOCK-2 RO-INPROC): admitted or refused by the first binding's mode (<see cref="PooledFileSession.Admit"/>:
+    /// 3045 "file already in use" and 3704 "already opened by user" from DAO.Workspace, <c>evidence/r-lock-1-2/*-inproc-*</c>,
+    /// <c>evidence/r-q46-dao-ddl-multi/mh-excl-*</c> calls 52–61, 79–81), it shares the pooled session. Its read-only
+    /// state follows the open order (<c>evidence/r-q46-dao-ddl-multi/mh-rwro-*</c>, <c>evidence/r-q47-bigint-expr-edges/
+    /// mh-rwro-close-rw-first-*</c>): a read-only binding beside a writable session inherits read/write (Updatable -1, its
+    /// INSERT and dynaset Edit/Update succeed, also after the writer closed); a read/write binding beside a read-only
+    /// session makes the session writable with a lock-file slot of its own (64 to 128 B) while the read-only binding stays
+    /// read-only (Updatable 0, INSERT 3073).
+    /// </summary>
+    private static CallResult Join(WorkspaceObject workspace, string name, string full, bool exclusive, bool readOnly, PooledFileSession pooled, out DatabaseObject? database)
+    {
+        database = null;
+        ComDatabaseSession session = pooled.Session;
+        switch (pooled.Admit(new FileBinding(exclusive, readOnly, workspace.UserName), session.Profile.Format == FileFormat.Jet4))
+        {
+            case InProcessRefusal.FileInUse:
+                return workspace.Fail(3045, DaoErrors.FileAlreadyInUse(name));
+            case InProcessRefusal.OpenedByUser:
+                return workspace.Fail(3704, DaoErrors.AlreadyOpenedByUser(pooled.First.UserName, Environment.MachineName));
+        }
+        if (!readOnly && session.ReadOnly)
+        {
+            LockFile? writerSlot = null;
+            if (!session.Exclusive)
+            {
+                writerSlot = LockFile.Join(full, Environment.MachineName, workspace.UserName, out int? lockError);
+                if (writerSlot is null)
+                {
+                    return CallResult.Fail(Failure.NotImplemented($"OpenDatabase read/write beside a read-only binding when the lock file cannot be joined (Win32 {lockError}; T-LOCK-11)"));
+                }
+            }
+            session.AdmitWriter(writerSlot);
+        }
+        bool isOwnWriter = !readOnly;
+        bool inheritWritable = readOnly && !pooled.First.ReadOnly && pooled.ActiveWriters > 0;
+        FileSessionPool.AddHolder(pooled, isOwnWriter);
+        database = new DatabaseObject(workspace, full, readOnly: readOnly && !inheritWritable, inheritedWritable: inheritWritable, pooled);
         return CallResult.Nothing;
     }
 
@@ -506,17 +561,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return hold;
     }
 
-    /// <summary>How the open recordsets of every Database handle sharing this session hold <paramref name="table"/>.</summary>
+    /// <summary>How the open recordsets of every Database handle of this engine sharing this file hold <paramref name="table"/>.</summary>
     internal TableHold SharedHold(string table)
     {
-        if (_sharedSession.Holders == 1)
+        if (_pooled.Holders == 1)
         {
             return Hold(table);
         }
         TableHold hold = TableHold.None;
         foreach (DatabaseObject d in Engine.Sessions)
         {
-            if (d.Closed || !ReferenceEquals(d._sharedSession, _sharedSession))
+            if (d.Closed || !ReferenceEquals(d._pooled, _pooled))
             {
                 continue;
             }
@@ -878,8 +933,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// A SQL DDL statement's catalog change was published (<see cref="DatabaseSql.OnSchemaPublished"/>). A catalog that
     /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="SchemaFailure"/>).
     /// </summary>
-    public void SqlSchemaPublished(ulong extentPages) =>
-        _session.SqlSchemaPublished(extentPages, IsTableHeld, OnSharedCatalogReloaded);
+    public void SqlSchemaPublished(ulong extentPages)
+    {
+        CatalogSnapshot before = _session.Catalog;
+        _session.SqlSchemaPublished(extentPages, IsTableHeld, () => OnSharedCatalogReloaded(before));
+    }
 
     /// <summary>The reason a statement cannot run against this Database's current catalog, or null.</summary>
     public string? SchemaFailure => _session.SchemaFailure;
@@ -981,6 +1039,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
                 Membership = TableDefsMembership,
+                Refreshed = static (c, held) => c.Database.TableDefsRefreshed(held),
                 ClosedSource = "DAO.Database", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
                 ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-dao-1-err-1/coll-tabledefs-index-variants
                 NameEndsAtNul = true, // r-dao-1-err-1/coll-name-variants
@@ -1048,6 +1107,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("TableDefs.Append on a read-only Database (ACE's refusal is not recorded)"));
         }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("TableDefs.Append");
+        }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
         {
@@ -1107,9 +1170,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return fields.Fail(3367, DaoErrors.AlreadyInCollection);
         }
+        // Another binding of the file dropped the table: 3078 from DAO.TableDef (r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 85).
+        if (tableDef.DroppedByPeer)
+        {
+            return CallResult.Fail(Failure.Dao(3078, "DAO.TableDef", SqlMessages.NoInputTable(tableDef.Name)));
+        }
         if (ReadOnly)
         {
             return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("TableDef.Fields.Append");
         }
         if (tableDef.IsSystem)
         {
@@ -1207,6 +1279,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put on a read-only Database (qualified.md r-q37 Open)"));
         }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal($"Field.{property} put");
+        }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
         {
@@ -1257,23 +1333,93 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// from the committed images, and the one TableDefs collection lists its members again (r-q15-ddl-open/lv-rewrite-
     /// byte-n: the same object after the Append finds the new table; DefinitionCollection.Membership).
     /// </summary>
-    private string? SchemaPublished(ulong extentPages) =>
-        _session.SchemaPublished(extentPages, IsTableHeld, OnSharedCatalogReloaded);
+    private string? SchemaPublished(ulong extentPages)
+    {
+        CatalogSnapshot before = _session.Catalog;
+        return _session.SchemaPublished(extentPages, IsTableHeld, () => OnSharedCatalogReloaded(before));
+    }
 
     private bool IsTableHeld(string table) => SharedHold(table) != TableHold.None;
 
-    private void OnSharedCatalogReloaded()
+    /// <summary>
+    /// The shared catalog was read again after this handle's catalog change: this handle lists its TableDefs again, and
+    /// every other binding of the file forgets its queries and SQL view but keeps its TableDefs as last listed
+    /// (<see cref="OnPeerCatalogReloaded"/>).
+    /// </summary>
+    private void OnSharedCatalogReloaded(CatalogSnapshot before)
     {
-        if (_sharedSession.Holders == 1)
+        OnCatalogReloaded();
+        if (_pooled.Holders == 1)
         {
-            OnCatalogReloaded();
             return;
         }
-        foreach (DatabaseObject d in Engine.Sessions)
+        HashSet<int>? dropped = null;
+        foreach (DatabaseObject d in Engine.Sessions.ToArray())
         {
-            if (!d.Closed && ReferenceEquals(d._sharedSession, _sharedSession))
+            if (!ReferenceEquals(d, this) && !d.Closed && ReferenceEquals(d._pooled, _pooled))
             {
-                d.OnCatalogReloaded();
+                dropped ??= [.. before.LocalTables(Format).Where(e => !Catalog.LocalTables(Format).Any(n => n.Id == e.Id && NamesEqual(n.Name, e.Name))).Select(e => e.Id)];
+                d.OnPeerCatalogReloaded(dropped);
+            }
+        }
+    }
+
+    private static bool NamesEqual(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Another binding of the file changed the catalog (<c>evidence/r-q46-dao-ddl-multi/mh-ddl-refresh-*</c>, same and two
+    /// Workspaces, ACCDB and Jet 4 MDB): this handle's TableDefs stays as it was listed until its Refresh (after
+    /// <c>CREATE TABLE U</c> by db1, <c>tds2.Count</c> unchanged and <c>Item("U")</c> 3265; after <c>DROP TABLE U</c>,
+    /// <c>Item("U")</c> still the held <c>_TableDef</c>), while its statements bind against the new catalog. The tables the
+    /// change dropped are remembered for the held TableDefs (<see cref="DroppedByPeer"/>).
+    /// </summary>
+    private void OnPeerCatalogReloaded(IReadOnlySet<int> dropped)
+    {
+        _queries = null;
+        _queriesFailure = null;
+        _sql?.Forget();
+        if (dropped.Count > 0)
+        {
+            (_peerDropped ??= []).UnionWith(dropped);
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="entry"/>'s table was dropped by another binding of the file and is not in the catalog now
+    /// (<c>evidence/r-q47-bigint-expr-edges/mh-held-tdf-after-drop-*</c>). A table this handle dropped itself is not one.
+    /// </summary>
+    internal bool DroppedByPeer(CatalogEntry entry) =>
+        _peerDropped?.Contains(entry.Id) == true
+        && !Catalog.LocalTables(Format).Any(e => e.Id == entry.Id && NamesEqual(e.Name, entry.Name));
+
+    /// <summary>Register a live <see cref="TableDefObject"/> of this Database so <see cref="TableDefsRefreshed"/> reaches it even across prior relists.</summary>
+    internal void TrackTableDef(TableDefObject tableDef) => _heldTableDefs.Add(tableDef);
+
+    /// <summary>Forget a <see cref="TableDefObject"/> at its final COM release.</summary>
+    internal void UntrackTableDef(TableDefObject tableDef) => _heldTableDefs.Remove(tableDef);
+
+    /// <summary>
+    /// <c>TableDefs.Refresh</c> listed the members again: every live TableDef of this Database whose table another binding
+    /// dropped is invalid from now on, with its Fields, Indexes, Index wrappers and fields (3420;
+    /// <c>evidence/r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb</c> calls 113–143: Name, RecordCount, Attributes,
+    /// Fields.Count and Indexes.Count from DAO.TableDef, a field's Name and Type from DAO.Field, OpenRecordset from
+    /// DAO.TableDef). Tracking all live wrappers on the Database ensures a prior <c>Refresh()</c> or self-DDL relist
+    /// cannot lose a held <see cref="TableDefObject"/> before the post-drop <c>Refresh()</c>.
+    /// </summary>
+    private void TableDefsRefreshed(IReadOnlyList<(string Name, DaoObject Wrapper)> held)
+    {
+        foreach (TableDefObject t in _heldTableDefs.ToArray())
+        {
+            if (DroppedByPeer(t.Entry))
+            {
+                t.InvalidateDropped();
+            }
+        }
+        foreach ((_, DaoObject wrapper) in held)
+        {
+            if (wrapper is TableDefObject t && DroppedByPeer(t.Entry))
+            {
+                t.InvalidateDropped();
             }
         }
     }
@@ -1487,6 +1633,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.SQL put on a read-only Database (ACE's refusal is not recorded)"));
         }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("QueryDef.SQL put");
+        }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
         {
@@ -1572,6 +1722,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDefs.Delete on a read-only Database (ACE's refusal is not recorded)"));
         }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("QueryDefs.Delete");
+        }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
         {
@@ -1633,6 +1787,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (ReadOnly)
         {
             return CallResult.Fail(Failure.NotImplemented("CreateQueryDef on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("CreateQueryDef");
         }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
@@ -1838,6 +1996,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("Relations.Append on a read-only Database (ACE's refusal is not recorded)"));
         }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("Relations.Append");
+        }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
         {
@@ -1902,6 +2064,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (ReadOnly)
         {
             return CallResult.Fail(Failure.NotImplemented("Relations.Delete on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("Relations.Delete");
         }
         TransactionCoordinator workspace = _workspace.Transactions;
         if (workspace.Depth > 0)
@@ -2018,6 +2184,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     public void Forget(IDatabaseRecordset recordset) => _recordsets.Remove(recordset);
 
+    /// <summary>Whether a recordset of this Database is open.</summary>
+    internal bool HasOpenRecordsets => _recordsets.Count > 0;
+
     /// <summary>A Rollback of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets (TXN-CLOSE).</summary>
     public void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost)
     {
@@ -2045,7 +2214,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _recordsets.Clear();
         CallResult closing = CallResult.Nothing;
-        bool lastHolder = _sharedSession.ReleaseHolder();
+        bool lastHolder = FileSessionPool.Release(_pooled, IsOwnWriter);
         if (lastHolder)
         {
             // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
@@ -2054,11 +2223,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
             // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
             // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
             // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
-            (MutationOpen open, string? detail) = _session.CloseCommit(_workspace.Transactions);
-            if (open != MutationOpen.None)
-            {
-                closing = EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
-            }
+            // The last binding of the file publishes it whichever Workspace's publications need it, even if a non-default
+            // Workspace was already closed and released (W-05 6xzx: evidence/r-q46-dao-ddl-multi/mh-ddl-refresh-twows-accdb
+            // and r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb: page-1 extent and dropped pages return only at
+            // db2.Close, 07->08). Two Workspaces both owing a closing commit is unrecorded and refused by name.
+            closing = CloseCommitAll();
         }
         bool removedFromThread = _openOnThread?.Remove(this) == true;
         if (lastHolder && removedFromThread)
@@ -2107,16 +2276,37 @@ internal sealed unsafe class DatabaseObject : DaoObject
             Close();
         }
     }
-}
 
-/// <summary>Reference-counted owner of one <see cref="ComDatabaseSession"/> shared across same-workspace peer handles.</summary>
-internal sealed class SharedDatabaseSession(ComDatabaseSession session)
-{
-    public ComDatabaseSession Session { get; } = session;
-
-    public int Holders { get; private set; } = 1;
-
-    public void AddHolder() => Holders++;
-
-    public bool ReleaseHolder() => --Holders == 0;
+    /// <summary>
+    /// The closing commit of the file's last binding: ends every attached Workspace's lazy burst on this cache, and when
+    /// exactly one Workspace owes a closing commit (page-1 reservations, ReleasedAtClose pages, or deferred catalog
+    /// commit), publishes it even if a non-default Workspace was already closed and released. When two or more Workspaces
+    /// both owe a closing commit on the same file, refuses by name (qualified.md 6xzx Open: unrecorded).
+    /// </summary>
+    private CallResult CloseCommitAll()
+    {
+        List<TransactionCoordinator>? owing = null;
+        foreach (TransactionCoordinator coordinator in _pooled.Coordinators)
+        {
+            coordinator.EndLazyBurst(Cache);
+            if (coordinator.NeedsCloseCommit(Cache))
+            {
+                (owing ??= []).Add(coordinator);
+            }
+        }
+        if (owing is null)
+        {
+            return CallResult.Nothing;
+        }
+        if (owing.Count > 1)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.MultiWorkspaceCloseCommit",
+                $"Database.Close when {owing.Count} Workspaces each owe a closing commit on the same file is not recorded (qualified.md R-LOCK-1 EX-PUBLIC 6xzx Open)"));
+        }
+        (MutationOpen open, string? detail) = _session.CloseCommit(owing[0]);
+        return open != MutationOpen.None
+            ? EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail)
+            : CallResult.Nothing;
+    }
 }

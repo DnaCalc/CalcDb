@@ -534,9 +534,11 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_dynaset_on_second_Database_same_file_refuses_unpublished_overlay()
+    public void Select_dynaset_on_second_Database_of_the_Workspace_reads_its_unpublished_overlay()
     {
-        // A second Database on the same file has its own PageCache and does not share the writer Database's overlay.
+        // A second Database of the same Workspace on the same file shares the pooled session and the Workspace's overlay
+        // (W-05 6xzx: r-q46-dao-ddl-multi/mh-rwrw-samews-accdb calls 65-66 for snapshot visibility, and
+        // r-q2-cursor-dao/life-clone-close-second-database-enlisted calls 9-26 for same-Workspace dynasets).
         string path = CopyFixture(Txn1bAccdb);
         DatabaseObject db1 = OpenPath(path);
         DatabaseObject db2 = OpenPath(path);
@@ -545,8 +547,10 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(ws, "BeginTrans"));
         Ok(Method(db1, "Execute", "UPDATE R SET V = 999 WHERE ID = 1", 128));
 
+        Assert.Same(db1.Cache, db2.Cache);
         SelectRecordsetObject rs2 = OpenSelect(db2, "SELECT ID, V FROM R ORDER BY ID", 2);
-        AssertNotModelled(FieldValue(rs2, "V"), "NotModelled.Edit.UnpublishedRows");
+        Assert.Equal(1, IntValue(Ok(FieldValue(rs2, "ID"))));
+        Assert.Equal(999, IntValue(Ok(FieldValue(rs2, "V"))));
 
         Ok(Method(ws, "Rollback"));
         Ok(Method(rs2, "Close"));
