@@ -1,9 +1,9 @@
 # calcdb compare-set run
-# name	qkrw-ddl-alter-1
+# name	compact-opt-locales-1
 # rule	calls.trace@13
-# candidate	5a68640458066d00deedb7d1e73d5c0fff19637af0bbb0b3f6ade785d4f2afdc
-# source	69afdee4e4
-# at	2026-11-26T11:58:33Z
+# candidate	0520582bf6c7e81bd397290be97abbaef3b495c540b037d88e2807c883f8dfe9
+# source	ed62beb7ed
+# at	2026-11-26T15:15:30Z
 folder	case	status	differences	stop	first
 r-act-1-meta	r-act-1-meta/support-ado-objects	Matched	0		
 r-act-1-meta	r-act-1-meta/support-dao-objects	Mismatched	3	interfaces	6 $.results.{B196B284-BAB4-101A-B69C-00AA00341D07} [InterfacesEvent]: expected "0x00000000" actual "0x80004002"
@@ -50,12 +50,12 @@ r-ado-1b	r-ado-1b/param-decimal-scale	Mismatched	16	CreateParameter	17 $.invokeH
 r-ado-1b	r-ado-1b/param-mutate-after-append	Mismatched	16	Execute	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-ado-1b	r-ado-1b/param-refresh-after-text-change	Mismatched	16	Refresh	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-ado-1b	r-ado-1b/param-value-tag-matrix	Mismatched	16	Execute	22 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-ado-1b	r-ado-1b/persist-malformed-files	Mismatched	10	Open	5 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
-r-ado-1b	r-ado-1b/persist-overwrite-flags	Mismatched	15	Save	17 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-ado-1b	r-ado-1b/persist-reconnect-adtg	Mismatched	16	Save	27 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-ado-1b	r-ado-1b/persist-reconnect-xml	Mismatched	16	Save	27 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-ado-1b	r-ado-1b/persist-malformed-files	Matched	0		
+r-ado-1b	r-ado-1b/persist-overwrite-flags	Mismatched	1	Save	31 $.excepInfo.source [call]: expected (absent) actual {"vt":8,"vtName":"VT_BSTR","bytes":"","byteLength":0,"text":""}
+r-ado-1b	r-ado-1b/persist-reconnect-adtg	Mismatched	2	files	28 $.files[2].length [files]: expected 851 actual 848
+r-ado-1b	r-ado-1b/persist-reconnect-xml	Mismatched	2	files	28 $.files[2].length [files]: expected 2395 actual 2441
 r-ado-1b	r-ado-1b/persist-roundtrip-typed	Mismatched	16	Open	15 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-ado-1b	r-ado-1b/persist-stream-roundtrip	Mismatched	16	Save	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-ado-1b	r-ado-1b/persist-stream-roundtrip	Matched	0		
 r-ado-1b	r-ado-1b/rs-cache-same-connection	Mismatched	16	Resync	68 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-ado-1b	r-ado-1b/rs-lock-matrix	Matched	0		
 r-ado-1b	r-ado-1b/rs-open-by-properties	Matched	0		
@@ -87,7 +87,7 @@ r-cat-1	r-cat-1/create-accdb-in-transaction	Matched	0
 r-cat-1	r-cat-1/create-accdb-option-omitted	Matched	0		
 r-cat-1	r-cat-1/create-accdb-properties	Mismatched	16	CreateProperty	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/create-accdb-queries	Mismatched	16	CreateQueryDef	32 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1	r-cat-1/create-accdb-queries-compacted	Mismatched	2	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-cat-1	r-cat-1/create-accdb-queries-compacted	Mismatched	1	files	10 $.files[1].sha256 [files]: expected "07064241ab3105bc00d944a5442aa0a7fea4b9bbad5c137692cbae72f5a9955c; at clock field 2: CatalogDate page 17 offset 0xB5 MSysObjects row page 17 slot 47 DateCreate" actual "5cae80bd199fdc3026cd2925f0f3bb00…
 r-cat-1	r-cat-1/create-accdb-workspace-route	Matched	0		
 r-cat-1	r-cat-1/create-mdb-catalog	Mismatched	6	Execute	17 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/create-mdb-empty	Matched	0		
@@ -95,9 +95,9 @@ r-cat-1	r-cat-1/create-mdb-version30	Mismatched	1	CreateDatabase	4 $.excepInfo.s
 r-cat-1	r-cat-1/drop-column	Mismatched	16	Execute	16 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/field-rules	Mismatched	16	Required	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/held-querydef-lifetime	Mismatched	16	Name	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1	r-cat-1/held-sql-replace	Mismatched	1	files	46 $.files[0].sha256 [files]: expected "5ed93436a0470e23cbb3512b5b0b5e870b6889622ebdd45e2d982598812a813d" actual "66c56ceb6c52d1edd8b29fa6d928c9c560657ef5ea37261e73675d41bb9e4f0e"
+r-cat-1	r-cat-1/held-sql-replace	Mismatched	1	files	46 $.files[0].sha256 [files]: expected "5ed93436a0470e23cbb3512b5b0b5e870b6889622ebdd45e2d982598812a813d" actual "490af2e5f49f426d51b964954c88f9c04d9c9d1f5784aec7777fc10beebb14bb"
 r-cat-1	r-cat-1/id-reuse	Mismatched	2	Execute	44 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1	r-cat-1/msys-add-objects	Mismatched	1	files	38 $.files[0].sha256 [files]: expected "30debd561d0ccc28b921b33c0ee62de2e056af9cb819157e0257b2afe2ce4bd4" actual "c27051663222a94230a3eef69f71b0121fa99dc3105b514aefa1ef3a2e308268"
+r-cat-1	r-cat-1/msys-add-objects	Mismatched	1	files	38 $.files[0].sha256 [files]: expected "30debd561d0ccc28b921b33c0ee62de2e056af9cb819157e0257b2afe2ce4bd4" actual "dd6245157c501b776deb0af782a9be60311f80a6e59d638b4a71ba2024978f1f"
 r-cat-1	r-cat-1/msys-queries	Matched	0		
 r-cat-1	r-cat-1/msys-queries-compacted	Matched	0		
 r-cat-1	r-cat-1/names	Mismatched	16	Append	28 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -112,7 +112,7 @@ r-cat-1	r-cat-1/recreate-table	Mismatched	16	Execute	17 $.invokeHresult [call]: 
 r-cat-1	r-cat-1/rename-column	Mismatched	16	Name	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/select-star	Mismatched	16	Execute	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/sql-round-trip	Mismatched	5	SQL	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1	r-cat-1/temporary-querydef	Mismatched	1	files	42 $.files[0].sha256 [files]: expected "7fa204e8b96653af33c8d0576ef6e3d5cfccf8cd06ff523de608b0a9a53f2967" actual "5b6f94c3a6f34ec1b155b19c6d99b5d65fbe159e43360cb17bdd5ff738a8227b"
+r-cat-1	r-cat-1/temporary-querydef	Mismatched	1	files	42 $.files[0].sha256 [files]: expected "7fa204e8b96653af33c8d0576ef6e3d5cfccf8cd06ff523de608b0a9a53f2967" actual "b68c8701ff12b81c42ae5d1ae00cda71092a8fffa93f66768bfd5bac94938bf7"
 r-cat-1	r-cat-1/unresolved-identifier	Mismatched	16	Execute	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1	r-cat-1/wildcard-mode	Mismatched	16	Execute	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/containers-enum	Matched	0		
@@ -140,7 +140,7 @@ r-cat-1b	r-cat-1b/qd-create-invalid-sql	Mismatched	5	CreateQueryDef	34 $.excepIn
 r-cat-1b	r-cat-1b/qd-execute-action-saved	Mismatched	16	Execute	28 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-execute-on-row-returning	Matched	0		
 r-cat-1b	r-cat-1b/qd-execute-param-action	Mismatched	1	files	38 $.files[0].length [files]: expected 241664 actual 229376
-r-cat-1b	r-cat-1b/qd-lastupdated-after-change	Mismatched	7	DateCreated	9 $.result.bits [call]: expected "1f4a3e62e4a0e640" actual "5971be7012a2e640"
+r-cat-1b	r-cat-1b/qd-lastupdated-after-change	Mismatched	7	DateCreated	9 $.result.bits [call]: expected "1f4a3e62e4a0e640" actual "f7a821c616a2e640"
 r-cat-1b	r-cat-1b/qd-maxrecords-put	Mismatched	6	MaxRecords	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-members-builtin	Matched	0		
 r-cat-1b	r-cat-1b/qd-openrecordset-on-action	Mismatched	16	OpenRecordset	7 $.excepInfo.scode [call]: expected "0x800A0C93" actual "0x80004001"
@@ -149,18 +149,18 @@ r-cat-1b	r-cat-1b/qd-passthrough-saved-run	Mismatched	16	OpenRecordset	11 $.exce
 r-cat-1b	r-cat-1b/qd-returnsrecords-put	Mismatched	10	ReturnsRecords	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-sql-change-type-tracking	Mismatched	16	Size	18[0].2 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-updatable-by-shape	Mismatched	16	CreateQueryDef	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1b	r-cat-1b/qd-view-append	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "b3894c7bfca0d47bf87edd98c7d753b13b8a6de5333600dedca2a1c7d6b07e5d" actual "c1e7777803fdf21ebeb3faf824e6ee64db07998ed8039d21197a5ab8b4a69528"
+r-cat-1b	r-cat-1b/qd-view-append	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "b3894c7bfca0d47bf87edd98c7d753b13b8a6de5333600dedca2a1c7d6b07e5d" actual "190dfceec1f53d7e2c847ab3b96352d68195a476ee366e423a4e830c1e548e90"
 r-cat-1b	r-cat-1b/qd-view-crosstab	Mismatched	16	Count	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1b	r-cat-1b/qd-view-ddl	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "50476449c412b28dcdf59aaccd77f24ca760f7bced3d8deb1b3b619327ba5d4d" actual "04c5a169485a27bca113842b2ac88eec09090ac8ca76cc5014cd44a47a861df8"
-r-cat-1b	r-cat-1b/qd-view-delete	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "990639ca1412fded070ddf96a8c6080efce43f7ae3fdad5ae53cdf816f1f0d2c" actual "b29c191a4a2ab4cd3364120f2679a0da6b8823adf035f5761b4126c735a7c9b6"
+r-cat-1b	r-cat-1b/qd-view-ddl	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "50476449c412b28dcdf59aaccd77f24ca760f7bced3d8deb1b3b619327ba5d4d" actual "dfadc88fd375b50582fe429b41d8b5bedb976c4a39bf20995344ced6012e3779"
+r-cat-1b	r-cat-1b/qd-view-delete	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "990639ca1412fded070ddf96a8c6080efce43f7ae3fdad5ae53cdf816f1f0d2c" actual "e7a5b9c94d543043bc62ca5fd2d8827c1a41b2460a12a67d9e8eb9601785ac73"
 r-cat-1b	r-cat-1b/qd-view-maketable	Mismatched	16	Count	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-view-parameterized	Mismatched	13	Size	18[0].2 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1b	r-cat-1b/qd-view-passthrough	Mismatched	1	files	51 $.files[0].sha256 [files]: expected "4877cba1901a32a1846eada5c6f8d9394067a6cd7a18e225f92abccb564cce63" actual "f6449836e831535bd6804deb52b1d1fe86fb2c266b331f4d45042959c68cbe47"
+r-cat-1b	r-cat-1b/qd-view-passthrough	Mismatched	1	files	51 $.files[0].sha256 [files]: expected "4877cba1901a32a1846eada5c6f8d9394067a6cd7a18e225f92abccb564cce63" actual "9417450ccf3532c49d4be5ce4926880c7389ad359412f7516a583a7b8946218e"
 r-cat-1b	r-cat-1b/qd-view-select	Mismatched	16	Size	18[0].2 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-cat-1b	r-cat-1b/qd-view-union	Mismatched	16	Count	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-cat-1b	r-cat-1b/qd-view-update	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "4a738e72f1a7718323683b01d4841767b336f08effb3411c6cef7792c01466e7" actual "e902a5b576b999b4f08d0b2070d7f3e4a5e1d3cad2ad83dfdbe3755f59c95ef1"
+r-cat-1b	r-cat-1b/qd-view-update	Mismatched	1	files	44 $.files[0].sha256 [files]: expected "4a738e72f1a7718323683b01d4841767b336f08effb3411c6cef7792c01466e7" actual "ec2d2e79bf909e70e0a9ea1316f0043790932ee58da75270fa460cbe4ab6b4b6"
 r-cat-1b	r-cat-1b/rel-append-over-existing-orphans	Mismatched	1	files	56 $.files[0].length [files]: expected 233472 actual 225280
-r-cat-1b	r-cat-1b/rel-delete-relation	Mismatched	1	files	51 $.files[0].sha256 [files]: expected "c61184ccc727cd253a57b7af38cda66dfb4e1b46620be21a4753dee2ee6d62c1" actual "948ad2b6ef61a9bb2e2a05d9dbd2bb2ca60b303638ad9fc84f9ee3fc11ba6a66"
+r-cat-1b	r-cat-1b/rel-delete-relation	Mismatched	1	files	51 $.files[0].sha256 [files]: expected "c61184ccc727cd253a57b7af38cda66dfb4e1b46620be21a4753dee2ee6d62c1" actual "0fea41010f93e44cbcc7d4ced3671e31c91cac10642973872ca64932abbb90b8"
 r-cat-1b	r-cat-1b/rel-index-ownership	Matched	0		
 r-cat-1b	r-cat-1b/rel-members	Matched	0		
 r-cat-1b	r-cat-1b/rel-msys-rows	Matched	0		
@@ -316,7 +316,7 @@ r-dao-1-err-1	r-dao-1-err-1/create-accdb-base	Mismatched	5	CreateProperty	33 $.i
 r-dao-1-err-1	r-dao-1-err-1/create-mdb-base	Mismatched	5	CreateProperty	33 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-dao-1-err-1	r-dao-1-err-1/create-workspace-route	Mismatched	16	Count	16 $.result.integer [call]: expected "5" actual "6"
 r-dao-1-err-1	r-dao-1-err-1/draft-index-relation	Mismatched	16	CreateIndex	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-dao-1-err-1	r-dao-1-err-1/draft-querydef	Mismatched	1	files	42 $.files[0].sha256 [files]: expected "49b675975b1362ce9e5462222279dacb778a3e37c4b0307cb51c7ffe1f4bf712" actual "ee5c64f99de2b39f493ddfb612e66e8d45daebc16fe2c6702c3c74e2247707cb"
+r-dao-1-err-1	r-dao-1-err-1/draft-querydef	Mismatched	1	files	42 $.files[0].sha256 [files]: expected "49b675975b1362ce9e5462222279dacb778a3e37c4b0307cb51c7ffe1f4bf712" actual "6dde65522e12b114f0f5a497fbcfc00c9e55484f73e8964ec38a7ea5c87fa256"
 r-dao-1-err-1	r-dao-1-err-1/draft-tabledef-field	Mismatched	1	files	61 $.files[0].length [files]: expected 266240 actual 258048
 r-dao-1-err-1	r-dao-1-err-1/err-base-scope	Mismatched	11	OpenRecordset	17 $.excepInfo.scode [call]: expected "0x800A0C06" actual "0x800A0BC3"
 r-dao-1-err-1	r-dao-1-err-1/err-bind-arity-member	Mismatched	13	CreateWorkspace	8 $.invokeHresult [call]: expected "0x80020009" actual "0x8002000F"
@@ -519,12 +519,12 @@ r-fix-cursor-dao	r-fix-cursor-dao/seek-duplicates-null-from-last	Matched	0
 r-fix-cursor-dao	r-fix-cursor-dao/seek-operator-spelling-controls	Matched	0		
 r-fix-cursor-dao	r-fix-cursor-dao/sql-insert-text-into-number-failonerror	Matched	0		
 r-fix-cursor-dao	r-fix-cursor-dao/updatable-members-rw	Mismatched	16	OpenRecordset	56 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/fmt1-accdb-decimal	Mismatched	16	files	18 $.files[0].sha256 [files]: expected "6a8086f446933fe400b00ceaf2e27afabb5f9e9299c1108aeaef6e35373c6328" actual "e7e7da15f64bc376e94d6d9ffb0b2d7c8836f50828594070c750e6c812ce867b"
+r-fix-fmt-sort	r-fix-fmt-sort/fmt1-accdb-decimal	Mismatched	16	files	18 $.files[0].sha256 [files]: expected "6a8086f446933fe400b00ceaf2e27afabb5f9e9299c1108aeaef6e35373c6328" actual "b0a9993d0c27cbe4382bba93f4eea139618aef8627f1b971e34c4b8eb1545b22"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-accdb-properties	Mismatched	16	CreateProperty	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/fmt1-collating-contrast	Mismatched	16	files	26 $.files[0].sha256 [files]: expected "42b874c75f24a6598d02f416ba123585c95cfa7f7718a67f81a9f4f10743e53b" actual "3b2b21ba7367a25a0adbc33f32381f2cc936b880844d7ea2823cff95640fe110"
+r-fix-fmt-sort	r-fix-fmt-sort/fmt1-collating-contrast	Mismatched	16	files	26 $.files[0].sha256 [files]: expected "42b874c75f24a6598d02f416ba123585c95cfa7f7718a67f81a9f4f10743e53b" actual "d9bd99eb0e6cd584a6324d76ad613daacf30e4c020f14ac17d8246d00189ba6f"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-bigint	Mismatched	16	Execute	19 $.excepInfo.scode [call]: expected "0x800A0BB9" actual "0x80004001"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-datetime2	Mismatched	16	Execute	19 $.excepInfo.scode [call]: expected "0x800A0BB9" actual "0x80004001"
-r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-decimal	Mismatched	16	files	18 $.files[0].sha256 [files]: expected "c6710f0f6a5728c7ce8e26184007ce0a53495d58f9c04a2226b39923691e1afa" actual "bfe6a0ef652afebe3c1e47ee9cab0cf52eb89ec955f279bc5f160a8b4cd227e2"
+r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-decimal	Mismatched	16	files	18 $.files[0].sha256 [files]: expected "c6710f0f6a5728c7ce8e26184007ce0a53495d58f9c04a2226b39923691e1afa" actual "09da30bb74286cc52ff2effa9ce7a1a9443c2d2589bb6fabfa78ddf37ed99cc7"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt1-mdb-properties	Mismatched	16	CreateProperty	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2-fx-fixture	Mismatched	16	Execute	154 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2-scalar-admission-date-range	Matched	0		
@@ -548,29 +548,29 @@ r-fix-fmt-sort	r-fix-fmt-sort/fmt2b-ix-dup-ladder	Matched	0
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2b-ix-text-ladder	Mismatched	9	files	29 $.files[0].sha256 [files]: expected "f8686d9a599bf97551dd1f8ed2e2c033ca6e8c33f7c81decd56121cba78cfecb" actual "8e2afb3b81b06ed606afad3ac192c6fd635e4d57c99cf4e7ef5deb25fd50b168"
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2b-kill-after-close-fixed-update	CandidateIncomplete	0	(incomplete)	candidate attempt Uncertain
 r-fix-fmt-sort	r-fix-fmt-sort/fmt2b-settle-fixed-update	Mismatched	16	OpenRecordset	5 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-comp-accdb	Mismatched	16	files	14 $.files[0].sha256 [files]: expected "85912d08960c71ee4cfb044b6d40b8d980627e80034dcc492e2f5bfecf1c7e1f" actual "11210fcf37b5f1288d6ca74b0b083ac15364e21de853fbfce9f12b32baa5961d"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-comp-mdb	Mismatched	16	files	14 $.files[0].sha256 [files]: expected "cb8ae54fddc1e4623208ebd9c7e4b63e7593a6c4b908c801f83097c13171788b" actual "a43f4f4370a32076446757d7b48cb18667760707716dfe487a16d494f4e6e838"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-comp-accdb	Mismatched	16	files	14 $.files[0].sha256 [files]: expected "85912d08960c71ee4cfb044b6d40b8d980627e80034dcc492e2f5bfecf1c7e1f" actual "27fabac6f145f0f0aad72caa158a49ba20926bd7d46d9f9bcb29b360def5af02"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-comp-mdb	Mismatched	16	files	14 $.files[0].sha256 [files]: expected "cb8ae54fddc1e4623208ebd9c7e4b63e7593a6c4b908c801f83097c13171788b" actual "27cbc202183dc7e980df0bb13a511b058f554ed08f4bf27271a60c1761027539"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-fr-accdb	Mismatched	16	Execute	384 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-fr-mdb	Mismatched	16	Execute	384 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-np-accdb	Mismatched	16	Execute	79 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-np-mdb	Mismatched	16	Execute	79 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-nums-decimal-accdb	Mismatched	16	Execute	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-nums-decimal-mdb	Mismatched	16	Execute	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-stages-accdb	Mismatched	16	files	15 $.files[0].sha256 [files]: expected "420028bcec78f344e4192b90c9d2ce7e6bf60203442ea699df4b713d03c2ad87" actual "d363472831a0e1f46c582c3aa71aa8f4f3eb84c282385d439a392fb0d2c0eca8"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-stages-mdb	Mismatched	16	files	15 $.files[0].sha256 [files]: expected "bf5bfcbacfae462335b96a6c748d4d40d7a78c676d018e763a71e1b564f287ac" actual "c7fc04341ddf0af5d021b7b288fc24237cad7788bf2674117e12325443e259e0"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-accdb	Mismatched	2	files	1012 $.files[0].sha256 [files]: expected "beac4297340a0859a83cff46978875ef385032d05c889d831c6e70ce549d9523" actual "a1e5fee027ec9df2f2e6a9bc05f3452179d3f4ef44865fc3b364d12e56f79dc9"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-mdb	Mismatched	2	files	1012 $.files[0].sha256 [files]: expected "a01d9e13bac0bcaee5b10f0e0ba73f4a8378d4615ca8b7fa16e0d6d6bd9500ae" actual "6a0ed2a0908c35945136a58ffee6254e7acc9d1810859bcd9c6188a1845d51ce"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-stages-accdb	Mismatched	16	files	15 $.files[0].sha256 [files]: expected "420028bcec78f344e4192b90c9d2ce7e6bf60203442ea699df4b713d03c2ad87" actual "b862ced4423b2793404fbcbcf46597b45f91b3ea623dc6f32822db2226731568"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-stages-mdb	Mismatched	16	files	15 $.files[0].sha256 [files]: expected "bf5bfcbacfae462335b96a6c748d4d40d7a78c676d018e763a71e1b564f287ac" actual "3f9c4dc37b414112e5ddeaf21058367ec6783d4b1c0e59fd8b98c1517fc635f5"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-accdb	Mismatched	2	files	1012 $.files[0].sha256 [files]: expected "beac4297340a0859a83cff46978875ef385032d05c889d831c6e70ce549d9523" actual "1af4e8e6c2cbe34e40a81c6afb5248fd2dfc6d29fb705287ffa7ae464aeb5023"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-corpus-mdb	Mismatched	2	files	1012 $.files[0].sha256 [files]: expected "a01d9e13bac0bcaee5b10f0e0ba73f4a8378d4615ca8b7fa16e0d6d6bd9500ae" actual "14136b02983f74eb8124e94921fe01cb08f2b76e8e96d109deef944c2a7fac85"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-lu-accdb	Mismatched	16	Execute	66 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3-unique-lu-mdb	Mismatched	16	Execute	66 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-dao-index-flags	Mismatched	16	files	9 $.files[0].sha256 [files]: expected "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8" actual "200dee0362e91369f0546a5a0f9dbd089a90f0bc9b2da291aa5f6c05a001ae9d"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-existing-nulls-isolated	Mismatched	16	files	117 $.files[0].sha256 [files]: expected "7548550af90223557e2c132755914f5b2ddc03e6ea83220547e79109bab2d75d" actual "c614f239c8a8574a187cace4bb6c5b37e29f95f9962168ff1ecb8e55e6ab3556"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-a	Mismatched	5	files	118 $.files[0].sha256 [files]: expected "65999e0ee6e23a15bd84f72ab2d053dd3c7173fdf64b07ed306443d499769330" actual "073e65252e3b794e56e97ac044e8ff15eb421b37b5ab8ae176590021212fd368"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-b	Mismatched	5	files	118 $.files[0].sha256 [files]: expected "15f39e2d62ff5278b11c5ee784f69bbd93dbad51db06025ad0b28086c64e3317" actual "f94936a728ff6cf521efebc785ecf3e914ca0cc415551de529bfe8b29484b433"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-drop-rebuild	Mismatched	16	files	118 $.files[0].sha256 [files]: expected "e124ad86a16d90a0b2f7b7a2bd86e3f197f3176dbbd4e4a5de83c1c48aecbb0b" actual "ee7f304f554e81267a475566ecdcc2a24945a34c2b7a10557072287ea21d0840"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-failed-unique	Mismatched	16	files	62 $.files[0].sha256 [files]: expected "4cf13adf477b543f95d341325d4c6af924ca5559d7f19234abb8403a60b3cfe7" actual "a3b6a53e333c8142455fbf8814b023ef9c748d1d530d9b30fa3a4e68c28b56b8"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-memo-index-ddl	Mismatched	16	files	74 $.files[0].sha256 [files]: expected "1eb24dbaa074c131aeba77f22bff0efecd19560f0b9cc7f7b1029522f21b9780" actual "945ce0f08f26346eeeb0d5a33358647368eadbb3436b2c3ea757a9f2a36390fc"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-dao-index-flags	Mismatched	16	files	9 $.files[0].sha256 [files]: expected "486fbdc4a022f0877f37bf8af89f4606f918e3f24a17c6e5fcb97d79847ebfb8" actual "258213feb4c39637c4866cb1deb8d5ebb38b64e672bb1dbcf869d1e35426bd81"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-existing-nulls-isolated	Mismatched	16	files	117 $.files[0].sha256 [files]: expected "7548550af90223557e2c132755914f5b2ddc03e6ea83220547e79109bab2d75d" actual "e247bc6807110aabc8d1b27ede20221198cb9225231c752d958681a52bebed3d"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-a	Mismatched	5	files	118 $.files[0].sha256 [files]: expected "65999e0ee6e23a15bd84f72ab2d053dd3c7173fdf64b07ed306443d499769330" actual "e9f5c69ea57b8b9cda15517531c4495ae79f8a850e5419ffce245b6ccd826265"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-build-order-b	Mismatched	5	files	118 $.files[0].sha256 [files]: expected "15f39e2d62ff5278b11c5ee784f69bbd93dbad51db06025ad0b28086c64e3317" actual "979f187d657e4d99337a0bac005b91434d4fe7d6c4f88a62c917e4b286a894be"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-drop-rebuild	Mismatched	16	files	118 $.files[0].sha256 [files]: expected "e124ad86a16d90a0b2f7b7a2bd86e3f197f3176dbbd4e4a5de83c1c48aecbb0b" actual "0cb6795c77b8637d578b6fd6f6ee14f5baacb3954e4ee635134df245a4f966dc"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-image-failed-unique	Mismatched	16	files	62 $.files[0].sha256 [files]: expected "4cf13adf477b543f95d341325d4c6af924ca5559d7f19234abb8403a60b3cfe7" actual "676f132cd4d49299177f5f9829aef36d14098730be8f74e40cb9ff938e301306"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-memo-index-ddl	Mismatched	16	files	74 $.files[0].sha256 [files]: expected "1eb24dbaa074c131aeba77f22bff0efecd19560f0b9cc7f7b1029522f21b9780" actual "092c330c6cf79b985b939c508d633dab02df6dd00137750c4691cc78d0edaf40"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3b-nulls-refusals	Mismatched	16	DistinctCount	98[1].6 $.result.integer [call]: expected "18" actual "8"
-r-fix-fmt-sort	r-fix-fmt-sort/sort3b-unique-refusals-lg	Mismatched	2	files	484 $.files[0].sha256 [files]: expected "b66a32f9b3c559f106a283e5f78b6fa8581a60adb8b339f7c195fa4c6a4377a0" actual "c8aca493504ad299b2ab0d488ea2df6fca06dbafbadc157177048cc37fd053de"
+r-fix-fmt-sort	r-fix-fmt-sort/sort3b-unique-refusals-lg	Mismatched	2	files	484 $.files[0].sha256 [files]: expected "b66a32f9b3c559f106a283e5f78b6fa8581a60adb8b339f7c195fa4c6a4377a0" actual "190b8d1ed902392b15f3601ea1797f4db4b3f98a1e1139d95de816b915fc31e1"
 r-fix-fmt-sort	r-fix-fmt-sort/sort3b-unique-refusals-lu	Mismatched	16	Execute	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-wire-ado	r-fix-wire-ado/ado-bulk-elements	Matched	0		
 r-fix-wire-ado	r-fix-wire-ado/ado-command-parameters-fresh	Mismatched	16	Value	23 $.excepInfo.scode [call]: expected "0x8002000A" actual "0x80004001"
@@ -619,7 +619,7 @@ r-fix-wire-ado	r-fix-wire-ado/opt-opendatabase-options-missing-readonly-true	Mat
 r-fix-wire-ado	r-fix-wire-ado/opt-opendatabase-options-readonly-missing	Matched	0		
 r-fix-wire-ado	r-fix-wire-ado/param-decimal-scale-fresh	Mismatched	16	CreateParameter	17 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-wire-ado	r-fix-wire-ado/param-select-text-fresh	Mismatched	16	Value	8 $.result.vt [call]: expected 1 actual 8
-r-fix-wire-ado	r-fix-wire-ado/persist-save-two-parameter	Mismatched	16	Save	17 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-fix-wire-ado	r-fix-wire-ado/persist-save-two-parameter	Mismatched	5	Save	38 $.excepInfo.source [call]: expected (absent) actual {"vt":8,"vtName":"VT_BSTR","bytes":"","byteLength":0,"text":""}
 r-fix-wire-ado	r-fix-wire-ado/str-memo-fieldsize	Mismatched	16	FindFirst	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-fix-wire-ado	r-fix-wire-ado/str-schema-change-isolated	Mismatched	16	Execute	8 $.excepInfo.scode [call]: expected "0x800A0C8B" actual "0x80004001"
 r-fix-wire-ado	r-fix-wire-ado/txn-client-cache-rollback-distinct-rows	Mismatched	16	EOF	92[1].check $.result.integer [call]: expected "-1" actual "0"
@@ -632,7 +632,7 @@ r-q-ado-misc	r-q-ado-misc/async-open-connect-polled	Mismatched	16	Open	14 $.invo
 r-q-ado-misc	r-q-ado-misc/batch-conflict-last	Mismatched	2	Value	138[2].1[1].0 $.result.bytes [call]: expected "650078007400650072006e0061006c003300" actual "730074006100670065003300"
 r-q-ado-misc	r-q-ado-misc/batch-scope-current	Mismatched	3	Value	57[1].1[1].0 $.result.bytes [call]: expected "6200650074006100" actual "6300750072003200"
 r-q-ado-misc	r-q-ado-misc/batch-scope-pending-deletes	Mismatched	2	Value	103[5].1[2].0 $.result.bytes [call]: expected "670061006d006d0061003200" actual "76006900610063006c006f006e006500"
-r-q-ado-misc	r-q-ado-misc/create-main	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "8ce44b486c3496e0903cdeae890bbe83fc1709ca82f353ca7c0175c34a91fbea; at page 0 offset 0xE00 (outside ACE clock fields): 1201000100010001" actual "681713065216a56a34d3e34dc59552c50520f537d07a00f9cf7fcba3a…
+r-q-ado-misc	r-q-ado-misc/create-main	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "8ce44b486c3496e0903cdeae890bbe83fc1709ca82f353ca7c0175c34a91fbea; at page 0 offset 0xE00 (outside ACE clock fields): 1201000100010001" actual "3b9785fcb83d6e20b2dd155c441843149b19e4900ce5ff4fc5fa8898a…
 r-q-ado-misc	r-q-ado-misc/cursor-cachesize-window	Matched	0		
 r-q-ado-misc	r-q-ado-misc/cursor-external-visibility	Mismatched	16	Value	70[1].1[3].0 $.result.integer [call]: expected "20" actual "999"
 r-q-ado-misc	r-q-ado-misc/cx-history-appendonly-persist	Mismatched	5	Value	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -650,18 +650,18 @@ r-q-ado-misc	r-q-ado-misc/param-markers-names	Mismatched	16	Execute	23 $.invokeH
 r-q-ado-misc	r-q-ado-misc/param-saved-declared-order	Mismatched	16	Count	17 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-ado-misc	r-q-ado-misc/param-saved-names-swapped	Mismatched	7	Execute	23 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-ado-misc	r-q-ado-misc/param-saved-wrong-names	Mismatched	16	Execute	23 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-ado-misc	r-q-ado-misc/props-conn-inventory	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "4f3d991522bd819c7605232cd7e84a149c5df5d6718d442f4de1be91020e41c5" actual "ff75a46f27c8e9d362244a3b0cf38cbb2ea430d1d43d7c7c14665cfae94a3ca7"
+r-q-ado-misc	r-q-ado-misc/props-conn-inventory	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "4f3d991522bd819c7605232cd7e84a149c5df5d6718d442f4de1be91020e41c5" actual "82a1d50cd5a4d554bd2cf52531a6561aaae3853c66e5cf1f62b157070d2f232f"
 r-q-ado-misc	r-q-ado-misc/props-failed-open	Matched	0		
 r-q-ado-misc	r-q-ado-misc/props-lookup-refresh	Matched	0		
-r-q-ado-misc	r-q-ado-misc/rebuild-repair-variants	Mismatched	16	RepairDatabase	6 $.excepInfo.scode [call]: expected "0x800A0CB3" actual "0x80004001"
+r-q-ado-misc	r-q-ado-misc/rebuild-repair-variants	Mismatched	5	OpenDatabase	21 $.excepInfo.scode [call]: expected "0x800A0D0F" actual "0x80004001"
 r-q-ado-misc	r-q-ado-misc/record-open-forms	Mismatched	3	Open	16 $.excepInfo.scode [call]: expected "0x800A0E7D" actual "0x80004001"
 r-q-ado-misc	r-q-ado-misc/results-nextrecordset-requery	Mismatched	2	Requery	25 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-ado-misc	r-q-ado-misc/results-timeout-values	Mismatched	16	Execute	71 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-ado-misc	r-q-ado-misc/resync-affect-matrix	Mismatched	1	files	104 $.files[0].sha256 [files]: expected "7d1c6c2d1c19c3799256526cf83c1f429c3c22e535d9e05ef855113525777a5a" actual "8eae884499f29056baa15654a7ece1e1e26885c4b7040445dc46fac7579c2bc2"
 r-q-ado-misc	r-q-ado-misc/resync-client-external	Mismatched	1	files	111 $.files[0].sha256 [files]: expected "66245159a8ea0b077e4177411ddbad55f63e2a3aa1a76df5015d82b3f81ddd6f" actual "93ab0227f3d20a4168a88d3ce50f5dc43f94d56ee2102df775464074e63acc53"
 r-q-ado-misc	r-q-ado-misc/schema-ids-no-restrictions	Mismatched	16	OpenSchema	12 $.excepInfo.scode [call]: expected "0x800A0CB3" actual "0x80004001"
-r-q-ado-misc	r-q-ado-misc/stream-file-ops	Mismatched	16	Open	5 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-ado-misc	r-q-ado-misc/stream-text-ops	Mismatched	16	Open	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q-ado-misc	r-q-ado-misc/stream-file-ops	Matched	0		
+r-q-ado-misc	r-q-ado-misc/stream-text-ops	Matched	0		
 r-q-ado-misc	r-q-ado-misc/values-witness-client-batch	Mismatched	2	Value	137[0].1[1].0 $.result.integer [call]: expected "120" actual "130"
 r-q-ado-misc	r-q-ado-misc/values-witness-criteria	Mismatched	1	files	190 $.files[0].sha256 [files]: expected "91da3204348313c6486264967d21222777411ec5846f70b81b467ce71dc4b3ef" actual "aa7f4c1fc58b4424ed2dcccee21e29f6f6f12668d981645fa932006b81a42725"
 r-q-ado-misc	r-q-ado-misc/values-witness-keyset	Mismatched	2	Value	128[0].1[1].0 $.result.integer [call]: expected "110" actual "130"
@@ -671,7 +671,7 @@ r-q-cursor-dao	r-q-cursor-dao/boot-systemdb-properties-first	Matched	0
 r-q-cursor-dao	r-q-cursor-dao/bulk-getrows-deletion-discovery	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/bulk-getrows-large-count	Mismatched	4	AbsolutePosition	15 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/create-main	Mismatched	2	Execute	51 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-cursor-dao	r-q-cursor-dao/create-membership-refresh	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58" actual "f7d91007e0a75f6f5ec59158c01ca9c743863ed8bd4225d1d5966db2084e5339"
+r-q-cursor-dao	r-q-cursor-dao/create-membership-refresh	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "90b478e2e51b0482f8d8533e4a5094ff6833aeeff388787d9ea951e224b42b58" actual "faf98ebbb62d507e3ee18660fd77d55860cc6bee5120aead960cdf5dbebe11dd"
 r-q-cursor-dao	r-q-cursor-dao/draft-correct-after-failure	Mismatched	16	Append	37 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/draft-setters-after-attach-txn	Mismatched	16	Name	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/edit-addnew-counter-rollback-reopen	Matched	0		
@@ -701,7 +701,7 @@ r-q-cursor-dao	r-q-cursor-dao/life-clone-population-order	Mismatched	16	Clone	11
 r-q-cursor-dao	r-q-cursor-dao/life-release-without-close-database	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/life-release-without-close-database-and-engine	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/meta-document-permissions-repeat	Matched	0		
-r-q-cursor-dao	r-q-cursor-dao/meta-held-document-recreate	Mismatched	15	DateCreated	16 $.result.bits [call]: expected "621139c9efa0e640" actual "be21c97312a2e640"
+r-q-cursor-dao	r-q-cursor-dao/meta-held-document-recreate	Mismatched	15	DateCreated	16 $.result.bits [call]: expected "621139c9efa0e640" actual "5be9f0ca16a2e640"
 r-q-cursor-dao	r-q-cursor-dao/pop-frontier-dynaset-big	Mismatched	6	AbsolutePosition	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/pop-frontier-snapshot-big	Mismatched	6	AbsolutePosition	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/pop-snapshot-change-after-first-move	Matched	0		
@@ -710,7 +710,7 @@ r-q-cursor-dao	r-q-cursor-dao/pop-snapshot-change-after-open	Matched	0
 r-q-cursor-dao	r-q-cursor-dao/prov-heap-second-row-edit	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/prov-missing-key-second-row-edit	Mismatched	16	Delete	24 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-cursor-dao	r-q-cursor-dao/prov-readonly-option-forms	Mismatched	16	OpenRecordset	22 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-cursor-dao	r-q-cursor-dao/query-param-remove-reintroduce	Mismatched	1	files	50 $.files[0].sha256 [files]: expected "85bdfa188f25bce81b15f3e2228981838623325af8631e7631c1808ab5998673" actual "d6fabe5a9b95cd30948466b1529b4d21cdebe4080ac3460cb22e93b775a53da7"
+r-q-cursor-dao	r-q-cursor-dao/query-param-remove-reintroduce	Mismatched	1	files	50 $.files[0].sha256 [files]: expected "85bdfa188f25bce81b15f3e2228981838623325af8631e7631c1808ab5998673" actual "99b38dde769d07de9c975ef1359d93ebae9fd5ebfe3d83fffe31e314ad93000f"
 r-q-cursor-dao	r-q-cursor-dao/seek-long-key-collision	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/seek-omission-positions	Matched	0		
 r-q-cursor-dao	r-q-cursor-dao/seek-short-keys-from-first	Matched	0		
@@ -723,8 +723,8 @@ r-q-fmt-sort	r-q-fmt-sort/calc-dependency-accdb	Mismatched	6	Expression	15 $.inv
 r-q-fmt-sort	r-q-fmt-sort/calc-types-accdb	Mismatched	16	Expression	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/controls-accdb	Mismatched	16	Execute	147 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/dao-index-primary-accdb	Mismatched	16	CreateIndex	11 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-fmt-sort	r-q-fmt-sort/dc-rules-accdb	Mismatched	16	CompactDatabase	237 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-fmt-sort	r-q-fmt-sort/dc-rules-mdb	Mismatched	16	CompactDatabase	237 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q-fmt-sort	r-q-fmt-sort/dc-rules-accdb	Mismatched	2	files	238 $.files[0].sha256 [files]: expected "62b8179baa2e7cc0470ccbd7890b2be24bc647e1ad4857da90b520aff09e4f4f" actual "e4cdb5599ff31a1cef4706337eb0ef5e0d5be6504a318251c6bc67eef1046771"
+r-q-fmt-sort	r-q-fmt-sort/dc-rules-mdb	Mismatched	2	files	238 $.files[0].sha256 [files]: expected "c092cc0fe75c44a71dbc3dfc75b240221127c16b49831cf6b95c58720bf5f000" actual "dc2036ab63b6a629e02540748a95eff5f6bf0100a6f136407335ab0a09f4a702"
 r-q-fmt-sort	r-q-fmt-sort/decimal-grid-accdb	Mismatched	16	Execute	23 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-q-fmt-sort	r-q-fmt-sort/decimal-grid-mdb	Mismatched	16	Execute	23 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-q-fmt-sort	r-q-fmt-sort/dt2-ticks-accdb	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -732,8 +732,8 @@ r-q-fmt-sort	r-q-fmt-sort/fail-hash-fk	Mismatched	4	files	13 $.files[0].sha256 [
 r-q-fmt-sort	r-q-fmt-sort/fail-hash-unique	Matched	0		
 r-q-fmt-sort	r-q-fmt-sort/fail-hash-validation	Matched	0		
 r-q-fmt-sort	r-q-fmt-sort/fx-fail-accdb	Matched	0		
-r-q-fmt-sort	r-q-fmt-sort/fx-noop-accdb	Mismatched	2	files	42 $.files[0].sha256 [files]: expected "665158af3a47dd7e8823bc0a4e62b97e6550e1d71859a9736caecfac5486e7aa; at page 0 offset 0xE00 (outside ACE clock fields): 2601000100010001" actual "732d6c9d386e5116e3db4de50b21983c2aaaa02cb91edc3576bed484a…
-r-q-fmt-sort	r-q-fmt-sort/fx-noop-mdb	Mismatched	2	files	42 $.files[0].sha256 [files]: expected "f5df8af24ac3e4b5cb09643b72a918304c297329a698cd45aa422980c0ca3373; at page 0 offset 0xE00 (outside ACE clock fields): 2601000100010001" actual "0978ac70c9d566788d097288000b039548efa894abb939e5d0a6eb557…
+r-q-fmt-sort	r-q-fmt-sort/fx-noop-accdb	Mismatched	2	files	42 $.files[0].sha256 [files]: expected "665158af3a47dd7e8823bc0a4e62b97e6550e1d71859a9736caecfac5486e7aa; at page 0 offset 0xE00 (outside ACE clock fields): 2601000100010001" actual "3a69cc67919a9df47669bf73c030f93ba59810c09a99db728ff3a5cad…
+r-q-fmt-sort	r-q-fmt-sort/fx-noop-mdb	Mismatched	2	files	42 $.files[0].sha256 [files]: expected "f5df8af24ac3e4b5cb09643b72a918304c297329a698cd45aa422980c0ca3373; at page 0 offset 0xE00 (outside ACE clock fields): 2601000100010001" actual "c1c5e371295cc315cdc51e97159abe14424844361cd1a7c01e4d38512…
 r-q-fmt-sort	r-q-fmt-sort/guid-order-accdb	Mismatched	16	OpenRecordset	128 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/index-enum-order-accdb	Mismatched	16	Execute	98 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/len-series-a-accdb	Mismatched	16	AddNew	138 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -754,11 +754,11 @@ r-q-fmt-sort	r-q-fmt-sort/query-props-accdb	Mismatched	16	CreateProperty	16 $.in
 r-q-fmt-sort	r-q-fmt-sort/rename-variants-accdb	Mismatched	16	Execute	11 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/rollback-size-accdb	Mismatched	9	files	23 $.files[0].sha256 [files]: expected "19ed9789d841169c6e90ac440e80e6bfb9421d8cf17ec22bd4ee92bca6bc7279" actual "7fdc5ee1cb0058486a5bb3bb56de5deebd126e6fc550eab37d1d8dcc4c0868d0"
 r-q-fmt-sort	r-q-fmt-sort/scalar-bounds-accdb	Mismatched	16	Execute	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-fmt-sort	r-q-fmt-sort/scalar-bounds-mdb	Mismatched	1	files	359 $.files[0].sha256 [files]: expected "01672e80724fb1270d8b9df5987e7cffbb408e4c25e14f4db3ec5a8db4c8e7ed" actual "1c76528c91433b52ff66a38fa12566956b37bf359ac596f2028c144732df5caa"
-r-q-fmt-sort	r-q-fmt-sort/text-units-accdb	Mismatched	1	files	82 $.files[0].sha256 [files]: expected "b1d3b89462ed56593a0cb545d4c42300dbd9bf98d16052bbc0490275deaa6dfe" actual "a07a092f355a2d3e24a7a0539a322f5bad2c07fd95c02be5db2dc02c42114fbf"
-r-q-fmt-sort	r-q-fmt-sort/text-units-mdb	Mismatched	1	files	82 $.files[0].sha256 [files]: expected "3e75fdf46163b9db642077ab105b6c115bc3cd3740a7f4e6f534dfbde94a2e15" actual "aa73336d4ca29f72ba53c213b17dc0810cce3836f53a3bcb76dc09f3cf4ef052"
-r-q-fmt-sort	r-q-fmt-sort/tie-order-accdb	Mismatched	1	files	200 $.files[0].sha256 [files]: expected "b3acebbaf87f44a39f8a0f97c5966bb220d3efc7bd36b76d75c96c994c449190" actual "08592bd28613c3d50b52122398cb614adc0c144189f718f3d3c061e855c97b75"
-r-q-fmt-sort	r-q-fmt-sort/tie-order-mdb	Mismatched	1	files	200 $.files[0].sha256 [files]: expected "2b8cf9e14bb462eae353a332a8de114217497fa4acdd1445927893803d1566b2" actual "ea719f1e342941a8dee3e54a88a96bcf05781d028210ee88035d92efc9d6ed7a"
+r-q-fmt-sort	r-q-fmt-sort/scalar-bounds-mdb	Mismatched	1	files	359 $.files[0].sha256 [files]: expected "01672e80724fb1270d8b9df5987e7cffbb408e4c25e14f4db3ec5a8db4c8e7ed" actual "638a950d03b714ffa1b0aa1535ddb8460ded053eb293e943a707ac3865e36dd9"
+r-q-fmt-sort	r-q-fmt-sort/text-units-accdb	Mismatched	1	files	82 $.files[0].sha256 [files]: expected "b1d3b89462ed56593a0cb545d4c42300dbd9bf98d16052bbc0490275deaa6dfe" actual "cf544f3e962ca56fb54898e8f1f40e11425d2a8cdef8abcaa3b6d4818b158c44"
+r-q-fmt-sort	r-q-fmt-sort/text-units-mdb	Mismatched	1	files	82 $.files[0].sha256 [files]: expected "3e75fdf46163b9db642077ab105b6c115bc3cd3740a7f4e6f534dfbde94a2e15" actual "f200db691ce18146cdfa965530fba32ed9500fa775aa4b9ff1249f284140254e"
+r-q-fmt-sort	r-q-fmt-sort/tie-order-accdb	Mismatched	1	files	200 $.files[0].sha256 [files]: expected "b3acebbaf87f44a39f8a0f97c5966bb220d3efc7bd36b76d75c96c994c449190" actual "eb23e3fc9d0b84ba924e935d7fbbf89ccb158bd94b5eb8a20ef0ec785a2bbc46"
+r-q-fmt-sort	r-q-fmt-sort/tie-order-mdb	Mismatched	1	files	200 $.files[0].sha256 [files]: expected "2b8cf9e14bb462eae353a332a8de114217497fa4acdd1445927893803d1566b2" actual "6d21c36c31737b3da752d013b924669227b9e0805e2eb9ce2acfb70329fec00c"
 r-q-fmt-sort	r-q-fmt-sort/v128-corpus-accdb	Mismatched	16	Execute	183 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/v256-corpus-accdb	Mismatched	16	CreateDatabase	3 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-fmt-sort	r-q-fmt-sort/v64-corpus-mdb	Mismatched	16	Execute	183 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -766,38 +766,38 @@ r-q-fmt-sort	r-q-fmt-sort/wide-accdb	Mismatched	16	Execute	7 $.invokeHresult [ca
 r-q-wire	r-q-wire/ado-connectionless-recordset	Mismatched	16	Append	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-wire	r-q-wire/dec-ddl-precision-limits	Mismatched	16	Execute	23 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-q-wire	r-q-wire/dec-scale-endpoints	Mismatched	16	Execute	25 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-wire	r-q-wire/feff-accdb-ado-put	Mismatched	1	files	191 $.files[0].sha256 [files]: expected "b41d592cf83141286a3297fa596455f3e128d7f0c45d8a0bc960ba5c83910640" actual "76a8d2838d80ded3ecbc3f0d590a43bc6c1a50e633cb65f2374424f028ea7a70"
-r-q-wire	r-q-wire/feff-accdb-ado-sql	Mismatched	1	files	53 $.files[0].sha256 [files]: expected "b613182ec8c67f26330bdc22756b0884b6d8cf68b597840c802f499513b31b92" actual "bbf773c524ffaf864c494f62bd197b89d9acd00da18c444129cc6635bbfcec96"
-r-q-wire	r-q-wire/feff-accdb-chrw-expr	Mismatched	1	files	40 $.files[0].sha256 [files]: expected "1975c34ff8b4a101c75622b9510043ef8b2ed1bf85bb0f731ab652ef6eeae4cc" actual "6acd50416c270b9fb2ff064a6f40a2ffd8ec8ff05aa8b7b73fc89f04ef77bdea"
+r-q-wire	r-q-wire/feff-accdb-ado-put	Mismatched	1	files	191 $.files[0].sha256 [files]: expected "b41d592cf83141286a3297fa596455f3e128d7f0c45d8a0bc960ba5c83910640" actual "0c58cc3df8f35cc1bbc0270a2bdd327891185974871edf7cd10c6fd8c253d915"
+r-q-wire	r-q-wire/feff-accdb-ado-sql	Mismatched	1	files	53 $.files[0].sha256 [files]: expected "b613182ec8c67f26330bdc22756b0884b6d8cf68b597840c802f499513b31b92" actual "5a5e663bf5e61df3153abda2b6a7f9dc8ec7ef2ad77d927615a3538d306d608f"
+r-q-wire	r-q-wire/feff-accdb-chrw-expr	Mismatched	1	files	40 $.files[0].sha256 [files]: expected "1975c34ff8b4a101c75622b9510043ef8b2ed1bf85bb0f731ab652ef6eeae4cc" actual "be7e07a528239b5c6641c5e22f9ba39d0d1ee94197f7f8fcf5c370db0a81f5f7"
 r-q-wire	r-q-wire/feff-accdb-compression-and-properties	Mismatched	5	Value	48[22].1 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q-wire	r-q-wire/feff-accdb-dao-put	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "f4736f6aaef5064b23df7de7f6414d15753fbcb3b48f0630fba0d611f5d80189" actual "ad09c7862160c16afddd7e9f1c64edced15e3738ab438a3f0442b514e2b781f4"
-r-q-wire	r-q-wire/feff-accdb-dao-put-refetch	Mismatched	1	files	185 $.files[0].sha256 [files]: expected "5c6bf159c03bfa0884cbc55a0f0892a17c3cd6a9113a506d6ace3003f90d1960" actual "e771cd457d3e561f79b45a5abbfd455b4af2ee4dc08f2b7e988c3ce85b9e5d7c"
-r-q-wire	r-q-wire/feff-accdb-param	Mismatched	1	files	67 $.files[0].sha256 [files]: expected "c3c3ee2d4ee195fccb6be6087ec153dc86e3f1654e32f12a5ba9e45fd7138349" actual "291d44009efe05411add1ed868de7ed675645eadb898e49d55f5dc4fd3234b7e"
-r-q-wire	r-q-wire/feff-accdb-sql-literal	Mismatched	1	files	46 $.files[0].sha256 [files]: expected "2c1ad5a2db4cb61cc7b9de562036056767b89ecdfb55ca9c2e966155782a8252" actual "a7c92f384784d7515be58b6abf4c465202d5e19ce4ac9ce16b806fd7bb3ba780"
-r-q-wire	r-q-wire/feff-mdb-dao-put	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "23485cce2a70cc584141d08b126f48a42a874cb8293895f720a09c4afb569015" actual "35c37c0324d0d34e2c9c5589d0f17744a4b51c6fc4275ca03425c3079c74f840"
+r-q-wire	r-q-wire/feff-accdb-dao-put	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "f4736f6aaef5064b23df7de7f6414d15753fbcb3b48f0630fba0d611f5d80189" actual "0d02133656d35464f87876d5c2c21f7bb1986ebfc093964a217c59a959855c97"
+r-q-wire	r-q-wire/feff-accdb-dao-put-refetch	Mismatched	1	files	185 $.files[0].sha256 [files]: expected "5c6bf159c03bfa0884cbc55a0f0892a17c3cd6a9113a506d6ace3003f90d1960" actual "09f9eaaa08e7750ee35f24a395f4637dfd1bf184866654d93baff01415fb2604"
+r-q-wire	r-q-wire/feff-accdb-param	Mismatched	1	files	67 $.files[0].sha256 [files]: expected "c3c3ee2d4ee195fccb6be6087ec153dc86e3f1654e32f12a5ba9e45fd7138349" actual "6e378a5ae6617f2b129f46afbb52cce6c91dc1aa4852f08048717790e983c19e"
+r-q-wire	r-q-wire/feff-accdb-sql-literal	Mismatched	1	files	46 $.files[0].sha256 [files]: expected "2c1ad5a2db4cb61cc7b9de562036056767b89ecdfb55ca9c2e966155782a8252" actual "00867b18b4c7a759c1d415bcf843547e00e4c25b66941f887c5cae406997276a"
+r-q-wire	r-q-wire/feff-mdb-dao-put	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "23485cce2a70cc584141d08b126f48a42a874cb8293895f720a09c4afb569015" actual "e712330bebe6cbcf9e06dc713bb60fffc9d60c93043f9fd478850044666e715e"
 r-q-wire	r-q-wire/ident-ado-lazy-load	Matched	0		
-r-q-wire	r-q-wire/int-sql-literal-byte	Mismatched	1	files	29 $.files[0].sha256 [files]: expected "c1617a75c7dc288bc5e05c1932227911fc0a5d56495c6e8fe6d19b257afa69ec" actual "2f32a9d6fdb299faa83abb295a96f53baf452cc7cb9c764196f00db15f8352d2"
-r-q-wire	r-q-wire/int-sql-literal-integer	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "50ac48668494b28333add300085171b441ed163d9f8f3b13eef9132d86e146d6" actual "7708caac68dc753b3d6e7e9a47247d524c0d1aec05f42b859db1916c1b3a439a"
-r-q-wire	r-q-wire/int-sql-literal-long	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "f8b5b2f47e8d9bef19c51d9b0992c7a3be45863d86dcf00d4ccdbfe6e5341107" actual "449cf4f78620c292772dc5f1e216118bd18f5807f7272b50761a16d1d842464f"
+r-q-wire	r-q-wire/int-sql-literal-byte	Mismatched	1	files	29 $.files[0].sha256 [files]: expected "c1617a75c7dc288bc5e05c1932227911fc0a5d56495c6e8fe6d19b257afa69ec" actual "3a0b70140bae7decada1b849c085dc111eab46b0d6a0370c18b09990ef001476"
+r-q-wire	r-q-wire/int-sql-literal-integer	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "50ac48668494b28333add300085171b441ed163d9f8f3b13eef9132d86e146d6" actual "93a7345594da7c09b88f2031b2cf0750abbc0bffbe13db97e3ec53359e43b2f9"
+r-q-wire	r-q-wire/int-sql-literal-long	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "f8b5b2f47e8d9bef19c51d9b0992c7a3be45863d86dcf00d4ccdbfe6e5341107" actual "947dbcd475a4b283b20374af91381486374e1a7026dcb43a2ed1ab879a4f96fd"
 r-q-wire	r-q-wire/name-ado-versioned-progids	Matched	0		
 r-q-wire	r-q-wire/obs-ado-errors-clear	Mismatched	16	Open	22 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-wire	r-q-wire/obs-engine-versus-expression-errors	Mismatched	4	OpenRecordset	24 $.excepInfo.scode [call]: expected "0x800A0005" actual "0x80004001"
-r-q-wire	r-q-wire/obs-errors-replace-persist	Mismatched	1	files	31 $.files[0].sha256 [files]: expected "330798f3fdb6be88b5a1cc94d5dae2b384f994368466e142a55a9c7a86d620fb" actual "daa7bf2b206f1e3ffa8b4d659c7f221cd4c4d861d295b9ac664a5036baddde81"
+r-q-wire	r-q-wire/obs-errors-replace-persist	Mismatched	1	files	31 $.files[0].sha256 [files]: expected "330798f3fdb6be88b5a1cc94d5dae2b384f994368466e142a55a9c7a86d620fb" actual "8804f27543fc77e846b861a6e699f8f0a3f9a189db08937464b16750a8759ae7"
 r-q-wire	r-q-wire/opt-opendatabase-options-null-alone	Mismatched	10	OpenDatabase	12 $.excepInfo.scode [call]: expected "0x800A0D5D" actual "0x80004001"
-r-q-wire	r-q-wire/retain-ado-field-after-recordset-and-connection-close	Mismatched	1	files	38 $.files[0].sha256 [files]: expected "c20387f2b0f5d9276ba9a8478b5f56791a13584e839765a33fc75e8e486dec8a" actual "aeb8e74232b91a37799d25adda28b8c8c2cf0da3a91ad2823b4b0f092bb291ef"
-r-q-wire	r-q-wire/retain-database-after-workspace-close	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "5330f934290a02a1e13f621436f3f15f109f7d497230452258f66812f61aaec6" actual "ea915231e887516c6ccca86dec2f2c09695c8a454ea186a345f4bf27c41bc4a2"
+r-q-wire	r-q-wire/retain-ado-field-after-recordset-and-connection-close	Mismatched	1	files	38 $.files[0].sha256 [files]: expected "c20387f2b0f5d9276ba9a8478b5f56791a13584e839765a33fc75e8e486dec8a" actual "984dc2777d5a5e82b096b8551ec1b20c05f293aac8de4e9a8b162e0e03bb0d11"
+r-q-wire	r-q-wire/retain-database-after-workspace-close	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "5330f934290a02a1e13f621436f3f15f109f7d497230452258f66812f61aaec6" actual "35c2cee08ef27ed7840ed170ab1d44e5221e5e7dfec953584777ba2653491c81"
 r-q-wire	r-q-wire/retain-errors-after-engine-release	Mismatched	2	Errors	20 $.result.identity [call]: expected "o3" actual "o6"
-r-q-wire	r-q-wire/retain-querydef-after-db-close	Mismatched	1	files	21 $.files[0].sha256 [files]: expected "a77525bae910cdb8e5bb59168c82a059f1b7c0e922f4ceff3298dd3e5eae23f9" actual "6036c754859bd05a66ab902c0a830851b82740029fe327a7a7d6491d9bb69b46"
+r-q-wire	r-q-wire/retain-querydef-after-db-close	Mismatched	1	files	21 $.files[0].sha256 [files]: expected "a77525bae910cdb8e5bb59168c82a059f1b7c0e922f4ceff3298dd3e5eae23f9" actual "d55caace5577a134e0518f99df65714706686eef5d743462a6f76c6c6d57dbf7"
 r-q-wire	r-q-wire/retain-recordset-field-after-db-close	Mismatched	3	Name	18 $.excepInfo.scode [call]: expected "0x800A0D5C" actual "0x80004001"
 r-q-wire	r-q-wire/retain-tabledef-after-db-close	Mismatched	2	Count	19 $.excepInfo.source.bytes [call]: expected "440041004f002e005400610062006c006500440065006600" actual "440041004f002e004600690065006c0064007300"
-r-q-wire	r-q-wire/rnd-seeded-repeat	Mismatched	1	files	29 $.files[0].sha256 [files]: expected "f380f4385496b7b58d641096e173a13f6c363cd8ca3577de68a5721c201d7021" actual "97b9528316ba6204d99cd8647777765200dd2e956fb35eb342a9c4e0bf5d9b04"
+r-q-wire	r-q-wire/rnd-seeded-repeat	Mismatched	1	files	29 $.files[0].sha256 [files]: expected "f380f4385496b7b58d641096e173a13f6c363cd8ca3577de68a5721c201d7021" actual "391ced6505b572349bffafce255afa4addc50e43d4e084f1a3a58c1dc48dbf29"
 r-q-wire	r-q-wire/str-edit-requery-mdb	Mismatched	16	Update	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-wire	r-q-wire/str-memo-fieldsize-by-recordset-type	Mismatched	9	GetChunk	22[0].3 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-wire	r-q-wire/str-odd-bstr-into-binary	Mismatched	16	Value	16 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q-wire	r-q-wire/thread-ado-command-main-sta	AcceptedDifference	0		
 r-q-wire	r-q-wire/thread-ado-command-new-mta	AcceptedDifference	0		
-r-q-wire	r-q-wire/thread-ado-data-read-main-sta	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "18c8d4f8d7e92df53043c892c16ed0abe6af841d9200a8efcafd7d6c09ea1b0b" actual "c20cee10f0a4a5955fb2034338731a46cf8081c686d688f6aa82af08bf66f47a"
-r-q-wire	r-q-wire/thread-ado-data-read-new-mta	Mismatched	1	files	12 $.files[0].sha256 [files]: expected "4f9b5b794a71b4b364d7e2ed0416340242e524aada6c0ec0543488b0bd21acff" actual "861a90ce48127b5907ad9ef85cec406c3c759022883b2cf950333e3c7a029a4b"
+r-q-wire	r-q-wire/thread-ado-data-read-main-sta	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "18c8d4f8d7e92df53043c892c16ed0abe6af841d9200a8efcafd7d6c09ea1b0b" actual "174225ea8779f8671207ada7bc4b5bcefd9afb098881475729fa46903de46814"
+r-q-wire	r-q-wire/thread-ado-data-read-new-mta	Mismatched	1	files	12 $.files[0].sha256 [files]: expected "4f9b5b794a71b4b364d7e2ed0416340242e524aada6c0ec0543488b0bd21acff" actual "4e19f62b2bddb84c716a4c434e9273c1f3744dbd6ae681f34ee0ae139ea1a31f"
 r-q-wire	r-q-wire/thread-ado-recordset-main-sta	AcceptedDifference	0		
 r-q-wire	r-q-wire/thread-ado-recordset-new-mta	AcceptedDifference	0		
 r-q-wire	r-q-wire/thread-ado-stream-main-sta	AcceptedDifference	0		
@@ -827,25 +827,25 @@ r-q15-ddl-open	r-q15-ddl-open/columns-a-z	Matched	0
 r-q15-ddl-open	r-q15-ddl-open/columns-z-a	Matched	0		
 r-q15-ddl-open	r-q15-ddl-open/columns-z-a-dao	Matched	0		
 r-q15-ddl-open	r-q15-ddl-open/counter-close-pages	Mismatched	11	files	10 $.files[0].sha256 [files]: expected "8024161d8050e5b6d85226be891b2bd367777550fddfcc0fe6f3eb9b11c4c547" actual (absent)
-r-q15-ddl-open	r-q15-ddl-open/counter-close-pages-insert	Mismatched	13	files	8 $.files[0].sha256 [files]: expected "56cc44dabf8410e20f41d3871d1446442c09e25ddec75f433a23964cd50fe3f8" actual "628513f13b23d61994c8947e4ad3fa6a09da1774e5facc59181025fad52e5fa7"
-r-q15-ddl-open	r-q15-ddl-open/counter-close-pages-rename	Mismatched	14	files	8 $.files[0].sha256 [files]: expected "ce0cbda407f91aeb9ae41523eeb9e00066b50aba39b9645df39045c094d03e63" actual "6282f85652e2189f0448213d8778066d80e7d052a9ab35efebbf037ea3173bbc"
-r-q15-ddl-open	r-q15-ddl-open/counter-create-second-session	Mismatched	10	files	8 $.files[0].sha256 [files]: expected "d1384c251801c413d732208392ce25c15ee1bf21c6bd9321b7bca0f3bb032573" actual "08424ab8db5822c836a7935e12b920871accdb1504f2b0c523d1906e04d68cc4"
+r-q15-ddl-open	r-q15-ddl-open/counter-close-pages-insert	Mismatched	13	files	8 $.files[0].sha256 [files]: expected "56cc44dabf8410e20f41d3871d1446442c09e25ddec75f433a23964cd50fe3f8" actual "3f5a87b3ef05877b3ab8c5a56ca70c80374204b87576661db66f1d27ae2c84ff"
+r-q15-ddl-open	r-q15-ddl-open/counter-close-pages-rename	Mismatched	14	files	8 $.files[0].sha256 [files]: expected "ce0cbda407f91aeb9ae41523eeb9e00066b50aba39b9645df39045c094d03e63" actual "3ac911850465f1987bdc3c070236e66790d91e64965384c2f248b1eba98c2736"
+r-q15-ddl-open	r-q15-ddl-open/counter-create-second-session	Mismatched	10	files	8 $.files[0].sha256 [files]: expected "d1384c251801c413d732208392ce25c15ee1bf21c6bd9321b7bca0f3bb032573" actual "94a6006770dfe74b29fcae1b4e67f551d0badd5726ac14638f7d04d0f77b3f5c"
 r-q15-ddl-open	r-q15-ddl-open/counter-create-then-read	Mismatched	16	files	10 $.files[0].sha256 [files]: expected "52a678d16bd979d09aab2bbdf9fcf21c8f889fa63a21d464709235fea75d82ed" actual (absent)
 r-q15-ddl-open	r-q15-ddl-open/counter-dao-append	Mismatched	8	files	28 $.files[0].sha256 [files]: expected "ae4514017219a46e6d375300eeb891538c3819823acc3b5391f19eb75c43a884" actual (absent)
 r-q15-ddl-open	r-q15-ddl-open/counter-dao-append-pages	Mismatched	16	files	19 $.files[0].sha256 [files]: expected "3534df91e8e8d224069880e0dd88fb1e26d03db7281096cc019e1a75a082162c" actual (absent)
 r-q15-ddl-open	r-q15-ddl-open/counter-drop-pages	Mismatched	16	files	10 $.files[0].sha256 [files]: expected "a27632043fe1a0824cffa8584c8eac130f7dfc8638e93ca402b90602c27739b6" actual (absent)
-r-q15-ddl-open	r-q15-ddl-open/counter-insert-second-session	Mismatched	10	files	8 $.files[0].sha256 [files]: expected "3697c7a097e0a261ece47d6fb501f9cb1f785b09e6767ea4f58c50e5eaf422be" actual "fadb4ae4f1a1a44a4e4bcbe0a975be59060b0585c44d7e81659302bf8630b80b"
+r-q15-ddl-open	r-q15-ddl-open/counter-insert-second-session	Mismatched	10	files	8 $.files[0].sha256 [files]: expected "3697c7a097e0a261ece47d6fb501f9cb1f785b09e6767ea4f58c50e5eaf422be" actual "432c25dbc4215a96fe1839cccd4b0e579f2b9a65000ba70d0cfb35e0067f5566"
 r-q15-ddl-open	r-q15-ddl-open/counter-one-create	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "c101d20327a2b2b5822ecd16c64d919bc6917df184f687f3ef42b0c3c12f4f44" actual (absent)
-r-q15-ddl-open	r-q15-ddl-open/counter-rename-second-session	Mismatched	12	files	8 $.files[0].sha256 [files]: expected "1b54aa5974a272df317cb2c76b51561226fb59dc055131f8cfbea87ffc92e512" actual "2843427e1ea2fc4bc9cfc85da269322242d37c92b2ba72e2828748a2d73cec69"
-r-q15-ddl-open	r-q15-ddl-open/counter-reserve-later-start	Mismatched	13	files	11 $.files[0].sha256 [files]: expected "140abc09cd9e8c895a5b9d063c3812d42876184669f6121007cf2ff8d7d69ce2" actual "2e607a1474dc2772498bcae1ccfbfff21b5829a5e67bf9d2b8640a029c32cbb4"
+r-q15-ddl-open	r-q15-ddl-open/counter-rename-second-session	Mismatched	12	files	8 $.files[0].sha256 [files]: expected "1b54aa5974a272df317cb2c76b51561226fb59dc055131f8cfbea87ffc92e512" actual "c601c059fef67da85206b07827a04737ba159dff1d700c56d6f1084a08fa8554"
+r-q15-ddl-open	r-q15-ddl-open/counter-reserve-later-start	Mismatched	13	files	11 $.files[0].sha256 [files]: expected "140abc09cd9e8c895a5b9d063c3812d42876184669f6121007cf2ff8d7d69ce2" actual "7f60f79caed112d7be5767b0e94f055f0a6112fb1b2dadd7e6714bb4bd79aa1e"
 r-q15-ddl-open	r-q15-ddl-open/counter-reserve-overflow	Mismatched	14	files	25 $.files[0].sha256 [files]: expected "c1f012c6241a7db821a9b90d1e76dc2d9c4d638f3c236ca9b853cabeaad41a7e" actual (absent)
 r-q15-ddl-open	r-q15-ddl-open/counter-two-creates	Mismatched	16	files	10 $.files[0].sha256 [files]: expected "94fd5f93707c8a16e9bea38ff30da14fead44df1a6ed299f62a22902aa85c534" actual (absent)
 r-q15-ddl-open	r-q15-ddl-open/date-create-vs-append	Mismatched	10	DateCreated	9 $.excepInfo.scode [call]: expected "0x800A0C93" actual "0x80004001"
 r-q15-ddl-open	r-q15-ddl-open/drop-pause-create	Matched	0		
 r-q15-ddl-open	r-q15-ddl-open/drop-then-create	Matched	0		
-r-q15-ddl-open	r-q15-ddl-open/drop-then-create-next-session	Mismatched	1	files	9 $.files[0].sha256 [files]: expected "a486f409324be230a1ad5a94dff16c967c2d248b3f17cb0833354275b755fe90" actual "17dd8a64331ec198d95346778e56bd9cc72cdd4aef42740646ad3f6af20d1dac"
-r-q15-ddl-open	r-q15-ddl-open/dup-append-dao	Mismatched	2	files	31 $.files[0].sha256 [files]: expected "7d4637561c8c733653b39bf40e7ffbf5b1226e4a51cce5992e1c3526d6c98f17; at page 0 offset 0xE02 (outside ACE clock fields): 0401000100010001" actual "a7a63874ea3cc061a261108e4276bb1cc5358098209e5ff3612231e71…
-r-q15-ddl-open	r-q15-ddl-open/dup-create-sql	Mismatched	2	files	22 $.files[0].sha256 [files]: expected "25bf77620931faa717c519407be8b62cd81ea1d1e74eb4421e91e99630d8fc11; at page 0 offset 0xE02 (outside ACE clock fields): 0401000100010001" actual "3c87639564f3582b816775fd83f7cf2cb3b0e6d913bea9efe26f00f5e…
+r-q15-ddl-open	r-q15-ddl-open/drop-then-create-next-session	Mismatched	1	files	9 $.files[0].sha256 [files]: expected "a486f409324be230a1ad5a94dff16c967c2d248b3f17cb0833354275b755fe90" actual "8d66cbd2f044aab3b96dc33e8eec62efc884c26c7b9eea3bde527bd376a4eea0"
+r-q15-ddl-open	r-q15-ddl-open/dup-append-dao	Mismatched	2	files	31 $.files[0].sha256 [files]: expected "7d4637561c8c733653b39bf40e7ffbf5b1226e4a51cce5992e1c3526d6c98f17; at page 0 offset 0xE02 (outside ACE clock fields): 0401000100010001" actual "adbf477ad4cc603f0b056d6f4efe80e8fffce477970eb048ab3160ddf…
+r-q15-ddl-open	r-q15-ddl-open/dup-create-sql	Mismatched	2	files	22 $.files[0].sha256 [files]: expected "25bf77620931faa717c519407be8b62cd81ea1d1e74eb4421e91e99630d8fc11; at page 0 offset 0xE02 (outside ACE clock fields): 0401000100010001" actual "bb94b690faf428c99fb3b2cd347e76c751b254626dc525252b54056a1…
 r-q15-ddl-open	r-q15-ddl-open/empty-name-append	Mismatched	1	Append	13 $.excepInfo.scode [call]: expected "0x800A0C35" actual "0x80004001"
 r-q15-ddl-open	r-q15-ddl-open/lv-dao-byte-property-1	Mismatched	7	CreateProperty	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q15-ddl-open	r-q15-ddl-open/lv-dao-byte-property-2	Mismatched	7	CreateProperty	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -904,8 +904,8 @@ r-q17-growth	r-q17-growth/freemap-free-2060	Matched	0
 r-q17-growth	r-q17-growth/freemap-free-2100	Matched	0		
 r-q17-growth	r-q17-growth/freemap-free-2250	Matched	0		
 r-q17-growth	r-q17-growth/freemap-free-2500	Matched	0		
-r-q17-growth	r-q17-growth/lval-memo	Mismatched	11	files	7 $.files[0].sha256 [files]: expected "8f473f9a3e38e97a6fba847f0dbe87e93b94113f15190c4e0f8dd44f0e22fe0d" actual "2fd55ed1a376d7eb88c81fb33f60a6ee2163ddb03adae41e2bdd14aa2399cd8e"
-r-q17-growth	r-q17-growth/lval-ole	Mismatched	11	files	7 $.files[0].sha256 [files]: expected "5cb5097cd717b1454889a26154940fbd8cbca1f11df5bf01d5b63bcdc8427702" actual "806d93f0c42bacc44193db7ab70ad6a7c9d40f8eca002c73d751967285be0dc1"
+r-q17-growth	r-q17-growth/lval-memo	Mismatched	11	files	7 $.files[0].sha256 [files]: expected "8f473f9a3e38e97a6fba847f0dbe87e93b94113f15190c4e0f8dd44f0e22fe0d" actual "08ed2ab661b8b1bcdec5df24e45cc0ae7b42137e6834d1d94ab36c498307e1fa"
+r-q17-growth	r-q17-growth/lval-ole	Mismatched	11	files	7 $.files[0].sha256 [files]: expected "5cb5097cd717b1454889a26154940fbd8cbca1f11df5bf01d5b63bcdc8427702" actual "de46ce50236a5d6c66c425a9c62be6fb4b435dafd70b85ee5d86673f3dd0d4c2"
 r-q17-growth	r-q17-growth/retire-delete-au1	Matched	0		
 r-q17-growth	r-q17-growth/retire-delete-au1-nine-then-last	Matched	0		
 r-q17-growth	r-q17-growth/retire-delete-au1-read-open	Mismatched	10	files	7 $.files[0].sha256 [files]: expected "de314f9a5f07460d7b571307533eb0791a5450de94accd7e0e886aeec1ef9748" actual (absent)
@@ -914,109 +914,109 @@ r-q17-growth	r-q17-growth/retire-rs-delete-au1	Mismatched	16	Delete	5 $.invokeHr
 r-q17-growth	r-q17-growth/shrink-row2-minus-30	Matched	0		
 r-q17-growth	r-q17-growth/shrink-row4-minus-30	Matched	0		
 r-q17-growth	r-q17-growth/split-inner-below	Mismatched	4	files	3128 $.files[0].length [files]: expected 204800 actual 208896
-r-q17-growth	r-q17-growth/split-inner-below-sync	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q17-growth	r-q17-growth/split-inner-below-sync	Mismatched	16	files	581 $.files[0].sha256 [files]: expected "1fea8b0f558a4ec1301eb63465e051dc62cd0273e9735c5dcabf36b509707c66" actual (absent)
 r-q17-growth	r-q17-growth/split-inner-middle	Mismatched	4	files	3128 $.files[0].length [files]: expected 204800 actual 208896
-r-q17-growth	r-q17-growth/split-inner-middle-sync	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q17-growth	r-q17-growth/split-inner-middle-sync	Mismatched	16	files	581 $.files[0].sha256 [files]: expected "02355570aa3312a5abea056406f25af9cf9f6cdcfc5f3792e640b6ede8464acc" actual (absent)
 r-q17-growth	r-q17-growth/split-ix-mid-insert-302	Matched	0		
-r-q17-growth	r-q17-growth/split-long-descending-sync	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q18-statements	r-q18-statements/ins-clean-existing-fail	Mismatched	8	files	32 $.files[0].sha256 [files]: expected "3d5b7d554b78b28b2a25d903c71767d9450b47d4f2b8230f490ff03caf11158b" actual "15d4ae715750a194e777b3bc08cbc4b040d58f6d0901b35bf58b9d4737640f9e"
-r-q18-statements	r-q18-statements/ins-clean-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "f97036988c7805717ef3b9d3cce12544139783219de5f8b6c8891eded9d36fc6" actual "ab66c366ed93b0000f89fd227c2eb324dc0a9cabe51450cdd0ecc5c1520e6789"
-r-q18-statements	r-q18-statements/ins-clean-fail-nopause	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "3588c8d34bb00b81b06d0eafb6bcebe5ad149edc69f8ddab25e9487be1984f6d" actual "f3a55c61f59e6811027242d53e728579a11db0f3f64530d999fda68a47aa9780"
-r-q18-statements	r-q18-statements/ins-clean-fail-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "22d4e6c2b9c0057b2959e385444ff9d32c6f95b3e41ba4d3a4c8278dc0bcd31c" actual "d9de6c1bc503d8ebdeee3a3be52447d752256beb44b0e97359733af1c592265d"
-r-q18-statements	r-q18-statements/ins-clean-fail-txn-rollback	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "ed88218a6d260c1c47299d177a70d2d092809642f2593f9962ae39912b7a8ab6" actual "85e4b0c5c5e7ac6de511447ed7da4651404b6b29d0f428fb5b3c8ac7c8ea990a"
-r-q18-statements	r-q18-statements/ins-clean-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "67292767d73c01b7a167debef0a074842d185a6a418f8182666c1954f9f882d1" actual "68e670497b061891931b6e4ebb12902071dae50f2e95f197b691b4b66bbe7e63"
-r-q18-statements	r-q18-statements/ins-clean-plain-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "a971c5eb5a9963943e706b988e4149d960a8fe1b895e6370a8126371270b12b2" actual "7b5028c7bd30faa334ea5e13e0b68609e7deaefdd2f1c18fa0fd96e4204785ff"
-r-q18-statements	r-q18-statements/ins-conv-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "959c7ae532903be0384807e99a4f5fd7d3d64b3c267b9b2bfe38ed71c1c12ef0" actual "243d33cffcf855b8e62d70e5f61d401054ebf3632c4618afe81f1c2be445cdff"
-r-q18-statements	r-q18-statements/ins-conv-values-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "fd767ef365e1a93e8d77e1e97ac9d57a7589835f303e06b185e133b8733f2f68" actual "fa1e2a87076c01441df8c922f0188b8d6e059886c6419353cf3720ce786bd4b0"
-r-q18-statements	r-q18-statements/ins-div0-fail	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "1de57f035f139a47af69ed89f53586c0950d7f057545467642017097b34031d1" actual "0501387e4d49e6960ccf5d22e08477d1b0c9f6de8b6b3b0038179ae4a5ec0a7a"
-r-q18-statements	r-q18-statements/ins-div0-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "0d6972978cfb61bbdbc4327ffb87ba433310e63e6fbae6de47aa7d23125a1325" actual "2ace3001fc7ecefe668b92963dd5c26953eea65684d002d763c3dd3b2722e794"
-r-q18-statements	r-q18-statements/ins-div0-values-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "49cca108d0ac41cc003efcce05bed2b6117e3c420ada2276cd6590122ff28b6e" actual "8189f3947cbe7c216d9cdd93a8bfd5af78bee80bd5d404aa06e4e30b3966cd8c"
-r-q18-statements	r-q18-statements/ins-dup-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "1853ca5efae4011ed30191aa9db306e582ac2006f55fb331aeae38188ce281a4" actual "c396d853925ddc719e425d1f68ff529543605b6ecb47c403548885e733697cd5"
-r-q18-statements	r-q18-statements/ins-dup-fail-count	Mismatched	10	files	31 $.files[0].sha256 [files]: expected "4c7ed2e52a77afccecc1f67262d98f80d82e3bf343361049c46ee4249891ca8e" actual "edffca0c868f0044cfa8e5af8a2fa5035cb71ff1cb4ea71fd58e595f9e44a1c9"
-r-q18-statements	r-q18-statements/ins-dup-fail-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "359042f2412d0634f8586a8248aaa8c910f5c2f4d5c99667c49039c8f3996b00" actual "216beeaa3092d2c4df0b1f18c9abcc8d593717bd853d18ed0577ea9354ee634e"
-r-q18-statements	r-q18-statements/ins-dup-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "a9f7eb65246cffe6a9c64efa0c6f988ee9841cb2896ceb72d6719a19761d21b6" actual "2ac3e83b4fd0db9236ce8bfe2977650ae2cba025475674ded37c2037aafb3a24"
-r-q18-statements	r-q18-statements/ins-dup-plain-count	Mismatched	10	files	31 $.files[0].sha256 [files]: expected "55437f45e1906db7aa76927e8bd5bacda75c59f88013d571a0fb7acebe481c36" actual "6d884eef474a42b9dfcce377715c2f3c9c6437f879714422e5ac9e9fc692ed2b"
-r-q18-statements	r-q18-statements/ins-dup-plain-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "b4152f54d50e7469edcd0dcdb6c6b75026d8187e2e1f650466efc1e57bb08227" actual "22cd0e2cc0a830a96601d183a0477c2d7694cf28a932aa7de98fa77992715f54"
-r-q18-statements	r-q18-statements/ins-one-existing-fail	Mismatched	8	files	32 $.files[0].sha256 [files]: expected "5e1e27fba692eb44631701aa96fa89109710752f421ee6ea1b37181dee43be59" actual "03d0a4ac26156d735655ed888cfce0c259db9ce110177f6f574fd927907604f0"
-r-q18-statements	r-q18-statements/ins-one-newpage-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "ec27e68ae4ee686996d2bafeafc7a47897d9de09d043c99ee7dde19ac1b41084" actual "6b184690e09c5091cf7ad0185f811e73a6fb3ff5c131b373c3dd84dff06b9b94"
-r-q18-statements	r-q18-statements/ro-excl-ins-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "0040148b747cfb1446b081a65b70c78e1ac51a2b916182d04e6f8c0cdb8162d7" actual "ff809864580ad3447acdae9fd2b284e4cf3e3b671b0e1d35cae4fd6c54d96b52"
-r-q18-statements	r-q18-statements/ro-ins-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "47c9611ae8467172a2ce9ed6af73b31c40b28ac55582c01b3fa8e5a391b9a2d4" actual "e3b3c27e008354697b613212661e76d4f7ab8f38bd5ccc650c4468c4aa9e2692"
-r-q18-statements	r-q18-statements/ro-ins-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "27155aea8f7ff4cae61312aa853b089f0160d2ff6a7b1a3041ccc05083850f1d" actual "29d7fa90fa43dc53a6d52edadf070f8da24ee6abe476e0d84c35eff0436b54a8"
-r-q18-statements	r-q18-statements/upd-dup-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "44c87454afbe1fcc7dc0c9f800cbe01eeb47fdaa64d2cbadf400605eddc48d58" actual "57b99fcda59b2819af8372377638e07387caf06aa6344e025a9cce0dc19331f7"
-r-q18-statements	r-q18-statements/upd-dup-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "5768df7d83b2a7afbc0e461215be457d716d3d2b19d81d0588ee48c375afd4d2" actual "f83bc9d7ef3494c1e5c29fa6207b25708c7f60ea50b3f7fcb1a8e0ce1c3e02dd"
-r-q18-statements	r-q18-statements/upd-dup-plain-desc	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "4483118265b367030c818598736fcdbf89b3933a8f55ccc74a96440ae0f40c6d" actual "68fb3f2256c236a5f5c406de149dae2494458405d8301ef7407a1fe77d5436d3"
-r-q18-statements	r-q18-statements/upd-dup-plain-three	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "8356d7e599242ac5b2e97d824074ba30bd826fcba473153c00e94983464471b9" actual "aa285b338965497e05501eae0a8982c74cb3f56f8dcacafbd670f1db23cec8b5"
-r-q19-growth-open	r-q19-growth-open/append-full-rightmost-covered	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/append-full-rightmost-uncovered	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/delete-all-intermediate-root	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "f8e2441ada4cc1d8b9224c0b5ab16cdd52a8974eb1dcef85a5ea301fab3912e3" actual "0fe40d4825df81bfeec1f8c118b683b194d66a1562d590d71d148ad790c23748"
-r-q19-growth-open	r-q19-growth-open/delete-all-long-values	Mismatched	16	files	37 $.files[0].sha256 [files]: expected "f94c2f2b245e4f9040c206f9c61c3ef44953626cbb8facaf6ec36818584920ab" actual "ab22a835e5061d00ce29824d24a59a2c26acac293466ea51924913fe237299b4"
-r-q19-growth-open	r-q19-growth-open/delete-all-no-index	Mismatched	15	files	37 $.files[0].sha256 [files]: expected "8e5a6d825f83f3533fa0b6b0a2ef8190c5837b415ac4705506a71606661c38b1" actual "70da9b88e9a2051cc7a74a48ac1b2bccbdfd468080b8d9bee86457085860787c"
-r-q19-growth-open	r-q19-growth-open/delete-all-pk	Mismatched	16	files	37 $.files[0].sha256 [files]: expected "337846bef30778b1a6c89d5cdbc9ab83b98d48fd5c64fdbdb513bd7ec77c289f" actual "822f75b8b41f85b090be00a4bea942eb18555af7a1405517d8c8bef6f1560e7b"
-r-q19-growth-open	r-q19-growth-open/delete-all-two-indexes	Mismatched	16	files	38 $.files[0].sha256 [files]: expected "f7c680d92515f4e1d6bc3232bb9bbfc8b4acd0ef6a7a3e95c7748ed608bbbd4a" actual "0e8452ffa22106cdf3348ad042b704a62383876eb8ae35be6df7584fee44b038"
+r-q17-growth	r-q17-growth/split-long-descending-sync	Mismatched	16	files	410 $.files[0].sha256 [files]: expected "62f3d38ebc285e41a22efe6d8affab88db968551c2f8ffecb693fefd8373d398" actual (absent)
+r-q18-statements	r-q18-statements/ins-clean-existing-fail	Mismatched	8	files	32 $.files[0].sha256 [files]: expected "3d5b7d554b78b28b2a25d903c71767d9450b47d4f2b8230f490ff03caf11158b" actual "0b2c1aa5480089026c1d64daadfc69b8b7303888177364de9286f4ee7a94c8c1"
+r-q18-statements	r-q18-statements/ins-clean-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "f97036988c7805717ef3b9d3cce12544139783219de5f8b6c8891eded9d36fc6" actual "8910fe4328e80825f8d52ec896478dce92c3a78db2c31fe13a188865c325b96f"
+r-q18-statements	r-q18-statements/ins-clean-fail-nopause	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "3588c8d34bb00b81b06d0eafb6bcebe5ad149edc69f8ddab25e9487be1984f6d" actual "f8733af1b9354d96a644dda4cede7d1b0f84609d58e85dfb723bccfd10b94ca6"
+r-q18-statements	r-q18-statements/ins-clean-fail-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "22d4e6c2b9c0057b2959e385444ff9d32c6f95b3e41ba4d3a4c8278dc0bcd31c" actual "374821dffda5fa0c98bf786af5fc9a004e9f41d337221d226e1950bb81830276"
+r-q18-statements	r-q18-statements/ins-clean-fail-txn-rollback	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "ed88218a6d260c1c47299d177a70d2d092809642f2593f9962ae39912b7a8ab6" actual "c008f2de0121e56083e16a801bf48063740a34d43420ca9cd8fd9211679d4b7f"
+r-q18-statements	r-q18-statements/ins-clean-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "67292767d73c01b7a167debef0a074842d185a6a418f8182666c1954f9f882d1" actual "cd07132785691511a37299f844a3ccfa83848c97d98666481a989b86be790e08"
+r-q18-statements	r-q18-statements/ins-clean-plain-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "a971c5eb5a9963943e706b988e4149d960a8fe1b895e6370a8126371270b12b2" actual "43139a4e6323001b666f40a299039c1dcb00e6b0fe06a92eeda98169e2ed3e9b"
+r-q18-statements	r-q18-statements/ins-conv-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "959c7ae532903be0384807e99a4f5fd7d3d64b3c267b9b2bfe38ed71c1c12ef0" actual "3237f58476512de75fd58c1eaf3d001e53883b284ca4e16bffad95b8d9d8b018"
+r-q18-statements	r-q18-statements/ins-conv-values-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "fd767ef365e1a93e8d77e1e97ac9d57a7589835f303e06b185e133b8733f2f68" actual "ba4717a783fad02c73812b7336c3e56127d75061b3f1097981f8501d5ac0073c"
+r-q18-statements	r-q18-statements/ins-div0-fail	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "1de57f035f139a47af69ed89f53586c0950d7f057545467642017097b34031d1" actual "6de1476b91cd516d17792614e28c48b9d60ce3b5d45d81b9440d6845f7b04895"
+r-q18-statements	r-q18-statements/ins-div0-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "0d6972978cfb61bbdbc4327ffb87ba433310e63e6fbae6de47aa7d23125a1325" actual "7b1705433cbb36ad77c9294227d921817d22efd07118f83e852db0cbe6d6a225"
+r-q18-statements	r-q18-statements/ins-div0-values-plain	Mismatched	16	files	31 $.files[0].sha256 [files]: expected "49cca108d0ac41cc003efcce05bed2b6117e3c420ada2276cd6590122ff28b6e" actual "51d30e3b3621383c3024d61dea301fcaf1e3220126a7cc9ba8d9aa922ecc04b2"
+r-q18-statements	r-q18-statements/ins-dup-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "1853ca5efae4011ed30191aa9db306e582ac2006f55fb331aeae38188ce281a4" actual "f3b63fbf83b319506822ae5ef8b57f2eaa6416b1f920d61dba401b896f600a05"
+r-q18-statements	r-q18-statements/ins-dup-fail-count	Mismatched	10	files	31 $.files[0].sha256 [files]: expected "4c7ed2e52a77afccecc1f67262d98f80d82e3bf343361049c46ee4249891ca8e" actual "e3e48584795af4ddecc91dbad9b932b8868199c5eae08ade5cbcd30780caebec"
+r-q18-statements	r-q18-statements/ins-dup-fail-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "359042f2412d0634f8586a8248aaa8c910f5c2f4d5c99667c49039c8f3996b00" actual "9006f8ce142b8aac200b5e2eeeaa65bd69c3e22b29859252b1652e064fd735ad"
+r-q18-statements	r-q18-statements/ins-dup-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "a9f7eb65246cffe6a9c64efa0c6f988ee9841cb2896ceb72d6719a19761d21b6" actual "eaeb224983d5c04ff00a7165f834a9c6308f4f7796e653d84739ca7b42312aec"
+r-q18-statements	r-q18-statements/ins-dup-plain-count	Mismatched	10	files	31 $.files[0].sha256 [files]: expected "55437f45e1906db7aa76927e8bd5bacda75c59f88013d571a0fb7acebe481c36" actual "96001dbdc575921cb162af5c14313bd65cff1ba006cd67a93c139c8095a84e3d"
+r-q18-statements	r-q18-statements/ins-dup-plain-txn	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "b4152f54d50e7469edcd0dcdb6c6b75026d8187e2e1f650466efc1e57bb08227" actual "0e8f6eea7900305edde7c4a03d65872498b5dccfc008f450f3fbb58cab9413fd"
+r-q18-statements	r-q18-statements/ins-one-existing-fail	Mismatched	8	files	32 $.files[0].sha256 [files]: expected "5e1e27fba692eb44631701aa96fa89109710752f421ee6ea1b37181dee43be59" actual "2044b1276c510b230d1888920df3f53488b1e4be5c320352f1ba33306b46e27d"
+r-q18-statements	r-q18-statements/ins-one-newpage-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "ec27e68ae4ee686996d2bafeafc7a47897d9de09d043c99ee7dde19ac1b41084" actual "3fce951bd9bf3dc6db774302323ec0257c9123cce137d296032c783fcbcdb32a"
+r-q18-statements	r-q18-statements/ro-excl-ins-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "0040148b747cfb1446b081a65b70c78e1ac51a2b916182d04e6f8c0cdb8162d7" actual "5ce545dcd727064317fbf7c79d50407d0b54db2eb5d833fb93a4ed70ea8bd6da"
+r-q18-statements	r-q18-statements/ro-ins-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "47c9611ae8467172a2ce9ed6af73b31c40b28ac55582c01b3fa8e5a391b9a2d4" actual "fb32540f9cddce32e1f33bc3dec5d5faac5344108323fdc0fb6dd0e522d95eb8"
+r-q18-statements	r-q18-statements/ro-ins-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "27155aea8f7ff4cae61312aa853b089f0160d2ff6a7b1a3041ccc05083850f1d" actual "e2e2c604d551937e8431609f8fc817bda916b4282bc28d8830583573c387fdc2"
+r-q18-statements	r-q18-statements/upd-dup-fail	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "44c87454afbe1fcc7dc0c9f800cbe01eeb47fdaa64d2cbadf400605eddc48d58" actual "6fa9a7c0fe0d1127ed6a03e6715793c43141e1d89fbf7966b76ece54cde7c97d"
+r-q18-statements	r-q18-statements/upd-dup-plain	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "5768df7d83b2a7afbc0e461215be457d716d3d2b19d81d0588ee48c375afd4d2" actual "08e1a7acaf04d496b9069790522fe0605afdb2d90ee48709af9be1327d62ced3"
+r-q18-statements	r-q18-statements/upd-dup-plain-desc	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "4483118265b367030c818598736fcdbf89b3933a8f55ccc74a96440ae0f40c6d" actual "f2d47a84e0608262a93ce10de9de6945fc712b8758a03d574a43bd7033d5faf7"
+r-q18-statements	r-q18-statements/upd-dup-plain-three	Mismatched	8	files	31 $.files[0].sha256 [files]: expected "8356d7e599242ac5b2e97d824074ba30bd826fcba473153c00e94983464471b9" actual "98c72f815d3d46d6d2f5ff63dba97db945141787ff7aa3a8131cdddadb784218"
+r-q19-growth-open	r-q19-growth-open/append-full-rightmost-covered	Mismatched	16	files	1199 $.files[0].sha256 [files]: expected "0d26227a015001380e4fc2cba711247c9478069b72957af12ed45d4b022b142b" actual (absent)
+r-q19-growth-open	r-q19-growth-open/append-full-rightmost-uncovered	Mismatched	16	files	1199 $.files[0].sha256 [files]: expected "16796ac2e00a82916097f61bd57618a91edad079fb30faf2e5390a409a8af001" actual (absent)
+r-q19-growth-open	r-q19-growth-open/delete-all-intermediate-root	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "f8e2441ada4cc1d8b9224c0b5ab16cdd52a8974eb1dcef85a5ea301fab3912e3" actual "33431dbf22afc2e10d62c839ce0a711bbe23c512ede55f6c9f8345a026c6f0d1"
+r-q19-growth-open	r-q19-growth-open/delete-all-long-values	Mismatched	16	files	37 $.files[0].sha256 [files]: expected "f94c2f2b245e4f9040c206f9c61c3ef44953626cbb8facaf6ec36818584920ab" actual "bc8def5be5cae7fb02bf42b24825070955f167de4ebcf7c9a69f7cb0827671df"
+r-q19-growth-open	r-q19-growth-open/delete-all-no-index	Mismatched	15	files	37 $.files[0].sha256 [files]: expected "8e5a6d825f83f3533fa0b6b0a2ef8190c5837b415ac4705506a71606661c38b1" actual "1269f9a46004364a1fb705c0b30042d2de1b4de7eaf590cf24676db892d721a9"
+r-q19-growth-open	r-q19-growth-open/delete-all-pk	Mismatched	16	files	37 $.files[0].sha256 [files]: expected "337846bef30778b1a6c89d5cdbc9ab83b98d48fd5c64fdbdb513bd7ec77c289f" actual "fa1fc46f9710364284030da3623ec30c40d209c92af41f81474dc997fbf21fe2"
+r-q19-growth-open	r-q19-growth-open/delete-all-two-indexes	Mismatched	16	files	38 $.files[0].sha256 [files]: expected "f7c680d92515f4e1d6bc3232bb9bbfc8b4acd0ef6a7a3e95c7748ed608bbbd4a" actual "408ba3b687eb4df782e39c8f42d968d889d11da9ce7021042ba003e5b265cd39"
 r-q19-growth-open	r-q19-growth-open/insert-free-1080	Matched	0		
 r-q19-growth-open	r-q19-growth-open/insert-free-2040	Matched	0		
 r-q19-growth-open	r-q19-growth-open/insert-free-2042	Matched	0		
 r-q19-growth-open	r-q19-growth-open/insert-free-3080	Matched	0		
-r-q19-growth-open	r-q19-growth-open/lv-fill-2000-1976	Mismatched	6	files	7 $.files[0].sha256 [files]: expected "bfbc318f978609ca7ec8eb59c04f5adaa9fc0f15f3d43345264e614b148033d3" actual "12d9e498e0ef042615192c171956f98890fbb96f8669c1c14eae905cb2d2a111"
-r-q19-growth-open	r-q19-growth-open/lv-fill-2000-1978	Mismatched	16	files	7 $.files[0].sha256 [files]: expected "2a13d30319ea77fecc303bde7f3381c44d872c6bed995937a982c6cf1f40d242" actual "b6a777bac52d1333f4b3f5288dd1c30088e0eabff1c63ce7aa2cfb07850a78d8"
-r-q19-growth-open	r-q19-growth-open/lv-fill-2000-2000	Mismatched	16	files	7 $.files[0].sha256 [files]: expected "a378211c623cafd31f55b0b8d901d14041f4d2ebd05adf84b3e33cfc5123198a" actual "37c6d3550154033de0c8665e66c6ca0381f459bcec7fd371474de567dbc3cc2e"
-r-q19-growth-open	r-q19-growth-open/lv-inline-memo	Mismatched	7	files	7 $.files[0].sha256 [files]: expected "707811d4c6dfa3600bf49c4c8162becfaad7085d7660d6741c7d99ad57ce6d55" actual "4cd7cd773d7f6fe0eed5f8ad44bbd442f7325f6941a6f09eb6aa4a1cbae48edc"
-r-q19-growth-open	r-q19-growth-open/lv-inline-ole	Mismatched	7	files	7 $.files[0].sha256 [files]: expected "ddb9125f5a5ce3c2c9ff4eb6fc518a594c4fe809bb3d1f25c59b54463ef782fb" actual "4de96074f559777eff3ca4ace3c4da6d51411f926e4e54c215a3295e6c68600e"
-r-q19-growth-open	r-q19-growth-open/lv-op-chain-larger	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "be4ab87fb3c341b67cd7eea9c00a56bafe971ba5904893ec9db4e4c23b0a3636" actual "1bb84e1f47b838d133d434e614a4c08b456056b58c66a0b0b2fc78499fe7f950"
-r-q19-growth-open	r-q19-growth-open/lv-op-chain-null	Mismatched	6	files	10 $.files[0].sha256 [files]: expected "e7add187ceec87bc8002a168125465285c01381fe459999ae14e673bc652c404" actual "80f4bf024c91db85cb649137844d09b1375839bd2810f3db5d5e28fc0cc2a778"
-r-q19-growth-open	r-q19-growth-open/lv-op-chain-smaller	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "acb714e64669b2d648c7c0634d62e51120d69019604d4812708eda1aff975ed4" actual "9893222924cefe36e4d7db8a6dd68ef721ccb4508fc624fddf2c2124319ee27d"
-r-q19-growth-open	r-q19-growth-open/lv-op-chain-to-single	Mismatched	6	files	10 $.files[0].sha256 [files]: expected "15022209fb1dadf3a659217b3dc0b17c92635cd10b5e8bf4d50838bedfb63f69" actual "6c875eac887830e3c6de9a8e97bd19252cccb8572ccda5e1133bb5ab2bd03553"
-r-q19-growth-open	r-q19-growth-open/lv-op-delete-row-chain	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "184bcbd1e1502b133743b4f66cd18538568b9312664d92958ecef336f140e92a" actual "8913ebeb7db361ffc3c4300035bda8633fc5d1a468a61ed130891da76d2ad45c"
-r-q19-growth-open	r-q19-growth-open/lv-op-delete-row-single	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "09a5b6186705ff2e35081e9a436c757bc44a3217a57371e9e121a09df707aed9" actual "938fe19710275d2f62d34dd3acf19ef352d3a5b1502e475b46a8bfe3f4ec75e9"
-r-q19-growth-open	r-q19-growth-open/lv-op-single-larger	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "7b5dc1efb438b2f6ff75be7e3701695b391be792ce09fcd8627691c31239c366" actual "a69290d59771403b556529e35cc77525d71be21dc80a1e3f1ff9d26ae6ffea17"
-r-q19-growth-open	r-q19-growth-open/lv-op-single-null	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "2eb455a8ae7d52731635147ffa010ca87eb6ce1c5ed95f38948b6f36a797926e" actual "c45f16d2ec0b7868a0b5fda11f049899ed22b63ae45b425f92f70966b6770197"
-r-q19-growth-open	r-q19-growth-open/lv-op-single-smaller	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "b4a12f59f5d582ac521bcb7cf15d806921315b8632d6a0b15d9287c19f05844f" actual "42e2adf051e412b4fe60c4b29c147440c724abac44683e2f6f2cf2324d02e11d"
-r-q19-growth-open	r-q19-growth-open/lv-op-single-to-chain	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "90803d01d5303d46dfb48f90eff434018f58c6ec9b8125ed6e3bdb54ce38c601" actual "cd1649f5b00102276bc35c0a8a29284998bc528a2bbd6e2febdf70874a10c46b"
-r-q19-growth-open	r-q19-growth-open/lv-single-2002	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "f7241b13288fd05792484f443c0c432002b9d2c70db07f8e9e466fabde4830e9" actual "12b2ca3250b95dbbe90db1c549cb5cda7e30dd8ac41cc94e969c48194ad5dfb6"
-r-q19-growth-open	r-q19-growth-open/lv-single-2500	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "449df6a9438db7b9229912de8a79c4f1cf2f044fde31b01a4664dd11e3701c18" actual "b5c3318ce988cc1fb217fe3dcdc276bf1bf2a5b1c2478bed867783ae78550267"
-r-q19-growth-open	r-q19-growth-open/lv-single-3000	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "0ea858bff623abfdf2a8916c44d10647aed925c1e28bcbda4d1edfc34b4ed9e2" actual "852e2b844c8db6eefb7364885b77cb3706b726e96c9d49e7048e5dc61dfb00af"
-r-q19-growth-open	r-q19-growth-open/lv-single-3500	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "e7e20a8edad071b92b332bc49512367a888eb5763f76a9f0171afecc016dee36" actual "dd79929e75fc765c952c43f12c6458850cab2e03bfb1e8de8390e616fb249376"
-r-q19-growth-open	r-q19-growth-open/lv-single-3600	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "8913950b420f3e97dde9874a99f2f13d9cf3fae46a968130599bc50bac4432d7" actual "02cea13e7f5780d00b79a2185eb6bbbd7a50a503d9ac5791b9cab9fe6f6f0d23"
-r-q19-growth-open	r-q19-growth-open/lv-single-3700	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "4d17f97280176d10a30b958c3cee7bc1877b9e86efa47a378e028adcc50c217d" actual "6693ee1a259d705718c0f487f6744af559aee04c21635b3aa3b05d070676c579"
-r-q19-growth-open	r-q19-growth-open/lv-single-3800	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "30f5d5619624a5da64a419f1413f1873dd7ffaff891287e534fa124dfb1b4859" actual "0cf93471a8daa45fa5ed3cf21557e719e295f614883b582cda22999ae7220127"
-r-q19-growth-open	r-q19-growth-open/lv-single-3810	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "e5cc8ff6b4d0645bf6ea51648a76c271c04b6c513642d70b399b86fcff2c68ce" actual "0892e69abbf33cee590326e5570505c65c3f6ee0d453cba68456dc69657e015d"
-r-q19-growth-open	r-q19-growth-open/lv-single-3811	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "b222cadd49f2658439b0e748f1d016bb73c96f5166edf832f3d8eac93e0aca09" actual "15beac8ca0fd7f2cc55b52e9eb00d7b6e790e5c232b0df044d614492c6a3109e"
-r-q19-growth-open	r-q19-growth-open/lv-single-3812	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "656a3bf8af4372b79fd417bc66644055329ced19bccfefa6f27cdc6d34e2005f" actual "5d5ec940a0d9831801aac5e33268c5aa27a4d65a0255514f8b0442092f3bee66"
-r-q19-growth-open	r-q19-growth-open/lv-single-3813	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "b5b93de53d4d74d6ae84723efc5aa628eab20f917fd38fe6ce2bafe5b8f56a8c" actual "b19d20ab6fe286d916a0c53703fec8e3d448206cc30e86aa19f18b2a368c3d8b"
-r-q19-growth-open	r-q19-growth-open/lv-single-3814	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "481a75d6033c26888a31063c3a9cf838eb17084c6af7211f3c36840faef2597b" actual "cf0c16030893ab51ab46d27d4736ffc8a9e8704a6fba36a08532a857c712b95d"
-r-q19-growth-open	r-q19-growth-open/lv-single-3815	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "687e9a2a7cd0527080707b7260e03c64bd1ca67293e6ddf55f91ba7106407bb6" actual "c6e4311e4a4772d0d523b0c47e1eebd2cd274741bc59a29a2be2f3540141c615"
-r-q19-growth-open	r-q19-growth-open/lv-single-3816	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "97431b909eb2537ca3849997628c799aeb68b7cd9e1720c8b457975a6f0c79b7" actual "826943880da42f32d611f924daf0fb72b70f377a9c0d08d732eac45fd80afa01"
-r-q19-growth-open	r-q19-growth-open/lv-single-3817	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "d0db9b0e7d9687ae99357d13084d59f744f3882421d2d17544028bd1bf1c4120" actual "9ad623c963704c80ef52590fd95c1db289e0e7204dba9a0151a7e4af8ca6794b"
-r-q19-growth-open	r-q19-growth-open/lv-single-3818	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2faf550ca08a7dfc2b148af2b54bcfc7429378fe51fec92b4c0711d7b17bf46d" actual "23f89a4f6ce23f2250bafe22697d4d888f691f30f2fe2cb1dd409349a6b0ab08"
-r-q19-growth-open	r-q19-growth-open/lv-single-3819	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "06edbddb0fa020823479fbc6927d94919c590b56205cf8a25f09e62689176590" actual "6546f85985935327cdbb21fc6e2abec37ef0036858280d3e01b5daceb9a46c34"
-r-q19-growth-open	r-q19-growth-open/lv-single-3820	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "95c06bbcadf9cd6a5521305263e0a208c9f93469fe03c1c5ea0410c7c79835cf" actual "9dfcf635235a0b391eaf67678fe213fc26d6e810b5952f61fd60efc66021b85c"
-r-q19-growth-open	r-q19-growth-open/lv-single-3830	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "e6bc624ab73e85fa42cb4718cf1846d73db628c65c7700ad8bbf44e05f7f4289" actual "20904fde59aa214f53e86535677a1de265abbb1254d8e1c3baac7d6ae36d8b4f"
-r-q19-growth-open	r-q19-growth-open/lv-single-3840	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "3b938470b28b7ecaa8754eb6f416cf8eaa01bf4b7052ebd4fefc5ad6f1303f91" actual "4f0afa448f4727f44ba0b7c43b1d4f0406a865c0dc905cf8c2b2ab5213bfbb4b"
-r-q19-growth-open	r-q19-growth-open/lv-single-3850	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2d5b3d326669e5e78c7367db7d5ec235cad38b91a12905bd62fb868f4aada67e" actual "8fe756715220c37945c58bc2adea13e110e41285eed5147132165bc356622909"
-r-q19-growth-open	r-q19-growth-open/lv-single-3860	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2470a3ecc4127ec9eda0bdb6269d4fb0959cd221be489954f6c2a5413d4728e7" actual "af701a1a4ae47d7212cf64f6df18c7f94b89383f585f922d4262c1c6ada65421"
-r-q19-growth-open	r-q19-growth-open/lv-single-3870	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "68d362bde6fec8b99aa72c27fe80e3024275ad2c0f3ded941a20118dd531448f" actual "001c843d8c055fa14eed2f8232986e23f56e9221e7ff2fe18c07e9f88c44504c"
-r-q19-growth-open	r-q19-growth-open/lv-single-3880	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "617bf1fbec1d3b6f077775ba354ff09c4517fb7e63d328c9cc184339dda211bd" actual "9cf11988cdab87f8e3fbabc5a3b91d79dcb4dc162b1ecb28af995005a4b346dc"
-r-q19-growth-open	r-q19-growth-open/lv-single-3890	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "cf15b11b99188422906682a81f238213364f8dafbf38c0062ca4374dd50b9594" actual "33653a3f0964003c46e74abb39eaca03a2a728e9b018e69b27d2f21291133261"
-r-q19-growth-open	r-q19-growth-open/lv-single-3900	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "748d1480a925b1a06301d1704b34dc5221cba892373f0568193fbb2866f7de24" actual "eb1e97f4254989f35f0815240c3691ad1b46194f5f55e80673c02c4a81caccc7"
-r-q19-growth-open	r-q19-growth-open/lv-single-3950	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "d29f519df23cbba781d16c437a8e94fb516e969f331267a76320ae4a1dfc5f8e" actual "cadba1679ecd1983e57617e9e311a1f9fa61fe74661ca233d1e4ab56ddd7616f"
-r-q19-growth-open	r-q19-growth-open/lv-single-3990	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "8b5f32584696fd94e681359f5eb16cd80813cca3360802e24f890fc3f03dac4b" actual "f4c03f6785ed23064cb63d78c1ea0f7bdb558313c98d411831627f611241c46a"
-r-q19-growth-open	r-q19-growth-open/lv-single-4000	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "7e0a8b4409105ac7dc781a390ba6af6e8f45484050f76deef841cba4aadcadec" actual "a181b998cd407789af847a1b4e68e0fb4390375ea25fc757c7217469791f2ab5"
-r-q19-growth-open	r-q19-growth-open/lv-single-4060	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "9e9f0df2914e2b68b66d7c56674971982385ba75c36c401e2a548dd8ccf0c8ce" actual "cfda6a2ee48f4fcf5af361187d21d94baf6767be6ae412b286ef1d644899c56c"
-r-q19-growth-open	r-q19-growth-open/lv-single-4072	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "01cd5e7adf895e8cac45d49b61de86622611994010c81e82ff62f18396b56eac" actual "c1a08a8b9af4b8b1a716f86f82bea784b3d5b0d944cab170fb4e6014d2060199"
-r-q19-growth-open	r-q19-growth-open/lv-single-4074	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "658284c87ac26231a4bea85d473342c2259bea77364971ad8fa78a3b6460ca60" actual "aef0a8cafa5e4c366620c3199daf6ffc1561fc12c974e30bdf2943e7918d92ac"
+r-q19-growth-open	r-q19-growth-open/lv-fill-2000-1976	Mismatched	6	files	7 $.files[0].sha256 [files]: expected "bfbc318f978609ca7ec8eb59c04f5adaa9fc0f15f3d43345264e614b148033d3" actual "f59cb5d3c140a686e544d7100e62a90a9dbf0561e26f337e1dc9130c913e81c5"
+r-q19-growth-open	r-q19-growth-open/lv-fill-2000-1978	Mismatched	16	files	7 $.files[0].sha256 [files]: expected "2a13d30319ea77fecc303bde7f3381c44d872c6bed995937a982c6cf1f40d242" actual "b9aff0150e1e87833d5b1e31a90ea7816b629bab79f4ac538635969aca38184d"
+r-q19-growth-open	r-q19-growth-open/lv-fill-2000-2000	Mismatched	16	files	7 $.files[0].sha256 [files]: expected "a378211c623cafd31f55b0b8d901d14041f4d2ebd05adf84b3e33cfc5123198a" actual "4f3c6ea7fad422904d244413d7d71cec681a70e67657dfea29f3f5b091f57718"
+r-q19-growth-open	r-q19-growth-open/lv-inline-memo	Mismatched	7	files	7 $.files[0].sha256 [files]: expected "707811d4c6dfa3600bf49c4c8162becfaad7085d7660d6741c7d99ad57ce6d55" actual "d926ecf19cddadd4d3c024d25d15d859b4194cfc95d567d1fea33cdd721584c8"
+r-q19-growth-open	r-q19-growth-open/lv-inline-ole	Mismatched	7	files	7 $.files[0].sha256 [files]: expected "ddb9125f5a5ce3c2c9ff4eb6fc518a594c4fe809bb3d1f25c59b54463ef782fb" actual "36d131a8e4dc7733f4083c974d8f711ee7cd015aa1d4c75a9c1eeddaea975e65"
+r-q19-growth-open	r-q19-growth-open/lv-op-chain-larger	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "be4ab87fb3c341b67cd7eea9c00a56bafe971ba5904893ec9db4e4c23b0a3636" actual "967c628d0d72f78581b66309018c92d8521f2c3ec0e41aa4541a6b130b6fb45f"
+r-q19-growth-open	r-q19-growth-open/lv-op-chain-null	Mismatched	6	files	10 $.files[0].sha256 [files]: expected "e7add187ceec87bc8002a168125465285c01381fe459999ae14e673bc652c404" actual "02a21e1bf0cc29cedea1cc407ddfec069141b3428c6ece7ccd5de0003a5a77ad"
+r-q19-growth-open	r-q19-growth-open/lv-op-chain-smaller	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "acb714e64669b2d648c7c0634d62e51120d69019604d4812708eda1aff975ed4" actual "3c483d3990490020892903c7bbf50f4968c9431043c174d8414435c0554c43db"
+r-q19-growth-open	r-q19-growth-open/lv-op-chain-to-single	Mismatched	6	files	10 $.files[0].sha256 [files]: expected "15022209fb1dadf3a659217b3dc0b17c92635cd10b5e8bf4d50838bedfb63f69" actual "25d41e081428d5b5cbbc716c6fc20f7d0d4575558deceab3c4c7fd579677a2ee"
+r-q19-growth-open	r-q19-growth-open/lv-op-delete-row-chain	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "184bcbd1e1502b133743b4f66cd18538568b9312664d92958ecef336f140e92a" actual "81a6e289143391e609d1ab1cf126287f8060ef34fe36202e92510a198d6211b4"
+r-q19-growth-open	r-q19-growth-open/lv-op-delete-row-single	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "09a5b6186705ff2e35081e9a436c757bc44a3217a57371e9e121a09df707aed9" actual "442e61e603d8fce072d9c01cde4915f9f83ce7f48312bb778060bfe64af19db0"
+r-q19-growth-open	r-q19-growth-open/lv-op-single-larger	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "7b5dc1efb438b2f6ff75be7e3701695b391be792ce09fcd8627691c31239c366" actual "8f29a37c6454e20e08329a134a0730eb44df784dfba4c6235eb4d506e8968080"
+r-q19-growth-open	r-q19-growth-open/lv-op-single-null	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "2eb455a8ae7d52731635147ffa010ca87eb6ce1c5ed95f38948b6f36a797926e" actual "420c9eb4d4e4e149e8920009d23af5e4278b615ac64595adda0115f5cb4b9523"
+r-q19-growth-open	r-q19-growth-open/lv-op-single-smaller	Mismatched	7	files	10 $.files[0].sha256 [files]: expected "b4a12f59f5d582ac521bcb7cf15d806921315b8632d6a0b15d9287c19f05844f" actual "619a5219c0103abcd1a16fc227bbe7ba27568e2a0273dec3f90c388309a401b8"
+r-q19-growth-open	r-q19-growth-open/lv-op-single-to-chain	Mismatched	8	files	10 $.files[0].sha256 [files]: expected "90803d01d5303d46dfb48f90eff434018f58c6ec9b8125ed6e3bdb54ce38c601" actual "c3f6675ccdb046ae6df79b7e7858c3fb928964dbb0869338d3170149347d23f5"
+r-q19-growth-open	r-q19-growth-open/lv-single-2002	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "f7241b13288fd05792484f443c0c432002b9d2c70db07f8e9e466fabde4830e9" actual "9741d1fc546e2d94af7538de6195c304c953b5a51ccdbb2ead4d1a47a5017b65"
+r-q19-growth-open	r-q19-growth-open/lv-single-2500	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "449df6a9438db7b9229912de8a79c4f1cf2f044fde31b01a4664dd11e3701c18" actual "3123b808d3442999dbef825d05a592fc5a8873b6beb1315921cb22828c7efba9"
+r-q19-growth-open	r-q19-growth-open/lv-single-3000	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "0ea858bff623abfdf2a8916c44d10647aed925c1e28bcbda4d1edfc34b4ed9e2" actual "e200b9dfaf234f1dbc5f73e5550deed635d06ff93cfdfa789e9803013fb56675"
+r-q19-growth-open	r-q19-growth-open/lv-single-3500	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "e7e20a8edad071b92b332bc49512367a888eb5763f76a9f0171afecc016dee36" actual "0c97f081be6770e8f8e20b8c521558e69fa9dbd5e77be04cfb879be374d8ddfe"
+r-q19-growth-open	r-q19-growth-open/lv-single-3600	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "8913950b420f3e97dde9874a99f2f13d9cf3fae46a968130599bc50bac4432d7" actual "aa67a9f78a0c15f2e36132dcc2884cdbbebc4c3e3b1ebc2ee08a3e85878e4721"
+r-q19-growth-open	r-q19-growth-open/lv-single-3700	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "4d17f97280176d10a30b958c3cee7bc1877b9e86efa47a378e028adcc50c217d" actual "cec0b1e519418d7ffdfffb10a1f76f5aef5929032fa618a94d292edb93fe07f6"
+r-q19-growth-open	r-q19-growth-open/lv-single-3800	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "30f5d5619624a5da64a419f1413f1873dd7ffaff891287e534fa124dfb1b4859" actual "a1af1055ff64a0a7fd4ca91fcec7fcdeca947569447e0311e273dbf55145eda6"
+r-q19-growth-open	r-q19-growth-open/lv-single-3810	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "e5cc8ff6b4d0645bf6ea51648a76c271c04b6c513642d70b399b86fcff2c68ce" actual "71012f4f59c068b88f42e08d72e4ba0cb81feacc2ca18c28a2c4c99e937574d3"
+r-q19-growth-open	r-q19-growth-open/lv-single-3811	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "b222cadd49f2658439b0e748f1d016bb73c96f5166edf832f3d8eac93e0aca09" actual "a64a13f0591895a5e1f46bbbd3e757a64b31401e76f42c48bfa982705082f471"
+r-q19-growth-open	r-q19-growth-open/lv-single-3812	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "656a3bf8af4372b79fd417bc66644055329ced19bccfefa6f27cdc6d34e2005f" actual "2a6b6265a027a79dddc699c216f58c939c23f7ca36bcc4fc7990464742874fdf"
+r-q19-growth-open	r-q19-growth-open/lv-single-3813	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "b5b93de53d4d74d6ae84723efc5aa628eab20f917fd38fe6ce2bafe5b8f56a8c" actual "e5a7935ecd98c1017d6568f096b1638a111c4a8e56fdd1645f3e5f98caa417d9"
+r-q19-growth-open	r-q19-growth-open/lv-single-3814	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "481a75d6033c26888a31063c3a9cf838eb17084c6af7211f3c36840faef2597b" actual "a8432d53a622cb912af440d52ab08c7fc394a0741948c971e690a0aeb113a1cd"
+r-q19-growth-open	r-q19-growth-open/lv-single-3815	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "687e9a2a7cd0527080707b7260e03c64bd1ca67293e6ddf55f91ba7106407bb6" actual "d14daad0ba917d11005d3d20a4a16fd28dba2a98870601e7e5f2215c313f760a"
+r-q19-growth-open	r-q19-growth-open/lv-single-3816	Mismatched	3	files	7 $.files[0].sha256 [files]: expected "97431b909eb2537ca3849997628c799aeb68b7cd9e1720c8b457975a6f0c79b7" actual "bac9584717dff8c331b461e304243d039e411734f135f7867f9260bc2f4ebd5b"
+r-q19-growth-open	r-q19-growth-open/lv-single-3817	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "d0db9b0e7d9687ae99357d13084d59f744f3882421d2d17544028bd1bf1c4120" actual "07787635aa0d627f48efd30700b43438f8315eec064faddd048215d09de166ac"
+r-q19-growth-open	r-q19-growth-open/lv-single-3818	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2faf550ca08a7dfc2b148af2b54bcfc7429378fe51fec92b4c0711d7b17bf46d" actual "982df32b106ef5e7343e3b7df784c5b6340ad97e9c28af32dc0d051791e12de6"
+r-q19-growth-open	r-q19-growth-open/lv-single-3819	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "06edbddb0fa020823479fbc6927d94919c590b56205cf8a25f09e62689176590" actual "17980b160e62b86e942c8687af2496003931a4ec8c7e78cce70b8dc943837eb1"
+r-q19-growth-open	r-q19-growth-open/lv-single-3820	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "95c06bbcadf9cd6a5521305263e0a208c9f93469fe03c1c5ea0410c7c79835cf" actual "8a335d174146417e0d273b6e7fb67572cc7298b8578a6a6dbb836cdb08dc476a"
+r-q19-growth-open	r-q19-growth-open/lv-single-3830	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "e6bc624ab73e85fa42cb4718cf1846d73db628c65c7700ad8bbf44e05f7f4289" actual "3e82886e6af92cb7d19eddd759b53d3635ac9e3aad1c67e44c14849d83f14ad7"
+r-q19-growth-open	r-q19-growth-open/lv-single-3840	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "3b938470b28b7ecaa8754eb6f416cf8eaa01bf4b7052ebd4fefc5ad6f1303f91" actual "2de958a1d0e7638800f632d4d0863513c75361c0ec7bbab1018940ed127b3603"
+r-q19-growth-open	r-q19-growth-open/lv-single-3850	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2d5b3d326669e5e78c7367db7d5ec235cad38b91a12905bd62fb868f4aada67e" actual "39bbf4511a42ce18d41d748c69dc524e2e3d9bf13581d8c0fae113df39cac37d"
+r-q19-growth-open	r-q19-growth-open/lv-single-3860	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "2470a3ecc4127ec9eda0bdb6269d4fb0959cd221be489954f6c2a5413d4728e7" actual "5b587a27599bc00a668d06de7c8014b6036a3e3dfd0fe48fd33f4822a8cc24b0"
+r-q19-growth-open	r-q19-growth-open/lv-single-3870	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "68d362bde6fec8b99aa72c27fe80e3024275ad2c0f3ded941a20118dd531448f" actual "2bd0746ed30118f89762c9a7d869b87245e1a899624c9994925e2121591fb052"
+r-q19-growth-open	r-q19-growth-open/lv-single-3880	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "617bf1fbec1d3b6f077775ba354ff09c4517fb7e63d328c9cc184339dda211bd" actual "8b04750e26ad79371e82ace83bae61ed18affcc0c801bc1410ee97cc3cae8c9f"
+r-q19-growth-open	r-q19-growth-open/lv-single-3890	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "cf15b11b99188422906682a81f238213364f8dafbf38c0062ca4374dd50b9594" actual "d01bc93c13a0620c01887f0c35e2441fe4631c7ee2c664c4125f871518707e77"
+r-q19-growth-open	r-q19-growth-open/lv-single-3900	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "748d1480a925b1a06301d1704b34dc5221cba892373f0568193fbb2866f7de24" actual "be1ac498b4c90f3ca0810d3e4b6818b54319e4e72950fdfd7d83ac9160d300e7"
+r-q19-growth-open	r-q19-growth-open/lv-single-3950	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "d29f519df23cbba781d16c437a8e94fb516e969f331267a76320ae4a1dfc5f8e" actual "12f6b54eb61b6d5004f8a8f229163bcb79a8192f81ea2394d429801f5344c385"
+r-q19-growth-open	r-q19-growth-open/lv-single-3990	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "8b5f32584696fd94e681359f5eb16cd80813cca3360802e24f890fc3f03dac4b" actual "97173bdb6ac9674462b5ef77bc75ef75e01bcf4c537be0d95cf4840f74783b8c"
+r-q19-growth-open	r-q19-growth-open/lv-single-4000	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "7e0a8b4409105ac7dc781a390ba6af6e8f45484050f76deef841cba4aadcadec" actual "f4db12e14f591268c4e6f96daabb68c39f7df67c208083cc920563aae55f4e81"
+r-q19-growth-open	r-q19-growth-open/lv-single-4060	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "9e9f0df2914e2b68b66d7c56674971982385ba75c36c401e2a548dd8ccf0c8ce" actual "4eb4f412b6974f1b04bff2a4aeddf5d4746bdbdd5ab608ad08b74e316284955d"
+r-q19-growth-open	r-q19-growth-open/lv-single-4072	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "01cd5e7adf895e8cac45d49b61de86622611994010c81e82ff62f18396b56eac" actual "9c069c7b3d28cb74d0dbf2ea83843142e82e0fb493bc6350be4077a6ea10e945"
+r-q19-growth-open	r-q19-growth-open/lv-single-4074	Mismatched	5	files	7 $.files[0].sha256 [files]: expected "658284c87ac26231a4bea85d473342c2259bea77364971ad8fa78a3b6460ca60" actual "c8b51ea89ade373ce2c6c0769285023da361540a9f3aa86f2dc833432d102f26"
 r-q19-growth-open	r-q19-growth-open/rs-dynaset-delete-au1-counts	Mismatched	16	Delete	5 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q19-growth-open	r-q19-growth-open/rs-dynaset-delete-au1-td-before	Mismatched	16	Delete	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q19-growth-open	r-q19-growth-open/rs-table-delete-au1	Mismatched	16	RecordCount	16 $.result.integer [call]: expected "10" actual "9"
 r-q19-growth-open	r-q19-growth-open/rs-table-delete-au1-td-after	Mismatched	16	files	21 $.files[0].sha256 [files]: expected "b7c179770f03c14277c274ed356e1b5ae6943b263b1ed17d0431eb52517e67b2" actual (absent)
 r-q19-growth-open	r-q19-growth-open/rs-table-delete-au1-td-refresh	Mismatched	16	files	40 $.files[0].sha256 [files]: expected "b7c179770f03c14277c274ed356e1b5ae6943b263b1ed17d0431eb52517e67b2" actual (absent)
-r-q19-growth-open	r-q19-growth-open/split-empty-left-leaf	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "061acdf81546509304d0fdcdbd17450a6ef2a86d68dea995a6141a9b1808dd67" actual "db5b440213d33711c3228f1852b6495e5519ed99916ce3e23f3e1134401c03df"
-r-q19-growth-open	r-q19-growth-open/split-empty-right-leaf	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "c0f42a14c0b98b8c330c812caebae705bddd4cf95929aa77bac9e91ef318a3d4" actual "534a324d3a3fc30de06f6664a735582729d0265da17038b3786c7e0743e55070"
+r-q19-growth-open	r-q19-growth-open/split-empty-left-leaf	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "061acdf81546509304d0fdcdbd17450a6ef2a86d68dea995a6141a9b1808dd67" actual "fff7443e09ebd85d57d49d1baf39428d43482dcaf71006732d7d6120f450ec11"
+r-q19-growth-open	r-q19-growth-open/split-empty-right-leaf	Mismatched	16	files	1207 $.files[0].sha256 [files]: expected "c0f42a14c0b98b8c330c812caebae705bddd4cf95929aa77bac9e91ef318a3d4" actual "5709698e8847cc8973ee7f83508a71e93ca934cf3658db4934c2a56a79e8dce9"
 r-q19-growth-open	r-q19-growth-open/split-text-deep-descending	Mismatched	16	Execute	23 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/split-text-odd-count	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/split-uncovered-between-leaves	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/split-uncovered-right-leaf-below	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/split-uncovered-root-below	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q19-growth-open	r-q19-growth-open/split-uncovered-sparse-leaf-below	Mismatched	16	SetOption	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q19-growth-open	r-q19-growth-open/split-text-odd-count	Mismatched	16	files	405 $.files[0].sha256 [files]: expected "6a7c897f93ab13a40b5c9a33beda0b31f24c604f92cfa613e487dfcff44fc6df" actual (absent)
+r-q19-growth-open	r-q19-growth-open/split-uncovered-between-leaves	Mismatched	16	files	1209 $.files[0].sha256 [files]: expected "daef34d7f085a40475dc76e368094b67abb5363239d75e9c96267b7ed2170584" actual (absent)
+r-q19-growth-open	r-q19-growth-open/split-uncovered-right-leaf-below	Mismatched	16	files	611 $.files[0].sha256 [files]: expected "d5cd796e0bcd5bac71ed9e30abde1d4f0740db6d12936ee7d5e140a921a8b2ef" actual (absent)
+r-q19-growth-open	r-q19-growth-open/split-uncovered-root-below	Mismatched	16	files	609 $.files[0].sha256 [files]: expected "04c591682864a9ec00a74c9d5181b0796250ba23438e15a77a2d626c900fddd8" actual (absent)
+r-q19-growth-open	r-q19-growth-open/split-uncovered-sparse-leaf-below	Mismatched	16	Execute	611 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-ado-misc	r-q2-ado-misc/ado-async-fetch-rows	Mismatched	16	sinkcall	15 $.event [SinkCallEvent]: expected "sinkCall" actual "invoke"
 r-q2-ado-misc	r-q2-ado-misc/ado-events-async-execute	Mismatched	16	sinkcall	12 $.event [SinkCallEvent]: expected "sinkCall" actual "invoke"
 r-q2-ado-misc	r-q2-ado-misc/ado-events-clone-propagation	Matched	0		
@@ -1032,12 +1032,12 @@ r-q2-ado-misc	r-q2-ado-misc/batch-scope-clone-submit-clone	Matched	0
 r-q2-ado-misc	r-q2-ado-misc/batch-scope-clone-submit-original	Matched	0		
 r-q2-ado-misc	r-q2-ado-misc/book-static-exchange	Mismatched	16	Bookmark	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-ado-misc	r-q2-ado-misc/create-cx	Mismatched	16	CreateField	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-ado-misc	r-q2-ado-misc/create-main	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b; at page 0 offset 0xE00 (outside ACE clock fields): 1201000100010001" actual "7d925785662218ac6f0639a63d9a124f0dac5e25ffb89ed15f112752c…
+r-q2-ado-misc	r-q2-ado-misc/create-main	Mismatched	1	files	26 $.files[0].sha256 [files]: expected "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b; at page 0 offset 0xE00 (outside ACE clock fields): 1201000100010001" actual "e437e653520c820a31414d6f3b68683552e789da6cde957430fd4a6c1…
 r-q2-ado-misc	r-q2-ado-misc/cx-edit-commit-variant	Mismatched	16	OpenRecordset	8 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-ado-misc	r-q2-ado-misc/cx-hold-bookmark-reuse	Mismatched	16	OpenRecordset	5 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-ado-misc	r-q2-ado-misc/disconnect-null-binding	Mismatched	7	ActiveConnection	21 $.result.display [call]: expected "null interface pointer" actual (absent)
 r-q2-ado-misc	r-q2-ado-misc/link-txn-xproc	Mismatched	16	Append	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-ado-misc	r-q2-ado-misc/ole-act-datasource-interfaces	Mismatched	3	(provenance)	modules [provenance]: expected no native engine module actual C:\Program Files\Common Files\Microsoft Shared\OFFICE16\ACECORE.DLL
+r-q2-ado-misc	r-q2-ado-misc/ole-act-datasource-interfaces	CandidateIncomplete	0	(incomplete)	candidate attempt Uncertain
 r-q2-ado-misc	r-q2-ado-misc/ole-act-datasource-routes	Mismatched	2	(provenance)	modules [provenance]: expected no native engine module actual C:\Program Files\Common Files\Microsoft Shared\OFFICE16\ACECORE.DLL
 r-q2-ado-misc	r-q2-ado-misc/results-timeout-lock-wait	Mismatched	16	Execute	16 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-q2-ado-misc	r-q2-ado-misc/resync-underlying-clean-row	Mismatched	1	files	165 $.files[0].sha256 [files]: expected "96825cd4a2dcd2bfaa8e5866547e450e37f0c31ea863f8959bd197af86605712" actual "2d88ac1b662362b0e1124e01fb69a67db92211744d2d1b50db7a989cd9f88ce4"
@@ -1060,7 +1060,7 @@ r-q2-cat-txn-lock	r-q2-cat-txn-lock/read-schema-held-querydef-late	Mismatched	16
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-close-recordset-opened-before-level	Mismatched	16	Close	11 $.invokeHresult [call]: expected "0x80020009" actual "0x00000000"
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-flush-boundary-fine-timeline	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-flush-idle-and-close-timeline	Mismatched	16	Execute	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-flush-implicitcommitsync-yes-timeline	Mismatched	16	SetOption	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-flush-implicitcommitsync-yes-timeline	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-flush-usercommitsync-no-timeline	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-local-inproc-far-rows-unindexed-orders	Mismatched	2	Idle	224 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cat-txn-lock	r-q2-cat-txn-lock/txn-local-pagetimeout-alone-timing	Mismatched	3	Idle	27 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -1073,10 +1073,10 @@ r-q2-cursor-dao	r-q2-cursor-dao/boot-alias-path-open-twice	Mismatched	16	Name	12
 r-q2-cursor-dao	r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row	Mismatched	4	GetRows	21 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cursor-dao	r-q2-cursor-dao/byref-dao-move-seek	Mismatched	1	files	59 $.files[0].sha256 [files]: expected "4df3d89fb95eae13beac6721abaaf26148e03ac2a3318f1dc37b43ea3a63e589" actual "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2"
 r-q2-cursor-dao	r-q2-cursor-dao/byref-dao-openrecordset	Mismatched	15	OpenRecordset	36 $.excepInfo.scode [call]: expected "0x800A0BB9" actual "0x80004001"
-r-q2-cursor-dao	r-q2-cursor-dao/create-held-databases-before-engine-create	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "b4f478113cd592f39fbf6bce028a36aef2d26128521b029934992efe3508c1d2" actual "927061c80b55b880ed8a7bf1d166bf3d5b3a1c8a4edba1f0634f30e77cf93723"
+r-q2-cursor-dao	r-q2-cursor-dao/create-held-databases-before-engine-create	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "b4f478113cd592f39fbf6bce028a36aef2d26128521b029934992efe3508c1d2" actual "2f5a34eda6148b3c4c9f7b61a257ed2e2a6f84a0748aa238642f75fd172ea3b8"
 r-q2-cursor-dao	r-q2-cursor-dao/create-main	Mismatched	1	files	69 $.files[0].length [files]: expected 786432 actual 774144
-r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-early	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "63c44480d54b660ca747369d23a1b26fbe1cf422586443cfe5b4978bb9b69696" actual "e063f7e25b531244a4efd88974a22a835a7d9a2acc4dfcb8cdd7418fbd5a3093"
-r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-late	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "9cb27c7cdbc430b5d7459ec9052c70a888973721b44558aa344d6ac57b8630ba" actual "898efede2c507e547f5888bc6e3c5af4b46375a4900f80603906bc841b3aba8d"
+r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-early	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "63c44480d54b660ca747369d23a1b26fbe1cf422586443cfe5b4978bb9b69696" actual "27c5ad13c4fa4d9ec79e05cc3ec5b3c209b3bc0cd384dec92458817ca85f7a7d"
+r-q2-cursor-dao	r-q2-cursor-dao/create-suspend-mid-call-late	Mismatched	1	files	13 $.files[0].sha256 [files]: expected "9cb27c7cdbc430b5d7459ec9052c70a888973721b44558aa344d6ac57b8630ba" actual "5f66afd0890b9015220d1b4e0d84217f3dec1faf8e969b9a41afe1fb2582f273"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-close-during-walk	Mismatched	13	enum	10 $.newEnumHresult [EnumEvent]: expected "0x00000000" actual "0x80020009"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-dao-child-collections	Mismatched	16	enum	11 $.newEnumHresult [EnumEvent]: expected "0x00000000" actual "0x80020009"
 r-q2-cursor-dao	r-q2-cursor-dao/enum-dao-top-level-collections	Mismatched	16	enum	9 $.newEnumHresult [EnumEvent]: expected "0x00000000" actual "0x80020009"
@@ -1104,7 +1104,7 @@ r-q2-cursor-dao	r-q2-cursor-dao/named-dao-refusals	Mismatched	16	OpenRecordset	9
 r-q2-cursor-dao	r-q2-cursor-dao/pop-snapshot-orderby-small	Mismatched	1	AbsolutePosition	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-cursor-dao	r-q2-cursor-dao/pop-snapshot-plain-table-big	Matched	0		
 r-q2-cursor-dao	r-q2-cursor-dao/pop-snapshot-select-noorder-big	Mismatched	16	AbsolutePosition	18 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-expr-sql	r-q2-expr-sql/act-ado-failure-lane	Mismatched	1	files	107 $.files[0].sha256 [files]: expected "b327886a64e8fbade405669fe87bc0b0e61e3e5e8b519ec9f32ac163493453d0" actual "9e57268ef7a4411f47b3238f7eaae0f522bb390ac3cc884b8e795ff8525876d6"
+r-q2-expr-sql	r-q2-expr-sql/act-ado-failure-lane	Mismatched	1	files	107 $.files[0].sha256 [files]: expected "b327886a64e8fbade405669fe87bc0b0e61e3e5e8b519ec9f32ac163493453d0" actual "f06e6c48e303a6d0f6083f3576d2a285fb15710c4466da8aaf651092695aa2d8"
 r-q2-expr-sql	r-q2-expr-sql/act-frozen-update-ddl	Mismatched	16	Execute	9 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-expr-sql	r-q2-expr-sql/act-frozen-update-dml-early	Mismatched	16	Execute	9 $.excepInfo.scode [call]: expected "0x800A0C7D" actual "0x80004001"
 r-q2-expr-sql	r-q2-expr-sql/act-frozen-update-dml-late	Mismatched	16	Execute	9 $.excepInfo.scode [call]: expected "0x800A0C7D" actual "0x80004001"
@@ -1144,26 +1144,26 @@ r-q2-wire	r-q2-wire/act-factory-dao-identity	Matched	0
 r-q2-wire	r-q2-wire/act-typecreate-ado-coclasses	Matched	0		
 r-q2-wire	r-q2-wire/act-typecreate-dao-identity	Matched	0		
 r-q2-wire	r-q2-wire/byref-ado-command-execute	Mismatched	4	Execute	20 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-wire	r-q2-wire/byref-ado-records-affected-counts	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "b115e27bfcc0d585ba12a2adaa5aa70282e63f3960f82444830ec03181ceee5e" actual "f5d2b3e6ffc2e672a0c8bfef82bb06f8d671eb6d2c17b66e8c518f0769406d2f"
+r-q2-wire	r-q2-wire/byref-ado-records-affected-counts	Mismatched	1	files	25 $.files[0].sha256 [files]: expected "b115e27bfcc0d585ba12a2adaa5aa70282e63f3960f82444830ec03181ceee5e" actual "a0a85982ae576a865103a8f629add3e700cfcdd137d07d1996ff4dad142b39fd"
 r-q2-wire	r-q2-wire/byref-dao-openrecordset-args	Mismatched	6	OpenRecordset	20 $.excepInfo.scode [call]: expected "0x800A0BB9" actual "0x80004001"
 r-q2-wire	r-q2-wire/byref-dao-put-values	Mismatched	8	Value	24 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-wire	r-q2-wire/events-ado-async-main-sta	Mismatched	14	sinkcall	59 $.event [SinkCallEvent]: expected "sinkCall" actual "invoke"
 r-q2-wire	r-q2-wire/events-ado-async-new-mta	Mismatched	15	sinkcall	50.9 $.event [SinkCallEvent]: expected "sinkCall" actual "invoke"
-r-q2-wire	r-q2-wire/events-ado-connection-main-sta	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "4f2b8779d7d031582a9d1f07cfee28fe95268e85303d68b2bb97a2b0a1b9297f" actual "846306c6cf206bc556c7da2931f4f0e65bc6888e87df8fde31162418d8824a12"
-r-q2-wire	r-q2-wire/events-ado-connection-new-mta	Mismatched	1	files	10 $.files[0].sha256 [files]: expected "10db307f28fc66cfec738fb8a95052edf4ab62466fef8a11b314185791dd4563" actual "73baec09ac7d83d78760ade8e7fab624975ac7505fedec52fdc1997770136d7f"
+r-q2-wire	r-q2-wire/events-ado-connection-main-sta	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "4f2b8779d7d031582a9d1f07cfee28fe95268e85303d68b2bb97a2b0a1b9297f" actual "aa776497aa6cca862d7d670d53c35085bcd70a36493231eacb143ae125adf1a8"
+r-q2-wire	r-q2-wire/events-ado-connection-new-mta	Mismatched	1	files	10 $.files[0].sha256 [files]: expected "10db307f28fc66cfec738fb8a95052edf4ab62466fef8a11b314185791dd4563" actual "0e52d66684a0d0e3edc35d21859710587d6e07c9f681780c8d0685403b14a712"
 r-q2-wire	r-q2-wire/events-ado-recordset	Mismatched	1	files	33 $.files[0].length [files]: expected 192512 actual 188416
 r-q2-wire	r-q2-wire/feff-compare-copy	Mismatched	16	Value	22[0].1[0].0 $.result.integer [call]: expected "3" actual "2"
-r-q2-wire	r-q2-wire/feff-len-ascii-accdb	Mismatched	1	files	216 $.files[0].sha256 [files]: expected "30b4dcfc41700ce8e776b48c7f0c430cae096ca97c080cf5208094c3de73e794" actual "f8c8016122796e8c99ce3a6e2e1cc3a0d091f52dc9a5043602c5f70b63edceaf"
-r-q2-wire	r-q2-wire/feff-len-ascii-mdb	Mismatched	1	files	216 $.files[0].sha256 [files]: expected "e5c742f10753ce01e45e184ae37fe2c99bd564488f751aa4f23b5c6b28b6559a" actual "67daca2b6cc79d4e4cd7265ee18fa25e67a622ef8a2b2e342dd327fe6b47aaa8"
-r-q2-wire	r-q2-wire/feff-len-content	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "5aac38618b3e5d573039ac05983f9c340c31c9fac5c71c906158e472e2b3f6d9" actual "30ef33171815005bcb3efd44449b082077fa5d183d56607262fe80605866b506"
-r-q2-wire	r-q2-wire/feff-memo-long	Mismatched	1	files	104 $.files[0].sha256 [files]: expected "3ec621f105f33fbd86e4f5fe91c8fff6fc1ab985777db81403ea8a7db3f44aa6" actual "8b88c6e9b12ffd56f9a8a61488a6a980c360f7c3cba36cc693a5aacb41bb670c"
+r-q2-wire	r-q2-wire/feff-len-ascii-accdb	Mismatched	1	files	216 $.files[0].sha256 [files]: expected "30b4dcfc41700ce8e776b48c7f0c430cae096ca97c080cf5208094c3de73e794" actual "9266992ef45945b43b823e4f42b723109c883cec1a3f423a772d7fd66623d2dd"
+r-q2-wire	r-q2-wire/feff-len-ascii-mdb	Mismatched	1	files	216 $.files[0].sha256 [files]: expected "e5c742f10753ce01e45e184ae37fe2c99bd564488f751aa4f23b5c6b28b6559a" actual "6a0002de1171b6f07e0728be81b2071cb8fbb1f2bc6ddbf5c5cfdc72ee4bf8f5"
+r-q2-wire	r-q2-wire/feff-len-content	Mismatched	1	files	183 $.files[0].sha256 [files]: expected "5aac38618b3e5d573039ac05983f9c340c31c9fac5c71c906158e472e2b3f6d9" actual "b2e3ca3f6b582313cd8a06c38a99eaeb8ced1093684afcca5dc23a9267946743"
+r-q2-wire	r-q2-wire/feff-memo-long	Mismatched	1	files	104 $.files[0].sha256 [files]: expected "3ec621f105f33fbd86e4f5fe91c8fff6fc1ab985777db81403ea8a7db3f44aa6" actual "5933a01578cb7e859c3c0d075f5bb0c0be49464a11ed0057ce7a0d05427f321f"
 r-q2-wire	r-q2-wire/freeze-after-close	Mismatched	2	Execute	25 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-wire	r-q2-wire/freeze-after-commit-return	Mismatched	3	Execute	28 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q2-wire	r-q2-wire/freeze-after-implicit-return	Mismatched	3	Execute	25 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-q2-wire	r-q2-wire/named-ado-methods	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8" actual "dd841dd950e1ebb670e13e656595f159487a7f48779e778ade837e56ba3b1717"
-r-q2-wire	r-q2-wire/named-dao-methods	Mismatched	1	files	19 $.files[0].sha256 [files]: expected "d1a0dff146333983aa46f1bc143f154bf71e19bb9ccba84da61424be5b02f77a" actual "9c7e75acc6ded013079b0eb639b3545d7617ce91c861aab7f73340acdd77cb0a"
+r-q2-wire	r-q2-wire/named-ado-methods	Mismatched	1	files	28 $.files[0].sha256 [files]: expected "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8" actual "d5e398c644c264159330ba2660ca732f21c3d482acb18f585efa40f8c9e0e418"
+r-q2-wire	r-q2-wire/named-dao-methods	Mismatched	1	files	19 $.files[0].sha256 [files]: expected "d1a0dff146333983aa46f1bc143f154bf71e19bb9ccba84da61424be5b02f77a" actual "e756bde07d85fcca80ae6597ce3de43231d97670927dd0a936023affbd7d03e6"
 r-q2-wire	r-q2-wire/obs-errors-foreach-enumeration	Mismatched	16	enum	13 $.newEnumHresult [EnumEvent]: expected "0x00000000" actual "0x80020009"
-r-q2-wire	r-q2-wire/retain-enum-ado-after-close	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "118b158e3895a72e087739c459dd545730539a881b42e5fb4e3ef28eeb0fbd83" actual "efb9c974583a36dc4c47c416c0cde6a73f896f218ea2ef69b0b979678e993aeb"
+r-q2-wire	r-q2-wire/retain-enum-ado-after-close	Mismatched	1	files	30 $.files[0].sha256 [files]: expected "118b158e3895a72e087739c459dd545730539a881b42e5fb4e3ef28eeb0fbd83" actual "a8b129d508a2f62307e9359acdfe3e1b33eebface46dc431f72221fd587576ec"
 r-q2-wire	r-q2-wire/retain-enum-dao-after-close	Mismatched	16	enum	12 $.newEnumHresult [EnumEvent]: expected "0x00000000" actual "0x80020009"
 r-q20-delete-pages	r-q20-delete-pages/dynaset-empty-all-asc	Mismatched	16	Delete	16 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-q20-delete-pages	r-q20-delete-pages/dynaset-empty-all-desc	Mismatched	16	Delete	16 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -1228,12 +1228,12 @@ r-q8-header-counter	r-q8-header-counter/two-statements	Mismatched	2	files	10 $.f
 r-q8-header-counter	r-q8-header-counter/two-statements-4s-apart	Mismatched	2	files	11 $.files[0].sha256 [files]: expected "624dff75149ed148e8238476ed60fd7e5607b17e3899db6dac17800bf88be173; at page 0 offset 0xE02 (outside ACE clock fields): 0201000100010001" actual "49288e9c099e3b28218a88a1c5a28a0053476f2e6d078898dd091510b…
 r-sort-3	r-sort-3/ado-order-seek-accdb	Mismatched	16	Value	14[1].1[0].0 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3	r-sort-3/compact-accdb-to-accdb-czech	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-sort-3	r-sort-3/compact-accdb-to-accdb-general	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-sort-3	r-sort-3/compact-accdb-to-accdb-general	Mismatched	16	files	8 $.files[1].length [files]: expected 684032 actual 876544
 r-sort-3	r-sort-3/compact-accdb-to-accdb-german	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3	r-sort-3/compact-accdb-to-accdb-japanese	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3	r-sort-3/compact-accdb-to-accdb-swedish	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-sort-3	r-sort-3/compact-accdb-to-mdb-general	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-sort-3	r-sort-3/compact-mdb-to-accdb-general	Mismatched	16	CompactDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-sort-3	r-sort-3/compact-accdb-to-mdb-general	Mismatched	16	files	8 $.files[1].length [files]: expected 589824 actual 782336
+r-sort-3	r-sort-3/compact-mdb-to-accdb-general	Mismatched	16	files	8 $.files[1].length [files]: expected 700416 actual 892928
 r-sort-3	r-sort-3/create-corpus-accdb	Mismatched	12	files	1034 $.files[0].length [files]: expected 184320 actual 192512
 r-sort-3	r-sort-3/create-corpus-mdb	Mismatched	12	files	1034 $.files[0].length [files]: expected 90112 actual 98304
 r-sort-3	r-sort-3/create-derive-accdb	Mismatched	16	files	6161 $.files[0].length [files]: expected 184320 actual 229376
@@ -1285,11 +1285,11 @@ r-sort-3b	r-sort-3b/lg-unique-survivors	Matched	0
 r-sort-3b	r-sort-3b/lg-walk	Matched	0		
 r-sort-3b	r-sort-3b/locale-czech	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/locale-general-mdb	Mismatched	16	files	236 $.files[0].length [files]: expected 90112 actual 94208
-r-sort-3b	r-sort-3b/locale-german	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-sort-3b	r-sort-3b/locale-german	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/locale-japanese	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/locale-russian	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-sort-3b	r-sort-3b/locale-spanish-trad	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-sort-3b	r-sort-3b/locale-swedish	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-sort-3b	r-sort-3b/locale-spanish-trad	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-sort-3b	r-sort-3b/locale-swedish	Mismatched	16	Execute	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/locale-turkish	Mismatched	16	CreateDatabase	4 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/lu-compare-ops	Mismatched	16	OpenRecordset	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-sort-3b	r-sort-3b/lu-like-vs-range	Mismatched	16	OpenRecordset	6 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
@@ -1335,13 +1335,13 @@ r-str-ado-act	r-str-ado-act/ado-execute-results	Matched	0
 r-str-ado-act	r-str-ado-act/ado-open-alt-orders	Matched	0		
 r-str-ado-act	r-str-ado-act/ado-open-provider-property	Mismatched	16	Properties	13 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/ado-params	Mismatched	16	Count	15 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-str-ado-act	r-str-ado-act/ado-persist	Mismatched	16	Save	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-str-ado-act	r-str-ado-act/ado-persist	Mismatched	2	files	28 $.files[1].length [files]: expected 1005 actual 1008
 r-str-ado-act	r-str-ado-act/ado-provider-non-ace	Mismatched	16	Open	4 $.excepInfo.scode [call]: expected "0x80004005" actual "0x80004001"
 r-str-ado-act	r-str-ado-act/ado-rs-cursors	Matched	0		
 r-str-ado-act	r-str-ado-act/ado-rs-read-close	Mismatched	1	Value	17[3].1[9].0 $.result.decimal.sign [call]: expected 0 actual 128
 r-str-ado-act	r-str-ado-act/ado-schema	Mismatched	16	OpenSchema	10 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/ado-session	Mismatched	13	Execute	24 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
-r-str-ado-act	r-str-ado-act/ado-stream	Mismatched	16	Open	7 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
+r-str-ado-act	r-str-ado-act/ado-stream	Matched	0		
 r-str-ado-act	r-str-ado-act/ado-txn	Mismatched	2	Execute	14 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/ado-view	Mismatched	2	Bookmark	49 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
 r-str-ado-act	r-str-ado-act/create-ado-accdb	Mismatched	3	CreateQueryDef	36 $.invokeHresult [call]: expected "0x00000000" actual "0x80020009"
