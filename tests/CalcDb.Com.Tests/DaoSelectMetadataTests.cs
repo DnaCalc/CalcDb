@@ -454,23 +454,23 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
     {
         DatabaseObject db = Open(DefCursorMain, readOnly: false);
         SelectRecordsetObject rs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N FROM T WHERE ID = 3", 2)));
-        // Updatable single-table SELECT dynaset admits Edit / CancelUpdate in EditMode 1
+        // Updatable single-table SELECT dynaset admits Edit / AddNew / CancelUpdate in EditMode 1 / 2
         // (evidence/r-q42-field-rule-and/rule-and2-ne-accdb rows 395-401, 415-422, 436-443;
-        // evidence/r-q42-field-rule-and/rule-and2-ne-mdb rows 395-401, 415-422, 436-443);
+        // evidence/r-q42-field-rule-and/rule-and2-ne-mdb rows 395-401, 415-422, 436-443;
+        // evidence/r-q50-jk44-ddl-vis/dao-edit-buf-commit-rb-accdb, dao-edit-buf-nested-partial-accdb);
         // Update without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
         // (evidence/r-err-1b/asg-update-without-edit rows 5, 10, 32);
         // CancelUpdate without Edit on a depth-0 SELECT dynaset is unrecorded and refuses by name;
-        // AddNew and Delete stay refused.
+        // Delete on a writable SELECT dynaset stays refused.
         Ok(Method(rs, "Edit"));
+        Ok(Method(rs, "CancelUpdate"));
+        Ok(Method(rs, "AddNew"));
         Ok(Method(rs, "CancelUpdate"));
         AssertDaoError(Method(rs, "Update"), 3020, "DAO.Recordset");
         AssertNotModelled(Method(rs, "CancelUpdate"), "NotModelled.QueryRecordsetCancelUpdateNoEdit");
-        foreach (string method in (string[])["AddNew", "Delete"])
-        {
-            CallResult result = Method(rs, method);
-            Assert.NotNull(result.Failure);
-            Assert.Equal(FailureKind.NotImplemented, result.Failure!.Kind);
-        }
+        CallResult deleteResult = Method(rs, "Delete");
+        Assert.NotNull(deleteResult.Failure);
+        Assert.Equal(FailureKind.NotImplemented, deleteResult.Failure!.Kind);
         Ok(Method(rs, "Close"));
 
         // Snapshot SELECT keeps Edit refused by name.

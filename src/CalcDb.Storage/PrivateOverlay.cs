@@ -192,6 +192,9 @@ public sealed class PrivateOverlay : IDisposable
     /// <summary>Remove the innermost scope's deltas and restore its scope-before images; no native write, no sibling change.</summary>
     public void RollbackScope() => _cache.EndOverlayScope(this, commit: false);
 
+    /// <summary>Remove <paramref name="pageNumber"/> from this overlay after publishing its page changes externally.</summary>
+    public bool DiscardPage(ulong pageNumber) => _cache.DiscardOverlayPage(this, pageNumber);
+
     /// <summary>Discard every scope: the locker sees committed images again. No native page is restored or written.</summary>
     public void Rollback() => _cache.RollbackOverlay(this);
 
@@ -258,6 +261,19 @@ public sealed partial class PageCache
             var overlay = new PrivateOverlay(this, locker, view);
             _overlays.Add(overlay);
             return overlay;
+        }
+    }
+
+    public PrivateOverlay CreateTransientOverlay(LockerId locker, ReadView? view = null)
+    {
+        if (locker.Value == 0)
+        {
+            throw new ArgumentException("Locker 0 is reserved for reader history.", nameof(locker));
+        }
+        lock (_latch)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            return new PrivateOverlay(this, locker, view);
         }
     }
 
@@ -453,6 +469,31 @@ public sealed partial class PageCache
         {
             ThrowIfUnusable(overlay);
             DiscardOverlayUnderLatch(overlay);
+        }
+    }
+
+    internal bool DiscardOverlayPage(PrivateOverlay overlay, ulong pageNumber)
+    {
+        lock (_latch)
+        {
+            ThrowIfUnusable(overlay);
+            if (!overlay.Pages.Remove(pageNumber, out OverlayPage? page))
+            {
+                return false;
+            }
+            ReleaseOwner(page.Current);
+            foreach (ScopeBefore before in page.Befores)
+            {
+                if (before.Before is { } owner)
+                {
+                    ReleaseOwner(owner);
+                }
+            }
+            foreach (List<ulong> scopePages in overlay.ScopePages)
+            {
+                scopePages.Remove(pageNumber);
+            }
+            return true;
         }
     }
 

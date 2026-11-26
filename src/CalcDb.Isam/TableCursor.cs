@@ -955,16 +955,27 @@ internal sealed class PopulationFamily : IDisposable
         public bool HadNestedCommit { get; set; }
     }
 
+    private sealed class EmptyRowSource : IOrderedSource<RowId>, IDisposable
+    {
+        public static readonly EmptyRowSource Instance = new();
+        public RowId? Next(RowId? after) => null;
+        public RowId? Previous(RowId? before) => null;
+        public void Dispose() { }
+    }
+
+    internal static IOrderedSource<RowId> EmptySource => EmptyRowSource.Instance;
+
     private PageSource _pages;
     private readonly FormatDescriptor _d;
     private readonly TableDefinition _table;
     private ulong _pageCount;
     private readonly bool _forwardOnly;
     private readonly bool _isSnapshot;
+    private readonly bool _appendOnly;
     private uint? _bookmarkBase;
     private bool _snapshotRequeried;
     private bool _bookmarksInvalidatedByDelete;
-    private ScanSource _source;
+    private IOrderedSource<RowId> _source;
     private OccurrenceStore<RowId> _store;
     private SnapshotValues? _snapshot;
     private readonly List<PopulationCursor> _members = [];
@@ -980,7 +991,7 @@ internal sealed class PopulationFamily : IDisposable
     private PopulationCursor? _root;
     private bool _disposed;
 
-    public PopulationFamily(PageSource pages, FormatDescriptor d, TableDefinition table, ulong pageCount, ScanSource source, bool forwardOnly, uint? bookmarkBase, bool snapshot)
+    public PopulationFamily(PageSource pages, FormatDescriptor d, TableDefinition table, ulong pageCount, IOrderedSource<RowId> source, bool forwardOnly, uint? bookmarkBase, bool snapshot, bool appendOnly = false)
     {
         _pages = pages;
         _d = d;
@@ -988,6 +999,7 @@ internal sealed class PopulationFamily : IDisposable
         _pageCount = pageCount;
         _forwardOnly = forwardOnly;
         _isSnapshot = snapshot;
+        _appendOnly = appendOnly;
         _bookmarkBase = bookmarkBase;
         _source = source;
         // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
@@ -1073,7 +1085,7 @@ internal sealed class PopulationFamily : IDisposable
         _coordinator?.Unregister(this);
         _coordinator = null;
         _savepoints.Clear();
-        _source.Dispose();
+        (_source as IDisposable)?.Dispose();
         _snapshot?.Dispose();
         _snapshot = null;
     }
@@ -1288,16 +1300,25 @@ internal sealed class PopulationFamily : IDisposable
             return false;
         }
         ulong extent = Math.Max(pageCount ?? _pageCount, pages.Cache.KnownExtentPages);
-        ScanNavigator? navigator = ScanNavigator.Open(pages, _d, _table, extent, out failure);
-        if (navigator is null)
+        IOrderedSource<RowId> newScanSource;
+        if (_appendOnly)
         {
-            return false;
+            newScanSource = EmptyRowSource.Instance;
+            failure = null;
         }
-        var newScanSource = new ScanSource(navigator);
+        else
+        {
+            ScanNavigator? navigator = ScanNavigator.Open(pages, _d, _table, extent, out failure);
+            if (navigator is null)
+            {
+                return false;
+            }
+            newScanSource = new ScanSource(navigator);
+        }
         var newStore = new OccurrenceStore<RowId>(newScanSource, firstMoveChunk: _forwardOnly ? 1 : 500);
         if (_members.Count > 1 && newStore.Next(null) is null)
         {
-            newScanSource.Dispose();
+            (newScanSource as IDisposable)?.Dispose();
             failure = new TraversalFailure("NotModelled.CloneRequeryEmptyTable: Requery with live clones when the requeried table is empty (not recorded)", null);
             return false;
         }
@@ -1310,7 +1331,7 @@ internal sealed class PopulationFamily : IDisposable
         }
         _pages = pages;
         _pageCount = extent;
-        _source.Dispose();
+        (_source as IDisposable)?.Dispose();
         _source = newScanSource;
         _store = newStore;
         _savepoints.Clear();
@@ -1399,7 +1420,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// Open a dynaset, snapshot or forward-only cursor. <paramref name="bookmarkBase"/> numbers its bookmarks
     /// (<see cref="KeysetBookmark"/>); null where ACE's base is not identified, and the bookmarks are then NotObserved.
     /// </summary>
-    public static PopulationCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false)
+    public static PopulationCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false, bool appendOnly = false)
     {
         if (snapshot && (cache.Overlay is not null || cache.IsDynamic))
         {
@@ -1413,7 +1434,17 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         {
             return null;
         }
-        var family = new PopulationFamily(cache, d, table, pageCount, new ScanSource(navigator), forwardOnly, bookmarkBase, snapshot);
+        IOrderedSource<RowId> source;
+        if (appendOnly)
+        {
+            navigator.Dispose();
+            source = PopulationFamily.EmptySource;
+        }
+        else
+        {
+            source = new ScanSource(navigator);
+        }
+        var family = new PopulationFamily(cache, d, table, pageCount, source, forwardOnly, bookmarkBase, snapshot, appendOnly);
         return new PopulationCursor(family, isRoot: true);
     }
 

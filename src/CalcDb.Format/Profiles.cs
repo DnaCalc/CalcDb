@@ -194,12 +194,17 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
     /// Increment the Jet 4 MDB / ACCDB page-0 commit counter for the session kind by 1:
     /// <see cref="HeaderRules.ExclusiveCommitCounter"/> (u16LE at [3584, 3586)) for exclusive sessions
     /// (evidence/r-q41-create-session-counter, evidence/r-q40-mdb-counter/create-first-write-accdb,
-    /// create-first-write-mdb) and <see cref="HeaderRules.CommitCounter"/> (u16LE at [3586, 3588)) for shared sessions
+    /// create-first-write-mdb), <see cref="HeaderRules.CommitCounter"/> (u16LE at [3586, 3588)) for shared sessions
     /// (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits,
-    /// evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb).
+    /// evidence/r-q19-growth-open/split-uncovered-right-leaf-below, evidence/r-q40-mdb-counter/carry-u16-mdb), and
+    /// <see cref="HeaderRules.ReadOnlyFirstCommitCounter"/> (u16LE at [3588, 3590)) when the first open was shared ReadOnly
+    /// (<c>evidence/r-q52-ddl-make-domain/mh-rofirst-dynaset-edit-*</c>).
     /// Refuses unsupported headers and overflow past 65,535 (wrap past 65,535 is unobserved).
     /// </summary>
-    public static bool TryIncrementCommitCounter(Span<byte> page0, FormatDescriptor d, bool exclusive, out string? failure)
+    public static bool TryIncrementCommitCounter(Span<byte> page0, FormatDescriptor d, bool exclusive, out string? failure) =>
+        TryIncrementCommitCounter(page0, d, exclusive, secondarySlot: false, out failure);
+
+    public static bool TryIncrementCommitCounter(Span<byte> page0, FormatDescriptor d, bool exclusive, bool secondarySlot, out string? failure)
     {
         failure = null;
         if (page0.Length != d.PageSize)
@@ -213,7 +218,7 @@ public sealed record DatabaseHeader(TextSortOrder SortOrder)
             failure = $"page 0 is not a supported Jet 4 MDB or ACCDB database header ({refusal})";
             return false;
         }
-        FieldRule rule = d.Header.CommitCounterFor(exclusive);
+        FieldRule rule = d.Header.CommitCounterFor(exclusive, secondarySlot);
         ulong current = rule.Read(page0);
         if (current >= ushort.MaxValue)
         {

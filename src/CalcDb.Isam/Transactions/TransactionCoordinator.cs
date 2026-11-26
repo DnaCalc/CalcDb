@@ -102,6 +102,12 @@ public interface IPublicationTarget
     /// the shared slot <c>[0x0E02, 0x0E04)</c> (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter).
     /// </summary>
     bool IsExclusiveSession(PageCache cache) => false;
+
+    /// <summary>
+    /// Whether this binding writes to the secondary shared commit-counter slot <c>[0x0E04, 0x0E06)</c> because the
+    /// process pool's first handle on the file opened read-only and non-exclusively (<c>r-q52/mh-rofirst-dynaset-edit-*</c>).
+    /// </summary>
+    bool IsSecondaryCommitSlot(PageCache cache) => false;
 }
 
 /// <summary>
@@ -154,6 +160,8 @@ public sealed class ExplicitFrame
 
     internal Dictionary<(PageCache Cache, uint TableDefPage), AutoNumberMark>? ConsumedAutoNumbers { get; set; }
 
+    public bool HasConsumedAutoNumbers => ConsumedAutoNumbers is { Count: > 0 };
+
     internal HashSet<(PageCache Cache, uint TableDefPage)>? StatementTableDefPages { get; set; }
 
     internal bool HasAutoNumberTarget { get; set; }
@@ -162,9 +170,13 @@ public sealed class ExplicitFrame
 
     internal HashSet<PageCache>? RolledBackGlobalMapAllocations { get; set; }
 
+    internal HashSet<PageCache>? RolledBackNonAutoCloseCommits { get; set; }
+
     internal Dictionary<AutoNumberCounter, long>? InitialExplicitCounters { get; private set; }
 
     internal (AutoNumberCounter Counter, long Value)? PendingCounterReseed { get; set; }
+
+    internal bool FlushedTableDefOnPeerConflict { get; set; }
 
     internal void SaveExplicitCounterBefore(AutoNumberCounter counter, long? valueBefore = null)
     {
@@ -683,6 +695,31 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _deferredCloseEdits.ContainsKey(cache);
 
     /// <summary>
+    /// True when <paramref name="cache"/> owes work other than purely releasing pages in page 1 and holds no pending
+    /// <c>_releaseAtClose</c> page frees (<c>r-q52/mh-twows-both-close-commit-*</c> vs <c>r-q46/mh-ddl-refresh-twows-*</c>).
+    /// </summary>
+    public bool HasNonReleaseCloseCommit(PageCache cache) =>
+        !_releaseAtClose.ContainsKey(cache)
+        && (_allocatedGlobalMap.Contains(cache)
+            || _reservedExtent.Contains(cache)
+            || _sessionReservedExtent.ContainsKey(cache)
+            || _deferredCatalogCommit.ContainsKey(cache)
+            || _closeCommitRequired.Contains(cache)
+            || _deferredCloseEdits.ContainsKey(cache));
+
+    /// <summary>Remove and return any pending ReleasedAtClose page numbers for <paramref name="cache"/> so a non-last close transfers them to the pooled session.</summary>
+    public IReadOnlyList<uint> TransferReleaseAtClose(PageCache cache)
+    {
+        _reservedExtent.Remove(cache);
+        _sessionReservedExtent.Remove(cache);
+        if (_releaseAtClose.Remove(cache, out List<uint>? pages) && pages.Count > 0)
+        {
+            return pages;
+        }
+        return [];
+    }
+
+    /// <summary>
     /// Require a closing counter commit (+1 on page 0) at <see cref="PublishCloseCommit"/> even when page 1 was not
     /// touched (<c>evidence/r-q47-bigint-expr-edges/reldel-noenforce-accdb</c>, <c>reldel-noenforce-mdb</c>).
     /// </summary>
@@ -977,6 +1014,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <summary>The effective dbLockRetry × dbLockDelay of the engine (the adapter sets it from SetOption; TXN-LOCAL).</summary>
     public LockWaitPolicy WaitPolicy { get; set; } = LockWaitPolicy.Default;
 
+    /// <summary>When true (DAO Workspaces per r-q54/field-meta-and-lockwait-*), lock conflicts fail immediately without retry waits.</summary>
+    public bool ImmediateConflict { get; set; }
+
+    /// <summary>Invoked when a lock request outside an explicit transaction hits a <see cref="LockLifetime.Transaction"/> holder conflict (r-q52/mh-twows-3188-step-*).</summary>
+    public Func<LockerId, PageCache, bool>? OnTransactionLockConflict { get; set; }
+
     /// <summary>The time and scheduling seam of this locker's conflict waits.</summary>
     public ILockScheduler Scheduler { get; set; } = ThreadLockScheduler.System;
 
@@ -1018,7 +1061,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public LockAcquisition Lock(PageCache file, ReadOnlySpan<LockResource> footprint, LockLifetime lifetime)
     {
         _locked.Add(file);
-        LockAcquisition got = file.Locks.Acquire(Locker, footprint, lifetime, WaitPolicy, Scheduler);
+        LockWaitPolicy effectiveWait = ImmediateConflict ? LockWaitPolicy.NoWait : WaitPolicy;
+        LockAcquisition got = file.Locks.Acquire(Locker, footprint, lifetime, effectiveWait, Scheduler);
+        if (got.Conflict is { HolderLifetime: LockLifetime.Transaction } conflict
+            && _frames.Count == 0
+            && OnTransactionLockConflict is { } onConflict)
+        {
+            onConflict(conflict.Holder, file);
+        }
         if (_statement is not null && got.Conflict is null && lifetime != LockLifetime.PendingEdit)
         {
             RecordStatementLockDelta(file, footprint, lifetime, +1);
@@ -1217,6 +1267,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 parent.RolledBackGlobalMapAllocations ??= [];
                 parent.RolledBackGlobalMapAllocations.UnionWith(rolledAlloc);
             }
+            if (top.RolledBackNonAutoCloseCommits is { Count: > 0 } nonAutoClose)
+            {
+                parent.RolledBackNonAutoCloseCommits ??= [];
+                parent.RolledBackNonAutoCloseCommits.UnionWith(nonAutoClose);
+            }
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.CommitScope();
@@ -1251,12 +1306,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             _pendingCloseCommit.UnionWith(outerRolledAlloc);
         }
+        if (top.RolledBackNonAutoCloseCommits is { Count: > 0 } outerNonAutoClose)
+        {
+            _closeCommitRequired.UnionWith(outerNonAutoClose);
+        }
         bool pages = _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0);
         if (!pages && top.Changes.Count == 0)
         {
             top.ApplyPendingCounterReseed();
             _sideEffectRoles.Clear();
             _pendingCloseCommit.Clear();
+            _lazyBursts.Clear();
             ReleaseLocks(LockLifetime.Transaction);
             ReleaseParticipants();
             foreach (PopulationFamily pop in _populations)
@@ -1400,13 +1460,13 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// than before I/O, matching ACE's write-behind window which ends about 0.5 s after the return
     /// (R-TXN-1 TXN-FLUSH-BEHIND; ETW background writer delay 500–545 ms).
     /// </summary>
-    private void RecordBurst(PageCache cache, CommitMode mode, bool trackLazyBurst)
+    private void RecordBurst(PageCache cache, CommitMode mode, bool trackLazyBurst, bool keepBurstWindow = false)
     {
-        if (mode == CommitMode.Immediate)
+        if (mode == CommitMode.Immediate && !keepBurstWindow)
         {
             _lazyBursts.Remove(cache);
         }
-        else if (trackLazyBurst)
+        else if (trackLazyBurst || keepBurstWindow)
         {
             _lazyBursts[cache] = Clock();
         }
@@ -1429,7 +1489,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         MutationErrorSource conflictSource,
         out MutationError? error,
         bool allowDuringRollbackExtent = false,
-        bool allowPendingDeferredCatalogCommit = false)
+        bool allowPendingDeferredCatalogCommit = false,
+        bool allowBesideParticipants = false,
+        bool useTransientOverlay = false)
     {
         error = null;
         if (Publisher is not { } publisher)
@@ -1469,7 +1531,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             RecordBurst(cache, mode, trackLazyBurst);
             return (MutationOpen.None, null);
         }
-        if (_participants.ContainsKey(cache))
+        if (!allowBesideParticipants && _participants.ContainsKey(cache))
         {
             return (MutationOpen.Publication, "a non-transactional write (an AddNew's AutoNumber, a refused unique insert's counters) beside this Workspace's unpublished changes of the file: its order and commit count against the statement's or level's commit are not recorded");
         }
@@ -1488,7 +1550,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
         }
         FormatDescriptor d = FormatDescriptor.Jet4Family;
-        PrivateOverlay overlay = cache.CreateOverlay(Locker);
+        PrivateOverlay overlay = useTransientOverlay ? cache.CreateTransientOverlay(Locker) : cache.CreateOverlay(Locker);
         bool keepOverlay = false;
         try
         {
@@ -1506,8 +1568,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (incrementPage0)
             {
                 bool exclusive = IsExclusive(cache);
-                FieldRule counterRule = d.Header.CommitCounterFor(exclusive);
-                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d, exclusive));
+                bool secondary = IsSecondarySlot(cache);
+                FieldRule counterRule = d.Header.CommitCounterFor(exclusive, secondary);
+                EditResult p0Edit = overlay.Edit(0, new CommitCounterDelta(d, exclusive, secondary));
                 if (!p0Edit.Succeeded)
                 {
                     return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
@@ -1610,7 +1673,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     private bool IsExclusive(PageCache cache) => Publisher?.IsExclusiveSession(cache) ?? false;
 
-    private FieldRule CommitCounterRule(PageCache cache) => FormatDescriptor.Jet4Family.Header.CommitCounterFor(IsExclusive(cache));
+    private bool IsSecondarySlot(PageCache cache) => Publisher?.IsSecondaryCommitSlot(cache) ?? false;
+
+    private FieldRule CommitCounterRule(PageCache cache) => FormatDescriptor.Jet4Family.Header.CommitCounterFor(IsExclusive(cache), IsSecondarySlot(cache));
 
     private static ulong CommitCounterAt(PageCache cache, FieldRule rule)
     {
@@ -1795,7 +1860,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// native effect leaves the set as it was; one that stops after an effect keeps the attempt as resolution owner
     /// (the cache restricts admission) and is named.
     /// </summary>
-    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode)
+    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode, bool keepBurstWindow = false)
     {
         if (_unwrittenPendingCount > 0 && _pending.Find(c => c.Physical is null) is { } unwritten)
         {
@@ -1848,7 +1913,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (incrementPage0)
             {
                 bool exclusive = IsExclusive(p.Cache);
-                FieldRule counterRule = d.Header.CommitCounterFor(exclusive);
+                bool secondary = IsSecondarySlot(p.Cache);
+                FieldRule counterRule = d.Header.CommitCounterFor(exclusive, secondary);
                 bool needCounterEdit = !p.Overlay.ChangedPages.Contains(0UL);
                 if (!needCounterEdit && page0HadContentEdit)
                 {
@@ -1862,7 +1928,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (needCounterEdit)
                 {
-                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, exclusive));
+                    EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, exclusive, secondary));
                     if (!p0Edit.Succeeded)
                     {
                         return (MutationOpen.Publication, $"page 0 could not take the commit-counter revision: {p0Edit.Failure} {p0Edit.Detail}");
@@ -1913,7 +1979,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 p.Cache.NoteExtent(publishedExtent);
             }
-            RecordBurst(p.Cache, mode, trackLazyBurst);
+            RecordBurst(p.Cache, mode, trackLazyBurst, keepBurstWindow);
         }
         foreach (PageCache f in _locked)
         {
@@ -2047,10 +2113,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new ResolutionOutcome(new MutationError(MutationError.NoTransaction, MutationErrorSource.Workspace));
         }
-        bool pendingEdit = _edits.Exists(e => e.Mode != EditMode.None);
-        if (pendingEdit && _frames.Count > 1)
+        if (_frames[^1].FlushedTableDefOnPeerConflict)
         {
-            return new ResolutionOutcome(null, MutationOpen.PendingEditAtInnerRollback, "an edit is pending at an inner Rollback");
+            return new ResolutionOutcome(
+                null,
+                MutationOpen.Publication,
+                "Rollback after a peer lock conflict flushed pending TableDef counts is not recorded (r-q52/mh-twows-3188-step)");
         }
         if (_statement is null && _edits.Exists(e => e.HasPendingCheckAutoNumberInTxn))
         {
@@ -2118,6 +2186,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     _frames[^1].RolledBackGlobalMapAllocations ??= [];
                     _frames[^1].RolledBackGlobalMapAllocations!.Add(nestedCounters.File);
                 }
+                if (!nestedCounters.HasAutoNumberTarget)
+                {
+                    _frames[^1].RolledBackNonAutoCloseCommits ??= [];
+                    _frames[^1].RolledBackNonAutoCloseCommits!.Add(nestedCounters.File);
+                }
             }
             else
             {
@@ -2127,6 +2200,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     p.Overlay.RollbackScope();
                 }
+            }
+            foreach (EditFrame e in _edits.ToArray())
+            {
+                e.DropForRollback();
             }
             foreach (PopulationFamily pop in _populations)
             {
@@ -2147,6 +2224,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
+        _lazyBursts.Clear();
         if (write is { } words)
         {
             return WriteRolledBackAutoNumbers(words, top.Changes.Count);
@@ -2170,14 +2248,82 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (Publisher is null
             || top.Level != 2
             || _frames.Count != 2
-            || top.StatementCount != 1
-            || top.HasNonInsertSelectWork
-            || top.Changes.Count == 0
-            || top.ConsumedAutoNumbers is not { Count: 1 } marks)
+            || top.Changes.Count == 0)
         {
             return null;
         }
         ExplicitFrame outer = _frames[0];
+        if (top.ConsumedAutoNumbers is not { Count: > 0 }
+            && outer.ConsumedAutoNumbers is not { Count: > 0 }
+            && outer.RolledBackGlobalMapAllocations is not { Count: > 0 }
+            && top.StatementTableDefPages is not { Count: > 0 }
+            && outer.StatementTableDefPages is not { Count: > 0 }
+            && top.RolledBackGlobalMapAllocations is not { Count: > 0 })
+        {
+            PageCache? nonAutoFile = null;
+            uint nonAutoTdefPage = 0;
+            bool hasInsert = false;
+            bool validNonAuto = true;
+            foreach (AcceptedRowChange change in top.Changes)
+            {
+                if (change.Physical is not { } physical || AllocatesGlobalMapPage(physical))
+                {
+                    validNonAuto = false;
+                    break;
+                }
+                if (nonAutoFile is null)
+                {
+                    nonAutoFile = physical.File;
+                }
+                else if (!ReferenceEquals(physical.File, nonAutoFile))
+                {
+                    validNonAuto = false;
+                    break;
+                }
+                if (change.Kind == RowChangeKind.Insert)
+                {
+                    if (change.Table.AutoNumber is not null)
+                    {
+                        validNonAuto = false;
+                        break;
+                    }
+                    if (!hasInsert)
+                    {
+                        hasInsert = true;
+                        nonAutoTdefPage = change.Table.Table.FirstPage;
+                    }
+                    else if (change.Table.Table.FirstPage != nonAutoTdefPage)
+                    {
+                        validNonAuto = false;
+                        break;
+                    }
+                }
+                else if (change.Kind != RowChangeKind.Modify)
+                {
+                    validNonAuto = false;
+                    break;
+                }
+            }
+            if (validNonAuto
+                && hasInsert
+                && nonAutoFile is not null
+                && HasCommitCounterHeader(nonAutoFile)
+                && _participants.TryGetValue(nonAutoFile, out FileParticipant? nonAutoParticipant))
+            {
+                FormatDescriptor dNonAuto = FormatDescriptor.Jet4Family;
+                using PagePin? pinNonAuto = nonAutoParticipant.Overlay.Pin(nonAutoTdefPage).Pin;
+                if (pinNonAuto is not null && TableDefCounterSnapshotDelta.Capture(pinNonAuto.Bytes, dNonAuto) is { } snapNonAuto)
+                {
+                    return new StatementCounters(nonAutoFile, [(nonAutoTdefPage, snapNonAuto)], TookPage: false, HasAutoNumberTarget: false);
+                }
+            }
+        }
+        if (top.StatementCount != 1
+            || top.HasNonInsertSelectWork
+            || top.ConsumedAutoNumbers is not { Count: 1 } marks)
+        {
+            return null;
+        }
         if (outer.Changes.Count > 0
             || outer.StatementCount > 0
             || outer.HasNonInsertSelectWork
@@ -3018,7 +3164,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (_pending.Count > 0 || (hasSideEffect && _participants.Values.Any(p => p.Overlay.ChangedPages.Count > 0)))
         {
-            (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+            (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, keepBurstWindow: true);
             if (open != MutationOpen.None && group2File is not null)
             {
                 // Group 2 did not publish, so the full Group 1 extent (allocated + unused pages) remains in
@@ -3589,7 +3735,156 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// <paramref name="cache"/> unresolved so a retry can succeed; a failure after a native write marks
     /// <paramref name="cache"/> unresolved via <see cref="PublicationStep.NeedsResolution"/> without dropping tracking.
     /// </summary>
-    public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
+    /// <summary>
+    /// Publish pending TableDef count increments held in depth 1 when another session hits a <see cref="LockLifetime.Transaction"/>
+    /// 3188 conflict on this file (<c>r-q52/mh-twows-3188-step-{accdb,mdb}</c>), leaving remaining overlay changes for CommitTrans.
+    /// </summary>
+    public bool TryFlushPendingTableDefOnConflict(PageCache cache)
+    {
+        if (_frames.Count != 1 || _statement is not null || !_participants.TryGetValue(cache, out FileParticipant? participant))
+        {
+            return false;
+        }
+        ExplicitFrame top = _frames[0];
+        if (top.Level != 1
+            || top.FlushedTableDefOnPeerConflict
+            || top.Changes.Count == 0
+            || top.ConsumedAutoNumbers is { Count: > 0 }
+            || top.StatementTableDefPages is { Count: > 0 }
+            || !HasCommitCounterHeader(cache))
+        {
+            return false;
+        }
+        uint? targetTdefPage = null;
+        List<PageEdit> tdefEdits = [];
+        for (int i = 0; i < top.Changes.Count; i++)
+        {
+            AcceptedRowChange change = top.Changes[i];
+            if (change.Physical is not { } physical || !ReferenceEquals(physical.File, cache))
+            {
+                continue;
+            }
+            IReadOnlyList<PageEdit> edits = physical.Edits;
+            for (int ei = 0; ei < edits.Count; ei++)
+            {
+                PageEdit edit = edits[ei];
+                if (edit.Delta is TableDefCountsDelta delta)
+                {
+                    if (change.Kind != RowChangeKind.Insert || edit.Page > uint.MaxValue || delta.AutoNumberFloor is not null)
+                    {
+                        return false;
+                    }
+                    uint page = (uint)edit.Page;
+                    if (targetTdefPage is { } existing && existing != page)
+                    {
+                        return false;
+                    }
+                    targetTdefPage = page;
+                    tdefEdits.Add(new PageEdit(page, delta, PageRole.Catalog));
+                }
+            }
+        }
+        if (targetTdefPage is not uint tdefPage || tdefEdits.Count == 0)
+        {
+            return false;
+        }
+        for (int i = 0; i < top.Changes.Count; i++)
+        {
+            if (top.Changes[i].Physical is not { } physical || !ReferenceEquals(physical.File, cache))
+            {
+                continue;
+            }
+            foreach (PageEdit edit in physical.Edits)
+            {
+                if (edit.Page == tdefPage && edit.Delta is not TableDefCountsDelta)
+                {
+                    return false;
+                }
+            }
+        }
+        (MutationOpen open, _) = PublishNonTransactional(
+            cache,
+            tdefEdits,
+            [],
+            CommitMode.Immediate,
+            MutationErrorSource.Workspace,
+            out MutationError? error,
+            allowBesideParticipants: true,
+            useTransientOverlay: true);
+        if (open != MutationOpen.None || error is not null)
+        {
+            return false;
+        }
+        participant.Overlay.DiscardPage(tdefPage);
+        top.FlushedTableDefOnPeerConflict = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Non-last handle close commit (<c>r-q52/mh-twows-both-close-commit-*</c> Phases 1 &amp; 3): flushes any
+    /// deferred catalog commit or close edits and advances page 0's commit counter once without modifying page 1.
+    /// </summary>
+    public (MutationOpen Open, string? Detail) PublishNonLastCloseCommit(PageCache cache)
+    {
+        if (_participants.ContainsKey(cache))
+        {
+            return (MutationOpen.Publication, "this Workspace's accepted changes of the file are not published: a closing commit would publish beside them");
+        }
+        if (_deferredCatalogCommit.ContainsKey(cache))
+        {
+            (MutationOpen defOpen, string? defDetail) = FlushDeferredCatalogCommit(cache);
+            if (defOpen != MutationOpen.None)
+            {
+                return (defOpen, defDetail);
+            }
+            if (!_allocatedGlobalMap.Contains(cache)
+                && !_reservedExtent.Contains(cache)
+                && !_sessionReservedExtent.ContainsKey(cache)
+                && !_closeCommitRequired.Contains(cache)
+                && !_deferredCloseEdits.ContainsKey(cache))
+            {
+                return (MutationOpen.None, null);
+            }
+        }
+        List<PageEdit> edits = [];
+        List<LockResource> footprint = [];
+        if (_deferredCloseEdits.TryGetValue(cache, out List<PageEdit>? closeEdits) && closeEdits.Count > 0)
+        {
+            HashSet<ulong> lockedCatalogPages = [];
+            foreach (PageEdit edit in closeEdits)
+            {
+                edits.Add(edit);
+                if (lockedCatalogPages.Add(edit.Page))
+                {
+                    footprint.Add(new LockResource(edit.Page, LockPurpose.TableDef));
+                }
+            }
+        }
+        (MutationOpen open, string? detail) = PublishNonTransactional(
+            cache,
+            edits,
+            [.. footprint],
+            CommitMode.Immediate,
+            MutationErrorSource.Workspace,
+            out MutationError? error,
+            allowDuringRollbackExtent: true);
+        if (open == MutationOpen.None && error is null)
+        {
+            _allocatedGlobalMap.Remove(cache);
+            _jet4MdbRollbackPending.Remove(cache);
+            _reservedExtent.Remove(cache);
+            _sessionReservedExtent.Remove(cache);
+            _rollbackExtentPending.Remove(cache);
+            _pendingGroup2AllocatedPages.Remove(cache);
+            _closeCommitRequired.Remove(cache);
+            _deferredCloseEdits.Remove(cache);
+            _pendingRolledBackPages.Remove(cache);
+            cache.UnregisterRollbackExtentOwner(Locker);
+        }
+        return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
+    }
+
+    public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache, IReadOnlyList<uint>? extraReleasedPages = null)
     {
         if (_participants.ContainsKey(cache))
         {
@@ -3605,21 +3900,43 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (!_allocatedGlobalMap.Contains(cache)
                 && !_releaseAtClose.ContainsKey(cache)
                 && !_closeCommitRequired.Contains(cache)
-                && !_deferredCloseEdits.ContainsKey(cache))
+                && !_deferredCloseEdits.ContainsKey(cache)
+                && extraReleasedPages is not { Count: > 0 })
             {
                 return (MutationOpen.None, null);
             }
         }
         List<PageEdit> frees = [];
         List<LockResource> footprint = [];
-        if (_releaseAtClose.TryGetValue(cache, out List<uint>? released) && released.Count > 0)
+        List<uint> releasedPages = [];
+        if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
+        {
+            foreach (uint page in released)
+            {
+                if (!releasedPages.Contains(page))
+                {
+                    releasedPages.Add(page);
+                }
+            }
+        }
+        if (extraReleasedPages is { Count: > 0 })
+        {
+            foreach (uint page in extraReleasedPages)
+            {
+                if (!releasedPages.Contains(page))
+                {
+                    releasedPages.Add(page);
+                }
+            }
+        }
+        if (releasedPages.Count > 0)
         {
             if (cache.HasOtherRollbackExtentOwner(Locker))
             {
                 return (MutationOpen.Publication, OtherWorkspaceRollbackExtentDetail);
             }
             var allocator = new PageAllocator(cache, FormatDescriptor.Jet4Family, cache.KnownExtentPages, allowPendingRollbackExtent: true);
-            foreach (uint page in released)
+            foreach (uint page in releasedPages)
             {
                 if (allocator.Free(null, page, out string? failure) is not { } free)
                 {

@@ -29,7 +29,7 @@ public sealed class DaoOperationTableTests
         Assert.Equal(OptionAdmission.InvalidArgument, RecordsetOptions.Admit(4, 48));
         Assert.Equal(OptionAdmission.InvalidArgument, RecordsetOptions.Admit(2, 64));
         Assert.Equal(OptionAdmission.Admitted, RecordsetOptions.Admit(1, 260));
-        Assert.Equal(OptionAdmission.NotModelled, RecordsetOptions.Admit(2, 8));
+        Assert.Equal(OptionAdmission.Admitted, RecordsetOptions.Admit(2, 8));
         Assert.True(RecordsetOptions.Updatable(1, 256, readOnlyDatabase: false));
         Assert.False(RecordsetOptions.Updatable(2, 256, readOnlyDatabase: false));
         Assert.False(RecordsetOptions.Updatable(1, 12, readOnlyDatabase: false));

@@ -180,6 +180,373 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         AssertDaoError(Get(rq, "EOF"), 3420, "DAO.Recordset");
     }
 
+    private const string VisAccdb = "f51d3cf367ed40df9dbde48c82d6964ddf6002a3699121053347e1b385f9719a";
+    private const string VisMdb = "b8be8fc1b5580799d437a24c6174ebd1713c0f137affce98a16e080e633e87f7";
+    private const string Txn1bMdb = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75";
+
+    private static byte ReadFileByte(string path, int page, int offset)
+    {
+        byte[] buf = new byte[4096];
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        fs.Position = (long)page * 4096;
+        fs.ReadExactly(buf);
+        return buf[offset];
+    }
+
+    private void PutFieldValue(DispatchObject rs, string name, object value)
+    {
+        DispatchObject fields = Recover<DispatchObject>(Ok(Get(rs, "Fields")));
+        DispatchObject fld = Recover<DispatchObject>(Ok(Get(fields, "Item", name)));
+        Ok(Call(fld, "Value", InvokeKind.PropertyPut, value));
+    }
+
+    private int ReadDispatchIntField(DispatchObject rs, string name)
+    {
+        DispatchObject fields = Recover<DispatchObject>(Ok(Get(rs, "Fields")));
+        DispatchObject fld = Recover<DispatchObject>(Ok(Get(fields, "Item", name)));
+        return IntValue(Ok(Get(fld, "Value")));
+    }
+
+    private static long s_nextHost = 0xDA0_7F00;
+
+    private DBEngineObject CreateEngine()
+    {
+        nint engine = 0;
+        var binding = new HostBinding(checked((nuint)Interlocked.Increment(ref s_nextHost)), Standalone: true, 0, 0, 0, 0, 0);
+        Assert.Equal(0, DBEngineObject.Create(binding, 0, NativeRoute.IidIDispatch, &engine));
+        DBEngineObject obj = ComObject.Recover<DBEngineObject>(engine);
+        _held.Add((obj, engine));
+        return obj;
+    }
+
+    private string CopyFixturePath(string sha)
+    {
+        DatabaseObject temp = Open(sha);
+        string path = TextValue(Ok(Get(temp, "Name")));
+        Ok(Method(temp, "Close"));
+        return path;
+    }
+
+    private WorkspaceObject DefaultWorkspace(DBEngineObject eng)
+    {
+        DispatchObject wss = Recover<DispatchObject>(Ok(Get(eng, "Workspaces")));
+        return Recover<WorkspaceObject>(Ok(Get(wss, "Item", 0)));
+    }
+
+    private static short Int16Value(CallResult result)
+    {
+        Ok(result);
+        NativeVariant v = result.HasScalar ? result.Scalar : *result.Value!.Pointer;
+        Assert.Equal(VarType.I2, (VarType)v.Vt);
+        result.ReleaseUntaken();
+        return unchecked((short)v.Int64);
+    }
+
+    [Fact]
+    public void Ws2_reader_dynaset_and_snapshot_after_other_workspace_Rollback()
+    {
+        // R-TXN-1 TXN-VIEW (evidence/r-txn-1b/ws2-reader-after-other-rollback): pre-txn SELECT dynaset and snapshot
+        // on Workspace B stay readable on committed values during A's depth-1 UPDATE, after A's Rollback, and after Requery.
+        string path = CopyFixturePath(Txn1bAccdb);
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path, false, false)));
+        WorkspaceObject ws1 = DefaultWorkspace(eng);
+        WorkspaceObject ws2 = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "second", "admin", "", 2)));
+        DatabaseObject db2 = Recover<DatabaseObject>(Ok(Method(ws2, "OpenDatabase", path, false, false)));
+
+        const string sql = "SELECT ID, V FROM Wide WHERE ID IN (1, 2, 64) ORDER BY ID";
+        SelectRecordsetObject rsd = OpenSelect(db2, sql, 2);
+        SelectRecordsetObject rss = OpenSelect(db2, sql, 4);
+
+        Ok(Method(ws1, "BeginTrans"));
+        Ok(Method(db1, "Execute", "UPDATE Wide SET V = 100 WHERE ID = 1", 128));
+
+        Ok(Method(rsd, "MoveFirst"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rsd));
+        Ok(Method(rss, "MoveFirst"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rss));
+
+        SelectRecordsetObject rssMid = OpenSelect(db2, sql, 4);
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rssMid));
+        Ok(Method(rssMid, "Close"));
+
+        Ok(Method(ws1, "Rollback"));
+        DispatchObject errs = Recover<DispatchObject>(Ok(Get(eng, "Errors")));
+        Assert.Equal(0, Int16Value(Get(errs, "Count")));
+
+        Ok(Method(rsd, "MoveFirst"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rsd));
+        Ok(Method(rss, "MoveFirst"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rss));
+
+        Ok(Method(rsd, "Requery"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rsd));
+        Ok(Method(rss, "Requery"));
+        Assert.Equal([(1, 0), (2, 0), (64, 0)], ReadIdV(rss));
+
+        Ok(Method(rss, "Close"));
+        Ok(Method(rsd, "Close"));
+        Ok(Method(db2, "Close"));
+        Ok(Method(ws2, "Close"));
+        Ok(Method(db1, "Close"));
+    }
+
+    [Fact]
+    public void Ws2_Rollback_beside_unrecorded_cursor_shapes_stays_NotModelled()
+    {
+        // Unrecorded neighbouring cross-Workspace rollback shapes stay refused by name:
+        // (1) SELECT dynaset opened inside BeginTrans on ws2; (2) pre-txn local table cursor; (3) Jet 4 MDB.
+        DBEngineObject eng = CreateEngine();
+        WorkspaceObject ws1 = DefaultWorkspace(eng);
+
+        string pathDuring = CopyFixturePath(Txn1bAccdb);
+        DatabaseObject dbDuring = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", pathDuring, false, false)));
+        WorkspaceObject ws2During = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "w2a", "admin", "", 2)));
+        DatabaseObject db2During = Recover<DatabaseObject>(Ok(Method(ws2During, "OpenDatabase", pathDuring, false, false)));
+        Ok(Method(ws1, "BeginTrans"));
+        Ok(Method(dbDuring, "Execute", "UPDATE Wide SET V = 100 WHERE ID = 1", 128));
+        SelectRecordsetObject rsDuring = OpenSelect(db2During, "SELECT ID, V FROM Wide ORDER BY ID", 2);
+        AssertNotModelled(Method(ws1, "Rollback"), "NotModelled.CrossWorkspaceRollbackBesideCursor");
+        Ok(Method(rsDuring, "Close"));
+        Ok(Method(db2During, "Close"));
+        Ok(Method(ws2During, "Close"));
+        Ok(Method(ws1, "Rollback"));
+        Ok(Method(dbDuring, "Close"));
+
+        string pathLocal = CopyFixturePath(Txn1bAccdb);
+        DatabaseObject dbLocal = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", pathLocal, false, false)));
+        WorkspaceObject ws2Local = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "w2b", "admin", "", 2)));
+        DatabaseObject db2Local = Recover<DatabaseObject>(Ok(Method(ws2Local, "OpenDatabase", pathLocal, false, false)));
+        DispatchObject localRs = Recover<DispatchObject>(Ok(Method(db2Local, "OpenRecordset", "R", 2)));
+        Ok(Method(ws1, "BeginTrans"));
+        Ok(Method(dbLocal, "Execute", "UPDATE Wide SET V = 100 WHERE ID = 1", 128));
+        AssertNotModelled(Method(ws1, "Rollback"), "NotModelled.CrossWorkspaceRollbackBesideCursor");
+        Ok(Method(localRs, "Close"));
+        Ok(Method(db2Local, "Close"));
+        Ok(Method(ws2Local, "Close"));
+        Ok(Method(ws1, "Rollback"));
+        Ok(Method(dbLocal, "Close"));
+
+        string pathMdb = CopyFixturePath(Txn1bMdb);
+        DatabaseObject dbMdb = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", pathMdb, false, false)));
+        WorkspaceObject ws2Mdb = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "w2m", "admin", "", 2)));
+        DatabaseObject db2Mdb = Recover<DatabaseObject>(Ok(Method(ws2Mdb, "OpenDatabase", pathMdb, false, false)));
+        SelectRecordsetObject rsMdb = OpenSelect(db2Mdb, "SELECT ID, V FROM Wide ORDER BY ID", 2);
+        Ok(Method(ws1, "BeginTrans"));
+        Ok(Method(dbMdb, "Execute", "UPDATE Wide SET V = 100 WHERE ID = 1", 128));
+        AssertNotModelled(Method(ws1, "Rollback"), "NotModelled.CrossWorkspaceRollbackBesideCursor");
+        Ok(Method(rsMdb, "Close"));
+        Ok(Method(db2Mdb, "Close"));
+        Ok(Method(ws2Mdb, "Close"));
+        Ok(Method(ws1, "Rollback"));
+        Ok(Method(dbMdb, "Close"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Dao_database_txn_surface_returns_3251_and_workspace_shares_across_handles(bool mdb)
+    {
+        // R-TXN-1 / R-CURSOR-1 / R-DAO-1 (evidence/r-q50-jk44-ddl-vis/dao-txn-surface-sharing-accdb, -mdb):
+        // Database.{BeginTrans,CommitTrans,Rollback} fail 3251; SelectRecordset.Transactions is true for dynaset
+        // and NotModelled for snapshot; DBEngine.BeginTrans / Workspaces(0).CommitTrans / DBEngine.Rollback share
+        // one transaction level across open Database handles and open recordsets.
+        string path = CopyFixturePath(mdb ? VisMdb : VisAccdb);
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path, false, false)));
+        WorkspaceObject ws0 = DefaultWorkspace(eng);
+        DatabaseObject db2 = Recover<DatabaseObject>(Ok(Method(ws0, "OpenDatabase", path, false, false)));
+
+        Assert.True(BoolValue(Ok(Get(db1, "Transactions"))));
+        AssertDaoError(Method(db1, "BeginTrans"), 3251, "DAO.Database");
+        AssertDaoError(Method(db1, "CommitTrans"), 3251, "DAO.Database");
+        AssertDaoError(Method(db1, "Rollback"), 3251, "DAO.Database");
+
+        SelectRecordsetObject rs1 = OpenSelect(db1, "SELECT ID, V, S FROM T ORDER BY ID", 2);
+        SelectRecordsetObject rsSnap = OpenSelect(db1, "SELECT ID, V, S FROM T ORDER BY ID", 4);
+        Assert.True(BoolValue(Ok(Get(rs1, "Transactions"))));
+        AssertNotModelled(Get(rsSnap, "Transactions"), "NotModelled.QueryRecordsetTransactions");
+        Ok(Method(rsSnap, "Close"));
+
+        DispatchObject rs2 = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T2", 1)));
+        SelectRecordsetObject rs3 = OpenSelect(db2, "SELECT ID, V, S FROM T ORDER BY ID", 2);
+
+        Ok(Method(eng, "BeginTrans"));
+        Ok(Method(db1, "Execute", "UPDATE T SET V = 111 WHERE ID = 1", 128));
+        Ok(Method(db2, "Execute", "UPDATE T2 SET V = 222 WHERE ID = 1", 128));
+
+        Assert.Equal([(1, 111), (2, 20), (3, 30), (4, 40)], ReadIdV(rs3));
+        Assert.Equal(222, ReadDispatchIntField(rs2, "V"));
+
+        Ok(Method(ws0, "CommitTrans"));
+
+        Ok(Method(eng, "BeginTrans"));
+        Ok(Method(db2, "Execute", "UPDATE T SET V = 999 WHERE ID = 2", 128));
+        Ok(Method(eng, "Rollback"));
+
+        Ok(Method(rs1, "MoveFirst"));
+        Assert.Equal([(1, 111), (2, 20), (3, 30), (4, 40)], ReadIdV(rs1));
+
+        Ok(Method(rs3, "Close"));
+        Ok(Method(rs2, "Close"));
+        Ok(Method(rs1, "Close"));
+        Ok(Method(db2, "Close"));
+        Ok(Method(db1, "Close"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Dao_open_recordset_options_deny_append_join_and_seechanges(bool mdb)
+    {
+        // R-LOCK-4 / R-CURSOR-1 / R-DAO-1 (evidence/r-q50-jk44-ddl-vis/dao-opt-deny-append-accdb, -mdb,
+        // dao-opt-join-seechanges-accdb, -mdb):
+        // dbDenyWrite(1) and dbDenyRead(2) block writes/reads with 3008 across both Workspaces; dbAppendOnly(8) opens
+        // empty (RecordCount 0) for AddNew+Edit; join dbConsistent(32) fails 3164 on FK put vs dbInconsistent(16)
+        // failing 3200 on Update and dbConsistent|dbInconsistent failing 3001; dbSeeChanges(512) fails 3197 at Edit.
+        string path = CopyFixturePath(mdb ? VisMdb : VisAccdb);
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path, false, false)));
+        WorkspaceObject ws2 = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "ws2", "admin", "", 2)));
+        DatabaseObject db2 = Recover<DatabaseObject>(Ok(Method(ws2, "OpenDatabase", path, false, false)));
+
+        DispatchObject rdw = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 1, 1)));
+        AssertDaoError(Method(db2, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", 128), 3008, "DAO.Database");
+        AssertDaoError(Method(db1, "Execute", "UPDATE T SET V = 99 WHERE ID = 1", 128), 3008, "DAO.Database");
+        SelectRecordsetObject snapDuringDenyWrite = OpenSelect(db2, "SELECT ID, V FROM T ORDER BY ID", 4);
+        Assert.Equal(4, ReadIdV(snapDuringDenyWrite).Count);
+        Ok(Method(snapDuringDenyWrite, "Close"));
+        Ok(Method(rdw, "Close"));
+
+        DispatchObject rdr = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 1, 2)));
+        AssertDaoError(Method(db2, "OpenRecordset", "SELECT ID, V FROM T ORDER BY ID", 4), 3008, "DAO.Database");
+        AssertDaoError(Method(db1, "OpenRecordset", "SELECT ID, V FROM T ORDER BY ID", 4), 3008, "DAO.Database");
+        Ok(Method(rdr, "Close"));
+
+        DispatchObject rApp = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 8)));
+        Assert.True(BoolValue(Ok(Get(rApp, "BOF"))));
+        Assert.True(BoolValue(Ok(Get(rApp, "EOF"))));
+        Assert.Equal(0, IntValue(Ok(Get(rApp, "RecordCount"))));
+        Ok(Method(rApp, "AddNew"));
+        PutFieldValue(rApp, "ID", 50);
+        PutFieldValue(rApp, "V", 500);
+        PutFieldValue(rApp, "S", "a50");
+        Ok(Method(rApp, "Update"));
+        Assert.Equal(1, IntValue(Ok(Get(rApp, "RecordCount"))));
+        Ok(Method(rApp, "MoveFirst"));
+        Ok(Method(rApp, "Edit"));
+        PutFieldValue(rApp, "V", 505);
+        Ok(Method(rApp, "Update"));
+        Ok(Method(rApp, "Close"));
+
+        const string joinSql = "SELECT P.ID AS PID, P.Name, C.ID AS CID, C.PID AS CPID, C.Tag FROM P INNER JOIN C ON P.ID = C.PID ORDER BY C.ID";
+        AssertDaoError(Method(db1, "OpenRecordset", joinSql, 2, 48), 3001, "DAO.Database");
+
+        SelectRecordsetObject rCon = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", joinSql, 2, 32)));
+        Assert.Equal(3, IntValue(Ok(Get(rCon, "RecordCount"))));
+        Ok(Method(rCon, "Edit"));
+        AssertDaoError(Call(GetField(rCon, "PID"), "Value", InvokeKind.PropertyPut, 99), 3164, "DAO.Field");
+        Ok(Method(rCon, "CancelUpdate"));
+        Ok(Method(rCon, "Close"));
+
+        SelectRecordsetObject rIncon = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", joinSql, 2, 16)));
+        Assert.Equal(3, IntValue(Ok(Get(rIncon, "RecordCount"))));
+        Ok(Method(rIncon, "Edit"));
+        Ok(Call(GetField(rIncon, "PID"), "Value", InvokeKind.PropertyPut, 99));
+        AssertDaoError(Method(rIncon, "Update"), 3200, "DAO.Recordset");
+        Ok(Method(rIncon, "CancelUpdate"));
+        Ok(Method(rIncon, "Close"));
+
+        SelectRecordsetObject rSee = Recover<SelectRecordsetObject>(Ok(Method(db1, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2, 512)));
+        Ok(Method(db2, "Execute", "UPDATE T SET V = 777 WHERE ID = 1", 128));
+        AssertDaoError(Method(rSee, "Edit"), 3197, "DAO.Recordset");
+        Ok(Method(rSee, "Move", 0));
+        Ok(Method(rSee, "Edit"));
+        Ok(Method(rSee, "CancelUpdate"));
+        Ok(Method(rSee, "Close"));
+
+        Ok(Method(db2, "Close"));
+        Ok(Method(ws2, "Close"));
+        Ok(Method(db1, "Close"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Dao_held_edit_buffers_across_commit_rollback_and_nested_partial(bool mdb)
+    {
+        // R-TXN-1 / R-CURSOR-1 (evidence/r-q50-jk44-ddl-vis/dao-edit-buf-commit-rb-accdb, -mdb,
+        // dao-edit-buf-nested-partial-accdb, -mdb):
+        // held Edit()/AddNew() buffers survive CommitTrans, are cleared on outer and inner Rollback (EditMode=0,
+        // Update=3020), fail Close 3246 inside txn / 3420 after Database.Close, and nested non-AutoNumber inner Rollback
+        // preserves the p42 rowCount bump across outer CommitTrans + Close.
+        DatabaseObject db = Open(mdb ? VisMdb : VisAccdb);
+        string path = TextValue(Ok(Get(db, "Name")));
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+        SelectRecordsetObject rsOut = OpenSelect(db, "SELECT ID, V, S FROM T ORDER BY ID", 2);
+
+        // Held Edit survives empty CommitTrans and writes on subsequent Update; held AddNew drops on Rollback.
+        Ok(Method(rsOut, "Move", 1));
+        Ok(Method(rsOut, "Edit"));
+        Ok(Call(GetField(rsOut, "V"), "Value", InvokeKind.PropertyPut, 222));
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(ws, "CommitTrans"));
+        Assert.Equal(1, Int16Value(Get(rsOut, "EditMode")));
+        Ok(Method(rsOut, "Update"));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(rsOut, "AddNew"));
+        Ok(Call(GetField(rsOut, "ID"), "Value", InvokeKind.PropertyPut, 11));
+        Ok(Call(GetField(rsOut, "V"), "Value", InvokeKind.PropertyPut, 110));
+        Ok(Call(GetField(rsOut, "S"), "Value", InvokeKind.PropertyPut, "a11"));
+        Ok(Method(ws, "Rollback"));
+        Assert.Equal(0, Int16Value(Get(rsOut, "EditMode")));
+        AssertDaoError(Method(rsOut, "Update"), 3020, "DAO.Recordset");
+
+        // Nested partial rollback on rsOut & rsIn1.
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(db, "Execute", "UPDATE T SET V = 110 WHERE ID = 1", 128));
+        SelectRecordsetObject rsIn1 = OpenSelect(db, "SELECT ID, V, S FROM T ORDER BY ID", 2);
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(db, "Execute", "UPDATE T SET V = 220 WHERE ID = 2", 128));
+        Ok(Method(db, "Execute", "INSERT INTO T (ID, V, S) VALUES (20, 200, 'n20')", 128));
+
+        Ok(Method(rsOut, "MoveFirst"));
+        Ok(Method(rsOut, "Move", 2));
+        Ok(Method(rsOut, "Edit"));
+        Ok(Call(GetField(rsOut, "V"), "Value", InvokeKind.PropertyPut, 333));
+        Ok(Method(rsIn1, "AddNew"));
+        Ok(Call(GetField(rsIn1, "ID"), "Value", InvokeKind.PropertyPut, 21));
+
+        Ok(Method(ws, "Rollback"));
+        Assert.Equal(0, Int16Value(Get(rsOut, "EditMode")));
+        Assert.Equal(0, Int16Value(Get(rsIn1, "EditMode")));
+        AssertDaoError(Method(rsOut, "Update"), 3020, "DAO.Recordset");
+        AssertDaoError(Method(rsIn1, "Update"), 3020, "DAO.Recordset");
+        Assert.Equal(4, IntValue(Ok(Get(rsOut, "RecordCount"))));
+
+        Ok(Method(ws, "BeginTrans"));
+        Ok(Method(db, "Execute", "UPDATE T SET V = 440 WHERE ID = 4", 128));
+        Ok(Method(rsOut, "MoveFirst"));
+        Ok(Method(rsOut, "Move", 3));
+        Ok(Method(rsOut, "Edit"));
+        Ok(Call(GetField(rsOut, "V"), "Value", InvokeKind.PropertyPut, 444));
+        Ok(Method(ws, "CommitTrans"));
+        Assert.Equal(1, Int16Value(Get(rsOut, "EditMode")));
+        Ok(Method(rsOut, "Update"));
+        Ok(Method(ws, "CommitTrans"));
+
+        Ok(Method(rsIn1, "Close"));
+        Ok(Method(db, "Close"));
+        AssertDaoError(Get(rsOut, "EditMode"), 3420, "DAO.Recordset");
+
+        if (!mdb)
+        {
+            Assert.Equal(5, ReadFileByte(path, 42, 16));
+            Assert.Equal(5, ReadFileByte(path, 42, 67));
+        }
+    }
+
     [Fact]
     public void Select_dynaset_opened_before_level_reads_overlay_and_committed_after_CommitTrans()
     {
@@ -522,9 +889,13 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         AssertNotModelled(FieldValue(top, "V"), "NotModelled.Edit.ComplexSelectOverlay");
         AssertNotModelled(FieldValue(join, "V"), "NotModelled.Edit.ComplexSelectOverlay");
 
+        // Depth-2 single-table dynasets are recorded (r-q50/dao-edit-buf-nested-partial-*); depth >= 3 stays refused.
+        Ok(Method(ws, "BeginTrans"));
+        Assert.Equal(111, IntValue(Ok(FieldValue(simple, "V"))));
         Ok(Method(ws, "BeginTrans"));
         AssertNotModelled(FieldValue(simple, "V"), "NotModelled.Edit.NestedSelectOverlay");
 
+        Ok(Method(ws, "Rollback"));
         Ok(Method(ws, "Rollback"));
         Ok(Method(ws, "Rollback"));
         Ok(Method(simple, "Close"));

@@ -1892,6 +1892,45 @@ public sealed class CounterAndLandingTests
         }
     }
 
+    [Fact]
+    public void Nested_non_auto_insert_inner_rollback_propagates_close_commit_to_outer_commit_and_close()
+    {
+        // R-TXN-1 / R-CRASH-1 (evidence/r-q50-jk44-ddl-vis/dao-edit-buf-nested-partial-accdb):
+        // rolling back a depth-2 non-AutoNumber INSERT keeps the TableDef rowCount bump at outer CommitTrans
+        // and propagates an extra closing commit (+1 at CommitTrans, +1 at PublishCloseCommit).
+        using var rig = new Rig(Txn1bMainFixture);
+        (TableDefinition r, _) = rig.Table("R");
+        (EditFrame frame, TableCursor cursor) = rig.OpenTable("R");
+        byte initial = rig.Before[D.Header.CommitCounter.Offset];
+        uint initialRows = DecodeTableDef(rig.Before, r.FirstPage).RowCount;
+
+        Assert.Null(rig.A.BeginTrans());
+        SeekRowById(cursor, r, 1);
+        Assert.True(frame.Edit().Succeeded);
+        Assert.True(frame.Assign(Col(r, "V"), I4(110)).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+
+        Assert.Null(rig.A.BeginTrans());
+        Assert.True(frame.AddNew().Succeeded);
+        Assert.True(frame.Assign(Col(r, "ID"), I4(20)).Succeeded);
+        Assert.True(frame.Assign(Col(r, "V"), I4(200)).Succeeded);
+        AssignText(frame, Col(r, "Z"), "r20");
+        Assert.True(frame.Update().Succeeded);
+        Assert.True(rig.A.Rollback().Succeeded);
+
+        Assert.Empty(rig.A.Publications);
+        Assert.True(rig.A.CommitTrans().Succeeded);
+
+        byte[] afterOuter = rig.File.Image.Snapshot();
+        Assert.Equal(initial + 1, afterOuter[D.Header.CommitCounter.Offset]);
+        Assert.Equal(initialRows + 1, DecodeTableDef(afterOuter, r.FirstPage).RowCount);
+        Assert.True(rig.A.NeedsCloseCommit(rig.File.Cache));
+
+        Assert.Equal(MutationOpen.None, rig.A.PublishCloseCommit(rig.File.Cache).Open);
+        Assert.Equal(initial + 2, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+        Assert.False(rig.A.NeedsCloseCommit(rig.File.Cache));
+    }
+
     private sealed class NullDefaultBinder : IMutationRuleBinder
     {
         private sealed class NullDefault : IFieldDefault

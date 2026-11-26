@@ -132,6 +132,13 @@ internal static class DaoErrors
 
     /// <summary>3035 (r-wire/getrows-numrows-args: GetRows(Int32.MaxValue)).</summary>
     public const string SystemResourceExceeded = "System resource exceeded.";
+
+    /// <summary>3008 (r-q50-jk44-ddl-vis/dao-opt-deny-append-*: open table with dbDenyWrite / dbDenyRead).</summary>
+    public static string TableAlreadyOpenedExclusively(string table) =>
+        $"The table '{table}' is already opened exclusively by another user, or it is already open through the user interface and cannot be manipulated programmatically.";
+
+    /// <summary>3164 (r-q50-jk44-ddl-vis/dao-opt-join-seechanges-*: join key field put under dbConsistent).</summary>
+    public const string FieldCannotBeUpdated = "Field cannot be updated.";
 }
 
 /// <summary>

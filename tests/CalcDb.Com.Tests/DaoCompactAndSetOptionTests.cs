@@ -236,6 +236,56 @@ public sealed unsafe class DaoCompactAndSetOptionTests : IDisposable
         Assert.StartsWith(expectedCode + ":", result.Failure.Description, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Same_process_update_on_page_lock_returns_immediately_under_SetOption_retry_budget(bool mdb)
+    {
+        // evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb and -mdb, plus
+        // r-q2-cursor-dao/errpart-lock-multipage-plain: with SetOption(57, 3) and SetOption(63, 200),
+        // in-process 3188 page locks do not sleep on LockRetryDelay.
+        DBEngineObject eng = Engine();
+        string path = TempPath(mdb ? "lockwait.mdb" : "lockwait.accdb");
+        DatabaseObject db0 = Recover<DatabaseObject>(Ok(Method(eng, "CreateDatabase", path, DbLangGeneral, mdb ? DbVersion40 : DbVersion120)));
+        Ok(Method(db0, "Execute", "CREATE TABLE LockBig (ID LONG CONSTRAINT PK_LockBig PRIMARY KEY, V TEXT(255))", 128));
+        string pad = new('a', 200);
+        for (int id = 1; id <= 60; id++)
+        {
+            Ok(Method(db0, "Execute", $"INSERT INTO LockBig (ID, V) VALUES ({id}, '{pad}')", 128));
+        }
+        Ok(Method(db0, "Close"));
+
+        DatabaseObject db1 = Recover<DatabaseObject>(Ok(Method(eng, "OpenDatabase", path, false, false)));
+        WorkspaceObject ws2 = Recover<WorkspaceObject>(Ok(Method(eng, "CreateWorkspace", "ws2", "Admin", "", 2)));
+        DatabaseObject db2 = Recover<DatabaseObject>(Ok(Method(ws2, "OpenDatabase", path, false, false)));
+
+        DispatchObject r2 = Recover<DispatchObject>(Ok(Method(db2, "OpenRecordset", "LockBig", 2)));
+        Ok(Put(r2, "LockEdits", true));
+        Ok(Method(r2, "FindFirst", "ID = 25"));
+        Ok(Method(r2, "Edit"));
+
+        Ok(Method(eng, "SetOption", 57, 3));
+        Ok(Method(eng, "SetOption", 63, 200));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Ok(Method(db1, "Execute", "UPDATE LockBig SET V = 'u'"));
+        sw.Stop();
+        int affected = unchecked((int)Scalar(Get(db1, "RecordsAffected")).Value);
+        Assert.InRange(affected, 1, 59);
+        Assert.True(sw.ElapsedMilliseconds < 200, $"Expected zero-sleep partial lock skip, took {sw.ElapsedMilliseconds} ms");
+
+        sw.Restart();
+        Fails(Method(db1, "Execute", "UPDATE LockBig SET V = 'v'", 128), 3188, "DAO.Database");
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 200, $"Expected zero-sleep 3188 refusal, took {sw.ElapsedMilliseconds} ms");
+
+        Ok(Method(r2, "CancelUpdate"));
+        Ok(Method(r2, "Close"));
+        Ok(Method(db2, "Close"));
+        Ok(Method(ws2, "Close"));
+        Ok(Method(db1, "Close"));
+    }
+
     // =========================================================================
     // 1. DBEngine.RepairDatabase (RB-REPAIR)
     // =========================================================================

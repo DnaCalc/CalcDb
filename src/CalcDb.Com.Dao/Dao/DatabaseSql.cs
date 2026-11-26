@@ -28,6 +28,12 @@ internal interface IDatabaseRecordset
 
     /// <summary>How this recordset holds local table <paramref name="table"/> against a DDL statement of its Database (<see cref="TableHold"/>).</summary>
     TableHold Holds(string table);
+
+    /// <summary>Whether this open recordset holds <c>dbDenyWrite</c> on local table <paramref name="table"/>.</summary>
+    bool DeniesWrite(string table) => false;
+
+    /// <summary>Whether this open recordset holds <c>dbDenyRead</c> on local table <paramref name="table"/>.</summary>
+    bool DeniesRead(string table) => false;
 }
 
 /// <summary>
@@ -117,9 +123,12 @@ internal static class SelectRoute
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a query as type {recordsetType}"));
         }
-        if (options != 0)
+        switch (RecordsetOptions.Admit(recordsetType, options))
         {
-            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a query with Options {options} (RecordsetOptions was asked on tables)"));
+            case OptionAdmission.InvalidArgument:
+                return database.Fail(3001, DaoErrors.InvalidArgument);
+            case OptionAdmission.NotModelled:
+                return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a query type {recordsetType} with Options {options} (RecordsetOptions)"));
         }
         SelectSyntax? syntax = SqlParser.Parse(sql, out SqlFailure? failure);
         if (syntax is null)
@@ -132,12 +141,21 @@ internal static class SelectRoute
         {
             return Published(database, failure!);
         }
+        foreach (SourceSlot slot in plan.Sources)
+        {
+            if (slot.TableName.Length > 0 && database.DenyReadTable(slot.TableName) is { } deniedRead)
+            {
+                plan.Dispose();
+                return database.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedRead));
+            }
+        }
         ReadView? snapshotView = null;
         PrivateOverlay? snapshotOverlay = null;
         SelectCursor? cursor = null;
         bool adopted = false;
         try
         {
+            database.EnsureReadOnlyFirstView();
             bool singleTableRowSelect = IsSingleTableRowSelect(plan);
             cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal);
             if (cursor is null)
@@ -148,7 +166,8 @@ internal static class SelectRoute
             {
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay);
+            InnerJoinKeys? innerJoin = ExtractInnerJoinKeys(syntax, plan);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -202,6 +221,16 @@ internal static class SelectRoute
         if (recordsetType == 2 && singleTableRowSelect)
         {
             scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions));
+        }
+        else if (recordsetType == 4
+            && singleTableRowSelect
+            && hasOrderBy
+            && database.ReadOnlyFirstView is { } staleRoView
+            && database.Workspace.Transactions.Depth == 0
+            && !ProjectsMemoOrOle(plan))
+        {
+            snapshotOverlay = database.Cache.CreateOverlay(EngineState.NextLocker(), staleRoView);
+            scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, snapshotOverlay));
         }
         else if (recordsetType == 4
             && singleTableRowSelect
@@ -286,6 +315,49 @@ internal static class SelectRoute
         && plan.Top is null
         && plan.TryUpdatable(ResultKind.Dynaset, out _) == true;
 
+    internal static InnerJoinKeys? ExtractInnerJoinKeys(SelectSyntax syntax, BoundSelect plan)
+    {
+        if (plan.IsUnion
+            || plan.Predicate != SelectPredicate.All
+            || plan.Top is not null
+            || plan.Sources.Count != 2
+            || plan.Sources[0].Table is null
+            || plan.Sources[1].Table is null
+            || syntax.From is not [JoinSource { Kind: JoinKind.Inner, Left: NamedSource leftSrc, Right: NamedSource rightSrc, On.Syntax.Root: { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal, Left: { Kind: SyntaxKind.Name, Text: { } lhs }, Right: { Kind: SyntaxKind.Name, Text: { } rhs } } }])
+        {
+            return null;
+        }
+        if (!TrySplitQualifiedColumn(lhs, out string? q1, out string c1) || !TrySplitQualifiedColumn(rhs, out string? q2, out string c2))
+        {
+            return null;
+        }
+        if (string.Equals(q1, leftSrc.ScopeName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(q2, rightSrc.ScopeName, StringComparison.OrdinalIgnoreCase))
+        {
+            return new InnerJoinKeys(c1, c2);
+        }
+        if (string.Equals(q2, leftSrc.ScopeName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(q1, rightSrc.ScopeName, StringComparison.OrdinalIgnoreCase))
+        {
+            return new InnerJoinKeys(c2, c1);
+        }
+        return null;
+    }
+
+    private static bool TrySplitQualifiedColumn(string text, out string? qualifier, out string column)
+    {
+        int dot = text.LastIndexOf('.');
+        if (dot > 0 && dot + 1 < text.Length)
+        {
+            qualifier = text[..dot];
+            column = text[(dot + 1)..];
+            return true;
+        }
+        qualifier = null;
+        column = text;
+        return false;
+    }
+
     /// <summary>
     /// Whether <paramref name="sql"/> is a SELECT the parser reads: Execute refuses it with 3065. Anything else, action
     /// queries and DDL included, is W-07's (null).
@@ -359,6 +431,15 @@ internal static class ActionRoute
         {
             return CallResult.Fail(refused);
         }
+        if (!ddl)
+        {
+            using ActionSyntax? parsedAction = ActionParser.Parse(sql, out _);
+            if (parsedAction is not null && database.DenyWriteTable(parsedAction.TargetName) is { } deniedWrite)
+            {
+                recordsAffected.Fail();
+                return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedWrite));
+            }
+        }
         ActionOutcome outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
         bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
         return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
@@ -420,6 +501,11 @@ internal static class ActionRoute
         if (database.InheritedWritable)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.ReadOnlyAction", "QueryDef.Execute through a read-only handle that inherited read/write from the file's writable binding is not recorded (r-q46-dao-ddl-multi/mh-rwro-* record Database.Execute only)"));
+        }
+        if (database.DenyWriteTable(plan.TargetName) is { } deniedWrite)
+        {
+            recordsAffected = 0;
+            return caller.Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(deniedWrite));
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;

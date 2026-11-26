@@ -223,10 +223,114 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
     private static byte[] FilePage(string path, int page, int pageSize)
     {
         byte[] bytes = new byte[pageSize];
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         stream.Position = (long)page * pageSize;
         stream.ReadExactly(bytes);
         return bytes;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReadOnly_first_then_writable_preserves_ro_3027_requery_isolation_and_slot2_counter(bool mdb)
+    {
+        // R-LOCK-2 / R-FMT-2 (evidence/r-q52-ddl-make-domain/mh-rofirst-dynaset-edit-accdb, -mdb):
+        // when dbRo opens shared ReadOnly before dbRw opens shared writable, dbRo stays read-only (Updatable=0, 3027),
+        // Requery succeeds on ACCDB and MDB alike, snapshots opened under dbRo stay isolated from dbRw writes, and
+        // ACCDB page 0 slot-2 counter (0x0E04) steps 0 -> 1 -> 2 across Phase 1 (same WS) and Phase 2 (two WSs).
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb);
+
+        // Phase 1: same Workspace, ReadOnly opened first then writable second.
+        DatabaseObject dbRo = Open(eng.Engine.DefaultWorkspace!, path, false, true);
+        DispatchObject rsBefore = Recover<DispatchObject>(Ok(Method(dbRo, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2)));
+        DatabaseObject dbRw = Open(eng.Engine.DefaultWorkspace!, path, false, false);
+
+        Assert.False(BoolResult(Get(dbRo, "Updatable")));
+        Assert.True(BoolResult(Get(dbRw, "Updatable")));
+        FailsDao(Method(rsBefore, "Edit"), 3027, "DAO.Recordset");
+
+        DispatchObject rsAfter = Recover<DispatchObject>(Ok(Method(dbRo, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2)));
+        Assert.False(BoolResult(Get(rsAfter, "Updatable")));
+        FailsDao(Method(rsAfter, "Edit"), 3027, "DAO.Recordset");
+
+        Ok(Method(dbRw, "Execute", "INSERT INTO T VALUES (3, 30, 'three')", 128));
+        Assert.Equal([(1, 10), (2, 20)], Rows(dbRo));
+
+        Ok(Method(rsAfter, "Requery"));
+        FailsDao(Method(rsAfter, "Edit"), 3027, "DAO.Recordset");
+
+        Ok(Method(rsAfter, "Close"));
+        Ok(Method(rsBefore, "Close"));
+        Ok(Method(dbRw, "Close"));
+        Ok(Method(dbRo, "Close"));
+        if (!mdb)
+        {
+            Assert.Equal(1, FilePage(path, 0, D.PageSize)[D.Header.ReadOnlyFirstCommitCounter!.Offset]);
+        }
+
+        // Phase 2: two Workspaces, ReadOnly opened first on ws2 then writable on default Workspace.
+        WorkspaceObject ws2 = Workspace2(eng);
+        DatabaseObject dbRo2 = Open(ws2, path, false, true);
+        DispatchObject rs2 = Recover<DispatchObject>(Ok(Method(dbRo2, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2)));
+        DatabaseObject dbRw2 = Open(eng.Engine.DefaultWorkspace!, path, false, false);
+        Ok(Method(dbRw2, "Execute", "INSERT INTO T VALUES (4, 40, 'four')", 128));
+        Assert.Equal([(1, 10), (2, 20), (3, 30)], Rows(dbRo2));
+
+        Ok(Method(rs2, "Requery"));
+        Ok(Method(rs2, "Close"));
+        Ok(Method(dbRw2, "Close"));
+        Ok(Method(dbRo2, "Close"));
+        Ok(Method(ws2, "Close"));
+        if (!mdb)
+        {
+            Assert.Equal(2, FilePage(path, 0, D.PageSize)[D.Header.ReadOnlyFirstCommitCounter!.Offset]);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Two_workspace_3188_flushes_pending_counters_and_steps_commit_counter(bool mdb)
+    {
+        // R-LOCK-1 / R-TXN-1 / R-CRASH-1 (evidence/r-q52-ddl-make-domain/mh-twows-3188-step-accdb, -mdb):
+        // a 3188 write-lock conflict by ws2 flushes ws0's pending write to the file, stepping ACCDB 0x0E02 by +1,
+        // and ws0.CommitTrans then commits without double-counting, stepping 0x0E02 by +1 again.
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb);
+        byte cStart = !mdb ? FilePage(path, 0, D.PageSize)[D.Header.CommitCounter.Offset] : (byte)0;
+
+        DatabaseObject db1 = Open(eng.Engine.DefaultWorkspace!, path, false, false);
+        WorkspaceObject ws2 = Workspace2(eng);
+        DatabaseObject db2 = Open(ws2, path, false, false);
+
+        Ok(Method(eng.Engine.DefaultWorkspace!, "BeginTrans"));
+        Ok(Method(db1, "Execute", "INSERT INTO T VALUES (30, 300, 'thirty')", 128));
+        if (!mdb)
+        {
+            Assert.Equal(cStart, Page(db2, 0)[D.Header.CommitCounter.Offset]);
+        }
+
+        FailsDao(Method(db2, "Execute", "UPDATE T SET V = 999 WHERE ID = 1", 128), 3188, "DAO.Database");
+        if (!mdb)
+        {
+            Assert.Equal((byte)(cStart + 1), Page(db2, 0)[D.Header.CommitCounter.Offset]);
+        }
+
+        Ok(Method(eng.Engine.DefaultWorkspace!, "CommitTrans"));
+        if (!mdb)
+        {
+            Assert.Equal((byte)(cStart + 2), Page(db2, 0)[D.Header.CommitCounter.Offset]);
+        }
+        Assert.Equal([(1, 10), (2, 20), (30, 300)], Rows(db2));
+
+        Ok(Method(db2, "Close"));
+        Ok(Method(ws2, "Close"));
+        Ok(Method(db1, "Close"));
+        if (!mdb)
+        {
+            Assert.Equal((byte)(cStart + 2), FilePage(path, 0, D.PageSize)[D.Header.CommitCounter.Offset]);
+        }
     }
 
     [Fact]
@@ -733,15 +837,38 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Assert.NotEqual(page1, disk1);
         Assert.Equal(D.Header.CommitCounter.Read(page0) + 1, D.Header.CommitCounter.Read(disk0));
 
-        // Gate 4 Finding 3b: two Workspaces both owing a closing commit on the same file refuse by name instead of writing two commits.
+        // r-q52/mh-twows-both-close-commit: two Workspaces both reserving page-1 global map bits (CREATE TABLE) write
+        // +1 on first Close (non-last close) and +1 on last Close; two Workspaces only releasing pages (DROP TABLE) combine into one +1 on last Close.
         string path2 = Seeded(eng, mdb: false);
         WorkspaceObject wsB = Workspace2(eng);
         DatabaseObject da = Open(ws0, path2, exclusive: false, readOnly: false);
         DatabaseObject db = Open(wsB, path2, exclusive: false, readOnly: false);
         Ok(Method(da, "Execute", "CREATE TABLE UA (V LONG)", 128));
         Ok(Method(db, "Execute", "CREATE TABLE UB (V LONG)", 128));
+        byte[] preClose0 = Page(da, 0);
+        ulong preCounter = D.Header.CommitCounter.Read(preClose0);
         Ok(Method(da, "Close"));
-        FailsNotModelled(Method(db, "Close"), "NotModelled.MultiWorkspaceCloseCommit");
+        Assert.Equal(preCounter + 1UL, D.Header.CommitCounter.Read(Page(db, 0)));
+        Ok(Method(db, "Close"));
+        byte[] finalDisk0 = FilePage(path2, 0, preClose0.Length);
+        Assert.Equal(preCounter + 2UL, D.Header.CommitCounter.Read(finalDisk0));
+
+        string path3 = Seeded(eng, mdb: false);
+        DatabaseObject dSetup = Open(ws0, path3, exclusive: false, readOnly: false);
+        Ok(Method(dSetup, "Execute", "CREATE TABLE UA (V LONG)", 128));
+        Ok(Method(dSetup, "Execute", "CREATE TABLE UB (V LONG)", 128));
+        Ok(Method(dSetup, "Close"));
+        DatabaseObject da3 = Open(ws0, path3, exclusive: false, readOnly: false);
+        DatabaseObject db3 = Open(wsB, path3, exclusive: false, readOnly: false);
+        Ok(Method(da3, "Execute", "DROP TABLE UA", 128));
+        Ok(Method(db3, "Execute", "DROP TABLE UB", 128));
+        byte[] beforeDropClose0 = Page(da3, 0);
+        ulong dropBaseCounter = D.Header.CommitCounter.Read(beforeDropClose0);
+        Ok(Method(da3, "Close"));
+        Assert.Equal(dropBaseCounter, D.Header.CommitCounter.Read(Page(db3, 0)));
+        Ok(Method(db3, "Close"));
+        byte[] afterDropDisk0 = FilePage(path3, 0, beforeDropClose0.Length);
+        Assert.Equal(dropBaseCounter + 1UL, D.Header.CommitCounter.Read(afterDropDisk0));
     }
 
     [Fact]

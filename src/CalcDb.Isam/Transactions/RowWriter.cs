@@ -73,6 +73,12 @@ public sealed class PhysicalChange(PageCache file, IReadOnlyList<PageEdit> edits
     /// null when the change writes the TableDef itself.
     /// </summary>
     public IReadOnlyList<int>? DeferredEntryDecrements { get; init; }
+
+    /// <summary>
+    /// Physical index ordinals whose bulk-built counters wait until Database.Close
+    /// (<see cref="Edit.EditFrame.DeferInsertTableDefCounts"/>; r-q50/dao-edit-buf-commit-rb).
+    /// </summary>
+    public IReadOnlyList<int>? DeferredEntryIncrements { get; init; }
 }
 
 /// <summary>A compiled change, or why this slice does not write it (the change is then accepted without a physical form).</summary>
@@ -530,17 +536,18 @@ public sealed class NoOpPageDelta : IPageDelta
 
 /// <summary>
 /// Increment the Jet 4 MDB / ACCDB page-0 commit counter by 1: offset 3584 (<c>0x0E00</c>) for exclusive sessions
-/// (<paramref name="exclusive"/> = <c>true</c>) or offset 3586 (<c>0x0E02</c>) for shared sessions (R-FMT-2; R-CRASH-1
+/// (<paramref name="exclusive"/> = <c>true</c>), offset 3588 (<c>0x0E04</c>) for read-only-first shared sessions
+/// (<paramref name="secondarySlot"/> = <c>true</c>), or offset 3586 (<c>0x0E02</c>) for shared sessions (R-FMT-2; R-CRASH-1
 /// CRASH-ORDER; evidence/r-q8-header-counter, evidence/r-q10-commit-counter-edits, evidence/r-q40-mdb-counter,
-/// evidence/r-q41-create-session-counter).
+/// evidence/r-q41-create-session-counter, evidence/r-q52-ddl-make-domain/mh-rofirst-dynaset-edit-*).
 /// </summary>
-public sealed class CommitCounterDelta(FormatDescriptor d, bool exclusive = false) : IPageDelta
+public sealed class CommitCounterDelta(FormatDescriptor d, bool exclusive = false, bool secondarySlot = false) : IPageDelta
 {
     public DeltaFootprint Footprint => DeltaFootprint.None;
 
     public void Apply(Span<byte> decodedPage)
     {
-        if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, exclusive, out string? failure))
+        if (!DatabaseHeader.TryIncrementCommitCounter(decodedPage, d, exclusive, secondarySlot, out string? failure))
         {
             throw new FormatViolationException($"Page 0 commit counter: {failure}");
         }
@@ -1051,6 +1058,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             AllocatedGlobalMapPages = externalAllocator is null && allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
             BaseExtentPages = externalAllocator is null && allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
             ConsumedReservedPages = externalAllocator is null && allocator.ConsumedReservedPages.Count > 0 ? [.. allocator.ConsumedReservedPages] : [],
+            DeferredEntryIncrements = deferTableDefCountUpdate ? [.. incrementUnique] : null,
         }, null);
     }
 
@@ -1342,7 +1350,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// evidence/r-q17-growth/retire-rs-delete-au1: after ten Deletes, one at a time and each its own commit, the
     /// recordset's Close writes page 107 byte 16, the row count, as one more commit).
     /// </summary>
-    public CompiledChange CompileTableDefCounts(int rowCountDelta, IReadOnlyList<int> decrementEntryCounts, PrivateOverlay? seen = null)
+    public CompiledChange CompileTableDefCounts(int rowCountDelta, IReadOnlyList<int> decrementEntryCounts, PrivateOverlay? seen = null) =>
+        CompileTableDefCounts(rowCountDelta, [], decrementEntryCounts, seen);
+
+    /// <summary>
+    /// Compile a combined TableDef counter commit (row count delta plus index UniqueEntryCount increments and decrements).
+    /// </summary>
+    public CompiledChange CompileTableDefCounts(int rowCountDelta, IReadOnlyList<int> incrementEntryCounts, IReadOnlyList<int> decrementEntryCounts, PrivateOverlay? seen = null)
     {
         using PagePin? tdefPin = Seen(seen).Pin(_table.FirstPage).Pin;
         if (tdefPin is null)
@@ -1350,13 +1364,13 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             return NotWritten($"TableDef page {_table.FirstPage} could not be pinned");
         }
         byte[] tdefCopy = tdefPin.Bytes.ToArray();
-        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, rowCountDelta, null, [], decrementEntryCounts, _d, out string? tdefFailure))
+        if (!TableDefUpdater.TryUpdateCounts(tdefCopy, rowCountDelta, null, incrementEntryCounts, decrementEntryCounts, _d, out string? tdefFailure))
         {
             return NotWritten($"TableDef {_table.FirstPage}: {tdefFailure}");
         }
         return new CompiledChange(new PhysicalChange(
             _cache,
-            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(rowCountDelta, null, [], [.. decrementEntryCounts], _d), PageRole.Catalog)],
+            [new PageEdit(_table.FirstPage, new TableDefCountsDelta(rowCountDelta, null, [.. incrementEntryCounts], [.. decrementEntryCounts], _d), PageRole.Catalog)],
             [new LockResource(_table.FirstPage, LockPurpose.TableDef)]), null);
     }
 

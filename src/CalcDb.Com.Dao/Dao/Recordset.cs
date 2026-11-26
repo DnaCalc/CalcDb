@@ -279,6 +279,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// </summary>
     public bool ReadOnlyByOption => RecordsetType is 1 or 2 && !Database.ReadOnly && RecordsetOptions.ReadOnlyOnly(_options);
 
+    public bool DeniesWrite(string table) => !Closed && (_options & 1) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
+
+    public bool DeniesRead(string table) => !Closed && (_options & 2) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The table's property blob (CAT-P), read once; null with <paramref name="failure"/> when it cannot be read.</summary>
     public PropertyBlob? Blob(out string? failure)
     {
@@ -2885,19 +2889,18 @@ internal enum OptionAdmission
 /// <item>Updatable: False on a read-only open; table-type False with dbReadOnly 4; dynaset False with 4 or dbForwardOnly
 /// 256; snapshot and forward-only always False;</item>
 /// <item>Bookmarkable: forward-only False; dynaset and snapshot False with 256; table-type True;</item>
-/// <item>dbAppendOnly 8 empties a dynaset (EOF, RecordCount 0) and changes nothing on the other types: that empty
-/// population is not modelled yet.</item>
+/// <item>dbAppendOnly 8 empties a dynaset (EOF, RecordCount 0) for AddNew/Edit of newly added rows
+/// (<c>evidence/r-q50-jk44-ddl-vis/dao-opt-deny-append-*</c>) and changes nothing on the other types.</item>
 /// </list>
-/// dbDenyWrite 1, dbDenyRead 2, dbInconsistent 16, dbConsistent 32, dbFailOnError 128 and dbSeeChanges 512 change none of
-/// the members those records read (Type, Updatable, Bookmarkable, EOF, RecordCount); their effects on other sessions and
-/// on writes are not modelled here (W-10, W-05).
+/// dbDenyWrite 1, dbDenyRead 2, dbInconsistent 16, dbConsistent 32, dbFailOnError 128 and dbSeeChanges 512 are admitted
+/// (<c>dao-opt-deny-append-*</c>, <c>dao-opt-join-seechanges-*</c>).
 /// </summary>
 internal static class RecordsetOptions
 {
-    private const int DenyWrite = 1, DenyRead = 2, ReadOnly = 4, AppendOnly = 8, Inconsistent = 16, Consistent = 32, SqlPassThrough = 64,
+    private const int DenyWrite = 1, DenyRead = 2, ReadOnly = 4, AppendOnlyOption = 8, Inconsistent = 16, Consistent = 32, SqlPassThrough = 64,
         FailOnError = 128, ForwardOnly = 256, SeeChanges = 512, RunAsync = 1024, ExecDirect = 2048;
 
-    private const int Known = DenyWrite | DenyRead | ReadOnly | AppendOnly | Inconsistent | Consistent | SqlPassThrough | FailOnError | ForwardOnly | SeeChanges | RunAsync | ExecDirect;
+    private const int Known = DenyWrite | DenyRead | ReadOnly | AppendOnlyOption | Inconsistent | Consistent | SqlPassThrough | FailOnError | ForwardOnly | SeeChanges | RunAsync | ExecDirect;
 
     public static OptionAdmission Admit(int type, int options)
     {
@@ -2914,8 +2917,12 @@ internal static class RecordsetOptions
         {
             return OptionAdmission.NotModelled; // accepted read-only; not asked on a writable open
         }
-        return type == 2 && (options & AppendOnly) != 0 ? OptionAdmission.NotModelled : OptionAdmission.Admitted;
+        return OptionAdmission.Admitted;
     }
+
+    public static bool IsAppendOnly(int options) => (options & AppendOnlyOption) != 0;
+
+    public static bool HasSeeChanges(int options) => (options & SeeChanges) != 0;
 
     public static bool Updatable(int type, int options, bool readOnlyDatabase) => !readOnlyDatabase && type switch
     {

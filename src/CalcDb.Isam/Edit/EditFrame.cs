@@ -229,6 +229,18 @@ public sealed class EditFrame : IDisposable
     public MutationErrorSource ConflictSource { get; init; } = MutationErrorSource.Recordset;
 
     /// <summary>
+    /// True on SELECT dynasets where an open explicit transaction allows Edit/Update on a row already changed earlier
+    /// inside that explicit transaction (r-q50/dao-edit-buf-nested-partial).
+    /// </summary>
+    public bool AllowExplicitTxnReedit { get; init; }
+
+    /// <summary>
+    /// True on depth-0 dynaset/append-only AddNew where TableDef RowCount/UniqueEntryCount (+1) are held back until
+    /// Database.Close (r-q50/dao-edit-buf-commit-rb).
+    /// </summary>
+    public bool DeferInsertTableDefCounts { get; init; }
+
+    /// <summary>
     /// Whether an ad-hoc ADO <c>Connection.Execute</c> or DAO <c>Database.Execute</c> single-row
     /// <c>INSERT ... VALUES</c> may evaluate SQL <c>CHECK</c> constraints on a Jet 4 MDB
     /// (<c>evidence/r-q30-sql-check/mdb-*</c>, <c>evidence/r-q31-sql-check-2/mdb-*</c>). MDB multi-row statements,
@@ -299,7 +311,7 @@ public sealed class EditFrame : IDisposable
             }
             return EditOutcome.Fail(MutationError.NoCurrentRecord, MutationErrorSource.Recordset);
         }
-        if (_workspace.HasAcceptedChange(_table.Semantics, row))
+        if (_workspace.HasAcceptedChange(_table.Semantics, row) && !(AllowExplicitTxnReedit && _workspace.Depth > 0 && !_workspace.InStatement))
         {
             return EditOutcome.NotModelled(MutationOpen.PrivateRow, $"row {row} was changed by this Workspace and is not published");
         }
@@ -1201,7 +1213,7 @@ public sealed class EditFrame : IDisposable
         }
 
         // 4. The lock footprint and, for an optimistic edit, the stored image (W-05/local-lockers-rebase).
-        if (Mode == EditMode.Edit && _original is { } edited && _workspace.HasAcceptedChange(s, edited))
+        if (Mode == EditMode.Edit && _original is { } edited && _workspace.HasAcceptedChange(s, edited) && !(AllowExplicitTxnReedit && _workspace.Depth > 0 && !_workspace.InStatement))
         {
             return new UpdateOutcome(null, MutationOpen.PrivateRow, $"row {edited} was changed by this Workspace after Edit read it and is not published");
         }
@@ -1255,12 +1267,14 @@ public sealed class EditFrame : IDisposable
                     && values[autoCol.Ordinal].Integer < ac.Last;
                 acceptedAutoFloor = AutoNumberFloor(values[autoCol.Ordinal].Integer, reseed: reseedAcceptedAuto);
             }
+            bool deferInsertCounts = DeferInsertTableDefCounts && !_workspace.InStatement && _workspace.Depth == 0;
             physical = insertWriter.CompileInsert(
                 s,
                 values,
                 acceptedAutoFloor,
                 _workspace.OverlayOf(insertWriter.File),
                 reseedAutoNumber: reseedAcceptedAuto,
+                deferTableDefCountUpdate: deferInsertCounts,
                 sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File));
         }
         else
@@ -1358,6 +1372,20 @@ public sealed class EditFrame : IDisposable
         {
             _ticket.Disposition = used is null ? TicketDisposition.ConsumedWithoutRow : TicketDisposition.Accepted;
             _ticket = null;
+        }
+        if (mode == EditMode.AddNew
+            && accepted.Open == MutationOpen.None
+            && physical.Change?.DeferredEntryIncrements is { } deferredIncrements
+            && _workspace.Depth == 0
+            && !_workspace.InStatement
+            && _table.Writer is { } deferWriter)
+        {
+            CompiledChange countsCommit = deferWriter.CompileTableDefCounts(+1, deferredIncrements, []);
+            if (countsCommit.Change is null)
+            {
+                return new UpdateOutcome(null, MutationOpen.Publication, countsCommit.NotWritten);
+            }
+            _workspace.AppendDeferredCloseEdits(deferWriter.File, countsCommit.Change.Edits);
         }
         Clear();
         int? insertedOrdinal = null;

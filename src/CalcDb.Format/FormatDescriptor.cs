@@ -71,6 +71,7 @@ public sealed record FormatDescriptor
             // carry across 255 into the high byte identically on ACCDB and Jet 4 MDB (0x01FF -> 0x0200 -> 0x0201).
             ExclusiveCommitCounter = new("jet4.header.exclusive_commit_counter", "header", 3584, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB exclusive-session commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit in exclusive sessions with no lock file), transferred as a 2-byte [3584, 3586) bracket.", "R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter; evidence/r-q40-mdb-counter/create-first-write-accdb, create-first-write-mdb"),
             CommitCounter = new("jet4.header.commit_counter", "header", 3586, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB shared-session commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit in shared sessions), transferred as a 2-byte [3586, 3588) bracket.", "R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q8-header-counter; evidence/r-q10-commit-counter-edits; evidence/r-q19-growth-open/split-uncovered-right-leaf-below; evidence/r-q40-mdb-counter; evidence/r-q41-create-session-counter"),
+            ReadOnlyFirstCommitCounter = new("jet4.header.readonly_first_commit_counter", "header", 3588, 2, ByteOrder.Little, "Jet 4 MDB and ACCDB shared read-only-first pooled-session commit counter: 2-byte little-endian counter (+1 per lazy burst or immediate commit when the first open was shared ReadOnly and a writer joined), transferred as a 2-byte [3588, 3590) bracket.", "R-FMT-2; R-LOCK-2 RO-INPROC; evidence/r-q46-dao-ddl-multi/mh-rwro-samews-accdb, mh-rwro-twows-accdb; evidence/r-q52-ddl-make-domain/mh-rofirst-dynaset-edit-accdb, mh-rofirst-dynaset-edit-mdb"),
             CommitCounterBracketBytes = 2,
         },
         DataPage = new DataPageRules
@@ -268,11 +269,15 @@ public sealed record HeaderRules
     /// </summary>
     public required FieldRule ExclusiveCommitCounter { get; init; }
     public required FieldRule CommitCounter { get; init; }
+    public FieldRule? ReadOnlyFirstCommitCounter { get; init; }
     public required int CommitCounterBracketBytes { get; init; }
 
-    public FieldRule CommitCounterFor(bool exclusive) => exclusive ? ExclusiveCommitCounter : CommitCounter;
+    public FieldRule CommitCounterFor(bool exclusive, bool secondarySlot = false) =>
+        exclusive ? ExclusiveCommitCounter : (secondarySlot && ReadOnlyFirstCommitCounter is { } roFirst ? roFirst : CommitCounter);
 
-    public IEnumerable<FieldRule> Rules => [Version, SortIdentifier, SortReserved, SortVersion, ExclusiveCommitCounter, CommitCounter];
+    public IEnumerable<FieldRule> Rules => ReadOnlyFirstCommitCounter is { } roFirst
+        ? [Version, SortIdentifier, SortReserved, SortVersion, ExclusiveCommitCounter, CommitCounter, roFirst]
+        : [Version, SortIdentifier, SortReserved, SortVersion, ExclusiveCommitCounter, CommitCounter];
 }
 
 /// <summary>The ordinary data page envelope and slot directory (II-03 §§1.3, 3.3).</summary>
