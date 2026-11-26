@@ -55,6 +55,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("ReplicaID", (self, args) => Live(self, d => NullBstr()))
         .Get("DesignMasterID", (self, args) => Live(self, d => NullBstr()))
         .Get("Connection", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Method("BeginTrans", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType, publishesErrorInfo: true)))
+        .Method("CommitTrans", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType, publishesErrorInfo: true)))
+        .Method("Rollback", (self, args) => Live(self, d => d.Fail(3251, DaoErrors.NotSupportedForType, publishesErrorInfo: true)))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
 
     /// <summary>The databases open on this thread, whose caches' live work the cost counters add (W-01/dao-cost).</summary>
@@ -122,6 +125,26 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _session = pooled.Session;
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
+    }
+
+    /// <summary>True when the first binding of the pooled file session opened read-only and shared (mh-rofirst-dynaset-edit).</summary>
+    public bool ReadOnlyFirst => _pooled.ReadOnlyFirst;
+
+    private ReadView? _readOnlyFirstView;
+
+    /// <summary>
+    /// Shared <see cref="ReadView"/> captured when a shared ReadOnly-first <c>Database</c> opens its first recordset,
+    /// isolating subsequent snapshots opened on that handle from writers' in-session publishes before the handle closes
+    /// (<c>r-q52/mh-rofirst-dynaset-edit-*</c>).
+    /// </summary>
+    internal ReadView? ReadOnlyFirstView => _readOnlyFirstView;
+
+    internal void EnsureReadOnlyFirstView()
+    {
+        if (ReadOnlyFirst && ReadOnly && _readOnlyFirstView is null && Cache.RegisterView() is { Succeeded: true, View: { } view })
+        {
+            _readOnlyFirstView = view;
+        }
     }
 
     private void OnEditContextCreated(TableEditContext context, CatalogEntry entry, TableDefinition table)
@@ -708,6 +731,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
             case OptionAdmission.NotModelled:
                 return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {options} (an accepted option whose effect is not modelled: RecordsetOptions)"));
         }
+        if (DenyReadTable(entry.Name) is { } denyReadTable)
+        {
+            return Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(denyReadTable));
+        }
+        if (recordsetType == 1 && DenyWriteTable(entry.Name) is { } denyWriteTable)
+        {
+            return Fail(3008, DaoErrors.TableAlreadyOpenedExclusively(denyWriteTable));
+        }
         TraversalFailure? traversal;
         // A table-type, dynaset or forward-only recordset reads this Workspace's own unpublished rows through its live
         // overlay while a level has changed the file and the committed images before the first change and after the level
@@ -727,7 +758,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
             ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
                 bookmarkBase: bookmarkBase,
-                snapshot: recordsetType == 4);
+                snapshot: recordsetType == 4,
+                appendOnly: recordsetType == 2 && RecordsetOptions.IsAppendOnly(options));
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
@@ -736,6 +768,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             _workspace.Transactions.EndLazyBurst(Cache);
         }
+        EnsureReadOnlyFirstView();
         var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options, lockEdit != 3, tempSlot, bookmarkBaseRefusal);
         if (tempSlot is int claimedSlot)
         {
@@ -2187,6 +2220,83 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Whether a recordset of this Database is open.</summary>
     internal bool HasOpenRecordsets => _recordsets.Count > 0;
 
+    /// <summary>
+    /// True when every open recordset on this Database belongs to the recorded <c>r-txn-1b/ws2-reader-after-other-rollback</c>
+    /// shape: single-table SELECT dynaset/snapshot opened at depth 0 before <paramref name="frameBeginSeq"/> with no pending edit.
+    /// </summary>
+    internal bool AllowsOtherWorkspaceRollback(ulong frameBeginSeq)
+    {
+        foreach (IDatabaseRecordset r in _recordsets)
+        {
+            if (r is not SelectRecordsetObject sr || !sr.AllowsOtherWorkspaceRollback(frameBeginSeq))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Name of the first table in <paramref name="tables"/> currently blocked by an open <c>dbDenyRead</c> recordset on the same cache.</summary>
+    internal string? DenyReadTable(params ReadOnlySpan<string> tables)
+    {
+        foreach (DatabaseObject d in Engine.Sessions)
+        {
+            if (d.Closed || !ReferenceEquals(d.Cache, Cache))
+            {
+                continue;
+            }
+            foreach (string table in tables)
+            {
+                if (table.Length > 0 && d.HasDenyRead(table))
+                {
+                    return table;
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Name of <paramref name="table"/> if any open <c>dbDenyWrite</c> recordset on the same cache blocks writes to it.</summary>
+    internal string? DenyWriteTable(string table)
+    {
+        if (table.Length == 0)
+        {
+            return null;
+        }
+        foreach (DatabaseObject d in Engine.Sessions)
+        {
+            if (!d.Closed && ReferenceEquals(d.Cache, Cache) && d.HasDenyWrite(table))
+            {
+                return table;
+            }
+        }
+        return null;
+    }
+
+    private bool HasDenyRead(string table)
+    {
+        foreach (IDatabaseRecordset r in _recordsets)
+        {
+            if (r.DeniesRead(table))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool HasDenyWrite(string table)
+    {
+        foreach (IDatabaseRecordset r in _recordsets)
+        {
+            if (r.DeniesWrite(table))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>A Rollback of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets (TXN-CLOSE).</summary>
     public void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost)
     {
@@ -2208,6 +2318,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Close: every recordset of this Database closes, the file is released once the last holder closes, the Workspace forgets it.</summary>
     private CallResult Close()
     {
+        _readOnlyFirstView?.Dispose();
+        _readOnlyFirstView = null;
         foreach (IDatabaseRecordset r in _recordsets.ToArray())
         {
             r.CloseCursor();
@@ -2225,9 +2337,26 @@ internal sealed unsafe class DatabaseObject : DaoObject
             // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
             // The last binding of the file publishes it whichever Workspace's publications need it, even if a non-default
             // Workspace was already closed and released (W-05 6xzx: evidence/r-q46-dao-ddl-multi/mh-ddl-refresh-twows-accdb
-            // and r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb: page-1 extent and dropped pages return only at
-            // db2.Close, 07->08). Two Workspaces both owing a closing commit is unrecorded and refused by name.
+            // and r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb; mh-twows-both-close-commit-{accdb,mdb}).
             closing = CloseCommitAll();
+        }
+        else
+        {
+            _workspace.Transactions.EndLazyBurst(Cache);
+            bool sameWorkspaceStillOpen = Engine.Sessions.Any(d =>
+                !ReferenceEquals(d, this) && !d.Closed && ReferenceEquals(d.Cache, Cache) && ReferenceEquals(d.Workspace, _workspace));
+            if (!sameWorkspaceStillOpen)
+            {
+                (MutationOpen defOpen, string? defDetail) = _workspace.Transactions.FlushDeferredCatalogCommitIfAny(Cache);
+                if (defOpen != MutationOpen.None)
+                {
+                    closing = EditPublication.Open(defOpen, "Database.Close could not write its closing commit: " + defDetail);
+                }
+                else if (!_workspace.Transactions.HasParticipant(Cache) && !_workspace.Transactions.HasPendingRollbackGuard(Cache))
+                {
+                    _workspace.Transactions.TransferCloseObligationsTo(Cache, _pooled.DeferredObligations);
+                }
+            }
         }
         bool removedFromThread = _openOnThread?.Remove(this) == true;
         if (lastHolder && removedFromThread)
@@ -2278,10 +2407,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// The closing commit of the file's last binding: ends every attached Workspace's lazy burst on this cache, and when
-    /// exactly one Workspace owes a closing commit (page-1 reservations, ReleasedAtClose pages, or deferred catalog
-    /// commit), publishes it even if a non-default Workspace was already closed and released. When two or more Workspaces
-    /// both owe a closing commit on the same file, refuses by name (qualified.md 6xzx Open: unrecorded).
+    /// The closing commit of the file's last binding: ends every attached Workspace's lazy burst on this cache, flushes any
+    /// remaining deferred catalog commits, and consolidates all close-commit obligations across closed Workspaces into a
+    /// single closing commit (<c>evidence/r-q52-ddl-make-domain/mh-twows-both-close-commit-accdb</c>, <c>-mdb</c>).
     /// </summary>
     private CallResult CloseCommitAll()
     {
@@ -2294,19 +2422,32 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 (owing ??= []).Add(coordinator);
             }
         }
-        if (owing is null)
+        if (owing is null && !_pooled.DeferredObligations.HasWork)
         {
             return CallResult.Nothing;
         }
-        if (owing.Count > 1)
+        TransactionCoordinator primary = owing is { Count: > 0 } ? owing[0] : _workspace.Transactions;
+        primary.AdoptCloseObligations(Cache, _pooled.DeferredObligations);
+        if (owing is { Count: > 1 })
         {
-            return CallResult.Fail(Failure.NotModelled(
-                "NotModelled.MultiWorkspaceCloseCommit",
-                $"Database.Close when {owing.Count} Workspaces each owe a closing commit on the same file is not recorded (qualified.md R-LOCK-1 EX-PUBLIC 6xzx Open)"));
+            var transferred = new PooledCloseObligations();
+            for (int i = 1; i < owing.Count; i++)
+            {
+                TransactionCoordinator secondary = owing[i];
+                (MutationOpen defOpen, string? defDetail) = secondary.FlushDeferredCatalogCommitIfAny(Cache);
+                if (defOpen != MutationOpen.None)
+                {
+                    return EditPublication.Open(defOpen, "Database.Close could not write its closing commit: " + defDetail);
+                }
+                secondary.TransferCloseObligationsTo(Cache, transferred);
+                primary.AdoptCloseObligations(Cache, transferred);
+            }
         }
-        (MutationOpen open, string? detail) = _session.CloseCommit(owing[0]);
-        return open != MutationOpen.None
-            ? EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail)
-            : CallResult.Nothing;
+        (MutationOpen open, string? detail) = _session.CloseCommit(primary);
+        if (open != MutationOpen.None)
+        {
+            return EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
+        }
+        return CallResult.Nothing;
     }
 }

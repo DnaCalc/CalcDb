@@ -73,6 +73,19 @@ internal sealed class UnpublishedChanges
     /// <summary>The coordinators of the engine's live Workspaces.</summary>
     public IReadOnlyList<TransactionCoordinator> Workspaces => _workspaces;
 
+    /// <summary>Flush pending TableDef count increments held by <paramref name="holder"/> when another session hits a transaction 3188 conflict (<c>r-q52/mh-twows-3188-step-*</c>).</summary>
+    public bool TryFlushPendingTableDefOnConflict(LockerId holder, PageCache cache)
+    {
+        foreach (TransactionCoordinator w in _workspaces)
+        {
+            if (w.Locker == holder)
+            {
+                return w.TryFlushPendingTableDefOnConflict(cache);
+            }
+        }
+        return false;
+    }
+
     /// <summary>Record the file whose table a compiled semantics describes.</summary>
     public void Register(MutationSemantics semantics, string file) => _files.AddOrUpdate(semantics, file);
 

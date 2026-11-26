@@ -13,6 +13,8 @@ using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
 
+internal readonly record struct InnerJoinKeys(string LeftColumn, string RightColumn);
+
 /// <summary>
 /// A Recordset (Recordset2) over a SELECT's result (W-06/parser-binder-scan; II-11 §1 ExecutionInstance, II-12 §10): the
 /// SQL executor's <see cref="SelectCursor"/>, opened by Database.OpenRecordset with SELECT text or a saved select query,
@@ -34,17 +36,20 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
         .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
         .Get("Bookmarkable", (self, args) => Live(self, r => r.Bookmarkable()))
+        .Get("Transactions", (self, args) => Live(self, r => r.Transactions()))
         .Get("RecordCount", (self, args) => Live(self, r => r.RecordCount()))
         .Get("EditMode", (self, args) => Live(self, r => r.EditModeValue()))
-        .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
-        .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
+        .Get("EOF", (self, args) => Live(self, r => Bool(r.IsAtEof)))
+        .Get("BOF", (self, args) => Live(self, r => Bool(r.IsAtBof)))
         .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
-        .Method("MoveFirst", (self, args) => Live(self, r => r.EditPending("MoveFirst") ?? r.Moved(r.Cursor.MoveFirst())))
-        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.EditPending("MoveLast") ?? r.Moved(r.Cursor.MoveLast())))
-        .Method("MoveNext", (self, args) => Live(self, r => r.EditPending("MoveNext") ?? r.Moved(r.Cursor.MoveNext())))
-        .Method("MovePrevious", (self, args) => Live(self, r => r.EditPending("MovePrevious") ?? r.Moved(r.Cursor.MovePrevious())))
+        .Method("MoveFirst", (self, args) => Live(self, r => r.EditPending("MoveFirst") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.First) : r.Moved(r.Cursor.MoveFirst()))))
+        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Live(self, r => r.EditPending("MoveLast") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Last) : r.Moved(r.Cursor.MoveLast()))))
+        .Method("MoveNext", (self, args) => Live(self, r => r.EditPending("MoveNext") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Next) : r.Moved(r.Cursor.MoveNext()))))
+        .Method("MovePrevious", (self, args) => Live(self, r => r.EditPending("MovePrevious") ?? (r._appendOnly ? r.MoveAppendOnly(AppendOnlyMove.Previous) : r.Moved(r.Cursor.MovePrevious()))))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.EditPending("Move") ?? r.Move(rows, start)); })
         .Method("Edit", (self, args) => Live(self, r => r.Edit()))
+        .Method("AddNew", (self, args) => Live(self, r => r.AddNew()))
+        .Method("Delete", (self, args) => Live(self, r => r.Delete()))
         .Method("Update", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, force = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Update(type, force)); })
         .Method("CancelUpdate", (self, args) => { nint type = args.Length > 0 ? args[0] : 0; return Live(self, r => r.CancelUpdate(type)); })
         .Method("GetRows", (self, args) => { nint count = args.Length > 0 ? args[0] : 0; return ((SelectRecordsetObject)self).GetRows(count); })
@@ -91,8 +96,25 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private string? _resolvedOverlayAfterCommit;
     private string? _committedOpenLevel;
     private string? _forwardOnlyResolved;
+    private readonly int _options;
+    private readonly InnerJoinKeys? _innerJoin;
+    private readonly bool _isUpdatableInnerJoin;
+    private readonly bool _appendOnly;
+    private readonly List<RowId>? _appendOnlyRows;
+    private int _appendOnlyIndex = -1;
+    private bool _appendOnlyBof = true;
+    private bool _appendOnlyEof = true;
+    private RowReader? _appendOnlyReader;
+    private bool _movedSinceOpen;
     private RowReader? _editReader;
+    private RowReader? _seeChangesReader;
     private EditFrame? _frame;
+    private EditFrame?[]? _joinFrames;
+    private RowReader?[]? _joinReaders;
+    private int _dirtyJoinSource = -1;
+    private RowId? _seeChangesRow;
+    private NativeValue[]? _seeChangesValues;
+    private ulong _seeChangesSerial;
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
     public SelectRecordsetObject(
@@ -103,12 +125,18 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         bool singleTableRowSelect,
         bool hasOrderBy,
         ReadView? snapshotView = null,
-        PrivateOverlay? snapshotOverlay = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        PrivateOverlay? snapshotOverlay = null,
+        int options = 0,
+        ulong openSequence = 0,
+        InnerJoinKeys? innerJoin = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
+        _options = options;
+        _innerJoin = innerJoin;
+        OpenSequence = openSequence;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
         _snapshotView = snapshotView;
@@ -118,11 +146,93 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _hasOrderBy = hasOrderBy;
         _dynamicOverlay = recordsetType == 2 && singleTableRowSelect;
         _isMaterializedSnapshot = recordsetType == 4 && IsMaterializedPlan(plan);
+        _isUpdatableInnerJoin = !singleTableRowSelect
+            && recordsetType == 2
+            && innerJoin is not null
+            && plan.Sources.Count == 2
+            && plan.Sources[0].Table is not null
+            && plan.Sources[1].Table is not null
+            && cursor.Updatable == true;
+        _appendOnly = recordsetType == 2 && RecordsetOptions.IsAppendOnly(options);
+        _appendOnlyRows = _appendOnly ? [] : null;
         if (recordsetType == 4 && _openOverlay is { } openOverlay)
         {
             _openOverlaySnapshot = CaptureOverlayPages(openOverlay);
         }
         database.AddRef(); // a recordset keeps its Database object alive
+        CaptureSeeChangesRow();
+    }
+
+    public ulong OpenSequence { get; }
+
+    internal bool IsAppendOnly => _appendOnly;
+
+    internal CallResult ReadAppendOnlyField(int ordinal, bool fromCollect)
+    {
+        if (fromCollect)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyCollect", "Recordset.Collect on a dbAppendOnly SELECT recordset (not recorded)"));
+        }
+        if (!_isSingleTableRowSelect || Plan.Sources[0].Table is not { } table)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyRead", "Field.Value on a non-single-table dbAppendOnly SELECT recordset (not recorded)"));
+        }
+        if (Cursor.Columns[ordinal] is not { Origin: ColumnOrigin.BaseColumn, SourceColumn: { SourceIndex: 0 } sc })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyNonBaseColumn", $"Field.Value of non-base column {Cursor.Columns[ordinal].Name} on a dbAppendOnly SELECT recordset (not recorded)"));
+        }
+        if (_appendOnlyIndex < 0 || _appendOnlyIndex >= _appendOnlyRows!.Count)
+        {
+            return CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
+        }
+        _appendOnlyReader ??= RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        if (_appendOnlyReader is not { } reader)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Field.Value on a dbAppendOnly SELECT recordset when the table reader could not be opened"));
+        }
+        reader.Position(_appendOnlyRows[_appendOnlyIndex]);
+        if (sc.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo)
+        {
+            TextFieldRead text = reader.ReadText(sc.Column);
+            if (text.HasText)
+            {
+                return CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Shape.Units, text, static (dest, t) => t.DecodeInto(dest)));
+            }
+            return FieldObject.Published(text.Result, sc.Column);
+        }
+        return FieldObject.Published(reader.Read(sc.Column), sc.Column);
+    }
+
+    internal bool IsSingleTableRowSelect => _isSingleTableRowSelect;
+
+    internal bool IsUpdatableInnerJoin => _isUpdatableInnerJoin;
+
+    internal bool IsAtEof => _appendOnly ? _appendOnlyEof : Cursor.Eof;
+
+    internal bool IsAtBof => _appendOnly ? _appendOnlyBof : Cursor.Bof;
+
+    internal bool AllowsOtherWorkspaceRollback(ulong frameBeginSeq) =>
+        !Closed
+        && _isSingleTableRowSelect
+        && RecordsetType is 2 or 4
+        && _openLevels.Length == 0
+        && OpenSequence < frameBeginSeq
+        && !HasPendingEdit;
+
+    public bool DeniesWrite(string table) => !Closed && (_options & 1) != 0 && ReferencesTable(table);
+
+    public bool DeniesRead(string table) => !Closed && RecordsetType == 1 && (_options & 2) != 0 && ReferencesTable(table);
+
+    private bool ReferencesTable(string table)
+    {
+        foreach (SourceSlot source in Plan.Sources)
+        {
+            if (string.Equals(source.TableName, table, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -147,6 +257,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return;
         }
+        _dirtyJoinSource = -1;
+        _editReader?.Position(null);
+        DiscardJoinReaders();
         if (Array.IndexOf(_openLevels, level) >= 0)
         {
             NotRecordedAfterRollback ??= $"a query recordset opened inside a level ({level.Level}) that was rolled back, not recorded (TXN-CLOSE)";
@@ -254,7 +367,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.ResolvedOverlay", $"{member}: the query recordset was opened over its Workspace's overlay of a level that has ended"));
         }
-        if (_dynamicOverlay && currentOverlay is not null && (Database.Workspace.Transactions.Depth >= 2 || _openLevels.Length >= 2))
+        if (_dynamicOverlay && currentOverlay is not null && (Database.Workspace.Transactions.Depth > 2 || _openLevels.Length >= 2))
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.NestedSelectOverlay", $"{member}: a SELECT dynaset reading an overlay at nested transaction depth {Database.Workspace.Transactions.Depth} (not recorded)"));
         }
@@ -337,7 +450,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// </summary>
     private CallResult Updatable() => Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Recordset.Updatable")
         : Database.ReadOnly ? Bool(false)
-        : Cursor.Updatable is bool updatable ? Bool(updatable)
+        : Cursor.Updatable is bool updatable ? Bool(updatable && RecordsetOptions.Updatable(RecordsetType, _options, readOnlyDatabase: false))
         : CallResult.Fail(Failure.NotModelled(Cursor.UpdatableOpen ?? "NotModelled.QueryUpdatable", $"Recordset.Updatable: {Cursor.UpdatableOpen ?? "unrecorded query shape"}"));
 
     /// <summary>
@@ -353,6 +466,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         8 => Bool(false),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryBookmarkable", $"Recordset.Bookmarkable on a type {RecordsetType} query recordset (not recorded)")),
     };
+
+    private CallResult Transactions() => RecordsetType == 2
+        ? Bool(true)
+        : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetTransactions", $"Recordset.Transactions on a type {RecordsetType} query recordset (only dynaset is recorded)"));
 
     /// <summary>
     /// The catalog MR2 property blob (CAT-P) of a local source table by name, read once per table on this recordset.
@@ -382,7 +499,52 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// </summary>
     private CallResult RecordCount()
     {
-        if (IsMdb)
+        if (_appendOnly)
+        {
+            return _movedSinceOpen
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordCount.AppendOnlyMoved", "RecordCount after moving a dbAppendOnly SELECT dynaset (not recorded)"))
+                : Int32(_appendOnlyRows!.Count);
+        }
+        if (_isUpdatableInnerJoin && _hasOrderBy && !_movedSinceOpen && Plan.Parameters.Count == 0)
+        {
+            SelectCursor? tmp = SelectRoute.OpenCursor(
+                Database, Plan, RecordsetType, _isSingleTableRowSelect, _hasOrderBy,
+                values: null,
+                out ReadView? tmpView, out PrivateOverlay? tmpOverlay,
+                out SqlFailure? tmpFailure, out CallResult? tmpViewRefusal);
+            if (tmp is null)
+            {
+                if (tmpViewRefusal is { } refused)
+                {
+                    return refused;
+                }
+                return CallResult.Fail(Failure.NotModelled(tmpFailure?.NotModelled ?? "NotModelled.QueryRecordCount", "RecordCount: " + tmpFailure?.Message));
+            }
+            try
+            {
+                MoveOutcome lastOutcome = tmp.MoveLast();
+                if (tmp.FetchFailure is { } fetch)
+                {
+                    return CallResult.Fail(fetch.IsNotModelled
+                        ? Failure.NotModelled(fetch.NotModelled!, fetch.Message)
+                        : Failure.Dao(fetch.Number, Source, fetch.Message));
+                }
+                if (lastOutcome is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.QueryRecordCount",
+                        $"RecordCount on join cursor MoveLast returned {lastOutcome}"));
+                }
+                return Int32((int)tmp.RecordCount);
+            }
+            finally
+            {
+                tmp.Dispose();
+                tmpOverlay?.Dispose();
+                tmpView?.Dispose();
+            }
+        }
+        if (IsMdb && !(Database.Workspace.Transactions.Depth > 0 && _isSingleTableRowSelect))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordCount.Mdb",
@@ -447,6 +609,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(fetch.IsNotModelled ? Failure.NotModelled(fetch.NotModelled!, fetch.Message) : Failure.Dao(fetch.Number, Source, fetch.Message));
         }
+        if (outcome is MoveOutcome.Moved or MoveOutcome.ReachedBoundary)
+        {
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+        }
         return outcome switch
         {
             MoveOutcome.Moved or MoveOutcome.ReachedBoundary => CallResult.Nothing,
@@ -456,6 +623,116 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         };
     }
 
+    private enum AppendOnlyMove : byte { First, Last, Next, Previous, Relative }
+
+    private CallResult MoveAppendOnly(AppendOnlyMove kind, int relativeRows = 0)
+    {
+        _movedSinceOpen = true;
+        _frame?.Discard();
+        int count = _appendOnlyRows!.Count;
+        if (count == 0)
+        {
+            if (kind is AppendOnlyMove.First or AppendOnlyMove.Last)
+            {
+                _appendOnlyIndex = -1;
+                _appendOnlyBof = true;
+                _appendOnlyEof = true;
+            }
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        switch (kind)
+        {
+            case AppendOnlyMove.First:
+                _appendOnlyIndex = 0;
+                _appendOnlyBof = false;
+                _appendOnlyEof = false;
+                break;
+            case AppendOnlyMove.Last:
+                _appendOnlyIndex = count - 1;
+                _appendOnlyBof = false;
+                _appendOnlyEof = false;
+                break;
+            case AppendOnlyMove.Next:
+                if (_appendOnlyEof)
+                {
+                    return Fail(3021, DaoErrors.NoCurrentRecord);
+                }
+                int next = _appendOnlyBof ? 0 : _appendOnlyIndex + 1;
+                if (next >= count)
+                {
+                    _appendOnlyIndex = -1;
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = true;
+                }
+                else
+                {
+                    _appendOnlyIndex = next;
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = false;
+                }
+                break;
+            case AppendOnlyMove.Previous:
+                if (_appendOnlyBof)
+                {
+                    return Fail(3021, DaoErrors.NoCurrentRecord);
+                }
+                int prev = _appendOnlyEof ? count - 1 : _appendOnlyIndex - 1;
+                if (prev < 0)
+                {
+                    _appendOnlyIndex = -1;
+                    _appendOnlyBof = true;
+                    _appendOnlyEof = false;
+                }
+                else
+                {
+                    _appendOnlyIndex = prev;
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = false;
+                }
+                break;
+            case AppendOnlyMove.Relative:
+                if (relativeRows == 0)
+                {
+                    if (_appendOnlyBof || _appendOnlyEof || _appendOnlyIndex < 0)
+                    {
+                        return Fail(3021, DaoErrors.NoCurrentRecord);
+                    }
+                    break;
+                }
+                int start = _appendOnlyIndex >= 0 ? _appendOnlyIndex : (_appendOnlyEof ? count : -1);
+                long target = (long)start + relativeRows;
+                if (target < -1 || target > count)
+                {
+                    _appendOnlyIndex = -1;
+                    _appendOnlyBof = target < 0;
+                    _appendOnlyEof = target > 0;
+                    CaptureSeeChangesRow();
+                    return Fail(3021, DaoErrors.NoCurrentRecord);
+                }
+                if (target == -1)
+                {
+                    _appendOnlyIndex = -1;
+                    _appendOnlyBof = true;
+                    _appendOnlyEof = false;
+                }
+                else if (target == count)
+                {
+                    _appendOnlyIndex = -1;
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = true;
+                }
+                else
+                {
+                    _appendOnlyIndex = (int)target;
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = false;
+                }
+                break;
+        }
+        CaptureSeeChangesRow();
+        return CallResult.Nothing;
+    }
+
     private CallResult Move(nint rowsArg, nint startBookmark)
     {
         if (startBookmark != 0)
@@ -463,7 +740,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             return CallResult.Fail(Failure.NotImplemented("Move with a StartBookmark"));
         }
         int? rows = Args.Int32(rowsArg, omitted: null);
-        return rows is null ? CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number")) : Moved(Cursor.Move(rows.Value));
+        if (rows is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number"));
+        }
+        return _appendOnly ? MoveAppendOnly(AppendOnlyMove.Relative, rows.Value) : Moved(Cursor.Move(rows.Value));
     }
 
     /// <summary>
@@ -572,9 +853,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     $"GetRows({count}) with {colCount} columns on {(IsMdb ? "MDB" : "ACCDB")} type {RecordsetType} SELECT (exact 3035 threshold is only recorded on x64 for 2 columns across cursors 2/4/8 and 1/3/4 columns on ACCDB snapshot)"));
             }
         }
-        if (Cursor.Eof || Cursor.Bof)
+        if (IsAtEof || IsAtBof)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (_appendOnly)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetGetRowsAppendOnly",
+                "GetRows on a populated dbAppendOnly SELECT dynaset (not recorded)"));
         }
         if (Cursor.FetchFailure is not null)
         {
@@ -745,7 +1032,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetRequeryArg",
                 "Recordset.Requery with a NewQueryDef argument on a SELECT recordset (not recorded)"));
         }
-        if (IsMdb
+        if (_appendOnly
+            || (IsMdb && !(Database.ReadOnlyFirst && Database.ReadOnly && RecordsetType == 2 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
             || !_isSingleTableRowSelect
             || !_hasOrderBy
@@ -761,7 +1049,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             Database, Plan, RecordsetType, _isSingleTableRowSelect, _hasOrderBy,
             values: null,
             out ReadView? nextSnapshotView, out PrivateOverlay? nextSnapshotOverlay,
-            out SqlFailure? failure, out CallResult? viewRefusal);
+            out SqlFailure? failure, out CallResult? viewRefusal,
+            useReadOnlyFirstView: false);
         if (next is null)
         {
             if (viewRefusal is { } refused)
@@ -785,6 +1074,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _openOverlay = Database.Workspace.Transactions.OverlayOf(Database.Cache);
         _openOverlaySnapshot = RecordsetType == 4 && _openOverlay is { } overlay ? CaptureOverlayPages(overlay) : null;
         _openPublishedSerial = Database.Cache.PublishedSerial;
+        _movedSinceOpen = false;
         previousCursor.Dispose();
         previousSnapshotOverlay?.Dispose();
         previousSnapshotView?.Dispose();
@@ -792,41 +1082,248 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             Database.Workspace.Transactions.EndLazyBurst(Database.Cache);
         }
+        CaptureSeeChangesRow();
         return CallResult.Nothing;
     }
 
     internal EditFrame? FrameIfMade => _frame;
 
-    private CallResult? EditPending(string member) => _frame is { Mode: not EditMode.None }
+    internal bool HasPendingEdit =>
+        _frame is { Mode: not EditMode.None }
+        || (_joinFrames is { } jf && ((jf[0]?.Mode ?? EditMode.None) != EditMode.None || (jf[1]?.Mode ?? EditMode.None) != EditMode.None));
+
+    private CallResult? EditPending(string member) => HasPendingEdit
         ? CallResult.Fail(Failure.NotModelled(
             "NotModelled.QueryRecordsetEditPending",
             $"{member} with an edit pending on a SELECT recordset (not recorded)"))
         : null;
 
+    internal EditFrame? FrameForSourceIfEditing(int sourceIndex) => sourceIndex switch
+    {
+        0 when _isSingleTableRowSelect => _frame is { Mode: not EditMode.None } f ? f : null,
+        0 or 1 when _isUpdatableInnerJoin => _joinFrames?[sourceIndex] is { Mode: not EditMode.None } jf ? jf : null,
+        _ => null,
+    };
+
+    private void DiscardJoinReaders()
+    {
+        if (_joinReaders is null)
+        {
+            return;
+        }
+        _joinReaders[0]?.Position(null);
+        _joinReaders[1]?.Position(null);
+    }
+
+    private void DisposeJoinFrames()
+    {
+        _dirtyJoinSource = -1;
+        if (_joinFrames is not null)
+        {
+            _joinFrames[0]?.Dispose();
+            _joinFrames[1]?.Dispose();
+            _joinFrames = null;
+        }
+        if (_joinReaders is not null)
+        {
+            _joinReaders[0]?.Dispose();
+            _joinReaders[1]?.Dispose();
+            _joinReaders = null;
+        }
+    }
+
+    private static bool HasSingleColumnUniqueIndex(TableDefinition table, ColumnDescriptor column)
+    {
+        const byte UniqueFlag = 0x01;
+        const byte IgnoreNullsFlag = 0x02;
+        foreach (PhysicalIndex pi in table.PhysicalIndexes)
+        {
+            if (pi.Columns.Count == 1
+                && pi.Columns[0].PhysicalNumber == column.PhysicalNumber
+                && (pi.Flags & UniqueFlag) != 0
+                && (pi.Flags & IgnoreNullsFlag) == 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal bool IsConsistentBlockedJoinKey(ColumnSource sc)
+    {
+        if (!_isUpdatableInnerJoin || _innerJoin is not { } jk)
+        {
+            return false;
+        }
+        bool isParentKey = (sc.SourceIndex == 0
+                && string.Equals(sc.Column.Name, jk.LeftColumn, StringComparison.OrdinalIgnoreCase)
+                && HasSingleColumnUniqueIndex(Plan.Sources[0].Table!, sc.Column))
+            || (sc.SourceIndex == 1
+                && string.Equals(sc.Column.Name, jk.RightColumn, StringComparison.OrdinalIgnoreCase)
+                && HasSingleColumnUniqueIndex(Plan.Sources[1].Table!, sc.Column));
+        return isParentKey && (_options & 16) == 0;
+    }
+
+    internal CallResult? JoinMultiSideRefusal(int sourceIndex) =>
+        _isUpdatableInnerJoin && _dirtyJoinSource >= 0 && _dirtyJoinSource != sourceIndex
+            ? CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetJoinMultiSideEdit",
+                "editing columns from both sides of a join in a single Edit/Update (not recorded)"))
+            : null;
+
+    internal void NoteJoinAssignment(int sourceIndex)
+    {
+        if (_isUpdatableInnerJoin)
+        {
+            _dirtyJoinSource = sourceIndex;
+        }
+    }
+
+    private void CaptureSeeChangesRow()
+    {
+        if (!_isSingleTableRowSelect || RecordsetType != 2 || !RecordsetOptions.HasSeeChanges(_options))
+        {
+            return;
+        }
+        _seeChangesRow = null;
+        _seeChangesValues = null;
+        if (Closed || IsAtBof || IsAtEof)
+        {
+            return;
+        }
+        TableDefinition? table = Plan.Sources[0].Table;
+        if (table is null)
+        {
+            return;
+        }
+        RowId? rowId;
+        if (_appendOnly)
+        {
+            rowId = _appendOnlyIndex >= 0 && _appendOnlyIndex < _appendOnlyRows!.Count ? _appendOnlyRows[_appendOnlyIndex] : null;
+        }
+        else
+        {
+            int baseOrdinal = -1;
+            for (int i = 0; i < Cursor.Columns.Count; i++)
+            {
+                if (Cursor.Columns[i] is { Origin: ColumnOrigin.BaseColumn, SourceColumn.SourceIndex: 0 })
+                {
+                    baseOrdinal = i;
+                    break;
+                }
+            }
+            if (baseOrdinal < 0 || !Cursor.Read(baseOrdinal, out _, out _))
+            {
+                return;
+            }
+            rowId = (((IExpressionRow)Cursor).Source(0) as RowReader)?.Current;
+        }
+        if (rowId is not { } row)
+        {
+            return;
+        }
+        _seeChangesReader ??= RowReader.Open(new PageSource(Database.Cache), Database.Format, table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        if (_seeChangesReader is not { } reader)
+        {
+            return;
+        }
+        reader.Position(row);
+        IReadOnlyList<ColumnDescriptor> columns = table.Columns;
+        var values = new NativeValue[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            FieldResult read = reader.Read(columns[i]);
+            if (!read.Succeeded)
+            {
+                return;
+            }
+            values[i] = read.Value;
+        }
+        _seeChangesRow = row;
+        _seeChangesValues = values;
+        _seeChangesSerial = Database.Cache.PublishedSerial;
+    }
+
+    private bool HasSeeChangesConflict(TableDefinition table)
+    {
+        if (!RecordsetOptions.HasSeeChanges(_options)
+            || _seeChangesRow is not { } row
+            || _seeChangesValues is not { } snapshot
+            || Database.Cache.PublishedSerial == _seeChangesSerial)
+        {
+            return false;
+        }
+        _seeChangesReader?.Dispose();
+        _seeChangesReader = RowReader.Open(new PageSource(Database.Cache), Database.Format, table, Math.Max(Database.PageCount, Database.Cache.KnownExtentPages), out _);
+        if (_seeChangesReader is not { } reader)
+        {
+            return false;
+        }
+        reader.Position(row);
+        IReadOnlyList<ColumnDescriptor> columns = table.Columns;
+        var refreshed = new NativeValue[columns.Count];
+        bool changed = false;
+        bool allRead = true;
+        for (int i = 0; i < columns.Count; i++)
+        {
+            FieldResult current = reader.Read(columns[i]);
+            if (!current.Succeeded)
+            {
+                allRead = false;
+                changed = true;
+                break;
+            }
+            refreshed[i] = current.Value;
+            if (!NativeValue.SameStored(current.Value, snapshot[i]))
+            {
+                changed = true;
+            }
+        }
+        if (!changed)
+        {
+            _seeChangesSerial = Database.Cache.PublishedSerial;
+            return false;
+        }
+        if (allRead)
+        {
+            _seeChangesValues = refreshed;
+            _seeChangesSerial = Database.Cache.PublishedSerial;
+        }
+        else
+        {
+            _seeChangesRow = null;
+            _seeChangesValues = null;
+        }
+        return true;
+    }
+
     /// <summary>
-    /// Shared <see cref="EditFrame"/> for single-table updatable SELECT dynasets at transaction depth 0
-    /// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 395-401, 415-422, 436-443;
-    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 395-401, 415-422, 436-443;
-    /// <c>evidence/r-err-1b/asg-update-without-edit</c> rows 5, 10, 32): delegates validation, check ordering, and page
-    /// publication to the one ISAM edit frame over a dedicated <see cref="RowReader"/> positioned on the current base
-    /// row. Unrecorded cursor types, multi-table/subquery shapes, read-only opens, and in-transaction edits stay refused
-    /// by name.
+    /// Shared <see cref="EditFrame"/> for single-table updatable SELECT dynasets across depths 0..2
+    /// (<c>r-q42-field-rule-and</c>, <c>r-q50/dao-edit-buf-commit-rb-*</c>, <c>dao-edit-buf-nested-partial-*</c>,
+    /// <c>r-q52/mh-rofirst-dynaset-edit-*</c>) and 2-table keyed <c>INNER JOIN</c> dynasets (<c>r-q50/dao-opt-join-seechanges-*</c>).
     /// </summary>
-    internal EditFrame? EditFrameOrRefuse(string member, out CallResult refused)
+    internal EditFrame? EditFrameForSource(string member, int sourceIndex, out CallResult refused)
     {
         refused = default;
         if (RecordsetType != 2)
         {
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditType",
-                $"{member} on a type {RecordsetType} SELECT recordset (only single-table updatable dynasets are recorded)"));
+                $"{member} on a type {RecordsetType} SELECT recordset (only single-table and keyed inner-join dynasets are recorded)"));
             return null;
         }
-        if (!_isSingleTableRowSelect || Plan.Sources.Count != 1 || Plan.Sources[0].Table is null)
+        if (!_isSingleTableRowSelect && !(_isUpdatableInnerJoin && member is "Edit" or "Update" or "CancelUpdate" or "Field.Value put"))
         {
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditShape",
                 $"{member} on a non-single-table SELECT recordset (not recorded)"));
+            return null;
+        }
+        if (sourceIndex < 0 || sourceIndex >= Plan.Sources.Count || Plan.Sources[sourceIndex].Table is not { } table)
+        {
+            refused = CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetEditShape",
+                $"{member} on SELECT source {sourceIndex} (not recorded)"));
             return null;
         }
         if (Database.InheritedWritable && (Database.Exclusive || member is not ("Edit" or "Update" or "Field.Value put")))
@@ -834,25 +1331,34 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             refused = DatabaseObject.InheritedWriteRefusal($"SELECT Recordset.{member}");
             return null;
         }
-        if (Cursor.Updatable != true || Database.ReadOnly)
+        if (Database.ReadOnly || !RecordsetOptions.Updatable(RecordsetType, _options, readOnlyDatabase: false) || Cursor.Updatable != true)
         {
-            refused = CallResult.Fail(Failure.NotModelled(
-                "NotModelled.QueryRecordsetEditReadOnly",
-                $"{member} on a non-updatable SELECT dynaset (not recorded)"));
+            refused = Database.ReadOnly && member is "Edit" or "AddNew" or "Delete"
+                ? Fail(MutationError.ReadOnly, "Cannot update. Database or object is read-only.")
+                : CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetEditReadOnly",
+                    $"{member} on a non-updatable SELECT dynaset (not recorded)"));
             return null;
         }
-        if (Database.Workspace.Transactions.Depth > 0 || _openLevels.Length > 0)
+        if (_openLevels.Length >= 2 || Database.Workspace.Transactions.Depth > 2)
         {
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditTransaction",
-                $"{member} on a SELECT dynaset inside a transaction (only depth 0 is recorded)"));
+                $"{member} on a SELECT dynaset at open depth {_openLevels.Length} / current depth {Database.Workspace.Transactions.Depth} (not recorded)"));
             return null;
         }
-        if (_frame is { } existing)
+        if (_isSingleTableRowSelect)
         {
-            return existing;
+            if (_frame is { } existing)
+            {
+                return existing;
+            }
         }
-        SourceSlot source = Plan.Sources[0];
+        else if (_joinFrames?[sourceIndex] is { } existingJoin)
+        {
+            return existingJoin;
+        }
+        SourceSlot source = Plan.Sources[sourceIndex];
         CatalogEntry? entry = Database.Catalog.LocalTables(Database.Format)
             .FirstOrDefault(e => string.Equals(e.Name, source.TableName, StringComparison.OrdinalIgnoreCase));
         if (entry is null)
@@ -865,31 +1371,54 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' edit semantics cannot be compiled: {contextFailure}"));
             return null;
         }
-        if (RowReader.Open(Database.Cache, Database.Format, source.Table, Database.PageCount, out TraversalFailure? openFailure) is not { } reader)
+        if (RowReader.Open(new PageSource(Database.Cache, Database.Workspace.Transactions), Database.Format, table, Database.PageCount, out TraversalFailure? openFailure) is not { } reader)
         {
             refused = CallResult.Fail(Failure.NotImplemented($"{member} when table '{source.TableName}' cannot be opened for edit: {openFailure?.Predicate}"));
             return null;
         }
-        _editReader = reader;
-        _frame = new EditFrame(context, reader, Database.Workspace.Transactions, updatable: true);
-        return _frame;
+        var frame = new EditFrame(context, reader, Database.Workspace.Transactions, updatable: true)
+        {
+            AllowExplicitTxnReedit = true,
+            DeferInsertTableDefCounts = _isSingleTableRowSelect && context.Semantics.AutoNumber is null,
+        };
+        if (_isSingleTableRowSelect)
+        {
+            _editReader = reader;
+            _frame = frame;
+        }
+        else
+        {
+            _joinReaders ??= new RowReader?[Plan.Sources.Count];
+            _joinFrames ??= new EditFrame?[Plan.Sources.Count];
+            _joinReaders[sourceIndex] = reader;
+            _joinFrames[sourceIndex] = frame;
+        }
+        return frame;
     }
 
     private CallResult EditModeValue()
     {
         if (RecordsetType != 2
-            || !_isSingleTableRowSelect
-            || Plan.Sources.Count != 1
-            || Plan.Sources[0].Table is null
+            || (!_isSingleTableRowSelect && !_isUpdatableInnerJoin)
             || Cursor.Updatable != true
-            || Database.ReadOnly
             || Database.InheritedWritable
-            || Database.Workspace.Transactions.Depth > 0
-            || _openLevels.Length > 0)
+            || _openLevels.Length >= 2
+            || Database.Workspace.Transactions.Depth > 2)
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditMode",
                 $"EditMode on a type {RecordsetType} SELECT recordset in this state (not recorded)"));
+        }
+        if (Database.ReadOnly || !RecordsetOptions.Updatable(RecordsetType, _options, readOnlyDatabase: false))
+        {
+            return Int16(0);
+        }
+        if (_isUpdatableInnerJoin)
+        {
+            EditMode mode = _dirtyJoinSource >= 0
+                ? (_joinFrames?[_dirtyJoinSource]?.Mode ?? EditMode.None)
+                : (_joinFrames?[0]?.Mode ?? EditMode.None);
+            return Int16((short)mode);
         }
         return Int16((short)(_frame?.Mode ?? EditMode.None));
     }
@@ -900,20 +1429,51 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return pending;
         }
-        if (EditFrameOrRefuse("Edit", out CallResult refused) is not { } frame)
+        if (EditFrameForSource("Edit", 0, out CallResult refused) is not { } frame)
         {
             return refused;
         }
-        if (Cursor.Bof || Cursor.Eof)
+        EditFrame? frame1 = null;
+        if (_isUpdatableInnerJoin)
+        {
+            frame1 = EditFrameForSource("Edit", 1, out CallResult refused1);
+            if (frame1 is null)
+            {
+                return refused1;
+            }
+        }
+        if (_isUpdatableInnerJoin && RecordsetOptions.HasSeeChanges(_options))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetJoinSeeChangesEdit",
+                "Edit on a joined SELECT dynaset with dbSeeChanges is not recorded"));
+        }
+        if (IsAtBof || IsAtEof)
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditNoCurrentRecord",
-                "Edit at BOF/EOF on a depth-0 SELECT dynaset (not recorded)"));
+                "Edit at BOF/EOF on a SELECT dynaset (not recorded)"));
+        }
+        if (_isSingleTableRowSelect && _appendOnly)
+        {
+            if (_appendOnlyIndex < 0 || _appendOnlyIndex >= _appendOnlyRows!.Count)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetEditNoCurrentRecord",
+                    "Edit at BOF/EOF on a dbAppendOnly SELECT dynaset (not recorded)"));
+            }
+            if (HasSeeChangesConflict(Plan.Sources[0].Table!))
+            {
+                return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
+            }
+            _editReader!.Position(_appendOnlyRows[_appendOnlyIndex]);
+            return EditPublication.Of(frame.Edit());
         }
         int baseOrdinal = -1;
         for (int i = 0; i < Cursor.Columns.Count; i++)
         {
-            if (Cursor.Columns[i] is { Origin: ColumnOrigin.BaseColumn, SourceColumn.SourceIndex: 0 })
+            if (Cursor.Columns[i] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { } sc }
+                && (_isSingleTableRowSelect ? sc.SourceIndex == 0 : sc.SourceIndex is 0 or 1))
             {
                 baseOrdinal = i;
                 break;
@@ -935,22 +1495,88 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetEditReadFailure",
                 $"Edit on a SELECT dynaset when reading current row failed with ACE {readFailure.Number} ({readFailure.Message}; not recorded)"));
         }
-        if (((IExpressionRow)Cursor).Source(0) is not RowReader sourceReader || sourceReader.Current is not { } currentRow)
+        if (_isSingleTableRowSelect)
+        {
+            if (HasSeeChangesConflict(Plan.Sources[0].Table!))
+            {
+                return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
+            }
+            if (((IExpressionRow)Cursor).Source(0) is not RowReader sourceReader || sourceReader.Current is not { } currentRow)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetEditPosition",
+                    "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
+            }
+            _editReader!.Position(currentRow);
+            return EditPublication.Of(frame.Edit());
+        }
+        if (((IExpressionRow)Cursor).Source(0) is not RowReader r0 || r0.Current is not { } row0
+            || ((IExpressionRow)Cursor).Source(1) is not RowReader r1 || r1.Current is not { } row1)
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditPosition",
-                "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
+                "Edit on a joined SELECT dynaset whose source cursor has no current row (not recorded)"));
         }
-        _editReader!.Position(currentRow);
-        return EditPublication.Of(frame.Edit());
+        _joinReaders![0]!.Position(row0);
+        _joinReaders[1]!.Position(row1);
+        _dirtyJoinSource = -1;
+        CallResult edit0 = EditPublication.Of(frame.Edit());
+        if (edit0.Failure is not null)
+        {
+            return edit0;
+        }
+        CallResult edit1 = EditPublication.Of(frame1!.Edit());
+        if (edit1.Failure is not null)
+        {
+            frame.Discard();
+            return edit1;
+        }
+        return CallResult.Nothing;
+    }
+
+    private CallResult AddNew()
+    {
+        if (EditPending("AddNew") is { } pending)
+        {
+            return pending;
+        }
+        if (_appendOnly && Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetAppendOnlyTransaction",
+                "AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
+        }
+        if (EditFrameForSource("AddNew", 0, out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        if (frame.Updatable && frame.Table.Counter is { } counter
+            && Database.Engine.Changes.CounterAhead(Database.Name, Plan.Sources[0].TableName, counter))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.Edit.UnpublishedCounter",
+                $"another Database of this engine issued AutoNumber values of '{Plan.Sources[0].TableName}' that the file's counter does not hold yet"));
+        }
+        return EditPublication.Of(frame.AddNew());
+    }
+
+    private CallResult Delete()
+    {
+        if (EditPending("Delete") is { } pending)
+        {
+            return pending;
+        }
+        if (EditFrameForSource("Delete", 0, out CallResult refused) is not { } _)
+        {
+            return refused;
+        }
+        return CallResult.Fail(Failure.NotImplemented("Recordset.Delete on a writable SELECT dynaset (only read-only 3027 is recorded)"));
     }
 
     /// <summary>
-    /// Update on a single-table updatable SELECT dynaset at depth 0: commits pending edits or raises validation errors
-    /// (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 400, 420, 441;
-    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 400, 420, 441); without a pending Edit raises
-    /// DAO 3020 from <c>DAO.Recordset</c> without <c>IErrorInfo</c>
-    /// (<c>evidence/r-err-1b/asg-update-without-edit</c> rows 5, 10, 32). Non-default <c>Type</c>/<c>Force</c>
+    /// Update on a SELECT dynaset: commits pending edits or raises validation/FK/3020 errors
+    /// (<c>r-q42-field-rule-and/rule-and2-ne-*</c>, <c>r-err-1b/asg-update-without-edit</c>,
+    /// <c>r-q50/dao-edit-buf-*</c>, <c>r-q50/dao-opt-join-seechanges-*</c>). Non-default <c>Type</c>/<c>Force</c>
     /// arguments stay refused by name.
     /// </summary>
     private CallResult Update(nint typeArg, nint forceArg)
@@ -961,14 +1587,62 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetUpdateArgs",
                 "Update with non-default UpdateType or Force arguments on a SELECT dynaset (not recorded)"));
         }
-        if (EditFrameOrRefuse("Update", out CallResult refused) is not { } frame)
+        if (_isUpdatableInnerJoin)
+        {
+            if (EditFrameForSource("Update", 0, out CallResult joinRefused) is not { } jf0)
+            {
+                return joinRefused;
+            }
+            int active = _dirtyJoinSource >= 0 ? _dirtyJoinSource : 0;
+            EditFrame targetFrame = _joinFrames?[active] ?? jf0;
+            UpdateOutcome joinOutcome = targetFrame.Update(type: 1, force: false);
+            CallResult joinResult = EditPublication.Of(joinOutcome);
+            if (joinResult.Failure is null && targetFrame.Mode == EditMode.None)
+            {
+                if (joinOutcome.Change is { } jChange && Database.Workspace.Transactions.Depth == 0)
+                {
+                    Database.Engine.Changes.MarkPublished([jChange]);
+                }
+                _joinFrames?[1 - active]?.Discard();
+                _dirtyJoinSource = -1;
+                DiscardJoinReaders();
+                for (int s = 0; s < 2; s++)
+                {
+                    if (((IExpressionRow)Cursor).Source(s) is RowReader srcReader)
+                    {
+                        srcReader.Position(null);
+                    }
+                }
+            }
+            return joinResult;
+        }
+        if (EditFrameForSource("Update", 0, out CallResult refused) is not { } frame)
         {
             return refused;
+        }
+        EditMode mode = frame.Mode;
+        if (_appendOnly && mode == EditMode.AddNew && Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetAppendOnlyTransaction",
+                "Update of AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
         }
         UpdateOutcome outcome = frame.Update(type: 1, force: false);
         CallResult result = EditPublication.Of(outcome);
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
+            if (mode == EditMode.AddNew && _appendOnly)
+            {
+                if (outcome.Change?.Inserted is { } insertedRow)
+                {
+                    _appendOnlyRows!.Add(insertedRow);
+                }
+                if (_appendOnlyIndex < 0)
+                {
+                    _appendOnlyBof = false;
+                    _appendOnlyEof = true;
+                }
+            }
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
             {
                 Database.Engine.Changes.MarkPublished([change]);
@@ -978,15 +1652,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 sourceReader.Position(null);
             }
+            CaptureSeeChangesRow();
         }
         return result;
     }
 
     /// <summary>
-    /// CancelUpdate on a single-table updatable SELECT dynaset at depth 0: discards a pending edit and returns
-    /// <c>EditMode</c> to 0 (<c>evidence/r-q42-field-rule-and/rule-and2-ne-accdb</c> rows 415-422, 436-443;
-    /// <c>evidence/r-q42-field-rule-and/rule-and2-ne-mdb</c> rows 415-422, 436-443). Calling CancelUpdate without a
-    /// pending Edit at depth 0 is not recorded on a SELECT dynaset and stays refused by name.
+    /// CancelUpdate on a SELECT dynaset: discards a pending edit and returns <c>EditMode</c> to 0; without a pending Edit,
+    /// join dynasets fail 3020 (<c>r-q50/dao-opt-join-seechanges-*</c>) while single-table dynasets keep <c>NotModelled.QueryRecordsetCancelUpdateNoEdit</c>.
     /// </summary>
     private CallResult CancelUpdate(nint typeArg)
     {
@@ -994,7 +1667,19 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
         }
-        if (EditFrameOrRefuse("CancelUpdate", out CallResult refused) is not { } frame)
+        if (_isUpdatableInnerJoin)
+        {
+            if (EditFrameForSource("CancelUpdate", 0, out CallResult joinRefused) is not { } jf0)
+            {
+                return joinRefused;
+            }
+            CallResult res = EditPublication.Of(jf0.CancelUpdate());
+            _joinFrames?[1]?.Discard();
+            _dirtyJoinSource = -1;
+            DiscardJoinReaders();
+            return res;
+        }
+        if (EditFrameForSource("CancelUpdate", 0, out CallResult refused) is not { } frame)
         {
             return refused;
         }
@@ -1027,6 +1712,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _frame = null;
             _editReader?.Dispose();
             _editReader = null;
+            _appendOnlyReader?.Dispose();
+            _appendOnlyReader = null;
+            _seeChangesReader?.Dispose();
+            _seeChangesReader = null;
+            DisposeJoinFrames();
+            _seeChangesRow = null;
+            _seeChangesValues = null;
             Cursor.Dispose();
             Plan.Dispose();
             _snapshotOverlay?.Dispose();
@@ -1249,9 +1941,13 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "NotModelled.FieldSizeNonLvType",
                 $"Field.FieldSize of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
-        if (Recordset.Cursor.Eof || Recordset.Cursor.Bof)
+        if (Recordset.IsAtEof || Recordset.IsAtBof)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (Recordset.IsAppendOnly)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyFieldSize", $"Field.FieldSize of {Column.Name} on a dbAppendOnly SELECT recordset (not recorded)"));
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
@@ -1379,7 +2075,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "NotModelled.GetChunkNonLvType",
                 $"Field.GetChunk of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
-        if (Recordset.Cursor.Eof || Recordset.Cursor.Bof)
+        if (Recordset.IsAtEof || Recordset.IsAtBof)
         {
             if (offset < 0 || bytes < 0)
             {
@@ -1388,6 +2084,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                     "Field.GetChunk with a negative argument at BOF/EOF or on an empty recordset (precedence between 3001 and 3021 is not recorded)"));
             }
             return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (Recordset.IsAppendOnly)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetAppendOnlyGetChunk", $"Field.GetChunk of {Column.Name} on a dbAppendOnly SELECT recordset (not recorded)"));
         }
         if (!Recordset.Cursor.Read(_ordinal, out NativeVariant value, out SqlFailure? failure))
         {
@@ -1936,13 +2636,14 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return txRefused;
         }
-        if (Column.Origin != ColumnOrigin.BaseColumn || Column.SourceColumn is not { SourceIndex: 0 } sc)
+        if (Column.Origin != ColumnOrigin.BaseColumn || Column.SourceColumn is not { } sc
+            || !(Recordset.IsSingleTableRowSelect ? sc.SourceIndex == 0 : Recordset.IsUpdatableInnerJoin && sc.SourceIndex is 0 or 1))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryFieldValuePutColumnOrigin",
-                $"Field.Value put on {Column.Origin} column {Column.Name} of a SELECT recordset (only base columns of single-table dynasets are recorded)"));
+                $"Field.Value put on {Column.Origin} column {Column.Name} of a SELECT recordset (only base columns of single-table and keyed inner-join dynasets are recorded)"));
         }
-        if (Recordset.EditFrameOrRefuse("Field.Value put", out CallResult refused) is not { } frame)
+        if (Recordset.EditFrameForSource("Field.Value put", sc.SourceIndex, out CallResult refused) is not { } frame)
         {
             return refused;
         }
@@ -1950,13 +2651,25 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryFieldValuePutWithoutEdit",
-                "Field.Value put without Edit on a depth-0 SELECT dynaset (not recorded)"));
+                "Field.Value put without Edit on a SELECT dynaset (not recorded)"));
+        }
+        if (Recordset.IsConsistentBlockedJoinKey(sc))
+        {
+            return Fail(3164, DaoErrors.FieldCannotBeUpdated, publishesErrorInfo: true);
+        }
+        if (Recordset.JoinMultiSideRefusal(sc.SourceIndex) is { } multiSideRefused)
+        {
+            return multiSideRefused;
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
         EditOutcome outcome = frame.Assign(sc.Column, incoming, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
         if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
         {
             return FieldObject.PublishExtendedDateTimeInvalid(Engine);
+        }
+        if (outcome.Succeeded)
+        {
+            Recordset.NoteJoinAssignment(sc.SourceIndex);
         }
         return EditPublication.Of(outcome);
     }
@@ -1968,19 +2681,34 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return refused;
         }
-        if (recordset.FrameIfMade is { Mode: not EditMode.None } frame)
+        if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { } sc }
+            && recordset.FrameForSourceIfEditing(sc.SourceIndex) is { } frame)
         {
             if (fromCollect)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEdit", "Recordset.Collect while an edit is pending on a SELECT recordset (not recorded)"));
             }
-            if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { SourceIndex: 0 } sc })
+            return FieldObject.Published(frame.Read(sc.Column), sc.Column);
+        }
+        if (recordset.HasPendingEdit)
+        {
+            if (fromCollect)
             {
-                return FieldObject.Published(frame.Read(sc.Column), sc.Column);
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEdit", "Recordset.Collect while an edit is pending on a SELECT recordset (not recorded)"));
             }
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryFieldValueReadDuringEdit",
                 $"Field.Value read of non-base column {recordset.Cursor.Columns[ordinal].Name} while an edit is pending on a SELECT recordset (not recorded)"));
+        }
+        if (recordset.IsAppendOnly && (recordset.IsAtBof || recordset.IsAtEof))
+        {
+            return fromCollect
+                ? CallResult.Fail(Failure.Dao(3021, "DAO.Recordset", DaoErrors.NoCurrentRecord))
+                : CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
+        }
+        if (recordset.IsAppendOnly)
+        {
+            return recordset.ReadAppendOnlyField(ordinal, fromCollect);
         }
         if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
         {

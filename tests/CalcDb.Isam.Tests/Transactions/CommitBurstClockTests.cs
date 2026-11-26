@@ -183,6 +183,57 @@ public sealed class CommitBurstClockTests
     }
 
     [Fact]
+    public void Empty_CommitTrans_and_outermost_Rollback_clear_the_lazy_burst_window()
+    {
+        // evidence/r-q50-jk44-ddl-vis/dao-edit-buf-commit-rb-*: empty CommitTrans and outermost Rollback
+        // clear the deferred burst window so the next automatic Recordset write starts a new counter bump.
+        using var rig = new Rig();
+        (EditFrame frame, TableCursor cursor, TableDefinition g) = rig.OpenG();
+        byte initial = rig.Before[D.Header.CommitCounter.Offset];
+
+        SeekRowById(cursor, g, 1);
+        Assert.True(UpdateN(frame, g, 111).Succeeded);
+        Assert.Equal(initial + 1, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+
+        rig.Now += TimeSpan.FromMilliseconds(100);
+        Assert.Null(rig.Coordinator.BeginTrans());
+        Assert.True(rig.Coordinator.CommitTrans().Succeeded);
+
+        Assert.True(UpdateN(frame, g, 112).Succeeded);
+        Assert.Equal(initial + 2, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+
+        rig.Now += TimeSpan.FromMilliseconds(100);
+        Assert.Null(rig.Coordinator.BeginTrans());
+        Assert.True(UpdateN(frame, g, 113).Succeeded);
+        Assert.True(rig.Coordinator.Rollback().Succeeded);
+
+        Assert.True(UpdateN(frame, g, 114).Succeeded);
+        Assert.Equal(initial + 3, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+    }
+
+    [Fact]
+    public void Depth_zero_statement_publication_coalesces_with_immediate_followup_lazy_write()
+    {
+        // evidence/r-q50-jk44-ddl-vis/dao-opt-join-seechanges-*: a depth-0 action statement keeps the burst
+        // window open for an immediate (< 500 ms) follow-up Recordset write rather than forcing a second bump.
+        using var rig = new Rig();
+        (EditFrame frame, TableCursor cursor, TableDefinition g) = rig.OpenG();
+        byte initial = rig.Before[D.Header.CommitCounter.Offset];
+
+        SeekRowById(cursor, g, 1);
+        using (StatementScope stmt = rig.Coordinator.BeginStatement())
+        {
+            Assert.True(UpdateN(frame, g, 121).Succeeded);
+            Assert.True(stmt.Complete().Succeeded);
+        }
+        Assert.Equal(initial + 1, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+
+        rig.Now += TimeSpan.FromMilliseconds(100);
+        Assert.True(UpdateN(frame, g, 122).Succeeded);
+        Assert.Equal(initial + 1, rig.File.Image.Snapshot()[D.Header.CommitCounter.Offset]);
+    }
+
+    [Fact]
     public void Slow_publication_measures_new_burst_threshold_from_return_not_start()
     {
         // Write 1 starts at t = 0 and finishes I/O at t = 100 ms. Pausing 950 ms after return puts t at 1050 ms

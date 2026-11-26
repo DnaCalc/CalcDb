@@ -65,6 +65,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
         _extentPages = pageCount;
         Catalog = catalog;
         ReadOnly = readOnly;
+        ReadOnlyAtOpen = readOnly;
         Exclusive = exclusive;
         _ownerLabel = ownerLabel;
         _onEditContextCreated = onEditContextCreated;
@@ -111,6 +112,11 @@ public sealed class ComDatabaseSession : IPublicationTarget
     /// (R-FMT-2; R-CRASH-1 CRASH-ORDER; evidence/r-q41-create-session-counter).
     /// </summary>
     public bool Exclusive { get; }
+
+    /// <summary>True when the first pooled open of this session was shared ReadOnly, selecting slot <c>[0x0E04, 0x0E06)</c> (<c>evidence/r-q52-ddl-make-domain/mh-rofirst-dynaset-edit-*</c>).</summary>
+    public bool ReadOnlyFirst => !Exclusive && ReadOnlyAtOpen;
+
+    private bool ReadOnlyAtOpen { get; }
 
     public bool Closed => _file is null;
 
@@ -190,6 +196,8 @@ public sealed class ComDatabaseSession : IPublicationTarget
     }
 
     bool IPublicationTarget.IsExclusiveSession(PageCache cache) => ReferenceEquals(cache, Cache) && Exclusive;
+
+    bool IPublicationTarget.IsSecondaryCommitSlot(PageCache cache) => ReferenceEquals(cache, Cache) && ReadOnlyFirst;
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
     public TableDefinition? Definition(CatalogEntry entry, out string? failure)

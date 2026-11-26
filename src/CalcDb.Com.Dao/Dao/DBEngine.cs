@@ -20,6 +20,7 @@ namespace CalcDb.Com.Dao;
 internal sealed class EngineState(HostBinding binding) : IPublicationTarget
 {
     private WorkspaceObject? _defaultWorkspace;
+    private ulong _nextSeq;
 
     // Per-engine temp-page slot allocator for table-opened dynaset (2) and snapshot (4) families
     // (r-q24-bookmarks/q1a-snap-w-beside-dynaset-unmoved, r-q24-bookmarks/q1b-snap-w-beside-2-dynasets,
@@ -105,6 +106,25 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether the pooled session owning <paramref name="cache"/> opened read-only and non-exclusively first,
+    /// routing shared commits to page-0 slot <c>[0x0E04, 0x0E06)</c> (<c>r-q52/mh-rofirst-dynaset-edit-*</c>).
+    /// </summary>
+    public bool IsSecondaryCommitSlot(PageCache cache)
+    {
+        foreach (DatabaseObject d in Sessions)
+        {
+            if (ReferenceEquals(d.Cache, cache))
+            {
+                return d.ReadOnlyFirst;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Monotonic sequence for ordering recordset opens against Workspace BeginTrans frames (<c>r-txn-1b/ws2-reader-after-other-rollback</c>).</summary>
+    public ulong NextSequence() => ++_nextSeq;
 
     public HostBinding Binding { get; } = binding;
 
@@ -1031,6 +1051,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     private EmptyCollection? _users;
     private EmptyCollection? _groups;
     private PropertiesObject? _properties;
+    private readonly Dictionary<ExplicitFrame, ulong> _frameBeginSeq = [];
 
     public WorkspaceObject(EngineState engine, string name, string userName, bool isDefault) : base(Decl, Vtable, engine, "DAO.Workspace")
     {
@@ -1041,7 +1062,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         {
             Publisher = engine,
             WaitPolicy = engine.LockWait,
+            ImmediateConflict = true,
             AutoNumberPublished = engine.Changes.MarkAutoNumberPublished,
+            OnTransactionLockConflict = engine.Changes.TryFlushPendingTableDefOnConflict,
         };
         engine.Changes.Add(Transactions);
     }
@@ -1162,7 +1185,12 @@ internal sealed unsafe class WorkspaceObject : DaoObject
                 ? CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterTableDefsAppend", "BeginTrans while a DAO TableDefs.Append deferred TableDef write is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"))
                 : CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
         }
-        return Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
+        if (Transactions.BeginTrans() is { } refused)
+        {
+            return EditPublication.Published(refused);
+        }
+        _frameBeginSeq[Transactions.Frames[^1]] = Engine.NextSequence();
+        return CallResult.Nothing;
     }
 
     /// <summary>
@@ -1180,6 +1208,10 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         ResolutionOutcome outcome = Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0);
         if (outcome.Succeeded)
         {
+            if (level is not null)
+            {
+                _frameBeginSeq.Remove(level);
+            }
             if (outermost is not null)
             {
                 Engine.Changes.MarkPublished(outermost);
@@ -1204,13 +1236,14 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     public CallResult Rollback()
     {
         ExplicitFrame? level = Transactions.Depth > 0 ? Transactions.Frames[^1] : null;
-        if (level is not null && CrossWorkspaceCursorRefusal() is { } refused)
+        if (level is not null && CrossWorkspaceCursorRefusal(level) is { } refused)
         {
             return refused;
         }
         ResolutionOutcome outcome = Transactions.Rollback();
         if (level is not null && outcome.Error is null && outcome.Open == MutationOpen.None)
         {
+            _frameBeginSeq.Remove(level);
             foreach (DatabaseObject d in _databases.ToArray())
             {
                 d.RolledBack(level, outermost: level.Level == 1);
@@ -1223,22 +1256,31 @@ internal sealed unsafe class WorkspaceObject : DaoObject
 
     /// <summary>
     /// A Rollback of a level whose changes sit on a file that a Database of another Workspace has open with a recordset:
-    /// the pooled session shares the cache, and no record shows what that recordset reads after the other Workspace's
-    /// Rollback (qualified.md 6xzx Open: cross-Workspace Rollback while the second handle holds a cursor; W-05 6xzx).
-    /// The far-row records roll back with no such recordset open (q2/txn-local-inproc-far-rows-unindexed-orders).
+    /// admitted for depth-1 ACCDB overlay-only rollback beside single-table SELECT dynasets/snapshots opened on an
+    /// idle peer Workspace before BeginTrans (<c>evidence/r-txn-1b/ws2-reader-after-other-rollback</c>); every other
+    /// cross-Workspace cursor combination remains refused by name (<c>NotModelled.CrossWorkspaceRollbackBesideCursor</c>).
     /// </summary>
-    private CallResult? CrossWorkspaceCursorRefusal()
+    private CallResult? CrossWorkspaceCursorRefusal(ExplicitFrame level)
     {
+        ulong? frameSeq = _frameBeginSeq.TryGetValue(level, out ulong seq) ? seq : null;
         foreach (DatabaseObject d in _databases)
         {
             if (d.Closed || Transactions.OverlayOf(d.Cache) is null)
             {
                 continue;
             }
+            bool accdbOverlayOnly = level.Level == 1
+                && d.Profile.Format != FileFormat.Jet4
+                && Transactions.IsDepth1OverlayModifyOnly(d.Cache)
+                && frameSeq is not null;
             foreach (DatabaseObject other in Engine.Sessions)
             {
                 if (!other.Closed && !ReferenceEquals(other.Workspace, this) && ReferenceEquals(other.Cache, d.Cache) && other.HasOpenRecordsets)
                 {
+                    if (accdbOverlayOnly && other.Workspace.Transactions.Depth == 0 && other.AllowsOtherWorkspaceRollback(frameSeq!.Value))
+                    {
+                        continue;
+                    }
                     return CallResult.Fail(Failure.NotModelled(
                         "NotModelled.CrossWorkspaceRollbackBesideCursor",
                         "Rollback of changes to a file that a Database of another Workspace holds a recordset on is not recorded (qualified.md R-LOCK-1 EX-PUBLIC 6xzx Open)"));
