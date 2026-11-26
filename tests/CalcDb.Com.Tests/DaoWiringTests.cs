@@ -441,8 +441,13 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Assert.Equal(expected, after.Transactions.WaitPolicy);
         Ok(Method(engine, "SetOption", 63, 300));
         Assert.Equal(new LockWaitPolicy(1, TimeSpan.FromMilliseconds(300)), after.Transactions.WaitPolicy);
-        Named(Method(engine, "SetOption", 3, 100)); // dbPageTimeout: not modelled
-        Named(Method(engine, "SetOption", 57, 0));
+        // r-q51-codecs-props-compact/setoption-matrix-accdb, setoption-matrix-mdb: unknown option codes outside
+        // SetOptionEnum (tested with 999, 0, -1; 3 is likewise outside SetOptionEnum) -> 3001; dbLockRetry 0 succeeds;
+        // unrecorded valid SetOptionEnum code 60 (dbExclusiveAsyncDelay) stays NotModelled.EngineOption.
+        Fails(Method(engine, "SetOption", 3, 100), 3001, "DAO.DbEngine", errorInfo: false);
+        Ok(Method(engine, "SetOption", 57, 0));
+        Assert.Equal(new LockWaitPolicy(0, TimeSpan.FromMilliseconds(300)), after.Transactions.WaitPolicy);
+        Named(Method(engine, "SetOption", 60, 100));
     }
 
     private DBEngineObject Engine()
