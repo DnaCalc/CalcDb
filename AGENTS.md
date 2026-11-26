@@ -121,40 +121,47 @@ scope or design, the book wins.
 
 ## C# navigation and edits (roscli)
 
-roscli (RoslynSkills, installed as a global tool `0.1.6-preview.31` plus NativeAOT `%LOCALAPPDATA%\RoslynSkills\bin\roscli-fast.exe`)
-keeps CalcDb.slnx loaded in a daemon and answers warm queries in ~41–87 ms via `roscli-fast.exe` (measured on
-`CalcDb.slnx`, 2026-11-26, process log: `--symbol` `find_invocations` 51 ms, `find_references` 52.6 ms,
-`nav.call_hierarchy` `854z` incoming 87.2 ms). Every answer has the same JSON shape in-process and through the daemon:
-the payload in `Data`, how it ran in `Transport`. A position is `<file> <line> <column>` or `file:line:col`; `--symbol Type.Member` /
+roscli (RoslynSkills, installed as a global tool `0.1.6-preview.33` plus NativeAOT `%LOCALAPPDATA%\RoslynSkills\bin\roscli-fast.exe`,
+and `RoslynSkills.McpServer --mode slim` 12-tool `6,016 B` facade) keeps `CalcDb.slnx` loaded in a daemon with a live
+in-memory `WorkspaceOverlayIndex` over cached `SourceText`/`SyntaxTree` and answers warm queries in ~41–87 ms via
+`roscli-fast.exe` (measured on `CalcDb.slnx`, 2026-11-26, process log: `ctx.search_text` `58.3 ms` CLI / `6.6 ms` MCP
+vs `94.7 ms` `rg`; zero-disk `ctx.read_window` `0.2–0.3 ms` host / `4.8 ms` MCP; 1-call `ctx.symbol_context` `64.1 ms`
+CLI / `13.3–15.6 ms` MCP; `--symbol` `find_invocations` `51.0 ms`, `find_references` `52.6 ms`, `nav.call_hierarchy`
+`854z` incoming `87.2 ms`). Every answer has the same JSON shape in-process and through the daemon: the payload in
+`Data`, how it ran in `Transport`. A position is `<file> <line> <column>` or `file:line:col`; `--symbol Type.Member` /
 `--symbol-name` is supported across all 6 `nav.*` commands (`nav.find_references`, `nav.find_invocations`,
 `nav.find_implementations`, `nav.find_overrides`, `nav.go_to_definition`, `nav.call_hierarchy`, with optional
-parameter-type disambiguation), and a missed column names the symbols on that line.
+parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_signature`, `nav.call_path`
+(`--source-symbol`/`--target-symbol`), and `analyze.impact_slice`; `--symbols` batches `nav.find_references` and
+`nav.find_invocations` in one pass, and a missed column names the symbols on that line.
 
-- **Text first.** ripgrep (`rg -n -w`, ~40–100 ms) for names, text and string literals; your own file tools for
-  single-file and small edits.
-- **roscli for what text cannot answer:** implementers (`nav.find_implementations`); the uses and constructions of a
-  type, and of an overloaded or same-named member or a method group (`nav.find_references`, `nav.find_invocations`);
-  callers through lambdas and method groups (`nav.call_hierarchy` — `854z` fixed so incoming callers of an interface
-  implementation include calls through its implemented interface members with `edges[].implemented_member`; ask on the
-  interface member itself when you want callers of polymorphic callers without picking a concrete class); a definition
-  (`nav.go_to_definition`); the compile errors of a project, a folder or the solution (`diag.get_workspace_snapshot`).
-  Scope a compile check to the changed folder (`--directory-path <dir> --include-diagnostics true`, ~110 ms warm; ~1–2 s
-  first; whole solution ~22 s), keep a call hierarchy shallow or chain `nav.find_invocations`, and pair a semantic search
-  with `rg` where a string literal could carry the name (82kf trial, process log 2026-11-22).
-- **roscli for edits that follow a symbol:** a rename across files (`edit.rename_symbol`), a signature change
-  (`edit.change_signature`), several exact edits in one step (`edit.transaction`), and a missing `using` or an
-  unimplemented interface (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Read the diff and build the
-  area filter after every edit, roscli's included; a refactoring is reviewed like any change.
+- **Overlay search & zero-disk reads first (when warm).** Once `WorkspaceHost` is warm (`workspace.use CalcDb.slnx --wait-warmup true`),
+  prefer `ctx.search_text` (with `--syntax-filter code|declarations|invocations|identifiers|comments|strings` and batched
+  `queries`) over `rg` to eliminate false-positive comment/string hits, and use `ctx.read_window` (single or batched,
+  zero disk reads + `file_sha256` + `enclosing_symbol`) instead of repeated `read_file` calls. Use `rg -n -w` (~40–100 ms)
+  when no daemon is running or for non-C# files.
+- **One-call compound mindspace.** Prefer `ctx.symbol_context` (or `roslyn_context` in slim MCP) over chaining `rg` +
+  `read_file` + `nav.go_to_definition` + `nav.find_references` + `nav.call_hierarchy`: it returns definition, XML summary,
+  references, 1-hop interface-aware callers/callees, implementations, and file diagnostics in one round trip. For raw
+  individual queries: implementers (`nav.find_implementations`), member uses (`nav.find_references`/`nav.find_invocations`),
+  polymorphic callers (`nav.call_hierarchy` — `854z` fixed with `edges[].implemented_member`), definition (`nav.go_to_definition`),
+  and scoped compile checks (`diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true`, ~110 ms warm;
+  pair semantic search with `ctx.search_text` / `rg` where a string literal could carry the name, 82kf trial).
+- **roscli for edits that follow a symbol:** a rename across files (`edit.rename_symbol --symbol`), a signature change
+  (`edit.change_signature --symbol`), atomic multi-file exact edits with `expected_sha256` / `expected_file_hashes`
+  preconditions (`edit.transaction` / `edit.batch_exact`), and a missing `using` or an unimplemented interface
+  (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Read the diff and build the area filter after every
+  edit, roscli's included; a refactoring is reviewed like any change.
 - **Who starts a daemon.** A writer whose brief refactors or traces code across projects, and a reviewer who checks the
-  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs 20 to 30 s
-  to warm and about 450 MB per worktree.
-- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then `roscli workspace.use CalcDb.slnx` (or
-  `roscli-fast.exe workspace.use CalcDb.slnx`), which starts a detached daemon bounded by a 30-minute idle timeout and
-  8 daemons per user. Run subsequent calls with `ROSCLI_DAEMON=required` (no `--workspace-path` needed); a dead daemon
-  fails in about a second with its reason. The daemon sees files any tool creates or deletes before its next answer;
-  only a project or solution file change needs `roscli workspace.refresh`. Run `roscli daemon.stop` before you end and
-  verify `roscli daemon.list` shows your worktree stopped; `daemon.prune` clears leftovers. It writes nothing into the
-  repository.
+  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs ~20 s bind
+  (+ ~33 s full 33-project warmup with `--wait-warmup true`) and about 1.2 GB warmed per worktree.
+- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then `roscli-fast.exe workspace.use CalcDb.slnx --wait-warmup true`
+  (or `roscli workspace.use CalcDb.slnx`), which starts a detached daemon bounded by a 30-minute idle timeout and 8 daemons
+  per user (`workspace.status` reports `warmup_state` and `overlay_index`). Run subsequent calls with `ROSCLI_DAEMON=required`
+  (no `--workspace-path` needed); a dead daemon fails in about a second with its reason. The daemon sees files any tool
+  creates or deletes before its next answer and updates `WorkspaceOverlayIndex` incrementally; only a project or solution
+  file change needs `roscli workspace.refresh`. Run `roscli daemon.stop` before you end and verify `roscli daemon.list`
+  shows your worktree stopped; `daemon.prune` clears leftovers. It writes nothing into the repository.
 - **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills
   (`C:\Work\RoslynSkills`, spawned as a swarm tooling worker, landed on `main`, installed globally + NativeAOT
   `roscli-fast.exe` here), never worked around in CalcDb.
