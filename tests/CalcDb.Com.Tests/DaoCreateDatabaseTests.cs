@@ -436,8 +436,12 @@ public sealed unsafe class DaoCreateDatabaseTests : IDisposable
         Refused(Method(eng, "CreateDatabase", TempPath("m3.accdb"), DbLangGeneral, 256), "NotModelled.CreateAce2010");
         Refused(Method(eng, "CreateDatabase", TempPath("m4.accdb"), DbLangGeneral + ";pwd=secret", DbVersion120), "NotModelled.DatabasePassword");
         Refused(Method(eng, "CreateDatabase", TempPath("m4b.mdb"), DbLangGeneral + ";pwd=secret", 64), "NotModelled.DatabasePassword");
-        Refused(Method(eng, "CreateDatabase", TempPath("m5.accdb"), ";LANGID=0x0407;CP=1252;COUNTRY=0", DbVersion120), "NotModelled.CreateLocale");
-        Refused(Method(eng, "CreateDatabase", TempPath("m5b.mdb"), ";LANGID=0x0407;CP=1252;COUNTRY=0", 64), "NotModelled.CreateLocale");
+        // Unrecorded locale (Japanese 0x0411) stays refused by name; Spanish (0x040A), Swedish (0x041D), and German (0x0407)
+        // are recorded in r-q51-codecs-props-compact and r-q53-conv-abspos-subq-loc and succeed below.
+        Refused(Method(eng, "CreateDatabase", TempPath("m5.accdb"), ";LANGID=0x0411;CP=1252;COUNTRY=0", DbVersion120), "NotModelled.CreateLocale");
+        Refused(Method(eng, "CreateDatabase", TempPath("m5b.mdb"), ";LANGID=0x0411;CP=1252;COUNTRY=0", 64), "NotModelled.CreateLocale");
+        // Non-General locales are recorded only with full ';LANGID=0x....;CP=1252;COUNTRY=0' spelling.
+        Refused(Method(eng, "CreateDatabase", TempPath("m5e.accdb"), ";LANGID=0x0407", DbVersion120), "NotModelled.CreateLocale");
         // Partial dbLangGeneral spellings are recorded for ACCDB only, not Jet 4 MDB (r-q38-mdb-new-image).
         Refused(Method(eng, "CreateDatabase", TempPath("m5c.mdb"), ";LANGID=0x0409;CP=1252", 64), "NotModelled.CreateLocale");
         Refused(Method(eng, "CreateDatabase", TempPath("m5d.mdb"), ";LANGID=0x0409;COUNTRY=0", 64), "NotModelled.CreateLocale");
@@ -447,5 +451,40 @@ public sealed unsafe class DaoCreateDatabaseTests : IDisposable
         Refused(Method(eng, "CreateDatabase", TempPath("m7a.mdb"), DbLangGeneral, (short)64), "NotModelled.CreateDatabaseArgumentType");
         Refused(Method(eng, "CreateDatabase", TempPath("m7b.mdb"), DbLangGeneral, 64.0), "NotModelled.CreateDatabaseArgumentType");
         Refused(Method(eng, "CreateDatabase", TempPath("m7c.mdb"), DbLangGeneral, "64"), "NotModelled.CreateDatabaseArgumentType");
+    }
+
+    [Theory]
+    [InlineData(";LANGID=0x040A;CP=1252;COUNTRY=0", 128, 1034, "12.0", FileFormat.Ace2007, 42)]
+    [InlineData(";LANGID=0x040A;CP=1252;COUNTRY=0", 64, 1034, "4.0", FileFormat.Jet4, 19)]
+    [InlineData(";LANGID=0x041D;CP=1252;COUNTRY=0", 128, 1053, "12.0", FileFormat.Ace2007, 42)]
+    [InlineData(";LANGID=0x041D;CP=1252;COUNTRY=0", 64, 1053, "4.0", FileFormat.Jet4, 19)]
+    [InlineData(";LANGID=0x0407;CP=1252;COUNTRY=0", 128, 1031, "12.0", FileFormat.Ace2007, 42)]
+    [InlineData(";LANGID=0x0407;CP=1252;COUNTRY=0", 64, 1031, "4.0", FileFormat.Jet4, 19)]
+    public void CreateDatabase_supports_recorded_Spanish_Swedish_and_German_locales_for_ACCDB_and_Jet4_MDB(
+        string locale,
+        int option,
+        int expectedCollatingOrder,
+        string expectedVersion,
+        FileFormat expectedFormat,
+        int expectedPages)
+    {
+        // r-q51-codecs-props-compact/locale-create-spanish-accdb, locale-create-spanish-mdb,
+        // r-q53-conv-abspos-subq-loc/createdb-swedish-041d-accdb, createdb-swedish-041d-mdb,
+        // r-q53-conv-abspos-subq-loc/createdb-german-0407-accdb, createdb-german-0407-mdb.
+        DBEngineObject eng = Engine();
+        string ext = expectedFormat == FileFormat.Jet4 ? "mdb" : "accdb";
+        string path = TempPath($"loc-{expectedCollatingOrder}-{option}.{ext}");
+        DatabaseObject db = Recover<DatabaseObject>(Ok(Method(eng, "CreateDatabase", path, locale, option)));
+        Assert.Equal(expectedVersion, Text(Get(db, "Version")));
+        Assert.Equal((VarType.I4, (long)expectedCollatingOrder), Scalar(Get(db, "CollatingOrder")));
+        Ok(Method(db, "Close"));
+
+        byte[] bytes = File.ReadAllBytes(path);
+        Assert.Equal(expectedPages * 4096, bytes.Length);
+        InspectionReport report = Inspector.Inspect(bytes);
+        Assert.Equal(ProfileRefusal.None, report.Refusal);
+        Assert.Empty(report.Problems);
+        Assert.Equal(expectedFormat, report.Profile!.Format);
+        Assert.Equal((ushort)expectedCollatingOrder, report.Header!.SortOrder.Identifier);
     }
 }

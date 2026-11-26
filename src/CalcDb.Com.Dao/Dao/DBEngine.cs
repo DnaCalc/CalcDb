@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
@@ -178,6 +179,8 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Get("DefaultType", (self, args) => Int32(2))
         .Get("SystemDB", (self, args) => Text(((DBEngineObject)self).Engine.Touched ? "system.mdb" : ""))
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
+        .Method("CompactDatabase", (self, args) => ((DBEngineObject)self).CompactDatabase(args))
+        .Method("RepairDatabase", (self, args) => ((DBEngineObject)self).RepairDatabase(args[0]))
         .Method("SetOption", (self, args) => ((DBEngineObject)self).SetOption(args[0], args[1]))
         .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args))
         .Method("CreateDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.CreateDatabase(args))
@@ -240,6 +243,8 @@ internal sealed unsafe class DBEngineObject : DaoObject
     protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => member.Name switch
     {
         "CommitTrans" => Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)"),
+        "SetOption" when conversion is { Parameter: 0, Reason: ArgumentConversionReason.TypeMismatch } =>
+            Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
         "CreateDatabase" when conversion is { Parameter: 1, Reason: ArgumentConversionReason.Missing } => InvalidArgumentCount(),
         "CreateDatabase" when conversion is { Parameter: 1, Reason: ArgumentConversionReason.TypeMismatch } =>
             Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
@@ -303,31 +308,649 @@ internal sealed unsafe class DBEngineObject : DaoObject
         return result;
     }
 
-    /// <summary>dbLockRetry and dbLockDelay (SetOptionEnum 57 and 63).</summary>
-    private const int LockRetryOption = 57, LockDelayOption = 63;
+    /// <summary>SetOptionEnum constants (SET-OPTION; evidence/r-q51-codecs-props-compact/setoption-matrix-accdb, setoption-matrix-mdb).</summary>
+    private const int PageTimeoutOption = 6;
+    private const int MaxBufferSizeOption = 8;
+    private const int LockRetryOption = 57;
+    private const int UserCommitSyncOption = 58;
+    private const int ImplicitCommitSyncOption = 59;
+    private const int MaxLocksPerFileOption = 62;
+    private const int LockDelayOption = 63;
+    private const int RecycleLvsOption = 65;
+
+    private const string NetworkInterruptedError =
+        "Your network access was interrupted. To continue, close the database, and then open it again.";
+    private const string ComplexDowngradeError =
+        "Operation cannot be completed on this database because it uses attachments or multi-valued lookup fields.";
+    private const string CollatingNotSupportedForFormatError =
+        "Selected collating sequence not supported with the specified file format.";
+    private const string InvalidPasswordError = "Not a valid password.";
 
     /// <summary>
-    /// SetOption(Option, Value): dbLockRetry (57) and dbLockDelay (63, milliseconds) set the finite conflict wait of every
-    /// Workspace of the engine (qualified.md R-TXN-1 TXN-LOCAL: the refusal comes after dbLockRetry × dbLockDelay; recorded
-    /// with retry 1 × delay 1, 3 × 300, 5 × 100 and 20 × 250, r-txn-1/local-option-retry, r-lock-3-4-txn/txn-local-xproc-
-    /// conflict-settings). A value below 1 or one that is not a number, and every other option (dbPageTimeout,
-    /// dbUserCommitSync, dbImplicitCommitSync, dbFlushTransactionTimeout and the rest change visibility and write timing
-    /// CalcDb does not model by them), are named.
+    /// RepairDatabase(Name): unconditionally refused with DAO 3251 "Operation is not supported for this type of object."
+    /// from DAO.DbEngine with no IErrorInfo and 0 bytes changed (RB-REPAIR; evidence/r-cplx-rebuild/repair-clean-control,
+    /// evidence/r-q-ado-misc/rebuild-repair-variants).
+    /// </summary>
+    private CallResult RepairDatabase(nint nameArg)
+    {
+        _ = nameArg;
+        return Fail(3251, DaoErrors.NotSupportedForType);
+    }
+
+    /// <summary>
+    /// CompactDatabase(SrcName, DstName, DstLocale, Options, SrcLocale): clean offline rebuild across ACCDB 2007 and
+    /// Jet 4 MDB (same-format, cross-format, and recorded DstLocale 0x0409/0x040A/0x041D/0x0407) with exact refusal
+    /// matrix (RB-CLEAN, RB-OPTIONS, RB-PUBLISH, RB-NEGATIVE; evidence/r-q51-codecs-props-compact/compact-*,
+    /// evidence/r-cplx-rebuild/*, evidence/r-def-cat-txn/rb-compact-*, evidence/r-fix-cat-txn/*).
+    /// </summary>
+    private CallResult CompactDatabase(ReadOnlySpan<nint> args)
+    {
+        string? srcName = args.Length > 0 ? ReadBstrOrEmpty(args[0]) : null;
+        string? dstName = args.Length > 1 ? ReadBstrOrEmpty(args[1]) : null;
+        if (srcName is null || dstName is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CompactDatabase with a non-text SrcName or DstName argument"));
+        }
+
+        // 1. Existing destination file or source==destination alias -> 3204 "Database already exists."
+        // Checked before \\?\ SrcName check so CompactDatabase(src, "\\?\...\existing") returns 3204
+        // (evidence/r-cplx-rebuild/publish-existing-and-aliases step 103; r-q51-codecs-props-compact/compact-errors-accdb, compact-errors-mdb).
+        if (dstName.Length > 0 && File.Exists(dstName))
+        {
+            return Fail(3204, DaoErrors.DatabaseAlreadyExists);
+        }
+
+        // 2. \\?\ extended-length prefix on SrcName -> 3043 (evidence/r-cplx-rebuild/publish-existing-and-aliases).
+        if (srcName.StartsWith(@"\\?\", StringComparison.Ordinal))
+        {
+            return Fail(3043, NetworkInterruptedError);
+        }
+
+        string fullSrc;
+        try
+        {
+            fullSrc = Path.GetFullPath(srcName);
+        }
+        catch (ArgumentException)
+        {
+            return Fail(3044, DaoErrors.NotAValidPath(srcName));
+        }
+
+        string fullDst;
+        try
+        {
+            fullDst = Path.GetFullPath(dstName);
+        }
+        catch (ArgumentException)
+        {
+            return Fail(3044, DaoErrors.NotAValidPath(dstName));
+        }
+
+        // Check resolved alias against existing destination (handles ./ and case/slash variants).
+        if (File.Exists(fullDst))
+        {
+            return Fail(3204, DaoErrors.DatabaseAlreadyExists);
+        }
+
+        // 3. Missing source -> 3024 "Could not find file '<srcName>'."
+        if (!File.Exists(fullSrc))
+        {
+            return Fail(3024, DaoErrors.FileNotFound(srcName));
+        }
+
+        // 4. Parse DstLocale (optional arg 2).
+        if (ParseCompactDstLocale(args.Length > 2 ? args[2] : 0, out TextSortOrder? dstSortOrder) is { } dstLocaleFail)
+        {
+            return dstLocaleFail;
+        }
+
+        // 5. Parse Options (optional arg 3).
+        if (ParseCompactOptions(args.Length > 3 ? args[3] : 0, out int optionFlags) is { } optFail)
+        {
+            return optFail;
+        }
+
+        // 6. Parse SrcLocale (optional arg 4).
+        if (ParseCompactSrcLocale(args.Length > 4 ? args[4] : 0, out bool hasSrcPassword) is { } srcLocaleFail)
+        {
+            return srcLocaleFail;
+        }
+
+        // 7. In-process hold check via FileSessionPool
+        // (evidence/r-cplx-rebuild/publish-held-inproc; evidence/r-q51-codecs-props-compact/compact-errors-accdb, compact-errors-mdb):
+        // ACCDB held shared -> 3704 AlreadyOpenedByUser; ACCDB held exclusive or Jet 4 MDB held in any mode -> 3045 FileAlreadyInUse.
+        if (FileSessionPool.Find(fullSrc, Engine.Binding.Identity) is { } pooled)
+        {
+            if (pooled.Session.Profile.Format == FileFormat.Ace2007 && !pooled.First.Exclusive)
+            {
+                return Fail(3704, DaoErrors.AlreadyOpenedByUser(pooled.First.UserName, Environment.MachineName));
+            }
+            return Fail(3045, DaoErrors.FileAlreadyInUse(srcName));
+        }
+
+        // 8. Cross-process hold check + exclusive read of source bytes
+        // (evidence/r-cplx-rebuild/publish-held-xproc):
+        // Sharing violation on an ACCDB with an active .laccdb slot -> 3704 (user, machine from lock file);
+        // sharing violation on MDB, exclusive ACCDB, or OS-locked handle -> 3045.
+        byte[] srcBytes;
+        try
+        {
+            using var stream = new FileStream(fullSrc, FileMode.Open, FileAccess.Read, FileShare.None);
+            long len = stream.Length;
+            if (len > int.MaxValue)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLargeFile", "CompactDatabase on files > 2 GB is not modelled"));
+            }
+            srcBytes = new byte[len];
+            stream.ReadExactly(srcBytes);
+        }
+        catch (FileNotFoundException)
+        {
+            return Fail(3024, DaoErrors.FileNotFound(srcName));
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return Fail(3044, DaoErrors.NotAValidPath(srcName));
+        }
+        catch (IOException)
+        {
+            if (TryReadAccdbSharedLockHolder(fullSrc, out string? lockUser, out string? lockMachine))
+            {
+                return Fail(3704, DaoErrors.AlreadyOpenedByUser(lockUser!, lockMachine!));
+            }
+            return Fail(3045, DaoErrors.FileAlreadyInUse(srcName));
+        }
+
+        // 9. Inspect source format to validate format-dependent options before compacting.
+        if (srcBytes.Length < FormatDescriptor.Jet4Family.PageSize
+            || (srcBytes.Length % FormatDescriptor.Jet4Family.PageSize) != 0
+            || ProfileSelector.Select(srcBytes.AsSpan(0, FormatDescriptor.Jet4Family.PageSize), out FileProfile? srcProfile) != ProfileRefusal.None
+            || srcProfile is null)
+        {
+            return Fail(3343, $"Unrecognized database format '{srcName}'.");
+        }
+
+        bool srcIsAccdb = srcProfile.Format is FileFormat.Ace2007 or FileFormat.Ace2010;
+        bool srcIsMdb = srcProfile.Format == FileFormat.Jet4;
+        if (!srcIsAccdb && !srcIsMdb)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSourceFormat", $"CompactDatabase source format {srcProfile.Format} is not recorded"));
+        }
+
+        // Option bit rules (RB-OPTIONS; evidence/r-cplx-rebuild/options-version, negative-open-and-compact):
+        // - ACCDB + dbEncrypt(2) or dbDecrypt(4) -> 3001 InvalidArgument.
+        // - MDB + dbVersion140(256) -> 3914 CollatingNotSupportedForFormat.
+        // - ACCDB + dbVersion140(256) -> NotModelled.CompactAce2010 (ACE 2010 format is outside W-L1).
+        // - Undefined option bit 1024 -> ignored, keeps source format (negative-open-and-compact step 84).
+        if (srcIsAccdb && (optionFlags & 6) != 0)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (srcIsMdb && (optionFlags & 6) != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactEncryptDecrypt", $"CompactDatabase Jet 4 MDB with encrypt/decrypt option {optionFlags} is not recorded"));
+        }
+        if ((optionFlags & 256) != 0)
+        {
+            return srcIsMdb
+                ? Fail(3914, CollatingNotSupportedForFormatError)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.CompactAce2010", "CompactDatabase option 256 (ACE 2010) is not implemented"));
+        }
+
+        // Strip ignored undefined bit 1024 (observed in negative-open-and-compact step 84).
+        int versionBits = optionFlags & ~1024;
+        FileFormat targetFormat;
+        switch (versionBits)
+        {
+            case 0:
+                targetFormat = srcProfile.Format;
+                break;
+            case 64:
+                targetFormat = FileFormat.Jet4;
+                break;
+            case 128:
+                targetFormat = FileFormat.Ace2007;
+                break;
+            default:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CompactOption",
+                    $"CompactDatabase option {optionFlags}: only 0/omitted, 64 (Jet 4 MDB), 128 (ACCDB 2007), and ignored 1024 are implemented"));
+        }
+
+        // Ace2010 sources are admitted only to reach DatabaseCompactor's 3818 complex/calculated downgrade check
+        // when target is Jet 4 MDB (option 64; evidence/r-cplx-rebuild/compact-complex-fixtures step 619 cx-calc).
+        if (srcProfile.Format == FileFormat.Ace2010 && targetFormat != FileFormat.Jet4)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSourceFormat", $"CompactDatabase source format {srcProfile.Format} is not recorded"));
+        }
+
+        // 10. Run DatabaseCompactor in memory (zero bytes written to disk until validated & complete).
+        var compactRequest = new CompactRequest(
+            TargetFormat: targetFormat,
+            TargetSortOrder: dstSortOrder,
+            TargetCodePage: dstSortOrder is not null ? NewDatabaseRequest.WesternCodePage : null,
+            CreationDateBits: 0,
+            WorkingDirectory: Environment.CurrentDirectory);
+
+        CompactResult compacted = DatabaseCompactor.Compact(srcBytes, compactRequest);
+        if (!compacted.Succeeded)
+        {
+            return compacted.FailureKind switch
+            {
+                CompactFailureKind.UnrecognizedFormat or CompactFailureKind.Malformed =>
+                    Fail(3343, $"Unrecognized database format '{srcName}'."),
+                CompactFailureKind.NotPlaintext when hasSrcPassword =>
+                    CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.CompactPassword",
+                        "CompactDatabase on a password-protected or encrypted database with ';pwd=' in SrcLocale is not implemented (W-L1)")),
+                CompactFailureKind.NotPlaintext =>
+                    Fail(3031, InvalidPasswordError),
+                CompactFailureKind.ComplexToJet4 =>
+                    Fail(3818, ComplexDowngradeError),
+                _ => CallResult.Fail(Failure.NotModelled(
+                    compacted.NotModelledTag ?? "NotModelled.Compact",
+                    compacted.Detail ?? "CompactDatabase failed on unmodelled feature")),
+            };
+        }
+
+        // 11. Publish output file atomically (never overwrite existing, delete partial on write failure).
+        string? dstDir = Path.GetDirectoryName(fullDst);
+        if (string.IsNullOrEmpty(dstDir) || !Directory.Exists(dstDir))
+        {
+            return Fail(3044, DaoErrors.NotAValidPath(dstName));
+        }
+        bool created = false;
+        try
+        {
+            using var outStream = new FileStream(fullDst, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            created = true;
+            outStream.Write(compacted.Image!);
+            outStream.Flush(flushToDisk: true);
+        }
+        catch (IOException) when (!created && File.Exists(fullDst))
+        {
+            return Fail(3204, DaoErrors.DatabaseAlreadyExists);
+        }
+        catch (Exception ex)
+        {
+            if (created)
+            {
+                try { File.Delete(fullDst); } catch { /* best-effort cleanup */ }
+            }
+            return CallResult.Fail(Failure.NotImplemented($"CompactDatabase write failed: {ex.Message}"));
+        }
+
+        return CallResult.Nothing;
+    }
+
+    private CallResult? ParseCompactDstLocale(nint arg, out TextSortOrder? sortOrder)
+    {
+        sortOrder = null;
+        if (arg == 0)
+        {
+            return null;
+        }
+        var cell = Args.Cell(arg);
+        if (TypedCall.IsMissing(cell))
+        {
+            return null;
+        }
+        VarType vt = (VarType)cell->Vt;
+        if (vt == VarType.Empty)
+        {
+            return null;
+        }
+        string? locale = ReadBstrOrEmpty(arg);
+        if (locale is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale with non-text argument ({vt})"));
+        }
+        if (locale.Length == 0)
+        {
+            return null;
+        }
+        if (locale[0] != ';')
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale '{locale}' without leading ';' is not recorded"));
+        }
+
+        int? langId = null;
+        int? codePage = null;
+        int? country = null;
+        foreach (string token in locale.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int eq = token.IndexOf('=');
+            if (eq <= 0)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale unrecognized token '{token}'"));
+            }
+            string key = token[..eq].Trim();
+            string value = token[(eq + 1)..].Trim();
+            if (key.Equals("PWD", StringComparison.OrdinalIgnoreCase))
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactPassword", "CompactDatabase DstLocale with a database password (;pwd=) is not recorded"));
+            }
+            if (key.Equals("LANGID", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!WorkspaceObject.TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale unparsed LANGID '{value}'"));
+                }
+                langId = parsed;
+            }
+            else if (key.Equals("CP", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!WorkspaceObject.TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale unparsed CP '{value}'"));
+                }
+                codePage = parsed;
+            }
+            else if (key.Equals("COUNTRY", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!WorkspaceObject.TryParseLocaleNumber(value, out int parsed))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale unparsed COUNTRY '{value}'"));
+                }
+                country = parsed;
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale parameter '{key}' is not recorded"));
+            }
+        }
+
+        if (langId == 0)
+        {
+            return Fail(3228, DaoErrors.CollatingSequenceNotSupported);
+        }
+        if (langId is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale '{locale}' without LANGID is not recorded"));
+        }
+        if (codePage is not (null or 1252) || country is not (null or 0))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale '{locale}' uses unrecorded CP/COUNTRY"));
+        }
+
+        sortOrder = langId switch
+        {
+            0x0409 => NewDatabaseRequest.GeneralLegacySort,
+            0x040A => NewDatabaseRequest.SpanishSort,
+            0x041D => NewDatabaseRequest.SwedishSort,
+            0x0407 => NewDatabaseRequest.GermanSort,
+            _ => null,
+        };
+        if (sortOrder is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase DstLocale '{locale}' (LANGID 0x{langId:X4}) is not recorded"));
+        }
+        // Non-General locales are recorded on CompactDatabase only with full ';LANGID=0x....;CP=1252;COUNTRY=0'.
+        if (langId != 0x0409 && (codePage != 1252 || country != 0))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactLocale", $"CompactDatabase non-General DstLocale '{locale}' requires ';LANGID=0x....;CP=1252;COUNTRY=0'"));
+        }
+        return null;
+    }
+
+    private CallResult? ParseCompactOptions(nint arg, out int options)
+    {
+        options = 0;
+        if (arg == 0)
+        {
+            return null;
+        }
+        var cell = Args.Cell(arg);
+        if (TypedCall.IsMissing(cell) || (VarType)cell->Vt == VarType.Empty)
+        {
+            return null;
+        }
+        if (Args.Int32(arg, omitted: 0) is not int value)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactOption", $"CompactDatabase Options with non-integer argument ({(VarType)cell->Vt})"));
+        }
+        options = value;
+        return null;
+    }
+
+    private CallResult? ParseCompactSrcLocale(nint arg, out bool hasPassword)
+    {
+        hasPassword = false;
+        if (arg == 0)
+        {
+            return null;
+        }
+        var cell = Args.Cell(arg);
+        if (TypedCall.IsMissing(cell) || (VarType)cell->Vt == VarType.Empty)
+        {
+            return null;
+        }
+        string? srcLocale = ReadBstrOrEmpty(arg);
+        if (srcLocale is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSrcLocale", $"CompactDatabase SrcLocale with non-text argument ({(VarType)cell->Vt})"));
+        }
+        if (srcLocale.Length == 0)
+        {
+            return null;
+        }
+        if (srcLocale[0] != ';')
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSrcLocale", $"CompactDatabase SrcLocale '{srcLocale}' without leading ';' is not recorded"));
+        }
+        foreach (string token in srcLocale.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int eq = token.IndexOf('=');
+            if (eq <= 0)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSrcLocale", $"CompactDatabase SrcLocale unrecognized token '{token}'"));
+            }
+            string key = token[..eq].Trim();
+            string value = token[(eq + 1)..].Trim();
+            if (key.Equals("PWD", StringComparison.OrdinalIgnoreCase))
+            {
+                if (value.Length > 0)
+                {
+                    hasPassword = true;
+                }
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CompactSrcLocale", $"CompactDatabase SrcLocale parameter '{key}' is not recorded"));
+            }
+        }
+        return null;
+    }
+
+    private static string? ReadBstrOrEmpty(nint arg)
+    {
+        if (Args.Text(arg) is { } text)
+        {
+            return text;
+        }
+        return arg != 0 && Args.TypeOf(arg) == VarType.Bstr ? "" : null;
+    }
+
+    private static bool TryReadAccdbSharedLockHolder(string fullSrc, out string? user, out string? machine)
+    {
+        user = null;
+        machine = null;
+        if (!fullSrc.EndsWith(".accdb", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        string lockPath = Path.ChangeExtension(fullSrc, ".laccdb");
+        if (!File.Exists(lockPath))
+        {
+            return false;
+        }
+        try
+        {
+            using var fs = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            byte[] slot = new byte[64];
+            while (fs.Read(slot, 0, 64) == 64)
+            {
+                if (slot[0] == 0)
+                {
+                    continue;
+                }
+                int machineEnd = Array.IndexOf(slot, (byte)0, 0, 32);
+                int userEnd = Array.IndexOf(slot, (byte)0, 32, 32);
+                string m = Encoding.ASCII.GetString(slot, 0, machineEnd < 0 ? 32 : machineEnd).Trim();
+                string u = Encoding.ASCII.GetString(slot, 32, userEnd < 0 ? 32 : userEnd - 32).Trim();
+                if (m.Length > 0 && u.Length > 0)
+                {
+                    machine = m;
+                    user = u;
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// SetOption(Option, Value) (SET-OPTION; qualified.md L3024-3026;
+    /// evidence/r-q51-codecs-props-compact/setoption-matrix-accdb, setoption-matrix-mdb, r-txn-1/local-option-retry,
+    /// r-lock-3-4-txn/txn-local-xproc-conflict-settings):
+    /// - Integer options 6, 8, 57, 62, 63, 65 accept numeric/Bool/Empty/numeric-BSTR values and reject Null or
+    ///   non-numeric BSTR with 3421 (IErrorInfo absent). Options 57 (dbLockRetry) and 63 (dbLockDelay) update
+    ///   <see cref="EngineState.LockWait"/>.
+    /// - Yes/No options 58 (dbUserCommitSync) and 59 (dbImplicitCommitSync) accept only BSTR "Yes"/"No"
+    ///   (case-insensitive) and reject any other string, Null, integer, Bool, or Empty with 3001 (IErrorInfo absent).
+    /// - Unknown integer option codes not in SetOptionEnum (e.g. 999, 0, -1, 3) fail 3001 (IErrorInfo absent).
+    /// - Unrecorded valid SetOptionEnum codes (60, 61, 66, 70, 80, 81, 82) return NotModelled.EngineOption.
+    /// - Non-numeric Option (parameter 0) fails 3421 with IErrorInfo present in <see cref="ArgumentConversionFailure"/>.
+    /// - Changes 0 bytes on any database file and never clears DBEngine.Errors on success.
     /// </summary>
     private CallResult SetOption(nint optionArg, nint valueArg)
     {
         int? option = Args.Int32(optionArg, omitted: null);
-        if (option is not (LockRetryOption or LockDelayOption))
+        if (option is null)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.EngineOption", $"DBEngine.SetOption {option?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(not a number)"}: only dbLockRetry (57) and dbLockDelay (63) are modelled"));
+            return Fail(3421, DaoErrors.ConversionError);
         }
-        if (Args.Int32(valueArg, omitted: null) is not int value || value < 1)
+
+        switch (option.Value)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.EngineOptionValue", $"DBEngine.SetOption {option} with a value that is not a number of at least 1 (not recorded)"));
+            case PageTimeoutOption:
+            case MaxBufferSizeOption:
+            case LockRetryOption:
+            case MaxLocksPerFileOption:
+            case LockDelayOption:
+            case RecycleLvsOption:
+            {
+                if (!TryCoerceSetOptionInt32(valueArg, out int value))
+                {
+                    return Fail(3421, DaoErrors.ConversionError);
+                }
+                if (option.Value == LockRetryOption)
+                {
+                    Engine.SetLockWait(Engine.LockWait with { Retries = Math.Max(0, value) });
+                }
+                else if (option.Value == LockDelayOption)
+                {
+                    Engine.SetLockWait(Engine.LockWait with { Delay = TimeSpan.FromMilliseconds(Math.Max(0, value)) });
+                }
+                return CallResult.Nothing;
+            }
+
+            case UserCommitSyncOption:
+            case ImplicitCommitSyncOption:
+            {
+                if (valueArg == 0)
+                {
+                    return Fail(3001, DaoErrors.InvalidArgument);
+                }
+                var cell = Args.Cell(valueArg);
+                if ((VarType)cell->Vt != VarType.Bstr)
+                {
+                    return Fail(3001, DaoErrors.InvalidArgument);
+                }
+                string s = ReadBstrOrEmpty(valueArg) ?? "";
+                if (!s.Equals("Yes", StringComparison.OrdinalIgnoreCase) && !s.Equals("No", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Fail(3001, DaoErrors.InvalidArgument);
+                }
+                return CallResult.Nothing;
+            }
+
+            // Valid SetOptionEnum codes whose value domain is not yet recorded in evidence.
+            case 60 or 61 or 66 or 70 or 80 or 81 or 82:
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.EngineOption",
+                    $"DBEngine.SetOption {option.Value} is a valid SetOptionEnum code whose value rules are not recorded"));
+
+            // Unknown option code not in SetOptionEnum (e.g. 999, 0, -1, 3) -> 3001 InvalidArgument (IErrorInfo absent).
+            default:
+                return Fail(3001, DaoErrors.InvalidArgument);
         }
-        LockWaitPolicy current = Engine.LockWait;
-        Engine.SetLockWait(option == LockRetryOption ? current with { Retries = value } : current with { Delay = TimeSpan.FromMilliseconds(value) });
-        return CallResult.Nothing;
+    }
+
+    private static bool TryCoerceSetOptionInt32(nint valueArg, out int value)
+    {
+        value = 0;
+        if (valueArg == 0)
+        {
+            return true;
+        }
+        var cell = Args.Cell(valueArg);
+        if (TypedCall.IsMissing(cell))
+        {
+            return false;
+        }
+        VarType vt = (VarType)cell->Vt;
+        switch (vt)
+        {
+            case VarType.Empty:
+                value = 0;
+                return true;
+            case VarType.Null:
+                return false;
+            case VarType.I4:
+                value = (int)cell->Int64;
+                return true;
+            case VarType.I2:
+                value = (short)cell->Int64;
+                return true;
+            case VarType.UI1:
+                value = (byte)cell->Int64;
+                return true;
+            case VarType.Bool:
+                value = (short)cell->Int64;
+                return true;
+            case VarType.R4:
+            {
+                float f = BitConverter.Int32BitsToSingle((int)cell->Int64);
+                if (!float.IsFinite(f) || f < int.MinValue || f > int.MaxValue)
+                {
+                    return false;
+                }
+                value = (int)Math.Round(f, MidpointRounding.ToEven);
+                return true;
+            }
+            case VarType.R8:
+            {
+                double d = BitConverter.Int64BitsToDouble(cell->Int64);
+                if (!double.IsFinite(d) || d < int.MinValue || d > int.MaxValue)
+                {
+                    return false;
+                }
+                value = (int)Math.Round(d, MidpointRounding.ToEven);
+                return true;
+            }
+            case VarType.Bstr:
+            {
+                string? s = ReadBstrOrEmpty(valueArg);
+                return s is not null && int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+            }
+            default:
+                return false;
+        }
     }
 
     /// <summary>The engines and engine states of one apartment thread, by binding.</summary>
@@ -732,7 +1355,7 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("CreateDatabase with a non-text Locale argument"));
         }
 
-        if (ValidateCreateLocale(locale, out bool hasCodePage, out bool hasCountry) is { } localeFailure)
+        if (ValidateCreateLocale(locale, out TextSortOrder sortOrder, out bool hasCodePage, out bool hasCountry) is { } localeFailure)
         {
             return localeFailure;
         }
@@ -742,9 +1365,17 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             return optionFailure;
         }
 
-        // Jet 4 MDB is recorded only with ';LANGID=0x0409;CP=1252;COUNTRY=0' (eng-general-full, ws-general-full,
+        // Jet 4 MDB General is recorded only with ';LANGID=0x0409;CP=1252;COUNTRY=0' (eng-general-full, ws-general-full,
         // r-fmt-1/create-mdb-empty, r-cat-1/create-mdb-empty, r-cat-1/create-accdb-ext-v40) and ';LANGID=0x0409'
-        // (eng-langid-only). Partial spellings such as ';LANGID=0x0409;CP=1252' are recorded for ACCDB only.
+        // (eng-langid-only). Partial spellings such as ';LANGID=0x0409;CP=1252' are recorded for ACCDB General only.
+        // Non-General locales (Spanish 0x040A, Swedish 0x041D, German 0x0407) are recorded only with the full
+        // ';LANGID=0x....;CP=1252;COUNTRY=0' spelling (r-q51/locale-create-spanish-*, r-q53/createdb-{swedish-041d,german-0407}-*).
+        if (sortOrder != NewDatabaseRequest.GeneralLegacySort && !(hasCodePage && hasCountry))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.CreateLocale",
+                $"CreateDatabase with locale '{locale}': non-General locales are recorded only with ';LANGID=0x....;CP=1252;COUNTRY=0'"));
+        }
         if (format == FileFormat.Jet4 && hasCodePage != hasCountry)
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -753,8 +1384,8 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         }
 
         NewDatabaseRequest request = format == FileFormat.Jet4
-            ? NewDatabaseRequest.Jet4MdbGeneral()
-            : NewDatabaseRequest.AccdbGeneral();
+            ? NewDatabaseRequest.Jet4Mdb(sortOrder)
+            : NewDatabaseRequest.Accdb(sortOrder);
         CallResult result = DatabaseObject.Create(this, name, request, out DatabaseObject? database);
         if (database is not null)
         {
@@ -774,8 +1405,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         return arg != 0 && Args.TypeOf(arg) == VarType.Bstr ? "" : null;
     }
 
-    private CallResult? ValidateCreateLocale(string locale, out bool hasCodePage, out bool hasCountry)
+    private CallResult? ValidateCreateLocale(string locale, out TextSortOrder sortOrder, out bool hasCodePage, out bool hasCountry)
     {
+        sortOrder = NewDatabaseRequest.GeneralLegacySort;
         hasCodePage = false;
         hasCountry = false;
 
@@ -841,16 +1473,28 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             // r-sort-3/create-locale-spellings: ;LANGID=0x0000;CP=1252;COUNTRY=0 -> 3228.
             return Fail(3228, DaoErrors.CollatingSequenceNotSupported);
         }
-        if (langId == 0x0409 && (codePage is null or 1252) && (country is null or 0))
+        if ((codePage is null or 1252) && (country is null or 0))
         {
-            hasCodePage = codePage is not null;
-            hasCountry = country is not null;
-            return null;
+            TextSortOrder? matched = langId switch
+            {
+                0x0409 => NewDatabaseRequest.GeneralLegacySort,
+                0x040A => NewDatabaseRequest.SpanishSort,   // r-q51-codecs-props-compact/locale-create-spanish-accdb, locale-create-spanish-mdb
+                0x041D => NewDatabaseRequest.SwedishSort,   // r-q53-conv-abspos-subq-loc/createdb-swedish-041d-accdb, createdb-swedish-041d-mdb
+                0x0407 => NewDatabaseRequest.GermanSort,    // r-q53-conv-abspos-subq-loc/createdb-german-0407-accdb, createdb-german-0407-mdb
+                _ => null,
+            };
+            if (matched is { } resolved)
+            {
+                sortOrder = resolved;
+                hasCodePage = codePage is not null;
+                hasCountry = country is not null;
+                return null;
+            }
         }
-        return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with locale '{locale}': only dbLangGeneral (;LANGID=0x0409, optional CP=1252, optional COUNTRY=0) is implemented"));
+        return CallResult.Fail(Failure.NotModelled("NotModelled.CreateLocale", $"CreateDatabase with locale '{locale}': only recorded Western locales (0x0409, 0x040A, 0x041D, 0x0407; CP 1252; COUNTRY 0) are implemented"));
     }
 
-    private static bool TryParseLocaleNumber(string value, out int number)
+    internal static bool TryParseLocaleNumber(string value, out int number)
     {
         if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
         {

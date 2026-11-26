@@ -29,23 +29,42 @@ public sealed record NewDatabaseRequest(
     /// <summary>General - Legacy sort order (<c>1033, 0, 0</c>) for <c>dbLangGeneral</c> Jet 4 MDB and ACCDB 2007 databases.</summary>
     public static TextSortOrder GeneralLegacySort { get; } = new(1033, 0, 0);
 
+    /// <summary>Spanish Traditional sort order (<c>1034, 0, 0</c>, <c>0x040A</c>; <c>r-q51-codecs-props-compact/locale-create-spanish-*</c>).</summary>
+    public static TextSortOrder SpanishSort { get; } = new(1034, 0, 0);
+
+    /// <summary>Swedish/Finnish sort order (<c>1053, 0, 0</c>, <c>0x041D</c>; <c>r-q53-conv-abspos-subq-loc/createdb-swedish-041d-*</c>).</summary>
+    public static TextSortOrder SwedishSort { get; } = new(1053, 0, 0);
+
+    /// <summary>German sort order (<c>1031, 0, 0</c>, <c>0x0407</c>; <c>r-q53-conv-abspos-subq-loc/createdb-german-0407-*</c>).</summary>
+    public static TextSortOrder GermanSort { get; } = new(1031, 0, 0);
+
     public const ushort WesternCodePage = 1252;
 
-    /// <summary>Create an ACCDB 2007 (<c>dbVersion120</c>) <c>dbLangGeneral</c> request for the given local timestamp.</summary>
-    public static NewDatabaseRequest AccdbGeneral(DateTime? localTimestamp = null)
+    /// <summary>Whether <paramref name="order"/> is one of the recorded creation/compaction sort orders (<c>0x0409</c>, <c>0x040A</c>, <c>0x041D</c>, <c>0x0407</c>).</summary>
+    public static bool IsSupportedSortOrder(TextSortOrder order) =>
+        order == GeneralLegacySort || order == SpanishSort || order == SwedishSort || order == GermanSort;
+
+    /// <summary>Create an ACCDB 2007 (<c>dbVersion120</c>) request for a recorded sort order and local timestamp.</summary>
+    public static NewDatabaseRequest Accdb(TextSortOrder sortOrder, ushort codePage = WesternCodePage, DateTime? localTimestamp = null)
     {
         DateTime ts = localTimestamp ?? DateTime.Now;
         ulong oaBits = BitConverter.DoubleToUInt64Bits(ts.ToOADate());
-        return new NewDatabaseRequest(FileFormat.Ace2007, GeneralLegacySort, WesternCodePage, oaBits);
+        return new NewDatabaseRequest(FileFormat.Ace2007, sortOrder, codePage, oaBits);
     }
 
-    /// <summary>Create a Jet 4 MDB (<c>dbVersion40</c>, option 64, <c>r-q38-mdb-new-image</c>) <c>dbLangGeneral</c> request for the given local timestamp.</summary>
-    public static NewDatabaseRequest Jet4MdbGeneral(DateTime? localTimestamp = null)
+    /// <summary>Create a Jet 4 MDB (<c>dbVersion40</c>, option 64) request for a recorded sort order and local timestamp.</summary>
+    public static NewDatabaseRequest Jet4Mdb(TextSortOrder sortOrder, ushort codePage = WesternCodePage, DateTime? localTimestamp = null)
     {
         DateTime ts = localTimestamp ?? DateTime.Now;
         ulong oaBits = BitConverter.DoubleToUInt64Bits(ts.ToOADate());
-        return new NewDatabaseRequest(FileFormat.Jet4, GeneralLegacySort, WesternCodePage, oaBits, IncrementComplexTypeUpdateUlp: false);
+        return new NewDatabaseRequest(FileFormat.Jet4, sortOrder, codePage, oaBits, IncrementComplexTypeUpdateUlp: false);
     }
+
+    /// <summary>Create an ACCDB 2007 (<c>dbVersion120</c>) <c>dbLangGeneral</c> request for the given local timestamp.</summary>
+    public static NewDatabaseRequest AccdbGeneral(DateTime? localTimestamp = null) => Accdb(GeneralLegacySort, WesternCodePage, localTimestamp);
+
+    /// <summary>Create a Jet 4 MDB (<c>dbVersion40</c>, option 64, <c>r-q38-mdb-new-image</c>) <c>dbLangGeneral</c> request for the given local timestamp.</summary>
+    public static NewDatabaseRequest Jet4MdbGeneral(DateTime? localTimestamp = null) => Jet4Mdb(GeneralLegacySort, WesternCodePage, localTimestamp);
 }
 
 /// <summary>
@@ -77,15 +96,15 @@ public static class NewDatabaseSynthesizer
     private static readonly byte[] SidUsers = DefaultAdminSecurity.Users.ToArray();
     private static readonly byte[] SidAdmins = DefaultAdminSecurity.Admins.ToArray();
 
-    private const int SystemObjectFlag = unchecked((int)0x80000000);
-    private const int ComplexTypeObjectFlag = unchecked((int)0x80030000);
+    internal const int SystemObjectFlag = unchecked((int)0x80000000);
+    internal const int ComplexTypeObjectFlag = unchecked((int)0x80030000);
 
-    private const int TablesContainerId = 0x0F000001;
-    private const int DatabasesContainerId = 0x0F000002;
-    private const int RelationshipsContainerId = 0x0F000003;
-    private const int MSysDbId = 0x10000000;
+    internal const int TablesContainerId = 0x0F000001;
+    internal const int DatabasesContainerId = 0x0F000002;
+    internal const int RelationshipsContainerId = 0x0F000003;
+    internal const int MSysDbId = 0x10000000;
 
-    private sealed record ObjectSeed(
+    internal sealed record ObjectSeed(
         int Id,
         int ParentId,
         string Name,
@@ -94,9 +113,9 @@ public static class NewDatabaseSynthesizer
         byte[]? PlaintextOwnerSid,
         bool UpdatePlusOneUlp = false);
 
-    private sealed record AceSeed(int ObjectId, byte[] PlaintextSid, int Acm, bool Inheritable);
+    internal sealed record AceSeed(int ObjectId, byte[] PlaintextSid, int Acm, bool Inheritable);
 
-    private static readonly ObjectSeed[] InitialObjects =
+    internal static readonly ObjectSeed[] InitialObjects =
     [
         new(TablesContainerId, 0x0F000000, "Tables", 3, SystemObjectFlag, SidEngine),
         new(DatabasesContainerId, 0x0F000000, "Databases", 3, SystemObjectFlag, SidEngine),
@@ -118,9 +137,9 @@ public static class NewDatabaseSynthesizer
         new(39, TablesContainerId, "MSysComplexType_Attachment", 1, ComplexTypeObjectFlag, null),
     ];
 
-    private static readonly ObjectSeed[] Jet4InitialObjects = InitialObjects[..Jet4InitialObjectCount];
+    internal static readonly ObjectSeed[] Jet4InitialObjects = InitialObjects[..Jet4InitialObjectCount];
 
-    private static readonly AceSeed[] InitialAces =
+    internal static readonly AceSeed[] InitialAces =
     [
         new(2, SidAdmin, 0x00060000, false),
         new(18, SidAdmin, 0x00060000, false),
@@ -162,7 +181,7 @@ public static class NewDatabaseSynthesizer
 
     // Jet 4 MDB carries only the 16 ACEs belonging to the 8 non-complex catalog objects, in the same slot order
     // (r-q38-mdb-new-image pages 10 and 18).
-    private static readonly AceSeed[] Jet4InitialAces = BuildJet4InitialAces();
+    internal static readonly AceSeed[] Jet4InitialAces = BuildJet4InitialAces();
 
     private static AceSeed[] BuildJet4InitialAces()
     {
@@ -190,9 +209,9 @@ public static class NewDatabaseSynthesizer
         {
             throw new NotSupportedException($"NewDatabaseSynthesizer currently supports {FileFormat.Jet4} and {FileFormat.Ace2007}, not {request.Format}.");
         }
-        if (request.SortOrder != NewDatabaseRequest.GeneralLegacySort || request.CodePage != NewDatabaseRequest.WesternCodePage)
+        if (!NewDatabaseRequest.IsSupportedSortOrder(request.SortOrder) || request.CodePage != NewDatabaseRequest.WesternCodePage)
         {
-            throw new NotSupportedException($"NewDatabaseSynthesizer currently supports dbLangGeneral (1033/0/0, CP 1252).");
+            throw new NotSupportedException($"NewDatabaseSynthesizer currently supports recorded Western locales (0x0409, 0x040A, 0x041D, 0x0407, CP 1252), not {request.SortOrder} CP {request.CodePage}.");
         }
 
         FormatDescriptor d = descriptor ?? FormatDescriptor.Jet4Family;
@@ -264,7 +283,7 @@ public static class NewDatabaseSynthesizer
         WriteMSysAcesDataPage(pages[acesDataPage], acesDef, aces, sidKeystream, d);
 
         // Index leaf pages (3 populated + 4 empty in Jet 4 MDB, + 3 complex empty in ACCDB).
-        WriteMSysObjectsParentIdNameIndex(pages[7], objectsDef, objects, d);
+        WriteMSysObjectsParentIdNameIndex(pages[7], request.SortOrder, objects, d);
         WriteMSysObjectsIdIndex(pages[8], objects, d);
         WriteMSysAcesObjectIdIndex(pages[10], aces, acesDataPage, d);
 
@@ -282,10 +301,10 @@ public static class NewDatabaseSynthesizer
         return pages;
     }
 
-    private static uint PackSortOrder(TextSortOrder order) =>
+    internal static uint PackSortOrder(TextSortOrder order) =>
         (uint)order.Identifier | ((uint)order.Reserved << 16) | ((uint)(byte)order.Version << 24);
 
-    private static void WriteUsageMapPage(Span<byte> page, FormatDescriptor d, params uint[][] slotPages) => MapPages.Initialize(page, slotPages, d);
+    internal static void WriteUsageMapPage(Span<byte> page, FormatDescriptor d, params uint[][] slotPages) => MapPages.Initialize(page, slotPages, d);
 
     private static void AppendMap(Span<byte> page, byte[] mapBytes, FormatDescriptor d)
     {
@@ -295,8 +314,8 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteComplexScalarTable(
-        byte[][] pages,
+    internal static void WriteComplexScalarTable(
+        IList<byte[]> pages,
         uint tdefPage,
         uint mapPage,
         byte typeCode,
@@ -318,11 +337,11 @@ public static class NewDatabaseSynthesizer
             PhysicalIndexes: [],
             LogicalIndexes: [],
             LvalColumnMaps: []);
-        TableDefEncoder.Encode(pages[tdefPage], spec, d);
-        WriteUsageMapPage(pages[mapPage], d, [], []);
+        TableDefEncoder.Encode(pages[(int)tdefPage], spec, d);
+        WriteUsageMapPage(pages[(int)mapPage], d, [], []);
     }
 
-    private static TableDefinition DecodeSinglePageTableDef(byte[] pageBytes, uint pageNumber, FormatDescriptor d)
+    internal static TableDefinition DecodeSinglePageTableDef(byte[] pageBytes, uint pageNumber, FormatDescriptor d)
     {
         ReadOnlyMemory<byte> mem = pageBytes;
         TableDefSegmentView? stream = TableDefSegmentView.Open(pageNumber, p => p == pageNumber ? mem : null, d, 1, out string? streamFailure);
@@ -421,15 +440,12 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteMSysObjectsParentIdNameIndex(Span<byte> page, TableDefinition objectsDef, ReadOnlySpan<ObjectSeed> objects, FormatDescriptor d)
+    private static void WriteMSysObjectsParentIdNameIndex(Span<byte> page, TextSortOrder sortOrder, ReadOnlySpan<ObjectSeed> objects, FormatDescriptor d)
     {
         IndexPages.InitializeLeaf(page, owner: 2, d);
-        ColumnDescriptor nameCol = objectsDef.Columns.Single(c => c.Name == "Name");
-        FieldKeyCodec nameCodec = IndexKeys.CodecFor(nameCol, out KeyCodecRefusal refusal)
-            ?? throw new InvalidOperationException($"Missing key codec for MSysObjects.Name: {refusal}");
 
         var entries = new List<byte[]>(objects.Length);
-        byte[] scratch = new byte[IndexKeys.MaxFieldBytes + nameCodec.MaxFieldBytes + d.IndexPage.LeafTrailerBytes];
+        byte[] scratch = new byte[IndexKeys.MaxFieldBytes + 1 + SortDescriptors.GeneralLegacy.MaxPayloadBytes + d.IndexPage.LeafTrailerBytes];
         for (int slot = 0; slot < objects.Length; slot++)
         {
             ObjectSeed row = objects[slot];
@@ -437,9 +453,9 @@ public static class NewDatabaseSynthesizer
             {
                 throw new InvalidOperationException("Failed to encode ParentId index key.");
             }
-            if (!IndexKeys.TryWriteField(scratch.AsSpan(n1), nameCodec, ascending: true, KeyValue.OfText(row.Name.AsMemory()), out int n2))
+            if (!TryEncodeLocaleTextKey(sortOrder, row.Name.AsSpan(), ascending: true, scratch.AsSpan(n1), out int n2))
             {
-                throw new InvalidOperationException($"Failed to encode Name index key for '{row.Name}'.");
+                throw new InvalidOperationException($"Failed to encode Name index key for '{row.Name}' under {sortOrder}.");
             }
             int len = n1 + n2;
             WriteLeafTrailer(scratch.AsSpan(len, 4), dataPage: 17, slot: (byte)slot);
@@ -450,6 +466,196 @@ public static class NewDatabaseSynthesizer
         {
             throw new InvalidOperationException($"Failed to write MSysObjects.ParentIdName index page: {failure}");
         }
+    }
+
+    /// <summary>
+    /// Encodes a non-null Text/Memo index key field (direction marker + payload) for the General family
+    /// (<c>1033/0, 1033/1, 1033/-1</c>) and the three recorded non-General Western locales:
+    /// <list type="bullet">
+    ///   <item>German (<c>1031/0</c>, <c>r-q53-conv-abspos-subq-loc/createdb-german-0407-*</c>, <c>qualified.md</c> R-SORT-3): identical to General Legacy on ASCII and recorded German letters (<c>ä/Ä, ö/Ö, ü/Ü, ß</c>).</item>
+    ///   <item>Spanish Traditional (<c>1034/0</c>, <c>r-q51-codecs-props-compact/locale-create-spanish-*</c>, <c>compact-dstlocale-spanish-*</c>): General Legacy weights with the recorded <c>ch</c> digraph weight <c>0x4E 0x04</c> (refuses unrecorded Spanish-special <c>ll</c>/<c>ñ</c> or non-ASCII characters).</item>
+    ///   <item>Swedish/Finnish (<c>1053/0</c>, <c>r-q53-conv-abspos-subq-loc/createdb-swedish-041d-*</c>): General Legacy weights with the recorded Swedish primary weights <c>å/Å -> 0x79 0x05</c>, <c>ä/Ä -> 0x79 0x07</c>, <c>ö/Ö -> 0x79 0x08</c> (refuses other non-ASCII characters).</item>
+    /// </list>
+    /// </summary>
+    public static bool TryEncodeLocaleTextKey(TextSortOrder sortOrder, ReadOnlySpan<char> text, bool ascending, Span<byte> destination, out int written)
+    {
+        written = 0;
+        if (SortDescriptors.For(sortOrder, out _) is { } generalSort)
+        {
+            return IndexKeys.TryWriteField(destination, new FieldKeyCodec(NativeTypes.Text, generalSort), ascending, KeyValue.OfText(text.ToArray()), out written);
+        }
+
+        // Trim indexed prefix (255 code units) and trailing U+0020 spaces per II-05 §6 / TextKeyExtent.IndexedPrefix.
+        int len = Math.Min(text.Length, 255);
+        while (len > 0 && text[len - 1] == ' ')
+        {
+            len--;
+        }
+        ReadOnlySpan<char> trimmed = text[..len];
+
+        if (sortOrder == NewDatabaseRequest.GermanSort)
+        {
+            foreach (char c in trimmed)
+            {
+                if (c >= 0x80 && c is not ('ä' or 'Ä' or 'ö' or 'Ö' or 'ü' or 'Ü' or 'ß'))
+                {
+                    return false;
+                }
+            }
+            return IndexKeys.TryWriteField(destination, new FieldKeyCodec(NativeTypes.Text, SortDescriptors.GeneralLegacy), ascending, KeyValue.OfText(trimmed.ToArray()), out written);
+        }
+
+        if (sortOrder == NewDatabaseRequest.SpanishSort)
+        {
+            // Verify every character is ASCII and contains no unrecorded Spanish 'll' digraph.
+            bool hasCh = false;
+            for (int i = 0; i < trimmed.Length; i++)
+            {
+                char c = trimmed[i];
+                if (c >= 0x80)
+                {
+                    return false;
+                }
+                if (i + 1 < trimmed.Length)
+                {
+                    char next = trimmed[i + 1];
+                    if ((c is 'c' or 'C') && (next is 'h' or 'H'))
+                    {
+                        hasCh = true;
+                    }
+                    else if ((c is 'l' or 'L') && (next is 'l' or 'L'))
+                    {
+                        return false; // 'll' Spanish Traditional weight bytes are not retained in any kept-page record.
+                    }
+                }
+            }
+            if (!hasCh)
+            {
+                return IndexKeys.TryWriteField(destination, new FieldKeyCodec(NativeTypes.Text, SortDescriptors.GeneralLegacy), ascending, KeyValue.OfText(trimmed.ToArray()), out written);
+            }
+            return TryEncodePrimaryWithOverrides(trimmed, ascending, isSpanish: true, destination, out written);
+        }
+
+        if (sortOrder == NewDatabaseRequest.SwedishSort)
+        {
+            bool hasSwedishSpecial = false;
+            foreach (char c in trimmed)
+            {
+                if (c is 'å' or 'Å' or 'ä' or 'Ä' or 'ö' or 'Ö')
+                {
+                    hasSwedishSpecial = true;
+                }
+                else if (c is 'w' or 'W')
+                {
+                    // Swedish Traditional (1053/0) tailors W with V; no retained kept-page record decides Swedish 'w'/'W' weight bytes.
+                    return false;
+                }
+                else if (c >= 0x80)
+                {
+                    return false;
+                }
+            }
+            if (!hasSwedishSpecial)
+            {
+                return IndexKeys.TryWriteField(destination, new FieldKeyCodec(NativeTypes.Text, SortDescriptors.GeneralLegacy), ascending, KeyValue.OfText(trimmed.ToArray()), out written);
+            }
+            return TryEncodePrimaryWithOverrides(trimmed, ascending, isSpanish: false, destination, out written);
+        }
+
+        return false;
+    }
+
+    private static bool TryEncodePrimaryWithOverrides(ReadOnlySpan<char> trimmed, bool ascending, bool isSpanish, Span<byte> destination, out int written)
+    {
+        written = 0;
+        if (destination.Length < 4)
+        {
+            return false;
+        }
+        var legacyCodec = new FieldKeyCodec(NativeTypes.Text, SortDescriptors.GeneralLegacy);
+        int p = 0;
+        destination[p++] = ascending ? (byte)0x7F : (byte)0x80;
+        Span<byte> unitBuf = stackalloc byte[32];
+        char[] single = new char[1];
+
+        for (int i = 0; i < trimmed.Length; i++)
+        {
+            char c = trimmed[i];
+            if (isSpanish && (c is 'c' or 'C') && i + 1 < trimmed.Length && (trimmed[i + 1] is 'h' or 'H'))
+            {
+                // r-q51-codecs-props-compact/locale-create-spanish-accdb p7/p45 & compact-dstlocale-spanish-accdb p44: 'ch' -> 4E 04.
+                if (p + 2 > destination.Length) return false;
+                destination[p++] = 0x4E;
+                destination[p++] = 0x04;
+                i++;
+                continue;
+            }
+            if (!isSpanish && c is 'å' or 'Å')
+            {
+                // r-q53-conv-abspos-subq-loc/createdb-swedish-041d-accdb p45: 'å' -> 79 05.
+                if (p + 2 > destination.Length) return false;
+                destination[p++] = 0x79;
+                destination[p++] = 0x05;
+                continue;
+            }
+            if (!isSpanish && c is 'ä' or 'Ä')
+            {
+                // r-q53-conv-abspos-subq-loc/createdb-swedish-041d-accdb p45: 'ä' -> 79 07.
+                if (p + 2 > destination.Length) return false;
+                destination[p++] = 0x79;
+                destination[p++] = 0x07;
+                continue;
+            }
+            if (!isSpanish && c is 'ö' or 'Ö')
+            {
+                // r-q53-conv-abspos-subq-loc/createdb-swedish-041d-accdb p45: 'ö' -> 79 08.
+                if (p + 2 > destination.Length) return false;
+                destination[p++] = 0x79;
+                destination[p++] = 0x08;
+                continue;
+            }
+            if (c == ' ')
+            {
+                // General Legacy primary weight for internal U+0020 space is 0x07 0x02 (third_party/jackcess/index_codes_genleg.txt);
+                // cannot pass single ' ' to IndexKeys.TryWriteField because TextKeys.KeyUnits trims trailing spaces.
+                if (p + 2 > destination.Length) return false;
+                destination[p++] = 0x07;
+                destination[p++] = 0x02;
+                continue;
+            }
+            // Encode single ASCII character through GeneralLegacy and extract its primary bytes between marker 0x7F and level terminator 0x01 0x00.
+            single[0] = c;
+            if (!IndexKeys.TryWriteField(unitBuf, legacyCodec, ascending: true, KeyValue.OfText(single), out int n, TextKeyExtent.WholeSeekArgument)
+                || n < 3 || unitBuf[0] != 0x7F || unitBuf[n - 2] != 0x01 || unitBuf[n - 1] != 0x00)
+            {
+                return false; // Character carries secondary/unprintable weights not supported in override path.
+            }
+            int primaryLen = n - 3;
+            if (p + primaryLen > destination.Length)
+            {
+                return false;
+            }
+            unitBuf.Slice(1, primaryLen).CopyTo(destination[p..]);
+            p += primaryLen;
+        }
+
+        int trailerBytes = ascending ? 2 : 3;
+        if (p + trailerBytes > destination.Length)
+        {
+            return false;
+        }
+        destination[p++] = 0x01;
+        destination[p++] = 0x00;
+        if (!ascending)
+        {
+            for (int i = 1; i < p; i++)
+            {
+                destination[i] = (byte)~destination[i];
+            }
+            destination[p++] = 0x00;
+        }
+        written = p;
+        return true;
     }
 
     private static void WriteMSysObjectsIdIndex(Span<byte> page, ReadOnlySpan<ObjectSeed> objects, FormatDescriptor d)
@@ -496,7 +702,7 @@ public static class NewDatabaseSynthesizer
         }
     }
 
-    private static void WriteLeafTrailer(Span<byte> trailer, uint dataPage, byte slot)
+    internal static void WriteLeafTrailer(Span<byte> trailer, uint dataPage, byte slot)
     {
         trailer[0] = (byte)(dataPage >> 16);
         trailer[1] = (byte)(dataPage >> 8);
@@ -504,28 +710,28 @@ public static class NewDatabaseSynthesizer
         trailer[3] = slot;
     }
 
-    private static byte[] EncodeInt16LE(short value)
+    internal static byte[] EncodeInt16LE(short value)
     {
         byte[] bytes = new byte[2];
         BinaryPrimitives.WriteInt16LittleEndian(bytes, value);
         return bytes;
     }
 
-    private static byte[] EncodeInt32LE(int value)
+    internal static byte[] EncodeInt32LE(int value)
     {
         byte[] bytes = new byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(bytes, value);
         return bytes;
     }
 
-    private static byte[] EncodeUInt64LE(ulong value)
+    internal static byte[] EncodeUInt64LE(ulong value)
     {
         byte[] bytes = new byte[8];
         BinaryPrimitives.WriteUInt64LittleEndian(bytes, value);
         return bytes;
     }
 
-    private static TableDefSpec MSysObjectsSpec(uint sortTypeInfo, uint rowCount) => new(
+    internal static TableDefSpec MSysObjectsSpec(uint sortTypeInfo, uint rowCount) => new(
         TableType: SystemTableType,
         RowCount: rowCount,
         AutoNumber: 0,
@@ -574,7 +780,7 @@ public static class NewDatabaseSynthesizer
             new(12, new RowLocator(6, 6), new RowLocator(6, 7)),
         ]);
 
-    private static TableDefSpec MSysAcesSpec(uint sortTypeInfo, uint rowCount, uint uniqueObjectCount) => new(
+    internal static TableDefSpec MSysAcesSpec(uint sortTypeInfo, uint rowCount, uint uniqueObjectCount) => new(
         TableType: SystemTableType,
         RowCount: rowCount,
         AutoNumber: 0,
@@ -599,9 +805,9 @@ public static class NewDatabaseSynthesizer
         ],
         LvalColumnMaps: []);
 
-    private static TableDefSpec MSysQueriesSpec(uint sortTypeInfo) => new(
+    internal static TableDefSpec MSysQueriesSpec(uint sortTypeInfo, uint rowCount = 0, uint uniqueCount = 0) => new(
         TableType: SystemTableType,
-        RowCount: 0,
+        RowCount: rowCount,
         AutoNumber: 0,
         MaxColumns: 8,
         VariableColumns: 4,
@@ -620,7 +826,7 @@ public static class NewDatabaseSynthesizer
         ],
         PhysicalIndexes:
         [
-            new([new(0, true, 0x01), new(1, true, 0x01), new(2, true, 0x01)], new RowLocator(11, 4), 12, 0x81),
+            new([new(0, true, 0x01), new(1, true, 0x01), new(2, true, 0x01)], new RowLocator(11, 4), 12, 0x81, EntryCount: 0, UniqueEntryCount: uniqueCount),
         ],
         LogicalIndexes:
         [
@@ -631,9 +837,9 @@ public static class NewDatabaseSynthesizer
             new(5, new RowLocator(11, 2), new RowLocator(11, 3)),
         ]);
 
-    private static TableDefSpec MSysRelationshipsSpec(uint sortTypeInfo) => new(
+    internal static TableDefSpec MSysRelationshipsSpec(uint sortTypeInfo, uint rowCount = 0, uint relUnique = 0, uint objUnique = 0, uint refObjUnique = 0) => new(
         TableType: SystemTableType,
-        RowCount: 0,
+        RowCount: rowCount,
         AutoNumber: 0,
         MaxColumns: 8,
         VariableColumns: 5,
@@ -652,9 +858,9 @@ public static class NewDatabaseSynthesizer
         ],
         PhysicalIndexes:
         [
-            new([new(0, true, 0x01)], new RowLocator(13, 2), 14, 0x82),
-            new([new(4, true, 0x01)], new RowLocator(13, 3), 15, 0x82),
-            new([new(6, true, 0x01)], new RowLocator(13, 4), 16, 0x82),
+            new([new(0, true, 0x01)], new RowLocator(13, 2), 14, 0x82, EntryCount: 0, UniqueEntryCount: relUnique),
+            new([new(4, true, 0x01)], new RowLocator(13, 3), 15, 0x82, EntryCount: 0, UniqueEntryCount: objUnique),
+            new([new(6, true, 0x01)], new RowLocator(13, 4), 16, 0x82, EntryCount: 0, UniqueEntryCount: refObjUnique),
         ],
         LogicalIndexes:
         [
@@ -664,9 +870,9 @@ public static class NewDatabaseSynthesizer
         ],
         LvalColumnMaps: []);
 
-    private static TableDefSpec MSysComplexColumnsSpec(uint sortTypeInfo) => new(
+    internal static TableDefSpec MSysComplexColumnsSpec(uint sortTypeInfo, uint rowCount = 0) => new(
         TableType: ComplexTableType,
-        RowCount: 0,
+        RowCount: rowCount,
         AutoNumber: 0,
         MaxColumns: 5,
         VariableColumns: 1,
@@ -694,7 +900,7 @@ public static class NewDatabaseSynthesizer
         ],
         LvalColumnMaps: []);
 
-    private static TableDefSpec MSysComplexAttachmentSpec(uint sortTypeInfo) => new(
+    internal static TableDefSpec MSysComplexAttachmentSpec(uint sortTypeInfo) => new(
         TableType: ComplexTableType,
         RowCount: 0,
         AutoNumber: 0,
