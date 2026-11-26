@@ -811,10 +811,21 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
                         Release(cmd);
                     }
 
-                    // 3289 (CHECK DDL through DAO-style engine error) has no ADO error record -> stays refused, never mapped.
+                    // evidence/r-q43-schema-lval-index/chk-lvprop-notnull-two-accdb: adding a second CHECK on a table
+                    // whose MSysObjects.LvProp already holds Required + an existing CHECK succeeds over ADO and enforces.
                     Outcome ddlOut = Call(cnReq, "Execute", "ALTER TABLE Req ADD CONSTRAINT CK_Extra CHECK (V < 100)", Missing, 1);
-                    Assert.NotNull(ddlOut.Failure);
-                    Assert.Equal(HResults.E_NOTIMPL, ddlOut.Failure!.Value.Scode);
+                    Assert.Null(ddlOut.Failure);
+                    AssertCheck3317(
+                        cnReq,
+                        Call(cnReq, "Execute", "INSERT INTO Req (ID, R, V) VALUES (12, 'r', 150)", Missing, 1),
+                        "CK_Extra",
+                        "Req");
+
+                    // Unrecorded ADO CHECK DDL expression stays refused (E_NOTIMPL, not mapped).
+                    Outcome badDdlOut = Call(cnReq, "Execute", "ALTER TABLE Req ADD CONSTRAINT CK_Bad CHECK (V > 0 AND V < 100)", Missing, 1);
+                    Assert.NotNull(badDdlOut.Failure);
+                    Assert.Equal(HResults.E_NOTIMPL, badDdlOut.Failure!.Value.Scode);
+                    Assert.Contains("NotModelled.DdlCheckExpression", badDdlOut.Failure.Value.Description);
                 }
                 finally
                 {
