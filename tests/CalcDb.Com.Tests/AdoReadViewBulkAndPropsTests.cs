@@ -1176,7 +1176,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.Null(Call(cliNeg, "Close").Failure);
             Release(cliNeg);
 
-            // Count(N) succeeds (adInteger, Attr=122); Sum(N)/Avg(N) stay refused by CalcDb.Sql.
+            // Count(N) succeeds (adInteger, Attr=122); Sum(N)/Avg(N) succeed with recorded ADO Decimal metadata & values
+            // (evidence/r-fix-wire-ado/fields-meta-decimal-expressions #424-455, #492-523).
             nint cntRs = New(OwnRecordset);
             Assert.Null(Call(cntRs, "Open", "SELECT Count(N) AS C FROM K", new Dispatch(cn), 1, 1, 1).Failure);
             nint cntF = (nint)Get(cntRs, "Fields")!;
@@ -1187,7 +1188,20 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Release(cntRs);
 
             nint aggRs = New(OwnRecordset);
-            Assert.Equal(HResults.E_NOTIMPL, Call(aggRs, "Open", "SELECT Sum(N) AS S, Avg(N) AS A FROM K", new Dispatch(cn), 1, 1, 1).Failure!.Value.Scode);
+            Assert.Null(Call(aggRs, "Open", "SELECT Sum(N) AS S, Avg(N) AS A FROM K", new Dispatch(cn), 1, 1, 1).Failure);
+            nint aggF = (nint)Get(aggRs, "Fields")!;
+            AssertFieldMeta(aggF, "S", expectedType: 131, expectedSize: 19, expectedPrec: 28, expectedScale: 4, expectedAttr: 122);
+            AssertFieldMeta(aggF, "A", expectedType: 131, expectedSize: 19, expectedPrec: 28, expectedScale: 10, expectedAttr: 114);
+            nint fSum = (nint)Get(aggF, "Item", "S")!;
+            Assert.Equal(3.1249m, Convert.ToDecimal(Get(fSum, "Value")));
+            Assert.Equal(19, Get(fSum, "ActualSize"));
+            Release(fSum);
+            nint fAvg = (nint)Get(aggF, "Item", "A")!;
+            Assert.Equal(1.0416333333333333333333333333m, Convert.ToDecimal(Get(fAvg, "Value")));
+            Assert.Equal(16, Get(fAvg, "ActualSize"));
+            Release(fAvg);
+            Release(aggF);
+            Assert.Null(Call(aggRs, "Close").Failure);
             Release(aggRs);
         }
         finally

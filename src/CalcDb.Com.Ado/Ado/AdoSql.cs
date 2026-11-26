@@ -436,6 +436,38 @@ internal static class AdoSqlErrors
             3073 => Make(AdoObject.HResultFail, failure.Message, 5003073, "3073", -198839259, AdoObject.IidCommand),
             // r-ado-1b/rs-cache-same-connection #264, #267
             3167 => RecordIsDeleted(),
+            // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*: multi-row scalar subquery (3354) on ad-hoc SELECT
+            3354 when !isSavedQuery && isSelect => Make(
+                AdoObject.HResultFail,
+                failure.Message,
+                5003354,
+                "3354",
+                -201133054,
+                AdoObject.IidCommand),
+            // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*: Decimal aggregate 96-bit overflow (6) on ad-hoc SELECT
+            6 when !isSavedQuery && isSelect => Make(
+                AdoObject.HResultDataOverflow,
+                failure.Message,
+                5003071,
+                "3072",
+                -529730518,
+                AdoObject.IidCommand),
+            // r-q52-ddl-make-domain/domain-ado-*: runtime syntax error in domain function criteria (3075) on ad-hoc SELECT
+            3075 when !isSavedQuery && isSelect && failure.FromDomainFunction && failure.Phase == SqlPhase.Open => Make(
+                AdoObject.HResultErrorsInCommand,
+                failure.Message,
+                5003950,
+                "3075",
+                -524553244,
+                AdoObject.IidCommand),
+            // r-q52-ddl-make-domain/domain-ado-*: unknown field inside domain function reports ACE 3061 message/SQLState/NativeError
+            3061 when !isSavedQuery && failure.FromDomainFunction => Make(
+                AdoObject.HResultParamNotOptional,
+                failure.Message,
+                5003061,
+                "3061",
+                -531565506,
+                AdoObject.IidCommand),
             // r-ado-1b/errors-by-route (ad-hoc vs saved query parameter failure)
             3061 when !isSavedQuery => Make(
                 AdoObject.HResultParamNotOptional,

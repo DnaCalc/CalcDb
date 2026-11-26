@@ -37,7 +37,26 @@ public enum SyntaxKind : byte
 
     /// <summary><c>*</c> as the whole argument list of a call (SQL <c>Count(*)</c>; W-06/parser-binder-scan).</summary>
     Star,
+
+    /// <summary>A scalar subquery <c>(SELECT …)</c> in an expression (R-SQL-1 SQL-SUB-03/04).</summary>
+    Subquery,
+
+    /// <summary><c>EXISTS (SELECT …)</c> (R-SQL-1 SQL-SUB-03/04).</summary>
+    Exists,
+
+    /// <summary><c>x [NOT] IN (SELECT …)</c> (R-SQL-1 SQL-SUB-03/04).</summary>
+    InSubquery,
+
+    /// <summary><c>x &lt;cmp&gt; ANY|SOME|ALL (SELECT …)</c> (R-SQL-1 SQL-SUB-03/04).</summary>
+    QuantifiedComparison,
 }
+
+/// <summary>
+/// Callback supplied by <c>CalcDb.Sql</c> to parse a nested SQL <c>SELECT</c> inside an expression (subqueries
+/// in <c>WHERE</c>, <c>SELECT</c>, <c>IN</c>, <c>EXISTS</c>, <c>ANY</c>/<c>ALL</c>). When null (Find criteria,
+/// validation rules, action queries), subquery forms keep refusing with <c>NotModelled.Subquery</c>.
+/// </summary>
+public delegate bool SubqueryParser(string source, int start, out object? subquery, out int end, out ExpressionFailure? failure);
 
 /// <summary>What a literal is, which decides its operand contract and its static type.</summary>
 public enum LiteralKind : byte
@@ -76,20 +95,31 @@ public sealed class SyntaxNode
 
     public IReadOnlyList<SyntaxNode> Items { get; init; } = [];
 
+    /// <summary>The parsed SQL subquery AST for <see cref="SyntaxKind.Subquery"/>, <see cref="SyntaxKind.Exists"/>, <see cref="SyntaxKind.InSubquery"/>, or <see cref="SyntaxKind.QuantifiedComparison"/>.</summary>
+    public object? Subquery { get; init; }
+
+    /// <summary>True for <c>ALL</c> and false for <c>ANY</c>/<c>SOME</c> on <see cref="SyntaxKind.QuantifiedComparison"/>.</summary>
+    public bool QuantifierAll { get; init; }
+
     /// <summary>The offset of the node's first unit in the source.</summary>
     public int Offset { get; init; }
+
+    /// <summary>For parenthesized calls and subqueries, the offset of the closing <c>)</c> in the source (0 if unset).</summary>
+    public int CloseOffset { get; init; }
 }
 
 /// <summary>A parsed expression: its root, or the syntax error ACE reports for the text (3077).</summary>
 public sealed unsafe class ExpressionSyntax : IDisposable
 {
     private readonly List<nint> _texts;
+    private readonly List<IDisposable> _subqueries;
 
-    internal ExpressionSyntax(SyntaxNode? root, ExpressionFailure? failure, List<nint> texts)
+    internal ExpressionSyntax(SyntaxNode? root, ExpressionFailure? failure, List<nint> texts, List<IDisposable>? subqueries = null)
     {
         Root = root;
         Failure = failure;
         _texts = texts;
+        _subqueries = subqueries ?? [];
     }
 
     public SyntaxNode? Root { get; }
@@ -102,20 +132,27 @@ public sealed unsafe class ExpressionSyntax : IDisposable
     /// <c>Brien</c>, a missing operator, before its unterminated string). Precedence, lowest first: Imp, Eqv, Xor, Or,
     /// And, Not, comparison (= &lt;&gt; &lt; &gt; &lt;= &gt;= Like Is In Between), &amp;, + -, Mod, \, * /, unary -, ^.
     /// </summary>
-    public static ExpressionSyntax Parse(ReadOnlySpan<char> source)
+    public static ExpressionSyntax Parse(ReadOnlySpan<char> source) => Parse(source, null);
+
+    /// <summary>Parse <paramref name="source"/>, optionally parsing embedded SQL subqueries via <paramref name="parseSubquery"/>.</summary>
+    public static ExpressionSyntax Parse(ReadOnlySpan<char> source, SubqueryParser? parseSubquery)
     {
-        var parser = new Parser(source.ToString(), 0);
+        var parser = new Parser(source.ToString(), 0, parseSubquery);
         try
         {
             SyntaxNode root = parser.Expression();
             parser.ExpectEnd();
-            return new ExpressionSyntax(root, null, parser.Texts);
+            return new ExpressionSyntax(root, null, parser.Texts, parser.Subqueries);
         }
         catch (SyntaxError e)
         {
             return parser.Failed(e);
         }
         catch (NotModelledSyntax e)
+        {
+            return parser.Failed(e);
+        }
+        catch (SubqueryError e)
         {
             return parser.Failed(e);
         }
@@ -128,14 +165,18 @@ public sealed unsafe class ExpressionSyntax : IDisposable
     /// is that token's offset. On a syntax error the failure is the Find context's 3077 with <see cref="ExpressionFailure.Site"/>
     /// at the offset where it was detected; the SQL layer reports it in its own words (3075).
     /// </summary>
-    public static ExpressionSyntax ParseFragment(string source, int start, out int end)
+    public static ExpressionSyntax ParseFragment(string source, int start, out int end) =>
+        ParseFragment(source, start, null, out end);
+
+    /// <summary>Parse one expression fragment of a larger SQL statement, optionally parsing embedded SQL subqueries.</summary>
+    public static ExpressionSyntax ParseFragment(string source, int start, SubqueryParser? parseSubquery, out int end)
     {
-        var parser = new Parser(source, start);
+        var parser = new Parser(source, start, parseSubquery);
         try
         {
             SyntaxNode root = parser.Expression();
             end = parser.Position;
-            return new ExpressionSyntax(root, null, parser.Texts);
+            return new ExpressionSyntax(root, null, parser.Texts, parser.Subqueries);
         }
         catch (SyntaxError e)
         {
@@ -143,6 +184,11 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             return parser.Failed(e);
         }
         catch (NotModelledSyntax e)
+        {
+            end = parser.ErrorPosition;
+            return parser.Failed(e);
+        }
+        catch (SubqueryError e)
         {
             end = parser.ErrorPosition;
             return parser.Failed(e);
@@ -252,7 +298,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         return sb.ToString();
     }
 
-    /// <summary>Free the text literals' BSTRs (a bound expression that keeps them takes them over: <see cref="TakeTexts"/>).</summary>
+    /// <summary>Free the text literals' BSTRs (a bound expression that keeps them takes them over: <see cref="TakeTexts"/>) and any parsed subqueries.</summary>
     public void Dispose()
     {
         foreach (nint b in _texts)
@@ -260,6 +306,11 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             Bstrs.Free(b);
         }
         _texts.Clear();
+        foreach (IDisposable sub in _subqueries)
+        {
+            sub.Dispose();
+        }
+        _subqueries.Clear();
     }
 
     /// <summary>Hand the text literals' BSTRs to a new owner.</summary>
@@ -278,6 +329,11 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         public string Name { get; } = name;
     }
 
+    private sealed class SubqueryError(ExpressionFailure failure) : Exception(failure.Message)
+    {
+        public ExpressionFailure Failure { get; } = failure;
+    }
+
     private enum TokenKind : byte
     {
         End,
@@ -292,7 +348,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
     private readonly record struct Token(TokenKind Kind, int Start, int Length, string Text, bool Doubled = false);
 
     /// <summary>The recursive-descent form of the precedence table; nesting depth is bounded by <see cref="MaxDepth"/>.</summary>
-    private sealed class Parser(string source, int start)
+    private sealed class Parser(string source, int start, SubqueryParser? parseSubquery = null)
     {
         private const int MaxDepth = 200;
 
@@ -307,6 +363,8 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         private int _depth;
 
         public List<nint> Texts { get; } = [];
+
+        public List<IDisposable> Subqueries { get; } = [];
 
         /// <summary>The offset of the first token not consumed.</summary>
         public int Position => _peeked?.Start ?? SkipSpace(_position);
@@ -330,6 +388,11 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 Bstrs.Free(b);
             }
             Texts.Clear();
+            foreach (IDisposable sub in Subqueries)
+            {
+                sub.Dispose();
+            }
+            Subqueries.Clear();
         }
 
         public ExpressionSyntax Failed(SyntaxError e)
@@ -342,6 +405,32 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         {
             FreeTexts();
             return new ExpressionSyntax(null, ExpressionFailure.Open(ExpressionPhase.Parse, e.Name, e.Message) with { Site = ErrorPosition }, []);
+        }
+
+        public ExpressionSyntax Failed(SubqueryError e)
+        {
+            FreeTexts();
+            return new ExpressionSyntax(null, e.Failure, []);
+        }
+
+        private object ParseSubqueryAt(int startOffset, string keyword)
+        {
+            if (parseSubquery is null)
+            {
+                throw new NotModelledSyntax("NotModelled.Subquery", $"a subquery ({keyword}): R-SQL-1 SQL-SUB, W-06/relational-spill");
+            }
+            if (!parseSubquery(source, startOffset, out object? sub, out int end, out ExpressionFailure? fail))
+            {
+                throw new SubqueryError(fail ?? ExpressionFailure.Open(ExpressionPhase.Parse, "NotModelled.Subquery", "subquery parse failed"));
+            }
+            if (sub is IDisposable disposable)
+            {
+                Subqueries.Add(disposable);
+            }
+            _position = end;
+            _lastTokenEnd = end;
+            _peeked = null;
+            return sub!;
         }
 
         private Token Peek() => _peeked ??= Lex();
@@ -664,6 +753,32 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                         "<=" => ScalarOperation.LessOrEqual,
                         _ => ScalarOperation.GreaterOrEqual,
                     };
+                    Token q = Peek();
+                    if (q.Kind == TokenKind.Name
+                        && (q.Text.Equals("ANY", StringComparison.OrdinalIgnoreCase)
+                            || q.Text.Equals("SOME", StringComparison.OrdinalIgnoreCase)
+                            || q.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        int afterQ = SkipSpace(q.Start + q.Length);
+                        if (afterQ < source.Length && source[afterQ] == '(')
+                        {
+                            Next(); // ANY / SOME / ALL
+                            Next(); // (
+                            object sub = ParseSubqueryAt(Position, q.Text);
+                            CloseParenthesis(out int closeOffset);
+                            left = new SyntaxNode
+                            {
+                                Kind = SyntaxKind.QuantifiedComparison,
+                                Operation = op,
+                                Left = left,
+                                QuantifierAll = q.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase),
+                                Subquery = sub,
+                                Offset = t.Start,
+                                CloseOffset = closeOffset,
+                            };
+                            continue;
+                        }
+                    }
                     left = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = op, Left = left, Right = Concatenation(), Offset = t.Start };
                     continue;
                 }
@@ -700,7 +815,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 if (IsKeyword("In"))
                 {
                     Next();
-                    left = new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = List(), Negated = false, Offset = t.Start };
+                    left = ParseIn(left, negated: false, t.Start);
                     continue;
                 }
                 if (IsKeyword("Between"))
@@ -730,7 +845,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             if (IsKeyword("In"))
             {
                 Next();
-                return new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = List(), Negated = true, Offset = offset };
+                return ParseIn(left, negated: true, offset);
             }
             if (IsKeyword("Between"))
             {
@@ -747,14 +862,20 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             throw new SyntaxError(ExpressionMessages.MissingOperator);
         }
 
-        /// <summary>A parenthesized list of one or more expressions (In, and a call's arguments).</summary>
-        private List<SyntaxNode> List()
+        private SyntaxNode ParseIn(SyntaxNode left, bool negated, int offset)
         {
             if (!IsSymbol("("))
             {
                 throw new SyntaxError(ExpressionMessages.MissingOperator);
             }
             Next();
+            Token first = Peek();
+            if (first.Kind == TokenKind.Name && first.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                object sub = ParseSubqueryAt(first.Start, "SELECT");
+                CloseParenthesis(out int closeOffset);
+                return new SyntaxNode { Kind = SyntaxKind.InSubquery, Left = left, Negated = negated, Subquery = sub, Offset = offset, CloseOffset = closeOffset };
+            }
             var items = new List<SyntaxNode> { Expression() };
             while (IsSymbol(","))
             {
@@ -762,14 +883,16 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 items.Add(Expression());
             }
             CloseParenthesis();
-            return items;
+            return new SyntaxNode { Kind = SyntaxKind.In, Left = left, Items = items, Negated = negated, Offset = offset };
         }
 
         /// <summary>
         /// The closing parenthesis; at the end "Missing ), ], or Item", at a comma "Syntax error (comma)" (r-sql-13b/
         /// sub-in-list-null-forms: <c>(a, g) IN ((1, 'x'))</c>), else "missing operator".
         /// </summary>
-        private void CloseParenthesis()
+        private void CloseParenthesis() => CloseParenthesis(out _);
+
+        private void CloseParenthesis(out int closeOffset)
         {
             if (!IsSymbol(")"))
             {
@@ -777,7 +900,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 throw new SyntaxError(t.Kind == TokenKind.End ? ExpressionMessages.MissingParenthesis
                     : t.Kind == TokenKind.Symbol && t.Text == "," ? ExpressionMessages.CommaSyntax : ExpressionMessages.MissingOperator);
             }
-            Next();
+            closeOffset = Next().Start;
         }
 
         private SyntaxNode Concatenation() => Binary(Additive, "&");
@@ -883,6 +1006,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 case TokenKind.Keyword when t.Text.Equals("Null", StringComparison.OrdinalIgnoreCase):
                     return new SyntaxNode { Kind = SyntaxKind.Literal, Literal = LiteralKind.Null, Value = ScalarLiterals.Null, Text = t.Text, Offset = t.Start };
                 case TokenKind.Name:
+                    if (t.Text.Equals("EXISTS", StringComparison.OrdinalIgnoreCase) && IsSymbol("(") && parseSubquery is not null)
+                    {
+                        Next(); // (
+                        object sub = ParseSubqueryAt(Position, t.Text);
+                        CloseParenthesis(out int closeOffset);
+                        return new SyntaxNode { Kind = SyntaxKind.Exists, Subquery = sub, Offset = t.Start, CloseOffset = closeOffset };
+                    }
                     if (t.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
                         || (IsSymbol("(") && (t.Text.Equals("EXISTS", StringComparison.OrdinalIgnoreCase) || t.Text.Equals("ANY", StringComparison.OrdinalIgnoreCase)
                             || t.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase) || t.Text.Equals("SOME", StringComparison.OrdinalIgnoreCase))))
@@ -895,7 +1025,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     }
                     if (IsSymbol("("))
                     {
-                        var call = new SyntaxNode { Kind = SyntaxKind.Call, Text = t.Text, Items = Arguments(), Offset = t.Start };
+                        var call = new SyntaxNode { Kind = SyntaxKind.Call, Text = t.Text, Items = Arguments(out int closeOffset), Offset = t.Start, CloseOffset = closeOffset };
                         if (IsSymbol("("))
                         {
                             // r-expr-1b/route-mdb-battery: Split('a b', ' ')(1).
@@ -906,6 +1036,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                     return new SyntaxNode { Kind = SyntaxKind.Name, Text = t.Text, Offset = t.Start };
                 case TokenKind.Symbol when t.Text == "(":
                     {
+                        Token innerFirst = Peek();
+                        if (innerFirst.Kind == TokenKind.Name && innerFirst.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            object sub = ParseSubqueryAt(innerFirst.Start, "SELECT");
+                            CloseParenthesis(out int closeOffset);
+                            return new SyntaxNode { Kind = SyntaxKind.Subquery, Subquery = sub, Offset = t.Start, CloseOffset = closeOffset };
+                        }
                         SyntaxNode inner = Expression();
                         CloseParenthesis();
                         return inner;
@@ -921,18 +1058,18 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         }
 
         /// <summary>A call's arguments: <c>()</c>, <c>(*)</c> (SQL Count; the binder admits it only there) or a list.</summary>
-        private List<SyntaxNode> Arguments()
+        private List<SyntaxNode> Arguments(out int closeOffset)
         {
             Next(); // (
             if (IsSymbol(")"))
             {
-                Next();
+                closeOffset = Next().Start;
                 return [];
             }
             if (IsSymbol("*"))
             {
                 Token star = Next();
-                CloseParenthesis();
+                CloseParenthesis(out closeOffset);
                 return [new SyntaxNode { Kind = SyntaxKind.Star, Offset = star.Start }];
             }
             var items = new List<SyntaxNode> { Expression() };
@@ -941,7 +1078,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 Next();
                 items.Add(Expression());
             }
-            CloseParenthesis();
+            CloseParenthesis(out closeOffset);
             return items;
         }
 

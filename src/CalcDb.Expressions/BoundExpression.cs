@@ -34,6 +34,31 @@ public readonly record struct ColumnBinding(int Source, ColumnDescriptor Column)
 /// </summary>
 public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field, bool IsExtendedDateTime = false);
 
+/// <summary>The 8 SQL domain aggregate functions (II-10 §27; qualified.md R-EXPR-1 DomainFunction).</summary>
+public enum DomainFunction : byte
+{
+    DLookup,
+    DCount,
+    DSum,
+    DMin,
+    DMax,
+    DAvg,
+    DFirst,
+    DLast,
+}
+
+/// <summary>
+/// A bound embedded SQL subquery in an expression (R-SQL-1 SQL-SUB-03/04): its index in the enclosing plan's
+/// subquery list, its declared VARIANT type, its static type, and whether its runtime value is a Boolean (-1/0/Null).
+/// </summary>
+public readonly record struct SubqueryBinding(int Id, VarType Declared, StaticType Type, bool IsBooleanResult);
+
+[System.Runtime.CompilerServices.InlineArray(3)]
+file struct DomainArgsBuffer
+{
+    private NativeVariant _element0;
+}
+
 /// <summary>
 /// The row an expression is evaluated on (II-10 §4: a native row reaches the evaluator without a second value system):
 /// the cursor of each source, positioned on the row's occurrence, and the values a SQL plan supplies directly.
@@ -45,6 +70,28 @@ public interface IExpressionRow
 
     /// <summary>The value of a slot, borrowed for the evaluation (its owner keeps it alive and releases it).</summary>
     NativeVariant Slot(int slot);
+
+    /// <summary>
+    /// Evaluate embedded subquery <paramref name="subqueryId"/> against the current row (and <paramref name="leftOperand"/>
+    /// for <c>IN</c> / quantified comparisons). Returns an owned <paramref name="result"/> (caller clears BSTR/array).
+    /// </summary>
+    bool EvaluateSubquery(int subqueryId, in NativeVariant leftOperand, out NativeVariant result, out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Subquery", "subquery evaluation is not supported by this row");
+        return false;
+    }
+
+    /// <summary>
+    /// Evaluate a SQL domain aggregate function (<c>DLookup</c>, <c>DCount</c>, …) with <paramref name="args"/>
+    /// (borrowed for the call). Returns an owned <paramref name="result"/> (caller clears BSTR/array).
+    /// </summary>
+    bool EvaluateDomain(DomainFunction function, ReadOnlySpan<NativeVariant> args, int site, out NativeVariant result, out ExpressionFailure? failure)
+    {
+        result = default;
+        failure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.DomainFunction", $"{function}: domain function evaluation is not supported by this row");
+        return false;
+    }
 }
 
 /// <summary>
@@ -101,6 +148,13 @@ public class ExpressionSchema
 
     /// <summary>Whether an index of the field's table has this column first.</summary>
     public virtual bool LeadsIndex(ColumnBinding field) => _indexedFirst.Contains(field.Column.PhysicalNumber);
+
+    /// <summary>Bind an embedded SQL subquery node in this scope; returns null with <paramref name="failure"/> when unsupported or invalid.</summary>
+    public virtual SubqueryBinding? BindSubquery(SyntaxNode node, OperandContract leftContract, out ExpressionFailure? failure)
+    {
+        failure = ExpressionFailure.Open(ExpressionPhase.Bind, "NotModelled.Subquery", "a subquery is not supported in this scope");
+        return null;
+    }
 }
 
 /// <summary>
@@ -119,6 +173,8 @@ public sealed unsafe partial class BoundExpression : IDisposable
     private readonly ScalarDescriptor[] _descriptors;
     private readonly ColumnBinding[] _fields;
     private readonly bool _usesSlots;
+    private readonly bool _usesSubqueries;
+    private readonly bool _usesDomainFunctions;
     private readonly Slot[] _stack;
     private bool _holdsResult;
     private nint[] _ownedTexts;
@@ -136,6 +192,8 @@ public sealed unsafe partial class BoundExpression : IDisposable
         _descriptors = [.. b.Descriptors];
         _fields = [.. b.Fields];
         _usesSlots = b.UsesSlots;
+        _usesSubqueries = b.UsesSubqueries;
+        _usesDomainFunctions = b.UsesDomainFunctions;
         _stack = new Slot[Math.Max(1, b.MaxDepth)];
         _ownedTexts = ownedTexts;
         _scratch = new nint[_fields.Length];
@@ -152,17 +210,26 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>The static type of the whole expression.</summary>
     public StaticType Type { get; }
 
-    /// <summary>Whether the expression reads no field and no slot: its value is the same on every row.</summary>
-    public bool IsConstant => _fields.Length == 0 && !_usesSlots;
+    /// <summary>Whether the expression reads no field, no slot, and no subquery: its value is the same on every row.</summary>
+    public bool IsConstant => _fields.Length == 0 && !_usesSlots && !_usesSubqueries;
 
-    /// <summary>Whether the expression reads any slot (parameter, group key, aggregate, union, or derived-table column).</summary>
+    /// <summary>Whether the expression reads any slot (parameter, group key, aggregate, union, outer correlation, or derived-table column).</summary>
     public bool UsesSlots => _usesSlots;
+
+    /// <summary>Whether the expression contains any embedded SQL subquery (<c>(SELECT …)</c>, <c>EXISTS</c>, <c>IN (SELECT …)</c>, <c>ANY</c>/<c>ALL</c>).</summary>
+    public bool UsesSubqueries => _usesSubqueries;
+
+    /// <summary>Whether the expression contains any SQL domain aggregate call (<c>DLookup</c>, <c>DCount</c>, …).</summary>
+    public bool UsesDomainFunctions => _usesDomainFunctions;
 
     /// <summary>The field when the whole expression is one field reference.</summary>
     public ColumnBinding? BareField => _program.Length == 1 && _program[0].Op == Op.LoadField ? _fields[_program[0].Operand] : null;
 
     /// <summary>The slot when the whole expression is one slot value.</summary>
     public int? BareSlot => _program.Length == 1 && _program[0].Op == Op.LoadSlot ? _program[0].Operand : null;
+
+    /// <summary>The subquery id when the whole expression is one bare scalar/EXISTS subquery.</summary>
+    public int? BareSubquery => _program.Length == 1 && _program[0].Op == Op.Subquery ? _program[0].Operand : null;
 
     /// <summary>The fields the expression reads, in first-use order.</summary>
     public IReadOnlyList<ColumnBinding> Fields => _fields;
@@ -181,6 +248,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
 
     /// <summary>Whether the last evaluation failure came from a <c>DATETIME2</c> comparison failing 3464.</summary>
     public bool LastFailureWasExtendedDateTimeComparison { get; private set; }
+
+    /// <summary>Whether the last evaluation failure came from an embedded SQL subquery or domain function.</summary>
+    public bool LastFailureWasSubqueryOrDomain { get; private set; }
 
     private enum Op : byte
     {
@@ -214,10 +284,19 @@ public sealed unsafe partial class BoundExpression : IDisposable
 
         /// <summary>Expression-layer function call dispatched by <see cref="Instruction.Function"/> with <see cref="Instruction.Operand"/> arguments.</summary>
         CallFunction,
+
+        /// <summary>Evaluate an embedded SQL scalar or EXISTS subquery (<see cref="IExpressionRow.EvaluateSubquery"/>).</summary>
+        Subquery,
+
+        /// <summary>Pop left operand and evaluate an embedded SQL IN / ANY / ALL subquery (<see cref="IExpressionRow.EvaluateSubquery"/>).</summary>
+        SubqueryWithLeft,
+
+        /// <summary>Evaluate a SQL domain aggregate function (<see cref="IExpressionRow.EvaluateDomain"/>) with <see cref="Instruction.Operand"/> arguments.</summary>
+        DomainCall,
     }
 
     [StructLayout(LayoutKind.Auto)]
-    private readonly record struct Instruction(Op Op, int Operand, int Descriptor, bool Flag = false, ExprFunction Function = ExprFunction.None);
+    private readonly record struct Instruction(Op Op, int Operand, int Descriptor, bool Flag = false, ExprFunction Function = ExprFunction.None, DomainFunction Domain = default);
 
     [StructLayout(LayoutKind.Auto)]
     private struct Slot
@@ -368,6 +447,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         _active = context;
         LastFailureWasStoredBooleanComparison = false;
         LastFailureWasExtendedDateTimeComparison = false;
+        LastFailureWasSubqueryOrDomain = false;
         if (_holdsResult)
         {
             Release(ref _stack[0]);
@@ -530,6 +610,80 @@ public sealed unsafe partial class BoundExpression : IDisposable
                         continue;
                     }
                     break;
+                case Op.Subquery:
+                {
+                    NativeVariant subVal = default;
+                    ExpressionFailure? subFail = null;
+                    if (row is null || !row.EvaluateSubquery(ins.Operand, default, out subVal, out subFail))
+                    {
+                        LastFailure = subFail ?? ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Subquery", "subquery evaluation requires a SQL row");
+                        LastFailureWasSubqueryOrDomain = true;
+                        Unwind(sp);
+                        return false;
+                    }
+                    stack[sp].Value = subVal;
+                    stack[sp].Owned = subVal.Vt is (ushort)VarType.Bstr or (ushort)(VarType.Array | VarType.UI1);
+                    stack[sp].BooleanTag = (ins.Flag && subVal.Vt == (ushort)VarType.I2) || subVal.Vt == (ushort)VarType.Bool;
+                    stack[sp].ExtendedDateTimeTag = false;
+                    sp++;
+                    continue;
+                }
+                case Op.SubqueryWithLeft:
+                {
+                    NativeVariant left = stack[sp - 1].Value;
+                    NativeVariant subVal = default;
+                    ExpressionFailure? subFail = null;
+                    bool ok = row is not null && row.EvaluateSubquery(ins.Operand, left, out subVal, out subFail);
+                    subFail ??= ok ? null : ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Subquery", "subquery evaluation requires a SQL row");
+                    Release(ref stack[sp - 1]);
+                    sp--;
+                    if (!ok)
+                    {
+                        LastFailure = subFail;
+                        LastFailureWasSubqueryOrDomain = true;
+                        Unwind(sp);
+                        return false;
+                    }
+                    stack[sp].Value = subVal;
+                    stack[sp].Owned = subVal.Vt is (ushort)VarType.Bstr or (ushort)(VarType.Array | VarType.UI1);
+                    stack[sp].BooleanTag = (ins.Flag && subVal.Vt == (ushort)VarType.I2) || subVal.Vt == (ushort)VarType.Bool;
+                    stack[sp].ExtendedDateTimeTag = false;
+                    sp++;
+                    continue;
+                }
+                case Op.DomainCall:
+                {
+                    int n = ins.Operand;
+                    int first = sp - n;
+                    DomainArgsBuffer argBuf = default;
+                    Span<NativeVariant> args = argBuf[..n];
+                    for (int i = 0; i < n; i++)
+                    {
+                        args[i] = stack[first + i].Value;
+                    }
+                    NativeVariant domVal = default;
+                    ExpressionFailure? domFail = null;
+                    bool ok = row is not null && row.EvaluateDomain(ins.Domain, args, ins.Descriptor, out domVal, out domFail);
+                    domFail ??= ok ? null : ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.DomainFunction", $"{ins.Domain}: domain function evaluation requires a SQL row");
+                    for (int i = first; i < sp; i++)
+                    {
+                        Release(ref stack[i]);
+                    }
+                    sp = first;
+                    if (!ok)
+                    {
+                        LastFailure = domFail;
+                        LastFailureWasSubqueryOrDomain = true;
+                        Unwind(sp);
+                        return false;
+                    }
+                    stack[sp].Value = domVal;
+                    stack[sp].Owned = domVal.Vt is (ushort)VarType.Bstr or (ushort)(VarType.Array | VarType.UI1);
+                    stack[sp].BooleanTag = domVal.Vt == (ushort)VarType.Bool;
+                    stack[sp].ExtendedDateTimeTag = false;
+                    sp++;
+                    continue;
+                }
                 default:
                     r = Between(ref sp, ins);
                     break;
@@ -1237,6 +1391,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
 
         public bool UsesSlots { get; private set; }
 
+        public bool UsesSubqueries { get; private set; }
+
+        public bool UsesDomainFunctions { get; private set; }
+
         public int MaxDepth { get; private set; }
 
         private bool Query => use == ExpressionUse.Query;
@@ -1270,6 +1428,8 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 SyntaxKind.IsNull => IsNull(node.Left!, node.Negated, node.Offset, at),
                 SyntaxKind.In => In(node, at),
                 SyntaxKind.Between => Between(node, at),
+                SyntaxKind.Subquery or SyntaxKind.Exists => BindSubquery(node, hasLeft: false, at),
+                SyntaxKind.InSubquery or SyntaxKind.QuantifiedComparison => BindSubquery(node, hasLeft: true, at),
                 _ => throw Open("NotModelled.Star", "* outside Count(*)"),
             };
             MaxDepth = Math.Max(MaxDepth, at + Math.Max(result.Depth, 1));
@@ -1483,6 +1643,62 @@ public sealed unsafe partial class BoundExpression : IDisposable
             return new Bound(StaticType.Boolean, BooleanExpression, Math.Max(x.Depth, Math.Max(low.Depth + 1, high.Depth + 2)));
         }
 
+        private Bound BindSubquery(SyntaxNode node, bool hasLeft, int at)
+        {
+            OperandContract leftContract = default;
+            int depth = 1;
+            if (hasLeft)
+            {
+                Bound left = Bind(node.Left!, at);
+                leftContract = left.Contract;
+                depth = Math.Max(depth, left.Depth);
+            }
+            if (schema.BindSubquery(node, leftContract, out ExpressionFailure? failure) is not { } binding)
+            {
+                throw new BindError((failure ?? ExpressionFailure.Open(ExpressionPhase.Bind, "NotModelled.Subquery", "subquery binding failed")) with { Site = node.Offset });
+            }
+            UsesSubqueries = true;
+            Program.Add(new Instruction(hasLeft ? Op.SubqueryWithLeft : Op.Subquery, binding.Id, node.Offset, binding.IsBooleanResult));
+            OperandContract contract = binding.IsBooleanResult
+                ? BooleanExpression
+                : new OperandContract(OperandOrigin.Expression, binding.Declared);
+            return new Bound(binding.Type, contract, depth);
+        }
+
+        private Bound BindDomainCall(SyntaxNode node, int at)
+        {
+            int n = node.Items.Count;
+            if (n is < 2 or > 3)
+            {
+                int aritySite = node.CloseOffset > node.Offset ? node.CloseOffset : node.Offset;
+                throw WrongArity(node.Text!, n, aritySite);
+            }
+            DomainFunction fn = node.Text!.ToUpperInvariant() switch
+            {
+                "DLOOKUP" => DomainFunction.DLookup,
+                "DCOUNT" => DomainFunction.DCount,
+                "DSUM" => DomainFunction.DSum,
+                "DMIN" => DomainFunction.DMin,
+                "DMAX" => DomainFunction.DMax,
+                "DAVG" => DomainFunction.DAvg,
+                "DFIRST" => DomainFunction.DFirst,
+                "DLAST" => DomainFunction.DLast,
+                _ => throw Open("NotModelled.DomainFunction", $"{node.Text}: unsupported domain aggregate function"),
+            };
+            int depth = 1;
+            for (int i = 0; i < n; i++)
+            {
+                Bound arg = Bind(node.Items[i], at + i);
+                depth = Math.Max(depth, arg.Depth + i);
+            }
+            UsesDomainFunctions = true;
+            Program.Add(new Instruction(Op.DomainCall, n, node.Offset, Domain: fn));
+            StaticType staticType = fn is DomainFunction.DCount or DomainFunction.DSum or DomainFunction.DAvg
+                ? StaticType.Value
+                : StaticType.Unknown;
+            return new Bound(staticType, OperandContract.FunctionResult, depth);
+        }
+
         private int _iifDepth;
 
         private BindError TooComplex(string name, int site, string openName, string openDetail) => Query
@@ -1500,7 +1716,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 case FunctionAvailability.Unknown:
                     throw Fail(3072, ExpressionMessages.UnknownFunction);
                 case FunctionAvailability.Domain when Query:
-                    throw Open("NotModelled.DomainFunction", $"{node.Text}: a domain aggregate is a child query (II-10 §27), not built yet");
+                    return BindDomainCall(node, at);
                 case FunctionAvailability.Domain:
                     throw Fail(3072, ExpressionMessages.FunctionNotAvailable);
                 case FunctionAvailability.NotAvailableInQuery when Query:
