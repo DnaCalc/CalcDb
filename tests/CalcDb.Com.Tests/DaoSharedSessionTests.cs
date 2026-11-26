@@ -314,7 +314,7 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
     [InlineData(true, true)]
     public void Two_bindings_share_one_cache_lock_slot_and_locker_rules(bool mdb, bool twoWorkspaces)
     {
-        // evidence/r-q46-dao-ddl-multi/mh-rwrw-{samews,twows}-{accdb,mdb}: db1 INSERT is visible to db2's fresh snapshot,
+        // evidence/r-q46-dao-ddl-multi/mh-rwrw-* (same and two Workspaces, ACCDB and Jet 4 MDB): db1 INSERT is visible to db2's fresh snapshot,
         // db2 INSERT is visible to db1; under ws0.BeginTrans the same Workspace's db2 sees db1's uncommitted row, the
         // other Workspace's db2 does not and its UPDATE of the same page fails 3188; the lock file stays 64 B, survives
         // db1.Close and goes with db2.Close.

@@ -102,8 +102,9 @@ internal static class DaoErrors
     public static string FileAlreadyInUse(string path) => $"Could not use '{path}'; file already in use.";
 
     /// <summary>
-    /// 3704 (R-LOCK-2 RO-INPROC: evidence/r-lock-1-2/accdb-inproc-ws{1,2}-shared-ro-then-excl-rw; evidence/r-q46-dao-ddl-multi/
-    /// mh-excl-*-accdb call 79): the first binding's user and this computer's name.
+    /// 3704 (R-LOCK-2 RO-INPROC: evidence/r-lock-1-2/accdb-inproc-ws1-shared-ro-then-excl-rw and
+    /// accdb-inproc-ws2-shared-ro-then-excl-rw; evidence/r-q46-dao-ddl-multi/mh-excl-samews-accdb call 79): the first
+    /// binding's user and this computer's name.
     /// </summary>
     public static string AlreadyOpenedByUser(string user, string machine) =>
         $"You attempted to open a database that is already opened by user '{user}' on machine '{machine}'. Try again when the database is available.";
