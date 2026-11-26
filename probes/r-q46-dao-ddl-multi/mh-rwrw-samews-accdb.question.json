@@ -1,0 +1,1097 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q46-dao-ddl-multi/mh-rwrw-samews-accdb",
+  "bookRefs": [
+    "R-LOCK-1",
+    "EX-PUBLIC",
+    "R-LOCK-2",
+    "RO-INPROC",
+    "R-TXN-1",
+    "TXN-LOCAL",
+    "II-09",
+    "W-05",
+    "W-08"
+  ],
+  "description": "ACCDB (same Workspace): two RW OpenDatabase handles (db1, db2) on table T(ID PK, V, S) seeded with rows 1,2. db1 INSERTs row 10; db2 immediately reads T (visibility) and INSERTs row 20 (same burst?); db1 edits row 1 via dynaset Edit/Update; pause 1500ms; ws0.BeginTrans + db1 INSERT row 30 -> db2 (same ws0) reads T and UPDATEs row 30 -> ws0.CommitTrans; close db1 (keep pages: extent/0xE02), then close db2 (keep pages). Keeps all pages at every step.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db0"
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG, S TEXT(50))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 10, 'one')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 20, 'two')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-setup",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg0",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg0",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws0"
+    },
+    {
+      "op": "invoke",
+      "target": "ws0",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db1"
+    },
+    {
+      "op": "invoke",
+      "target": "ws0",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-both-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (10, 100, 'd1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-db1-ins10-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg2",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg2",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r2a"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2a",
+      "member": "EOF",
+      "maxIterations": 6,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2a",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2a",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2a",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2a"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (20, 200, 'd2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-db2-ins20-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg3",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg3",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg3"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r1a"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r1a",
+      "member": "EOF",
+      "maxIterations": 6,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r1a",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r1a",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1a",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r1a"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V, S FROM T WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "ed1"
+    },
+    {
+      "op": "invoke",
+      "target": "ed1",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ed1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ed1f"
+    },
+    {
+      "op": "invoke",
+      "target": "ed1f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "ed1v"
+    },
+    {
+      "op": "invoke",
+      "target": "ed1v",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 111
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ed1",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "ed1v"
+    },
+    {
+      "op": "release",
+      "target": "ed1f"
+    },
+    {
+      "op": "invoke",
+      "target": "ed1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ed1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-db1-upd1-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg4",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg4",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg4"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-pause-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg5",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg5",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg5"
+    },
+    {
+      "op": "invoke",
+      "target": "ws0",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (30, 300, 'txn')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r2t"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2t",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2t",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2t",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2t",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2t"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = 999 WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ws0",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-commit-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg6",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg6",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg6"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r2c"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2c",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2c",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2c",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2c"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-db1-close-live",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg7",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg7",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg7"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db2"
+    },
+    {
+      "op": "release",
+      "target": "ws0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-both-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg8",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg8",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg8"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rsro"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rsro",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rsro",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rsro",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rsro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbro"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}
