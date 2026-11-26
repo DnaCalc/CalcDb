@@ -1665,3 +1665,14 @@ Indicators (`tools/process-indicators.ps1`, window since 2026-11-25 00:09, 92 co
 Wave 1 dispatched across disjoint boundaries: `pjs2` (`CalcDb-w1`, Claude Opus), `v9dh` (`CalcDb-w2`, Gemini Neon),
 `r-q43` ready-gate evidence audit + probe round (`CalcDb-probe`, Gemini Neon), and `RoslynSkills` hot index/MCP/client
 speedup (`C:\Work\RoslynSkills`, Claude Sonnet).
+
+### Wave 1 landings & RoslynSkills ~15% tooling iteration (2026-11-26)
+
+1. **Wave 1 landed on `master`:**
+   - `agg-types-sql` (`72026842`, `ce854135`): +44 matched across `r-sql-1` / `r-par-1` / `r-lock-1-2`, core baseline `491/1360` (0 Lost, `r-q8-header-counter` `28/31`).
+   - `r-q44-ddl-alter-types` (`105ba4de`): 53 probes, 67 sealed ACE records covering `ALTER TABLE`, `BIGINT`/`DATETIME2`/`LARGEINT`, `Double`/`DateTime`/`GUID`/`Memo` `CREATE INDEX`, plus `ADODB.Stream` ready audit for `prfx` stretch 2 (`3,697/3,697` tests).
+   - `v9dh` (`e7f9c7f8`, `f09959fd`): Gate 4 review by `@review-v9dh` caught Finding 1 (`EditFrame` deferred Delete counts dropped on concurrent DAO write), fixed in `d1bc01f9`; `3,435/3,435` tests across 7 projects, `r-q41` `22/38`, core baseline `491/1360` (0 Lost).
+2. **RoslynSkills warm-path speedup (`C:\Work\RoslynSkills`, local `main` `c8498e8`, global `roscli` `0.1.6-preview.29` + NativeAOT `roscli-fast.exe`):**
+   - Replaced per-call disk freshness stat sweeps with a `FileSystemWatcher` completeness proof + `obj/bin` marker-file barrier (falling back to sweep on watcher error / strict policy / 250 ms timeout / 15 s interval), added directory `HotTextIndex` and per-tree `IdentifierIndex`, routed hot MCP tools through the daemon (`transport.mode = "mcp"`), added the `cli/run` bridge + 2 MB NativeAOT `RoslynSkills.FastClient` (`%LOCALAPPDATA%\RoslynSkills\bin\roscli-fast.exe`), and added background compile warmup (`336/336` Release tests green).
+   - Measured median wall times on `CalcDb.slnx` (33 projects, 600 docs): `find_symbol` `967 → 42 ms` (`rg 40 ms`), `find_references` `1,058 → 65 ms` (`rg 67 ms`), `find_invocations` `805 → 53 ms` (`rg 68 ms`), `find_implementations` `554 → 48 ms` (`rg 74 ms`), `ctx.search_text` `563 → 49 ms` (`rg 68 ms`), `diag snapshot src/CalcDb.Sql` `1,298 → 105 ms`; MCP steady state `12 / 24 / 24 ms`.
+   - **Open tooling telemetry to fix in next ~15% pass:** (a) `@review-v9dh` observed `nav.find_invocations` on `SchemaWriter.CreateTable` and `nav.find_references` on `DeferredCatalogCommit.Kind` returning empty results; (b) cold first semantic query (`find_invocations` ~14–16 s, `find_references` ~1.5–2.7 s) still outlives `workspace.use` warmup; (c) consider wiring `RoslynSkills.McpServer` once user confirms, and replacing `obj/bin` barrier dotfile if desired.
