@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
+using CalcDb.Catalog;
 using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Foundation;
@@ -145,6 +146,17 @@ public static unsafe class ActionExecutor
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Bind, 3078, $"The Microsoft Access database engine cannot find the input table or query '{normalized}'. Make sure it exists and that its name is spelled correctly."));
             }
         }
+        if (ActionParser.IsMakeTable(normalized))
+        {
+            if (source is not (ActionErrorSource.Database or ActionErrorSource.Ado))
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.MakeTableRoute", $"SELECT ... INTO via {source} is not recorded"));
+            }
+            if (database.Workspace.Depth > 0)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "SELECT ... INTO inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
+            }
+        }
         BoundAction? plan = BoundAction.Prepare(sql, database, out SqlFailure? failure);
         if (plan is null)
         {
@@ -171,6 +183,11 @@ public static unsafe class ActionExecutor
         }
         if (database.ReadOnly)
         {
+            if (plan.Kind == ActionKind.MakeTable && source == ActionErrorSource.Database && (options & DbFailOnError) != 0)
+            {
+                // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 35: SELECT ... INTO with dbFailOnError on read-only DB -> 3027.
+                return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3027, SqlMessages.CannotUpdateReadOnly));
+            }
             // r-fix-cursor-dao/lock-readonly-db-insert-failonerror shows a read-only handle succeeding when the same
             // process already holds a read-write open; pure DAO read-only refusal is decided by r-q18-statements/ro-ins-fail
             // and ro-ins-plain (INSERT ... VALUES -> 3073) and r-q43-schema-lval-index/ro-ddl-disc-accdb (UPDATE -> 3073
@@ -232,6 +249,17 @@ public static unsafe class ActionExecutor
         }
 
         bool failOnError = (options & DbFailOnError) != 0;
+        if (plan.Kind == ActionKind.MakeTable)
+        {
+            try
+            {
+                return ExecuteMakeTable(plan, database, failOnError, paramValues, source, acceptsFailure);
+            }
+            finally
+            {
+                ClearAll(paramValues);
+            }
+        }
         int externalDepth = database.Workspace.Depth;
         // R-TXN-1 TXN-STMT (task sjws): the statement publishes once, at its end, what it changed, also the rows before a
         // failure; inside a BeginTrans level its changes join the level. When a failure is unmodelled or the caller
@@ -280,6 +308,242 @@ public static unsafe class ActionExecutor
 
     private static bool CallerAcceptsFailure(SqlFailure failure, Func<SqlFailure, bool>? acceptsFailure) =>
         acceptsFailure is null || (!failure.IsNotModelled && acceptsFailure(failure));
+
+    // ---- SELECT ... INTO target FROM ... (MakeTable) -------------------------------------------------------------------
+
+    private static ActionOutcome ExecuteMakeTable(
+        BoundAction plan,
+        ISqlActionDatabase database,
+        bool failOnError,
+        NativeVariant[] paramValues,
+        ActionErrorSource errorSource,
+        Func<SqlFailure, bool>? acceptsFailure)
+    {
+        if (errorSource is not (ActionErrorSource.Database or ActionErrorSource.Ado))
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.MakeTableRoute", $"SELECT ... INTO via {errorSource} is not recorded"));
+        }
+        if (database is not ISqlSchemaDatabase schemaDb)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaHost", "database host does not implement ISqlSchemaDatabase"));
+        }
+        if (database.Workspace.Depth > 0)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "SELECT ... INTO inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
+        }
+        if (schemaDb.PageCount >= 510)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriterInlineMapRange", $"file has {schemaDb.PageCount} pages; SchemaWriter's inline map encoder only handles pages < 512"));
+        }
+        SchemaWriter? writer = schemaDb.OpenSchemaWriter(out string? writerFailure);
+        if (writer is null)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", writerFailure ?? "SchemaWriter unavailable"));
+        }
+
+        SchemaRoute route = errorSource == ActionErrorSource.Ado ? SchemaRoute.Ado : SchemaRoute.Sql;
+        var createRequest = new CreateTableRequest(plan.TargetName, plan.MakeTableFields, route, IsMakeTable: true);
+
+        if (plan.HasDuplicateMakeTableField)
+        {
+            // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 22: SELECT ID, Qty AS ID INTO MT_DupCol
+            // fails 3191 after SchemaWriter's 2-commit UniqueEntryCount rollback.
+            SqlFailure dupFail = SqlFailure.Ace(SqlPhase.Execute, 3191, SqlMessages.CannotDefineFieldMoreThanOnce);
+            if (!CallerAcceptsFailure(dupFail, acceptsFailure))
+            {
+                return ActionOutcome.Fail(dupFail);
+            }
+            ulong dupNow = schemaDb.NowDateBits();
+            SchemaOutcome dupOutcome = writer.CreateTable(database.Workspace, createRequest, dupNow, dupNow);
+            if (dupOutcome.PublishedAny)
+            {
+                schemaDb.OnSchemaPublished(dupOutcome.ExtentPages);
+            }
+            return ActionOutcome.Fail(dupFail);
+        }
+
+        // Materialize all source rows before creating the target table so row-level expression failures
+        // (e.g. 94 Invalid use of Null in r-q47/bi-select-into-accdb, 3071 in r-q49/dt2-select-into-accdb,
+        // 3464 in r-q47/meta-select-into-funcs-accdb) leave no table created.
+        var nullableParams = new NativeVariant?[paramValues.Length];
+        for (int i = 0; i < paramValues.Length; i++)
+        {
+            nullableParams[i] = paramValues[i];
+        }
+
+        var sourceRows = new List<NativeVariant[]>();
+        try
+        {
+            using (SelectCursor? source = SelectCursor.Open(plan.SourceSelect!, database, ResultKind.Snapshot, nullableParams, out SqlFailure? selectFail))
+            {
+                if (source is null)
+                {
+                    return ActionOutcome.Fail(selectFail!);
+                }
+                int width = plan.MakeTableFields.Count;
+                for (MoveOutcome move = source.MoveFirst(); move == MoveOutcome.Moved; move = source.MoveNext())
+                {
+                    var row = new NativeVariant[width];
+                    for (int c = 0; c < width; c++)
+                    {
+                        if (!source.Read(c, out NativeVariant v, out SqlFailure? readFail))
+                        {
+                            ClearAll(row);
+                            if (readFail!.IsNotModelled)
+                            {
+                                return ActionOutcome.Fail(readFail);
+                            }
+                            SqlFailure mapped = MapSelectReadFailure(readFail);
+                            if (mapped.IsNotModelled)
+                            {
+                                return ActionOutcome.Fail(mapped);
+                            }
+                            if (!failOnError)
+                            {
+                                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.MakeTableExpressionErrorWithoutFailOnError", $"SELECT ... INTO read error without dbFailOnError: {mapped}"));
+                            }
+                            return ActionOutcome.Fail(mapped);
+                        }
+                        row[c] = SelectValues.Copy(v);
+                    }
+                    sourceRows.Add(row);
+                }
+                if (source.FetchFailure is { } fetchFail)
+                {
+                    return ActionOutcome.Fail(fetchFail.Number == 3167
+                        ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while scanning SELECT ... INTO source (not recorded)")
+                        : fetchFail);
+                }
+            }
+
+            if (sourceRows.Count > 0)
+            {
+                foreach (NewField f in plan.MakeTableFields)
+                {
+                    if (f.VariableLayout)
+                    {
+                        // CalcDb.Isam.FieldEncoder.EncodeVariable currently encodes only Text, Binary, Guid, and BigInt;
+                        // refuse before creating the target table so no empty table is left behind.
+                        return ActionOutcome.Fail(SqlFailure.Open(
+                            SqlPhase.Execute,
+                            "NotModelled.MakeTableVariableScalarRowWrite",
+                            $"SELECT ... INTO populated table '{plan.TargetName}' with variable-layout computed column '{f.Name}' ({f.Type}) requires variable-scalar encoding in CalcDb.Isam.FieldEncoder"));
+                    }
+                }
+            }
+
+            Func<int, bool>? acceptsSchemaError = acceptsFailure is null
+                ? null
+                : errNum => acceptsFailure(SqlFailure.Ace(SqlPhase.Execute, errNum, FormatMakeTableSchemaError(errNum, plan.TargetName)));
+            ulong nowBits = schemaDb.NowDateBits();
+            SchemaOutcome createOutcome = writer.CreateTable(database.Workspace, createRequest, nowBits, nowBits, acceptsSchemaError);
+            if (createOutcome.PublishedAny)
+            {
+                schemaDb.OnSchemaPublished(createOutcome.ExtentPages);
+            }
+            if (!createOutcome.Succeeded)
+            {
+                if (createOutcome.Refused is { } refused)
+                {
+                    if (refused.Error is int errNum)
+                    {
+                        return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, FormatMakeTableSchemaError(errNum, plan.TargetName)));
+                    }
+                    return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", refused.NotWritten ?? "SchemaWriter refused SELECT ... INTO"));
+                }
+                if (createOutcome.Accepted.Error is { } mutErr)
+                {
+                    return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, mutErr.Number, mutErr.Describe()));
+                }
+                return ActionOutcome.Fail(SqlFailure.Open(
+                    SqlPhase.Execute,
+                    $"NotModelled.SchemaAccept.{createOutcome.Accepted.Open}",
+                    createOutcome.Accepted.Detail ?? createOutcome.Accepted.Open.ToString()));
+            }
+
+            if (sourceRows.Count == 0)
+            {
+                return ActionOutcome.Ok(0);
+            }
+
+            TableDefinition? createdTable = database.Table(plan.TargetName);
+            if (createdTable is null)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.MakeTableReload", $"created table '{plan.TargetName}' not visible after catalog reload"));
+            }
+            TableEditContext? editContext = database.EditContext(plan.TargetName, out string? ctxFailure);
+            if (editContext is null)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.EditContext", ctxFailure ?? $"no edit context for '{plan.TargetName}'"));
+            }
+            TableCursor? cursor = database.OpenCursor(createdTable, out string? cursorFailure);
+            if (cursor is null)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TableCursor", cursorFailure ?? $"could not open cursor on '{plan.TargetName}'"));
+            }
+
+            using StatementScope statement = database.Workspace.BeginStatement(isInsertSelect: true);
+            using (cursor)
+            using (var frame = new EditFrame(editContext, cursor, database.Workspace) { ConflictSource = MutationErrorSource.Database })
+            {
+                int affected = 0;
+                var converted = new NativeVariant[createdTable.Columns.Count];
+                try
+                {
+                    for (int r = 0; r < sourceRows.Count; r++)
+                    {
+                        NativeVariant[] rawRow = sourceRows[r];
+                        for (int c = 0; c < rawRow.Length; c++)
+                        {
+                            if (!ConvertForColumn(rawRow[c], createdTable.Columns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail, allowExtendedDateTimeBytes: true))
+                            {
+                                ClearAll(converted);
+                                statement.Abort();
+                                return ActionOutcome.Fail(convFail!);
+                            }
+                        }
+
+                        SqlFailure? rowFail = InsertOneRow(frame, createdTable.Columns, converted, failOnError, out bool inserted);
+                        ClearAll(converted);
+                        if (rowFail is not null)
+                        {
+                            statement.Abort();
+                            return ActionOutcome.Fail(rowFail);
+                        }
+                        if (inserted)
+                        {
+                            affected++;
+                        }
+                    }
+                }
+                finally
+                {
+                    ClearAll(converted);
+                }
+
+                ResolutionOutcome published = statement.Complete();
+                return !published.Succeeded
+                    ? ActionOutcome.Fail(MapResolutionFailure(published))
+                    : ActionOutcome.Ok(affected);
+            }
+        }
+        finally
+        {
+            foreach (NativeVariant[] row in sourceRows)
+            {
+                ClearAll(row);
+            }
+        }
+    }
+
+    private static string FormatMakeTableSchemaError(int errNum, string tableName) => errNum switch
+    {
+        3001 => SqlMessages.InvalidArgument,
+        3010 => SqlMessages.TableAlreadyExists(tableName),
+        3125 => SqlMessages.InvalidObjectName(tableName),
+        3191 => SqlMessages.CannotDefineFieldMoreThanOnce,
+        _ => $"ACE schema error {errNum}",
+    };
 
     // ---- INSERT INTO ... VALUES (...) ----------------------------------------------------------------------------------
 
@@ -1267,7 +1531,8 @@ public static unsafe class ActionExecutor
         ActionErrorSource errorSource,
         out NativeVariant converted,
         out SqlFailure? failure,
-        bool r8OverflowAs6 = false)
+        bool r8OverflowAs6 = false,
+        bool allowExtendedDateTimeBytes = false)
     {
         converted = default;
         failure = null;
@@ -1281,6 +1546,28 @@ public static unsafe class ActionExecutor
             }
             converted = new NativeVariant { Vt = (ushort)VarType.Null };
             return true;
+        }
+        if (allowExtendedDateTimeBytes && column.TypeCode == NativeTypes.ExtendedDateTime && vt == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
+        {
+            // r-q49-dt2-draftprops/dt2-select-into-accdb: SelectCursor.Read projects a stored DATETIME2 column
+            // as its raw 42-byte ASCII VT_ARRAY|VT_UI1 payload; decode and format as US DAO text for EditFrame.Assign.
+            (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
+            if (shape.Length == 1 && shape[0].Count == ExtendedDateTimeCodec.PayloadBytes)
+            {
+                byte* ptr = (byte*)SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower);
+                if (ExtendedDateTimeCodec.TryDecode(new ReadOnlySpan<byte>(ptr, ExtendedDateTimeCodec.PayloadBytes), out ExtendedDateTimeValue dt))
+                {
+                    string text = dt.FormatDao();
+                    converted = new NativeVariant
+                    {
+                        Vt = (ushort)VarType.Bstr,
+                        Pointer = Bstrs.FromUnits(text.Length, text, static (dest, src) => src.AsSpan().CopyTo(dest)),
+                    };
+                    return true;
+                }
+            }
+            failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+            return false;
         }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {

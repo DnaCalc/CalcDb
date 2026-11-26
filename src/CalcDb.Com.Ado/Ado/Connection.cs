@@ -2269,7 +2269,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             : AdoSqlText.RewriteQuestionMarkParameters(sql, out _);
 
         using ActionSyntax? parsed = ActionParser.Parse(effectiveSql, out _);
-        TableEditContext? editContext = parsed is null ? null : session.Sql.EditContext(parsed.TargetName, out _);
+        TableEditContext? editContext = parsed is null || parsed.Kind == ActionKind.MakeTable ? null : session.Sql.EditContext(parsed.TargetName, out _);
         if (editContext is not null)
         {
             if (editContext.Semantics.HasCheckConstraints)

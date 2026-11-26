@@ -9,6 +9,7 @@ public enum ActionKind : byte
     InsertSelect,
     Update,
     Delete,
+    MakeTable,
 }
 
 /// <summary>One <c>[table.]column = expression</c> assignment in an <c>UPDATE … SET</c> clause (II-11 §24).</summary>
@@ -80,10 +81,11 @@ public sealed class ActionSyntax : IDisposable
 
 /// <summary>
 /// Access SQL action statement parser (W-07/actions; II-11 §§22–28): parses single-table <c>INSERT INTO … VALUES</c>,
-/// <c>INSERT INTO … SELECT</c>, <c>UPDATE … SET … [WHERE …]</c>, and <c>DELETE […] FROM … [WHERE …]</c> over the one
-/// expression grammar (<see cref="ExpressionSyntax.ParseFragment"/>) and the one <see cref="SqlParser"/> SELECT and
-/// PARAMETERS grammar. Multi-table/joined actions, <c>SELECT INTO</c>, external <c>IN 'file'</c> and DDL statements are
-/// refused with explicit named <c>NotModelled.*</c> outcomes; recorded ACE syntax errors cite their retained records.
+/// <c>INSERT INTO … SELECT</c>, <c>UPDATE … SET … [WHERE …]</c>, <c>DELETE […] FROM … [WHERE …]</c>, and
+/// <c>SELECT … INTO target FROM …</c> over the one expression grammar (<see cref="ExpressionSyntax.ParseFragment"/>)
+/// and the one <see cref="SqlParser"/> SELECT and PARAMETERS grammar. Multi-table/joined DML actions, external
+/// <c>IN 'file'</c>, and DDL statements are refused with explicit named <c>NotModelled.*</c> outcomes; recorded ACE
+/// syntax errors cite their retained records.
 /// </summary>
 public static class ActionParser
 {
@@ -105,7 +107,7 @@ public static class ActionParser
         "CREATE", "ALTER", "DROP", "GRANT", "REVOKE", "BEGIN", "EXEC", "EXECUTE",
     };
 
-    /// <summary>Whether <paramref name="source"/> starts with a SQL action keyword (<c>INSERT</c>, <c>UPDATE</c>, or <c>DELETE</c>), optionally after <c>PARAMETERS …;</c>.</summary>
+    /// <summary>Whether <paramref name="source"/> starts with a SQL action keyword (<c>INSERT</c>, <c>UPDATE</c>, <c>DELETE</c>, or <c>SELECT ... INTO</c>), optionally after <c>PARAMETERS …;</c>.</summary>
     public static bool IsAction(string source)
     {
         int nul = source.IndexOf('\0', StringComparison.Ordinal);
@@ -119,7 +121,95 @@ public static class ActionParser
             }
             text = text[(semi + 1)..].TrimStart();
         }
-        return StartsWithWord(text, "INSERT") || StartsWithWord(text, "UPDATE") || StartsWithWord(text, "DELETE");
+        return StartsWithWord(text, "INSERT")
+            || StartsWithWord(text, "UPDATE")
+            || StartsWithWord(text, "DELETE")
+            || (StartsWithWord(text, "SELECT") && HasTopLevelIntoBeforeFrom(text));
+    }
+
+    /// <summary>Whether <paramref name="source"/> is a <c>SELECT ... INTO</c> make-table statement (optionally after <c>PARAMETERS …;</c>).</summary>
+    internal static bool IsMakeTable(string source)
+    {
+        int nul = source.IndexOf('\0', StringComparison.Ordinal);
+        ReadOnlySpan<char> text = (nul >= 0 ? source.AsSpan(0, nul) : source.AsSpan()).TrimStart();
+        if (StartsWithWord(text, "PARAMETERS"))
+        {
+            int semi = text.IndexOf(';');
+            if (semi < 0)
+            {
+                return false;
+            }
+            text = text[(semi + 1)..].TrimStart();
+        }
+        return StartsWithWord(text, "SELECT") && HasTopLevelIntoBeforeFrom(text);
+    }
+
+    internal static bool HasTopLevelIntoBeforeFrom(ReadOnlySpan<char> text)
+    {
+        int depth = 0;
+        char quote = '\0';
+        int i = 0;
+        while (i < text.Length)
+        {
+            char c = text[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    quote = '\0';
+                }
+                i++;
+                continue;
+            }
+            if (c is '\'' or '"')
+            {
+                quote = c;
+                i++;
+                continue;
+            }
+            if (c == '[')
+            {
+                int close = text[(i + 1)..].IndexOf(']');
+                i = close < 0 ? text.Length : i + 1 + close + 1;
+                continue;
+            }
+            if (c == '(')
+            {
+                depth++;
+                i++;
+                continue;
+            }
+            if (c == ')')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+                i++;
+                continue;
+            }
+            if (depth == 0 && (char.IsLetter(c) || c == '_'))
+            {
+                int q = i;
+                while (q < text.Length && (char.IsLetterOrDigit(text[q]) || text[q] == '_'))
+                {
+                    q++;
+                }
+                ReadOnlySpan<char> w = text[i..q];
+                if (w.Equals("INTO", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+                if (w.Equals("FROM", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+                i = q;
+                continue;
+            }
+            i++;
+        }
+        return false;
     }
 
     /// <summary>Whether <c>Database.Execute</c> parses <paramref name="source"/> as SQL rather than looking it up as a saved query name.</summary>
@@ -318,10 +408,9 @@ public static class ActionParser
             }
             if (IsWord("SELECT"))
             {
-                if (HasTopLevelIntoBeforeFrom())
+                if (HasTopLevelIntoBeforeFrom(s.AsSpan(_p)))
                 {
-                    failure = Open("NotModelled.MakeTableAction", "SELECT … INTO … (make-table action query is outside W-07/actions stretch 1)");
-                    return null;
+                    return MakeTable(out failure);
                 }
                 if (parameters.Count > 0)
                 {
@@ -346,72 +435,44 @@ public static class ActionParser
             return null;
         }
 
-        private bool HasTopLevelIntoBeforeFrom()
+        /// <summary>
+        /// <c>SELECT … INTO target FROM …</c> (R-SQL-2 SQL-ACT-MAKE; r-q52-ddl-make-domain/maketable-*).
+        /// Reuses <see cref="SqlParser.ParseForDefinition"/> so the one SELECT grammar parses the query body.
+        /// </summary>
+        private ActionSyntax? MakeTable(out SqlFailure? failure)
         {
-            int depth = 0;
-            char quote = '\0';
-            int i = _p;
-            while (i < s.Length)
+            SelectSyntax? select = SqlParser.ParseForDefinition(s, out failure);
+            if (select is null)
             {
-                char c = s[i];
-                if (quote != '\0')
-                {
-                    if (c == quote)
-                    {
-                        quote = '\0';
-                    }
-                    i++;
-                    continue;
-                }
-                if (c is '\'' or '"')
-                {
-                    quote = c;
-                    i++;
-                    continue;
-                }
-                if (c == '[')
-                {
-                    int close = s.IndexOf(']', i + 1);
-                    i = close < 0 ? s.Length : close + 1;
-                    continue;
-                }
-                if (c == '(')
-                {
-                    depth++;
-                    i++;
-                    continue;
-                }
-                if (c == ')')
-                {
-                    if (depth > 0)
-                    {
-                        depth--;
-                    }
-                    i++;
-                    continue;
-                }
-                if (depth == 0 && (char.IsLetter(c) || c == '_'))
-                {
-                    int q = i;
-                    while (q < s.Length && (char.IsLetterOrDigit(s[q]) || s[q] == '_'))
-                    {
-                        q++;
-                    }
-                    ReadOnlySpan<char> w = s.AsSpan(i, q - i);
-                    if (w.Equals("INTO", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                    if (w.Equals("FROM", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                    i = q;
-                    continue;
-                }
-                i++;
+                return null;
             }
-            return false;
+            if (select.IntoTarget is not { } target)
+            {
+                select.Dispose();
+                failure = SqlFailure.Ace(SqlPhase.Parse, 3141, SqlParser.SelectSyntaxError);
+                return null;
+            }
+            if (select.IsUnion)
+            {
+                select.Dispose();
+                failure = Open("NotModelled.MakeTableUnion", "SELECT ... INTO with UNION is not recorded");
+                return null;
+            }
+            if (select.From.Count == 0)
+            {
+                select.Dispose();
+                failure = Open("NotModelled.MakeTableNoFrom", "SELECT ... INTO without FROM is not recorded");
+                return null;
+            }
+            var action = new ActionSyntax(s, ActionKind.MakeTable, target, targetAlias: null)
+            {
+                SourceSelect = select,
+                SourceSelectHasFrom = true,
+                WithOwnerAccess = select.WithOwnerAccess,
+            };
+            action.Parameters.AddRange(select.Parameters);
+            failure = null;
+            return action;
         }
 
         /// <summary>
