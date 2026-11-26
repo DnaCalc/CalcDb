@@ -15,6 +15,9 @@ public enum Admission
     /// <summary>Exclusion: read and write access, share flags zero.</summary>
     Exclusive,
 
+    /// <summary>Single-writer lease with read sharing (II-09 §3, gp86): RW access with FILE_SHARE_READ, denying all external writers and FILE_SHARE_READ-only readers while permitting read-only observers declaring R|W share.</summary>
+    SingleWriterShareRead,
+
     /// <summary>Reader-only sharing: read access, FILE_SHARE_READ alone, which denies a writer while it is held.</summary>
     ReaderOnly,
 
@@ -90,6 +93,7 @@ public sealed unsafe class WindowsFile : IPositionedFile
         (uint access, uint share) = admission switch
         {
             Admission.Exclusive => (Kernel32.GenericRead | Kernel32.GenericWrite, 0u),
+            Admission.SingleWriterShareRead => (Kernel32.GenericRead | Kernel32.GenericWrite, Kernel32.FileShareRead),
             Admission.ReaderOnly => (Kernel32.GenericRead, Kernel32.FileShareRead),
             _ => (Kernel32.GenericRead | Kernel32.GenericWrite, Kernel32.FileShareRead | Kernel32.FileShareWrite),
         };

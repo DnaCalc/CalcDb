@@ -81,6 +81,13 @@ public sealed class WindowsFileTests : IDisposable
     [Theory]
     [InlineData(Admission.Exclusive, Admission.ReaderOnly, false)]
     [InlineData(Admission.ReaderOnly, Admission.Exclusive, false)]
+    [InlineData(Admission.SingleWriterShareRead, Admission.ReaderOnly, false)]
+    [InlineData(Admission.ReaderOnly, Admission.SingleWriterShareRead, false)]
+    [InlineData(Admission.SingleWriterShareRead, Admission.Exclusive, false)]
+    [InlineData(Admission.Exclusive, Admission.SingleWriterShareRead, false)]
+    [InlineData(Admission.SingleWriterShareRead, Admission.SingleWriterShareRead, false)]
+    [InlineData(Admission.SingleWriterShareRead, Admission.SharedReadWrite, false)]
+    [InlineData(Admission.SharedReadWrite, Admission.SingleWriterShareRead, false)]
     [InlineData(Admission.ReaderOnly, Admission.ReaderOnly, true)]
     [InlineData(Admission.ReaderOnly, Admission.SharedReadWrite, false)]
     [InlineData(Admission.SharedReadWrite, Admission.ReaderOnly, false)]
@@ -88,7 +95,7 @@ public sealed class WindowsFileTests : IDisposable
     [InlineData(Admission.SharedReadWrite, Admission.SharedReadWrite, true)]
     public void Admission_pairs_are_decided_by_share_flags_in_both_orders(Admission first, Admission second, bool coexist)
     {
-        // T-LOCK-01: the second open of each ordered pair; reader-only sharing denies any writer while held.
+        // T-LOCK-01: the second open of each ordered pair; SingleWriterShareRead still denies ReaderOnly and any writer.
         string path = NewFile($"admit-{first}-{second}.bin", 4096);
         using WindowsFile a = OpenOk(path, first);
         OpenResult b = WindowsFile.Open(path, second);
@@ -98,6 +105,22 @@ public sealed class WindowsFileTests : IDisposable
             Assert.True(b.SharingViolation);
         }
         b.File?.Dispose();
+    }
+
+    [Fact]
+    public void SingleWriterShareRead_admits_read_observer_declaring_read_and_write_share_and_denies_writers()
+    {
+        string path = NewFile("single-writer-share-read.bin", 4096);
+        using WindowsFile writer = OpenOk(path, Admission.SingleWriterShareRead);
+
+        // Read-only observer declaring FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE (gp86 nativeOpen).
+        using (var observer = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            Assert.Equal(4096, observer.Length);
+        }
+
+        // External writer fails with sharing violation.
+        Assert.Throws<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite));
     }
 
     [Fact]

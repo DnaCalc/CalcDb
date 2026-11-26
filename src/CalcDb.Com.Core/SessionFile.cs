@@ -7,8 +7,8 @@ namespace CalcDb.Com;
 /// The database file of one Database session (II-09 §§2–3; W-05/same-width-mutation): one positioned file for the
 /// session's cache, whose native handle can be replaced on the explicit reopen path while the session, its incarnation
 /// and its cached images continue. The session opens under reader-only admission (II-09 §3 Step 2, W-10/native-readers-only)
-/// and takes the writer lease, Step 1 (read/write access, share mask zero), at its first publication: there is no
-/// in-place promotion of a reader handle (II-09 §3, "There is no in-place promotion from a Step 2 lease to a writable
+/// and takes the writer lease, Step 1 (read/write access, FILE_SHARE_READ per II-09 §3 / gp86), at its first publication:
+/// there is no in-place promotion of a reader handle (II-09 §3, "There is no in-place promotion from a Step 2 lease to a writable
 /// lease"), so the reader handle closes and the writer handle opens. Between the two another process can open the file;
 /// <see cref="TakeWriterLease"/> therefore checks the file's identity and the bytes of the pages the publication will
 /// overwrite before it admits the write. The writer lease is held until the session closes.
@@ -34,10 +34,10 @@ public sealed class SessionFile : IPositionedFile
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
 
-    /// <summary>Atomically create a new database file under exclusive admission (R-LOCK-1 EX-CREATE, W-07/new-database-image).</summary>
+    /// <summary>Atomically create a new database file under single-writer admission (R-LOCK-1 EX-CREATE, II-09 §3 Step 1, gp86).</summary>
     public static SessionFile? CreateNewExclusive(string path, out OpenResult opened)
     {
-        opened = WindowsFile.CreateFresh(path, Admission.Exclusive);
+        opened = WindowsFile.CreateFresh(path, Admission.SingleWriterShareRead);
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
 
@@ -66,12 +66,12 @@ public sealed class SessionFile : IPositionedFile
     public FileIdentity Identity { get; }
 
     /// <summary>Whether the session holds the writer lease (Step 1).</summary>
-    public bool Writable => _handle.Admission == Admission.Exclusive;
+    public bool Writable => _handle.Admission is Admission.Exclusive or Admission.SingleWriterShareRead;
 
     /// <summary>
-    /// Take the writer lease, if the session does not hold it yet: close the reader handle, open Step 1, and check that the
-    /// file is the same object and that <paramref name="pages"/> still hold <paramref name="cache"/>'s committed images.
-    /// On a refusal the reader handle is reopened; null on success, else the reason.
+    /// Take the writer lease, if the session does not hold it yet: close the reader handle, open Step 1 (RW + FILE_SHARE_READ),
+    /// and check that the file is the same object and that <paramref name="pages"/> still hold <paramref name="cache"/>'s
+    /// committed images. On a refusal the reader handle is reopened; null on success, else the reason.
     /// </summary>
     public string? TakeWriterLease(PageCache cache, IReadOnlyCollection<ulong> pages)
     {
@@ -80,11 +80,11 @@ public sealed class SessionFile : IPositionedFile
             return null;
         }
         _handle.Dispose();
-        OpenResult writer = WindowsFile.Open(_path, Admission.Exclusive);
+        OpenResult writer = WindowsFile.Open(_path, Admission.SingleWriterShareRead);
         if (writer.File is not { } file)
         {
             string why = writer.SharingViolation
-                ? "another open of the file excludes the writer lease (II-09 §3 Step 1: read/write access, share mask zero)"
+                ? "another open of the file excludes the writer lease (II-09 §3 Step 1: read/write access, FILE_SHARE_READ)"
                 : $"the file cannot be opened for writing (Win32 {writer.NativeError})";
             return Restore(why);
         }

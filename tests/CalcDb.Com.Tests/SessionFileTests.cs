@@ -167,12 +167,34 @@ public sealed class SessionFileTests : IDisposable
         return outcome;
     }
 
-    /// <summary>The file's bytes read through the session's own handle (the exclusive lease admits no other open).</summary>
+    /// <summary>The file's bytes read through the session's own handle (the single-writer lease denies writers and share-read-only readers).</summary>
     private static byte[] ReadThrough(SessionFile file)
     {
         byte[] bytes = new byte[file.GetExtent()];
         Assert.Equal(TransferStatus.Complete, file.ReadAt(0, bytes).Status);
         return bytes;
+    }
+
+    [Fact]
+    public void Single_writer_lease_admits_read_observer_declaring_write_share_and_denies_share_read_only_and_writers()
+    {
+        using SessionFile file = SessionFile.OpenReader(_path, out _)!;
+        var cache = new PageCache(new FilePageSource(file, (uint)D.PageSize, 0xFFFFFF, uint.MaxValue), file.Incarnation, D.PageSize, 64);
+        Assert.Null(file.TakeWriterLease(cache, [0UL]));
+        Assert.True(file.Writable);
+
+        using (var observer = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            Assert.True(observer.Length > 0);
+        }
+
+        OpenResult readerOnly = WindowsFile.Open(_path, Admission.ReaderOnly);
+        Assert.False(readerOnly.Succeeded);
+        Assert.True(readerOnly.SharingViolation);
+
+        OpenResult otherWriter = WindowsFile.Open(_path, Admission.SharedReadWrite);
+        Assert.False(otherWriter.Succeeded);
+        Assert.True(otherWriter.SharingViolation);
     }
 
     /// <summary>The file's bytes through a second reader handle, beside the session's reader handle.</summary>

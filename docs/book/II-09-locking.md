@@ -46,10 +46,10 @@ The initial public-to-physical mapping is explicit:
 
 | Public request | Initial physical lease | Public consequence and deciding case |
 | --- | --- | --- |
-| DAO default `OpenDatabase(name)`; shared, read/write | Step 1, RW access and share zero | Physically exclusive across processes, even for a caller that only reads; the second default open is a named, counted R-LOCK-1/EX-DEFAULT mismatch. |
+| DAO default `OpenDatabase(name)`; shared, read/write | Step 1, RW access and `FILE_SHARE_READ` (`gp86`) | Excludes every external writer and `FILE_SHARE_READ`-only reader (Win32 32), while permitting read-only observers declaring `FILE_SHARE_READ | FILE_SHARE_WRITE`; second default ACE open remains a named, counted R-LOCK-1/EX-DEFAULT mismatch. |
 | Shared plus explicit read-only | Step 2, R access and share read | Admit compatible readers while excluding every writer; actual ACE reader access is R-LOCK-2/RO-ACTUAL. |
 | Explicit exclusive plus read-only | Step 1, R access and share zero | Exclude other independent data opens; R-LOCK-1/EX-PUBLIC. |
-| Explicit exclusive plus read/write | Step 1, RW access and share zero | Exclude other independent data opens; R-LOCK-1/EX-PUBLIC. |
+| Explicit exclusive plus read/write | Step 1, RW access and `FILE_SHARE_READ` (`gp86`) | Excludes other independent data opens and `FILE_SHARE_READ`-only readers (`T-LOCK-67`, `r-lock-1-2`), while permitting read-only inspection handles declaring `FILE_SHARE_READ | FILE_SHARE_WRITE`. |
 | Supported ACE ADO open | Equivalent admitted access/exclusivity after ADO policy is applied | A writable connection uses Step 1; a supported reader-only request can use Step 2. R-ADO-1 records the actual public mode mapping. |
 
 A default open is therefore not an implicit reader-only open. The initial scope cannot reproduce two ordinary writable/default opens in different processes; count the difference in both ACE-first and CalcDb-first orders. This restriction does not serialize transactions in one process. Compatible default/shared public bindings join the same held FileSession and retain separate lockers. Explicit public-exclusive requests still obey their independent-open rules. Later external stages 3–4 supply coexistence with native writers.
@@ -111,7 +111,7 @@ Creation while the Workspace has an open transaction is a public-policy experime
 
 ## 3. The share test is symmetric and uses actual access categories
 
-For the initial Windows backend, Step 1 uses `OPEN_EXISTING` with `GENERIC_READ`, or `GENERIC_READ | GENERIC_WRITE` for writable use, and share mask zero. Step 2 uses `GENERIC_READ` with `FILE_SHARE_READ`. Handles are noninheritable. New-file creation uses `CREATE_NEW` under the corresponding exclusive lease rather than a potentially destructive open disposition. These are proposed CalcDb calls, not reported ACE flags. [^a-create]
+For the initial Windows backend (`gp86` refinement of Step 1), the shared/default single-writer lease uses `OPEN_EXISTING` with `GENERIC_READ | GENERIC_WRITE` and `FILE_SHARE_READ` (`Admission.SingleWriterShareRead`); explicit read-only exclusivity (`OpenDatabase(..., Exclusive=True, ReadOnly=True)`) retains `GENERIC_READ` with share mask zero (`Admission.Exclusive`). Step 2 uses `GENERIC_READ` with `FILE_SHARE_READ`. Handles are noninheritable. New-file creation uses `CREATE_NEW` under `SingleWriterShareRead` rather than a potentially destructive open disposition. By Windows' symmetric share test, `(GENERIC_READ | GENERIC_WRITE) / FILE_SHARE_READ` still denies every external writer and every `FILE_SHARE_READ`-only reader (`r-lock-1-2`), while permitting read-only observation handles that declare `FILE_SHARE_READ | FILE_SHARE_WRITE` (`r-q39`, `r-q40`, `r-q41`, `r-q49` `nativeOpen`). [^a-create]
 
 For a small explanatory model, normalize the sharing-relevant access categories to bits R=1, W=2 and D=4; these are **model bits**, not the numeric values of `GENERIC_READ`, `GENERIC_WRITE` or `DELETE`. If an existing handle has access A and share allowance S, and a candidate has access a and share allowance s, the pair is compatible only when both tests hold:
 
@@ -127,6 +127,9 @@ Apply the tests against every existing relevant open. The rule is symmetric in t
 | Existing access / shares | Candidate access / shares | Pair result | Decisive condition |
 | --- | --- | --- | --- |
 | RW / none | R / RWD | Deny | Existing owner permits no candidate data access. |
+| RW / R (`gp86` Step 1) | R / RW(D) | Admit | Writer shares R and observer shares RW. |
+| RW / R (`gp86` Step 1) | R / R | Deny | Candidate withholds W from the existing writer. |
+| RW / R (`gp86` Step 1) | RW / RW | Deny | Existing writer withholds W. |
 | R / R | R / R | Admit | Both permit the other's read access. |
 | R / R | RW / RW | Deny | Existing reader withholds W. |
 | RW / RW | R / R | Deny | Candidate withholds W from the existing writer. |
