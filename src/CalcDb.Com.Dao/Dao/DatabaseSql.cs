@@ -351,26 +351,46 @@ internal static class ActionRoute
             return CallResult.Fail(Failure.NotImplemented("Execute after a catalog change whose catalog cannot be read: " + stale));
         }
         bool ddl = DdlParser.IsDdlLeadingKeyword(sql);
+        if (InheritedRefusal(database, sql, ddl, options, source) is { } inheritedRefused)
+        {
+            return inheritedRefused;
+        }
         if (ddl && database.DdlRefusal(sql) is { } refused)
         {
             return CallResult.Fail(refused);
         }
         ActionOutcome outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
-        // When a shared read-only ACCDB handle runs a recorded peer-RW statement beside an open shared writable peer
-        // in the same Workspace (sharing the same ComDatabaseSession), ACE performs the write through the in-process
-        // writable session (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 23-25: CREATE TABLE, CREATE INDEX, DROP TABLE;
-        // r-err-1b/lock-readonly-db-insert calls 8 & 16 and r-fix-cursor-dao/lock-readonly-db-insert-failonerror call 17:
-        // INSERT ... VALUES with options 0 and dbFailOnError). Unrecorded peer-RW DDL/DML neighbours (UPDATE, DELETE,
-        // INSERT ... SELECT, ALTER TABLE, DROP INDEX, MDB, other Workspaces, inside BeginTrans) keep NotModelled.ReadOnlyAction.
-        if (outcome.Failure is { IsNotModelled: true, NotModelled: "NotModelled.ReadOnlyAction", ReadOnlyInfo: not null }
-            && source == ActionErrorSource.Database
-            && PeerWritableFor(database) is { } peer
-            && IsRecordedPeerReadWriteStatement(sql, ddl, options))
-        {
-            outcome = ActionExecutor.Execute(sql, peer.Sql, options, values, source);
-        }
         bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
         return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
+    }
+
+    /// <summary>
+    /// A statement through a handle that asked for ReadOnly but inherited read/write from the file's writable binding
+    /// (<see cref="DatabaseObject.InheritedWritable"/>) runs as on a read/write handle when its form is one the records show
+    /// through such a handle, and is refused by name otherwise (W-05 <c>6xzx</c>):
+    /// beside the writer, CREATE TABLE, CREATE INDEX and single-table DROP TABLE with Options 0
+    /// (<c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c> calls 22–25) and INSERT ... VALUES with Options 0 or 128
+    /// (<c>r-err-1b/lock-readonly-db-insert</c> calls 8, 16; <c>r-fix-cursor-dao/lock-readonly-db-insert-failonerror</c>
+    /// call 17; <c>r-q46-dao-ddl-multi/mh-rwro-*</c> call 54, same and two Workspaces, ACCDB and Jet 4 MDB); after the
+    /// writer closed, INSERT ... VALUES with Options 128 (<c>r-q47-bigint-expr-edges/mh-rwro-close-rw-first-*</c> call 38).
+    /// UPDATE, DELETE, ALTER TABLE, DROP INDEX, INSERT ... SELECT, other Options, DDL after the writer closed and
+    /// QueryDef.Execute through such a handle are not recorded.
+    /// </summary>
+    private static CallResult? InheritedRefusal(DatabaseObject database, string sql, bool ddl, int options, ActionErrorSource source)
+    {
+        if (!database.InheritedWritable)
+        {
+            return null;
+        }
+        bool writerBeside = database.HasOwnWriterBeside;
+        bool recorded = source == ActionErrorSource.Database && database.Workspace.Transactions.Depth == 0 && (ddl
+            ? writerBeside && options == 0 && DdlParser.Parse(sql, out _, allowAdoCheck: false) is CreateTableStatement or CreateIndexStatement or DropTableStatement { TableNames.Count: 1 }
+            : IsInsertValues(sql) && (writerBeside ? options is 0 or 128 : options == 128));
+        return recorded
+            ? null
+            : CallResult.Fail(Failure.NotModelled(
+                "NotModelled.ReadOnlyAction",
+                $"{(source == ActionErrorSource.Database ? "Database" : "QueryDef")}.Execute with Options {options} through a read-only handle that inherited read/write from the file's writable binding{(writerBeside ? "" : " after that binding closed")}: only CREATE TABLE, CREATE INDEX and single-table DROP TABLE (Options 0, writer open) and INSERT ... VALUES (Options 0 or 128 with the writer open, 128 after) are recorded (r-q43-schema-lval-index/ro-ddl-disc-accdb, r-q46-dao-ddl-multi/mh-rwro-*, r-q47-bigint-expr-edges/mh-rwro-close-rw-first-*)"));
     }
 
     /// <summary>Run a QueryDef's bound action plan with the QueryDef's parameter values (missing ones: 3061, SQL-B).</summary>
@@ -387,6 +407,10 @@ internal static class ActionRoute
         if (CheckConstraintRefusal(database, plan.TargetName, "QueryDef.Execute") is { } checkRefused)
         {
             return checkRefused;
+        }
+        if (database.InheritedWritable)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.ReadOnlyAction", "QueryDef.Execute through a read-only handle that inherited read/write from the file's writable binding is not recorded (r-q46-dao-ddl-multi/mh-rwro-* record Database.Execute only)"));
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;
@@ -489,21 +513,23 @@ internal static class ActionRoute
         }
         if (failure.IsNotModelled)
         {
-            // Read-only ACCDB alone (!ReadWriteBeside, !WasSharedWithWritablePeer): surface the SQL layer's structured
-            // ReadOnlyInfo for recorded Database.Execute forms:
+            // Read-only ACCDB alone (!ReadWriteBeside): surface the SQL layer's structured ReadOnlyInfo for recorded
+            // Database.Execute forms:
             // - INSERT ... VALUES (3073): shared options 0 / 128 (r-q18-statements/ro-ins-plain, ro-ins-fail) and
             //   exclusive options 128 (r-q18-statements/ro-excl-ins-fail).
             // - DDL (3370: DROP/CREATE TABLE, CREATE INDEX, ALTER TABLE ADD COLUMN), UPDATE (3073), DELETE (3086):
             //   shared open with options 0 (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 11-16).
-            // Unrecorded cases (ReadOnlyInfo null, unrecorded options/exclusive combinations, QueryDef.Execute, MDB,
-            // post-peer-close, or unrecorded peer-RW forms) stay refused by name as NotModelled.ReadOnlyAction.
+            // A read-only handle opened before a read/write binding of the same file (ACCDB and Jet 4 MDB, same and two
+            // Workspaces): INSERT ... VALUES with options 128 is 3073 (W-05 6xzx, r-q46-dao-ddl-multi/mh-rwro-* call 102).
+            // Unrecorded cases (ReadOnlyInfo null, unrecorded options/exclusive combinations, QueryDef.Execute, MDB alone,
+            // other statements beside a writer) stay refused by name as NotModelled.ReadOnlyAction.
             if (failure.NotModelled == "NotModelled.ReadOnlyAction"
                 && failure.ReadOnlyInfo is { } readOnlyInfo
                 && source == ActionErrorSource.Database
-                && database.Profile.IsAce
-                && !database.WasSharedWithWritablePeer
-                && !ReadWriteBeside(database)
-                && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues))
+                && database.ReadOnly
+                && (ReadWriteBeside(database)
+                    ? isInsertValues && options == 128
+                    : database.Profile.IsAce && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues)))
             {
                 recordsAffected.Fail();
                 return caller.Fail(readOnlyInfo.Number, readOnlyInfo.Message);
@@ -523,39 +549,6 @@ internal static class ActionRoute
     {
         using ActionSyntax? action = ActionParser.Parse(sql, out _);
         return action is { Kind: ActionKind.InsertValues };
-    }
-
-    private static bool IsRecordedPeerReadWriteStatement(string sql, bool ddl, int options)
-    {
-        if (ddl)
-        {
-            return options == 0
-                && DdlParser.Parse(sql, out _, allowAdoCheck: false) is
-                    CreateTableStatement
-                    or CreateIndexStatement
-                    or DropTableStatement { TableNames.Count: 1 };
-        }
-        return options is 0 or 128 && IsInsertValues(sql);
-    }
-
-    /// <summary>
-    /// The open shared writable peer <see cref="DatabaseObject"/> in the same Workspace and shared session when
-    /// <paramref name="database"/> is a shared read-only ACCDB handle at transaction depth 0; otherwise null.
-    /// </summary>
-    private static DatabaseObject? PeerWritableFor(DatabaseObject database)
-    {
-        if (!database.ReadOnly || database.Exclusive || !database.Profile.IsAce || database.Workspace.Transactions.Depth != 0)
-        {
-            return null;
-        }
-        return database.Engine.Sessions.FirstOrDefault(d =>
-            !ReferenceEquals(d, database)
-            && !d.Closed
-            && !d.ReadOnly
-            && !d.Exclusive
-            && ReferenceEquals(d.Workspace, database.Workspace)
-            && ReferenceEquals(d.Cache, database.Cache)
-            && string.Equals(d.Name, database.Name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Whether another open Database of the process has the same file open read/write.</summary>

@@ -251,6 +251,17 @@ internal sealed unsafe class DBEngineObject : DaoObject
 
     private WorkspacesObject WorkspacesCollection => _workspaces ??= new WorkspacesObject(Engine);
 
+    private static readonly Operation WorkspacesItem = static (self, args) => args.Length == 1
+        ? ((DBEngineObject)self).WorkspacesCollection.Item(args)
+        : CallResult.Fail(Failure.NotImplemented($"DBEngine.Workspaces with {args.Length} index arguments (only one is recorded)"));
+
+    /// <summary>
+    /// <c>DBEngine.Workspaces(Index)</c>: a get of Workspaces with an index is the collection's Item (r-lock-1-2/*-inproc-*,
+    /// r-q46-dao-ddl-multi/mh-*, r-q47-bigint-expr-edges/mh-*: <c>eng.Workspaces(VT_I4 0)</c> returns the default
+    /// Workspace). Only Workspaces is recorded with extra arguments; every other member keeps DISP_E_BADPARAMCOUNT.
+    /// </summary>
+    protected override Operation? ExtraArgumentGet(MemberDecl member) => member.Name == "Workspaces" ? WorkspacesItem : null;
+
     private ErrorsObject ErrorsCollection => _errors ??= new ErrorsObject(Engine);
 
     /// <summary>
@@ -570,6 +581,10 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     public CallResult Rollback()
     {
         ExplicitFrame? level = Transactions.Depth > 0 ? Transactions.Frames[^1] : null;
+        if (level is not null && CrossWorkspaceCursorRefusal() is { } refused)
+        {
+            return refused;
+        }
         ResolutionOutcome outcome = Transactions.Rollback();
         if (level is not null && outcome.Error is null && outcome.Open == MutationOpen.None)
         {
@@ -582,6 +597,33 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     }
 
     private IDatabaseRecordset? _skipRollbackFor;
+
+    /// <summary>
+    /// A Rollback of a level whose changes sit on a file that a Database of another Workspace has open with a recordset:
+    /// the pooled session shares the cache, and no record shows what that recordset reads after the other Workspace's
+    /// Rollback (qualified.md 6xzx Open: cross-Workspace Rollback while the second handle holds a cursor; W-05 6xzx).
+    /// The far-row records roll back with no such recordset open (q2/txn-local-inproc-far-rows-unindexed-orders).
+    /// </summary>
+    private CallResult? CrossWorkspaceCursorRefusal()
+    {
+        foreach (DatabaseObject d in _databases)
+        {
+            if (d.Closed || Transactions.OverlayOf(d.Cache) is null)
+            {
+                continue;
+            }
+            foreach (DatabaseObject other in Engine.Sessions)
+            {
+                if (!other.Closed && !ReferenceEquals(other.Workspace, this) && ReferenceEquals(other.Cache, d.Cache) && other.HasOpenRecordsets)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.CrossWorkspaceRollbackBesideCursor",
+                        "Rollback of changes to a file that a Database of another Workspace holds a recordset on is not recorded (qualified.md R-LOCK-1 EX-PUBLIC 6xzx Open)"));
+                }
+            }
+        }
+        return null;
+    }
 
     /// <summary>True when <paramref name="recordset"/> is the surviving clone family during a clone-release transaction abort.</summary>
     public bool SkipsRollback(IDatabaseRecordset recordset) => ReferenceEquals(_skipRollbackFor, recordset);
@@ -927,7 +969,7 @@ internal sealed unsafe class WorkspacesObject : DaoObject
 
     private WorkspaceObject[] Members => [Engine.DefaultWorkspace, .. Engine.Appended];
 
-    private CallResult Item(ReadOnlySpan<nint> args)
+    internal CallResult Item(ReadOnlySpan<nint> args)
     {
         WorkspaceObject[] members = Members;
         int? found = CollectionLookup.Find(args[0], new CollectionNames([.. members.Select(w => w.Name)]), out bool objectIndex);

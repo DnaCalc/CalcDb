@@ -231,9 +231,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
                     .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.Item(index)); })
-                    .Method("Refresh", (self, args) => Live(self, c => c.Relist() is { } fail
-                        ? CallResult.Fail(Failure.NotImplemented(fail))
-                        : CallResult.Nothing));
+                    .Method("Refresh", (self, args) => Live(self, c => c.Refresh()));
                 if (decl.MembersNamed("Append").Length > 0)
                 {
                     operations = operations.Method("Append", (self, args) => { nint item = args[0]; return Live(self, c => c.Appender is { } append ? append(c, item) : CallResult.Fail(Failure.NotImplemented(c.Source + ".Append"))); });
@@ -254,10 +252,36 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         var c = (DefinitionCollection)self;
         if (c.Invalid)
         {
-            return CallResult.Fail(Failure.Dao(3420, c.ClosedSource ?? c.Source, DaoErrors.ObjectInvalid));
+            string source = !c._database.Closed && c.OwnerInvalidSource is { } owner ? owner : c.ClosedSource ?? c.Source;
+            return CallResult.Fail(Failure.Dao(3420, source, DaoErrors.ObjectInvalid));
         }
         return c.Denied is { } denied ? c.Fail(denied.Number, denied.Text) : op(c);
     }
+
+    /// <summary>The explicit Refresh: list the members again, then tell the owner which wrappers were held before (<see cref="Refreshed"/>).</summary>
+    private CallResult Refresh()
+    {
+        IReadOnlyList<(string Name, DaoObject Wrapper)> held = Refreshed is null ? [] : SnapshotHeld();
+        if (Relist() is { } fail)
+        {
+            return CallResult.Fail(Failure.NotImplemented(fail));
+        }
+        Refreshed?.Invoke(this, held);
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// Called after an explicit Refresh with the member wrappers held before it (TableDefs: a TableDef whose table another
+    /// binding dropped becomes invalid, r-q47-bigint-expr-edges/mh-held-tdf-after-drop-*); null for the other collections.
+    /// </summary>
+    public Action<DefinitionCollection, IReadOnlyList<(string Name, DaoObject Wrapper)>>? Refreshed { get; init; }
+
+    /// <summary>
+    /// The source of the 3420 a member gives when <see cref="IsOwnerInvalid"/> holds while the Database is open, when it is
+    /// the owner's (a dropped TableDef's Fields.Count from DAO.TableDef, r-q47-bigint-expr-edges/mh-held-tdf-after-drop-*
+    /// call 125); null for <see cref="ClosedSource"/> or the collection's own.
+    /// </summary>
+    public string? OwnerInvalidSource { get; init; }
 
     private CallResult Item(nint index)
     {
@@ -325,8 +349,8 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Connect", (self, args) => Live(self, t => Text("")))
         .Get("SourceTableName", (self, args) => Live(self, t => Text("")))
         .Get("Updatable", (self, args) => Live(self, t => Bool(!t._owner.Database.ReadOnly)))
-        .Get("DateCreated", (self, args) => Live(self, t => CatalogDates.Date(t._entry.DateCreateBits)))
-        .Get("LastUpdated", (self, args) => Live(self, t => CatalogDates.Date(t._entry.DateUpdateBits)))
+        .Get("DateCreated", (self, args) => Live(self, t => t.DroppedByPeer ? DroppedDate : CatalogDates.Date(t._entry.DateCreateBits)))
+        .Get("LastUpdated", (self, args) => Live(self, t => t.DroppedByPeer ? DroppedDate : CatalogDates.Date(t._entry.DateUpdateBits)))
         .Get("RecordCount", (self, args) => Live(self, t => t.Definition is { } d ? Int32((int)d.RowCount) : t.DefinitionFailure()))
         .Get("ValidationRule", (self, args) => Live(self, t => t.StoredText("ValidationRule")))
         .Put("ValidationRule", (self, args) => { nint value = args[^1]; return Live(self, t => t.PutValidationRule(value)); })
@@ -362,7 +386,29 @@ internal sealed unsafe class TableDefObject : DaoObject
 
     public string Name => _entry.Name;
 
-    public override bool Invalid => _owner.Database.Closed;
+    /// <summary>The catalog row this TableDef was made from (or last refreshed to).</summary>
+    internal CatalogEntry Entry => _entry;
+
+    public override bool Invalid => _dropped || _owner.Database.Closed;
+
+    private bool _dropped;
+
+    /// <summary>
+    /// Whether another binding of the file dropped this table and the owning TableDefs has not been refreshed since
+    /// (<c>evidence/r-q47-bigint-expr-edges/mh-held-tdf-after-drop-*</c> calls 39–101): the cached metadata still answers
+    /// (Name, RecordCount, Attributes, Fields.Count, a field's Name and Type, Indexes.Count), DateCreated and LastUpdated
+    /// read <c>VT_DATE 0</c>, and OpenRecordset and Fields.Append fail 3078.
+    /// </summary>
+    internal bool DroppedByPeer => _owner.Database.DroppedByPeer(_entry);
+
+    /// <summary>DateCreated and LastUpdated of a TableDef whose table another binding dropped: VT_DATE 0 (mh-held-tdf-after-drop-* calls 51, 55).</summary>
+    private static CallResult DroppedDate => CallResult.OfScalar(Foundation.VarType.Date, 0L);
+
+    /// <summary>
+    /// The owning TableDefs was refreshed after another binding dropped this table: every member of this TableDef, its
+    /// Fields and Indexes collections and its fields fail 3420 from now on (mh-held-tdf-after-drop-* calls 113–143).
+    /// </summary>
+    internal void InvalidateDropped() => _dropped = true;
 
     public TableDefinition? Definition { get; private set; }
 
@@ -397,7 +443,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     private static CallResult Live(ComObject self, Func<TableDefObject, CallResult> op)
     {
         var t = (TableDefObject)self;
-        return t._owner.Database.Closed ? t.Fail(3420, DaoErrors.ObjectInvalid) : op(t);
+        return t.Invalid ? t.Fail(3420, DaoErrors.ObjectInvalid) : op(t);
     }
 
     private CallResult DefinitionFailure() => CallResult.Fail(Failure.NotImplemented("TableDef member when the TableDef cannot be read: " + _definitionFailure));
@@ -471,6 +517,8 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Membership = () => FieldsMembership(reload: true),
                 PreserveHeldByName = true,
                 Appender = (c, arg) => c.Database.AppendField(this, c, arg),
+                IsOwnerInvalid = () => _dropped,
+                OwnerInvalidSource = "DAO.TableDef", // r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 125
             };
         }
         return Object(_fields);
@@ -508,6 +556,7 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
                 ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
                 Membership = () => IndexesMembership(reload: true),
+                IsOwnerInvalid = () => _dropped, // r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 137: 3420 from DAO.TableDef
             };
         }
         return Object(_indexes);
@@ -552,6 +601,12 @@ internal sealed unsafe class TableDefObject : DaoObject
             .FirstOrDefault(e => e.Id == _entry.Id && string.Equals(e.Name, _entry.Name, StringComparison.OrdinalIgnoreCase));
         if (liveEntry is null)
         {
+            // Another binding of the file dropped the table: dbOpenSnapshot (VT_I4 4) with Options omitted fails 3078 from
+            // DAO.Database (r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* calls 75, 133, 202).
+            if (DroppedByPeer && optionsArg == 0 && typeArg != 0 && Args.TypeOf(typeArg) == Foundation.VarType.I4 && (int)Args.Cell(typeArg)->Int64 == 4)
+            {
+                return CallResult.Fail(Failure.Dao(3078, "DAO.Database", global::CalcDb.Sql.SqlMessages.NoInputTable(_entry.Name)));
+            }
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.TableDefOpenRecordsetStale",
                 $"TableDef.OpenRecordset on deleted or stale TableDef '{_entry.Name}' (3265/3420/3011 is not recorded)"));
@@ -796,7 +851,8 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         table?.AddRef();
     }
 
-    public override bool Invalid => _owner.Database.Closed;
+    /// <summary>Invalid once its Database closed, or once its TableDef was invalidated after another binding dropped the table (its Fields collection is then invalid).</summary>
+    public override bool Invalid => _owner.Invalid;
 
     protected override OperationTable Table => Operations;
 

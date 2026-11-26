@@ -30,6 +30,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
     private readonly Action<TableEditContext, CatalogEntry, TableDefinition>? _onEditContextCreated;
     private SessionFile? _file;
     private LockFile? _lockFile;
+    private LockFile? _writerLockFile;
     private ulong _extentPages;
     private string? _schemaFailure;
     private QueryCatalog? _queries;
@@ -87,7 +88,25 @@ public sealed class ComDatabaseSession : IPublicationTarget
     /// </summary>
     public ulong PageCount => Math.Max(_extentPages, Cache.KnownExtentPages);
 
-    public bool ReadOnly { get; }
+    public bool ReadOnly { get; private set; }
+
+    /// <summary>
+    /// Admit a read/write binding beside this read-only session (R-LOCK-2 RO-INPROC; W-05 <c>6xzx</c>): a shared
+    /// read-only first binding admits a shared read/write second one in the process, which then writes through this
+    /// session's cache while the read-only binding keeps its own read-only state
+    /// (<c>evidence/r-q46-dao-ddl-multi/mh-rwro-*</c> part 2: <c>dbRo.Updatable</c> 0, <c>dbRw</c>'s INSERT visible to
+    /// <c>dbRo</c>'s fresh snapshot before any byte reached the file). ACE gives the writer a lock-file slot of its own
+    /// (the <c>.laccdb</c>/<c>.ldb</c> grows 64 to 128 B at that open), held here as <paramref name="writerSlot"/> until the
+    /// session's lock file is released. The writer lease is taken at the first publication as for any writable session.
+    /// </summary>
+    public void AdmitWriter(LockFile? writerSlot)
+    {
+        ReadOnly = false;
+        _writerLockFile = writerSlot;
+    }
+
+    /// <summary>The lock-file slot of a writer admitted beside a read-only first binding (<see cref="AdmitWriter"/>), or null.</summary>
+    public LockFile? WriterLockFile => _writerLockFile;
 
     /// <summary>
     /// Whether this session opened or created the database exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file),
@@ -344,6 +363,8 @@ public sealed class ComDatabaseSession : IPublicationTarget
 
     public void DisposeLockFile()
     {
+        _writerLockFile?.Dispose();
+        _writerLockFile = null;
         _lockFile?.Dispose();
         _lockFile = null;
     }
