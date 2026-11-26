@@ -210,7 +210,13 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>The static type of the whole expression.</summary>
     public StaticType Type { get; }
 
-    /// <summary>Whether the expression reads no field, no slot, and no subquery: its value is the same on every row.</summary>
+    /// <summary>
+    /// Whether the expression reads no field, no slot, and no subquery: its value is the same on every row.
+    /// Column-free domain calls intentionally remain constant so <c>FoldsAtOpen</c> evaluates them once at
+    /// <c>OpenRecordset</c>/<c>Recordset.Open</c> as ACE does (<c>r-q52-ddl-make-domain/domain-null-empty-errors-dao-*</c>,
+    /// <c>domain-ado-*</c>, <c>r-q-expr-sql/domain-dsum-null-empty</c>, <c>r-def-expr-sql/expr-domain-criteria-and-failures</c>);
+    /// per-row domain calls that reference a field or slot have <c>IsConstant == false</c>.
+    /// </summary>
     public bool IsConstant => _fields.Length == 0 && !_usesSlots && !_usesSubqueries;
 
     /// <summary>Whether the expression reads any slot (parameter, group key, aggregate, union, outer correlation, or derived-table column).</summary>

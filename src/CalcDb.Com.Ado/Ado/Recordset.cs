@@ -199,23 +199,26 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
             {
                 // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-* (3354, Overflow 6), r-q52-ddl-make-domain/domain-ado-* (3078, 3061, 3075):
                 // ACE retains the prepared column schema on Recordset.Fields when execution fails after prepare.
-                var failedCols = new AdoFieldDescriptor[plan.Columns.Count];
-                for (int i = 0; i < failedCols.Length; i++)
-                {
-                    ResultColumn rc = plan.Columns[i];
-                    failedCols[i] = AdoFieldDescriptor.FromSelectColumn(rc, rc.FieldType, rc.TypeOpen, null, plan.Sources);
-                }
-                failedOpenColumns = failedCols;
+                failedOpenColumns = BuildSelectColumns(sql, plan, cursor: null, out _);
             }
             plan.Dispose();
             providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
             return null;
         }
 
-        int colCount = cursor.Columns.Count;
+        AdoFieldDescriptor[] columns = BuildSelectColumns(sql, plan, cursor, out AdoSelectShape shape);
+
+        string[] heldTables = [.. plan.Sources.Where(s => s.TableName.Length > 0).Select(s => s.TableName).Distinct(StringComparer.OrdinalIgnoreCase)];
+        int knownCount = cursor.Eof ? 0 : -1;
+        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape, isSavedQuery);
+    }
+
+    private static AdoFieldDescriptor[] BuildSelectColumns(string sql, BoundSelect plan, SelectCursor? cursor, out AdoSelectShape shape)
+    {
+        IReadOnlyList<ResultColumn> resultCols = cursor is not null ? cursor.Columns : plan.Columns;
+        int colCount = resultCols.Count;
         var columns = new AdoFieldDescriptor[colCount];
         SelectSyntax? parsedSelect = SqlParser.Parse(sql, out _);
-        AdoSelectShape shape;
         try
         {
             shape = ClassifySelectShape(plan, parsedSelect);
@@ -225,23 +228,30 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
                 && parsedSelect.Items.All(static it => !it.Star);
             for (int i = 0; i < colCount; i++)
             {
-                int? daoType = cursor.FieldType(i, out string? typeOpen);
+                int? daoType;
+                string? typeOpen;
+                if (cursor is not null)
+                {
+                    daoType = cursor.FieldType(i, out typeOpen);
+                }
+                else
+                {
+                    daoType = resultCols[i].FieldType;
+                    typeOpen = resultCols[i].TypeOpen;
+                }
                 SyntaxNode? exprRoot = daoType is null
-                    && cursor.Columns[i].Origin == ColumnOrigin.Expression
+                    && resultCols[i].Origin == ColumnOrigin.Expression
                     && canIndexItems
                     ? parsedSelect!.Items[i].Expression?.Syntax.Root
                     : null;
-                columns[i] = AdoFieldDescriptor.FromSelectColumn(cursor.Columns[i], daoType, typeOpen, exprRoot, plan.Sources);
+                columns[i] = AdoFieldDescriptor.FromSelectColumn(resultCols[i], daoType, typeOpen, exprRoot, plan.Sources);
             }
+            return columns;
         }
         finally
         {
             parsedSelect?.Dispose();
         }
-
-        string[] heldTables = [.. plan.Sources.Where(s => s.TableName.Length > 0).Select(s => s.TableName).Distinct(StringComparer.OrdinalIgnoreCase)];
-        int knownCount = cursor.Eof ? 0 : -1;
-        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape, isSavedQuery);
     }
 
     internal static AdoSelectShape ClassifySelectShape(BoundSelect plan, SelectSyntax? syntax)

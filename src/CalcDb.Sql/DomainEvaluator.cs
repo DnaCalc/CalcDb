@@ -140,7 +140,9 @@ internal static unsafe class DomainEvaluator
             if (!BoundSelect.BindDomainExpressions(
                 table,
                 domainName,
+                exprText,
                 exprSyntax?.Root,
+                criteriaText,
                 criteriaSyntax?.Root,
                 database,
                 out BoundSelect.DomainPlan? plan,
@@ -164,7 +166,11 @@ internal static unsafe class DomainEvaluator
                     if (bareCol.TypeCode is NativeTypes.Memo or NativeTypes.Ole
                         && function is DomainFunction.DSum or DomainFunction.DAvg or DomainFunction.DMin or DomainFunction.DMax)
                     {
-                        failure = Ace(3115, $"Cannot have Memo, OLE, or Hyperlink Object fields in aggregate argument ({bareCol.Name}).", site);
+                        // No sealed ACE record covers DSum/DAvg/DMin/DMax on Memo or OLE columns; refuse honestly.
+                        failure = ExpressionFailure.Open(
+                            ExpressionPhase.Evaluate,
+                            "NotModelled.DomainMemoAggregate",
+                            $"{function} over Memo/OLE column '{bareCol.Name}' (ACE's domain-function error is not recorded)");
                         return false;
                     }
                 }

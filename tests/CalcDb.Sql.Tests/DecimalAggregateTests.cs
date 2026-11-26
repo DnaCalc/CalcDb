@@ -24,7 +24,8 @@ public sealed class DecimalAggregateTests
 
         using BoundSelect plan = Prepare(db, sql);
 
-        // Metadata: Type 20 / Size 16 for Decimal aggregates; Precision/Scale (28,4) for SUM, (28,10) for AVG, (18,4) for MIN/MAX/FIRST/LAST.
+        // Metadata: Type 20 / Size 16 for Decimal aggregates; ADO Precision/NumericScale metadata is (28,4) for SUM,
+        // (28,10) for AVG (DAO Properties("Scale") reports 4 and remains NotModelled in CalcDb.Com.Dao), and (18,4) for MIN/MAX/FIRST/LAST.
         Assert.Equal((20, 16, (byte?)28, (byte?)4), Meta(plan.Columns[0]));
         Assert.Equal((20, 16, (byte?)28, (byte?)10), Meta(plan.Columns[1]));
         Assert.Equal((20, 16, (byte?)18, (byte?)4), Meta(plan.Columns[2]));
@@ -113,14 +114,10 @@ public sealed class DecimalAggregateTests
         AssertOpenAce(db, "SELECT AVG(V) AS AvgBig FROM DecBig", 6);
 
         // 2 rows of 9999999999999999999999999999 fit in 96-bit Decimal (1.999...e28, 29 digits):
-        // SUM fails 3761 (28-digit ceiling, r-fix-expr-sql/fold-decimal-28-digits), while AVG divides cleanly back to 9999999999999999999999999999.
+        // both SUM (r-fix-expr-sql/fold-decimal-28-digits) and AVG (r-fix-expr-sql/fold-decimal-avg-var-forms call 97)
+        // fail 3761 because the running sum exceeds ACE's 28-digit ceiling before division.
         AssertOpenAce(db, "SELECT SUM(V) AS SumTwo FROM DecBig WHERE ID <= 2", 3761);
-        using (BoundSelect pAvgTwo = Prepare(db, "SELECT AVG(V) AS AvgTwo FROM DecBig WHERE ID <= 2"))
-        using (SelectCursor cur = OpenSnapshot(db, pAvgTwo))
-        {
-            Assert.False(cur.Eof);
-            AssertDecimal(cur, 0, 9999999999999999999999999999m, expectedScale: 0);
-        }
+        AssertOpenAce(db, "SELECT AVG(V) AS AvgTwo FROM DecBig WHERE ID <= 2", 3761);
     }
 
     private static (int? Type, int? Size, byte? Precision, byte? Scale) Meta(ResultColumn col) =>

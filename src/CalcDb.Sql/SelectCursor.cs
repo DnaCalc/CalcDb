@@ -3805,8 +3805,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     return a.Result == VarType.Currency ? new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = s.Money } : new NativeVariant { Vt = (ushort)VarType.R8, Double = s.Sum };
                 case AggregateKind.Avg when s.Seen && a.Result == VarType.Decimal:
                 {
+                    if (Exceeds28Digits(s.DecimalSum))
+                    {
+                        // r-fix-expr-sql/fold-decimal-avg-var-forms call 97: AVG fails 3761 when the running sum before
+                        // division exceeds 28 decimal digits (10^28), even though the value fits in 96 bits.
+                        failure = SqlFailure.Ace(SqlPhase.Open, 3761, SqlMessages.DecimalPrecisionTooSmall);
+                        return ScalarLiterals.Null;
+                    }
                     // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*, r-fix-expr-sql/fold-decimal-avg-var-forms:
-                    // full 28-digit oleaut32 VarDiv quotient with trailing-zero stripping (e.g. 1.5 scale 1, 25.571442857142857142857142857 scale 27).
+                    // full 96-bit oleaut32 VarDiv quotient with trailing-zero stripping (up to 29 significant digits, e.g.
+                    // 1.5 scale 1, 25.571442857142857142857142857 scale 27, 1.3333333333333333333333333333 scale 28).
                     NativeVariant sumVar = OwnedVariant.DecimalCell(DecimalValue.FromDecimal(s.DecimalSum));
                     NativeVariant countVar = OwnedVariant.DecimalCell(DecimalValue.FromDecimal(s.Count));
                     ScalarOutcome div = ScalarKernel.Apply(
@@ -3822,9 +3830,6 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                             : SqlFailure.Ace(SqlPhase.Open, df.Number, AceError.Describe(df.Number));
                         return ScalarLiterals.Null;
                     }
-                    // Note: AVG(Decimal) returns full 96-bit oleaut32 VarDiv quotients (up to 29 significant digits, e.g.
-                    // 25.571442857142857142857142857 / 1.3333333333333333333333333333; r-q53 groupby-expr-decagg-dao-* &
-                    // subq-grp-decagg-ado-*); unlike SUM, AVG is not capped at 28 digits (3761 applies to SUM only).
                     return div.Value;
                 }
                 case AggregateKind.Avg when s.Seen && a.Result == VarType.Currency:

@@ -153,11 +153,34 @@ public sealed class DomainFunctionTests
             Assert.Equal("Wrong number of arguments used with function in query expression 'DLookup('Name', 'Items', 'ID = 1', 'extra''.", f4.Message);
         }
 
-        // DSum / DAvg on Text column -> 3464; Memo in DSum -> 3115; system table -> 3112.
+        // DSum / DAvg on Text column -> 3464; Memo in DSum stays honestly refused (unrecorded); system table -> 3112.
         AssertOpenAce(db, "SELECT DSum('Name', 'Items') AS X FROM Groups WHERE Gid = 1", 3464);
         AssertOpenAce(db, "SELECT DAvg('Name', 'Items') AS X FROM Groups WHERE Gid = 1", 3464);
-        AssertOpenAce(db, "SELECT DSum('Descr', 'Items') AS X FROM Groups WHERE Gid = 1", 3115);
+        using (BoundSelect memoPlan = Prepare(db, "SELECT DSum('Descr', 'Items') AS X FROM Groups WHERE Gid = 1"))
+        using (SelectCursor? memoCur = SelectCursor.Open(memoPlan, db, ResultKind.Snapshot, out SqlFailure? memoFail))
+        {
+            Assert.Null(memoCur);
+            Assert.NotNull(memoFail);
+            Assert.Equal("NotModelled.DomainMemoAggregate", memoFail!.NotModelled);
+        }
         AssertOpenAce(db, "SELECT DLookup('Name', 'MSysObjects') AS X FROM Groups WHERE Gid = 1", 3112);
+
+        // Inner bind-time 3075 inside domain expr/criteria quotes the inner expression, not an empty string.
+        using (BoundSelect innerPlan = Prepare(db, "SELECT DLookup('IIf(1)', 'Items') AS X FROM Groups WHERE Gid = 1"))
+        using (SelectCursor? innerCur = SelectCursor.Open(innerPlan, db, ResultKind.Snapshot, out SqlFailure? innerFail))
+        {
+            Assert.Null(innerCur);
+            Assert.NotNull(innerFail);
+            Assert.Equal(3075, innerFail!.Number);
+            Assert.Contains("'IIf(1)", innerFail.Message, StringComparison.Ordinal);
+        }
+
+        // Per-row domain expression does not claim unrecorded base-column SourceTable/SourceField.
+        using (BoundSelect perRowMeta = Prepare(db, "SELECT DLookup('Name', 'Items', 'Cat = ''' & Cat & '''') AS DL FROM Groups"))
+        {
+            Assert.Null(perRowMeta.Columns[0].SourceTable);
+            Assert.Null(perRowMeta.Columns[0].SourceField);
+        }
     }
 
     [Fact]

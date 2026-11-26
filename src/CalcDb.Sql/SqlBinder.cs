@@ -2911,7 +2911,7 @@ public sealed class BoundSelect : IDisposable
                     column.SourceTable = "";
                     column.SourceField = "";
                 }
-                else if (!column.Program.UsesSlots && column.Program.Fields.Count > 0)
+                else if (!column.Program.UsesSlots && !column.Program.UsesDomainFunctions && column.Program.Fields.Count > 0)
                 {
                     // r-fix-cursor-dao/field-metadata-rw, r-def-cursor-dao/query-field-metadata-expressions,
                     // r-sql-1/b-output-names: an ungrouped expression referencing one base column carries that
@@ -4230,8 +4230,11 @@ public sealed class BoundSelect : IDisposable
                         column.SourceField = "";
                         if (aggType == 20 && agg.SourceColumn is { TypeCode: NativeTypes.Numeric, CalculatedResultType: null } decCol)
                         {
-                            // r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*:
-                            // SUM(DECIMAL(p,s)) -> (28, s); AVG(DECIMAL(18,4)) -> (28, 10); MIN/MAX/FIRST/LAST -> (p, s).
+                            // ADO Field.Precision/NumericScale metadata (r-q53-conv-abspos-subq-loc/subq-grp-decagg-ado-*,
+                            // r-fix-wire-ado/fields-meta-decimal-expressions): SUM(DECIMAL(p,s)) -> (28, s);
+                            // AVG(DECIMAL(18,4)) -> (28, 10) (note: DAO Field.Properties("Scale") reports 4 in
+                            // groupby-expr-decagg-dao-* call 122[2], and CalcDb.Com.Dao keeps query Decimal Scale NotModelled);
+                            // MIN/MAX/FIRST/LAST -> (p, s).
                             (byte? dp, byte? ds) = agg.Kind switch
                             {
                                 AggregateKind.Sum => ((byte?)28, (byte?)decCol.NumericScale),
@@ -4768,7 +4771,9 @@ public sealed class BoundSelect : IDisposable
     internal static bool BindDomainExpressions(
         TableDefinition table,
         string tableName,
+        string exprText,
         SyntaxNode? exprRoot,
+        string criteriaText,
         SyntaxNode? criteriaRoot,
         ISqlDatabase database,
         out DomainPlan? plan,
@@ -4797,7 +4802,7 @@ public sealed class BoundSelect : IDisposable
                 exprProgram = BoundExpression.Bind(exprRoot, scope, database.Context, allowBareBinary: true, out ExpressionFailure? exprErr);
                 if (exprErr is not null)
                 {
-                    failure = SqlFailure.Of(exprErr, SqlPhase.Bind, "", 0, 0) with { FromDomainFunction = true };
+                    failure = SqlFailure.Of(exprErr, SqlPhase.Bind, exprText, 0, exprText.Length) with { FromDomainFunction = true };
                     return false;
                 }
             }
@@ -4807,7 +4812,7 @@ public sealed class BoundSelect : IDisposable
                 criteriaProgram = BoundExpression.Bind(criteriaRoot, scope, database.Context, allowBareBinary: false, out ExpressionFailure? critErr);
                 if (critErr is not null)
                 {
-                    failure = SqlFailure.Of(critErr, SqlPhase.Bind, "", 0, 0) with { FromDomainFunction = true };
+                    failure = SqlFailure.Of(critErr, SqlPhase.Bind, criteriaText, 0, criteriaText.Length) with { FromDomainFunction = true };
                     return false;
                 }
             }
