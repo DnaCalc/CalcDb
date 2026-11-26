@@ -78,6 +78,14 @@ public sealed class PartCFunctionsTests
         AssertEvalAce("FormatNumber(1, 2, -2, 1)", AceError.InvalidProcedureCall);
         AssertEvalAce("FormatNumber(1, 2, -2, -2, 1)", AceError.InvalidProcedureCall);
         AssertEvalAce("FormatNumber(1, Null)", AceError.TypeMismatch);
+
+        // Unrecorded Null inputs to FormatCurrency/FormatPercent refuse by name.
+        using BoundExpression fcNull = Bind("FormatCurrency(Null)");
+        Assert.False(fcNull.Evaluate(EmptyRow.Instance));
+        Assert.Equal("NotModelled.Scalar.NullArgument", fcNull.LastFailure?.NotModelled);
+        using BoundExpression fpNull = Bind("FormatPercent(Null)");
+        Assert.False(fpNull.Evaluate(EmptyRow.Instance));
+        Assert.Equal("NotModelled.Scalar.NullArgument", fpNull.LastFailure?.NotModelled);
     }
 
     [Fact]
@@ -102,6 +110,8 @@ public sealed class PartCFunctionsTests
         AssertInt32("DateDiff('h', CDate(0), CDate(-0.25))", 5);
         AssertInt32("DateDiff('h', CDate(-1.5), CDate(-0.5))", 23);
         AssertInt32("DateDiff('h', CDate(-1.25), CDate(-1.5))", 6);
+        AssertInt32("DateDiff('h', #1899-12-29#, #1899-12-30#)", 24);
+        AssertInt32("DateDiff('h', #1899-12-28#, #1899-12-30#)", 48);
         AssertNull("DateDiff('d', Null, #2024-03-05#)");
         AssertEvalAce("DateDiff(Null, #2024-03-01#, #2024-03-05#)", AceError.TypeMismatch);
         AssertEvalAce("DateDiff('s', #1900-01-01#, #2024-03-05#)", AceError.Overflow);

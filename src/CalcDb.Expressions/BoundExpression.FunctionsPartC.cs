@@ -219,7 +219,11 @@ public sealed unsafe partial class BoundExpression
             }
             if (expr.Vt == (ushort)VarType.Null)
             {
-                return MakeBstr(ReadOnlySpan<char>.Empty);
+                // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb (#1005) records FormatNumber(Null) -> "";
+                // FormatCurrency(Null) and FormatPercent(Null) have no retained record and refuse by name.
+                return ins.Function == ExprFunction.FormatNumber
+                    ? MakeBstr(ReadOnlySpan<char>.Empty)
+                    : ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, _descriptors[d].Site, _descriptors[d].Operation));
             }
             return ins.Function switch
             {
@@ -256,6 +260,7 @@ public sealed unsafe partial class BoundExpression
             }
             if (expr.Vt == (ushort)VarType.Null)
             {
+                // r-expr-1b/sandbox-vba-library (#275-#282): FormatDateTime(Null) -> "".
                 return MakeBstr(ReadOnlySpan<char>.Empty);
             }
             return ScalarFormat.FormatDateTime(_descriptors[d], expr, namedFormat);
@@ -541,14 +546,15 @@ public sealed unsafe partial class BoundExpression
                     };
                     static double LinearNudged(double oa)
                     {
+                        // Split negative OA date into whole + |frac| before nudging so negative midnights (-1.0, -2.0)
+                        // do not cross an integer boundary into the next day, while preserving all r-expr-1/c-date-payloads (qd19) cases.
                         const double eps = 0.5 / 86400000.0;
-                        double n = oa + eps;
-                        if (n < 0.0)
+                        if (oa < 0.0)
                         {
-                            double w = Math.Truncate(n);
-                            return w + Math.Abs(n - w);
+                            double w = Math.Truncate(oa);
+                            return w + Math.Abs(oa - w) - eps;
                         }
-                        return n;
+                        return oa + eps;
                     }
                     long p1 = (long)(LinearNudged(oa1) * unitsPerDay);
                     long p2 = (long)(LinearNudged(oa2) * unitsPerDay);
@@ -612,8 +618,8 @@ public sealed unsafe partial class BoundExpression
 
     /// <summary>
     /// <c>DatePart(interval, date[, firstdayofweek[, firstweekofyear]])</c>
-    /// (r-expr-1b/date-datepart-parts, r-q47-bigint-expr-edges/{date-system-week-null-edges-accdb,meta-*}).
-    /// Returns VT_I4 (DAO Type 4).
+    /// (r-expr-1b/date-datepart-parts, r-expr-1b/info-result-vartype-numeric, r-q47-bigint-expr-edges/date-system-week-null-edges-accdb,
+    /// r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb). Returns VT_I2 (inner Integer; DAO Type 4).
     /// </summary>
     private ScalarOutcome EvalDatePart(ref int sp, Instruction ins)
     {

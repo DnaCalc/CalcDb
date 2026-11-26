@@ -1697,10 +1697,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     break;
                 case ExprFunction.DateDiff:
                     Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
-                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[1], default);
-                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[2], default);
-                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 4 ? contracts[3] : default, default);
-                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 5 ? contracts[4] : default, default);
+                    Descriptor(ScalarOperation.CDate, node.Items[1].Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CDate, node.Items[2].Offset, 1, contracts[2], default);
+                    Descriptor(ScalarOperation.CLng, n >= 4 ? node.Items[3].Offset : node.Offset, 1, n >= 4 ? contracts[3] : default, default);
+                    Descriptor(ScalarOperation.CLng, n == 5 ? node.Items[4].Offset : node.Offset, 1, n == 5 ? contracts[4] : default, default);
                     break;
                 case ExprFunction.DatePart:
                     Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);

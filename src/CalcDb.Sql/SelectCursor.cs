@@ -1630,10 +1630,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             SyntaxNode root = c.Root!;
             if (root is { Kind: SyntaxKind.Call, Text: { } callName }
-                && callName.Equals("DateDiff", StringComparison.OrdinalIgnoreCase))
+                && callName.Equals("DateDiff", StringComparison.OrdinalIgnoreCase)
+                && first.Site == root.Offset)
             {
-                // r-expr-1b/date-datediff-boundaries (#335/#342, #349/#356): DateDiff('s', #1900-01-01#, #2024-03-05#)
-                // opens with Field.Type = 4 (Long) and fails 6 (Overflow) at Field.Value read.
+                // r-expr-1b/date-datediff-boundaries (#335/#342, #349/#356): DateDiff's own result overflow
+                // (DateDiff('s', #1900-01-01#, #2024-03-05#)) opens with Field.Type = 4 (Long) and fails 6 at Field.Value read;
+                // argument overflows keep the normal open-time failure.
                 read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
                 return null;
             }

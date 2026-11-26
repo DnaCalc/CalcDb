@@ -56,7 +56,7 @@ public static unsafe class ScalarFormat
         OleAut.DISP_E_TYPEMISMATCH => Fail(d, AceError.TypeMismatch),
         OleAut.DISP_E_DIVBYZERO => Fail(d, AceError.DivisionByZero),
         OleAut.E_INVALIDARG => Fail(d, AceError.InvalidProcedureCall),
-        _ => Fail(d, AceError.InvalidProcedureCall),
+        _ => Open(d, NotModelledCase.UnmappedAutomationFailure),
     };
 
     /// <summary>

@@ -171,7 +171,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         BoundSelect? plan = BoundSelect.Prepare(sql, session.Sql, out SqlFailure? failure);
         if (plan is null)
         {
-            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
+            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal);
             return null;
         }
 
@@ -210,7 +210,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             using SelectCursor? select = SelectCursor.Open(plan, session.Sql, ResultKind.Snapshot, null, out failure);
             if (select is null)
             {
-                providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
+                providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal);
                 return null;
             }
 
@@ -246,7 +246,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
                     MoveOutcome moved = select.MoveNext();
                     if (select.FetchFailure is { } fetch)
                     {
-                        providerError = AdoSqlErrors.TryMap(fetch, isSavedQuery, out refusal, isSelect: true);
+                        providerError = AdoSqlErrors.TryMap(fetch, isSavedQuery, out refusal);
                         return null;
                     }
                     if (moved != MoveOutcome.Moved)

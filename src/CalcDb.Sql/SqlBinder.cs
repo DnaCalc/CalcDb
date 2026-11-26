@@ -2552,8 +2552,8 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         private static StaticTypeResult StaticLiteral(SyntaxNode node) => node.Literal switch
         {
-            // r-wire/expr-literal-tags (#248/#259 True/False): DAO Field.Type 3, Field.Value VT_I2 -1/0 (inner VarType is VT_BOOL).
-            LiteralKind.Boolean => new(OperandKind.BooleanLiteral, 3, false),
+            // r-wire/expr-literal-tags (#248/#254/#259/#265 True/False): DAO Field.Type 3, VarType = 2 (VT_I2), Field.Value VT_I2 -1/0.
+            LiteralKind.Boolean => new(OperandKind.BooleanLiteral, 3, true),
             LiteralKind.Date => new(OperandKind.Date, 8, true),
             LiteralKind.Text => new(OperandKind.Text, 10, true),
             LiteralKind.Number when node.Value.Vt == (ushort)VarType.I4 => new(OperandKind.LongLiteral, 4, true, node.Value.Int64),
@@ -2603,7 +2603,8 @@ public sealed class BoundSelect : IDisposable
                 }
                 if (name.Equals("IMEStatus", StringComparison.OrdinalIgnoreCase))
                 {
-                    // r-expr-1b/sandbox-vba-library (#371): IMEStatus() is 4 (Long); inner is VT_I2.
+                    // r-expr-1b/sandbox-vba-library (#520/#526/#527): IMEStatus() is DAO Field.Type 4 (Long), VT_I4 0;
+                    // inner VarType(IMEStatus()) is not recorded, so InnerMatchesDao stays false.
                     return new(OperandKind.Long, 4, false);
                 }
                 return StaticTypeResult.Unknown;

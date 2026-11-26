@@ -238,7 +238,7 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT 1.5E308 AS v FROM T", 7, ColumnTypeRule.Bound)]
     [InlineData("SELECT 'abc' AS v FROM T", 10, ColumnTypeRule.Bound)]
     [InlineData("SELECT #2024-03-05# AS v FROM T", 8, ColumnTypeRule.Bound)]
-    [InlineData("SELECT True AS v FROM T", 3, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT True AS v FROM T", 3, ColumnTypeRule.Bound)]
     [InlineData("SELECT String$(3, 'a') AS v FROM T", 10, ColumnTypeRule.Bound)]
     [InlineData("SELECT Space$(3) AS v FROM T", 10, ColumnTypeRule.Bound)]
     [InlineData("SELECT LTrim$(' a') AS v FROM T", 10, ColumnTypeRule.Bound)]

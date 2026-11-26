@@ -390,7 +390,7 @@ internal static unsafe class OleAut
 
     public static int VarFormat(NativeVariant* input, char* format, int firstDay, int firstWeek, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarFormat(input, format, firstDay, firstWeek, flags, &value);
         bstr = value;
         return hr;
@@ -398,7 +398,7 @@ internal static unsafe class OleAut
 
     public static int VarFormatNumber(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarFormatNumber(input, numDig, incLead, useParens, group, flags, &value);
         bstr = value;
         return hr;
@@ -406,7 +406,7 @@ internal static unsafe class OleAut
 
     public static int VarFormatCurrency(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarFormatCurrency(input, numDig, incLead, useParens, group, flags, &value);
         bstr = value;
         return hr;
@@ -414,7 +414,7 @@ internal static unsafe class OleAut
 
     public static int VarFormatPercent(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarFormatPercent(input, numDig, incLead, useParens, group, flags, &value);
         bstr = value;
         return hr;
@@ -422,7 +422,7 @@ internal static unsafe class OleAut
 
     public static int VarFormatDateTime(NativeVariant* input, int namedFormat, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarFormatDateTime(input, namedFormat, flags, &value);
         bstr = value;
         return hr;
@@ -430,7 +430,7 @@ internal static unsafe class OleAut
 
     public static int VarWeekdayName(int weekday, int abbrev, int firstDay, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarWeekdayName(weekday, abbrev, firstDay, flags, &value);
         bstr = value;
         return hr;
@@ -438,7 +438,7 @@ internal static unsafe class OleAut
 
     public static int VarMonthName(int month, int abbrev, uint flags, out nint bstr)
     {
-        nint value;
+        nint value = 0;
         int hr = T.VarMonthName(month, abbrev, flags, &value);
         bstr = value;
         return hr;
