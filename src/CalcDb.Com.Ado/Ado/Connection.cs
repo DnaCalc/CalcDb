@@ -1883,6 +1883,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 "Connection.OpenSchema with a SchemaID argument is not recorded"));
         }
 
+        if (schemaId.Value == -1)
+        {
+            // r-oledb-odbc/schema-others #217: adSchemaProviderSpecific (-1) with omitted SchemaID fails 0x800A0BB9.
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
+
         if (AdoSchema.IsAceUnsupportedSchema(schemaId.Value))
         {
             return Fail(AdoErrors.OperationNotSupported);
@@ -2044,7 +2050,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
             {
-                return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters);
+                return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters, EmitWillExec);
             }
             EmitWillExec();
             return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
@@ -2073,7 +2079,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             {
                 if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
                 {
-                    return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters);
+                    return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters, EmitWillExec);
                 }
                 EmitWillExec();
                 return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
@@ -2209,7 +2215,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         SavedQuery query,
         bool noRecords,
         CommandObject? explicitCommand,
-        IReadOnlyList<AdoCommandParam>? commandParameters)
+        IReadOnlyList<AdoCommandParam>? commandParameters,
+        Action emitWillExec)
     {
         if (query.Family is not { } family || family == QueryFamily.PassThrough)
         {
@@ -2225,6 +2232,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 using BoundAction? plan = BoundAction.Prepare(sql, session.Sql, out _);
                 if (plan is not null && plan.Parameters.Count > (commandParameters?.Count ?? 0))
                 {
+                    emitWillExec();
                     MappedProviderError err = AdoSqlErrors.TooFewSavedParameters(plan.Parameters.Count);
                     SetProviderError(err.ErrorEntry);
                     EmitFailedExecuteComplete(noRecords, explicitCommand);

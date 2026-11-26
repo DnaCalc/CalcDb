@@ -68,9 +68,12 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
                     Assert.Equal(HResults.E_NOTIMPL, Invoke(cn, "Properties", 2).Failure!.Value.Scode);
                 }
 
-                // Empty CommandText -> 0x80040E0C (ado-cmd-exec-noparam-* #38).
+                // Empty CommandText -> Parameters.Count == 0 (no regression), Execute -> 0x80040E0C (ado-cmd-exec-noparam-* #38).
                 nint cmdEmpty = New(OwnCommand);
                 Assert.Null(Put(cmdEmpty, "ActiveConnection", new Dispatch(cn)).Failure);
+                nint pEmpty = (nint)Get(cmdEmpty, "Parameters")!;
+                Assert.Equal(0, Get(pEmpty, "Count"));
+                Release(pEmpty);
                 AssertError(Call(cmdEmpty, "Execute"), unchecked((int)0x80040E0C), "Microsoft Access Database Engine", 5000000, IidOleDbCommand);
                 AssertConnectionError(cn, unchecked((int)0x80040E0C), "", 0);
                 Release(cmdEmpty);
@@ -269,6 +272,22 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
                 AssertError(Call(cmdSel, "CreateParameter", "pId", 3, 1, Missing, "notanumber"), unchecked((int)0x800A0D5D), "ADODB.Command", 1240652, IidCommand);
                 Release(cmdSel);
 
+                // Unset appended Parameter (VT_EMPTY) on ? command -> 0x80040E10 "Parameter ?_1 has no default value." (r-fix-wire-ado/ado-params-manual-append #38).
+                nint cmdUnset = New(OwnCommand);
+                Assert.Null(Put(cmdUnset, "ActiveConnection", new Dispatch(cn)).Failure);
+                Assert.Null(Put(cmdUnset, "CommandType", 1).Failure);
+                Assert.Null(Put(cmdUnset, "CommandText", "SELECT ID FROM ParamT WHERE ID = ?").Failure);
+                nint pUnsetCol = (nint)Get(cmdUnset, "Parameters")!;
+                nint pUnset = (nint)Call(cmdUnset, "CreateParameter", "p1", 3, 1).Value!;
+                Assert.Null(Call(pUnsetCol, "Append", new Dispatch(pUnset)).Failure);
+                Outcome rUnset = Call(cmdUnset, "Execute");
+                AssertError(rUnset, unchecked((int)0x80040E10), "Microsoft Access Database Engine", 5003747, IidOleDbCommand);
+                Assert.Equal("Parameter ?_1 has no default value.", rUnset.Failure!.Value.Description);
+                AssertConnectionError(cn, unchecked((int)0x80040E10), "3748", -542379020);
+                Release(pUnset);
+                Release(pUnsetCol);
+                Release(cmdUnset);
+
                 // 3. Output / InputOutput / ReturnValue direction on ? fails 0x80040E21 on IID_IAccessor (r-oledb-odbc/param-edge #55/#77/#99).
                 foreach (int dir in NonInputDirections)
                 {
@@ -341,7 +360,14 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
                 Assert.Equal(1, Get(rsT, "State"));
                 Assert.Equal(3, Get(rsT, "CursorType"));
                 Assert.Equal(1, Get(rsT, "LockType"));
-                Assert.Equal(-1, Get(rsT, "RecordCount"));
+                if (dbVersion == 128)
+                {
+                    Assert.Equal(-1, Get(rsT, "RecordCount"));
+                }
+                else
+                {
+                    Assert.Equal(HResults.E_NOTIMPL, TryGet(rsT, "RecordCount").Failure!.Value.Scode);
+                }
                 AssertSchemaFields(rsT, ExpectedTableSchemaFields);
                 List<object?[]> tableRows = ReadAllRows(rsT);
                 Assert.Contains(tableRows, r => Equals(r[2], "Parent") && Equals(r[3], "TABLE"));
@@ -421,6 +447,9 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
                 AssertError(Call(cn, "OpenSchema", 20, 0), unchecked((int)0x800A0CB3), "ADODB.Connection", 1240648, IidConnection);
                 AssertError(Call(cn, "OpenSchema", 4, "Parent"), unchecked((int)0x800A0CB3), "ADODB.Connection", 1240648, IidConnection);
                 AssertError(Call(cn, "OpenSchema", 1), unchecked((int)0x800A0CB3), "ADODB.Connection", 1240648, IidConnection);
+                AssertError(Call(cn, "OpenSchema", 42), unchecked((int)0x800A0CB3), "ADODB.Connection", 1240648, IidConnection);
+                AssertError(Call(cn, "OpenSchema", 43), unchecked((int)0x800A0CB3), "ADODB.Connection", 1240648, IidConnection);
+                AssertError(Call(cn, "OpenSchema", -1), unchecked((int)0x800A0BB9), "ADODB.Connection", 1240641, IidConnection);
                 AssertError(Call(cn, "OpenSchema", 9999), unchecked((int)0x800A0BB9), "ADODB.Connection", 1240641, IidConnection);
             }
             finally
@@ -634,5 +663,6 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
         Assert.Equal(expectedScode, f.Scode);
         Assert.Equal(expectedSource, f.Source);
         Assert.Equal((uint)expectedHelpContext, f.HelpContext);
+        Assert.Equal(expectedIid, f.InfoGuid);
     }
 }

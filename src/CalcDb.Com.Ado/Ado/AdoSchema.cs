@@ -26,26 +26,29 @@ internal static class AdoSchema
 
     /// <summary>
     /// SchemaEnum values ACE refuses with 0x800A0CB3 when called with no restrictions
-    /// (evidence/r-q-ado-misc/schema-ids-no-restrictions, r-q54-excl-ddl-ix-cmd/ado-openschema-accdb #136, r-q54-excl-ddl-ix-cmd/ado-openschema-mdb #136).
+    /// (evidence/r-q-ado-misc/schema-ids-no-restrictions, r-oledb-odbc/schema-others #196, #203,
+    /// r-q54-excl-ddl-ix-cmd/ado-openschema-accdb #136, r-q54-excl-ddl-ix-cmd/ado-openschema-mdb #136).
+    /// Note: adSchemaProviderSpecific (-1) with omitted SchemaID fails 0x800A0BB9 (handled in Connection.OpenSchema).
     /// </summary>
     public static bool IsAceUnsupportedSchema(int schemaId) => schemaId is
-        -1 or 0 or 1 or 2 or 3 or 7 or 11 or 13 or 14 or 15 or 17 or 18 or 21 or 24 or 25 or 26 or 29
-        or (>= 32 and <= 41);
+        0 or 1 or 2 or 3 or 7 or 11 or 13 or 14 or 15 or 17 or 18 or 21 or 24 or 25 or 26 or 29
+        or (>= 32 and <= 43);
 
     /// <summary>
     /// Build a materialized <see cref="MemoryRowSource"/> for one of the five implemented schema rowsets,
-    /// or return null with a named refusal for other ACE-supported schemas (5, 6, 8, 9, 10, 16, 19, 22, 23, 30, 31).
+    /// or return null with a named refusal for other ACE-supported schemas (5, 6, 8, 9, 10, 16, 19, 22, 23, 30, 31)
+    /// or unrecorded catalog shapes inside the five schemas.
     /// </summary>
     public static MemoryRowSource? TryBuild(AdoOpenSession session, int schemaId, out Failure? refusal)
     {
         refusal = null;
         return schemaId switch
         {
-            AdSchemaTables => BuildTables(session),
-            AdSchemaColumns => BuildColumns(session),
-            AdSchemaIndexes => BuildIndexes(session),
+            AdSchemaTables => BuildTables(session, out refusal),
+            AdSchemaColumns => BuildColumns(session, out refusal),
+            AdSchemaIndexes => BuildIndexes(session, out refusal),
             AdSchemaPrimaryKeys => BuildPrimaryKeys(session),
-            AdSchemaForeignKeys => BuildForeignKeys(session),
+            AdSchemaForeignKeys => BuildForeignKeys(session, out refusal),
             _ => FailUnbuiltSchema(schemaId, out refusal),
         };
     }
@@ -59,7 +62,7 @@ internal static class AdoSchema
     }
 
     // -------------------------------------------------------------------------
-    // Column descriptor helpers (exact Type/DefinedSize/Precision/Scale/Attributes from ado-openschema-{accdb,mdb})
+    // Column descriptor helpers (exact Type/DefinedSize/Precision/Scale/Attributes from ado-openschema-accdb, ado-openschema-mdb)
     // -------------------------------------------------------------------------
 
     private static AdoFieldDescriptor ColWStr(string name) => new(name, 202, 255, 255, 255, 70, false, null, -1);
@@ -189,8 +192,9 @@ internal static class AdoSchema
         ColDate("DATE_MODIFIED"),
     ];
 
-    private static MemoryRowSource BuildTables(AdoOpenSession session)
+    private static MemoryRowSource? BuildTables(AdoOpenSession session, out Failure? refusal)
     {
+        refusal = null;
         var entries = new List<(string Name, string TableType, CatalogEntry Entry)>();
         if (session.Catalog.TablesContainer is int container)
         {
@@ -211,9 +215,17 @@ internal static class AdoSchema
                     string tableType = IsSystemTable(entry) ? "SYSTEM TABLE" : "TABLE";
                     entries.Add((entry.Name, tableType, entry));
                 }
-                else if (entry.Type is 4 or 6)
+                else if (entry.Type == 6)
                 {
+                    // r-enc-link/public-views: native linked table (Type 6) has TABLE_TYPE = "LINK".
                     entries.Add((entry.Name, "LINK", entry));
+                }
+                else if (entry.Type == 4)
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoOpenSchemaOdbcLinkedTable",
+                        $"adSchemaTables on ODBC linked table '{entry.Name}' (MSysObjects Type=4) is not recorded");
+                    return null;
                 }
                 else if (entry.Type == 5)
                 {
@@ -283,8 +295,9 @@ internal static class AdoSchema
         ColMemo("DESCRIPTION"),
     ];
 
-    private static MemoryRowSource BuildColumns(AdoOpenSession session)
+    private static MemoryRowSource? BuildColumns(AdoOpenSession session, out Failure? refusal)
     {
+        refusal = null;
         var items = new List<(string TableName, string ColumnName, MemoryCell[] Row)>();
 
         // Local user tables
@@ -299,7 +312,7 @@ internal static class AdoSchema
             {
                 ColumnDescriptor col = def.Columns[i];
                 (bool hasDefault, string? defaultText, bool required, string? descr) = ReadColumnProps(blob, col.Name);
-                MemoryCell[] row = BuildColumnRow(
+                MemoryCell[]? row = BuildColumnRow(
                     entry.Name,
                     col.Name,
                     ordinalOneBased: i + 1,
@@ -308,7 +321,12 @@ internal static class AdoSchema
                     hasDefault,
                     defaultText,
                     required,
-                    descr);
+                    descr,
+                    out refusal);
+                if (row is null)
+                {
+                    return null;
+                }
                 items.Add((entry.Name, col.Name, row));
             }
         }
@@ -335,25 +353,29 @@ internal static class AdoSchema
                 for (int i = 0; i < plan.Columns.Count; i++)
                 {
                     ResultColumn rc = plan.Columns[i];
-                    if (rc.SourceColumn is { } src)
+                    if (rc.SourceColumn is not { } src)
                     {
-                        MemoryCell[] row = BuildColumnRow(
-                            sq.Name,
-                            rc.Name,
-                            ordinalOneBased: i + 1,
-                            src.Column,
-                            isView: true,
-                            hasDefault: false,
-                            defaultText: null,
-                            required: false,
-                            description: null);
-                        items.Add((sq.Name, rc.Name, row));
+                        refusal = Failure.NotModelled(
+                            "NotModelled.AdoOpenSchemaViewExpressionColumn",
+                            $"adSchemaColumns for computed view column '{sq.Name}.{rc.Name}' is not recorded");
+                        return null;
                     }
-                    else
+                    MemoryCell[]? row = BuildColumnRow(
+                        sq.Name,
+                        rc.Name,
+                        ordinalOneBased: i + 1,
+                        src.Column,
+                        isView: true,
+                        hasDefault: false,
+                        defaultText: null,
+                        required: false,
+                        description: null,
+                        out refusal);
+                    if (row is null)
                     {
-                        MemoryCell[] row = BuildViewExpressionColumnRow(sq.Name, rc, ordinalOneBased: i + 1);
-                        items.Add((sq.Name, rc.Name, row));
+                        return null;
                     }
+                    items.Add((sq.Name, rc.Name, row));
                 }
             }
         }
@@ -372,7 +394,7 @@ internal static class AdoSchema
         return MemoryRowSource.FromRows(ColumnsSchemaColumns, rows);
     }
 
-    private static MemoryCell[] BuildColumnRow(
+    private static MemoryCell[]? BuildColumnRow(
         string tableName,
         string columnName,
         int ordinalOneBased,
@@ -381,16 +403,18 @@ internal static class AdoSchema
         bool hasDefault,
         string? defaultText,
         bool required,
-        string? description)
+        string? description,
+        out Failure? refusal)
     {
+        refusal = null;
         byte typeCode = col.CalculatedResultType ?? col.TypeCode;
         bool isNullable = typeCode != NativeTypes.Boolean && !col.IsAutoNumber && (!required || isView);
 
         bool isLong = typeCode is NativeTypes.Memo or NativeTypes.Ole;
         bool isVar = typeCode is NativeTypes.Text or NativeTypes.Binary;
-        // DBCOLUMNFLAGS:
+        // DBCOLUMNFLAGS (r-oledb-odbc/schema-columns, r-q54-excl-ddl-ix-cmd/ado-openschema-accdb, ado-openschema-mdb):
         // Base table: Fixed nullable=122, Fixed non-null=90, Var nullable=106, Var non-null=74, Long nullable=234, Long non-null=202
-        // View: Fixed nullable=118 (WRITE instead of WRITEUNKNOWN), Fixed non-null=90, Var nullable=102, Long nullable=230
+        // View: Fixed nullable=118, Fixed non-null Boolean=86 (AutoNumber=90), Var nullable=102, Long nullable=230
         int flags;
         if (isLong)
         {
@@ -402,7 +426,7 @@ internal static class AdoSchema
         }
         else
         {
-            flags = isNullable ? (isView ? 118 : 122) : 90;
+            flags = isNullable ? (isView ? 118 : 122) : (isView && !col.IsAutoNumber ? 86 : 90);
         }
 
         int dataType;
@@ -474,13 +498,11 @@ internal static class AdoSchema
                 charMax = CellDouble(0);
                 charOctet = CellDouble(0);
                 break;
-            case NativeTypes.BigInt:
-                dataType = 20;
-                numPrec = CellInt32(19);
-                break;
             default:
-                dataType = 130;
-                break;
+                refusal = Failure.NotModelled(
+                    "NotModelled.AdoOpenSchemaColumnType",
+                    $"adSchemaColumns for column '{tableName}.{columnName}' with native type code {typeCode} is not recorded");
+                return null;
         }
 
         return
@@ -513,36 +535,6 @@ internal static class AdoSchema
             CellNull(),                          // 25 DOMAIN_SCHEMA
             CellNull(),                          // 26 DOMAIN_NAME
             CellText(description),               // 27 DESCRIPTION
-        ];
-    }
-
-    private static MemoryCell[] BuildViewExpressionColumnRow(string viewName, ResultColumn rc, int ordinalOneBased)
-    {
-        int dataType = rc.FieldType switch
-        {
-            1 => 11,
-            2 => 17,
-            3 => 2,
-            4 => 3,
-            5 => 6,
-            6 => 4,
-            7 => 5,
-            8 => 7,
-            10 or 12 => 130,
-            9 or 11 => 128,
-            15 => 72,
-            20 => 131,
-            _ => 130,
-        };
-        int flags = dataType is 130 or 128 ? 102 : 118;
-        return
-        [
-            CellNull(), CellNull(), CellText(viewName), CellText(rc.Name),
-            CellNull(), CellNull(), CellDouble(ordinalOneBased), CellBool(false),
-            CellNull(), CellDouble(flags), CellBool(true), CellInt32(dataType),
-            CellNull(), CellNull(), CellNull(), CellNull(), CellNull(), CellNull(),
-            CellNull(), CellNull(), CellNull(), CellNull(), CellNull(), CellNull(),
-            CellNull(), CellNull(), CellNull(), CellNull(),
         ];
     }
 
@@ -579,8 +571,9 @@ internal static class AdoSchema
         ColBool("INTEGRATED"),
     ];
 
-    private static MemoryRowSource BuildIndexes(AdoOpenSession session)
+    private static MemoryRowSource? BuildIndexes(AdoOpenSession session, out Failure? refusal)
     {
+        refusal = null;
         var items = new List<(bool IsPk, bool IsUnique, string TableName, string IndexName, int Ordinal, MemoryCell[] Row)>();
         IndexDescriptorRules ixRules = session.Format.IndexDescriptor;
 
@@ -604,9 +597,16 @@ internal static class AdoSchema
                 {
                     continue;
                 }
+                if (phys.IgnoreNulls(ixRules))
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoOpenSchemaIndexIgnoreNulls",
+                        $"adSchemaIndexes NULLS flag for IgnoreNulls index '{entry.Name}.{logical.Name}' is not recorded");
+                    return null;
+                }
                 bool isPk = logical.IndexType == ixRules.PrimaryKeyType;
                 bool isUnique = phys.Unique(ixRules);
-                int nullsVal = phys.Required(ixRules) ? 1 : (phys.IgnoreNulls(ixRules) ? 4 : 0);
+                int nullsVal = phys.Required(ixRules) ? 1 : 0;
 
                 for (int k = 0; k < phys.Columns.Count; k++)
                 {
@@ -767,8 +767,9 @@ internal static class AdoSchema
         ColSmall("DEFERRABILITY"),
     ];
 
-    private static MemoryRowSource BuildForeignKeys(AdoOpenSession session)
+    private static MemoryRowSource? BuildForeignKeys(AdoOpenSession session, out Failure? refusal)
     {
+        refusal = null;
         var items = new List<(string PkTable, string FkTable, string FkName, int Ordinal, MemoryCell[] Row)>();
         IReadOnlyList<Relationship>? rels = session.Relationships(out _);
         if (rels is not null)
@@ -786,10 +787,17 @@ internal static class AdoSchema
 
             foreach (Relationship rel in rels)
             {
-                string updateRule = (rel.Attributes & 256) != 0 ? "CASCADE" : "NO ACTION";
-                string deleteRule = (rel.Attributes & 4096) != 0
-                    ? "CASCADE"
-                    : ((rel.Attributes & 0x2000) != 0 ? "SET NULL" : "NO ACTION");
+                // Only plain enforced NO ACTION relationships are recorded (r-q54-excl-ddl-ix-cmd/ado-openschema-accdb,
+                // r-q54-excl-ddl-ix-cmd/ado-openschema-mdb, r-oledb-odbc/schema-keys-indexes); refuse DontEnforce/CASCADE/SET NULL.
+                if ((rel.Attributes & (2 | 256 | 4096 | 0x2000)) != 0)
+                {
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoOpenSchemaForeignKeyAttributes",
+                        $"adSchemaForeignKeys for relationship '{rel.Name}' with attributes 0x{rel.Attributes:X} is not recorded");
+                    return null;
+                }
+                const string updateRule = "NO ACTION";
+                const string deleteRule = "NO ACTION";
                 string? pkName = pkNames.GetValueOrDefault(rel.Table);
 
                 for (int k = 0; k < rel.Columns.Count; k++)

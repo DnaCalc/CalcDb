@@ -336,6 +336,7 @@ internal sealed unsafe class CommandObject : AdoObject
                     _activeConnection.SetProviderError(noDef.ErrorEntry);
                     return CallResult.Fail(noDef.ComFailure);
                 }
+                return NotImplemented("Command.Execute with VT_EMPTY Parameters argument on a command without ? markers (not recorded)");
             }
             else
             {
@@ -349,7 +350,7 @@ internal sealed unsafe class CommandObject : AdoObject
                 }
                 _lastScalarParam?.Dispose();
                 _lastScalarParam = copied;
-                boundParams = [new AdoCommandParam(copied, AdoType: null)];
+                boundParams = [new AdoCommandParam(copied)];
             }
         }
 
@@ -358,15 +359,29 @@ internal sealed unsafe class CommandObject : AdoObject
             if (_parameters is { Count: > 0 })
             {
                 IReadOnlyList<ParameterObject> items = _parameters.Items;
+                AdoSqlText.RewriteQuestionMarkParameters(text, out int qCount);
                 boundParams = new List<AdoCommandParam>(items.Count);
-                foreach (ParameterObject p in items)
+                for (int i = 0; i < items.Count; i++)
                 {
+                    ParameterObject p = items[i];
                     if (p.Direction is 2 or 3 or 4)
                     {
                         // r-oledb-odbc/param-edge #55, #77, #99: Output/InputOutput/ReturnValue direction on ? command fails 0x80040E21 on IID_IAccessor.
                         MappedProviderError dirErr = AdoSqlErrors.MultipleStepOnAccessor();
                         _activeConnection.SetProviderError(dirErr.ErrorEntry);
                         return CallResult.Fail(dirErr.ComFailure);
+                    }
+                    if (p.ValueVariant.Type == VarType.Empty)
+                    {
+                        if (qCount > 0)
+                        {
+                            // r-fix-wire-ado/ado-command-parameters-fresh #73, #97; r-fix-wire-ado/ado-params-manual-append #38, #54:
+                            // unset appended Parameter (VT_EMPTY) on a ? command fails 0x80040E10 "Parameter ?_N has no default value." (3748).
+                            MappedProviderError noDef = AdoSqlErrors.ParameterNoDefaultValue(i + 1);
+                            _activeConnection.SetProviderError(noDef.ErrorEntry);
+                            return CallResult.Fail(noDef.ComFailure);
+                        }
+                        return NotImplemented("Command.Execute with an unset (VT_EMPTY) appended Parameter on a non-? command (not recorded)");
                     }
                     if (p.Type == 131 && p.ValueVariant.Type == VarType.Null)
                     {
@@ -375,12 +390,12 @@ internal sealed unsafe class CommandObject : AdoObject
                         _activeConnection.SetProviderError(numNullErr.ErrorEntry);
                         return CallResult.Fail(numNullErr.ComFailure);
                     }
-                    boundParams.Add(new AdoCommandParam(p.ValueVariant, p.Type));
+                    boundParams.Add(new AdoCommandParam(p.ValueVariant));
                 }
             }
             else if (_lastScalarParam is not null)
             {
-                boundParams = [new AdoCommandParam(_lastScalarParam, AdoType: null)];
+                boundParams = [new AdoCommandParam(_lastScalarParam)];
             }
         }
 
@@ -448,9 +463,11 @@ internal sealed class ParametersObject : AdoObject
     {
         if (_items.Count > 0
             || _owner.ActiveConnectionObject is not { IsOpen: true }
+            || _owner.CommandTextValue.Length == 0
             || _owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
         {
-            // r-q-ado-misc/param-saved-declared-order #17: empty Parameters.Count returns 0 on an open adCmdStoredProc Command.
+            // r-q-ado-misc/param-saved-declared-order #17: empty Parameters.Count returns 0 on an open adCmdStoredProc Command
+            // (and when CommandText is empty or connection is not open).
             return Int32(_items.Count);
         }
         // evidence/r-ado-1b/param-refresh-after-text-change: adCmdText with ? placeholders implicitly derives parameters on first Count access.
@@ -694,7 +711,7 @@ internal sealed unsafe class ParameterObject : AdoObject
 }
 
 /// <summary>One positional parameter value bound by <see cref="CommandObject.Execute"/>.</summary>
-internal readonly record struct AdoCommandParam(OwnedVariant Value, int? AdoType);
+internal readonly record struct AdoCommandParam(OwnedVariant Value);
 
 /// <summary>Shared positional parameter binder for <see cref="CommandObject.Execute"/> SELECT and action paths.</summary>
 internal static unsafe class AdoCommandParameters

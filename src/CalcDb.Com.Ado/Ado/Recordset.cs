@@ -187,7 +187,9 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         providerError = null;
         refusal = null;
         failedOpenColumns = null;
-        string effectiveSql = isSavedQuery ? sql : AdoSqlText.RewriteQuestionMarkParameters(sql, out _);
+        string effectiveSql = !isSavedQuery && commandParameters is not null
+            ? AdoSqlText.RewriteQuestionMarkParameters(sql, out _)
+            : sql;
         BoundSelect? plan = BoundSelect.Prepare(effectiveSql, session.Sql, out SqlFailure? failure);
         if (plan is null)
         {
@@ -4292,9 +4294,19 @@ internal sealed unsafe class RecordsetObject : AdoObject
         // Persisted client Recordsets (ADTG/XML files, Streams, MSPersist; r-str-ado-act/ado-persist,
         // r-ado-1b/persist-roundtrip-typed, persist-stream-roundtrip, persist-reconnect-adtg/xml,
         // persist-overwrite-flags, r-fix-wire-ado/persist-save-two-parameter) always report exact RecordCount.
-        if (sourceKind is AdoRecordCountSource.Persisted or AdoRecordCountSource.Schema)
+        if (sourceKind == AdoRecordCountSource.Persisted)
         {
             return null;
+        }
+        // OpenSchema Recordset.RecordCount is recorded only on ACCDB with server cursor (CursorLocation=2 -> -1;
+        // r-q-ado-misc/schema-ids-no-restrictions). MDB and client-cursor OpenSchema RecordCount stay refused by name.
+        if (sourceKind == AdoRecordCountSource.Schema)
+        {
+            return !isMdb && effectiveCursorLocation == 2
+                ? null
+                : Failure.NotModelled(
+                    "NotModelled.AdoRecordCount.Schema",
+                    $"ADO OpenSchema Recordset.RecordCount on isMdb={isMdb}, CursorLocation={effectiveCursorLocation} is not recorded");
         }
 
         // Jet 4 MDB RecordCount is recorded ONLY for client batch-optimistic cursors (3, 3, 4) over plain single-table queries
