@@ -130,6 +130,12 @@ internal sealed unsafe class CommandObject : AdoObject
         }
         if (AdoArgs.ObjectOf<ConnectionObject>(arg) is { } connection)
         {
+            if (connection.IsPersistenceOpen)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoMsPersistCommand",
+                    "Command.ActiveConnection = an open MSPersist Connection is not recorded"));
+            }
             if (connection.IsOpen)
             {
                 SetActiveConnectionInternal(connection);
@@ -181,6 +187,12 @@ internal sealed unsafe class CommandObject : AdoObject
         if (_activeConnection is not { IsOpen: true } cn)
         {
             return NotImplemented("Command.Properties without an open ACE ActiveConnection (not recorded)");
+        }
+        if (cn.IsPersistenceOpen || cn.OpenSession is null)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistCommand",
+                "Command.Properties on an MSPersist Connection is not recorded"));
         }
         if (string.IsNullOrEmpty(_commandText))
         {
@@ -250,6 +262,12 @@ internal sealed unsafe class CommandObject : AdoObject
         if (!_activeConnection.IsOpen)
         {
             return Fail(AdoErrors.ConnectionCannotBeUsed);
+        }
+        if (_activeConnection.IsPersistenceOpen || _activeConnection.OpenSession is null)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistCommand",
+                "Command.Execute on an MSPersist Connection is not recorded"));
         }
         nint parametersArg = args.Length > 1 ? args[1] : 0;
         if (parametersArg != 0 && Args.TypeOf(parametersArg) != VarType.Empty)

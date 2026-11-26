@@ -186,13 +186,15 @@ internal readonly record struct BatchRowOutcome(
 /// </summary>
 internal sealed unsafe class ClientRowBuffer
 {
-    private readonly AdoOpenSession _session;
-    private readonly string _tableName;
-    private readonly TableDefinition _table;
-    private readonly TableEditContext _editContext;
+    private AdoOpenSession? _session;
+    private string _tableName;
+    private TableDefinition? _table;
+    private TableEditContext? _editContext;
     private readonly AdoFieldDescriptor[] _columns;
-    private readonly ColumnDescriptor[] _columnMap;
-    private readonly int[] _pkSelectedOrdinals;
+    private ColumnDescriptor[]? _columnMap;
+    private int[] _pkSelectedOrdinals;
+    private readonly string[] _baseColumnNames;
+    private readonly bool _liveBinaryGuard;
     private readonly List<ClientRow> _rows;
     private readonly List<ClientRow> _purgedRows = [];
     private long _nextBookmarkId;
@@ -202,14 +204,17 @@ internal sealed unsafe class ClientRowBuffer
     private bool _disposed;
 
     private ClientRowBuffer(
-        AdoOpenSession session,
+        AdoOpenSession? session,
         string tableName,
-        TableDefinition table,
-        TableEditContext editContext,
+        TableDefinition? table,
+        TableEditContext? editContext,
         AdoFieldDescriptor[] columns,
-        ColumnDescriptor[] columnMap,
+        ColumnDescriptor[]? columnMap,
         int[] pkSelectedOrdinals,
-        List<ClientRow> rows)
+        List<ClientRow> rows,
+        string[]? baseColumnNames = null,
+        bool liveBinaryGuard = false,
+        long initialStagingOrder = 0)
     {
         _session = session;
         _tableName = tableName;
@@ -218,17 +223,28 @@ internal sealed unsafe class ClientRowBuffer
         _columns = columns;
         _columnMap = columnMap;
         _pkSelectedOrdinals = pkSelectedOrdinals;
+        _baseColumnNames = baseColumnNames ?? [.. columns.Select((c, i) => columnMap is not null ? columnMap[i].Name : c.Name)];
+        _liveBinaryGuard = liveBinaryGuard;
         _rows = rows;
         _nextBookmarkId = rows.Count;
+        _nextStagingOrder = initialStagingOrder;
     }
 
     public AdoFieldDescriptor[] Columns => _columns;
 
-    public ColumnDescriptor[] ColumnMap => _columnMap;
+    public ColumnDescriptor[]? ColumnMap => _columnMap;
+
+    public int[] PkSelectedOrdinals => _pkSelectedOrdinals;
+
+    public string[] BaseColumnNames => _baseColumnNames;
 
     public IReadOnlyList<ClientRow> Rows => _rows;
 
-    public AdoOpenSession Session => _session;
+    public AdoOpenSession? Session => _session;
+
+    public bool IsDisconnected => _session is null;
+
+    public bool IsLiveBinaryGuard => _liveBinaryGuard;
 
     public string TableName => _tableName;
 
@@ -393,17 +409,24 @@ internal sealed unsafe class ClientRowBuffer
             int colCount = select.Columns.Count;
             var columns = new AdoFieldDescriptor[colCount];
             var columnMap = new ColumnDescriptor[colCount];
+            bool hasOleColumn = false;
             for (int i = 0; i < colCount; i++)
             {
                 int? daoType = select.FieldType(i, out string? typeOpen);
                 columns[i] = AdoFieldDescriptor.FromSelectColumn(select.Columns[i], daoType, typeOpen, null, plan.Sources);
-                if (columns[i].AdoType is 204 or 205)
+                if (columns[i].AdoType == 204)
                 {
-                    // Client batch SELECT over Binary (204) / OLE (205) columns has no recorded read/edit rule
-                    // (evidence/r-str-ado-act/ado-rs-cursors c5); fall back to SelectRowSource so Binary/OLE
-                    // cell/ActualSize/GetString/Filter/Find refusals stay intact.
+                    // Client batch SELECT over fixed/var Binary (204) columns has no recorded read/edit rule;
+                    // fall back to SelectRowSource so Binary cell/ActualSize/GetString/Filter/Find refusals stay intact.
                     ineligible = true;
                     return null;
+                }
+                if (columns[i].AdoType == 205)
+                {
+                    // r-str-ado-act/ado-persist opens (3,3,4) on SELECT * FROM K ORDER BY ID (which includes OLE B),
+                    // edits T, and calls Save(); direct reads/Filter/Find/GetString/ActualSize of B on the live ACE
+                    // (3,3,4) cursor remain guarded by liveBinaryGuard so unrecorded live OLE reads stay refused by name.
+                    hasOleColumn = true;
                 }
                 columnMap[i] = select.Columns[i].SourceColumn!.Column;
             }
@@ -461,12 +484,174 @@ internal sealed unsafe class ClientRowBuffer
                 rows.Add(buffered);
             }
 
-            return new ClientRowBuffer(session, tableName, table, editContext, columns, columnMap, pkOrdinals, rows);
+            return new ClientRowBuffer(session, tableName, table, editContext, columns, columnMap, pkOrdinals, rows, liveBinaryGuard: hasOleColumn);
         }
         finally
         {
             plan.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Construct a disconnected <see cref="ClientRowBuffer"/> from a persisted ADTG or XML Recordset snapshot
+    /// (R-ADO-1 ADO-PERSIST; r-str-ado-act/ado-persist, r-ado-1b/persist-roundtrip-typed, persist-stream-roundtrip,
+    /// persist-reconnect-adtg, persist-reconnect-xml). Can later be bound to an open ACE connection via
+    /// <see cref="TryBindToSession"/> for <c>UpdateBatch</c>.
+    /// </summary>
+    public static ClientRowBuffer FromPersisted(PersistedRecordsetData data)
+    {
+        int colCount = data.Columns.Length;
+        var columns = new AdoFieldDescriptor[colCount];
+        var baseColumnNames = new string[colCount];
+        var pkList = new List<int>();
+        string tableName = data.BaseTableName ?? "";
+        for (int i = 0; i < colCount; i++)
+        {
+            PersistedColumn pc = data.Columns[i];
+            columns[i] = pc.ToFieldDescriptor();
+            baseColumnNames[i] = string.IsNullOrEmpty(pc.BaseColumnName) ? pc.Name : pc.BaseColumnName;
+            if (string.IsNullOrEmpty(tableName) && !string.IsNullOrEmpty(pc.BaseTableName))
+            {
+                tableName = pc.BaseTableName;
+            }
+            if (pc.IsKeyColumn)
+            {
+                pkList.Add(i);
+            }
+        }
+
+        var rows = new List<ClientRow>(data.Rows.Count);
+        long bookmarkId = 0;
+        long maxStaging = 0;
+        foreach (PersistedRow pr in data.Rows)
+        {
+            var cur = new OwnedVariant[colCount];
+            var orig = new OwnedVariant[colCount];
+            var under = new OwnedVariant[colCount];
+            for (int c = 0; c < colCount; c++)
+            {
+                cur[c] = pr.Current[c].CopyPreservingReference();
+                orig[c] = pr.Original[c].CopyPreservingReference();
+                under[c] = pr.State == ClientRowState.New
+                    ? OwnedVariant.Null()
+                    : pr.Original[c].CopyPreservingReference();
+            }
+            long staging = pr.StagingOrder;
+            if (pr.State is ClientRowState.New or ClientRowState.Modified or ClientRowState.Deleted && staging <= 0)
+            {
+                staging = ++maxStaging;
+            }
+            else if (staging > maxStaging)
+            {
+                maxStaging = staging;
+            }
+
+            var row = new ClientRow(++bookmarkId, storedRowId: null, cur, orig, under, pr.State, staging);
+            for (int c = 0; c < colCount; c++)
+            {
+                if (c < pr.ModifiedColumns.Length && pr.ModifiedColumns[c])
+                {
+                    row.ModifiedColumns[c] = true;
+                }
+                else if (pr.State == ClientRowState.New && cur[c].Type != VarType.Null)
+                {
+                    row.ModifiedColumns[c] = true;
+                }
+                else if (pr.State == ClientRowState.Modified && !VariantEquals(cur[c], orig[c]))
+                {
+                    row.ModifiedColumns[c] = true;
+                }
+            }
+            rows.Add(row);
+        }
+
+        return new ClientRowBuffer(
+            session: null,
+            tableName,
+            table: null,
+            editContext: null,
+            columns,
+            columnMap: null,
+            [.. pkList],
+            rows,
+            baseColumnNames,
+            liveBinaryGuard: false,
+            initialStagingOrder: maxStaging);
+    }
+
+    /// <summary>
+    /// Bind a disconnected persisted <see cref="ClientRowBuffer"/> to an open ACE session before <c>UpdateBatch</c>
+    /// (r-ado-1b/persist-reconnect-adtg #41-57, r-ado-1b/persist-reconnect-xml #41-57).
+    /// </summary>
+    public bool TryBindToSession(
+        AdoOpenSession session,
+        string? uniqueTableOverride,
+        out MappedProviderError? providerError,
+        out Failure? refusal)
+    {
+        providerError = null;
+        refusal = null;
+        string targetTable = !string.IsNullOrWhiteSpace(uniqueTableOverride) ? uniqueTableOverride : _tableName;
+        if (string.IsNullOrWhiteSpace(targetTable))
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoPersistReconnectNoTable",
+                "UpdateBatch on a reconnected persisted Recordset without base table metadata or Unique Table is not recorded");
+            return false;
+        }
+        CatalogEntry? entry = FindLocalTable(session, targetTable);
+        if (entry is null)
+        {
+            providerError = AdoSqlErrors.TableOrQueryNotFound(targetTable);
+            return false;
+        }
+        TableDefinition? table = session.Definition(entry, out string? defFail);
+        if (table is null)
+        {
+            refusal = Failure.NotImplemented($"Persisted reconnect table definition failure for '{targetTable}': {defFail}");
+            return false;
+        }
+        TableEditContext? editContext = session.EditContext(entry, out string? editFail);
+        if (editContext is null)
+        {
+            refusal = Failure.NotImplemented($"Persisted reconnect edit context failure for '{targetTable}': {editFail}");
+            return false;
+        }
+
+        var columnMap = new ColumnDescriptor[_columns.Length];
+        for (int i = 0; i < _columns.Length; i++)
+        {
+            string lookupName = !string.IsNullOrEmpty(_baseColumnNames[i]) ? _baseColumnNames[i] : _columns[i].Name;
+            ColumnDescriptor? matched = null;
+            foreach (ColumnDescriptor tc in table.Columns)
+            {
+                if (string.Equals(tc.Name, lookupName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = tc;
+                    break;
+                }
+            }
+            if (matched is null)
+            {
+                refusal = Failure.NotModelled(
+                    "NotModelled.AdoPersistReconnectColumnMismatch",
+                    $"Persisted column '{lookupName}' was not found in target table '{targetTable}'");
+                return false;
+            }
+            columnMap[i] = matched;
+        }
+
+        int[] resolvedPk = ResolvePrimaryKeyOrdinals(table, session.Format, columnMap);
+        _session = session;
+        _tableName = targetTable;
+        _table = table;
+        _editContext = editContext;
+        _columnMap = columnMap;
+        if (resolvedPk.Length > 0)
+        {
+            _pkSelectedOrdinals = resolvedPk;
+        }
+        return true;
     }
 
     public ClientRow AddNewRow()
@@ -512,6 +697,21 @@ internal sealed unsafe class ClientRowBuffer
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
             providerError = AdoSqlErrors.ClientDeletedRowHandle();
+            return false;
+        }
+
+        if (_liveBinaryGuard && _columns[ordinal].AdoType is 204 or 205)
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Assigning Binary/OLE field '{_columns[ordinal].Name}' on live client batch SELECT is not recorded");
+            return false;
+        }
+        if (_columnMap is null)
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoDisconnectedPersistedEdit",
+                $"Editing field '{_columns[ordinal].Name}' on a disconnected persisted Recordset is not recorded");
             return false;
         }
 
@@ -706,6 +906,12 @@ internal sealed unsafe class ClientRowBuffer
         errors = [];
         refusal = null;
 
+        if (_session is null || _table is null)
+        {
+            refusal = Failure.NotModelled("NotModelled.AdoDisconnectedResync", "Resync on a disconnected persisted Recordset is not recorded");
+            return false;
+        }
+
         PrivateOverlay? overlay = _session.Transactions.OverlayOf(_session.Cache);
         using RowReader? reader = RowReader.Open(new PageSource(_session.Cache, overlay), _session.Format, _table, _session.PageCount, out TraversalFailure? tf);
         if (reader is null)
@@ -818,6 +1024,10 @@ internal sealed unsafe class ClientRowBuffer
 
     private BatchRowOutcome ApplySingleRow(ClientRow row, int updateCriteria, int updateResync, bool isImmediate)
     {
+        if (_session is null || _table is null || _editContext is null || _columnMap is null)
+        {
+            return new BatchRowOutcome(row, Succeeded: false, null, Failure.NotModelled("NotModelled.AdoDisconnectedUpdate", "Updating a disconnected Recordset without binding to a session is not recorded"));
+        }
         if (_session.ReadOnly)
         {
             // r-ado-1b/rs-readonly-mode-edit #116-126: UpdateBatch on a Mode=1 read-only connection fails 3073 on ICommand.
@@ -840,8 +1050,12 @@ internal sealed unsafe class ClientRowBuffer
 
     private BatchRowOutcome ApplyInsert(ClientRow row, int updateResync, bool isImmediate)
     {
-        using var cursor = new SingleRowBatchCursor(_session, _table, currentRow: null);
-        using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
+        AdoOpenSession session = _session!;
+        TableDefinition table = _table!;
+        TableEditContext editContext = _editContext!;
+        ColumnDescriptor[] columnMap = _columnMap!;
+        using var cursor = new SingleRowBatchCursor(session, table, currentRow: null);
+        using var frame = new EditFrame(editContext, cursor, session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
             LockEdits = false,
@@ -856,7 +1070,7 @@ internal sealed unsafe class ClientRowBuffer
         bool hasNullAutoNumberPk = false;
         for (int i = 0; i < _columns.Length; i++)
         {
-            ColumnDescriptor col = _columnMap[i];
+            ColumnDescriptor col = columnMap[i];
             if (col.IsAutoNumber && !row.ModifiedColumns[i])
             {
                 if (_pkSelectedOrdinals.Contains(i))
@@ -890,10 +1104,10 @@ internal sealed unsafe class ClientRowBuffer
         if (updRes.Change is { } change)
         {
             row.StoredRowId = change.Inserted;
-            ColumnDescriptor? autoCol = _table.Columns.FirstOrDefault(c => c.IsAutoNumber);
+            ColumnDescriptor? autoCol = table.Columns.FirstOrDefault(c => c.IsAutoNumber);
             if (autoCol is not null && change.Values[autoCol.Ordinal].Kind == NativeKind.Long)
             {
-                _session.LastIdentity = (int)change.Values[autoCol.Ordinal].Integer;
+                session.LastIdentity = (int)change.Values[autoCol.Ordinal].Integer;
             }
 
             // r-ado-1b/batch-update-resync #176-185: Update Resync = adResyncInserts (8) WITHOUT adResyncAutoIncrement (1)
@@ -911,7 +1125,7 @@ internal sealed unsafe class ClientRowBuffer
             {
                 for (int i = 0; i < _columns.Length; i++)
                 {
-                    ColumnDescriptor col = _columnMap[i];
+                    ColumnDescriptor col = columnMap[i];
                     if (resyncInserts || (resyncAutoInc && col.IsAutoNumber))
                     {
                         OwnedVariant? refreshed = AdoFieldValues.FromNative(change.Values[col.Ordinal], _columns[i], isClientCursor: true, out _);
@@ -930,8 +1144,12 @@ internal sealed unsafe class ClientRowBuffer
 
     private BatchRowOutcome ApplyUpdate(ClientRow row, int updateCriteria, int updateResync, bool isImmediate)
     {
-        PrivateOverlay? overlay = _session.Transactions.OverlayOf(_session.Cache);
-        using RowReader? reader = RowReader.Open(new PageSource(_session.Cache, overlay), _session.Format, _table, _session.PageCount, out TraversalFailure? tf);
+        AdoOpenSession session = _session!;
+        TableDefinition table = _table!;
+        TableEditContext editContext = _editContext!;
+        ColumnDescriptor[] columnMap = _columnMap!;
+        PrivateOverlay? overlay = session.Transactions.OverlayOf(session.Cache);
+        using RowReader? reader = RowReader.Open(new PageSource(session.Cache, overlay), session.Format, table, session.PageCount, out TraversalFailure? tf);
         if (reader is null)
         {
             return new BatchRowOutcome(row, false, null, Failure.NotImplemented($"Client UpdateBatch RowReader failure for '{_tableName}': {tf?.Predicate}"));
@@ -959,8 +1177,8 @@ internal sealed unsafe class ClientRowBuffer
         }
 
         row.StoredRowId = liveId;
-        using var cursor = new SingleRowBatchCursor(_session, _table, liveId);
-        using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
+        using var cursor = new SingleRowBatchCursor(session, table, liveId);
+        using var frame = new EditFrame(editContext, cursor, session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
             LockEdits = false,
@@ -978,7 +1196,7 @@ internal sealed unsafe class ClientRowBuffer
             {
                 continue;
             }
-            ColumnDescriptor col = _columnMap[i];
+            ColumnDescriptor col = columnMap[i];
             if (col.IsAutoNumber)
             {
                 continue;
@@ -1003,7 +1221,7 @@ internal sealed unsafe class ClientRowBuffer
         {
             for (int i = 0; i < _columns.Length; i++)
             {
-                OwnedVariant? refreshed = AdoFieldValues.FromNative(change.Values[_columnMap[i].Ordinal], _columns[i], isClientCursor: true, out _);
+                OwnedVariant? refreshed = AdoFieldValues.FromNative(change.Values[columnMap[i].Ordinal], _columns[i], isClientCursor: true, out _);
                 if (refreshed is not null)
                 {
                     row.SetCurrent(i, refreshed);
@@ -1017,8 +1235,11 @@ internal sealed unsafe class ClientRowBuffer
 
     private BatchRowOutcome ApplyDelete(ClientRow row, int updateCriteria)
     {
-        PrivateOverlay? overlay = _session.Transactions.OverlayOf(_session.Cache);
-        using RowReader? reader = RowReader.Open(new PageSource(_session.Cache, overlay), _session.Format, _table, _session.PageCount, out TraversalFailure? tf);
+        AdoOpenSession session = _session!;
+        TableDefinition table = _table!;
+        TableEditContext editContext = _editContext!;
+        PrivateOverlay? overlay = session.Transactions.OverlayOf(session.Cache);
+        using RowReader? reader = RowReader.Open(new PageSource(session.Cache, overlay), session.Format, table, session.PageCount, out TraversalFailure? tf);
         if (reader is null)
         {
             return new BatchRowOutcome(row, false, null, Failure.NotImplemented($"Client Delete RowReader failure for '{_tableName}': {tf?.Predicate}"));
@@ -1046,8 +1267,8 @@ internal sealed unsafe class ClientRowBuffer
         }
 
         row.StoredRowId = liveId;
-        using var cursor = new SingleRowBatchCursor(_session, _table, liveId);
-        using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
+        using var cursor = new SingleRowBatchCursor(session, table, liveId);
+        using var frame = new EditFrame(editContext, cursor, session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
             LockEdits = false,
@@ -1219,9 +1440,10 @@ internal sealed unsafe class ClientRowBuffer
         var arr = new OwnedVariant[_columns.Length];
         try
         {
+            ColumnDescriptor[] columnMap = _columnMap!;
             for (int i = 0; i < _columns.Length; i++)
             {
-                FieldResult raw = reader.Read(_columnMap[i]);
+                FieldResult raw = reader.Read(columnMap[i]);
                 if (!raw.Succeeded)
                 {
                     DisposeVariants(arr, i);
@@ -1485,7 +1707,7 @@ internal sealed unsafe class ClientRowBuffer
         return false;
     }
 
-    private static int[] ResolvePrimaryKeyOrdinals(TableDefinition table, FormatDescriptor format, ColumnDescriptor[] columnMap)
+    internal static int[] ResolvePrimaryKeyOrdinals(TableDefinition table, FormatDescriptor format, ColumnDescriptor[] columnMap)
     {
         LogicalIndex? pkLogical = table.LogicalIndexes.FirstOrDefault(ix => ix.IndexType == format.IndexDescriptor.PrimaryKeyType);
         if (pkLogical is null)
@@ -1519,7 +1741,7 @@ internal sealed unsafe class ClientRowBuffer
         return [.. ordinals];
     }
 
-    private static CatalogEntry? FindLocalTable(AdoOpenSession session, string tableName) =>
+    internal static CatalogEntry? FindLocalTable(AdoOpenSession session, string tableName) =>
         session.Catalog.LocalTables(session.Format)
             .FirstOrDefault(e => CatalogRelationshipContext.NamesEqual(e.Name, tableName));
 
@@ -1645,6 +1867,7 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
     private readonly bool _isBatchOptimistic;
     private readonly bool _fromTable;
     private readonly bool _fromSavedQuery;
+    private readonly bool _isPersisted;
     private readonly List<ClientRow> _view = [];
     private long _syncedVersion = -1;
     private int _lastFilterGroup;
@@ -1661,12 +1884,14 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         ClientRowBuffer buffer,
         bool isBatchOptimistic,
         bool fromTable,
-        bool fromSavedQuery)
+        bool fromSavedQuery,
+        bool isPersisted = false)
     {
         _buffer = buffer;
         _isBatchOptimistic = isBatchOptimistic;
         _fromTable = fromTable;
         _fromSavedQuery = fromSavedQuery;
+        _isPersisted = isPersisted;
         RebuildView(0, null, null, null, out _);
         _currentRow = _view.Count > 0 ? _view[0] : null;
     }
@@ -1678,6 +1903,8 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
     public bool IsTableSource => _fromTable;
 
     public bool IsSavedQuery => _fromSavedQuery;
+
+    public bool IsPersisted => _isPersisted;
 
     public AdoFieldDescriptor[] Columns => _buffer.Columns;
 
@@ -1739,7 +1966,51 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
     public ClientBatchRowSource CreateClone()
     {
         _buffer.AddRef();
-        return new ClientBatchRowSource(_buffer, _isBatchOptimistic, _fromTable, _fromSavedQuery);
+        return new ClientBatchRowSource(_buffer, _isBatchOptimistic, _fromTable, _fromSavedQuery, _isPersisted);
+    }
+
+    /// <summary>Snapshot schema and rows (including pending Modified/New/Deleted states) for <c>Recordset.Save</c>.</summary>
+    public PersistedRecordsetData SnapshotForPersist(bool isUpdatable)
+    {
+        AdoFieldDescriptor[] cols = _buffer.Columns;
+        int colCount = cols.Length;
+        var persistedCols = new PersistedColumn[colCount];
+        string? baseTable = string.IsNullOrEmpty(_buffer.TableName) ? null : _buffer.TableName;
+        for (int i = 0; i < colCount; i++)
+        {
+            AdoFieldDescriptor c = cols[i];
+            persistedCols[i] = new PersistedColumn(
+                c.Name,
+                c.AdoType,
+                c.DefinedSize,
+                c.Precision,
+                c.NumericScale,
+                c.Attributes,
+                BaseTableName: baseTable,
+                BaseColumnName: _buffer.BaseColumnNames[i],
+                IsKeyColumn: _buffer.PkSelectedOrdinals.Contains(i));
+        }
+
+        var rows = new List<PersistedRow>(_buffer.Rows.Count);
+        foreach (ClientRow r in _buffer.Rows)
+        {
+            if (r.State == ClientRowState.Purged)
+            {
+                continue;
+            }
+            var cur = new OwnedVariant[colCount];
+            var orig = new OwnedVariant[colCount];
+            var mods = new bool[colCount];
+            for (int c = 0; c < colCount; c++)
+            {
+                cur[c] = r.Current[c].CopyPreservingReference();
+                orig[c] = r.Original[c].CopyPreservingReference();
+                mods[c] = r.ModifiedColumns[c];
+            }
+            rows.Add(new PersistedRow(r.State, cur, orig, mods, r.StagingOrder));
+        }
+
+        return new PersistedRecordsetData(persistedCols, rows, baseTable, isUpdatable);
     }
 
     public bool TrySeek(int index, out Failure? failure)
@@ -1771,6 +2042,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
             failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
+        if (_buffer.IsLiveBinaryGuard && _buffer.Columns[ordinal].AdoType is 204 or 205)
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Reading Binary/OLE field '{_buffer.Columns[ordinal].Name}' on live client batch SELECT is not recorded");
+            return null;
+        }
         return row.Current[ordinal].CopyPreservingReference();
     }
 
@@ -1786,6 +2064,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
             failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
+            return null;
+        }
+        if (_buffer.IsLiveBinaryGuard && _buffer.Columns[ordinal].AdoType is 204 or 205)
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Reading OriginalValue of Binary/OLE field '{_buffer.Columns[ordinal].Name}' on live client batch SELECT is not recorded");
             return null;
         }
         return row.Original[ordinal].CopyPreservingReference();
@@ -1805,6 +2090,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
             failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
+        if (_buffer.IsLiveBinaryGuard && _buffer.Columns[ordinal].AdoType is 204 or 205)
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Reading UnderlyingValue of Binary/OLE field '{_buffer.Columns[ordinal].Name}' on live client batch SELECT is not recorded");
+            return null;
+        }
         return row.Underlying[ordinal].CopyPreservingReference();
     }
 
@@ -1816,6 +2108,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         out Failure? failure)
     {
         failure = null;
+        if (_buffer.IsLiveBinaryGuard && filterExpr is not null && filterExpr.ReferencesBinaryColumn(_buffer.Columns, out string? binCol))
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Filtering on Binary/OLE field '{binCol}' on live client batch SELECT is not recorded");
+            return false;
+        }
         _lastFilterGroup = filterGroup;
         _lastFilterExpr = filterExpr;
         _lastSortSpec = sortSpec;

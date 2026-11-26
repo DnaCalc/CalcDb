@@ -26,6 +26,12 @@ internal static class AdoErrors
     /// <summary>0x800A0BB9 (CreateParameter Type 9999 or Direction 99, Connection.CommandTimeout -1, Recordset.PageSize/CacheSize/AbsolutePage &lt;= 0).</summary>
     public static readonly AdoError ArgumentsWrongType = new(0x0BB9, 1240641, "Arguments are of the wrong type, are out of acceptable range, or are in conflict with one another.");
 
+    /// <summary>0x800A0BBA (Stream.LoadFromFile of a missing file; r-q-ado-misc/stream-file-ops #34).</summary>
+    public static readonly AdoError FileCouldNotBeOpened = new(0x0BBA, 1240642, "File could not be opened.");
+
+    /// <summary>0x800A0BBC (Stream.SaveToFile with adSaveCreateNotExist onto an existing file; r-q-ado-misc/stream-file-ops #10).</summary>
+    public static readonly AdoError WriteToFileFailed = new(0x0BBC, 1240644, "Write to file failed.");
+
     /// <summary>0x800A0BCD (Field.Value or MoveNext/MovePrevious/MoveFirst/MoveLast with no current record; r-str-ado-act/ado-rs-read-close, r-oledb-odbc/fetch-moves).</summary>
     public static readonly AdoError NoCurrentRecord = new(0x0BCD, 1240645, "Either BOF or EOF is True, or the current record has been deleted. Requested operation requires a current record.");
 
@@ -127,6 +133,21 @@ internal abstract class AdoObject : DispatchObject
 
     /// <summary>Source string reported by client cursor engine failures (r-ado-1b/view-sort-grammar #77, #81).</summary>
     public const string CursorEngineSource = "Microsoft Cursor Engine";
+
+    /// <summary>Source string reported by OLE DB Persistence Provider failures (r-ado-1b/persist-malformed-files).</summary>
+    public const string PersistenceProviderSource = "Microsoft OLEDB Persistence Provider";
+
+    /// <summary>STG_E_FILENOTFOUND / 0x80030002 (Recordset.Open adCmdFile of a missing file; r-ado-1b/persist-malformed-files #86).</summary>
+    public const int HResultFileNotFound = unchecked((int)0x80030002);
+
+    /// <summary>STG_E_ACCESSDENIED / 0x80030005 (Stream.WriteText on a read-only adModeRead stream; r-q45-querydef-stream-rollback/stream-open-modes-reopen #58).</summary>
+    public const int HResultAccessDenied = unchecked((int)0x80030005);
+
+    /// <summary>STG_E_FILEALREADYEXISTS / 0x80030050 (Recordset.Save to an existing path; r-ado-1b/persist-overwrite-flags #32, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55).</summary>
+    public const int HResultFileAlreadyExists = unchecked((int)0x80030050);
+
+    /// <summary>E_INVALIDARG / 0x80070057 (Stream.ReadText on invalid UTF-8 bytes; r-str-ado-act/ado-stream #24, r-q-ado-misc/stream-text-ops #32).</summary>
+    public const int HResultInvalidArg = unchecked((int)0x80070057);
 
     /// <summary>HelpContext of OLE DB provider-layer and read-only-property errors (r-ado-1b/conn-open-args, conn-set-while-open, r-oledb-odbc/error-open-failures).</summary>
     public const int ProviderHelpContext = 1240640;
@@ -259,6 +280,22 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>A client Cursor Engine failure (Source "Microsoft Cursor Engine", HelpContext 0, IErrorInfo GUID = Guid.Empty; r-ado-1b/view-sort-grammar #77, #81).</summary>
     public static Failure CursorEngineFailure(int scode, string description) =>
         new(FailureKind.Ado, scode, CursorEngineSource, description, null, 0)
+        {
+            PublishesErrorInfo = true,
+            ErrorInfoIid = Guid.Empty,
+        };
+
+    /// <summary>An OLE DB Persistence Provider failure (Source "Microsoft OLEDB Persistence Provider", HelpContext 0, IErrorInfo GUID = Guid.Empty; r-ado-1b/persist-malformed-files).</summary>
+    public static Failure PersistenceFailure(int scode, string description) =>
+        new(FailureKind.Ado, scode, PersistenceProviderSource, description, null, 0)
+        {
+            PublishesErrorInfo = true,
+            ErrorInfoIid = Guid.Empty,
+        };
+
+    /// <summary>STG_E_FILEALREADYEXISTS (0x80030050) on Recordset.Save to an existing file (r-ado-1b/persist-overwrite-flags #32, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55).</summary>
+    public static Failure FileAlreadyExistsFailure() =>
+        new(FailureKind.Ado, HResultFileAlreadyExists, "", "", null, 0)
         {
             PublishesErrorInfo = true,
             ErrorInfoIid = Guid.Empty,
