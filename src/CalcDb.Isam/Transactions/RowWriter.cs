@@ -2315,12 +2315,12 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                     }
                 }
             }
-            if (!isAccdb && lvalFree.Count > 0)
+            if (!isAccdb && lvalFree.Count > 0 && !(lvalFree.Count == 1 && withRoom.Count == 1))
             {
-                failure = "appending to or reusing an existing long-value free-map page in an MDB file is not recorded (R-FMT-2 LV form selection Open; evidence/r-q36-publication-bytes/feff-content-mdb-dao records empty LV free map only)";
+                failure = "reusing an existing long-value free-map page in an MDB file beyond appending to the sole free-map page with room is not recorded (R-FMT-2 LV form selection Open; evidence/r-q44-ddl-alter-types/ixtype-memo-rows-mdb-dao records appending to the sole free-map page)";
                 return null;
             }
-            if (!isAccdb && _d.PageSize - _d.DataPage.SlotBase - needed < LvalFreeMapStaysAtOrAbove)
+            if (!isAccdb && lvalFree.Count == 0 && _d.PageSize - _d.DataPage.SlotBase - needed < LvalFreeMapStaysAtOrAbove)
             {
                 failure = $"writing a {payload.Length}-byte single-page Memo long value in an MDB file (leaving fewer than {LvalFreeMapStaysAtOrAbove} free bytes) is not recorded (R-FMT-2 LV form selection Open)";
                 return null;
@@ -2351,6 +2351,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
                     return null;
                 }
                 int remainingFree = (int)_d.DataPage.FreeCount.Read(copy);
+                if (!isAccdb && remainingFree < LvalFreeMapStaysAtOrAbove)
+                {
+                    failure = $"appending a {payload.Length}-byte Memo long value to MDB LVAL page {candidate} (leaving {remainingFree} < {LvalFreeMapStaysAtOrAbove} free bytes) is not recorded (R-FMT-2 LV form selection Open; evidence/r-q44-ddl-alter-types/ixtype-memo-rows-mdb-dao leaves >= {LvalFreeMapStaysAtOrAbove} bytes)";
+                    return null;
+                }
                 if (remainingFree <= LvalFreeMapLeavesAtOrBelow)
                 {
                     if (MapBit(maps.FreeMap, candidate, seen, out failure, member: false) is not { } leaveFree)

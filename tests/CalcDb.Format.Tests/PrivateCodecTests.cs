@@ -24,12 +24,12 @@ public sealed class PrivateCodecTests
         IsFixed = true,
     };
 
-    private static string Key(ColumnDescriptor column, KeyValue value)
+    private static string Key(ColumnDescriptor column, KeyValue value, bool ascending = true)
     {
-        FieldKeyCodec codec = IndexKeys.CodecFor(column, out KeyCodecRefusal refusal)!.Value;
+        FieldKeyCodec codec = IndexKeys.CodecFor(column, out KeyCodecRefusal refusal, ascending: ascending)!.Value;
         Assert.Equal(KeyCodecRefusal.None, refusal);
         byte[] key = new byte[codec.MaxFieldBytes];
-        Assert.True(IndexKeys.TryWriteField(key, codec, true, value, out int written));
+        Assert.True(IndexKeys.TryWriteField(key, codec, ascending, value, out int written));
         return Convert.ToHexString(key.AsSpan(0, written));
     }
 
@@ -75,11 +75,39 @@ public sealed class PrivateCodecTests
     }
 
     [Fact]
-    public void GUID_keys_frame_the_canonical_text_order()
+    public void GUID_keys_frame_the_canonical_text_order_ascending_and_descending()
     {
         // II-04 §5.4 row bytes of {00112233-4455-6677-8899-AABBCCDDEEFF}; II-05 §4.4 ascending key.
         byte[] row = Convert.FromHexString("33221100554477668899AABBCCDDEEFF");
-        Assert.Equal("7F001122334455667709" + "8899AABBCCDDEEFF08", Key(Column(NativeTypes.Guid, 16), KeyValue.OfBytes(row)));
+        ColumnDescriptor guidCol = Column(NativeTypes.Guid, 16);
+        Assert.Equal("7F001122334455667709" + "8899AABBCCDDEEFF08", Key(guidCol, KeyValue.OfBytes(row)));
+
+        // evidence/r-q44-ddl-alter-types/ixtype-guid-rows-accdb-dao (pages 46, 47) & ixtype-guid-rows-mdb-dao (pages 23, 24):
+        // descending GUID writes marker 0x80, complements data bytes and final count 0x08 -> 0xF7, keeping 0x09 uncomplemented.
+        (string guidText, string expectedAsc, string expectedDesc)[] cases =
+        [
+            ("00000000-0000-0000-0000-000000000000", "7F000000000000000009000000000000000008", "80FFFFFFFFFFFFFFFF09FFFFFFFFFFFFFFFFF7"),
+            ("00000001-0002-0003-0004-000000000005", "7F000000010002000309000400000000000508", "80FFFFFFFEFFFDFFFC09FFFBFFFFFFFFFFFAF7"),
+            ("80000000-0000-0000-0000-000000000001", "7F800000000000000009000000000000000108", "807FFFFFFFFFFFFFFF09FFFFFFFFFFFFFFFEF7"),
+            ("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF", "7FFFFFFFFFFFFFFFFF09FFFFFFFFFFFFFFFF08", "800000000000000000090000000000000000F7"),
+        ];
+        foreach ((string guidText, string expectedAsc, string expectedDesc) in cases)
+        {
+            byte[] raw = Guid.Parse(guidText).ToByteArray();
+            Assert.Equal(expectedAsc, Key(guidCol, KeyValue.OfBytes(raw), ascending: true));
+            Assert.Equal(expectedDesc, Key(guidCol, KeyValue.OfBytes(raw), ascending: false));
+        }
+        Assert.Equal("00", Key(guidCol, KeyValue.Null, ascending: true));
+        Assert.Equal("FF", Key(guidCol, KeyValue.Null, ascending: false));
+
+        // evidence/r-q44-ddl-alter-types/ixtype-double-rows-accdb-dao (pages 46, 47): -0.0 and +0.0 encode to distinct keys.
+        ColumnDescriptor dblCol = Column(NativeTypes.Double, 8);
+        KeyValue negZero = new(KeyValueKind.FloatBits, Bits: 0x8000_0000_0000_0000ul);
+        KeyValue posZero = new(KeyValueKind.FloatBits, Bits: 0x0000_0000_0000_0000ul);
+        Assert.Equal("7F7FFFFFFFFFFFFFFF", Key(dblCol, negZero, ascending: true));
+        Assert.Equal("7F8000000000000000", Key(dblCol, posZero, ascending: true));
+        Assert.Equal("808000000000000000", Key(dblCol, negZero, ascending: false));
+        Assert.Equal("807FFFFFFFFFFFFFFF", Key(dblCol, posZero, ascending: false));
     }
 
     [Theory]
@@ -95,7 +123,6 @@ public sealed class PrivateCodecTests
 
     [Theory]
     [InlineData(NativeTypes.Numeric)]
-    [InlineData(NativeTypes.Guid)]
     [InlineData(NativeTypes.Binary)]
     [InlineData(NativeTypes.ExtendedDateTime)]
     public void A_descending_key_no_fixture_decides_is_a_named_refusal(byte type)
@@ -103,6 +130,7 @@ public sealed class PrivateCodecTests
         Assert.Null(IndexKeys.CodecFor(Column(type, 17), out KeyCodecRefusal refusal, ascending: false));
         Assert.Equal(KeyCodecRefusal.DescendingNotDecided, refusal);
         Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Long, 4), out _, ascending: false));
+        Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Guid, 16), out _, ascending: false));
     }
 
     [Fact]

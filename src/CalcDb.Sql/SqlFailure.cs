@@ -167,6 +167,9 @@ public static class SqlMessages
     /// <summary>3018 when ALTER TABLE ALTER COLUMN names a nonexistent field (r-def-expr-sql/ddl-alter-column-forms).</summary>
     public const string CouldNotFindField = "Could not find field.";
 
+    /// <summary>3022 when CREATE UNIQUE INDEX encounters duplicate keys in existing rows (r-q44-ddl-alter-types/ixtype-memo-rows-*).</summary>
+    public const string DuplicateIndexValue = "The changes you requested to the table were not successful because they would create duplicate values in the index, primary key, or relationship. Change the data in the field or fields that contain duplicate data, remove the index, or redefine the index to permit duplicate entries and try again.";
+
     /// <summary>3090 when a table would have more than one AutoNumber/COUNTER column (r-def-expr-sql/ddl-counter-seed-increment, ddl-alter-column-forms).</summary>
     public const string MultipleAutoNumber = "Resultant table not allowed to have more than one AutoNumber field.";
 

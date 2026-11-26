@@ -1772,12 +1772,24 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     roles[sidePage] = sideRole;
                 }
             }
+            bool page0HadContentEdit = roles.ContainsKey(0UL);
             PageBracket? bracket = null;
             if (incrementPage0)
             {
                 bool exclusive = IsExclusive(p.Cache);
                 FieldRule counterRule = d.Header.CommitCounterFor(exclusive);
-                if (!p.Overlay.ChangedPages.Contains(0UL))
+                bool needCounterEdit = !p.Overlay.ChangedPages.Contains(0UL);
+                if (!needCounterEdit && page0HadContentEdit)
+                {
+                    // Page 0 already holds a non-counter edit (for example a header format-version upgrade at offset 20,
+                    // evidence/r-q44-ddl-alter-types/ext-*): still apply the commit counter once (idempotent on retry)
+                    // and publish the full page 0 instead of restricting the write to the 2-byte counter bracket.
+                    using PagePin? cached0 = p.Cache.Pin(0).Pin;
+                    using PagePin? overlay0 = new PageSource(p.Cache, p.Overlay).Pin(0).Pin;
+                    needCounterEdit = cached0 is null || overlay0 is null
+                        || counterRule.Read(overlay0.Bytes) == counterRule.Read(cached0.Bytes);
+                }
+                if (needCounterEdit)
                 {
                     EditResult p0Edit = p.Overlay.Edit(0, new CommitCounterDelta(d, exclusive));
                     if (!p0Edit.Succeeded)
@@ -1786,7 +1798,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     }
                 }
                 roles[0] = PageRole.NativeState;
-                bracket = new PageBracket(0, new PageSpan(counterRule.Offset, counterRule.Offset + d.Header.CommitCounterBracketBytes));
+                if (!page0HadContentEdit)
+                {
+                    bracket = new PageBracket(0, new PageSpan(counterRule.Offset, counterRule.Offset + d.Header.CommitCounterBracketBytes));
+                }
             }
             ulong publishedExtent = p.Cache.KnownExtentPages;
             foreach (ulong page in p.Overlay.ChangedPages)

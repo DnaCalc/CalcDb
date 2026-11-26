@@ -41,6 +41,8 @@ public enum NewFieldType : byte
     Memo,
     Guid,
     Decimal,
+    BigInt,
+    DateTime2,
 }
 
 /// <summary>
@@ -257,6 +259,21 @@ public sealed class SchemaWriter
     /// </summary>
     private static readonly StoredProperty SqlFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x01]);
 
+    /// <summary>
+    /// ACCDB extended-type feature version metadata written to page 0 offset 20 and <c>MSysObjects.LvProp</c>
+    /// (<c>FCMinReadVer</c>, <c>FCMinWriteVer</c>, <c>FCMinDesignVer</c> with flag <c>0x00</c>, type Text <c>0x0A</c>;
+    /// evidence/r-q44-ddl-alter-types/ext-*, evidence/r-q36-publication-bytes/create-nullfix-ext-accdb).
+    /// </summary>
+    private const byte Ace2016VersionCode = 5;
+    private const byte Ace2019VersionCode = 6;
+    private const uint DateTime2TypeInfo = 0x00000009u;
+    private const string BigIntMinVersion = "16.0.7124.1000";
+    private const string DateTime2MinVersion = "16.0.12600.10000";
+    private static readonly string[] FeatureMinVersionNames = ["FCMinReadVer", "FCMinWriteVer", "FCMinDesignVer"];
+
+    private static StoredProperty FeatureVersionProperty(string name, string version) =>
+        new(name, 0x00, NativeTypes.Text, System.Text.Encoding.Unicode.GetBytes(version));
+
     /// <summary>A saved query's MSysObjects Type (5) and its two-step default LvProp blobs (evidence/r-q39-querydef-bytes).</summary>
     private const short QueryObjectType = 5;
     private static readonly StoredProperty QueryOdbcTimeout = new("ODBCTimeout", 0x01, NativeTypes.Integer, [0x3C, 0x00]);
@@ -371,6 +388,9 @@ public sealed class SchemaWriter
         int lvalCount = 0;
         int firstLvalIdx = -1;
         int fixedBytes = 0;
+        int bigIntCount = 0;
+        int dateTime2Count = 0;
+        bool sawDateTime2BeforeBigInt = false;
         List<NewField> requiredFields = [];
         for (int i = 0; i < request.Fields.Count; i++)
         {
@@ -489,8 +509,48 @@ public sealed class SchemaWriter
                 case NewFieldType.DateTime:
                     fixedBytes += 8;
                     break;
+                case NewFieldType.BigInt:
+                    bigIntCount++;
+                    if (dateTime2Count > 0)
+                    {
+                        sawDateTime2BeforeBigInt = true;
+                    }
+                    break;
+                case NewFieldType.DateTime2:
+                    dateTime2Count++;
+                    fixedBytes += 42;
+                    break;
                 default:
                     return new SchemaRefusal(null, $"field {f.Name} of unrecorded type {f.Type}");
+            }
+        }
+        if (bigIntCount > 0 || dateTime2Count > 0)
+        {
+            if (isJet4Mdb)
+            {
+                if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+                {
+                    // evidence/r-q44-ddl-alter-types/ext-bigint-mdb-dao, ext-bigint-mdb-ado, ext-datetime2-mdb-dao, ext-datetime2-mdb-ado:
+                    // Jet 4 MDB refuses BIGINT and DATETIME2 with 3001 after stepping MSysObjects/MSysACEs UniqueEntryCount +1 and 0xE02 +2.
+                    return new SchemaRefusal(3001, null);
+                }
+                return new SchemaRefusal(null, $"BIGINT/DATETIME2 on {request.Route} route in a Jet 4 MDB is not recorded");
+            }
+            if (bigIntCount > 1 || dateTime2Count > 1 || sawDateTime2BeforeBigInt)
+            {
+                return new SchemaRefusal(null, $"CREATE TABLE with {bigIntCount} BIGINT and {dateTime2Count} DATETIME2 column(s){(sawDateTime2BeforeBigInt ? " (DATETIME2 before BIGINT)" : "")} is not recorded (recorded: single BIGINT, single DATETIME2 in r-q44-ddl-alter-types/ext-*, or BIGINT then DATETIME2 in r-q36-publication-bytes/create-nullfix-ext-accdb)");
+            }
+            if (requiredFields.Count > 0)
+            {
+                return new SchemaRefusal(null, "CREATE TABLE combining BIGINT/DATETIME2 (FCMin*Ver LvProp) with NOT NULL column LvProp is not recorded");
+            }
+            if (request.AllIndexes.Count > 1 || request.ForeignKey is not null)
+            {
+                return new SchemaRefusal(null, "CREATE TABLE combining BIGINT/DATETIME2 with UNIQUE or FOREIGN KEY constraints is not recorded (r-q44-ddl-alter-types/ext-* and r-q36-publication-bytes/create-nullfix-ext-accdb record optional PRIMARY KEY only)");
+            }
+            if (lvalCount > 0)
+            {
+                return new SchemaRefusal(null, "CREATE TABLE combining BIGINT/DATETIME2 with Memo/OLE columns is not recorded");
             }
         }
         if (fixedBytes > ushort.MaxValue)
@@ -863,7 +923,7 @@ public sealed class SchemaWriter
     /// <c>Database.Close</c> before the Close commit for <c>N+2</c> total). A DAO Append inside BeginTrans is refused by
     /// name: its frames joining the level are not recorded (task 4nfc).
     /// </summary>
-    public SchemaOutcome CreateTable(TransactionCoordinator workspace, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits)
+    public SchemaOutcome CreateTable(TransactionCoordinator workspace, CreateTableRequest request, ulong dateCreateBits, ulong dateUpdateBits, Func<int, bool>? acceptsError = null)
     {
         bool exclusiveSession = workspace.IsExclusiveSession(_cache);
         if (CheckCore(request, out PreparedForeignKey? preparedFk, exclusiveSession) is { } refused)
@@ -874,9 +934,22 @@ public sealed class SchemaWriter
             }
             if (refused.Error == 3380 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
             {
-                return CreateTableSqlAdoDuplicateRollback(workspace, refused);
+                return CreateTableSqlAdoDuplicateRollback(workspace, refused, allowJet4Mdb: false);
+            }
+            if (refused.Error == 3001 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+            {
+                if (acceptsError is not null && !acceptsError(3001))
+                {
+                    return new SchemaOutcome(refused, default, _pageCount, PublishedAny: false);
+                }
+                return CreateTableSqlAdoDuplicateRollback(workspace, refused, allowJet4Mdb: true);
             }
             return new SchemaOutcome(refused, default, _pageCount);
+        }
+        bool hasExtendedType = request.Fields.Any(f => f.Type is NewFieldType.BigInt or NewFieldType.DateTime2);
+        if (hasExtendedType && workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE with BIGINT/DATETIME2 inside BeginTrans is not recorded (evidence/r-q44-ddl-alter-types/ext-* run outside BeginTrans)"), default, _pageCount);
         }
         if (request.Route == SchemaRoute.Dao && workspace.Depth > 0)
         {
@@ -974,10 +1047,10 @@ public sealed class SchemaWriter
 
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
         if (sessionReserved.Count > 0
-            && (request.Route != SchemaRoute.Sql || preparedFk is not null || request.Fields.Any(f => f.Required)))
+            && (request.Route != SchemaRoute.Sql || preparedFk is not null || hasExtendedType || request.Fields.Any(f => f.Required)))
         {
             return new SchemaOutcome(
-                new SchemaRefusal(null, $"CREATE TABLE {request.Name} (route={request.Route}, fk={preparedFk is not null}, required={request.Fields.Any(f => f.Required)}) while a session page-1 extent reservation is pending is not recorded (only SQL CREATE TABLE without FOREIGN KEY or NOT NULL is recorded: evidence/r-q42-field-rule-and/multirow-accdb, multirow-mdb)"),
+                new SchemaRefusal(null, $"CREATE TABLE {request.Name} (route={request.Route}, fk={preparedFk is not null}, ext={hasExtendedType}, required={request.Fields.Any(f => f.Required)}) while a session page-1 extent reservation is pending is not recorded (only SQL CREATE TABLE without FOREIGN KEY, BIGINT/DATETIME2, or NOT NULL is recorded: evidence/r-q42-field-rule-and/multirow-accdb, multirow-mdb)"),
                 default,
                 _pageCount);
         }
@@ -1052,9 +1125,9 @@ public sealed class SchemaWriter
     /// Note: the records capture <c>before-open</c> and <c>after-close</c> only, not an intermediate snapshot between
     /// <c>Execute</c> and <c>Close</c> (mid-session commit timing stays Open).
     /// </summary>
-    private SchemaOutcome CreateTableSqlAdoDuplicateRollback(TransactionCoordinator workspace, SchemaRefusal refused)
+    private SchemaOutcome CreateTableSqlAdoDuplicateRollback(TransactionCoordinator workspace, SchemaRefusal refused, bool allowJet4Mdb)
     {
-        if (IsJet4Mdb(PinCopy(0) ?? []))
+        if (!allowJet4Mdb && IsJet4Mdb(PinCopy(0) ?? []))
         {
             return new SchemaOutcome(
                 new SchemaRefusal(null, "SQL/ADO CREATE TABLE with duplicate field in a Jet 4 MDB: page-0 and catalog-count writes are not recorded (evidence/r-q28-schema-write-open/pair-sql-*, pair-ado-* are ACCDB only)"),
@@ -1064,7 +1137,7 @@ public sealed class SchemaWriter
         if (workspace.Depth > 0)
         {
             return new SchemaOutcome(
-                new SchemaRefusal(null, "SQL/ADO CREATE TABLE with duplicate field inside BeginTrans: page-0 and catalog-count writes are not recorded"),
+                new SchemaRefusal(null, $"SQL/ADO CREATE TABLE {refused.Error} rollback inside BeginTrans: page-0 and catalog-count writes are not recorded"),
                 default,
                 _pageCount);
         }
@@ -1152,7 +1225,7 @@ public sealed class SchemaWriter
     /// in General Legacy (<c>1033/0</c>) name order while keeping its creation-order <c>LogicalNumber</c>, and set the
     /// table's MSysObjects <c>DateUpdate</c> to <paramref name="dateUpdateBits"/>.
     /// </summary>
-    public SchemaOutcome CreateIndex(TransactionCoordinator workspace, CreateIndexRequest request, ulong dateUpdateBits)
+    public SchemaOutcome CreateIndex(TransactionCoordinator workspace, CreateIndexRequest request, ulong dateUpdateBits, Func<int, bool>? acceptsError = null)
     {
         if (FileRefusal(allowJet4Mdb: true, out bool isJet4Mdb) is { } file)
         {
@@ -1178,7 +1251,7 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, failure), default, _pageCount);
         }
-        if (IndexRefusal(request.Index, [.. table.Columns.Select(c => (c.Name, c.TypeCode))], allowText: true) is { } invalid)
+        if (IndexRefusal(request.Index, [.. table.Columns.Select(c => (c.Name, c.TypeCode))], allowText: true, allowExtendedCreateIndexTypes: true) is { } invalid)
         {
             return new SchemaOutcome(invalid, default, _pageCount);
         }
@@ -1186,25 +1259,70 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(existingRefusal, default, _pageCount);
         }
+        bool isExtendedKeyType = false;
+        string[] tableColNames = [.. table.Columns.Select(c => c.Name)];
+        foreach (string fieldName in request.Index.Fields)
+        {
+            if (TryMatchFieldName(fieldName, tableColNames, out int colIdx, out _) && colIdx >= 0
+                && table.Columns[colIdx].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            {
+                isExtendedKeyType = true;
+            }
+        }
+        if (isExtendedKeyType && request.Route != SchemaRoute.Sql)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX via {request.Route} on Double/DateTime/GUID/Memo is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records DAO/SQL only)"), default, _pageCount);
+        }
         if (table.LongValueMaps.Count > 0 && request.Route == SchemaRoute.Ado)
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX via ADO on a table with LVAL column(s) is not recorded (only DAO/SQL is recorded: evidence/r-q21-ddl-types/ix-on-table-with-memo, evidence/r-q43-schema-lval-index/ix-lval-*)"), default, _pageCount);
         }
         if (isJet4Mdb && table.RowCount > 0
             && (request.Index.IgnoreNull || request.Index.DisallowNull
-                || (request.Index.Descending is not null && request.Index.Descending.Any(d => d))))
+                || (!isExtendedKeyType && request.Index.Descending is not null && request.Index.Descending.Any(d => d))))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX with IGNORE NULL, DISALLOW NULL or DESC on a populated Jet 4 MDB table is not recorded (evidence/r-q34-ddl-sweep/*-mdb-dao)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX with IGNORE NULL, DISALLOW NULL, or Long/Text DESC on a populated Jet 4 MDB table is not recorded (evidence/r-q34-ddl-sweep/*-mdb-dao; evidence/r-q44-ddl-alter-types/ixtype-double-rows-mdb-dao, ixtype-datetime-rows-mdb-dao, ixtype-guid-rows-mdb-dao record Double/DateTime/GUID DESC)"), default, _pageCount);
         }
         if (table.RowCount > 0 && request.Index.IgnoreNull && request.Index.Unique)
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE UNIQUE INDEX ... WITH IGNORE NULL on a populated table is not recorded (evidence/r-q21-ddl-types/ix-unique-ignore-null is empty; evidence/r-q34-ddl-sweep/ix-cat1b-rows-chain-accdb-dao is non-unique)"), default, _pageCount);
         }
+        if (!BuildIndexLeaf(table, request.Index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out bool duplicateMemoUnique, out string? buildFailure))
+        {
+            if (duplicateMemoUnique)
+            {
+                // evidence/r-q44-ddl-alter-types/ixtype-memo-rows-accdb-dao (a1 & a2) and ixtype-memo-rows-mdb-dao:
+                // CREATE UNIQUE INDEX on a Memo column with colliding 255-char prefixes fails 3022 after two page-0
+                // counter commits (0xE02 +2), leaving every other page untouched.
+                if (acceptsError is not null && !acceptsError(3022))
+                {
+                    return new SchemaOutcome(new SchemaRefusal(3022, null), default, _pageCount, PublishedAny: false);
+                }
+                for (int step = 0; step < 2; step++)
+                {
+                    (MutationOpen counterOpen, string? counterDetail) = workspace.PublishCounterCommit(_cache);
+                    if (counterOpen != MutationOpen.None)
+                    {
+                        return new SchemaOutcome(
+                            null,
+                            new AcceptOutcome(
+                                false,
+                                null,
+                                counterOpen,
+                                $"CREATE UNIQUE INDEX Memo duplicate 3022 rollback: page-0 counter commit {step + 1} of 2 failed: {counterDetail ?? counterOpen.ToString()}"),
+                            _pageCount,
+                            PublishedAny: step > 0);
+                    }
+                }
+                return new SchemaOutcome(new SchemaRefusal(3022, null), default, _pageCount, PublishedAny: true);
+            }
+            return new SchemaOutcome(null, new AcceptOutcome(false, null, MutationOpen.Publication, buildFailure), _pageCount);
+        }
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateIndex(p, entry, table, request.Index, dateUpdateBits, out extent));
+            p => CompileCreateIndex(p, entry, table, request.Index, leafBytes, entryCount, uniqueEntryCount, dateUpdateBits, out extent));
         return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
     }
 
@@ -2740,6 +2858,28 @@ public sealed class SchemaWriter
                     return work.NotWritten();
                 }
             }
+            bool hasBigInt = request.Fields.Any(f => f.Type == NewFieldType.BigInt);
+            bool hasDateTime2 = request.Fields.Any(f => f.Type == NewFieldType.DateTime2);
+            if (hasBigInt || hasDateTime2)
+            {
+                // evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-*, ext-datetime2-create-accdb-*,
+                // ext-both-accdb-dao, evidence/r-q36-publication-bytes/create-nullfix-ext-accdb:
+                // upgrade page 0 offset 20 (0x02 -> 0x05 for BIGINT, -> 0x06 for DATETIME2) and write
+                // FCMinReadVer, FCMinWriteVer, FCMinDesignVer incrementally to MSysObjects.LvProp (3 slots per type).
+                byte requiredVersion = hasDateTime2 ? Ace2019VersionCode : Ace2016VersionCode;
+                byte currentVersion = (byte)_d.Header.Version.Read(page0);
+                if (currentVersion < requiredVersion)
+                {
+                    if (!work.Apply(new PageEdit(0, new BytePatch(_d.Header.Version.Offset, [requiredVersion]), PageRole.NativeState)))
+                    {
+                        return work.NotWritten();
+                    }
+                }
+                if (!ApplyFeatureVersionProperties(work, p.Overlay, allocator, objectRow, hasBigInt, hasDateTime2, dateUpdateBits, releasedAtClose))
+                {
+                    return work.NotWritten();
+                }
+            }
         }
         if (preparedFk is not null)
         {
@@ -2906,6 +3046,50 @@ public sealed class SchemaWriter
             propMaps[i] = new PropertyMap(PropertySectionKind.ColumnValues, fields[i].Name, [property]);
         }
         return ApplyObjectProperties(work, overlay, allocator, objectRow, propMaps, dateUpdateBits, releasedAtClose);
+    }
+
+    /// <summary>
+    /// Write <c>FCMinReadVer</c>, <c>FCMinWriteVer</c>, and <c>FCMinDesignVer</c> incrementally onto the new table's
+    /// <c>MSysObjects.LvProp</c> (<c>evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-*</c>,
+    /// <c>ext-datetime2-create-accdb-*</c>, <c>ext-both-accdb-dao</c>,
+    /// <c>evidence/r-q36-publication-bytes/create-nullfix-ext-accdb</c>): 3 incremental slots for a single extended
+    /// type, or 3 for <c>BIGINT</c> followed by 3 updates to <c>DATETIME2</c> (6 slots total) when a table declares
+    /// <c>BIGINT</c> then <c>DATETIME2</c>, reusing a sole free <c>MSysObjects.LvProp</c> LVAL page when present.
+    /// </summary>
+    private bool ApplyFeatureVersionProperties(
+        Work work,
+        PrivateOverlay overlay,
+        PageAllocator allocator,
+        RowId objectRow,
+        bool hasBigInt,
+        bool hasDateTime2,
+        ulong dateUpdateBits,
+        List<uint> releasedAtClose)
+    {
+        string firstVersion = hasBigInt ? BigIntMinVersion : DateTime2MinVersion;
+        List<StoredProperty> props = [];
+        for (int i = 0; i < FeatureMinVersionNames.Length; i++)
+        {
+            props.Add(FeatureVersionProperty(FeatureMinVersionNames[i], firstVersion));
+            PropertyMap[] maps = [new PropertyMap(PropertySectionKind.ObjectValues, "", [.. props])];
+            if (!ApplyObjectProperties(work, overlay, allocator, objectRow, maps, dateUpdateBits, releasedAtClose, allowSharedLvalPage: true))
+            {
+                return false;
+            }
+        }
+        if (hasBigInt && hasDateTime2)
+        {
+            for (int i = 0; i < FeatureMinVersionNames.Length; i++)
+            {
+                props[i] = FeatureVersionProperty(FeatureMinVersionNames[i], DateTime2MinVersion);
+                PropertyMap[] maps = [new PropertyMap(PropertySectionKind.ObjectValues, "", [.. props])];
+                if (!ApplyObjectProperties(work, overlay, allocator, objectRow, maps, dateUpdateBits, releasedAtClose, allowSharedLvalPage: true))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /// <summary>
@@ -4424,7 +4608,7 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, $"{childTableName}'s map page {childTable.OwnedMap.Page} cannot append map slot {childMapSlot}: {mapAppendFailure ?? $"landed at slot {drySlot}"}");
             }
-            if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out string? buildFailure))
+            if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out _, out string? buildFailure))
             {
                 return new SchemaRefusal(null, buildFailure);
             }
@@ -4801,7 +4985,16 @@ public sealed class SchemaWriter
         return parentSpec with { LogicalIndexes = logicals };
     }
 
-    private CompiledChange CompileCreateIndex(FileParticipant p, CatalogEntry entry, TableDefinition table, NewIndex index, ulong dateUpdateBits, out ulong extent)
+    private CompiledChange CompileCreateIndex(
+        FileParticipant p,
+        CatalogEntry entry,
+        TableDefinition table,
+        NewIndex index,
+        byte[] leafBytes,
+        uint entryCount,
+        uint uniqueEntryCount,
+        ulong dateUpdateBits,
+        out ulong extent)
     {
         extent = _pageCount;
         var work = new Work(p);
@@ -4861,10 +5054,6 @@ public sealed class SchemaWriter
         {
             return NotWritten($"{entry.Name}'s map page {table.OwnedMap.Page} cannot append map slot {mapSlot}: {mapAppendFailure ?? $"landed at slot {drySlot}"}");
         }
-        if (!BuildIndexLeaf(table, index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out string? buildFailure))
-        {
-            return NotWritten(buildFailure);
-        }
         TableDefSpec sizedSpec = WithIndex(spec, index, new RowLocator(table.OwnedMap.Page, mapSlot), 0, entryCount, uniqueEntryCount);
         int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
         int encodedLen = EncodedTableDefLength(sizedSpec);
@@ -4909,11 +5098,13 @@ public sealed class SchemaWriter
         out byte[] leafBytes,
         out uint entryCount,
         out uint uniqueEntryCount,
+        out bool duplicateMemoUnique,
         out string? failure)
     {
         leafBytes = EmptyLeaf(table.FirstPage);
         entryCount = 0;
         uniqueEntryCount = 0;
+        duplicateMemoUnique = false;
         failure = null;
         if (table.RowCount == 0)
         {
@@ -4982,9 +5173,16 @@ public sealed class SchemaWriter
                     // evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb, ix-lval-second-uq-rows-accdb:
                     // a single ascending Null Long key in a non-unique non-IGNORE NULL bulk-built index is indexed as [0x00] and
                     // counted once in both EntryCount and UniqueEntryCount (4 rows: {Null, 10, 20, 20} -> (4, 3, 0)).
-                    if (index.Unique || keyCols.Length != 1 || keyCols[0].TypeCode != NativeTypes.Long || !keySpecs[0].Ascending || nullKeyRows > 0)
+                    // evidence/r-q44-ddl-alter-types/ixtype-double-rows-accdb-dao, ixtype-datetime-rows-accdb-dao, ixtype-guid-rows-accdb-dao, ixtype-memo-rows-accdb-dao (and -mdb-dao twins):
+                    // a single Null key in a single-column Double/DateTime/GUID (ASC/DESC, non-unique or UNIQUE) or ascending Memo
+                    // bulk-built index is indexed as [0x00] (ASC) / [0xFF] (DESC) and counted once in both EntryCount and UniqueEntryCount.
+                    bool recordedSingleNull = keyCols.Length == 1 && nullKeyRows == 0 && (
+                        (!index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)
+                        || keyCols[0].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid
+                        || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending));
+                    if (!recordedSingleNull)
                     {
-                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(index.Unique ? "UNIQUE" : keyCols.Length != 1 ? "multi-column" : keyCols[0].TypeCode != NativeTypes.Long ? $"0x{keyCols[0].TypeCode:X2}" : !keySpecs[0].Ascending ? "DESC" : "multiple")} Null keys is not recorded (only one ascending Long Null key in a non-unique index is recorded: evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb)";
+                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(nullKeyRows > 0 ? "multiple" : keyCols.Length != 1 ? "multi-column" : !keySpecs[0].Ascending ? $"DESC 0x{keyCols[0].TypeCode:X2}" : index.Unique ? $"UNIQUE 0x{keyCols[0].TypeCode:X2}" : $"0x{keyCols[0].TypeCode:X2}")} Null keys is not recorded (recorded: single Null on ascending non-unique Long in r-q43, Double/DateTime/GUID ASC/DESC and ascending Memo in r-q44-ddl-alter-types/ixtype-*-rows-*)";
                         return false;
                     }
                     nullKeyRows++;
@@ -4998,6 +5196,12 @@ public sealed class SchemaWriter
                 bool isNewKey = seenKeys.Add(key);
                 if ((index.PrimaryKey || index.Unique) && !isNewKey)
                 {
+                    if (!index.PrimaryKey && index.Unique && keyCols.Length == 1 && keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
+                    {
+                        duplicateMemoUnique = true;
+                        failure = $"{index.Name}: duplicate 255-character Memo key prefix in UNIQUE index (3022)";
+                        return false;
+                    }
                     failure = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022): post-failure file bytes are not recorded";
                     return false;
                 }
@@ -5208,6 +5412,18 @@ public sealed class SchemaWriter
                     fixedOffset += 17;
                     break;
                 }
+                case NewFieldType.BigInt:
+                    // ACCDB BIGINT: TypeCode 0x13 (19), variable Flags 0x02, Length 8, TypeInfo = sortInfo
+                    // (evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-*, ext-both-accdb-dao, r-q36 create-nullfix-ext-accdb).
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.BigInt, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
+                    variables++;
+                    break;
+                case NewFieldType.DateTime2:
+                    // ACCDB DATETIME2: TypeCode 0x14 (20), fixed Flags 0x03, Length 42 (0x2A), TypeInfo 0x00000009
+                    // (evidence/r-q44-ddl-alter-types/ext-datetime2-create-accdb-*, ext-both-accdb-dao, r-q36 create-nullfix-ext-accdb).
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, (ushort)i, variables, (ushort)i, DateTime2TypeInfo, FixedColumnFlags, 0x00, fixedOffset, 42));
+                    fixedOffset += 42;
+                    break;
                 default:
                     throw new InvalidOperationException($"Unchecked field type {f.Type}.");
             }
@@ -5243,6 +5459,8 @@ public sealed class SchemaWriter
         NewFieldType.Memo => NativeTypes.Memo,
         NewFieldType.Guid => NativeTypes.Guid,
         NewFieldType.Decimal => NativeTypes.Numeric,
+        NewFieldType.BigInt => NativeTypes.BigInt,
+        NewFieldType.DateTime2 => NativeTypes.ExtendedDateTime,
         _ => 0,
     };
 
@@ -5417,10 +5635,12 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// Validate an index against the recorded shapes (r-q11, r-q21-ddl-types): valid name, 1–2 distinct Long or Text
-    /// columns, recorded option combinations (no WITH PRIMARY + DISALLOW/IGNORE NULL, no DISALLOW NULL + IGNORE NULL).
+    /// Validate an index against the recorded shapes (r-q11, r-q21-ddl-types, r-q44-ddl-alter-types/ixtype-*): valid name,
+    /// 1–2 distinct Long or Text columns (or single-column Double, DateTime, GUID ASC/DESC, or ascending Memo for
+    /// <c>CREATE [UNIQUE] INDEX</c> without PRIMARY/DISALLOW NULL/IGNORE NULL), recorded option combinations (no WITH PRIMARY
+    /// + DISALLOW/IGNORE NULL, no DISALLOW NULL + IGNORE NULL).
     /// </summary>
-    private SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, byte TypeCode)> fields, bool allowText)
+    private SchemaRefusal? IndexRefusal(NewIndex index, IReadOnlyList<(string Name, byte TypeCode)> fields, bool allowText, bool allowExtendedCreateIndexTypes = false)
     {
         if (!IsValidName(index.Name))
         {
@@ -5444,8 +5664,9 @@ public sealed class SchemaWriter
         }
         string[] fieldNames = [.. fields.Select(f => f.Name)];
         List<string> seen = [];
-        foreach (string fieldName in index.Fields)
+        for (int i = 0; i < index.Fields.Count; i++)
         {
+            string fieldName = index.Fields[i];
             if (!TryMatchFieldName(fieldName, seen, out int seenIdx, out string? dupUndecided))
             {
                 return new SchemaRefusal(null, dupUndecided);
@@ -5464,10 +5685,24 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, $"index {index.Name} names field {fieldName}, which the table does not have once (ACE's refusal is not recorded)");
             }
             byte tc = fields[matchedIdx].TypeCode;
-            if (tc != NativeTypes.Long && !(allowText && tc == NativeTypes.Text))
+            if (tc == NativeTypes.Long || (allowText && tc == NativeTypes.Text))
             {
-                return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} of native type 0x{tc:X2} (r-q11/r-q21 record Long{(allowText ? " and Text" : "")} keys)");
+                continue;
             }
+            if (allowExtendedCreateIndexTypes && tc is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            {
+                if (index.Fields.Count != 1 || index.PrimaryKey || index.DisallowNull || index.IgnoreNull)
+                {
+                    return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} (0x{tc:X2}) with multi-column or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records single-column CREATE [UNIQUE] INDEX only)");
+                }
+                bool desc = index.Descending is not null && index.Descending[i];
+                if (tc == NativeTypes.Memo && desc)
+                {
+                    return new SchemaRefusal(null, $"descending index {index.Name} on Memo field {fieldName} is not recorded (evidence/r-q44-ddl-alter-types/ixtype-memo-* records ascending only)");
+                }
+                continue;
+            }
+            return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} of native type 0x{tc:X2} (r-q11/r-q21/r-q44 record Long{(allowText ? ", Text" : "")}{(allowExtendedCreateIndexTypes ? ", Double, DateTime, GUID, and Memo" : "")} keys)");
         }
         return null;
     }
