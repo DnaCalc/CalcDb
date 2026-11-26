@@ -139,32 +139,16 @@ and each reads master only once it holds the lock, so it is checked on top of th
 refused with `-Snapshot`: the run that lands is unfiltered.
 
 **After a passing check.** For a branch, the script prints the landing: `git merge --ff-only <checked commit>` in the
-integration checkout and `git push`. With `-Land` it runs them itself. If `git merge --ff-only` refuses because master
-moved while the check ran and every path changed on master since the checked base is under `docs/work/`, `-Land` merges
-the checked commit onto the new master (`Merge <branch> (<Name>)`, never a rebase, aborting on conflict) and pushes
-without checking again; any other move refuses and names the moved paths. With `-Compare` it then runs the core compare
-from the snapshot once the check worktree is free, so one job checks, lands and compares and its result is the
-compare's verdicts. With `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline
-and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), the script copies the run's TSV to
-`docs/work/compare-baseline.tsv`, commits only that file (`W-01 (compare): core baseline <run>, N of M (<topic>)`) and
-pushes while still holding `compare-store.compare-lock` (a `docs/work/` move, so a landing beside it merges over it),
-then cleans up the child's place without forcing: detaching a writer slot (`CalcDb-w1`, `CalcDb-w2`) at `master` or
-removing an ephemeral worktree (`git worktree remove`), and deleting the branch (`git branch -d`), skipping cleanup and
-saying so if the worktree has uncommitted changes or `-d` refuses. Any loss, refused landing or failed compare leaves
-baseline and cleanup to the organizer and prints why in a closing line (exit 1). Without `-Finish`, once the child's
-work ends, return a writer/prober slot to master (`git -C <slot> switch --detach master`) and delete the branch (`git
-branch -d`), then retire finished workers with `swarm kill` and update `plan.json`. For a file list, commit exactly
-those files with a message file of a unique name (`$TEMP/msg-<topic>-<session>.txt`) and push. When two children in the
-integration checkout edited one file, stage only the landing child's hunks (a copy of the file, `git hash-object -w`,
-`git update-index --cacheinfo`) and check the staged diff. Then update the register row, `qualified.md`, and
-`process-log.md`, write the commit message file, commit, and push between `-Land` runs (never while a `-Land` holds the
-check lock on `master`).
+integration checkout and `git push`. With `-Land` it runs them itself. With `-DetachSlot` (without waiting for
+`-Compare`), it immediately returns a clean writer slot (`CalcDb-w1`, `CalcDb-w2`) to detached `master`, removes
+`<slot>\.oracle-runs`, and deletes the merged `alta/<name>` branch so the next worker can start immediately while
+core compares run asynchronously per wave. If `git merge --ff-only` refuses because master moved while the check ran and every path changed on master since the checked base is under `docs/work/`, `-Land` merges the checked commit onto the new master (`Merge <branch> (<Name>)`, never a rebase, aborting on conflict) and pushes without checking again; any other move refuses and names the moved paths.
+With `-Compare` it then runs the core compare from the snapshot once the check worktree is free; with `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), it commits `docs/work/compare-baseline.tsv`, pushes, and detaches the slot. With `-Fast` (managed iteration / fast-path check without `-Snapshot`), it runs only directly affected test projects and skips NativeAOT `CalcDb.Com` publishing unless `Com` is tested; full solution + NativeAOT publish + all graph tests + `-Compare` runs at each wave checkpoint.
 
-## The compare tiers
+**Telemetry:** Every run logs a 1-line summary to `%LOCALAPPDATA%\CalcDb\landing-runs.tsv` and per-phase seconds plus exact failure reason tags (`build`, `publish`, `test:<name>`, `questions:<q>`, `land`, `ok`) to `%LOCALAPPDATA%\CalcDb\landing-phases.tsv`.
 
-- **Core set, after every landing:** [probes/compare-set.json](../../probes/compare-set.json), 1,360 questions, about
-  8 min with six candidate attempts at a time. `-Land -Compare -Finish` runs it automatically from the snapshot and
-  commits `compare-baseline.tsv` on 0-loss passes; standalone invocations run from the repository folder with:
+- **Core set, at wave checkpoints & baseline updates:** [probes/compare-set.json](../../probes/compare-set.json), 1,360 questions, about
+  8 min with six candidate attempts at a time. Run asynchronously from `-Snapshot` binaries after wave landings (or via `-Land -Compare -Finish` at a wave checkpoint) rather than blocking every slot reuse; standalone invocations run from the repository folder with:
   `<snapshot>\runner\calcdb-oracle.exe compare-set --rerun --name N --against baseline --set <snapshot>\compare-set.json --worker <snapshot>\worker\CalcDb.Oracle.Worker.exe --deployment <snapshot>\native --store %LOCALAPPDATA%\CalcDb\compare-store`.
   `--set` from the snapshot matters: without it the run reads the working tree's set, where an unfinished edit
   changes it. The run is written to `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\N.tsv`; copy it to

@@ -30,6 +30,8 @@ param(
     [string] $Solution = "CalcDb.slnx",             # with -InPlace, an area's filter (CalcDb.Sql.slnf ...) builds only that area
     [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
     [switch] $Land,                                 # with -Branch: after a pass, land on master (ff or merge over docs/work/) and push
+    [switch] $DetachSlot,                           # with -Land: detach a clean writer slot at master and delete merged branch immediately after push
+    [switch] $Fast,                                 # managed fast check: direct test deps only and skips NativeAOT unless Com is tested
     [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
     [switch] $Finish,                               # with -Land and -Compare: if nothing lost, record baseline, push and clean up
     [int] $MaxCpuCount = 4,                         # MSBuild -m cap (with -nr:false) so builds do not spawn 16 resident nodes
@@ -45,6 +47,8 @@ if (@($modes).Count -ne 1) { throw "give exactly one of -Branch, -Files and -InP
 if ($Solution -ne "CalcDb.slnx" -and -not $InPlace) { throw "-Solution is for a child's -InPlace self-check; a landing builds the whole solution" }
 if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for iterating, not for a landing run with -Snapshot" }
 if ($Land -and (-not $Branch -or $Filter)) { throw "-Land lands a -Branch check that ran every selected test (no -Filter)" }
+if ($DetachSlot -and -not $Land) { throw "-DetachSlot requires -Land" }
+if ($Fast -and ($Snapshot -or $Compare -or $Finish)) { throw "-Fast skips full graph/NativeAOT and cannot be combined with -Snapshot, -Compare, or -Finish" }
 if ($Compare -and -not ($Land -and $Snapshot)) { throw "-Compare compares what -Land landed, from the -Snapshot binaries" }
 if ($Finish -and -not ($Land -and $Compare)) { throw "-Finish requires -Land and -Compare" }
 if ($MaxParallelTests -lt 1) { throw "-MaxParallelTests must be at least 1" }
@@ -52,6 +56,19 @@ $filterArgs = if ($Filter) { @('--filter', $Filter) } else { @() }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 function Step([string] $what) { "[{0,5:n0} s] {1}" -f $sw.Elapsed.TotalSeconds, $what }
 $failed = 0
+$phaseBuildSec = 0; $phasePublishSec = 0; $phaseTestsSec = 0; $phaseQuestionsSec = 0; $phaseCompareSec = 0
+$failureReasons = [System.Collections.Generic.List[string]]::new()
+function Add-PhaseFailure([string] $tag) { if (-not $failureReasons.Contains($tag)) { $failureReasons.Add($tag) } }
+function Write-PhaseTelemetry([string] $CandidateId, [int] $FailCount, [string[]] $TestList) {
+    $ledger = Join-Path $env:LOCALAPPDATA "CalcDb\landing-phases.tsv"
+    if (-not (Test-Path $ledger)) {
+        New-Item -ItemType Directory -Force (Split-Path $ledger) | Out-Null
+        "utc`tname`tmode`tfast`tfiltered`tcandidate`tfailed`treasons`ttotal_sec`tbuild_sec`tpublish_sec`ttests_sec`tquestions_sec`tcompare_sec`ttests" | Set-Content $ledger
+    }
+    $runMode = if ($Branch) { 'branch' } elseif ($Files.Count) { 'files' } else { 'inplace' }
+    $reasonStr = if ($failureReasons.Count -gt 0) { $failureReasons -join ',' } elseif ($FailCount -gt 0) { 'failed' } else { 'ok' }
+    "$([DateTime]::UtcNow.ToString('s'))`t$Name`t$runMode`t$([bool] $Fast)`t$([bool] $Filter)`t$CandidateId`t$FailCount`t$reasonStr`t$([int] $sw.Elapsed.TotalSeconds)`t$phaseBuildSec`t$phasePublishSec`t$phaseTestsSec`t$phaseQuestionsSec`t$phaseCompareSec`t$($TestList -join ',')" | Add-Content $ledger
+}
 
 function Get-BranchWorktree([string] $Repo, [string] $Branch) {
     $blocks = ((git -C $Repo worktree list --porcelain) -join "`n") -split "`n`n"
@@ -214,6 +231,80 @@ function Read-CompareResult([string[]] $Lines) {
     }
 }
 
+function Cleanup-BranchSlot([string] $Repo, [string] $Branch) {
+    $details = [System.Collections.Generic.List[string]]::new()
+    $tree = Get-BranchWorktree $Repo $Branch
+    git -C $Repo show-ref --verify --quiet "refs/heads/$Branch" 2>&1 | Out-Null
+    $branchExists = ($LASTEXITCODE -eq 0)
+    $branchMerged = $false
+    if ($branchExists) {
+        git -C $Repo merge-base --is-ancestor "refs/heads/$Branch" master 2>&1 | Out-Null
+        $branchMerged = ($LASTEXITCODE -eq 0)
+    }
+    $cleanupNote = ""
+    if ($tree) {
+        $sameAsRepo = ([IO.Path]::GetFullPath($tree).TrimEnd('\') -ieq [IO.Path]::GetFullPath($Repo).TrimEnd('\'))
+        $isSlot = Test-WriterSlot $Repo $tree
+        $kind = if ($isSlot) { "writer slot" } else { "worktree" }
+        if ($sameAsRepo) {
+            $cleanupNote = "cleanup skipped (branch $Branch is checked out in integration checkout)"
+        } elseif (-not (Test-Path $tree)) {
+            $cleanupNote = "cleanup skipped ($kind path missing: $tree; branch $Branch kept)"
+        } else {
+            $dirty = @(git -C $tree status --porcelain 2>&1 | Where-Object { $_ })
+            if ($LASTEXITCODE -ne 0) {
+                foreach ($l in $dirty) { $details.Add("$l") }
+                $cleanupNote = "cleanup skipped (git status failed in $kind $tree; branch $Branch kept)"
+            } elseif ($dirty.Count -gt 0) {
+                $cleanupNote = "cleanup skipped ($kind $tree has $($dirty.Count) uncommitted change(s); branch $Branch kept)"
+            } elseif ($branchExists -and -not $branchMerged) {
+                $cleanupNote = "cleanup skipped (branch $Branch is not merged into master; $kind $tree and branch kept)"
+            } elseif ($isSlot) {
+                $swOut = @(git -C $tree switch --detach master 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -ne 0) {
+                    foreach ($l in $swOut) { $details.Add($l) }
+                    $cleanupNote = "cleanup skipped (git switch --detach master failed in slot $tree; branch $Branch kept)"
+                } else {
+                    $oraRuns = Join-Path $tree ".oracle-runs"
+                    if (Test-Path $oraRuns) { Remove-Item $oraRuns -Recurse -Force -ErrorAction SilentlyContinue }
+                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+                    if ($LASTEXITCODE -ne 0) {
+                        foreach ($l in $delOut) { $details.Add($l) }
+                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master; branch $Branch kept (git branch -d refused)"
+                    } else {
+                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master, deleted $Branch"
+                    }
+                }
+            } else {
+                $rmOut = @(git -C $Repo worktree remove $tree 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -ne 0) {
+                    foreach ($l in $rmOut) { $details.Add($l) }
+                    $cleanupNote = "cleanup skipped (git worktree remove failed for $tree; branch $Branch kept)"
+                } else {
+                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+                    if ($LASTEXITCODE -ne 0) {
+                        foreach ($l in $delOut) { $details.Add($l) }
+                        $cleanupNote = "removed worktree $tree; branch $Branch kept (git branch -d refused)"
+                    } else {
+                        $cleanupNote = "removed worktree $tree, deleted $Branch"
+                    }
+                }
+            }
+        }
+    } elseif ($branchExists) {
+        $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+            foreach ($l in $delOut) { $details.Add($l) }
+            $cleanupNote = "branch $Branch kept (git branch -d refused)"
+        } else {
+            $cleanupNote = "deleted $Branch (no worktree)"
+        }
+    } else {
+        $cleanupNote = "branch $Branch already absent"
+    }
+    [pscustomobject]@{ Note = $cleanupNote; Details = $details.ToArray() }
+}
+
 # After a clean core compare under the compare lock: copy TSV to docs/work/compare-baseline.tsv, commit only that file,
 # push, and clean up the child's writer slot or CodeAlta worktree and branch (task fhqk). Never forces cleanup.
 function Invoke-FinishLanding(
@@ -272,79 +363,11 @@ function Invoke-FinishLanding(
         return [pscustomobject]@{ ExitCode = 1; Message = "finish stopped: committed baseline $baselineSha ($RunName, $($parsed.Good) of $($parsed.Total)) locally, but push failed; cleanup skipped"; Details = $pushOut }
     }
 
-    $details = [System.Collections.Generic.List[string]]::new()
-    $tree = Get-BranchWorktree $Repo $Branch
-    git -C $Repo show-ref --verify --quiet "refs/heads/$Branch" 2>&1 | Out-Null
-    $branchExists = ($LASTEXITCODE -eq 0)
-    $branchMerged = $false
-    if ($branchExists) {
-        git -C $Repo merge-base --is-ancestor "refs/heads/$Branch" master 2>&1 | Out-Null
-        $branchMerged = ($LASTEXITCODE -eq 0)
-    }
-    $cleanupNote = ""
-    if ($tree) {
-        $sameAsRepo = ([IO.Path]::GetFullPath($tree).TrimEnd('\') -ieq [IO.Path]::GetFullPath($Repo).TrimEnd('\'))
-        $isSlot = Test-WriterSlot $Repo $tree
-        $kind = if ($isSlot) { "writer slot" } else { "worktree" }
-        if ($sameAsRepo) {
-            $cleanupNote = "cleanup skipped (branch $Branch is checked out in integration checkout)"
-        } elseif (-not (Test-Path $tree)) {
-            $cleanupNote = "cleanup skipped ($kind path missing: $tree; branch $Branch kept)"
-        } else {
-            $dirty = @(git -C $tree status --porcelain 2>&1 | Where-Object { $_ })
-            if ($LASTEXITCODE -ne 0) {
-                foreach ($l in $dirty) { $details.Add("$l") }
-                $cleanupNote = "cleanup skipped (git status failed in $kind $tree; branch $Branch kept)"
-            } elseif ($dirty.Count -gt 0) {
-                $cleanupNote = "cleanup skipped ($kind $tree has $($dirty.Count) uncommitted change(s); branch $Branch kept)"
-            } elseif ($branchExists -and -not $branchMerged) {
-                $cleanupNote = "cleanup skipped (branch $Branch is not merged into master; $kind $tree and branch kept)"
-            } elseif ($isSlot) {
-                $swOut = @(git -C $tree switch --detach master 2>&1 | ForEach-Object { "$_" })
-                if ($LASTEXITCODE -ne 0) {
-                    foreach ($l in $swOut) { $details.Add($l) }
-                    $cleanupNote = "cleanup skipped (git switch --detach master failed in slot $tree; branch $Branch kept)"
-                } else {
-                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
-                    if ($LASTEXITCODE -ne 0) {
-                        foreach ($l in $delOut) { $details.Add($l) }
-                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master; branch $Branch kept (git branch -d refused)"
-                    } else {
-                        $cleanupNote = "slot $(Split-Path $tree -Leaf) detached at master, deleted $Branch"
-                    }
-                }
-            } else {
-                $rmOut = @(git -C $Repo worktree remove $tree 2>&1 | ForEach-Object { "$_" })
-                if ($LASTEXITCODE -ne 0) {
-                    foreach ($l in $rmOut) { $details.Add($l) }
-                    $cleanupNote = "cleanup skipped (git worktree remove failed for $tree; branch $Branch kept)"
-                } else {
-                    $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
-                    if ($LASTEXITCODE -ne 0) {
-                        foreach ($l in $delOut) { $details.Add($l) }
-                        $cleanupNote = "removed worktree $tree; branch $Branch kept (git branch -d refused)"
-                    } else {
-                        $cleanupNote = "removed worktree $tree, deleted $Branch"
-                    }
-                }
-            }
-        }
-    } elseif ($branchExists) {
-        $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
-        if ($LASTEXITCODE -ne 0) {
-            foreach ($l in $delOut) { $details.Add($l) }
-            $cleanupNote = "branch $Branch kept (git branch -d refused)"
-        } else {
-            $cleanupNote = "deleted $Branch (no worktree)"
-        }
-    } else {
-        $cleanupNote = "branch $Branch already absent"
-    }
-
+    $cl = Cleanup-BranchSlot -Repo $Repo -Branch $Branch
     [pscustomobject]@{
         ExitCode = 0
-        Message  = "finish: baseline $RunName ($($parsed.Good) of $($parsed.Total)) committed ($baselineSha) and pushed; $cleanupNote"
-        Details  = $details.ToArray()
+        Message  = "finish: baseline $RunName ($($parsed.Good) of $($parsed.Total)) committed ($baselineSha) and pushed; $($cl.Note)"
+        Details  = $cl.Details
     }
 }
 
@@ -406,6 +429,8 @@ try {
             Step "MERGE CONFLICT with master in $(@($conflicts).Count) files:"
             $conflicts | ForEach-Object { "  $_" }
             if ($Finish) { Step "finish skipped: merge conflict in check worktree; baseline and worktree left to the organizer" }
+            Add-PhaseFailure "merge-conflict"
+            Write-PhaseTelemetry "$Branch+conflict" 1 @()
             exit 1
         }
         $candidate = (git -C $work rev-parse HEAD).Trim()
@@ -494,7 +519,7 @@ try {
             }
             Step "citations: $checkedCitations checked in $($citeFiles.Count) files, $($missingCitations.Count) missing"
             if ($missingCitations.Count -gt 0) {
-                $failed++
+                $failed++; Add-PhaseFailure "citations"
                 $missingCitations | Select-Object -First 50 | ForEach-Object { "  $_" }
                 if ($missingCitations.Count -gt 50) { "  ... and $($missingCitations.Count - 50) more" }
             }
@@ -535,16 +560,24 @@ try {
             } | Sort-Object -Unique)
         $graphTests = @($testProjects | Where-Object {
                 $everything -or @((Closure $_) | Where-Object { $_ -in $changedProjects }).Count } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
+        if ($Fast -and -not $everything) {
+            $comChanged = [bool]($changedProjects | Where-Object { $_ -like 'CalcDb.Com*' })
+            $graphTests = @($testProjects | Where-Object {
+                    ($_ -in $changedProjects) -or
+                    (@($projects[$_].Refs | Where-Object { $_ -in $changedProjects }).Count -gt 0) -or
+                    (@($projects[$_].Linked | Where-Object { $_ -in $changed }).Count -gt 0)
+                } | Where-Object { $comChanged -or $_ -ne 'CalcDb.Com.Tests' } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
+        }
         $inFilter = if ($Solution -ne "CalcDb.slnx") {
             @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
         } else { @() }
-        # During a -Filter iteration against an area filter (with no -Questions/-Snapshot), keep test projects scoped to
+        # During a -Filter or -Fast iteration against an area filter (with no -Questions/-Snapshot), keep test projects scoped to
         # that filter (plus any explicit -Tests) so iterating on Sql/Isam does not build and NativeAOT-publish Com.
-        if ($Filter -and $Solution -ne "CalcDb.slnx" -and -not $Questions.Count -and -not $Snapshot) {
+        if (($Filter -or $Fast) -and $Solution -ne "CalcDb.slnx" -and -not $Questions.Count -and -not $Snapshot) {
             $graphTests = @($graphTests | Where-Object { "tests/CalcDb.$_.Tests/CalcDb.$_.Tests.csproj" -in $inFilter })
         }
         $Tests = @(@($graphTests) + @($explicitTests) | Sort-Object -Unique)
-        $why = if ($everything) { "build files, evidence or probes changed" } else { "changed projects: $($changedProjects -join ', ')" }
+        $why = if ($everything) { "build files, evidence or probes changed" } elseif ($Fast) { "fast direct deps of: $($changedProjects -join ', ')" } else { "changed projects: $($changedProjects -join ', ')" }
         Step "tests from the project graph: $(if ($Tests.Count) { $Tests -join ', ' } else { 'none' }) ($why)"
 
         # Build everything needed in one dotnet build call (x38g). The tests run with --no-build: any selected test
@@ -608,17 +641,24 @@ try {
         $buildLockPath = Join-Path $buildLockDir "dotnet-build.lock"
         $buildLock = Wait-Lock $buildLockPath "dotnet build"
         try {
+            $buildSw = [Diagnostics.Stopwatch]::StartNew()
             $build = dotnet build $buildTarget @restoreArgs @msbuildArgs -v q -clp:ErrorsOnly 2>&1
+            $phaseBuildSec = [int] [Math]::Round($buildSw.Elapsed.TotalSeconds)
             if ($LASTEXITCODE) {
-                $failed++; $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"
+                $failed++; Add-PhaseFailure "build"
+                $build | Select-String ' error ' | Select-Object -First 30 | ForEach-Object { "  $_" }; Step "BUILD FAILED"
                 if ($Finish) { Step "finish skipped: build failed; baseline and worktree left to the organizer" }
+                Write-PhaseTelemetry $candidate $failed $Tests
                 exit $failed
             }
             Step "built $buildLabel$(if ($canSkipRestore) { ' (no-restore)' } else { '' })"
 
-            # The NativeAOT publish takes about 30 s: run it only when a source of CalcDb.Com's closure changed since the
-            # last publish here. Four Com test classes, the candidate check and the snapshot load the published module.
-            if ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) {
+            # The NativeAOT publish takes about 30-60 s: run it only when a source of CalcDb.Com's closure changed since the
+            # last publish here (and skip in -Fast mode when Com tests are not requested). Four Com test classes, the
+            # candidate check and the snapshot load the published module.
+            $needNativePublish = ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) -and (-not $Fast -or ($Tests -contains 'Com'))
+            if ($needNativePublish) {
+                $pubSw = [Diagnostics.Stopwatch]::StartNew()
                 $dirs = @((Closure 'CalcDb.Com') | ForEach-Object { $projects[$_].Dir }) + @('Directory.Build.props', 'global.json')
                 $sources = git -C $work ls-files -co --exclude-standard -- $dirs | Sort-Object
                 $text = ($sources | ForEach-Object { "$_ $((Get-FileHash (Join-Path $work $_) -Algorithm SHA256).Hash)" }) -join "`n"
@@ -627,9 +667,10 @@ try {
                 if ((Test-Path $stamp) -and (Get-Content $stamp -Raw).Trim() -eq $hash) { Step "native deployment current (CalcDb.Com closure unchanged)" }
                 else {
                     $pub = dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native @msbuildArgs -v q 2>&1
-                    if ($LASTEXITCODE) { $failed++; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
+                    if ($LASTEXITCODE) { $failed++; Add-PhaseFailure "publish"; $pub | Select-String ' error ' | Select-Object -First 20 | ForEach-Object { "  $_" }; Step "PUBLISH FAILED" }
                     else { Set-Content $stamp $hash -NoNewline; Step "published CalcDb.Com" }
                 }
+                $phasePublishSec = [int] [Math]::Round($pubSw.Elapsed.TotalSeconds)
             }
         } finally {
             if ($tempSlnf -and (Test-Path $tempSlnf)) { Remove-Item $tempSlnf -Force -ErrorAction SilentlyContinue }
@@ -742,7 +783,7 @@ try {
                             Step "$t`: total $($c.total), passed $($c.passed), failed $($c.failed), not executed $($c.notExecuted) (exit $code, ${sec}s)"
                         } else { Step "$t`: no trx (exit $code, ${sec}s)" }
                         if ($code) {
-                            $failed++
+                            $failed++; Add-PhaseFailure "test:$t"
                             if ($trx) {
                                 $trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Failed' | Select-Object -First 30 |
                                     ForEach-Object { "  FAILED $($_.testName)" }
@@ -777,15 +818,20 @@ try {
                 }
             }
         }
+        $phaseTestsSec = [Math]::Max(0, [int] $sw.Elapsed.TotalSeconds - $phaseBuildSec - $phasePublishSec)
         $runner = Join-Path $work "src\CalcDb.Oracle.Runner\bin\Debug\net11.0\calcdb-oracle.exe"
         $worker = Join-Path $work "src\CalcDb.Oracle.Worker\bin\Debug\net11.0-windows\win-x64\CalcDb.Oracle.Worker.exe"
-        foreach ($q in $Questions) {
-            # From this worktree: its evidence holds the change's records, its .oracle-runs is the store.
-            $res = & $runner batch --dir $q --env windows-x64-calcdb-local --deployment (Join-Path $work "artifacts\native") `
-                --worker $worker --compare --rerun 2>&1
-            if ($LASTEXITCODE) { $failed++ }
-            Step "candidate check $q (exit $LASTEXITCODE)"
-            $res | Select-Object -Last 25 | ForEach-Object { "  $_" }
+        if ($Questions.Count -gt 0) {
+            $qSw = [Diagnostics.Stopwatch]::StartNew()
+            foreach ($q in $Questions) {
+                # From this worktree: its evidence holds the change's records, its .oracle-runs is the store.
+                $res = & $runner batch --dir $q --env windows-x64-calcdb-local --deployment (Join-Path $work "artifacts\native") `
+                    --worker $worker --compare --rerun 2>&1
+                if ($LASTEXITCODE) { $failed++; Add-PhaseFailure "questions:$q" }
+                Step "candidate check $q (exit $LASTEXITCODE)"
+                $res | Select-Object -Last 25 | ForEach-Object { "  $_" }
+            }
+            $phaseQuestionsSec = [int] [Math]::Round($qSw.Elapsed.TotalSeconds)
         }
         if ($Snapshot) {
             $bins = Join-Path $env:LOCALAPPDATA "CalcDb\compare-bin"
@@ -814,7 +860,7 @@ try {
     $mode = if ($Branch) { 'branch' } elseif ($Files.Count) { 'files' } else { 'inplace' }
     "$([DateTime]::UtcNow.ToString('s'))`t$Name`t$mode`t$candidate`t$failed`t$([int] $sw.Elapsed.TotalSeconds)`t$([bool] $Filter)`t$($Tests -join ',')" | Add-Content $ledger
 
-    if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)"; exit $failed }
+    if ($Filter) { Step "done, $failed failed steps (FILTERED tests '$Filter': not a landing run)"; Write-PhaseTelemetry $candidate $failed $Tests; exit $failed }
     Step "done, $failed failed steps"
     $landed = $candidate
     if ($failed -eq 0 -and $Branch) {
@@ -827,12 +873,17 @@ try {
             Step $landRes.Message
             foreach ($d in $landRes.Details) { "  $d" }
             if ($landRes.Landed) { $landed = $landRes.Landed }
-            if (-not $landRes.Ok) { $failed++ }
+            if (-not $landRes.Ok) { $failed++; Add-PhaseFailure "land" }
+            elseif ($DetachSlot -and -not $Finish) {
+                $cl = Cleanup-BranchSlot -Repo $repo -Branch $Branch
+                foreach ($d in $cl.Details) { "  $d" }
+                Step "detach: $($cl.Note)"
+            }
         } else {
             "  land:    git -C $repo merge --ff-only $candidate; git -C $repo push"
             "           (if master moved meanwhile, run the check again)"
         }
-        if ($failed -eq 0 -and -not $Finish) {
+        if ($failed -eq 0 -and -not $Finish -and -not ($Land -and $DetachSlot)) {
             if ($tree -and (Test-WriterSlot $repo $tree)) { "  then:    git -C $tree switch --detach master; git branch -d $Branch (once the child's session has ended)" }
             elseif ($tree) { "  then:    git worktree remove $tree; git branch -d $Branch (once the child's session has ended)" }
             else { "  then:    git branch -d $Branch" }
@@ -842,6 +893,7 @@ try {
     }
     if (-not ($Compare -and $failed -eq 0)) {
         if ($Finish) { Step "finish skipped: landing did not complete ($failed failed step(s)); baseline and worktree left to the organizer" }
+        Write-PhaseTelemetry $landed $failed $Tests
         exit $failed
     }
 } finally { $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue }
@@ -857,12 +909,15 @@ try {
     $runName = "$Name-1"
     $runTsv = "$env:LOCALAPPDATA\CalcDb\compare-store\compare-sets\$runName.tsv"
     Step "core compare $runName from $snap"
+    $cmpSw = [Diagnostics.Stopwatch]::StartNew()
     $compareLines = [System.Collections.Generic.List[string]]::new()
     & "$snap\runner\calcdb-oracle.exe" compare-set --rerun --name $runName --against baseline --set "$snap\compare-set.json" `
         --worker "$snap\worker\CalcDb.Oracle.Worker.exe" --deployment "$snap\native" --store "$env:LOCALAPPDATA\CalcDb\compare-store" 2>&1 |
         ForEach-Object { $line = "$_"; $compareLines.Add($line); $line }
     $code = $LASTEXITCODE
+    $phaseCompareSec = [int] [Math]::Round($cmpSw.Elapsed.TotalSeconds)
     Step "core compare $runName (exit $code): $runTsv"
+    if ($code) { Add-PhaseFailure "compare" }
     if ($Finish) {
         $repoLock = Wait-Lock $repoLockPath "integration checkout" 1
         try {
@@ -871,7 +926,10 @@ try {
         } finally { $repoLock.Dispose(); Remove-Item $repoLockPath -Force -ErrorAction SilentlyContinue }
         foreach ($d in $fin.Details) { "  $d" }
         Step $fin.Message
+        if ($fin.ExitCode -ne 0) { Add-PhaseFailure "finish" }
+        Write-PhaseTelemetry $landed $fin.ExitCode $Tests
         exit $fin.ExitCode
     }
+    Write-PhaseTelemetry $landed $(if ($code) { 1 } else { 0 }) $Tests
     exit $(if ($code) { 1 } else { 0 })
 } finally { Pop-Location; $compareLock.Dispose(); Remove-Item $compareLockPath -Force -ErrorAction SilentlyContinue }

@@ -71,11 +71,12 @@ scope or design, the book wins.
   `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
   the repository (63z8).
 - Set the model of every child via `swarm add` and balance quota across available Gemini and Claude models
-  (`swarm models`): `gemini-4-neon-high` handles standard writer stretches, probe rounds, Gate 4 reviews, and tooling;
-  balance `claude-opus-5-5-high` and `claude-sonnet-5-5-high` onto high-leverage implementation slices, second reviews,
-  concurrency/locking/crash probe design, and RoslynSkills improvements. If a worker or coordinator hits quota/capacity
-  (429), switch models in place with `swarm model` rather than killing and re-spawning. Keep stretches to one
-  deliverable each.
+  (`swarm models`): use `gemini-4-neon-high` for standard writer stretches, probe rounds, and tooling; use
+  `gemini-4-neon-xhigh` for complex slices and Gate 4 reviews; balance `claude-opus-5-5-high` and
+  `claude-sonnet-5-5-high` onto high-leverage implementation slices, second reviews, concurrency/locking/crash probe
+  design, and RoslynSkills improvements whenever Claude quota is available (prefer `gemini-4-neon-xhigh` over
+  `hydrogen-xhigh` for workers when Claude hits 429). If a worker or coordinator hits quota/capacity (429), switch
+  models in place with `swarm model` rather than killing and re-spawning. Keep stretches to one deliverable each.
 - Workers coordinate on the swarm message board (`post_message` / `read_board` / `swarm_wait`) and the organizer keeps
   the Swarm UI `plan.json` updated (per `swarm_pane`) when adding workers, moving work, or changing goals. A child ends
   with the fixed report of landing-check.md posted to `@coordinator`: change, rules as a domain table (rule, the record
@@ -135,23 +136,28 @@ parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_sig
 (`--source-symbol`/`--target-symbol`), and `analyze.impact_slice`; `--symbols` batches `nav.find_references` and
 `nav.find_invocations` in one pass, and a missed column names the symbols on that line.
 
+- **MCP slim server wired globally:** `RoslynSkills.McpServer --mode slim` (12 tools, `6,016 B`) is configured in
+  `mcp_config.json`. Whenever `roslyn_*` MCP tools are available in your toolset, call `roslyn_context`,
+  `roslyn_search`, and `roslyn_run` (`ctx.read_window`, `diag.get_workspace_snapshot`) directly (`~5–15 ms` over the
+  persistent pipe) rather than spawning shell commands (`roscli-fast.exe`, `rg`) or repeating `read_file` loops. When
+  only shell tools are mounted, follow the same workflow via `roscli-fast.exe`.
 - **Overlay search & zero-disk reads first (when warm).** Once `WorkspaceHost` is warm (`workspace.use CalcDb.slnx --wait-warmup true`),
-  prefer `ctx.search_text` (with `--syntax-filter code|declarations|invocations|identifiers|comments|strings` and batched
+  prefer `roslyn_search` / `ctx.search_text` (with `--syntax-filter code|declarations|invocations|identifiers|comments|strings` and batched
   `queries`) over `rg` to eliminate false-positive comment/string hits, and use `ctx.read_window` (single or batched,
   zero disk reads + `file_sha256` + `enclosing_symbol`) instead of repeated `read_file` calls. Use `rg -n -w` (~40–100 ms)
   when no daemon is running or for non-C# files.
-- **One-call compound mindspace.** Prefer `ctx.symbol_context` (or `roslyn_context` in slim MCP) over chaining `rg` +
+- **One-call compound mindspace.** Prefer `roslyn_context` / `ctx.symbol_context` over chaining `rg` +
   `read_file` + `nav.go_to_definition` + `nav.find_references` + `nav.call_hierarchy`: it returns definition, XML summary,
   references, 1-hop interface-aware callers/callees, implementations, and file diagnostics in one round trip. For raw
-  individual queries: implementers (`nav.find_implementations`), member uses (`nav.find_references`/`nav.find_invocations`),
+  individual queries: implementers (`roslyn_nav_implementations` / `nav.find_implementations`), member uses (`nav.find_references`/`nav.find_invocations`),
   polymorphic callers (`nav.call_hierarchy` — `854z` fixed with `edges[].implemented_member`), definition (`nav.go_to_definition`),
-  and scoped compile checks (`diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true`, ~110 ms warm;
+  and scoped in-memory compile checks (`roslyn_diag_snapshot` / `diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true`, ~110 ms warm;
   pair semantic search with `ctx.search_text` / `rg` where a string literal could carry the name, 82kf trial).
 - **roscli for edits that follow a symbol:** a rename across files (`edit.rename_symbol --symbol`), a signature change
   (`edit.change_signature --symbol`), atomic multi-file exact edits with `expected_sha256` / `expected_file_hashes`
   preconditions (`edit.transaction` / `edit.batch_exact`), and a missing `using` or an unimplemented interface
-  (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Read the diff and build the area filter after every
-  edit, roscli's included; a refactoring is reviewed like any change.
+  (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Use `roslyn_diag_snapshot` / `diag.get_workspace_snapshot`
+  for live compile verification while writing code instead of running MSBuild on every edit.
 - **Who starts a daemon.** A writer whose brief refactors or traces code across projects, and a reviewer who checks the
   callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs ~20 s bind
   (+ ~33 s full 33-project warmup with `--wait-warmup true`) and about 1.2 GB warmed per worktree.
@@ -181,15 +187,15 @@ parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_sig
 
 ## Check cadence
 
-- Work in large coding batches. During a batch the only check is that the work compiles.
-  Commit as the batch progresses.
-- After a batch, run one large check (tests, oracle comparisons, analyzers), then fix
-  and re-check until clean.
-- The per-commit check stays light and is never skipped: an incremental build plus the test projects the project graph
-  selects, in the check worktree (tools/landing-check.ps1). Full corpus and oracle runs belong to the batch check.
-- A sub-session's landing ends a batch. The core compare set runs after it as a background job from a snapshot of
-  the check worktree's binaries, and blocks no build and no next child; the wide set runs once a day and before a
-  baseline is recorded ([docs/work/landing-check.md](docs/work/landing-check.md)).
+- Work in large coding batches using Roslyn's live workspace diagnostics (`diag.get_workspace_snapshot`) to stay compiled
+  without invoking MSBuild after small edits, and targeted `dotnet test --no-build --filter ...` (or `-InPlace -Fast` for
+  managed-only checks that skip NativeAOT `CalcDb.Com` publishing unless `Com` changed). Commit as the batch progresses.
+- After a batch ends and passes Gate 4 review, land quickly with `tools/landing-check.ps1 -Land -DetachSlot` (using
+  `-Fast` on purely managed slices when appropriate, or full graph checks for multi-area/COM landings), immediately
+  returning clean writer slots (`CalcDb-w1`, `CalcDb-w2`) to `master` without blocking on the oracle compare.
+- Run full solution builds, NativeAOT `CalcDb.Com` publish, all graph tests, and core compare (`-Snapshot` +
+  `compare-set`) once per wave checkpoint (every 2–4 landings) and asynchronously in the background so it never stalls
+  writer slots; run the wide compare set once a day and before recording wide baselines ([docs/work/landing-check.md](docs/work/landing-check.md)).
 
 ## Oracle conduct (ACE, Access and DAO on Windows)
 
