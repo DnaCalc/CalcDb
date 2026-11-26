@@ -145,6 +145,8 @@ public sealed class SchemaWriterTests
 
         public TransactionCoordinator Workspace { get; }
 
+        public void SyncExtent() => Pages = Math.Max(Pages, Cache.KnownExtentPages);
+
         /// <summary>A writer over the committed catalog, as the Database makes one per statement.</summary>
         public SchemaWriter Writer()
         {
@@ -579,14 +581,14 @@ public sealed class SchemaWriterTests
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Double)], SchemaRoute.Dao))?.NotWritten);
 
         // Index refusals on a created table.
-        session.Create(new("T", [Long("a"), Long("b"), Long("c"), new("d", NewFieldType.Double)], SchemaRoute.Sql), 1, 1);
+        session.Create(new("T", [Long("a"), Long("b"), Long("c"), new("d", NewFieldType.Single)], SchemaRoute.Sql), 1, 1);
         SchemaWriter w2 = session.Writer();
         // 3-column index (r-q21 Open).
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_3", ["a", "b", "c"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
         // Unrecorded option combinations.
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_PI", ["a"], PrimaryKey: true, IgnoreNull: true), SchemaRoute.Sql), 2).Refused?.NotWritten);
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DI", ["a"], PrimaryKey: false, DisallowNull: true, IgnoreNull: true), SchemaRoute.Sql), 2).Refused?.NotWritten);
-        // Unrecorded key column type (Double).
+        // Unrecorded key column type (Single; Double is now recorded in evidence/r-q44-ddl-alter-types/ixtype-double-*).
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_D", ["d"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
         // DAO route CREATE INDEX.
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DAO", ["a"], PrimaryKey: false), SchemaRoute.Dao), 2).Refused?.NotWritten);
@@ -1666,11 +1668,11 @@ public sealed class SchemaWriterTests
             session.Create(new("E", [Long("ID"), Long("K")], SchemaRoute.Sql), 1, 1);
             byte[] before = session.File.Snapshot();
 
-            // Indexing an LVAL column (Memo) itself is unrecorded (r-q43-schema-lval-index/ix-lval-* index Long/Text columns only).
-            SchemaOutcome memoColIndex = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_M", ["M"], PrimaryKey: false), SchemaRoute.Sql), 2);
+            // Descending Memo index is unrecorded (evidence/r-q44-ddl-alter-types/ixtype-memo-* records ascending Memo only).
+            SchemaOutcome memoColIndex = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_M", ["M"], PrimaryKey: false, Descending: [true]), SchemaRoute.Sql), 2);
             Assert.False(memoColIndex.Succeeded);
             Assert.False(memoColIndex.PublishedAny);
-            Assert.Contains("0x0C", memoColIndex.Refused?.NotWritten);
+            Assert.Contains("descending", memoColIndex.Refused?.NotWritten, StringComparison.OrdinalIgnoreCase);
 
             // ADO CREATE INDEX on an LVAL table is unrecorded (all LVAL CREATE INDEX records use DAO/SQL).
             SchemaOutcome adoLvalIndex = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_K_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado), 2);
@@ -2988,6 +2990,359 @@ public sealed class SchemaWriterTests
         Assert.Null(fail);
         Assert.Null(allocator.Allocate(null, out _, out string? exhaustedFail));
         Assert.Contains("no pages left", exhaustedFail);
+    }
+
+    // ---- W-07 / R-SORT-3 & R-FMT-1 (r-q44-ddl-alter-types): ixtype-* & ext-* byte-exact replays ----
+
+    [Theory]
+    [InlineData("ixtype-double-empty-accdb-dao", "V", "IX_V", false, false, "UQ_V", true, true)]
+    [InlineData("ixtype-double-rows-mdb-dao", "V", "IX_V", false, false, "UQ_V", true, true)]
+    [InlineData("ixtype-datetime-empty-accdb-dao", "D", "IX_D", false, false, "UQ_D", true, true)]
+    [InlineData("ixtype-datetime-rows-accdb-dao", "D", "IX_D", false, false, "UQ_D", true, true)]
+    [InlineData("ixtype-datetime-rows-mdb-dao", "D", "IX_D", false, false, "UQ_D", true, true)]
+    [InlineData("ixtype-guid-empty-accdb-dao", "G", "IX_G", false, false, "UQ_G", true, true)]
+    [InlineData("ixtype-guid-rows-accdb-dao", "G", "IX_G", false, false, "UQ_G", true, true)]
+    [InlineData("ixtype-guid-rows-mdb-dao", "G", "IX_G", false, false, "UQ_G", true, true)]
+    [InlineData("ixtype-memo-empty-accdb-dao", "M", "IX_M", false, false, "UQ_M", true, false)]
+    public void R_q44_ixtype_two_step_create_index_matches_ACE_byte_for_byte(
+        string question,
+        string col,
+        string ix1Name,
+        bool ix1Unique,
+        bool ix1Desc,
+        string ix2Name,
+        bool ix2Unique,
+        bool ix2Desc)
+    {
+        // evidence/r-q44-ddl-alter-types/ixtype-*: CREATE [UNIQUE] INDEX on Double, DateTime, GUID (ASC/DESC), and Memo (ASC).
+        byte[] afterSetup = Kept.ReadHandle(question, "pg0", "r-q44-ddl-alter-types");
+        byte[] aceAfter1 = Kept.ReadHandle(question, "pg1", "r-q44-ddl-alter-types");
+        byte[] aceAfter2 = Kept.ReadHandle(question, "pg2", "r-q44-ddl-alter-types");
+
+        (_, ulong updated1) = AceDates(aceAfter1, "T");
+        byte[] after1;
+        using (var s1 = new Session(afterSetup))
+        {
+            var idx1 = new NewIndex(ix1Name, [col], PrimaryKey: false, Unique: ix1Unique, Descending: ix1Desc ? [true] : null);
+            s1.CreateIndex(new("T", idx1, SchemaRoute.Sql), updated1);
+            s1.Close();
+            after1 = s1.File.Snapshot();
+        }
+        Assert.Equal(aceAfter1, after1);
+
+        (_, ulong updated2) = AceDates(aceAfter2, "T");
+        byte[] after2;
+        using (var s2 = new Session(after1))
+        {
+            var idx2 = new NewIndex(ix2Name, [col], PrimaryKey: false, Unique: ix2Unique, Descending: ix2Desc ? [true] : null);
+            s2.CreateIndex(new("T", idx2, SchemaRoute.Sql), updated2);
+            s2.Close();
+            after2 = s2.File.Snapshot();
+        }
+        Assert.Equal(aceAfter2, after2);
+    }
+
+    [Fact]
+    public void R_q44_ixtype_double_rows_accdb_three_steps_and_signed_zero_unique_match_ACE_byte_for_byte()
+    {
+        // evidence/r-q44-ddl-alter-types/ixtype-double-rows-accdb-dao: -0.0 and +0.0 coexist in UNIQUE index alongside 1 Null row.
+        const string q = "ixtype-double-rows-accdb-dao";
+        byte[] cur = Kept.ReadHandle(q, "pg0", "r-q44-ddl-alter-types");
+        (string handle, NewIndex idx)[] steps =
+        [
+            ("pg1", new("IX_V", ["V"], PrimaryKey: false, Unique: false)),
+            ("pg2", new("IX_VD", ["V"], PrimaryKey: false, Unique: false, Descending: [true])),
+            ("pg3", new("UQ_V", ["V"], PrimaryKey: false, Unique: true)),
+        ];
+        foreach ((string handle, NewIndex idx) in steps)
+        {
+            byte[] ace = Kept.ReadHandle(q, handle, "r-q44-ddl-alter-types");
+            (_, ulong updated) = AceDates(ace, "T");
+            using var session = new Session(cur);
+            session.CreateIndex(new("T", idx, SchemaRoute.Sql), updated);
+            session.Close();
+            cur = session.File.Snapshot();
+            Assert.Equal(ace, cur);
+        }
+    }
+
+    [Theory]
+    [InlineData("ixtype-memo-rows-accdb-dao")]
+    [InlineData("ixtype-memo-rows-mdb-dao")]
+    public void R_q44_ixtype_memo_rows_nonunique_and_unique_3022_collision_match_ACE_byte_for_byte(string question)
+    {
+        // evidence/r-q44-ddl-alter-types/ixtype-memo-rows-accdb-dao & ixtype-memo-rows-mdb-dao:
+        // step 1: CREATE INDEX IX_M ON T (M) indexes first 255 UTF-16 units of external LVAL memos + 1 Null row -> (5, 4, 0).
+        // step 2: CREATE UNIQUE INDEX UQ_M ON T (M) fails 3022 on 255-char prefix collision, stepping page 0 0xE02 +2 only.
+        byte[] afterSetup = Kept.ReadHandle(question, "pg0", "r-q44-ddl-alter-types");
+        byte[] aceAfter1 = Kept.ReadHandle(question, "pg1", "r-q44-ddl-alter-types");
+        byte[] aceAfter2 = Kept.ReadHandle(question, "pg2", "r-q44-ddl-alter-types");
+
+        (_, ulong updated1) = AceDates(aceAfter1, "T");
+        byte[] after1;
+        using (var s1 = new Session(afterSetup))
+        {
+            s1.CreateIndex(new("T", new("IX_M", ["M"], PrimaryKey: false, Unique: false), SchemaRoute.Sql), updated1);
+            s1.Close();
+            after1 = s1.File.Snapshot();
+        }
+        Assert.Equal(aceAfter1, after1);
+
+        // Caller rejecting 3022 writes 0 bytes.
+        using (var sDecline = new Session(after1))
+        {
+            SchemaOutcome declined = sDecline.Writer().CreateIndex(
+                sDecline.Workspace,
+                new("T", new("UQ_M", ["M"], PrimaryKey: false, Unique: true), SchemaRoute.Sql),
+                updated1,
+                acceptsError: _ => false);
+            Assert.Equal(3022, declined.Refused?.Error);
+            Assert.False(declined.PublishedAny);
+            Assert.Equal(after1, sDecline.File.Snapshot());
+        }
+
+        // Accepting 3022 steps 0xE02 +2 and leaves every other byte identical to ACE.
+        byte[] after2;
+        using (var s2 = new Session(after1))
+        {
+            SchemaOutcome dup = s2.Writer().CreateIndex(
+                s2.Workspace,
+                new("T", new("UQ_M", ["M"], PrimaryKey: false, Unique: true), SchemaRoute.Sql),
+                updated1);
+            Assert.Equal(3022, dup.Refused?.Error);
+            Assert.True(dup.PublishedAny);
+            s2.Close();
+            after2 = s2.File.Snapshot();
+        }
+        Assert.Equal(aceAfter2, after2);
+    }
+
+    [Theory]
+    [InlineData("ext-bigint-create-accdb-dao", "B", NewFieldType.BigInt, SchemaRoute.Sql)]
+    [InlineData("ext-bigint-create-accdb-ado", "B", NewFieldType.BigInt, SchemaRoute.Ado)]
+    [InlineData("ext-datetime2-create-accdb-dao", "D", NewFieldType.DateTime2, SchemaRoute.Sql)]
+    [InlineData("ext-datetime2-create-accdb-ado", "D", NewFieldType.DateTime2, SchemaRoute.Ado)]
+    public void R_q44_ext_accdb_create_table_matches_ACE_byte_for_byte(
+        string question,
+        string extColName,
+        NewFieldType extType,
+        SchemaRoute route)
+    {
+        // evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-dao, ext-bigint-create-accdb-ado, ext-datetime2-create-accdb-dao, ext-datetime2-create-accdb-ado:
+        // upgrades page 0 offset 20 (0x02 -> 0x05 or 0x06) and writes FCMin*Ver incrementally (3 LVAL slots) to MSysObjects.LvProp.
+        byte[] input = Kept.ReadHandle(question, "pg0", "r-q44-ddl-alter-types");
+        byte[] ace = Kept.ReadHandle(question, "pg1", "r-q44-ddl-alter-types");
+        (ulong created, ulong updated) = AceDates(ace, "T");
+
+        using var session = new Session(input);
+        session.Create(
+            new("T", [Long("ID"), new(extColName, extType)], route, [new("PK", ["ID"], PrimaryKey: true)]),
+            created,
+            updated);
+        session.Close();
+        Assert.Equal(ace, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void R_q44_ext_both_accdb_progresses_format_version_and_shares_LvProp_LVAL_page_byte_for_byte()
+    {
+        // evidence/r-q44-ddl-alter-types/ext-both-accdb-dao: T1 (BIGINT, 0x02->0x05) then T2 (DATETIME2, 0x05->0x06) reusing LVAL page 45.
+        const string q = "ext-both-accdb-dao";
+        byte[] input = Kept.ReadHandle(q, "pg0", "r-q44-ddl-alter-types");
+        byte[] ace1 = Kept.ReadHandle(q, "pg1", "r-q44-ddl-alter-types");
+        byte[] ace2 = Kept.ReadHandle(q, "pg2", "r-q44-ddl-alter-types");
+
+        (ulong c1, ulong u1) = AceDates(ace1, "T1");
+        byte[] after1;
+        using (var s1 = new Session(input))
+        {
+            s1.Create(new("T1", [Long("ID"), new("B", NewFieldType.BigInt)], SchemaRoute.Sql, [new("PK1", ["ID"], PrimaryKey: true)]), c1, u1);
+            s1.Close();
+            after1 = s1.File.Snapshot();
+        }
+        Assert.Equal(ace1, after1);
+
+        (ulong c2, ulong u2) = AceDates(ace2, "T2");
+        byte[] after2;
+        using (var s2 = new Session(after1))
+        {
+            s2.Create(new("T2", [Long("ID"), new("D", NewFieldType.DateTime2)], SchemaRoute.Sql, [new("PK2", ["ID"], PrimaryKey: true)]), c2, u2);
+            s2.Close();
+            after2 = s2.File.Snapshot();
+        }
+        Assert.Equal(ace2, after2);
+    }
+
+    [Theory]
+    [InlineData("ext-bigint-mdb-dao", "B", NewFieldType.BigInt, SchemaRoute.Sql)]
+    [InlineData("ext-bigint-mdb-ado", "B", NewFieldType.BigInt, SchemaRoute.Ado)]
+    [InlineData("ext-datetime2-mdb-dao", "D", NewFieldType.DateTime2, SchemaRoute.Sql)]
+    [InlineData("ext-datetime2-mdb-ado", "D", NewFieldType.DateTime2, SchemaRoute.Ado)]
+    public void R_q44_ext_mdb_refuses_3001_and_steps_catalog_counts_and_counter_byte_for_byte(
+        string question,
+        string extColName,
+        NewFieldType extType,
+        SchemaRoute route)
+    {
+        // evidence/r-q44-ddl-alter-types/ext-bigint-mdb-dao, ext-bigint-mdb-ado, ext-datetime2-mdb-dao, ext-datetime2-mdb-ado:
+        // refuses 3001 after stepping MSysObjects/MSysACEs UniqueEntryCount +1 and page 0 0xE02 +2.
+        byte[] input = Kept.ReadHandle(question, "pg0", "r-q44-ddl-alter-types");
+        byte[] ace = Kept.ReadHandle(question, "pg1", "r-q44-ddl-alter-types");
+        var req = new CreateTableRequest("T", [Long("ID"), new(extColName, extType)], route, [new("PK", ["ID"], PrimaryKey: true)]);
+
+        // Caller rejecting 3001 writes 0 bytes.
+        using (var sDecline = new Session(input))
+        {
+            SchemaOutcome declined = sDecline.Writer().CreateTable(sDecline.Workspace, req, 1, 1, acceptsError: _ => false);
+            Assert.Equal(3001, declined.Refused?.Error);
+            Assert.False(declined.PublishedAny);
+            Assert.Equal(input, sDecline.File.Snapshot());
+        }
+
+        using var session = new Session(input);
+        SchemaOutcome outcome = session.Writer().CreateTable(session.Workspace, req, 1, 1);
+        Assert.Equal(3001, outcome.Refused?.Error);
+        Assert.True(outcome.PublishedAny);
+        session.Close();
+        Assert.Equal(ace, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void R_q36_create_nullfix_ext_accdb_combined_bigint_then_datetime2_matches_ACE_LvProp_page_byte_for_byte()
+    {
+        // evidence/r-q36-publication-bytes/create-nullfix-ext-accdb: BIGINT then DATETIME2 in one table ->
+        // page 0 version 0x06, TDEF column specs, and 6 incremental LVAL slots on page 45 matching ACE byte-for-byte.
+        byte[] input = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyAccdb);
+        byte[] ace = Kept.ReadHandle("create-nullfix-ext-accdb", "pg", "r-q36-publication-bytes");
+        (ulong created, ulong updated) = AceDates(ace, "ExtTypes");
+
+        using var session = new Session(input);
+        session.Create(
+            new(
+                "ExtTypes",
+                [Long("ID"), new("FBig", NewFieldType.BigInt), new("FDt2", NewFieldType.DateTime2), Text("S", 50)],
+                SchemaRoute.Sql,
+                [new("PK_ET", ["ID"], PrimaryKey: true)]),
+            created,
+            updated);
+        session.Close();
+        byte[] actual = session.File.Snapshot();
+        Assert.Equal((byte)0x06, actual[D.Header.Version.Offset]);
+        // Page 45 is MSysObjects.LvProp LVAL (6 slots, 5 deleted 0xD000 + live slot 5 at 0x0F1E, stale gap at 0x0E40).
+        Assert.Equal(ace.AsSpan(45 * D.PageSize, D.PageSize).ToArray(), actual.AsSpan(45 * D.PageSize, D.PageSize).ToArray());
+    }
+
+    [Fact]
+    public void R_q44_unrecorded_ixtype_and_ext_neighbours_refuse_by_name_without_writing()
+    {
+        byte[] accdb = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyAccdb);
+        using var session = new Session(accdb);
+        byte[] before = session.File.Snapshot();
+
+        // Unrecorded BIGINT/DATETIME2 combinations in CREATE TABLE refuse without writing.
+        CreateTableRequest[] badCreates =
+        [
+            new("BadRev", [Long("ID"), new("D", NewFieldType.DateTime2), new("B", NewFieldType.BigInt)], SchemaRoute.Sql),
+            new("BadTwoBig", [Long("ID"), new("B1", NewFieldType.BigInt), new("B2", NewFieldType.BigInt)], SchemaRoute.Sql),
+            new("BadNN", [new("ID", NewFieldType.Long, Required: true), new("B", NewFieldType.BigInt)], SchemaRoute.Sql),
+            new("BadMemo", [Long("ID"), new("B", NewFieldType.BigInt), new("M", NewFieldType.Memo)], SchemaRoute.Sql),
+            new("BadUq", [Long("ID"), Long("K"), new("B", NewFieldType.BigInt)], SchemaRoute.Sql, [new("PK", ["ID"], PrimaryKey: true), new("UQ", ["K"], PrimaryKey: false, Unique: true)]),
+        ];
+        foreach (CreateTableRequest req in badCreates)
+        {
+            SchemaOutcome o = session.Writer().CreateTable(session.Workspace, req, 1, 1);
+            Assert.False(o.Succeeded);
+            Assert.Null(o.Refused?.Error);
+            Assert.NotNull(o.Refused?.NotWritten);
+            Assert.False(o.PublishedAny);
+        }
+        Assert.Equal(before, session.File.Snapshot());
+
+        // Inside BeginTrans: BIGINT refuses by name without writing.
+        Assert.Null(session.Workspace.BeginTrans());
+        SchemaOutcome inTx = session.Writer().CreateTable(session.Workspace, new("TxBig", [new("B", NewFieldType.BigInt)], SchemaRoute.Sql), 1, 1);
+        Assert.False(inTx.Succeeded);
+        Assert.NotNull(inTx.Refused?.NotWritten);
+        Assert.Null(session.Workspace.Rollback().Error);
+        Assert.Equal(before, session.File.Snapshot());
+
+        // Unrecorded CREATE INDEX neighbours: Memo DESC, 2-col Double, ADO Double.
+        session.Create(new("IxT", [Long("ID"), new("V", NewFieldType.Double), new("M", NewFieldType.Memo)], SchemaRoute.Sql, [new("PK", ["ID"], PrimaryKey: true)]), 1, 1);
+        byte[] afterCreate = session.File.Snapshot();
+        CreateIndexRequest[] badIndexes =
+        [
+            new("IxT", new("IX_MD", ["M"], PrimaryKey: false, Descending: [true]), SchemaRoute.Sql),
+            new("IxT", new("IX_2", ["ID", "V"], PrimaryKey: false), SchemaRoute.Sql),
+            new("IxT", new("IX_Ado", ["V"], PrimaryKey: false), SchemaRoute.Ado),
+            new("IxT", new("IX_DN", ["V"], PrimaryKey: false, DisallowNull: true), SchemaRoute.Sql),
+        ];
+        foreach (CreateIndexRequest req in badIndexes)
+        {
+            SchemaOutcome o = session.Writer().CreateIndex(session.Workspace, req, 2);
+            Assert.False(o.Succeeded);
+            Assert.Null(o.Refused?.Error);
+            Assert.NotNull(o.Refused?.NotWritten);
+            Assert.False(o.PublishedAny);
+        }
+        Assert.Equal(afterCreate, session.File.Snapshot());
+
+        // Succeeding UNIQUE Memo index with a Null row refuses by name without writing (non-unique succeeds).
+        TableDefinition ixDef = OpenTableDef(session, "IxT");
+        using (MutationSemantics sem = MutationSemantics.Compile("IxT", ixDef, null, NoTestRules.Instance, D.IndexDescriptor))
+        {
+            foreach ((int id, string? m) in new (int, string?)[] { (1, null), (2, "alpha"), (3, "beta") })
+            {
+                ulong extent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+                var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, ixDef, extent));
+                NativeValue[] row =
+                [
+                    new(NativeKind.Long) { Integer = id },
+                    NativeValue.Null,
+                    m is null ? NativeValue.Null : new(NativeKind.Text) { Text = m },
+                ];
+                CompiledChange ins = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache));
+                Assert.NotNull(ins.Change);
+                using StatementScope stmt = session.Workspace.BeginStatement();
+                AcceptOutcome acc = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, ins));
+                Assert.True(acc.Accepted, $"{acc.Open} {acc.Detail}");
+                Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+            }
+        }
+        session.SyncExtent();
+        byte[] afterMemoRows = session.File.Snapshot();
+        SchemaOutcome uqMemoNull = session.Writer().CreateIndex(session.Workspace, new("IxT", new("UQ_MN", ["M"], PrimaryKey: false, Unique: true), SchemaRoute.Sql), 3);
+        Assert.False(uqMemoNull.Succeeded);
+        Assert.Null(uqMemoNull.Refused?.Error);
+        Assert.Contains("UNIQUE Memo", uqMemoNull.Accepted.Detail ?? uqMemoNull.Refused?.NotWritten ?? string.Empty);
+        Assert.Equal(afterMemoRows, session.File.Snapshot());
+
+        // Shared MSysObjects.LvProp LVAL page dropping below 264 free bytes during incremental FCMin*Ver steps refuses without writing.
+        // ValidationRule of 1,800 chars (~3,655B LvProp) leaves ~425B free: step 1 (~84B) stays >= 264B, step 3 (~220B) would drop < 264B.
+        session.Create(new("Pad", [Long("ID"), Text("W", 50)], SchemaRoute.Sql, [new("PKP", ["ID"], PrimaryKey: true)]), 4, 4);
+        SchemaOutcome padRule = session.Writer().SetFieldValidationProperty(session.Workspace, "Pad", "W", FieldValidationProperty.ValidationRule, $"<> '{new string('a', 1800)}'", 5);
+        Assert.True(padRule.Succeeded, $"{padRule.Refused} {padRule.Accepted}");
+        session.SyncExtent();
+        byte[] afterPad = session.File.Snapshot();
+        SchemaOutcome lowFreeBig = session.Writer().CreateTable(session.Workspace, new("LowBig", [Long("ID"), new("B", NewFieldType.BigInt)], SchemaRoute.Sql, [new("PKL", ["ID"], PrimaryKey: true)]), 6, 6);
+        Assert.False(lowFreeBig.Succeeded);
+        Assert.Null(lowFreeBig.Refused?.Error);
+        Assert.False(lowFreeBig.PublishedAny);
+        Assert.Contains("264", lowFreeBig.Accepted.Detail ?? lowFreeBig.Refused?.NotWritten ?? string.Empty);
+        Assert.Equal(afterPad, session.File.Snapshot());
+
+        // Jet 4 MDB: unrecorded BIGINT combinations refuse by name with 0 bytes written (do NOT step 0xE02 / return 3001).
+        byte[] mdb = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyMdb);
+        using var mdbSession = new Session(mdb);
+        byte[] mdbBefore = mdbSession.File.Snapshot();
+        foreach (CreateTableRequest req in badCreates)
+        {
+            SchemaOutcome o = mdbSession.Writer().CreateTable(mdbSession.Workspace, req, 1, 1);
+            Assert.False(o.Succeeded);
+            Assert.Null(o.Refused?.Error);
+            Assert.NotNull(o.Refused?.NotWritten);
+            Assert.False(o.PublishedAny);
+        }
+        Assert.Equal(mdbBefore, mdbSession.File.Snapshot());
     }
 }
 

@@ -476,6 +476,12 @@ public static class DdlBinder
                 case DdlTypeKind.Guid:
                     fields.Add(new NewField(col.Name, NewFieldType.Guid));
                     break;
+                case DdlTypeKind.BigInt:
+                    fields.Add(new NewField(col.Name, NewFieldType.BigInt));
+                    break;
+                case DdlTypeKind.DateTime2:
+                    fields.Add(new NewField(col.Name, NewFieldType.DateTime2));
+                    break;
                 case DdlTypeKind.Decimal:
                 {
                     if (route != SchemaRoute.Ado)
@@ -783,12 +789,6 @@ public static class DdlBinder
 
     private static SqlFailure? ValidateDataType(string colName, DdlDataType dataType, ref int counterCount)
     {
-        if (dataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2)
-        {
-            // r-def-expr-sql/ddl-type-names-accdb Dt69/Dt70 succeed in ACCDB (3001 is MDB only); storage depends on
-            // database feature flags and MSysObjects.LvProp FCMin*Ver PropertyBlob (r-q36 create-nullfix-ext-accdb).
-            return BindOpen("NotModelled.DdlBigIntOrDateTime2", $"{dataType.Kind} availability depends on database feature flags, not yet modelled");
-        }
         if (dataType.Kind == DdlTypeKind.Counter)
         {
             if (dataType.Increment == 0)
@@ -1117,12 +1117,26 @@ public static class DdlBinder
         {
             return Fail(BindOpen("NotModelled.DdlIndexShape", $"CREATE INDEX with {stmt.Columns.Count} columns is not modelled in SchemaWriter (r-q11/r-q21 record 1–2 columns)"), out failure);
         }
-        foreach (ColumnDescriptor col in boundCols!)
+        for (int i = 0; i < boundCols!.Count; i++)
         {
-            if (col.TypeCode is not (NativeTypes.Long or NativeTypes.Text))
+            ColumnDescriptor col = boundCols[i];
+            if (col.TypeCode is NativeTypes.Long or NativeTypes.Text)
             {
-                return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21 record Long and Text)"), out failure);
+                continue;
             }
+            if (col.TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            {
+                if (route != SchemaRoute.Sql || stmt.Columns.Count != 1 || primary || disallowNull || ignoreNull)
+                {
+                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} via {route} with {stmt.Columns.Count} column(s) or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records single-column DAO CREATE [UNIQUE] INDEX only)"), out failure);
+                }
+                if (col.TypeCode == NativeTypes.Memo && stmt.Columns[i].Descending)
+                {
+                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", "descending CREATE INDEX on Memo (0x0C) is not recorded (evidence/r-q44-ddl-alter-types/ixtype-memo-* records ascending only)"), out failure);
+                }
+                continue;
+            }
+            return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21/r-q44 record Long, Text, Double, DateTime, GUID, and Memo)"), out failure);
         }
 
         var newIndex = new NewIndex(
@@ -1735,7 +1749,7 @@ public static class DdlExecutor
             }
             return ActionOutcome.Fail(failure!);
         }
-        return Execute(plan, database, options);
+        return Execute(plan, database, options, source, acceptsFailure);
     }
 
     private static ActionOutcome ExecuteDuplicateCreateTable(
@@ -1793,7 +1807,8 @@ public static class DdlExecutor
         BoundDdl plan,
         ISqlActionDatabase database,
         int options = 0,
-        ActionErrorSource source = ActionErrorSource.Database)
+        ActionErrorSource source = ActionErrorSource.Database,
+        Func<SqlFailure, bool>? acceptsFailure = null)
     {
         if ((options & ~AdmittedOptionsMask) != 0)
         {
@@ -1824,10 +1839,14 @@ public static class DdlExecutor
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", writerFailure ?? "SchemaWriter unavailable"));
         }
 
+        Func<int, bool>? acceptsError = acceptsFailure is null
+            ? null
+            : errNum => acceptsFailure(SqlFailure.Ace(SqlPhase.Execute, errNum, FormatSchemaErrorMessage(errNum, plan)));
+
         SchemaOutcome outcome = plan.Kind switch
         {
-            BoundDdlKind.CreateTable => writer.CreateTable(database.Workspace, plan.CreateTable!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
-            BoundDdlKind.CreateIndex => writer.CreateIndex(database.Workspace, plan.CreateIndex!, schemaDb.NowDateBits()),
+            BoundDdlKind.CreateTable => writer.CreateTable(database.Workspace, plan.CreateTable!, schemaDb.NowDateBits(), schemaDb.NowDateBits(), acceptsError),
+            BoundDdlKind.CreateIndex => writer.CreateIndex(database.Workspace, plan.CreateIndex!, schemaDb.NowDateBits(), acceptsError),
             BoundDdlKind.DropTable => writer.DropTable(database.Workspace, plan.DropTable!),
             BoundDdlKind.AddCheckConstraint => writer.AddCheckConstraint(database.Workspace, plan.AddCheckConstraint!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
             BoundDdlKind.AddForeignKey => writer.AddForeignKey(database.Workspace, plan.AddForeignKey!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
@@ -1849,13 +1868,7 @@ public static class DdlExecutor
         {
             if (refused.Error is int errNum)
             {
-                string msg = errNum switch
-                {
-                    3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
-                    3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? plan.AddForeignKey?.ForeignKey.Name ?? ""),
-                    _ => $"ACE schema error {errNum}",
-                };
-                return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, msg));
+                return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, errNum, FormatSchemaErrorMessage(errNum, plan)));
             }
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriter", refused.NotWritten ?? "SchemaWriter refused request"));
         }
@@ -1869,6 +1882,15 @@ public static class DdlExecutor
             $"NotModelled.SchemaAccept.{outcome.Accepted.Open}",
             outcome.Accepted.Detail ?? outcome.Accepted.Open.ToString()));
     }
+
+    private static string FormatSchemaErrorMessage(int errNum, BoundDdl plan) => errNum switch
+    {
+        3001 => SqlMessages.InvalidArgument,
+        3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
+        3022 => SqlMessages.DuplicateIndexValue,
+        3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? plan.AddForeignKey?.ForeignKey.Name ?? ""),
+        _ => $"ACE schema error {errNum}",
+    };
 
     /// <summary>
     /// DDL on a read-only Database handle (R-SQL-2 / R-LOCK-1; qualified.md, <c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c>):
@@ -1912,8 +1934,10 @@ public static class DdlExecutor
             case CreateTableStatement ct:
             {
                 // Call 12: valid CREATE TABLE <new> -> 3370 when alone; invalid forms (e.g. duplicate column 3380,
-                // invalid type 3292, existing table 3010) have no read-only precedence record and keep ReadOnlyInfo null.
-                if (DdlBinder.Bind(ct, database, out _, SchemaRoute.Sql) is not null)
+                // invalid type 3292, existing table 3010) and BIGINT/DATETIME2 (3370 vs MDB 3001 precedence unrecorded)
+                // keep ReadOnlyInfo null.
+                if (!ct.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2)
+                    && DdlBinder.Bind(ct, database, out _, SchemaRoute.Sql) is not null)
                 {
                     return ReadOnlyDdlRefusal(ct.TableName);
                 }
@@ -1928,15 +1952,18 @@ public static class DdlExecutor
                 }
                 break;
             }
-            case AlterTableStatement { Action: AddColumnsAlterAction } at:
+            case AlterTableStatement { Action: AddColumnsAlterAction addCols } at:
             {
                 // Call 14: valid ALTER TABLE T ADD COLUMN W LONG -> 3370 when alone. DdlBinder.Bind validates the
                 // table, column names, types and constraints without writing and returns NotModelled.DdlAlterTable
                 // only when no bind error (3371, 3380, 3292, 3211, ...) precedes it.
-                _ = DdlBinder.Bind(at, database, out SqlFailure? bindFailure, SchemaRoute.Sql);
-                if (bindFailure is { NotModelled: "NotModelled.DdlAlterTable" })
+                if (!addCols.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2))
                 {
-                    return ReadOnlyDdlRefusal(at.TableName);
+                    _ = DdlBinder.Bind(at, database, out SqlFailure? bindFailure, SchemaRoute.Sql);
+                    if (bindFailure is { NotModelled: "NotModelled.DdlAlterTable" })
+                    {
+                        return ReadOnlyDdlRefusal(at.TableName);
+                    }
                 }
                 break;
             }
@@ -1955,7 +1982,8 @@ public static class DdlExecutor
         return plan.Kind switch
         {
             BoundDdlKind.DropTable when plan.Syntax is DropTableStatement { TableNames.Count: 1 } drop => ReadOnlyDdlRefusal(drop.TableNames[0]),
-            BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create => ReadOnlyDdlRefusal(create.TableName),
+            BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create
+                && !create.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2) => ReadOnlyDdlRefusal(create.TableName),
             BoundDdlKind.CreateIndex when plan.Syntax is CreateIndexStatement index => ReadOnlyDdlRefusal(index.TableName),
             _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle")),
         };

@@ -699,7 +699,10 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE B511 (b BINARY(511))", "NotModelled.DdlBinarySize");
         AssertNotModelled(db, "CREATE TABLE Vb0 (b VARBINARY(0))", "NotModelled.DdlBinarySize");
         AssertNotModelled(db, "CREATE TABLE Cs1 (a COUNTER(1))", "NotModelled.DdlCounterSingleArg");
-        AssertNotModelled(db, "CREATE TABLE Bi (x BIGINT)", "NotModelled.DdlBigIntOrDateTime2");
+        // evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-dao, ext-largeint-create-accdb-dao:
+        // BIGINT succeeds on ACCDB; LARGEINT refuses 3292 without writing.
+        Assert.True(ActionExecutor.Execute("CREATE TABLE Bi (x BIGINT)", db).Succeeded);
+        AssertAceError(db, "CREATE TABLE BadLargeInt (x LARGEINT)", 3292);
         AssertNotModelled(db, "CREATE TABLE Un (a LONG UNIQUE)", "NotModelled.DdlUniqueConstraint");
         // 1-2 col Long/Text inline/table-level UNIQUE after inline PK is now recorded (evidence/r-q34-ddl-sweep/uq-*);
         // keep 3-col UNIQUE, non-(Long/Text) UNIQUE, UNIQUE before PK, table-level PK + UNIQUE, and LVAL + table-level UNIQUE refused.
@@ -726,12 +729,14 @@ public sealed class DdlTests
         string uq33 = string.Join(", ", Enumerable.Range(1, 33).Select(i => $"c{i:D2} LONG UNIQUE"));
         AssertNotModelled(db, $"CREATE TABLE C33 ({uq33})", "NotModelled.DdlTooManyTableConstraints");
 
-        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b LONG, c LONG, d DOUBLE)", db).Succeeded);
+        Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b LONG, c LONG, d DOUBLE, s SINGLE)", db).Succeeded);
         AssertNotModelled(db, "ALTER TABLE T ADD COLUMN e LONG", "NotModelled.DdlAlterTable");
         AssertNotModelled(db, "CREATE INDEX IX_DI ON T (a) WITH DISALLOW NULL IGNORE NULL", "NotModelled.DdlIndexOptions");
         AssertNotModelled(db, "CREATE INDEX IX_PI ON T (a) WITH PRIMARY IGNORE NULL", "NotModelled.DdlIndexOptions");
         AssertNotModelled(db, "CREATE INDEX IX_3 ON T (a, b, c)", "NotModelled.DdlIndexShape");
-        AssertNotModelled(db, "CREATE INDEX IX_D ON T (d)", "NotModelled.DdlIndexKeyType");
+        // evidence/r-q44-ddl-alter-types/ixtype-double-empty-accdb-dao: Double index succeeds; unrecorded Single refuses.
+        Assert.True(ActionExecutor.Execute("CREATE INDEX IX_D ON T (d)", db).Succeeded);
+        AssertNotModelled(db, "CREATE INDEX IX_S ON T (s)", "NotModelled.DdlIndexKeyType");
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (a)", db).Succeeded);
         AssertNotModelled(db, "DROP INDEX IX_T ON T", "NotModelled.DdlDropIndex");
         // Second index on a table that already has one is now admitted (evidence/r-q34-ddl-sweep/ix-cat1b-*, uqix-*).
@@ -1657,10 +1662,11 @@ public sealed class DdlTests
     [Fact]
     public void R_q36_setup_ddl_forms_execute_and_refuse_unrecorded_variants()
     {
-        // evidence/r-q36-publication-bytes/create-feff-*, create-nullfix-*:
+        // evidence/r-q36-publication-bytes/create-feff-*, create-nullfix-*, evidence/r-q44-ddl-alter-types/ext-*:
         // ADO WITH COMPRESSION (ACCDB + MDB, nullable unconstrained Text/Memo),
         // ADO DECIMAL(p, s) (ACCDB + MDB) and bare DECIMAL (ACCDB only; MDB refuses by name),
-        // and SQL BIGINT / DATETIME2 stay refused as NotModelled.DdlBigIntOrDateTime2 until MSysObjects.LvProp is modelled.
+        // and SQL BIGINT / DATETIME2 succeed on ACCDB (updating format version + MSysObjects.LvProp FCMin*Ver)
+        // and fail 3001 on Jet 4 MDB (stepping MSysObjects/MSysACEs UniqueEntryCount +1 and 0xE02 +2).
         byte[] accdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
         byte[] mdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyMdbSha);
 
@@ -1711,11 +1717,73 @@ public sealed class DdlTests
 
             AssertNotModelled(db, "CREATE TABLE Dec1 (D DECIMAL(18))", "NotModelled.DdlDecimalSingleArg", ActionErrorSource.Ado);
 
-            // 3. SQL BIGINT / DATETIME2 CREATE TABLE stays refused by name on both ACCDB and MDB until MSysObjects.LvProp (FCMin*Ver) is modelled.
-            AssertNotModelled(
-                db,
-                "CREATE TABLE ExtTypes (ID LONG CONSTRAINT PK_ET PRIMARY KEY, FBig BIGINT, FDt2 DATETIME2, S TEXT(50))",
-                "NotModelled.DdlBigIntOrDateTime2");
+            // 3. SQL BIGINT / DATETIME2 CREATE TABLE succeeds on ACCDB (r-q36 create-nullfix-ext-accdb, r-q44 ext-*)
+            //    and fails 3001 on Jet 4 MDB (r-q44 ext-{bigint,datetime2}-mdb-{dao,ado}).
+            const string extSql = "CREATE TABLE ExtTypes (ID LONG CONSTRAINT PK_ET PRIMARY KEY, FBig BIGINT, FDt2 DATETIME2, S TEXT(50))";
+            if (isMdb)
+            {
+                AssertAceError(db, extSql, 3001);
+            }
+            else
+            {
+                ActionOutcome extOk = ActionExecutor.Execute(extSql, db);
+                Assert.True(extOk.Succeeded, $"ACCDB ExtTypes failed: {extOk.Failure}");
+                TableDefinition extT = db.Table("ExtTypes")!;
+                ColumnDescriptor fBig = extT.Columns.Single(c => c.Name == "FBig");
+                Assert.Equal(NativeTypes.BigInt, fBig.TypeCode);
+                Assert.False(fBig.IsFixed);
+                Assert.Equal(8, fBig.Length);
+                ColumnDescriptor fDt2 = extT.Columns.Single(c => c.Name == "FDt2");
+                Assert.Equal(NativeTypes.ExtendedDateTime, fDt2.TypeCode);
+                Assert.True(fDt2.IsFixed);
+                Assert.Equal(42, fDt2.Length);
+                Assert.Equal(0x00000009u, fDt2.TypeInfo);
+            }
+        }
+    }
+
+    [Fact]
+    public void R_q44_ddl_index_key_types_and_ext_types_sql_end_to_end()
+    {
+        byte[] accdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyAccdbSha);
+        byte[] mdb = ArtifactStore.ForRepository(SqlFixture.Root()).ReadAll(EmptyMdbSha);
+
+        // ACCDB: CREATE [UNIQUE] INDEX on Double, DateTime, GUID (ASC/DESC), Memo (ASC); OLE -> 3409; unrecorded neighbours refused.
+        using (var db = new WritableSqlFixture(accdb))
+        {
+            Assert.True(ActionExecutor.Execute("CREATE TABLE AllIx (ID LONG CONSTRAINT PK PRIMARY KEY, V DOUBLE, D DATETIME, G GUID, M MEMO, O LONGBINARY)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE INDEX IX_V ON AllIx (V)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UQ_VD ON AllIx (V DESC)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE INDEX IX_D ON AllIx (D)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UQ_DD ON AllIx (D DESC)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE INDEX IX_G ON AllIx (G)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UQ_GD ON AllIx (G DESC)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE INDEX IX_M ON AllIx (M)", db).Succeeded);
+            Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UQ_M ON AllIx (M)", db).Succeeded);
+
+            // Refusals: OLE -> 3409; Memo DESC, ADO Double, 2-col Double, ALTER TABLE ADD CONSTRAINT on Double -> NotModelled.DdlIndexKeyType;
+            // ALTER TABLE ADD COLUMN BIGINT/DATETIME2 -> NotModelled.DdlAlterTable; LARGEINT -> 3292.
+            AssertAceError(db, "CREATE INDEX IX_O ON AllIx (O)", 3409);
+            AssertNotModelled(db, "CREATE INDEX IX_MD ON AllIx (M DESC)", "NotModelled.DdlIndexKeyType");
+            AssertNotModelled(db, "CREATE INDEX IX_AdoV ON AllIx (V)", "NotModelled.DdlIndexKeyType", ActionErrorSource.Ado);
+            AssertNotModelled(db, "CREATE INDEX IX_2V ON AllIx (ID, V)", "NotModelled.DdlIndexKeyType");
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD CONSTRAINT UQ_AltV UNIQUE (V)", "NotModelled.DdlIndexKeyType");
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN B BIGINT", "NotModelled.DdlAlterTable");
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN DT DATETIME2", "NotModelled.DdlAlterTable");
+            AssertAceError(db, "CREATE TABLE BadL (B LARGEINT)", 3292);
+        }
+
+        // MDB: BIGINT and DATETIME2 both fail 3001 on DAO and ADO routes.
+        using (var dbMdb = new WritableSqlFixture(mdb))
+        {
+            AssertAceError(dbMdb, "CREATE TABLE TB (ID LONG CONSTRAINT PK PRIMARY KEY, B BIGINT)", 3001);
+            AssertAceError(dbMdb, "CREATE TABLE TD (ID LONG CONSTRAINT PK PRIMARY KEY, D DATETIME2)", 3001);
+            ActionOutcome adoBig = ActionExecutor.Execute("CREATE TABLE TBA (ID LONG CONSTRAINT PK PRIMARY KEY, B BIGINT)", dbMdb, source: ActionErrorSource.Ado);
+            Assert.False(adoBig.Succeeded);
+            Assert.Equal(3001, adoBig.Failure?.Number);
+            ActionOutcome adoDt = ActionExecutor.Execute("CREATE TABLE TDA (ID LONG CONSTRAINT PK PRIMARY KEY, D DATETIME2)", dbMdb, source: ActionErrorSource.Ado);
+            Assert.False(adoDt.Succeeded);
+            Assert.Equal(3001, adoDt.Failure?.Number);
         }
     }
 

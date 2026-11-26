@@ -74,9 +74,9 @@ public enum KeyCodecRefusal
     SortOrderNotModelled,
 
     /// <summary>
-    /// A descending NUMERIC, GUID, Binary or Extended Date/Time column: no retained fixture has one, so neither the
+    /// A descending NUMERIC, Binary or Extended Date/Time column: no retained fixture has one, so neither the
     /// book's complement rule (II-05 §§4.1, 4.4) nor the reference's Jet 4 "legacy" NUMERIC form is decided
-    /// (NotModelled.DescendingKey).
+    /// (NotModelled.DescendingKey). Descending GUID is decided by <c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-*</c>.
     /// </summary>
     DescendingNotDecided,
 }
@@ -146,7 +146,7 @@ public static class IndexKeys
         {
             return new FieldKeyCodec(column.TypeCode, null);
         }
-        if (!ascending && (column.TypeCode == NativeTypes.Numeric || IsChunked(column.TypeCode)))
+        if (!ascending && (column.TypeCode == NativeTypes.Numeric || (IsChunked(column.TypeCode) && column.TypeCode != NativeTypes.Guid)))
         {
             refusal = KeyCodecRefusal.DescendingNotDecided;
             return null;
@@ -303,13 +303,16 @@ public static class IndexKeys
     }
 
     /// <summary>
-    /// The ascending chunked byte framing of Binary, GUID and Extended Date/Time (II-05 §4.4): eight data bytes then 09
+    /// The chunked byte framing of Binary, GUID and Extended Date/Time (II-05 §4.4): eight data bytes then 09
     /// while more follow; the last chunk padded with zeroes and ended by its count of data bytes (1 to 8). A GUID is
     /// framed in its canonical text order, the first three components reversed from the row's (IX_GU and IX_KG of
-    /// r-sort-3/create-nums-* and create-keys-*, the complex-value tables of r-fix-cat-txn/create-cx-types-accdb);
+    /// r-sort-3/create-nums-* and create-keys-*, the complex-value tables of r-fix-cat-txn/create-cx-types-accdb,
+    /// evidence/r-q44-ddl-alter-types/ixtype-guid-rows-*); descending GUID writes marker <c>0x80</c>, complements each
+    /// data byte and the final count byte (<c>0x08 -> 0xF7</c>), and keeps continuation byte <c>0x09</c> uncomplemented
+    /// (<c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-accdb-dao</c> page 47, <c>ixtype-guid-rows-mdb-dao</c> page 24).
     /// Extended Date/Time frames its 42 row bytes as they are (IX_DX); Binary its bytes (the MSysQueries
     /// ObjectIdAttribute index of every retained database). An empty Binary value writes the marker alone (no fixture
-    /// has one). Descending is <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
+    /// has one). Descending NUMERIC, Binary and Extended Date/Time stay <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
     /// </summary>
     private static bool TryWriteChunked(Span<byte> key, byte type, bool ascending, KeyValue value, out int written)
     {
@@ -320,7 +323,7 @@ public static class IndexKeys
             written = 1;
             return true;
         }
-        if (!ascending || value.Kind != KeyValueKind.Bytes)
+        if ((!ascending && type != NativeTypes.Guid) || value.Kind != KeyValueKind.Bytes)
         {
             return false;
         }
@@ -343,16 +346,19 @@ public static class IndexKeys
         {
             return false;
         }
-        key[0] = 0x7F;
+        key[0] = ascending ? (byte)0x7F : (byte)0x80;
         int at = 1;
         for (int start = 0; start < data.Length; start += ChunkBytes)
         {
             int count = Math.Min(ChunkBytes, data.Length - start);
             for (int i = 0; i < ChunkBytes; i++)
             {
-                key[at++] = i < count ? data[start + i] : (byte)0;
+                byte b = i < count ? data[start + i] : (byte)0;
+                key[at++] = ascending ? b : (byte)~b;
             }
-            key[at++] = start + ChunkBytes < data.Length ? MoreChunks : (byte)count;
+            key[at++] = start + ChunkBytes < data.Length
+                ? MoreChunks
+                : (ascending ? (byte)count : (byte)~count);
         }
         written = at;
         return true;
