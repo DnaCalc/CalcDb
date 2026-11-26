@@ -950,7 +950,8 @@ is summarised in [qualification-report.md](qualification-report.md).
 
 - **Claim**: `CREATE [UNIQUE] INDEX` succeeds on `Double` (`0x07`, ASC/DESC; `-0.0` `7f7f...` and `+0.0` `7f80...` produce distinct keys and coexist in a UNIQUE index), `DateTime` (`0x08`, ASC/DESC), `GUID` (`0x0F`, ASC `7f <chunk0:8B> 09 <chunk1:8B> 08`, DESC `80 <~chunk0:8B> 09 <~chunk1:8B> f7` — continuation byte `0x09` is NOT complemented while final count byte `0x08 -> 0xF7` IS complemented), and `Memo` (`0x0C`, ACCDB & MDB: indexes first 255 UTF-16 units via General sort weights `7f <weights> 01 00`; `CREATE UNIQUE INDEX` fails `3022` `0x800A0BCE` when two memos share their first 255 characters, stepping `0xE02` +2). (`OLE`/`LONGBINARY` `0x0B` still fails `3409`.)
 - **Records**: `evidence/r-q44-ddl-alter-types/ixtype-*` (12 probes + `a2` repeats, ACCDB & MDB, DAO & ADO).
-- **Open**: `Memo` sort keys with non-default collation flags or Jet 4 legacy text sort outside General sort weights.
+- **Built (`alta/r-q44-ddl-types`, `3044559e`)**: single-column DAO/SQL `CREATE [UNIQUE] INDEX` on `Double`, `DateTime`, `GUID` (ASC/DESC), and `Memo` (ASC; single/chained LVAL key reads; `UNIQUE` 255-char prefix collision `3022` with `0xE02 +2`; MDB sole free-map LVAL append `>= 264 B` free) across ACCDB & Jet 4 MDB (`12/12` `ixtype-*` Matched).
+- **Open**: `Memo DESC`; succeeding `UNIQUE Memo` with a Null row; ADO / multi-column / `PRIMARY` / `DISALLOW NULL` / `IGNORE NULL` / `ALTER TABLE ADD CONSTRAINT` on `Double`/`DateTime`/`GUID`/`Memo`; `Memo` sort keys with non-default collation flags or Jet 4 legacy text sort outside General sort weights.
 
 ### R-SORT-3 Null policy / aliases (public): a Null never collides, an all-Null tuple can be left out of the index, and the refusals are 3022 and 3058
 
