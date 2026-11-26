@@ -850,7 +850,7 @@ public sealed class RQ49Dt2DraftProps : ICard
             // 17 & 18: Draft Field Attributes & OrdinalPosition before TableDefs.Append
             yield return DraftAttrsOrdPosProbe($"draft-field-attrs-ordpos-{ext}", fixture, fmt);
 
-            // 19 & 20: Combined full r-cat-1b/create-props-style draft TableDef + Field properties in one Append
+            // 19 & 20: Combined full r-cat-1b/create-props style draft TableDef + Field properties in one Append
             yield return DraftPropsFullProbe($"draft-props-full-{ext}", fixture, fmt);
 
             // 21 & 22: Fresh draft getters + invalid draft TableDef/Field property puts & error codes
