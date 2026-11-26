@@ -118,11 +118,25 @@ public sealed class ReadOnlyActionSqlTests
         Assert.Equal("NotModelled.ReadOnlyAction", adoDropMissing.Failure!.NotModelled);
         Assert.Null(adoDropMissing.Failure.ReadOnlyInfo);
 
-        // Unrecorded DAO read-only DDL neighbours stay plain NotModelled.ReadOnlyAction with ReadOnlyInfo null.
+        // BoundDdl overload with ADO source also keeps ReadOnlyInfo null.
+        {
+            DdlStatement? stmt = DdlParser.Parse("DROP TABLE T", out _);
+            BoundDdl? plan = DdlBinder.Bind(stmt!, rw, out _);
+            ActionOutcome adoBound = DdlExecutor.Execute(plan!, ro, source: ActionErrorSource.Ado);
+            Assert.Equal("NotModelled.ReadOnlyAction", adoBound.Failure!.NotModelled);
+            Assert.Null(adoBound.Failure.ReadOnlyInfo);
+        }
+
+        // Unrecorded DAO read-only DDL neighbours (including invalid CREATE TABLE / CREATE INDEX / ALTER ADD COLUMN
+        // whose bind-error vs read-only precedence is unrecorded) stay plain NotModelled.ReadOnlyAction with ReadOnlyInfo null.
         foreach (string unrecordedSql in new[]
         {
             "CREATE TABLE T (ID LONG)",
+            "CREATE TABLE U1 (ID LONG, ID LONG)",
+            "CREATE TABLE U1 (ID BOGUSTYPE)",
             "CREATE INDEX IX_M ON Nope (V)",
+            "CREATE INDEX IX_BAD ON T (NoCol)",
+            "ALTER TABLE T ADD COLUMN V LONG",
             "ALTER TABLE T DROP COLUMN V",
             "ALTER TABLE T ALTER COLUMN V DOUBLE",
             "DROP INDEX PK ON T",
@@ -133,6 +147,15 @@ public sealed class ReadOnlyActionSqlTests
             Assert.Equal("NotModelled.ReadOnlyAction", outcome.Failure!.NotModelled);
             Assert.Null(outcome.Failure.ReadOnlyInfo);
         }
+
+        // Unrecorded read-only DML neighbours (INSERT ... SELECT and ADO Mode=Read DML) keep ReadOnlyInfo null.
+        ActionOutcome insSelect = ActionExecutor.Execute("INSERT INTO T (ID, V) SELECT ID + 10, V FROM T", ro);
+        Assert.Equal("NotModelled.ReadOnlyAction", insSelect.Failure!.NotModelled);
+        Assert.Null(insSelect.Failure.ReadOnlyInfo);
+
+        ActionOutcome adoUpdate = ActionExecutor.Execute("UPDATE T SET V = 20", ro, source: ActionErrorSource.Ado);
+        Assert.Equal("NotModelled.ReadOnlyAction", adoUpdate.Failure!.NotModelled);
+        Assert.Null(adoUpdate.Failure.ReadOnlyInfo);
 
         Assert.Equal(imageBytes, ro.Image.Snapshot());
     }

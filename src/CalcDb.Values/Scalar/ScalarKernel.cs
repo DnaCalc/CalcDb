@@ -325,11 +325,11 @@ public static unsafe partial class ScalarKernel
             NativeVariant* textOp = textLeft ? a : b;
             OperandContract otherContract = textLeft ? d.Second : d.First;
             VarType number = textLeft ? tb : ta;
-            if (number == VarType.I2 && otherContract.Origin == OperandOrigin.FunctionResult)
+            if (number == VarType.I2 && otherContract == OperandContract.CIntFunctionResult)
             {
                 // r-q43-schema-lval-index/bool-cmp-text-disc-accdb calls 105, 109: CInt(-1) = '-1' and CInt(0) = '0'
-                // stringify to "-1"/"0" and compare in Database (General) collation. Other FunctionResult VT_I2 values
-                // or operators against text have no retained record and stay refused by name rather than guessing 3464.
+                // stringify to "-1"/"0" and compare in Database (General) collation. Other CInt values or operators
+                // against text have no retained record and stay refused by name rather than guessing 3464.
                 short val = *(short*)&other->Int64;
                 if (d.Operation == ScalarOperation.Equal && val is -1 or 0)
                 {
@@ -345,7 +345,7 @@ public static unsafe partial class ScalarKernel
             {
                 return Fail(d, AceError.TypeMismatch);
             }
-            if (otherContract.Origin is OperandOrigin.Parameter or OperandOrigin.FunctionResult)
+            if (otherContract.Origin is OperandOrigin.Parameter or OperandOrigin.FunctionResult or OperandOrigin.Derived)
             {
                 return Open(d, NotModelledCase.DateAgainstText);
             }
@@ -370,6 +370,7 @@ public static unsafe partial class ScalarKernel
         Literal,
         Computed,
         Parameter,
+        Derived,
     }
 
     private static BooleanOrigin ClassifyBoolean(VarType tag, OperandContract contract)
@@ -386,6 +387,7 @@ public static unsafe partial class ScalarKernel
         {
             OperandOrigin.Field => BooleanOrigin.StoredField,
             OperandOrigin.Parameter => BooleanOrigin.Parameter,
+            OperandOrigin.Derived => BooleanOrigin.Derived,
             OperandOrigin.Expression or OperandOrigin.FunctionResult => BooleanOrigin.Computed,
             _ => BooleanOrigin.None,
         };
@@ -464,7 +466,7 @@ public static unsafe partial class ScalarKernel
                 return CompareNumeric(d, a, b, c);
 
             default:
-                // Boolean parameter against non-Boolean has no retained record.
+                // Boolean parameter or derived/UNION Boolean column against non-Boolean has no retained record.
                 return Open(d, NotModelledCase.BooleanComparison);
         }
     }

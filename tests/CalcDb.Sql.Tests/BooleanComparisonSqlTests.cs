@@ -184,6 +184,81 @@ public sealed class BooleanComparisonSqlTests(ITestOutputHelper output)
         }
     }
 
+    [Fact]
+    public void Derived_boolean_non_cint_i2_and_non_boolean_where_3464_keep_honest_boundaries()
+    {
+        const string emptyAccdbSha = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
+        using var db = new WritableSqlFixture(emptyAccdbSha);
+        Assert.True(DdlExecutor.Execute("CREATE TABLE B (ID LONG CONSTRAINT PK PRIMARY KEY, Y YESNO, S TEXT(20))", db, options: 128).Succeeded);
+        Assert.True(ActionExecutor.Execute("INSERT INTO B VALUES (1, True, 'x')", db, options: 128).Succeeded);
+
+        // Derived-table and UNION Boolean columns (both stored YESNO and computed (ID = 1)) are unrecorded and refuse by name.
+        foreach (string derivedSql in new[]
+        {
+            "SELECT b FROM (SELECT Y AS b FROM B) WHERE b = 'x'",
+            "SELECT b FROM (SELECT (ID = 1) AS b FROM B) WHERE b = 'x'",
+            "SELECT b FROM (SELECT Y AS b FROM B UNION ALL SELECT Y AS b FROM B) WHERE b = 'x'",
+        })
+        {
+            using BoundSelect? plan = BoundSelect.Prepare(derivedSql, db, out SqlFailure? bindFail);
+            Assert.True(plan is not null, $"{derivedSql}: {bindFail}");
+            using SelectCursor? rs = SelectCursor.Open(plan!, db, ResultKind.Snapshot, null, out SqlFailure? openFail);
+            Assert.Null(rs);
+            Assert.NotNull(openFail);
+            Assert.Equal("NotModelled.Scalar.BooleanComparison", openFail!.NotModelled);
+        }
+
+        // Only CInt(-1)/CInt(0) = text stringifies; CInt(5) = '5' refuses by name; other VT_I2 functions (Sgn, StrComp, IIf, Asc) keep 3464.
+        using (BoundSelect? plan = BoundSelect.Prepare("SELECT CInt(5) = '5' AS r FROM B", db, out SqlFailure? bindFail))
+        {
+            Assert.True(plan is not null, bindFail?.ToString());
+            using SelectCursor? rs = SelectCursor.Open(plan!, db, ResultKind.Snapshot, null, out SqlFailure? openFail);
+            Assert.Null(rs);
+            Assert.Equal("NotModelled.Scalar.BooleanComparison", openFail!.NotModelled);
+        }
+        foreach (string nonCIntSql in new[]
+        {
+            "SELECT Sgn(-1) = '-1' AS r FROM B",
+            "SELECT StrComp('a', 'a') = '0' AS r FROM B",
+            "SELECT IIf(True, -1, 0) = '-1' AS r FROM B",
+            "SELECT Asc('a') = '97' AS r FROM B",
+        })
+        {
+            using BoundSelect? plan = BoundSelect.Prepare(nonCIntSql, db, out SqlFailure? bindFail);
+            Assert.True(plan is not null, $"{nonCIntSql}: {bindFail}");
+            using SelectCursor? rs = SelectCursor.Open(plan!, db, ResultKind.Snapshot, null, out SqlFailure? openFail);
+            if (rs is null)
+            {
+                Assert.False(openFail!.IsNotModelled, $"{nonCIntSql}: {openFail}");
+                Assert.Equal(3464, openFail.Number);
+            }
+            else
+            {
+                Assert.False(rs.Read(0, out _, out SqlFailure? readFail));
+                Assert.False(readFail!.IsNotModelled, $"{nonCIntSql}: {readFail}");
+                Assert.Equal(3464, readFail.Number);
+            }
+        }
+
+        // Ordered single-table WHERE 3464 at Open is scoped to stored YESNO comparisons (bool-cmp-origin-accdb calls 166-182);
+        // non-Boolean WHERE 3464 (Long vs text) stays NotModelled.WhereFailureAtOpen.
+        using (BoundSelect? plan = BoundSelect.Prepare("SELECT ID FROM B WHERE Y = 'x' ORDER BY ID", db, out SqlFailure? bindFail))
+        {
+            Assert.True(plan is not null, bindFail?.ToString());
+            using SelectCursor? rs = SelectCursor.Open(plan!, db, ResultKind.Snapshot, null, out SqlFailure? openFail);
+            Assert.Null(rs);
+            Assert.False(openFail!.IsNotModelled);
+            Assert.Equal(3464, openFail.Number);
+        }
+        using (BoundSelect? plan = BoundSelect.Prepare("SELECT ID FROM B WHERE ID = 'x' ORDER BY ID", db, out SqlFailure? bindFail))
+        {
+            Assert.True(plan is not null, bindFail?.ToString());
+            using SelectCursor? rs = SelectCursor.Open(plan!, db, ResultKind.Snapshot, null, out SqlFailure? openFail);
+            Assert.Null(rs);
+            Assert.Equal("NotModelled.WhereFailureAtOpen", openFail!.NotModelled);
+        }
+    }
+
     private static int ScodeNumber(ExcepInfoObservation ex) =>
         int.Parse(ex.Scode![2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture) & 0xFFFF;
 

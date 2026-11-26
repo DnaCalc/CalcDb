@@ -1765,6 +1765,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     return null;
                 }
                 if (wf.Number == AceError.TypeMismatch
+                    && where.LastFailureWasStoredBooleanComparison
                     && plan.Tree is null
                     && plan.Sources.Count == 1
                     && plan.Sources[0].Subquery is null
@@ -1772,7 +1773,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     && plan.Order.Count > 0)
                 {
                     // r-q43-schema-lval-index/bool-cmp-origin-accdb calls 166, 170, 174, 182:
-                    // WHERE type mismatch (3464) on a single-table ordered SELECT fails OpenRecordset with 3464.
+                    // stored YESNO vs text (3464) in WHERE on a single-table ordered SELECT fails OpenRecordset with 3464.
                     failure = At(wf);
                     return null;
                 }
@@ -2049,7 +2050,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         RowTest test = plan.Where!.Test(this);
                         if (test == RowTest.Failed)
                         {
-                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", plan.Where.LastFailure!.ToString());
+                            ExpressionFailure wf = plan.Where.LastFailure!;
+                            failure = wf.IsNotModelled
+                                ? At(wf)
+                                : SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", wf.ToString());
                             return null;
                         }
                         if (test == RowTest.Match)

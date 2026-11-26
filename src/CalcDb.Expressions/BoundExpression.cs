@@ -176,6 +176,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>The failure of the last evaluation, set only on its failure path.</summary>
     public ExpressionFailure? LastFailure { get; private set; }
 
+    /// <summary>Whether the last evaluation failure came from a binary comparison involving a stored <c>YESNO</c> field.</summary>
+    public bool LastFailureWasStoredBooleanComparison { get; private set; }
+
     private enum Op : byte
     {
         LoadField,
@@ -353,6 +356,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
     private bool Run(IRecordCursor? cursor, IExpressionRow? row, ExpressionContext context)
     {
         _active = context;
+        LastFailureWasStoredBooleanComparison = false;
         if (_holdsResult)
         {
             Release(ref _stack[0]);
@@ -499,6 +503,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
             if (!r.Succeeded)
             {
                 LastFailure = ExpressionFailure.Of(r.Failure);
+                LastFailureWasStoredBooleanComparison = ins.Op == Op.Binary
+                    && r.Failure.Operation is >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual
+                    && IsStoredBoolean(_descriptors[ins.Descriptor]);
                 Unwind(sp);
                 return false;
             }
@@ -509,6 +516,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
         }
         return true;
     }
+
+    private static bool IsStoredBoolean(in ScalarDescriptor d) =>
+        (d.First.Origin == OperandOrigin.Field && d.First.Declared == VarType.Bool)
+        || (d.Second.Origin == OperandOrigin.Field && d.Second.Declared == VarType.Bool);
 
     /// <summary>
     /// x In (v1 … vn) (qualified.md "R-EXPR-1 Branch D (In)", r-q3-sql/in-phase): Null when x is Null; otherwise the
@@ -1355,7 +1366,12 @@ public sealed unsafe partial class BoundExpression : IDisposable
             int d = Descriptor(op, node.Offset, n, contracts[0], contracts[1]);
             bool booleanTag = n == 1 && op is ScalarOperation.CBool or ScalarOperation.IsNull or ScalarOperation.IsEmpty or ScalarOperation.IsError;
             Program.Add(new Instruction(n switch { 1 => Op.Unary, 2 => Op.Binary, _ => Op.Ternary }, 0, d, booleanTag));
-            return new Bound(entry.Type, booleanTag ? OperandContract.BooleanFunctionResult : OperandContract.FunctionResult, depth);
+            OperandContract contract = booleanTag
+                ? OperandContract.BooleanFunctionResult
+                : op == ScalarOperation.CInt
+                    ? OperandContract.CIntFunctionResult
+                    : OperandContract.FunctionResult;
+            return new Bound(entry.Type, contract, depth);
         }
 
         private Bound BindIIf(SyntaxNode node, int at)

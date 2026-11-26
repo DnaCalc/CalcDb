@@ -172,17 +172,20 @@ public static unsafe class ActionExecutor
         if (database.ReadOnly)
         {
             // r-fix-cursor-dao/lock-readonly-db-insert-failonerror shows a read-only handle succeeding when the same
-            // process already holds a read-write open; pure read-only refusal is decided by r-q18-statements/ro-ins-*
-            // (INSERT -> 3073) and r-q43-schema-lval-index/ro-ddl-disc-accdb (UPDATE -> 3073 call 15, DELETE -> 3086 call 16).
-            // Carry structured ReadOnlyInfo so the host layer can surface the exact error when !ReadWriteBeside.
-            ReadOnlyActionInfo? readOnlyInfo = plan.Kind switch
-            {
-                ActionKind.InsertValues or ActionKind.InsertSelect or ActionKind.Update =>
-                    new ReadOnlyActionInfo(3073, SqlMessages.NotUpdateable, plan.TargetName),
-                ActionKind.Delete =>
-                    new ReadOnlyActionInfo(3086, SqlMessages.CouldNotDeleteFromTables, plan.TargetName),
-                _ => null,
-            };
+            // process already holds a read-write open; pure DAO read-only refusal is decided by r-q18-statements/ro-ins-fail
+            // and ro-ins-plain (INSERT ... VALUES -> 3073) and r-q43-schema-lval-index/ro-ddl-disc-accdb (UPDATE -> 3073
+            // call 15, DELETE -> 3086 call 16). INSERT ... SELECT and ADO Mode=Read DML have no retained read-only record
+            // and keep ReadOnlyInfo null.
+            ReadOnlyActionInfo? readOnlyInfo = source == ActionErrorSource.Ado
+                ? null
+                : plan.Kind switch
+                {
+                    ActionKind.InsertValues or ActionKind.Update =>
+                        new ReadOnlyActionInfo(3073, SqlMessages.NotUpdateable, plan.TargetName),
+                    ActionKind.Delete =>
+                        new ReadOnlyActionInfo(3086, SqlMessages.CouldNotDeleteFromTables, plan.TargetName),
+                    _ => null,
+                };
             return ActionOutcome.Fail(
                 SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "Execute on a read-only Database handle") with
                 {

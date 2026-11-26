@@ -1,5 +1,6 @@
 using CalcDb.Expressions;
 using CalcDb.Foundation;
+using CalcDb.Values.Scalar;
 
 namespace CalcDb.Sql;
 
@@ -14,9 +15,9 @@ internal readonly record struct UnionConversion(VarType Target, int DaoType);
 /// r-sql-1/union-types, r-sql-13b/union-all-numeric-ladder, r-q-expr-sql/union-null-first). The numeric types widen
 /// along Yes/No and Byte, Integer, Long, Currency, Double (Yes/No with Byte is Integer, Long with Currency is Currency,
 /// Currency with Double is Double); Single with Long or Double is Double; any number, Yes/No or date with Text is Text
-/// (255), with Memo Memo; a date with Double is Text. A Null literal in a later arm leaves the type; a Null first arm of
-/// UNION ALL takes the later arms' type (Field.Size 510), of a distinct UNION over Text arms Text. Named: a Null first arm
-/// of a distinct UNION over other types (Text of the values' raw bytes, in an order not identified), pairs no record
+/// (255), with Memo Memo; a date with Double is Text. A Null literal in a later arm leaves the type (except a distinct
+/// UNION over Yes/No, where ACE coerces Null to False: named); a Null first arm of UNION ALL takes the later arms' type
+/// (Field.Size 510), of a distinct UNION over Text arms Text. Named: a Null first arm of a distinct UNION over other types (Text of the values' raw bytes, in an order not identified), pairs no record
 /// shows (Single with Byte, Integer, Currency or Yes/No; a date with other numbers; Decimal, GUID, binary and BigInt),
 /// and an arm whose column type is not identified.
 /// </summary>
@@ -158,7 +159,7 @@ internal sealed class UnionScope(List<ResultColumn> first, UnionConversion[] con
             return null;
         }
         int i = first.FindIndex(c => string.Equals(c.Name, node.Text, StringComparison.OrdinalIgnoreCase));
-        return i < 0 ? null : new SlotBinding(i, conversions[i].Target, conversions[i].DaoType == 1 ? StaticType.Boolean : StaticType.Value);
+        return i < 0 ? null : new SlotBinding(i, conversions[i].Target, conversions[i].DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived);
     }
 
     public override ColumnBinding? Resolve(string name, out ExpressionFailure? failure)

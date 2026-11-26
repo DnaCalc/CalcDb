@@ -1789,7 +1789,11 @@ public static class DdlExecutor
     }
 
     /// <summary>Execute a bound SQL DDL plan through <see cref="SchemaWriter"/>.</summary>
-    public static ActionOutcome Execute(BoundDdl plan, ISqlActionDatabase database, int options = 0)
+    public static ActionOutcome Execute(
+        BoundDdl plan,
+        ISqlActionDatabase database,
+        int options = 0,
+        ActionErrorSource source = ActionErrorSource.Database)
     {
         if ((options & ~AdmittedOptionsMask) != 0)
         {
@@ -1797,7 +1801,7 @@ public static class DdlExecutor
         }
         if (database.ReadOnly)
         {
-            return ReadOnlyBoundRefusal(plan);
+            return ReadOnlyBoundRefusal(plan, source);
         }
         if (database is not ISqlSchemaDatabase schemaDb)
         {
@@ -1897,38 +1901,41 @@ public static class DdlExecutor
                         // r-q43-schema-lval-index/ro-ddl-disc-accdb calls 10 & 22: missing-table 3376 precedes read-only check.
                         return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Bind, 3376, SqlMessages.TableDoesNotExist(name)));
                     }
-                    // Call 11: DROP TABLE <existing> -> 3370 when alone.
-                    return ReadOnlyDdlRefusal(name);
+                    // Call 11: valid DROP TABLE <existing> -> 3370 when alone.
+                    if (DdlBinder.Bind(drop, database, out _, SchemaRoute.Sql) is not null)
+                    {
+                        return ReadOnlyDdlRefusal(name);
+                    }
                 }
                 break;
             }
             case CreateTableStatement ct:
             {
-                if (DdlBinder.IsValidObjectName(ct.TableName)
-                    && !DdlBinder.IsLinked(database, ct.TableName)
-                    && DdlBinder.FindTable(database, ct.TableName) is null)
+                // Call 12: valid CREATE TABLE <new> -> 3370 when alone; invalid forms (e.g. duplicate column 3380,
+                // invalid type 3292, existing table 3010) have no read-only precedence record and keep ReadOnlyInfo null.
+                if (DdlBinder.Bind(ct, database, out _, SchemaRoute.Sql) is not null)
                 {
-                    // Call 12: CREATE TABLE U1 -> 3370 when alone.
                     return ReadOnlyDdlRefusal(ct.TableName);
                 }
                 break;
             }
             case CreateIndexStatement ci:
             {
-                if (!DdlBinder.IsLinked(database, ci.TableName)
-                    && DdlBinder.FindTable(database, ci.TableName) is not null)
+                // Call 13: valid CREATE INDEX IX_V ON T (V) -> 3370 when alone.
+                if (DdlBinder.Bind(ci, database, out _, SchemaRoute.Sql) is not null)
                 {
-                    // Call 13: CREATE INDEX IX_V ON T (V) -> 3370 when alone.
                     return ReadOnlyDdlRefusal(ci.TableName);
                 }
                 break;
             }
             case AlterTableStatement { Action: AddColumnsAlterAction } at:
             {
-                if (!DdlBinder.IsLinked(database, at.TableName)
-                    && DdlBinder.FindTable(database, at.TableName) is not null)
+                // Call 14: valid ALTER TABLE T ADD COLUMN W LONG -> 3370 when alone. DdlBinder.Bind validates the
+                // table, column names, types and constraints without writing and returns NotModelled.DdlAlterTable
+                // only when no bind error (3371, 3380, 3292, 3211, ...) precedes it.
+                _ = DdlBinder.Bind(at, database, out SqlFailure? bindFailure, SchemaRoute.Sql);
+                if (bindFailure is { NotModelled: "NotModelled.DdlAlterTable" })
                 {
-                    // Call 14: ALTER TABLE T ADD COLUMN W LONG -> 3370 when alone.
                     return ReadOnlyDdlRefusal(at.TableName);
                 }
                 break;
@@ -1937,13 +1944,22 @@ public static class DdlExecutor
         return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle"));
     }
 
-    private static ActionOutcome ReadOnlyBoundRefusal(BoundDdl plan) => plan.Kind switch
+    // BoundDdl has no AlterAddColumn kind (DdlBinder.Bind stops at NotModelled.DdlAlterTable), so only the bound
+    // DropTable, CreateTable and CreateIndex plans reach this overload.
+    private static ActionOutcome ReadOnlyBoundRefusal(BoundDdl plan, ActionErrorSource source)
     {
-        BoundDdlKind.DropTable when plan.Syntax is DropTableStatement { TableNames.Count: 1 } drop => ReadOnlyDdlRefusal(drop.TableNames[0]),
-        BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create => ReadOnlyDdlRefusal(create.TableName),
-        BoundDdlKind.CreateIndex when plan.Syntax is CreateIndexStatement index => ReadOnlyDdlRefusal(index.TableName),
-        _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle")),
-    };
+        if (source == ActionErrorSource.Ado)
+        {
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle"));
+        }
+        return plan.Kind switch
+        {
+            BoundDdlKind.DropTable when plan.Syntax is DropTableStatement { TableNames.Count: 1 } drop => ReadOnlyDdlRefusal(drop.TableNames[0]),
+            BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create => ReadOnlyDdlRefusal(create.TableName),
+            BoundDdlKind.CreateIndex when plan.Syntax is CreateIndexStatement index => ReadOnlyDdlRefusal(index.TableName),
+            _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle")),
+        };
+    }
 
     private static ActionOutcome ReadOnlyDdlRefusal(string tableName) => ActionOutcome.Fail(
         SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle") with

@@ -86,9 +86,10 @@ public enum NotModelledCase : byte
 
     /// <summary>
     /// An unrecorded Boolean comparison neighbour (qualified.md R-EXPR-1 Branch B, <c>r-q43-schema-lval-index/bool-cmp-*</c>):
-    /// stored <c>YESNO</c> or computed Boolean against Date/Time, a Boolean parameter against a non-Boolean, non-Database
-    /// compare mode for Boolean-against-text, numeric-zero text spellings other than <c>'0'</c> with <c>True</c>/<c>False</c>
-    /// <c>=</c>/<c>&lt;&gt;</c>, or a non-Boolean <c>FunctionResult</c> <c>VT_I2</c> against text outside recorded <c>CInt(-1)</c>/<c>CInt(0)</c> equality.
+    /// stored <c>YESNO</c> or computed Boolean against Date/Time, a Boolean parameter or derived/UNION Boolean column
+    /// against a non-Boolean, non-Database compare mode for Boolean-against-text, numeric-zero text spellings other than
+    /// <c>'0'</c> with <c>True</c>/<c>False</c> <c>=</c>/<c>&lt;&gt;</c>, or a <c>CInt</c> result against text outside
+    /// recorded <c>CInt(-1)</c>/<c>CInt(0)</c> equality.
     /// </summary>
     BooleanComparison,
 

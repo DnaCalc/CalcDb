@@ -1081,7 +1081,8 @@ public sealed class BoundSelect : IDisposable
                 if (TryDerivedColumn(name, out int colIndex, out ResultColumn? col))
                 {
                     sources[0].ReferencedColumns![colIndex] = true;
-                    return new SlotBinding(DerivedSlot0 + colIndex, DeclaredVarType(col!.FieldType), col.FieldType == 1 ? StaticType.Boolean : StaticType.Value);
+                    bool isBool = col!.FieldType == 1 || col.Program.Type == StaticType.Boolean;
+                    return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived);
                 }
                 bool bracketed = node.Offset >= 0 && node.Offset < source.Length && source[node.Offset] == '[';
                 parameters.Add(new QueryParameter(bracketed ? $"[{name}]" : name, 10, Declared: false));

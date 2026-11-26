@@ -128,6 +128,7 @@ public static unsafe class ExpressionHarness
                     contract = n.Operation switch
                     {
                         ScalarOperation.CBool or ScalarOperation.IsNull or ScalarOperation.IsEmpty or ScalarOperation.IsError => OperandContract.BooleanFunctionResult,
+                        ScalarOperation.CInt => OperandContract.CIntFunctionResult,
                         >= ScalarOperation.Equal and <= ScalarOperation.Imp => OperandContract.BooleanExpression,
                         >= ScalarOperation.CBool => OperandContract.FunctionResult,
                         _ => OperandContract.Expression,

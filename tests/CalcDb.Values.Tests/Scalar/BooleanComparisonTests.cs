@@ -183,8 +183,13 @@ public sealed unsafe class BooleanComparisonTests
         }
 
         // bool-cmp-text-disc-accdb calls 105, 109: CInt(-1) = '-1' and CInt(0) = '0' return -1.
-        Assert.Equal(-1, (short)Eval(ScalarOperation.Equal, OperandContract.FunctionResult, ct, OperandContract.Literal, *negOne.Pointer).Value.Int64);
-        Assert.Equal(-1, (short)Eval(ScalarOperation.Equal, OperandContract.FunctionResult, cf, OperandContract.Literal, *zero.Pointer).Value.Int64);
+        Assert.Equal(-1, (short)Eval(ScalarOperation.Equal, OperandContract.CIntFunctionResult, ct, OperandContract.Literal, *negOne.Pointer).Value.Int64);
+        Assert.Equal(-1, (short)Eval(ScalarOperation.Equal, OperandContract.CIntFunctionResult, cf, OperandContract.Literal, *zero.Pointer).Value.Int64);
+
+        // Other FunctionResult VT_I2 (Sgn, StrComp, Month, IIf) are NOT covered by CInt and keep 3464 against text.
+        Assert.Equal(AceError.TypeMismatch, Eval(ScalarOperation.Equal, OperandContract.FunctionResult, ct, OperandContract.Literal, *negOne.Pointer).Failure.Number);
+        Assert.Equal(AceError.TypeMismatch, Eval(ScalarOperation.Equal, OperandContract.FunctionResult, cf, OperandContract.Literal, *zero.Pointer).Failure.Number);
+        Assert.Equal(AceError.TypeMismatch, Eval(ScalarOperation.Equal, OperandContract.FunctionResult, I2(5), OperandContract.Literal, *letterA.Pointer).Failure.Number);
 
         // bool-cmp-text-disc-accdb calls 113, 117, 121: plain integer literals 0 = '0', 0 < 'a', -1 < 'a' still fail 3464.
         Assert.Equal(AceError.TypeMismatch, Eval(ScalarOperation.Equal, OperandContract.Literal, I4(0), OperandContract.Literal, *zero.Pointer).Failure.Number);
@@ -206,9 +211,12 @@ public sealed unsafe class BooleanComparisonTests
         Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.BooleanExpression, ct, OperandContract.Literal, Date(0.0)).Failure.Case);
         Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Less, OperandContract.BooleanFunctionResult, ct, OperandContract.Literal, Date(0.0)).Failure.Case);
 
-        // Boolean parameter vs non-Boolean (unrecorded).
+        // Boolean parameter and derived/UNION Boolean column vs non-Boolean (unrecorded).
         Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.Parameter(VarType.Bool), yt, OperandContract.Literal, I4(1)).Failure.Case);
         Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.Parameter(VarType.Bool), yt, OperandContract.Literal, *a.Pointer).Failure.Case);
+        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.Derived(VarType.Bool), yt, OperandContract.Literal, I4(1)).Failure.Case);
+        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.Derived(VarType.Bool), yt, OperandContract.Literal, *a.Pointer).Failure.Case);
+        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.Derived(VarType.Bool), ct, OperandContract.Literal, *a.Pointer).Failure.Case);
 
         // Non-Database compare mode / missing database collation for stringified Boolean vs text.
         var binary = new ExpressionContext(7177, TextCompareMode.Binary);
@@ -220,9 +228,9 @@ public sealed unsafe class BooleanComparisonTests
         // Numeric-zero text spellings other than '0' with True/False =/<>.
         Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.BooleanLiteral, t, OperandContract.Literal, *zeroDot.Pointer).Failure.Case);
 
-        // Non-Boolean FunctionResult VT_I2 against text outside recorded CInt(-1)/CInt(0) equality.
-        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.FunctionResult, I2(5), OperandContract.Literal, *five.Pointer).Failure.Case);
-        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Less, OperandContract.FunctionResult, ct, OperandContract.Literal, *a.Pointer).Failure.Case);
+        // CInt against text outside recorded CInt(-1)/CInt(0) equality stays refused by name.
+        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Equal, OperandContract.CIntFunctionResult, I2(5), OperandContract.Literal, *five.Pointer).Failure.Case);
+        Assert.Equal(NotModelledCase.BooleanComparison, Eval(ScalarOperation.Less, OperandContract.CIntFunctionResult, ct, OperandContract.Literal, *a.Pointer).Failure.Case);
 
         // Null propagates cleanly.
         Assert.Equal(VarType.Null, Eval(ScalarOperation.Equal, OperandContract.BooleanLiteral, t, OperandContract.Literal, Null()).Type);
@@ -233,7 +241,7 @@ public sealed unsafe class BooleanComparisonTests
     public void Boolean_comparisons_allocate_nothing_on_the_steady_path()
     {
         NativeVariant t = BoolLiteral(true), f = BoolLiteral(false), yt = YesNoField(true), ct = I2(-1), two = I4(2);
-        using OwnedVariant a = OwnedVariant.FromText("a"), negOne = OwnedVariant.FromText("-1");
+        using OwnedVariant a = OwnedVariant.FromText("a"), negOne = OwnedVariant.FromText("-1"), zero = OwnedVariant.FromText("0"), empty = OwnedVariant.FromText("");
         ScalarDescriptor eqLit = ScalarDescriptor.Binary(ScalarOperation.Equal, 1, OperandContract.BooleanLiteral, OperandContract.Literal);
         ScalarDescriptor ltFalse = ScalarDescriptor.Binary(ScalarOperation.Less, 1, OperandContract.BooleanLiteral, OperandContract.Literal);
         ScalarDescriptor eqComp = ScalarDescriptor.Binary(ScalarOperation.Equal, 1, OperandContract.BooleanExpression, OperandContract.Literal);
@@ -252,6 +260,9 @@ public sealed unsafe class BooleanComparisonTests
         void Run()
         {
             _ = ScalarKernel.Apply(eqLit, t, two, GeneralCtx);
+            _ = ScalarKernel.Apply(eqLit, t, *a.Pointer, GeneralCtx);
+            _ = ScalarKernel.Apply(eqLit, t, *zero.Pointer, GeneralCtx);
+            _ = ScalarKernel.Apply(eqLit, f, *empty.Pointer, GeneralCtx);
             _ = ScalarKernel.Apply(ltFalse, f, *a.Pointer, GeneralCtx);
             _ = ScalarKernel.Apply(eqComp, ct, *negOne.Pointer, GeneralCtx);
             _ = ScalarKernel.Apply(eqField, yt, two, GeneralCtx);
