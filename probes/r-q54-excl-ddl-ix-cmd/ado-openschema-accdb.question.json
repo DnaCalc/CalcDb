@@ -1,0 +1,1984 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q54-excl-ddl-ix-cmd/ado-openschema-accdb",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-PARAM",
+    "ADO-RESULTS",
+    "ADO-SCHEMA",
+    "R-DAO-1",
+    "R-LOCK-2",
+    "II-09",
+    "II-12",
+    "W-08",
+    "W-09"
+  ],
+  "description": "ACCDB: ADODB.Connection.OpenSchema (read-only on r-q54-src-accdb) for adSchemaTables(20), adSchemaColumns(4), adSchemaIndexes(12), adSchemaPrimaryKeys(28), and adSchemaForeignKeys(27): captures State, CursorType, LockType, Fields metadata (Name, Type, DefinedSize, Precision, NumericScale, Attributes), every row & exact row order, Restrictions argument forms (Missing, Empty, Null, scalar string/int), unsupported schema errors (1, 9999), and closed-connection error.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q54-src-accdb.accdb",
+      "sha256": "b27a9ac05b04914b27c6e94a6ad41c311670f007b88a57c15680cdbaa8997490",
+      "length": 274432,
+      "provenance": "r-q54-create-src-accdb-v3.a1 qk1-389302419283bc2a573b34495ed32c0c119c8e2cdceff8e8f8587c1233c22742 output:r-q54-src-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-cn-create"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "sch_tables"
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs1"
+    },
+    {
+      "op": "invoke",
+      "target": "afs1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs1",
+      "bind": "af2",
+      "maxItems": 36,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af2",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "sch_tables",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sch_tables",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs1",
+          "bind": "af2",
+          "maxItems": 36,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs1"
+        },
+        {
+          "op": "invoke",
+          "target": "sch_tables",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sch_tables",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sch_tables"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec3"
+    },
+    {
+      "op": "invoke",
+      "target": "aec3",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec3",
+      "bind": "ae4",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae4",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae4",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae4",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae4",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae4",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec3",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec3"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "sch_columns"
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs5"
+    },
+    {
+      "op": "invoke",
+      "target": "afs5",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs5",
+      "bind": "af6",
+      "maxItems": 36,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af6",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs5"
+    },
+    {
+      "op": "loopUntil",
+      "target": "sch_columns",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sch_columns",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs5"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs5",
+          "bind": "af6",
+          "maxItems": 36,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af6",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs5"
+        },
+        {
+          "op": "invoke",
+          "target": "sch_columns",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sch_columns",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sch_columns"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec7"
+    },
+    {
+      "op": "invoke",
+      "target": "aec7",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec7",
+      "bind": "ae8",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae8",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae8",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae8",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae8",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae8",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec7",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ],
+      "bind": "sch_indexes"
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs9"
+    },
+    {
+      "op": "invoke",
+      "target": "afs9",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs9",
+      "bind": "af10",
+      "maxItems": 36,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af10",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs9"
+    },
+    {
+      "op": "loopUntil",
+      "target": "sch_indexes",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sch_indexes",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs9"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs9",
+          "bind": "af10",
+          "maxItems": 36,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af10",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs9"
+        },
+        {
+          "op": "invoke",
+          "target": "sch_indexes",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sch_indexes",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sch_indexes"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec11"
+    },
+    {
+      "op": "invoke",
+      "target": "aec11",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec11",
+      "bind": "ae12",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec11",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec11"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 28
+        }
+      ],
+      "bind": "sch_pks"
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs13"
+    },
+    {
+      "op": "invoke",
+      "target": "afs13",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs13",
+      "bind": "af14",
+      "maxItems": 36,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af14",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs13"
+    },
+    {
+      "op": "loopUntil",
+      "target": "sch_pks",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sch_pks",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs13"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs13",
+          "bind": "af14",
+          "maxItems": 36,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af14",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs13"
+        },
+        {
+          "op": "invoke",
+          "target": "sch_pks",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sch_pks",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sch_pks"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec15"
+    },
+    {
+      "op": "invoke",
+      "target": "aec15",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec15",
+      "bind": "ae16",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae16",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae16",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae16",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae16",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae16",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec15",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec15"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 27
+        }
+      ],
+      "bind": "sch_fks"
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs17"
+    },
+    {
+      "op": "invoke",
+      "target": "afs17",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs17",
+      "bind": "af18",
+      "maxItems": 36,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af18",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs17"
+    },
+    {
+      "op": "loopUntil",
+      "target": "sch_fks",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sch_fks",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs17"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs17",
+          "bind": "af18",
+          "maxItems": 36,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af18",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs17"
+        },
+        {
+          "op": "invoke",
+          "target": "sch_fks",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sch_fks",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sch_fks"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec19"
+    },
+    {
+      "op": "invoke",
+      "target": "aec19",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec19",
+      "bind": "ae20",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae20",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae20",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae20",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae20",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae20",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec19",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec19"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "sr_t_empty"
+    },
+    {
+      "op": "invoke",
+      "target": "sr_t_empty",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sr_t_empty"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec21"
+    },
+    {
+      "op": "invoke",
+      "target": "aec21",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec21",
+      "bind": "ae22",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec21",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec21"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "sr_t_null"
+    },
+    {
+      "op": "invoke",
+      "target": "sr_t_null",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sr_t_null"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec23"
+    },
+    {
+      "op": "invoke",
+      "target": "aec23",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec23",
+      "bind": "ae24",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae24",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae24",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae24",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae24",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae24",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec23",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec23"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "sr_t_str"
+    },
+    {
+      "op": "invoke",
+      "target": "sr_t_str",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sr_t_str"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec25"
+    },
+    {
+      "op": "invoke",
+      "target": "aec25",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec25",
+      "bind": "ae26",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec25",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec25"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "sr_t_i4"
+    },
+    {
+      "op": "invoke",
+      "target": "sr_t_i4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sr_t_i4"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec27"
+    },
+    {
+      "op": "invoke",
+      "target": "aec27",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec27",
+      "bind": "ae28",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae28",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae28",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae28",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae28",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae28",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec27",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec27"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "sr_c_str"
+    },
+    {
+      "op": "invoke",
+      "target": "sr_c_str",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sr_c_str"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec29"
+    },
+    {
+      "op": "invoke",
+      "target": "aec29",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec29",
+      "bind": "ae30",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec29",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec29"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "su1"
+    },
+    {
+      "op": "invoke",
+      "target": "su1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "su1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec31"
+    },
+    {
+      "op": "invoke",
+      "target": "aec31",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec31",
+      "bind": "ae32",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae32",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae32",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae32",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae32",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae32",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec31",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec31"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9999
+        }
+      ],
+      "bind": "su9"
+    },
+    {
+      "op": "invoke",
+      "target": "su9",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "su9"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec33"
+    },
+    {
+      "op": "invoke",
+      "target": "aec33",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec33",
+      "bind": "ae34",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec33",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec33"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "sclosed"
+    },
+    {
+      "op": "release",
+      "target": "sclosed"
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

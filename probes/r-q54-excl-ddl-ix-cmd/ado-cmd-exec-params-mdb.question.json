@@ -1,0 +1,2769 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-PARAM",
+    "ADO-RESULTS",
+    "ADO-SCHEMA",
+    "R-DAO-1",
+    "R-LOCK-2",
+    "II-09",
+    "II-12",
+    "W-08",
+    "W-09"
+  ],
+  "description": "Jet 4 MDB: Parameterized ADODB.Command.Execute: Parameters.Append across adInteger(3), adVarWChar(202), adDouble(5), adDate(7), adCurrency(6), adBoolean(11), adNumeric(131), and Null for INSERT, SELECT, UPDATE (with RecordsAffected ByRef & re-execution with mutated Parameter.Value), scalar Parameters argument in Execute(ra, val, opts), and error mapping (missing param, type mismatch, dup PK). Keeps all pages.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-mdb-empty.mdb",
+      "sha256": "99da59149c57559b5658a9a08625236a936808d2be0ead100da977bd3716bdb4",
+      "length": 77824,
+      "provenance": "r-cat-1.create-mdb-empty.cfd08f7225.a1 qk1-cfd08f72252d515b07316a6bd39ffcd763b2a381963ec089596450dc48b1dec3 output:r-cat-1-mdb-empty.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "observeFiles",
+      "label": "before",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-cn-create"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE ParamT (ID LONG CONSTRAINT PK_ParamT PRIMARY KEY, S TEXT(30), D DOUBLE, DT DATETIME, C CURRENCY, Y BIT, DC DECIMAL(18,4))"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -1
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "aec2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec2",
+      "bind": "ae3",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae3",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae3",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae3",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae3",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae3",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec2",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-setup",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg4",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg4",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmdIns"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO ParamT (ID, S, D, DT, C, Y, DC) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pins"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pId"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ap5"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap5"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pS"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 30
+        },
+        {
+          "type": "bstr",
+          "text": "Alpha"
+        }
+      ],
+      "bind": "ap6"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap6"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap6"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pD"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "r8",
+          "bits": "4029800000000000"
+        }
+      ],
+      "bind": "ap7"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap7"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap7"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pDt"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "date",
+          "bits": "40e6854000000000"
+        }
+      ],
+      "bind": "ap8"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap8"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap8"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pC"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "cy",
+          "scaled": 455000
+        }
+      ],
+      "bind": "ap9"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap9"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap9"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pY"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "ap10"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap10"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap10"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pDc"
+        },
+        {
+          "type": "i4",
+          "value": 131
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "pDc"
+    },
+    {
+      "op": "invoke",
+      "target": "pDc",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pDc",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pDc",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "123.4567"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "pDc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ],
+      "bind": "ri1"
+    },
+    {
+      "op": "invoke",
+      "target": "ri1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ri1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec11"
+    },
+    {
+      "op": "invoke",
+      "target": "aec11",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec11",
+      "bind": "ae12",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae12",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec11",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec11"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ins-row1",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg13",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg13",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg13"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "i0"
+    },
+    {
+      "op": "invoke",
+      "target": "i0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i0"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "i1"
+    },
+    {
+      "op": "invoke",
+      "target": "i1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i1"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "i2"
+    },
+    {
+      "op": "invoke",
+      "target": "i2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i2"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "i3"
+    },
+    {
+      "op": "invoke",
+      "target": "i3",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i3"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "i4"
+    },
+    {
+      "op": "invoke",
+      "target": "i4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i4"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "i5"
+    },
+    {
+      "op": "invoke",
+      "target": "i5",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i5"
+    },
+    {
+      "op": "invoke",
+      "target": "pDc",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ],
+      "bind": "ri2"
+    },
+    {
+      "op": "invoke",
+      "target": "ri2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ri2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec14"
+    },
+    {
+      "op": "invoke",
+      "target": "aec14",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec14",
+      "bind": "ae15",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae15",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae15",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae15",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae15",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae15",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec14",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec14"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ins-row2-nulls",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg16",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg16",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg16"
+    },
+    {
+      "op": "invoke",
+      "target": "pins",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "i0d"
+    },
+    {
+      "op": "invoke",
+      "target": "i0d",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "i0d"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdIns",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ],
+      "bind": "riDup"
+    },
+    {
+      "op": "release",
+      "target": "riDup"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec17"
+    },
+    {
+      "op": "invoke",
+      "target": "aec17",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec17",
+      "bind": "ae18",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae18",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae18",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae18",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae18",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae18",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec17",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec17"
+    },
+    {
+      "op": "release",
+      "target": "pDc"
+    },
+    {
+      "op": "release",
+      "target": "pins"
+    },
+    {
+      "op": "release",
+      "target": "cmdIns"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmdSel"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, S, D, C, Y, DC FROM ParamT WHERE ID = ?"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs_i1"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs19"
+    },
+    {
+      "op": "invoke",
+      "target": "afs19",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs19",
+      "bind": "af20",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af20",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af20",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af20",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs19"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs_i1",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs_i1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs19"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs19",
+          "bind": "af20",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af20",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs19"
+        },
+        {
+          "op": "invoke",
+          "target": "rs_i1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_i1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec21"
+    },
+    {
+      "op": "invoke",
+      "target": "aec21",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec21",
+      "bind": "ae22",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae22",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec21",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec21"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs_i2"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs23"
+    },
+    {
+      "op": "invoke",
+      "target": "afs23",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs23",
+      "bind": "af24",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af24",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af24",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af24",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs23"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs_i2",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs_i2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs23"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs23",
+          "bind": "af24",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af24",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs23"
+        },
+        {
+          "op": "invoke",
+          "target": "rs_i2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs_i2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_i2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec25"
+    },
+    {
+      "op": "invoke",
+      "target": "aec25",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec25",
+      "bind": "ae26",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae26",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec25",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec25"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs_null"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_null",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_null",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs27"
+    },
+    {
+      "op": "invoke",
+      "target": "afs27",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs27",
+      "bind": "af28",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af28",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af28",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af28",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs27"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs_null",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs_null",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs27"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs27",
+          "bind": "af28",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af28",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs27"
+        },
+        {
+          "op": "invoke",
+          "target": "rs_null",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs_null",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_null"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec29"
+    },
+    {
+      "op": "invoke",
+      "target": "aec29",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec29",
+      "bind": "ae30",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae30",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec29",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec29"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "empty"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs_empty"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_empty",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_empty",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afs31"
+    },
+    {
+      "op": "invoke",
+      "target": "afs31",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "afs31",
+      "bind": "af32",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "af32",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af32",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "af32",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "afs31"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs_empty",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs_empty",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "afs31"
+        },
+        {
+          "op": "forEachItem",
+          "target": "afs31",
+          "bind": "af32",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "af32",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "afs31"
+        },
+        {
+          "op": "invoke",
+          "target": "rs_empty",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs_empty",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_empty"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec33"
+    },
+    {
+      "op": "invoke",
+      "target": "aec33",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec33",
+      "bind": "ae34",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae34",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec33",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec33"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rsMiss"
+    },
+    {
+      "op": "release",
+      "target": "rsMiss"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec35"
+    },
+    {
+      "op": "invoke",
+      "target": "aec35",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec35",
+      "bind": "ae36",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae36",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae36",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae36",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae36",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae36",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec35",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec35"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "psel"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdSel",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pId"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "notanumber"
+        }
+      ],
+      "bind": "ap37"
+    },
+    {
+      "op": "invoke",
+      "target": "psel",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap37"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap37"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec38"
+    },
+    {
+      "op": "invoke",
+      "target": "aec38",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec38",
+      "bind": "ae39",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae39",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae39",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae39",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae39",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae39",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec38",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec38"
+    },
+    {
+      "op": "release",
+      "target": "psel"
+    },
+    {
+      "op": "release",
+      "target": "cmdSel"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmdUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE ParamT SET S = ?, D = ? WHERE ID = ?"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pupd"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pS"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 30
+        },
+        {
+          "type": "bstr",
+          "text": "Updated-Two"
+        }
+      ],
+      "bind": "ap40"
+    },
+    {
+      "op": "invoke",
+      "target": "pupd",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap40"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap40"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pD"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "r8",
+          "bits": "4058e00000000000"
+        }
+      ],
+      "bind": "ap41"
+    },
+    {
+      "op": "invoke",
+      "target": "pupd",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap41"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap41"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pId"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "ap42"
+    },
+    {
+      "op": "invoke",
+      "target": "pupd",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ap42"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ap42"
+    },
+    {
+      "op": "invoke",
+      "target": "cmdUpd",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -99
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ],
+      "bind": "ru1"
+    },
+    {
+      "op": "invoke",
+      "target": "ru1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ru1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec43"
+    },
+    {
+      "op": "invoke",
+      "target": "aec43",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec43",
+      "bind": "ae44",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae44",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae44",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae44",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae44",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae44",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "aec43",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aec43"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-upd-row2",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg45",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg45",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg45"
+    },
+    {
+      "op": "release",
+      "target": "pupd"
+    },
+    {
+      "op": "release",
+      "target": "cmdUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg46",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg46",
+      "offset": 0,
+      "count": 1048576,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg46"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, S, D, DT, C, Y, DC FROM ParamT ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs47"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs47",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs47",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs47",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs47",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs47"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbro"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}
