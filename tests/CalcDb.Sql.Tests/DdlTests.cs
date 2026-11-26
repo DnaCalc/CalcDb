@@ -730,7 +730,10 @@ public sealed class DdlTests
         AssertNotModelled(db, $"CREATE TABLE C33 ({uq33})", "NotModelled.DdlTooManyTableConstraints");
 
         Assert.True(ActionExecutor.Execute("CREATE TABLE T (a LONG, b LONG, c LONG, d DOUBLE, s SINGLE)", db).Succeeded);
-        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN e LONG", "NotModelled.DdlAlterTable");
+        // evidence/r-q44-ddl-alter-types/add-long-empty-accdb-dao: single-column ADD COLUMN LONG succeeds; unrecorded Single / multi-column ADD refuse.
+        Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD COLUMN e LONG", db).Succeeded);
+        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN f SINGLE", "NotModelled.DdlAlterTable");
+        AssertNotModelled(db, "ALTER TABLE T ADD COLUMN g1 LONG, COLUMN g2 LONG", "NotModelled.DdlAlterTable");
         AssertNotModelled(db, "CREATE INDEX IX_DI ON T (a) WITH DISALLOW NULL IGNORE NULL", "NotModelled.DdlIndexOptions");
         AssertNotModelled(db, "CREATE INDEX IX_PI ON T (a) WITH PRIMARY IGNORE NULL", "NotModelled.DdlIndexOptions");
         AssertNotModelled(db, "CREATE INDEX IX_3 ON T (a, b, c)", "NotModelled.DdlIndexShape");
@@ -738,11 +741,14 @@ public sealed class DdlTests
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_D ON T (d)", db).Succeeded);
         AssertNotModelled(db, "CREATE INDEX IX_S ON T (s)", "NotModelled.DdlIndexKeyType");
         Assert.True(ActionExecutor.Execute("CREATE INDEX IX_T ON T (a)", db).Succeeded);
-        AssertNotModelled(db, "DROP INDEX IX_T ON T", "NotModelled.DdlDropIndex");
         // Second index on a table that already has one is now admitted (evidence/r-q34-ddl-sweep/ix-cat1b-*, uqix-*).
         Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UX_T ON T (b)", db).Succeeded);
         // FMT1-INDEX-ENUM Open: non-[A-Za-z0-9_] logical index name when 2+ indexes exist stays refused by name.
         AssertNotModelled(db, "CREATE INDEX [IX-Dash] ON T (c)", "NotModelled.SchemaWriter");
+        // evidence/r-q44-ddl-alter-types/dropcon-drop-index-accdb-dao: dropping the last DAO index succeeds; ADO DROP INDEX and non-last index drop refuse.
+        AssertNotModelled(db, "DROP INDEX UX_T ON T", "NotModelled.DdlDropIndex", ActionErrorSource.Ado);
+        AssertNotModelled(db, "DROP INDEX IX_D ON T", "NotModelled.SchemaWriter");
+        Assert.True(ActionExecutor.Execute("DROP INDEX UX_T ON T", db).Succeeded);
         // B11: multi-name DROP TABLE refuses by name even when one table is missing.
         AssertNotModelled(db, "DROP TABLE T, NoSuchTable", "NotModelled.DdlMultiDropTable");
         // B10: invalid index name against missing table refuses by name instead of assuming 3125 vs 3371 precedence.
@@ -1154,7 +1160,8 @@ public sealed class DdlTests
         // ALTER TABLE ADD CONSTRAINT UNIQUE lowers to CreateIndex and refuses leaf overflow with 0 bytes written;
         // out-of-scope DDL forms stay refused by name (or ACE 3289 for DAO CHECK) without writing.
         AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT UX_S UNIQUE (s)", "NotModelled.SchemaAccept.Publication");
-        AssertNotModelled(db, "ALTER TABLE T DROP CONSTRAINT PK_T", "NotModelled.DdlAlterTable");
+        // ADO DROP CONSTRAINT on PK is unrecorded (DAO PK drop is recorded in r-q44/dropcon-pk-empty-accdb-dao).
+        AssertNotModelled(db, "ALTER TABLE T DROP CONSTRAINT PK_T", "NotModelled.DdlAlterTable", ActionErrorSource.Ado);
         AssertNotModelled(db, "ALTER TABLE T ADD CONSTRAINT FK_T FOREIGN KEY (id) REFERENCES T (id)", "NotModelled.DdlForeignKey");
         AssertAceError(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", 3289);
         AssertAceError(db, "ALTER TABLE T ADD CONSTRAINT CK_N CHECK (id > 0)", 3289);
@@ -1398,8 +1405,14 @@ public sealed class DdlTests
         AssertNotModelled(db, "CREATE TABLE C2 (ID LONG CONSTRAINT PKC2 PRIMARY KEY, K LONG CONSTRAINT FK_C2_P REFERENCES P(ID))", "NotModelled.SchemaWriter");
         AssertNotModelled(db, "CREATE TABLE SelfT (ID LONG CONSTRAINT PKS PRIMARY KEY, K LONG CONSTRAINT FK_SELF REFERENCES SelfT(ID))", "NotModelled.DdlForeignKey");
         AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_P2 FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.SchemaWriter");
-        AssertNotModelled(db, "ALTER TABLE C DROP CONSTRAINT FK_C_P", "NotModelled.DdlAlterTable");
+        // ADO DROP CONSTRAINT on FK is unrecorded (DAO FK drop is recorded in r-q44/dropcon-fk-accdb-dao & mdb-dao).
+        AssertNotModelled(db, "ALTER TABLE C DROP CONSTRAINT FK_C_P", "NotModelled.DdlAlterTable", ActionErrorSource.Ado);
         Assert.Equal(beforeRefusals, db.Image.Snapshot());
+
+        // DAO DROP CONSTRAINT on FK succeeds and removes the relationship (r-q44/dropcon-fk-accdb-dao).
+        ActionOutcome dropFk = ActionExecutor.Execute("ALTER TABLE C DROP CONSTRAINT FK_C_P", db);
+        Assert.True(dropFk.Succeeded, $"DROP CONSTRAINT FK_C_P failed: {dropFk.Failure}");
+        Assert.True(ActionExecutor.Execute("INSERT INTO C (ID, K) VALUES (99, 999)", db).Succeeded);
     }
 
     [Fact]
@@ -1762,15 +1775,25 @@ public sealed class DdlTests
             Assert.True(ActionExecutor.Execute("CREATE UNIQUE INDEX UQ_M ON AllIx (M)", db).Succeeded);
 
             // Refusals: OLE -> 3409; Memo DESC, ADO Double, 2-col Double, ALTER TABLE ADD CONSTRAINT on Double -> NotModelled.DdlIndexKeyType;
-            // ALTER TABLE ADD COLUMN BIGINT/DATETIME2 -> NotModelled.DdlAlterTable; LARGEINT -> 3292.
+            // ALTER TABLE ADD COLUMN BIGINT/DATETIME2 succeed on empty ACCDB DAO (r-q44/ext-*-alter-accdb-dao) and refuse on ADO; LARGEINT -> 3292.
             AssertAceError(db, "CREATE INDEX IX_O ON AllIx (O)", 3409);
             AssertNotModelled(db, "CREATE INDEX IX_MD ON AllIx (M DESC)", "NotModelled.DdlIndexKeyType");
             AssertNotModelled(db, "CREATE INDEX IX_AdoV ON AllIx (V)", "NotModelled.DdlIndexKeyType", ActionErrorSource.Ado);
             AssertNotModelled(db, "CREATE INDEX IX_2V ON AllIx (ID, V)", "NotModelled.DdlIndexKeyType");
             AssertNotModelled(db, "ALTER TABLE AllIx ADD CONSTRAINT UQ_AltV UNIQUE (V)", "NotModelled.DdlIndexKeyType");
-            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN B BIGINT", "NotModelled.DdlAlterTable");
-            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN DT DATETIME2", "NotModelled.DdlAlterTable");
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN B BIGINT", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN DT DATETIME2", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
+            Assert.True(ActionExecutor.Execute("ALTER TABLE AllIx ADD COLUMN B BIGINT", db).Succeeded);
+            // Upgrading an already-upgraded ACCDB a second time via ALTER ADD COLUMN DATETIME2 is unrecorded and refuses honestly.
+            AssertNotModelled(db, "ALTER TABLE AllIx ADD COLUMN DT DATETIME2", "NotModelled.SchemaWriter");
             AssertAceError(db, "CREATE TABLE BadL (B LARGEINT)", 3292);
+        }
+
+        // Fresh ACCDB: ALTER TABLE ADD COLUMN DT DATETIME2 succeeds (r-q44/ext-datetime2-alter-accdb-dao).
+        using (var dbDt2 = new WritableSqlFixture(accdb))
+        {
+            Assert.True(ActionExecutor.Execute("CREATE TABLE T (ID LONG CONSTRAINT PK PRIMARY KEY)", dbDt2).Succeeded);
+            Assert.True(ActionExecutor.Execute("ALTER TABLE T ADD COLUMN DT DATETIME2", dbDt2).Succeeded);
         }
 
         // MDB: BIGINT and DATETIME2 both fail 3001 on DAO and ADO routes.

@@ -158,6 +158,9 @@ public static class SqlMessages
     /// <summary>3295 for malformed DROP TABLE / DROP INDEX or DROP VIEW / DROP PROCEDURE (r-def-expr-sql/ddl-drop-and-missing-objects, ddl-index-forms, r-sql-2-3/act-ddl-objects).</summary>
     public const string DropSyntaxError = "Syntax error in DROP TABLE or DROP INDEX.";
 
+    /// <summary>3000 for ADO DDL column DEFAULT type mismatch such as LONG DEFAULT 'abc' (r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*).</summary>
+    public const string TypeMismatch = "Type mismatch";
+
     /// <summary>3001 for invalid DDL argument such as COUNTER(1, 0) (r-def-expr-sql/ddl-counter-seed-increment; BIGINT/DATETIME2 fail 3001 in MDB, while ddl-type-names-accdb Dt69/Dt70 succeed in ACCDB).</summary>
     public const string InvalidArgument = "Invalid argument.";
 
@@ -199,6 +202,9 @@ public static class SqlMessages
 
     /// <summary>3285 for a duplicate field in an index definition (r-def-expr-sql/ddl-index-forms).</summary>
     public const string InvalidIndexDefinition = "Invalid index definition.";
+
+    /// <summary>3355 for an ADO DDL column DEFAULT referencing a field name such as DEFAULT [ID] (r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*).</summary>
+    public static string UnrecognizedFieldInDefault(string field, string table) => $"The database engine does not recognize either the field '{field}' in a validation expression, or the default value in the table '{table}'.";
 
     /// <summary>3368 when a foreign key column count or data types do not match the referenced columns (r-def-expr-sql/ddl-fk-actions).</summary>
     public const string RelationshipColumnMismatch = "Relationship must be on the same number of fields with the same data types.";

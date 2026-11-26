@@ -169,13 +169,17 @@ public readonly record struct EncodedField(bool IsNull, bool Boolean = false, by
 }
 
 /// <summary>
-/// Ordinary row encoder (II-04 §2; verified byte-for-byte across live rows in retained ACE fixtures and R-FMT-2 r-q36,
-/// <c>evidence/r-q36-publication-bytes/zf-*</c>, <c>nullfix-*</c>).
-/// Writes <c>C = MaxColumns</c>, fixed area (zeros for newly inserted Null fixed fields, preserved old bytes when
-/// supplied via <see cref="EncodedField.PreservedNull"/>), when <c>V == 0</c> pads with <c>max(0, 2 - fixedSize)</c>
-/// zero bytes so at least 4 bytes precede the null mask (no pad when <c>V &gt; 0</c>), contiguous variable payloads in
-/// <see cref="ColumnDescriptor.VariableIndex"/> order with immediately adjacent trailer, and the <c>ceil(C/8)</c>-byte
-/// mask with zero unused high bits. Refuses dropped-column schemas (<c>C != MaxColumns</c>) and rows past 4,060 bytes.
+/// Ordinary row encoder (II-04 §2; verified byte-for-byte across live rows in retained ACE fixtures, R-FMT-2 r-q36
+/// <c>evidence/r-q36-publication-bytes/zf-*</c>, <c>nullfix-*</c>, and <c>evidence/r-q44-ddl-alter-types</c>
+/// <c>dropcol-unindexed-rows-*</c>, <c>alt-long-double-text-rows-*</c>, <c>alt-text-widen-narrow-rows-*</c>,
+/// <c>alt-long-text-rows-mdb-dao</c>, <c>evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*</c>).
+/// Writes <c>C = MaxColumns</c>, fixed area (zeros for newly inserted Null fixed fields and dropped fixed slots,
+/// preserved old bytes when supplied via <see cref="EncodedField.PreservedNull"/>), when <c>V == 0</c> pads with
+/// <c>max(0, 2 - fixedSize)</c> zero bytes so at least 4 bytes precede the null mask (no pad when <c>V &gt; 0</c>),
+/// contiguous variable payloads in <see cref="ColumnDescriptor.VariableIndex"/> order (empty slices for abandoned
+/// variable indexes after <c>DROP COLUMN</c> or <c>ALTER COLUMN</c>) with immediately adjacent trailer, and the
+/// <c>ceil(C/8)</c>-byte mask with zero bits for dropped/abandoned physical numbers and unused high bits.
+/// Refuses rows past 4,060 bytes.
 /// </summary>
 public static class RowEncoder
 {
@@ -193,9 +197,9 @@ public static class RowEncoder
             return false;
         }
         int c = table.MaxColumns;
-        if (c <= 0 || columns.Count != c)
+        if (c <= 0 || columns.Count == 0 || columns.Count > c)
         {
-            failure = $"table has ColumnCount={columns.Count} and MaxColumns={c}: dropped-column row layout is not established";
+            failure = $"table has ColumnCount={columns.Count} and MaxColumns={c}: invalid column counts for row encoding";
             return false;
         }
         int fixedEnd = table.KnownFixedEnd(c, d);
@@ -287,13 +291,10 @@ public static class RowEncoder
             int pos = fixedEnd;
             for (int j = 0; j < v; j++)
             {
-                if (variableSlots[j] is not { } entry)
-                {
-                    failure = $"missing variable column at index {j} of {v}";
-                    return false;
-                }
                 starts[j] = pos;
-                if (!entry.Field.IsNull && entry.Field.Bytes is { Length: > 0 } bytes)
+                // Abandoned variable indexes (from DROP COLUMN or ALTER COLUMN) write an empty [pos, pos) slice
+                // (evidence/r-q44-ddl-alter-types/dropcol-unindexed-rows-*, r-q49-dt2-draftprops/ddl-default-alter-ado-*).
+                if (variableSlots[j] is { } entry && !entry.Field.IsNull && entry.Field.Bytes is { Length: > 0 } bytes)
                 {
                     bytes.CopyTo(row, pos);
                     pos += bytes.Length;
@@ -324,7 +325,197 @@ public static class RowEncoder
         return true;
     }
 
-    private static void WriteWord(byte[] buffer, int offset, int value)
+    /// <summary>
+    /// Rewrite one existing ordinary row in place for <c>ALTER TABLE ... ALTER COLUMN</c> type or width change
+    /// (<c>evidence/r-q44-ddl-alter-types/alt-long-double-text-rows-accdb-dao</c>,
+    /// <c>alt-long-text-rows-mdb-dao</c>, <c>alt-text-widen-narrow-rows-accdb-dao</c>,
+    /// <c>evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*</c>): copies <paramref name="oldBody"/> into the
+    /// scan's reused zero-initialized <paramref name="workBuffer"/> without clearing bytes past
+    /// <paramref name="oldBody"/> (reproducing ACE's reused row-rewrite scratch buffer on Null fixed slots and old
+    /// mask bytes in newly extended fixed gaps), raises <c>C</c> to <see cref="TableDefinition.MaxColumns"/>, keeps
+    /// abandoned fixed/variable slots and old null-mask bits intact, writes <paramref name="newValue"/> at
+    /// <paramref name="newColumn"/>'s new physical/variable slot, and writes the updated variable trailer and mask.
+    /// </summary>
+    public static bool TryRewriteAlteredColumn(
+        ReadOnlySpan<byte> oldBody,
+        TableDefinition oldTable,
+        TableDefinition newTable,
+        ColumnDescriptor newColumn,
+        EncodedField newValue,
+        FormatDescriptor d,
+        Span<byte> workBuffer,
+        out int writtenLength,
+        out string? failure)
+    {
+        writtenLength = 0;
+        failure = null;
+        if (d.Row.FixedBase != 2)
+        {
+            failure = "ALTER COLUMN row rewrite in a non-Jet4/ACE12 dialect is not recorded";
+            return false;
+        }
+        if (newColumn.IsMaskBoolean)
+        {
+            failure = $"ALTER COLUMN to Yes/No ({newColumn.Name}) row rewrite is not recorded";
+            return false;
+        }
+        if (workBuffer.Length < MaxOrdinaryRowBytes)
+        {
+            failure = $"work buffer of {workBuffer.Length} bytes is smaller than {MaxOrdinaryRowBytes}";
+            return false;
+        }
+        if (oldBody.Length > workBuffer.Length)
+        {
+            failure = $"existing row body ({oldBody.Length} bytes) exceeds work buffer ({workBuffer.Length} bytes)";
+            return false;
+        }
+        if (!RowEnvelope.TryOpen(oldBody, d, out RowEnvelope oldEnvelope, out failure))
+        {
+            return false;
+        }
+        int newC = newTable.MaxColumns;
+        int newV = newTable.VariableColumns;
+        if (newC <= 0 || oldEnvelope.ColumnCount > newC || newColumn.PhysicalNumber < 0 || newColumn.PhysicalNumber >= newC)
+        {
+            failure = $"invalid ALTER COLUMN physical layout (oldC={oldEnvelope.ColumnCount}, newC={newC}, newPhys={newColumn.PhysicalNumber})";
+            return false;
+        }
+        int oldColCount = oldEnvelope.ColumnCount;
+        int oldKnownFixedEnd = oldTable.KnownFixedEnd(oldColCount, d);
+        int oldV = 0;
+        int oldFixedAreaEnd = oldEnvelope.MaskStart;
+        int oldVarEnd = oldEnvelope.MaskStart;
+        bool mayHaveVarTrailer = oldTable.VariableColumns > 0
+            && (oldTable.Columns.Count(c => !c.IsFixed) < oldTable.VariableColumns
+                || oldTable.Columns.Any(c => !c.IsFixed && c.PhysicalNumber < oldColCount));
+        if (mayHaveVarTrailer && oldEnvelope.MaskStart >= oldKnownFixedEnd + 4)
+        {
+            int candV = oldBody[oldEnvelope.MaskStart - 2] | (oldBody[oldEnvelope.MaskStart - 1] << 8);
+            long trailerBytes = 4L + (2L * candV);
+            if (candV > 0 && candV <= oldTable.VariableColumns && oldEnvelope.MaskStart - trailerBytes >= oldKnownFixedEnd)
+            {
+                int dOffset = oldEnvelope.MaskStart - (int)trailerBytes;
+                int eod = oldBody[dOffset] | (oldBody[dOffset + 1] << 8);
+                int start0 = oldBody[oldEnvelope.MaskStart - 4] | (oldBody[oldEnvelope.MaskStart - 3] << 8);
+                if (start0 >= oldKnownFixedEnd && start0 <= eod && eod <= dOffset)
+                {
+                    oldV = candV;
+                    oldFixedAreaEnd = start0;
+                    oldVarEnd = eod;
+                }
+            }
+        }
+        if (oldV > newV)
+        {
+            failure = $"existing row has {oldV} variable columns, exceeding new table VariableColumns={newV}";
+            return false;
+        }
+        int newFixedEnd = Math.Max(oldFixedAreaEnd, newTable.KnownFixedEnd(newC, d));
+        if (oldV > 0 && newFixedEnd > oldFixedAreaEnd)
+        {
+            failure = $"ALTER COLUMN row rewrite extending fixed storage ({oldFixedAreaEnd} -> {newFixedEnd}) on a row with {oldV} existing variable column(s) is not recorded";
+            return false;
+        }
+
+        // Preserve ACE's reused scratch buffer: overwrite only [0..oldBody.Length), leaving bytes past oldBody.Length
+        // from earlier rows in the same scan intact (alt-long-double-text-rows-accdb-dao after-ddl-1 slot 1).
+        oldBody.CopyTo(workBuffer);
+        d.Row.ColumnCount.Write(workBuffer, (ulong)newC);
+
+        if (newColumn.IsFixed)
+        {
+            int width = NativeTypes.FixedWidth(newColumn.TypeCode) ?? newColumn.Length;
+            int destOffset = d.Row.FixedBase + newColumn.FixedOffset;
+            if (destOffset + width > newFixedEnd)
+            {
+                failure = $"altered fixed column {newColumn.Name} [{destOffset}, {destOffset + width}) runs past fixedEnd {newFixedEnd}";
+                return false;
+            }
+            if (!newValue.IsNull)
+            {
+                if (newValue.Bytes is not { } fixedBytes || fixedBytes.Length != width)
+                {
+                    failure = $"altered fixed column {newColumn.Name} expects {width} bytes, got {newValue.Bytes?.Length ?? 0}";
+                    return false;
+                }
+                fixedBytes.CopyTo(workBuffer.Slice(destOffset, width));
+            }
+        }
+        else if (newColumn.VariableIndex < oldV || newColumn.VariableIndex >= newV)
+        {
+            failure = $"altered variable column {newColumn.Name} has VariableIndex={newColumn.VariableIndex}, outside [{oldV}, {newV})";
+            return false;
+        }
+
+        int maskBytes = (newC + 7) / 8;
+        int maskStart;
+        if (newV == 0)
+        {
+            long eod = Math.Max(newFixedEnd, d.Row.FixedBase + 2);
+            long total = eod + maskBytes;
+            if (total > MaxOrdinaryRowBytes || eod > ushort.MaxValue)
+            {
+                failure = $"altered row of {total} bytes exceeds the {MaxOrdinaryRowBytes}-byte ordinary row limit";
+                return false;
+            }
+            maskStart = (int)eod;
+        }
+        else
+        {
+            Span<int> starts = stackalloc int[newV];
+            for (int j = 0; j < oldV; j++)
+            {
+                int off = oldEnvelope.MaskStart - 4 - (2 * j);
+                starts[j] = oldBody[off] | (oldBody[off + 1] << 8);
+            }
+            int pos = oldV > 0 ? oldVarEnd : newFixedEnd;
+            int newVarBytes = !newColumn.IsFixed && !newValue.IsNull ? (newValue.Bytes?.Length ?? 0) : 0;
+            long eod = (long)pos + newVarBytes;
+            long trailerLen = 4L + (2L * newV);
+            long total = eod + trailerLen + maskBytes;
+            if (total > MaxOrdinaryRowBytes || eod > ushort.MaxValue)
+            {
+                failure = $"altered row of {total} bytes exceeds the {MaxOrdinaryRowBytes}-byte ordinary row limit";
+                return false;
+            }
+            for (int j = oldV; j < newV; j++)
+            {
+                starts[j] = pos;
+                if (!newColumn.IsFixed && j == newColumn.VariableIndex && !newValue.IsNull && newValue.Bytes is { Length: > 0 } varBytes)
+                {
+                    varBytes.CopyTo(workBuffer.Slice(pos, varBytes.Length));
+                    pos += varBytes.Length;
+                }
+            }
+            int trailerAt = pos;
+            WriteWord(workBuffer, trailerAt, pos); // EOD
+            trailerAt += 2;
+            for (int j = newV - 1; j >= 0; j--)
+            {
+                WriteWord(workBuffer, trailerAt, starts[j]);
+                trailerAt += 2;
+            }
+            WriteWord(workBuffer, trailerAt, newV);
+            maskStart = trailerAt + 2;
+        }
+
+        workBuffer.Slice(maskStart, maskBytes).Clear();
+        for (int bit = 0; bit < oldEnvelope.ColumnCount; bit++)
+        {
+            if (oldEnvelope.MaskBit(bit))
+            {
+                workBuffer[maskStart + (bit / 8)] |= (byte)(1 << (bit % 8));
+            }
+        }
+        if (!newValue.IsNull)
+        {
+            workBuffer[maskStart + (newColumn.PhysicalNumber / 8)] |= (byte)(1 << (newColumn.PhysicalNumber % 8));
+        }
+        writtenLength = maskStart + maskBytes;
+        return true;
+    }
+
+    private static void WriteWord(Span<byte> buffer, int offset, int value)
     {
         buffer[offset] = (byte)value;
         buffer[offset + 1] = (byte)(value >> 8);

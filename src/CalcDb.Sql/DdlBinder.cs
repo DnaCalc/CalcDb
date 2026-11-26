@@ -53,6 +53,12 @@ public enum BoundDdlKind : byte
     DropTable,
     AddCheckConstraint,
     AddForeignKey,
+    AlterAddColumn,
+    AlterModifyColumn,
+    AlterDropColumn,
+    DropIndex,
+    DropForeignKey,
+    DropCheckConstraint,
 }
 
 /// <summary>
@@ -68,7 +74,13 @@ public sealed record BoundDdl(
     CreateIndexRequest? CreateIndex = null,
     DropTableRequest? DropTable = null,
     AddCheckConstraintRequest? AddCheckConstraint = null,
-    AddForeignKeyRequest? AddForeignKey = null);
+    AddForeignKeyRequest? AddForeignKey = null,
+    AlterAddColumnRequest? AlterAddColumn = null,
+    AlterModifyColumnRequest? AlterModifyColumn = null,
+    AlterDropColumnRequest? AlterDropColumn = null,
+    DropIndexRequest? DropIndex = null,
+    DeleteRelationRequest? DropForeignKey = null,
+    DropCheckConstraintRequest? DropCheckConstraint = null);
 
 /// <summary>
 /// Access SQL DDL binder (W-07/native-metadata-write stretch 2; II-11 §28): validates ACE's recorded bind rules and
@@ -165,7 +177,7 @@ public static class DdlBinder
             CreateTableStatement ct => BindCreateTable(ct, database, out failure, route),
             CreateIndexStatement ci => BindCreateIndex(ci, database, out failure, route),
             DropTableStatement dt => BindDropTable(dt, database, out failure),
-            DropIndexStatement di => BindDropIndex(di, database, out failure),
+            DropIndexStatement di => BindDropIndex(di, database, out failure, route),
             AlterTableStatement at => BindAlterTable(at, database, out failure, route),
             _ => Fail(SqlFailure.Open(SqlPhase.Bind, "NotModelled.DdlKind", statement.Kind.ToString()), out failure),
         };
@@ -378,19 +390,24 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlWithCompression", $"WITH COMPRESSION on {route} {col.DataType.Kind} column '{col.Name}' with modifiers/constraints is recorded only for nullable, unconstrained ADO Text and Memo (evidence/r-q36-publication-bytes/create-feff-*)"), out failure);
             }
+            if (col.DefaultExpression is not null && route != SchemaRoute.Ado)
+            {
+                return Fail(BindOpen("NotModelled.DdlDefault", $"DEFAULT on {route} CREATE TABLE column '{col.Name}' is not recorded (DAO rejects DEFAULT with 3290)"), out failure);
+            }
+            NewField boundField;
             switch (col.DataType.Kind)
             {
                 case DdlTypeKind.YesNo:
-                    fields.Add(new NewField(col.Name, NewFieldType.YesNo));
+                    boundField = new NewField(col.Name, NewFieldType.YesNo);
                     break;
                 case DdlTypeKind.Byte:
-                    fields.Add(new NewField(col.Name, NewFieldType.Byte));
+                    boundField = new NewField(col.Name, NewFieldType.Byte);
                     break;
                 case DdlTypeKind.Short:
-                    fields.Add(new NewField(col.Name, NewFieldType.Short));
+                    boundField = new NewField(col.Name, NewFieldType.Short);
                     break;
                 case DdlTypeKind.Long:
-                    fields.Add(new NewField(col.Name, NewFieldType.Long, Required: required));
+                    boundField = new NewField(col.Name, NewFieldType.Long, Required: required);
                     break;
                 case DdlTypeKind.Counter:
                     if (col.DataType.Seed is int seed)
@@ -404,24 +421,24 @@ public static class DdlBinder
                         {
                             return Fail(BindOpen("NotModelled.DdlCounterOverflow", $"COUNTER({seed}, {inc}) on column '{col.Name}': seed - increment overflows signed 32-bit int"), out failure);
                         }
-                        fields.Add(new NewField(col.Name, NewFieldType.Counter, Seed: seed, Increment: inc));
+                        boundField = new NewField(col.Name, NewFieldType.Counter, Seed: seed, Increment: inc);
                     }
                     else
                     {
-                        fields.Add(new NewField(col.Name, NewFieldType.Counter));
+                        boundField = new NewField(col.Name, NewFieldType.Counter);
                     }
                     break;
                 case DdlTypeKind.Currency:
-                    fields.Add(new NewField(col.Name, NewFieldType.Currency));
+                    boundField = new NewField(col.Name, NewFieldType.Currency);
                     break;
                 case DdlTypeKind.Single:
-                    fields.Add(new NewField(col.Name, NewFieldType.Single));
+                    boundField = new NewField(col.Name, NewFieldType.Single);
                     break;
                 case DdlTypeKind.Double:
-                    fields.Add(new NewField(col.Name, NewFieldType.Double));
+                    boundField = new NewField(col.Name, NewFieldType.Double);
                     break;
                 case DdlTypeKind.DateTime:
-                    fields.Add(new NewField(col.Name, NewFieldType.DateTime));
+                    boundField = new NewField(col.Name, NewFieldType.DateTime);
                     break;
                 case DdlTypeKind.Binary:
                 {
@@ -431,7 +448,7 @@ public static class DdlBinder
                     {
                         return Fail(BindOpen("NotModelled.DdlBinarySize", $"BINARY({size}) on column '{col.Name}' is outside 1..510 (bounds not probed in r-q21-ddl-types)"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Binary, size));
+                    boundField = new NewField(col.Name, NewFieldType.Binary, size);
                     break;
                 }
                 case DdlTypeKind.VarBinary:
@@ -445,7 +462,7 @@ public static class DdlBinder
                     {
                         return Fail(BindOpen("NotModelled.DdlBinarySize", $"VARBINARY({size}) on column '{col.Name}' is outside 1..510 (bounds not probed in r-q21-ddl-types)"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.VarBinary, size));
+                    boundField = new NewField(col.Name, NewFieldType.VarBinary, size);
                     break;
                 }
                 case DdlTypeKind.Text:
@@ -456,7 +473,7 @@ public static class DdlBinder
                         // r-def-expr-sql/ddl-type-names-accdb accepts TEXT(0); SchemaWriter requires 1..255.
                         return Fail(BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on column '{col.Name}' is not modelled in SchemaWriter"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Text, size, Required: required, UnicodeCompression: col.WithCompression));
+                    boundField = new NewField(col.Name, NewFieldType.Text, size, Required: required, UnicodeCompression: col.WithCompression);
                     break;
                 }
                 case DdlTypeKind.Memo:
@@ -464,23 +481,23 @@ public static class DdlBinder
                     {
                         firstLvalIdx = i;
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Memo, Required: required, UnicodeCompression: col.WithCompression));
+                    boundField = new NewField(col.Name, NewFieldType.Memo, Required: required, UnicodeCompression: col.WithCompression);
                     break;
                 case DdlTypeKind.LongBinary:
                     if (firstLvalIdx < 0)
                     {
                         firstLvalIdx = i;
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Ole));
+                    boundField = new NewField(col.Name, NewFieldType.Ole);
                     break;
                 case DdlTypeKind.Guid:
-                    fields.Add(new NewField(col.Name, NewFieldType.Guid));
+                    boundField = new NewField(col.Name, NewFieldType.Guid);
                     break;
                 case DdlTypeKind.BigInt:
-                    fields.Add(new NewField(col.Name, NewFieldType.BigInt));
+                    boundField = new NewField(col.Name, NewFieldType.BigInt);
                     break;
                 case DdlTypeKind.DateTime2:
-                    fields.Add(new NewField(col.Name, NewFieldType.DateTime2));
+                    boundField = new NewField(col.Name, NewFieldType.DateTime2);
                     break;
                 case DdlTypeKind.Decimal:
                 {
@@ -512,12 +529,17 @@ public static class DdlBinder
                         // evidence/r-q-wire/dec-ddl-precision-limits records ACE 3700/3701 on ACCDB ADO; refusal kept until lowered.
                         return Fail(BindOpen("NotModelled.DdlDecimalPrecision", $"DECIMAL({precision}, {scale}) on column '{col.Name}' is outside 1..28 / 0..precision"), out failure);
                     }
-                    fields.Add(new NewField(col.Name, NewFieldType.Decimal, Precision: (byte)precision, Scale: (byte)scale, ImplicitDecimalPrecision: implicitPrecision));
+                    boundField = new NewField(col.Name, NewFieldType.Decimal, Precision: (byte)precision, Scale: (byte)scale, ImplicitDecimalPrecision: implicitPrecision);
                     break;
                 }
                 default:
                     return Fail(BindOpen("NotModelled.DdlFieldType", $"CREATE TABLE column '{col.Name}' type {col.DataType.Kind} is not modelled in SchemaWriter"), out failure);
             }
+            if (col.DefaultExpression is not null)
+            {
+                boundField = boundField with { DefaultValue = col.DefaultExpression };
+            }
+            fields.Add(boundField);
         }
 
         List<NewIndex>? indexes = null;
@@ -1257,7 +1279,7 @@ public static class DdlBinder
 
     // ---- DROP INDEX ------------------------------------------------------------------------------------------------
 
-    private static BoundDdl? BindDropIndex(DropIndexStatement stmt, ISqlDatabase database, out SqlFailure? failure)
+    private static BoundDdl? BindDropIndex(DropIndexStatement stmt, ISqlDatabase database, out SqlFailure? failure, SchemaRoute route = SchemaRoute.Sql)
     {
         if (IsLinked(database, stmt.TableName))
         {
@@ -1291,7 +1313,12 @@ public static class DdlBinder
             // r-def-expr-sql/ddl-drop-and-missing-objects -> 3281.
             return Fail(BindAce(3281, SqlMessages.CannotDeleteRelatedObject), out failure);
         }
-        return Fail(BindOpen("NotModelled.DdlDropIndex", "DROP INDEX is not modelled in SchemaWriter"), out failure);
+        if (route != SchemaRoute.Sql)
+        {
+            return Fail(BindOpen("NotModelled.DdlDropIndex", $"DROP INDEX on {route} route is not recorded (evidence/r-q44-ddl-alter-types/dropcon-drop-index-* records DAO/SQL only)"), out failure);
+        }
+        failure = null;
+        return new BoundDdl(stmt, BoundDdlKind.DropIndex, DropIndex: new DropIndexRequest(stmt.TableName, index.Name, route));
     }
 
     // ---- ALTER TABLE -----------------------------------------------------------------------------------------------
@@ -1318,7 +1345,7 @@ public static class DdlBinder
         if (inUse)
         {
             // r-def-cursor-dao/err-drop-missing-index-column: 3211 is recorded for plain ALTER TABLE DROP COLUMN and before 3381.
-            if (stmt.Action is DropColumnsAlterAction && actionErr is { IsNotModelled: true } or { Number: 3381 })
+            if (stmt.Action is DropColumnsAlterAction && actionErr is null or { IsNotModelled: true } or { Number: 3381 })
             {
                 return Fail(BindAce(3211, SqlMessages.TableInUse(stmt.TableName)), out failure);
             }
@@ -1412,7 +1439,68 @@ public static class DdlBinder
                 {
                     return BindAce(3190, SqlMessages.TooManyFields);
                 }
-                return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE ADD COLUMN is not modelled in SchemaWriter");
+                if (addCols.Columns.Count != 1)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE ADD COLUMN with multiple columns in one statement is not modelled in SchemaWriter");
+                }
+                DdlColumnDef addCol = addCols.Columns[0];
+                if (addCol.Constraints.Count > 0)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' with inline constraints is not modelled in SchemaWriter");
+                }
+                if (addCol.WithCompression)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' WITH COMPRESSION is not modelled in SchemaWriter");
+                }
+                if (addCol.Nullability == DdlNullability.Null)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' with explicit NULL clause is not modelled in SchemaWriter");
+                }
+                bool addRequired = addCol.Nullability == DdlNullability.NotNull;
+                if (addRequired && addCol.DataType.Kind is not (DdlTypeKind.Long or DdlTypeKind.Text))
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' {addCol.DataType.Kind} NOT NULL is not recorded (evidence/r-q44/add-notnull-*, add-text-notnull-empty-* and r-q49/ddl-default-alter-ado-* record LONG and TEXT NOT NULL only)");
+                }
+                if (addCol.DefaultExpression is not null && route != SchemaRoute.Ado)
+                {
+                    return BindOpen("NotModelled.DdlDefault", $"ALTER TABLE ADD COLUMN '{addCol.Name}' DEFAULT on {route} route is not recorded");
+                }
+                NewField addField;
+                switch (addCol.DataType.Kind)
+                {
+                    case DdlTypeKind.Long:
+                        addField = new NewField(addCol.Name, NewFieldType.Long, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    case DdlTypeKind.Text:
+                    {
+                        int size = addCol.DataType.Size ?? 255;
+                        if (size == 0)
+                        {
+                            return BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) on ALTER TABLE ADD COLUMN '{addCol.Name}' is not modelled in SchemaWriter");
+                        }
+                        addField = new NewField(addCol.Name, NewFieldType.Text, Size: size, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    }
+                    case DdlTypeKind.DateTime:
+                        addField = new NewField(addCol.Name, NewFieldType.DateTime, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    case DdlTypeKind.Memo:
+                        addField = new NewField(addCol.Name, NewFieldType.Memo, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    case DdlTypeKind.BigInt:
+                        addField = new NewField(addCol.Name, NewFieldType.BigInt, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    case DdlTypeKind.DateTime2:
+                        addField = new NewField(addCol.Name, NewFieldType.DateTime2, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    default:
+                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' of type {addCol.DataType.Kind} is not recorded (evidence/r-q44 and r-q49 record Long, Text, DateTime, Memo, BigInt, and DateTime2)");
+                }
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.AlterAddColumn,
+                    AlterAddColumn: new AlterAddColumnRequest(stmt.TableName, addField, route));
+                return null;
             }
 
             case AddConstraintAlterAction addCon:
@@ -1637,11 +1725,122 @@ public static class DdlBinder
                 {
                     return typeErr;
                 }
-                return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE ALTER COLUMN is not modelled in SchemaWriter");
+                NewFieldType targetType;
+                int targetSize = 0;
+                switch (alterCol.DataType.Kind)
+                {
+                    case DdlTypeKind.Long:
+                        targetType = NewFieldType.Long;
+                        break;
+                    case DdlTypeKind.Double:
+                        targetType = NewFieldType.Double;
+                        break;
+                    case DdlTypeKind.Text:
+                    {
+                        int sz = alterCol.DataType.Size ?? 255;
+                        if (sz == 0)
+                        {
+                            return BindOpen("NotModelled.DdlTextZeroSize", $"TEXT(0) in ALTER TABLE ALTER COLUMN '{existing.Name}' is not modelled in SchemaWriter");
+                        }
+                        targetType = NewFieldType.Text;
+                        targetSize = sz;
+                        break;
+                    }
+                    default:
+                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ALTER COLUMN '{existing.Name}' to type {alterCol.DataType.Kind} is not recorded (evidence/r-q44 and r-q49 record Long, Double, and Text)");
+                }
+                bool sameTypeAndSize =
+                    (existing.TypeCode == NativeTypes.Long && !existing.IsAutoNumber && targetType == NewFieldType.Long)
+                    || (existing.TypeCode == NativeTypes.Double && targetType == NewFieldType.Double)
+                    || (existing.TypeCode == NativeTypes.Text && targetType == NewFieldType.Text && existing.Length == targetSize * 2);
+                if (sameTypeAndSize)
+                {
+                    if (alterCol.DefaultExpression is not null)
+                    {
+                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ALTER COLUMN '{existing.Name}' keeping type/size while setting DEFAULT is not recorded (use SET DEFAULT or change Text width as in r-q49/ddl-default-alter-ado-*)");
+                    }
+                    if (alterCol.Nullability == DdlNullability.NotNull)
+                    {
+                        boundPlan = new BoundDdl(
+                            stmt,
+                            BoundDdlKind.AlterModifyColumn,
+                            AlterModifyColumn: new AlterModifyColumnRequest(stmt.TableName, existing.Name, AlterColumnKind.SetRequired, Route: route));
+                        return null;
+                    }
+                    if (alterCol.Nullability == DdlNullability.Null)
+                    {
+                        boundPlan = new BoundDdl(
+                            stmt,
+                            BoundDdlKind.AlterModifyColumn,
+                            AlterModifyColumn: new AlterModifyColumnRequest(stmt.TableName, existing.Name, AlterColumnKind.ClearRequiredNoOp, Route: route));
+                        return null;
+                    }
+                    return BindOpen("NotModelled.DdlAlterTable", $"no-op ALTER TABLE ALTER COLUMN '{existing.Name}' with unchanged type/size and no NULL/NOT NULL clause is not recorded");
+                }
+                if (alterCol.Nullability != DdlNullability.Unspecified)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ALTER COLUMN '{existing.Name}' combining a type/size change with {alterCol.Nullability} is not recorded");
+                }
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.AlterModifyColumn,
+                    AlterModifyColumn: new AlterModifyColumnRequest(
+                        stmt.TableName,
+                        existing.Name,
+                        AlterColumnKind.ModifyTypeOrSize,
+                        TargetType: targetType,
+                        TargetSize: targetSize,
+                        Route: route,
+                        DefaultValue: alterCol.DefaultExpression));
+                return null;
+            }
+
+            case SetDefaultAlterAction setDef:
+            {
+                if (!TryResolveFieldName(setDef.ColumnName, tableColNames, sortOrder, out int existingIdx, out SqlFailure? lookupUndecided))
+                {
+                    return lookupUndecided!;
+                }
+                if (existingIdx < 0)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ALTER COLUMN '{setDef.ColumnName}' SET DEFAULT on nonexistent column is not recorded");
+                }
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.AlterModifyColumn,
+                    AlterModifyColumn: new AlterModifyColumnRequest(
+                        stmt.TableName,
+                        table.Columns[existingIdx].Name,
+                        AlterColumnKind.SetDefault,
+                        Route: route,
+                        DefaultValue: setDef.DefaultExpression));
+                return null;
+            }
+
+            case DropDefaultAlterAction dropDef:
+            {
+                if (!TryResolveFieldName(dropDef.ColumnName, tableColNames, sortOrder, out int existingIdx, out SqlFailure? lookupUndecided))
+                {
+                    return lookupUndecided!;
+                }
+                if (existingIdx < 0)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ALTER COLUMN '{dropDef.ColumnName}' DROP DEFAULT on nonexistent column is not recorded");
+                }
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.AlterModifyColumn,
+                    AlterModifyColumn: new AlterModifyColumnRequest(
+                        stmt.TableName,
+                        table.Columns[existingIdx].Name,
+                        AlterColumnKind.DropDefault,
+                        Route: route));
+                return null;
             }
 
             case DropColumnsAlterAction dropCols:
             {
+                string? canonicalSingle = null;
                 foreach (string name in dropCols.ColumnNames)
                 {
                     if (!TryResolveFieldName(name, tableColNames, sortOrder, out int existingIdx, out SqlFailure? lookupUndecided))
@@ -1662,11 +1861,20 @@ public static class DdlBinder
                     bool inIndex = table.PhysicalIndexes.Any(pi => pi.Columns.Any(ic => ic.PhysicalNumber == existing.PhysicalNumber));
                     if (inIndex)
                     {
-                        // r-def-expr-sql/ddl-alter-column-forms, r-sql-2-3/act-ddl-columns-indexes -> 3280.
+                        // r-def-expr-sql/ddl-alter-column-forms, r-sql-2-3/act-ddl-columns-indexes, r-q44/dropcol-indexed-* -> 3280.
                         return BindAce(3280, SqlMessages.CannotDeleteIndexedField);
                     }
+                    canonicalSingle ??= existing.Name;
                 }
-                return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP COLUMN is not modelled in SchemaWriter");
+                if (dropCols.ColumnNames.Count != 1 || canonicalSingle is null)
+                {
+                    return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP COLUMN with multiple columns in one statement is not modelled in SchemaWriter");
+                }
+                boundPlan = new BoundDdl(
+                    stmt,
+                    BoundDdlKind.AlterDropColumn,
+                    AlterDropColumn: new AlterDropColumnRequest(stmt.TableName, canonicalSingle, route));
+                return null;
             }
 
             case DropConstraintAlterAction dropCon:
@@ -1674,18 +1882,50 @@ public static class DdlBinder
                 LogicalIndex? idx = table.LogicalIndexes.FirstOrDefault(li => NamesEqual(li.Name, dropCon.ConstraintName));
                 if (idx is not null)
                 {
-                    // r-txn-1/ddl-relation-querydef-property-rollback: dropping a foreign-key constraint (IndexType == 2)
+                    // r-txn-1/ddl-relation-querydef-property-rollback, r-q44/dropcon-fk-*: dropping a foreign-key constraint (IndexType == 2)
                     // removes the relationship itself; dropping a primary/unique index referenced by a relationship fails 3281.
-                    if (idx.IndexType != 2 && database is ISqlSchemaDatabase sd && sd.IsIndexInRelationship(stmt.TableName, idx.Name))
+                    if (idx.IndexType == 2)
+                    {
+                        if (route != SchemaRoute.Sql)
+                        {
+                            return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT (foreign key) on {route} route is not recorded (evidence/r-q44-ddl-alter-types/dropcon-fk-* records DAO/SQL only)");
+                        }
+                        boundPlan = new BoundDdl(
+                            stmt,
+                            BoundDdlKind.DropForeignKey,
+                            DropForeignKey: new DeleteRelationRequest(idx.Name, route));
+                        return null;
+                    }
+                    if (database is ISqlSchemaDatabase sd && sd.IsIndexInRelationship(stmt.TableName, idx.Name))
                     {
                         // r-def-expr-sql/ddl-drop-and-missing-objects -> 3281.
                         return BindAce(3281, SqlMessages.CannotDeleteRelatedObject);
                     }
-                    return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP CONSTRAINT is not modelled in SchemaWriter");
+                    if (route != SchemaRoute.Sql)
+                    {
+                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT (index/PK/UNIQUE) on {route} route is not recorded (evidence/r-q44-ddl-alter-types/dropcon-pk-*, dropcon-uq-* record DAO/SQL only)");
+                    }
+                    boundPlan = new BoundDdl(
+                        stmt,
+                        BoundDdlKind.DropIndex,
+                        DropIndex: new DropIndexRequest(stmt.TableName, idx.Name, route));
+                    return null;
                 }
                 if (database is ISqlSchemaDatabase sd2 && sd2.HasRelationshipNamed(stmt.TableName, dropCon.ConstraintName))
                 {
-                    return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP CONSTRAINT (foreign key) is not modelled in SchemaWriter");
+                    return BindOpen("NotModelled.DdlAlterTable", "ALTER TABLE DROP CONSTRAINT (foreign key without matching child FK index) is not modelled in SchemaWriter");
+                }
+                if (database is ISqlSchemaDatabase sdCheck && sdCheck.OpenSchemaWriter(out _)?.HasCheckConstraint(stmt.TableName, dropCon.ConstraintName) == true)
+                {
+                    if (route != SchemaRoute.Ado)
+                    {
+                        return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE DROP CONSTRAINT on CHECK constraint '{dropCon.ConstraintName}' via {route} is not recorded (evidence/r-q44-ddl-alter-types/dropcon-check-* records ADO only)");
+                    }
+                    boundPlan = new BoundDdl(
+                        stmt,
+                        BoundDdlKind.DropCheckConstraint,
+                        DropCheckConstraint: new DropCheckConstraintRequest(stmt.TableName, dropCon.ConstraintName, route));
+                    return null;
                 }
                 // r-def-expr-sql/ddl-drop-and-missing-objects: ALTER TABLE Dp2 DROP CONSTRAINT Nope -> 3755.
                 return BindAce(3755, SqlMessages.CheckConstraintDoesNotExist(dropCon.ConstraintName));
@@ -1827,9 +2067,15 @@ public static class DdlExecutor
             // Unpublished schema changes live in the Workspace overlay, which CatalogBootstrap.Open does not yet read.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "DDL inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
         }
-        if (plan.Kind is BoundDdlKind.CreateTable or BoundDdlKind.CreateIndex or BoundDdlKind.AddCheckConstraint or BoundDdlKind.AddForeignKey && schemaDb.PageCount >= 510)
+        if (plan.Kind is BoundDdlKind.CreateTable
+            or BoundDdlKind.CreateIndex
+            or BoundDdlKind.AddCheckConstraint
+            or BoundDdlKind.AddForeignKey
+            or BoundDdlKind.AlterAddColumn
+            or BoundDdlKind.AlterModifyColumn
+            && schemaDb.PageCount >= 510)
         {
-            // SchemaWriter.CompileCreateTable/CreateIndex/AddCheckConstraint/AddForeignKey encodes inline maps with basePage=0 (MapPages.Initialize), which
+            // SchemaWriter encodes inline maps with basePage=0 (MapPages.Initialize), which
             // only admits page numbers < 512 (CalcDb.Format/IndexPages.cs EncodeInline). Refuse honestly instead of throwing.
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaWriterInlineMapRange", $"file has {schemaDb.PageCount} pages; SchemaWriter's inline map encoder only handles pages < 512"));
         }
@@ -1850,6 +2096,12 @@ public static class DdlExecutor
             BoundDdlKind.DropTable => writer.DropTable(database.Workspace, plan.DropTable!),
             BoundDdlKind.AddCheckConstraint => writer.AddCheckConstraint(database.Workspace, plan.AddCheckConstraint!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
             BoundDdlKind.AddForeignKey => writer.AddForeignKey(database.Workspace, plan.AddForeignKey!, schemaDb.NowDateBits(), schemaDb.NowDateBits()),
+            BoundDdlKind.AlterAddColumn => writer.AlterAddColumn(database.Workspace, plan.AlterAddColumn!, schemaDb.NowDateBits()),
+            BoundDdlKind.AlterModifyColumn => writer.AlterModifyColumn(database.Workspace, plan.AlterModifyColumn!, schemaDb.NowDateBits()),
+            BoundDdlKind.AlterDropColumn => writer.AlterDropColumn(database.Workspace, plan.AlterDropColumn!, schemaDb.NowDateBits()),
+            BoundDdlKind.DropIndex => writer.DropIndex(database.Workspace, plan.DropIndex!, schemaDb.NowDateBits()),
+            BoundDdlKind.DropForeignKey => writer.DeleteRelation(database.Workspace, plan.DropForeignKey!, schemaDb.NowDateBits()),
+            BoundDdlKind.DropCheckConstraint => writer.DropCheckConstraint(database.Workspace, plan.DropCheckConstraint!, schemaDb.NowDateBits()),
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
@@ -1885,12 +2137,34 @@ public static class DdlExecutor
 
     private static string FormatSchemaErrorMessage(int errNum, BoundDdl plan) => errNum switch
     {
+        3000 => SqlMessages.TypeMismatch,
         3001 => SqlMessages.InvalidArgument,
         3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
         3022 => SqlMessages.DuplicateIndexValue,
         3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? plan.AddForeignKey?.ForeignKey.Name ?? ""),
+        3280 => SqlMessages.CannotDeleteIndexedField,
+        3355 => FormatUnrecognizedDefaultMessage(plan),
+        3372 => SqlMessages.NoSuchIndex(plan.DropIndex?.IndexName ?? "", plan.DropIndex?.Table ?? ""),
+        3755 => SqlMessages.CheckConstraintDoesNotExist(plan.DropCheckConstraint?.ConstraintName ?? ""),
         _ => $"ACE schema error {errNum}",
     };
+
+    private static string FormatUnrecognizedDefaultMessage(BoundDdl plan)
+    {
+        if (plan.CreateTable is { } ct)
+        {
+            foreach (NewField f in ct.Fields)
+            {
+                if (f.DefaultValue is not null
+                    && SchemaWriter.ClassifyDefaultValue(f.Type, f.DefaultValue, out string? fieldName, out _) == DefaultValueCheckKind.UnrecognizedField
+                    && fieldName is not null)
+                {
+                    return SqlMessages.UnrecognizedFieldInDefault(fieldName, ct.Name);
+                }
+            }
+        }
+        return "ACE schema error 3355";
+    }
 
     /// <summary>
     /// DDL on a read-only Database handle (R-SQL-2 / R-LOCK-1; qualified.md, <c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c>):
@@ -1955,12 +2229,12 @@ public static class DdlExecutor
             case AlterTableStatement { Action: AddColumnsAlterAction addCols } at:
             {
                 // Call 14: valid ALTER TABLE T ADD COLUMN W LONG -> 3370 when alone. DdlBinder.Bind validates the
-                // table, column names, types and constraints without writing and returns NotModelled.DdlAlterTable
-                // only when no bind error (3371, 3380, 3292, 3211, ...) precedes it.
+                // table, column names, types and constraints without writing and succeeds (or returns NotModelled.DdlAlterTable
+                // for valid-but-unmodelled ADD shapes) only when no bind error (3371, 3380, 3292, 3211, ...) precedes it.
                 if (!addCols.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2))
                 {
-                    _ = DdlBinder.Bind(at, database, out SqlFailure? bindFailure, SchemaRoute.Sql);
-                    if (bindFailure is { NotModelled: "NotModelled.DdlAlterTable" })
+                    BoundDdl? bound = DdlBinder.Bind(at, database, out SqlFailure? bindFailure, SchemaRoute.Sql);
+                    if (bound is not null || bindFailure is { NotModelled: "NotModelled.DdlAlterTable" })
                     {
                         return ReadOnlyDdlRefusal(at.TableName);
                     }
@@ -1971,8 +2245,6 @@ public static class DdlExecutor
         return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle"));
     }
 
-    // BoundDdl has no AlterAddColumn kind (DdlBinder.Bind stops at NotModelled.DdlAlterTable), so only the bound
-    // DropTable, CreateTable and CreateIndex plans reach this overload.
     private static ActionOutcome ReadOnlyBoundRefusal(BoundDdl plan, ActionErrorSource source)
     {
         if (source == ActionErrorSource.Ado)
@@ -1985,6 +2257,8 @@ public static class DdlExecutor
             BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create
                 && !create.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2) => ReadOnlyDdlRefusal(create.TableName),
             BoundDdlKind.CreateIndex when plan.Syntax is CreateIndexStatement index => ReadOnlyDdlRefusal(index.TableName),
+            BoundDdlKind.AlterAddColumn when plan.Syntax is AlterTableStatement { Action: AddColumnsAlterAction addCols } at
+                && !addCols.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2) => ReadOnlyDdlRefusal(at.TableName),
             _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle")),
         };
     }
