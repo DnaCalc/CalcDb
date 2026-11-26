@@ -598,16 +598,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             return Fail(3011, DaoErrors.ObjectNotFound(name));
         }
-        return OpenLocalTableRecordset(entry, type, options.Value, lockEdit);
+        return OpenLocalTableRecordset(entry, type, options.Value, lockEdit, fromTableDef: false);
     }
 
     /// <summary>
     /// Shared local-table recordset open used by both <c>Database.OpenRecordset</c> and <c>_TableDef.OpenRecordset</c>
     /// (one open path; W-08 / R-DAO-1 / R-FMT-1): system tables fail 3112 from <c>DAO.Database</c> for recorded forms
-    /// (<c>r-fmt-1/read-accdb-*</c> and <c>read-mdb-*</c> type 4; <c>r-cat-1/msys-queries*</c> type 1); user tables open
-    /// table-type (1), dynaset (2), snapshot (4) or forward-only (8).
+    /// (<c>r-fmt-1/read-accdb-*</c> and <c>read-mdb-*</c> <c>_TableDef.OpenRecordset(4)</c>; <c>r-cat-1/msys-queries*</c>
+    /// <c>Database.OpenRecordset("MSysQueries", 1)</c>); user tables open table-type (1), dynaset (2), snapshot (4) or
+    /// forward-only (8).
     /// </summary>
-    internal CallResult OpenLocalTableRecordset(CatalogEntry entry, int? type, int options, int? lockEdit)
+    internal CallResult OpenLocalTableRecordset(CatalogEntry entry, int? type, int options, int? lockEdit, bool fromTableDef)
     {
         if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
         {
@@ -621,13 +622,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             // r-fmt-1/read-accdb-* and read-mdb-* (52 records, tdf.OpenRecordset(4)): 3112 from DAO.Database;
             // r-cat-1/msys-queries and msys-queries-compacted (call 19, db.OpenRecordset("MSysQueries", 1)): 3112 from DAO.Database.
-            if (type is 1 or 4 && options == 0 && lockEdit is null)
+            bool recordedSystemOpen = fromTableDef ? type == 4 : type == 1;
+            if (recordedSystemOpen && options == 0 && lockEdit is null)
             {
                 return Fail(3112, SqlMessages.NoReadPermission(entry.Name));
             }
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.SystemTableOpenRecordset",
-                $"OpenRecordset on system table '{entry.Name}' with Type={type?.ToString() ?? "(omitted)"}, Options={options}, LockEdit={lockEdit?.ToString() ?? "(omitted)"} (only Type 1 and 4 with Options 0 and omitted LockEdit are recorded)"));
+                $"OpenRecordset on system table '{entry.Name}' (fromTableDef={fromTableDef}) with Type={type?.ToString() ?? "(omitted)"}, Options={options}, LockEdit={lockEdit?.ToString() ?? "(omitted)"} is not recorded"));
         }
         if (Definition(entry, out string? viewFailure) is not { } table)
         {
@@ -1124,7 +1126,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put inside a transaction (qualified.md r-q37 Open)"));
         }
-        if (Hold(tableDef.Name) != TableHold.None)
+        if (SharedHold(tableDef.Name) != TableHold.None)
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.{property} put on '{tableDef.Name}' while a recordset of it is open (qualified.md r-q37 Open)"));
         }

@@ -365,11 +365,12 @@ internal static class ActionRoute
         if (outcome.Failure is { IsNotModelled: true, NotModelled: "NotModelled.ReadOnlyAction", ReadOnlyInfo: not null }
             && source == ActionErrorSource.Database
             && PeerWritableFor(database) is { } peer
-            && IsRecordedPeerReadWriteStatement(sql, ddl))
+            && IsRecordedPeerReadWriteStatement(sql, ddl, options))
         {
             outcome = ActionExecutor.Execute(sql, peer.Sql, options, values, source);
         }
-        return Published(database, caller, outcome, source, ref recordsAffected);
+        bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
+        return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
     }
 
     /// <summary>Run a QueryDef's bound action plan with the QueryDef's parameter values (missing ones: 3061, SQL-B).</summary>
@@ -389,7 +390,7 @@ internal static class ActionRoute
         }
         ActionOutcome outcome = ActionExecutor.Execute(plan, database.Sql, options, values, ActionErrorSource.QueryDef);
         RecordsAffectedState state = default;
-        CallResult result = Published(database, caller, outcome, ActionErrorSource.QueryDef, ref state);
+        CallResult result = Published(database, caller, outcome, ActionErrorSource.QueryDef, options, isInsertValues: false, ref state);
         if (result.Failure?.Kind != FailureKind.NotModelled)
         {
             recordsAffected = state.Current;
@@ -471,7 +472,7 @@ internal static class ActionRoute
     public static CallResult Failed(DatabaseObject database, DaoObject caller, SqlFailure failure, ref int recordsAffected)
     {
         RecordsAffectedState state = default;
-        CallResult result = Published(database, caller, ActionOutcome.Fail(failure), ActionErrorSource.QueryDef, ref state);
+        CallResult result = Published(database, caller, ActionOutcome.Fail(failure), ActionErrorSource.QueryDef, options: 0, isInsertValues: false, ref state);
         if (result.Failure?.Kind != FailureKind.NotModelled)
         {
             recordsAffected = state.Current;
@@ -479,7 +480,7 @@ internal static class ActionRoute
         return result;
     }
 
-    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, ActionErrorSource source, ref RecordsAffectedState recordsAffected)
+    private static CallResult Published(DatabaseObject database, DaoObject caller, ActionOutcome outcome, ActionErrorSource source, int options, bool isInsertValues, ref RecordsAffectedState recordsAffected)
     {
         if (outcome.Failure is not { } failure)
         {
@@ -488,18 +489,21 @@ internal static class ActionRoute
         }
         if (failure.IsNotModelled)
         {
-            // Read-only ACCDB alone (!ReadWriteBeside): surface the SQL layer's structured ReadOnlyInfo for recorded
-            // Database.Execute DDL (3370: r-q43-schema-lval-index/ro-ddl-disc-accdb calls 11-14) and DML
-            // (INSERT ... VALUES 3073: r-q18-statements/ro-ins-fail, ro-ins-plain, ro-excl-ins-fail;
-            // UPDATE 3073 call 15, DELETE 3086 call 16 of ro-ddl-disc-accdb). Unrecorded cases (ReadOnlyInfo null,
-            // e.g. INSERT ... SELECT or invalid DDL precedence, QueryDef.Execute, MDB, or unrecorded peer-RW forms)
-            // stay refused by name as NotModelled.ReadOnlyAction.
+            // Read-only ACCDB alone (!ReadWriteBeside, !WasSharedWithWritablePeer): surface the SQL layer's structured
+            // ReadOnlyInfo for recorded Database.Execute forms:
+            // - INSERT ... VALUES (3073): shared options 0 / 128 (r-q18-statements/ro-ins-plain, ro-ins-fail) and
+            //   exclusive options 128 (r-q18-statements/ro-excl-ins-fail).
+            // - DDL (3370: DROP/CREATE TABLE, CREATE INDEX, ALTER TABLE ADD COLUMN), UPDATE (3073), DELETE (3086):
+            //   shared open with options 0 (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 11-16).
+            // Unrecorded cases (ReadOnlyInfo null, unrecorded options/exclusive combinations, QueryDef.Execute, MDB,
+            // post-peer-close, or unrecorded peer-RW forms) stay refused by name as NotModelled.ReadOnlyAction.
             if (failure.NotModelled == "NotModelled.ReadOnlyAction"
                 && failure.ReadOnlyInfo is { } readOnlyInfo
                 && source == ActionErrorSource.Database
                 && database.Profile.IsAce
                 && !database.WasSharedWithWritablePeer
-                && !ReadWriteBeside(database))
+                && !ReadWriteBeside(database)
+                && IsRecordedReadOnlyAloneMode(database.Exclusive, options, isInsertValues))
             {
                 recordsAffected.Fail();
                 return caller.Fail(readOnlyInfo.Number, readOnlyInfo.Message);
@@ -510,17 +514,28 @@ internal static class ActionRoute
         return caller.Fail(failure.Number, failure.Message);
     }
 
-    private static bool IsRecordedPeerReadWriteStatement(string sql, bool ddl)
+    private static bool IsRecordedReadOnlyAloneMode(bool exclusive, int options, bool isInsertValues) =>
+        isInsertValues
+            ? (!exclusive && options is 0 or 128) || (exclusive && options == 128)
+            : !exclusive && options == 0;
+
+    private static bool IsInsertValues(string sql)
+    {
+        using ActionSyntax? action = ActionParser.Parse(sql, out _);
+        return action is { Kind: ActionKind.InsertValues };
+    }
+
+    private static bool IsRecordedPeerReadWriteStatement(string sql, bool ddl, int options)
     {
         if (ddl)
         {
-            return DdlParser.Parse(sql, out _, allowAdoCheck: false) is
-                CreateTableStatement
-                or CreateIndexStatement
-                or DropTableStatement { TableNames.Count: 1 };
+            return options == 0
+                && DdlParser.Parse(sql, out _, allowAdoCheck: false) is
+                    CreateTableStatement
+                    or CreateIndexStatement
+                    or DropTableStatement { TableNames.Count: 1 };
         }
-        using ActionSyntax? action = ActionParser.Parse(sql, out _);
-        return action is { Kind: ActionKind.InsertValues };
+        return options is 0 or 128 && IsInsertValues(sql);
     }
 
     /// <summary>

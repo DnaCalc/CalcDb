@@ -506,7 +506,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     private CallResult OpenRecordset(nint typeArg, nint optionsArg)
     {
         CatalogEntry? liveEntry = _owner.Database.Catalog.LocalTables(_owner.Database.Format)
-            .FirstOrDefault(e => e.Id == _entry.Id);
+            .FirstOrDefault(e => e.Id == _entry.Id && string.Equals(e.Name, _entry.Name, StringComparison.OrdinalIgnoreCase));
         if (liveEntry is null)
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -539,7 +539,7 @@ internal sealed unsafe class TableDefObject : DaoObject
                 "NotModelled.TableDefOpenRecordsetType",
                 $"TableDef.OpenRecordset with Type {recordsetType} is not recorded (only dbOpenSnapshot (4) is recorded)"));
         }
-        return _owner.Database.OpenLocalTableRecordset(liveEntry, type: 4, options: 0, lockEdit: null);
+        return _owner.Database.OpenLocalTableRecordset(liveEntry, type: 4, options: 0, lockEdit: null, fromTableDef: true);
     }
 
     protected override void OnFinalRelease()

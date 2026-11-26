@@ -241,8 +241,9 @@ public sealed unsafe class DaoTableDefOpenAndReadOnlyActionTests : IDisposable
 
             // r-cat-1/msys-queries (call 19): Database.OpenRecordset("MSysQueries", 1) also fails 3112 from DAO.Database.
             FailsDao(Method(ro, "OpenRecordset", "MSysQueries", 1), 3112, "DAO.Database", SqlMessages.NoReadPermission("MSysQueries"));
-            // Unrecorded system-table OpenRecordset type (dynaset 2) stays refused by name.
+            // Unrecorded Database.OpenRecordset system-table types (dynaset 2, snapshot 4) stay refused by name.
             FailsNotModelled(Method(ro, "OpenRecordset", "MSysQueries", 2), "NotModelled.SystemTableOpenRecordset");
+            FailsNotModelled(Method(ro, "OpenRecordset", "MSysObjects", 4), "NotModelled.SystemTableOpenRecordset");
             Ok(Method(ro, "Close"));
         }
     }
@@ -283,10 +284,12 @@ public sealed unsafe class DaoTableDefOpenAndReadOnlyActionTests : IDisposable
         FailsNotModelled(Method(t1, "OpenRecordset", 4, 0), "NotModelled.TableDefOpenRecordsetOptions");
         FailsNotModelled(Method(t1, "OpenRecordset", 4, "bad"), "NotModelled.TableDefOpenRecordsetOptions");
 
-        // Deleted/stale TableDef held across DROP TABLE refuses by name.
+        // Deleted/stale TableDef held across DROP TABLE refuses by name, even if a later CREATE TABLE reuses its page ID.
         Ok(Method(db, "Execute", "CREATE TABLE StaleT (ID LONG)", 128));
         TableDefObject stale = Recover<TableDefObject>(Ok(Get(tdfs, "Item", "StaleT")));
         Ok(Method(db, "Execute", "DROP TABLE StaleT", 128));
+        FailsNotModelled(Method(stale, "OpenRecordset", 4), "NotModelled.TableDefOpenRecordsetStale");
+        Ok(Method(db, "Execute", "CREATE TABLE ReusedPageT (ID LONG)", 128));
         FailsNotModelled(Method(stale, "OpenRecordset", 4), "NotModelled.TableDefOpenRecordsetStale");
 
         // Closed Database invalidates held TableDef with 3420 from DAO.TableDef (r-dao-1-err-1/life-database-workspace-close).
@@ -337,9 +340,12 @@ public sealed unsafe class DaoTableDefOpenAndReadOnlyActionTests : IDisposable
 
         Ok(Method(dro, "Close"));
 
-        // Exclusive read-only ACCDB (r-q18-statements/ro-excl-ins-fail): INSERT VALUES fails 3073.
+        // Exclusive read-only ACCDB (r-q18-statements/ro-excl-ins-fail): INSERT VALUES with 128 fails 3073;
+        // unrecorded exclusive read-only DDL/UPDATE/DELETE stay NotModelled.ReadOnlyAction.
         DatabaseObject droExcl = OpenDb(eng, path, exclusive: true, readOnly: true);
         FailsDao(Method(droExcl, "Execute", "INSERT INTO T VALUES (2, 20)", 128), 3073, "DAO.Database", SqlMessages.NotUpdateable);
+        FailsNotModelled(Method(droExcl, "Execute", "DROP TABLE T"), "NotModelled.ReadOnlyAction");
+        FailsNotModelled(Method(droExcl, "Execute", "UPDATE T SET V = 20"), "NotModelled.ReadOnlyAction");
         Ok(Method(droExcl, "Close"));
 
         Assert.Equal(beforeHash, SHA256.HashData(File.ReadAllBytes(path)));
@@ -403,6 +409,7 @@ public sealed unsafe class DaoTableDefOpenAndReadOnlyActionTests : IDisposable
         FailsNotModelled(Method(dro, "Execute", "UPDATE T SET V = 99"), "NotModelled.ReadOnlyAction");
         FailsNotModelled(Method(dro, "Execute", "DELETE FROM T"), "NotModelled.ReadOnlyAction");
         FailsNotModelled(Method(dro, "Execute", "ALTER TABLE T ADD COLUMN W LONG"), "NotModelled.ReadOnlyAction");
+        FailsNotModelled(Method(dro, "Execute", "CREATE TABLE U3 (ID LONG)", 128), "NotModelled.ReadOnlyAction");
         FailsNotModelled(Method(dro, "Execute", "INSERT INTO T (ID, V) SELECT ID + 100, V FROM T"), "NotModelled.ReadOnlyAction");
 
         // Closing dro leaves drw open and invalidates dro with 3420; closing drw flushes the shared session cleanly.
