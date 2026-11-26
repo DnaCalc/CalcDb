@@ -576,9 +576,12 @@ public sealed class SchemaWriterTests
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 0, Scale: 0)], SchemaRoute.Ado))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 29, Scale: 0)], SchemaRoute.Ado))?.NotWritten);
         Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Decimal, Precision: 10, Scale: 11)], SchemaRoute.Ado))?.NotWritten);
-        // DAO route non-Long column types remain refused (LvProp/TypeInfo unprobed).
-        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Memo)], SchemaRoute.Dao))?.NotWritten);
-        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Double)], SchemaRoute.Dao))?.NotWritten);
+        // DAO route non-Decimal types are now recorded (evidence/r-q46-dao-ddl-multi/cf-memo-accdb, cf-double-accdb);
+        // fixed-width Binary and seeded Counter remain refused on the DAO route.
+        Assert.Null(w.Check(new("T", [new("n", NewFieldType.Memo)], SchemaRoute.Dao)));
+        Assert.Null(w.Check(new("T", [new("n", NewFieldType.Double)], SchemaRoute.Dao)));
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Binary, Size: 8)], SchemaRoute.Dao))?.NotWritten);
+        Assert.NotNull(w.Check(new("T", [new("n", NewFieldType.Counter, Seed: 10, Increment: 2)], SchemaRoute.Dao))?.NotWritten);
 
         // Index refusals on a created table.
         session.Create(new("T", [Long("a"), Long("b"), Long("c"), new("d", NewFieldType.Single)], SchemaRoute.Sql), 1, 1);
@@ -981,17 +984,30 @@ public sealed class SchemaWriterTests
     }
 
     [Fact]
-    public void R_q26_dao_non_long_shapes_stay_refused_by_name()
+    public void R_q26_dao_non_long_shapes_admitted_by_rq46_and_unrecorded_dao_types_stay_refused()
     {
         byte[] fixture = Fixture();
         using var session = new Session(fixture);
         SchemaWriter w = session.Writer();
-        CreateTableRequest[] refused =
+        // Multi-field mixed Text/Long DAO drafts are now recorded in evidence/r-q46-dao-ddl-multi/cf-multi-mixed-accdb.
+        CreateTableRequest[] admitted =
         [
             new("T", [Text("B"), Text("A")], SchemaRoute.Dao),
             new("T", [Text("B"), Long("A")], SchemaRoute.Dao),
             new("T", [Long("B"), Text("A")], SchemaRoute.Dao),
             new("T", [Text("B"), Long("C"), Text("A")], SchemaRoute.Dao),
+        ];
+        foreach (CreateTableRequest req in admitted)
+        {
+            Assert.Null(w.Check(req));
+        }
+
+        // Unrecorded DAO draft shapes (Decimal, fixed-width Binary, seeded Counter) remain refused by name.
+        CreateTableRequest[] refused =
+        [
+            new("T", [new("D", NewFieldType.Decimal, Precision: 18, Scale: 2)], SchemaRoute.Dao),
+            new("T", [new("B", NewFieldType.Binary, Size: 8)], SchemaRoute.Dao),
+            new("T", [new("ID", NewFieldType.Counter, Seed: 5, Increment: 2)], SchemaRoute.Dao),
         ];
         foreach (CreateTableRequest req in refused)
         {
@@ -1394,8 +1410,10 @@ public sealed class SchemaWriterTests
         using (var session = new Session(mdb))
         {
             SchemaWriter w = session.Writer();
-            // DAO route on MDB stays refused by name.
-            Assert.NotNull(w.Check(new("T", [Long("n")], SchemaRoute.Dao))?.NotWritten);
+            // Shared Jet 4 MDB DAO route is now recorded (evidence/r-q46-dao-ddl-multi/cf-*-mdb);
+            // draft Decimal on Jet 4 MDB DAO route stays refused by name.
+            Assert.Null(w.Check(new("T", [Long("n")], SchemaRoute.Dao)));
+            Assert.NotNull(w.Check(new("T", [new("D", NewFieldType.Decimal, Precision: 18, Scale: 2)], SchemaRoute.Dao))?.NotWritten);
             // Unrecorded Jet 4 MDB column types (COUNTER(seed, inc), VARBINARY, bare DECIMAL) stay refused by name;
             // explicit ADO DECIMAL(p, s) on Jet 4 MDB is recorded (evidence/r-q36-publication-bytes/create-nullfix-mdb).
             Assert.Contains("Jet 4 MDB", w.Check(new("T", [new("ID", NewFieldType.Counter, Seed: 100, Increment: 5)], SchemaRoute.Sql))?.NotWritten);
@@ -2554,12 +2572,13 @@ public sealed class SchemaWriterTests
             Assert.Equal(afterT1, shared.File.Snapshot());
         }
 
-        // 3. Exclusive Jet 4 MDB: 1 Long inline field admitted; shared MDB, 2-field MDB, and spilling MDB refused by name.
+        // 3. Jet 4 MDB DAO TableDefs.Append: exclusive 1-Long inline and shared MDB (evidence/r-q46-dao-ddl-multi/cf-*-mdb)
+        //    are admitted; exclusive 2-field MDB and exclusive spilling MDB stay refused by name.
         using (var exclMdb = new Session(mdb, exclusive: true))
         {
             SchemaWriter w = exclMdb.Writer();
             Assert.Null(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: true));
-            Assert.NotNull(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: false)?.NotWritten);
+            Assert.Null(w.Check(new("T1", [Long("ID")], SchemaRoute.Dao), exclusiveSession: false));
             Assert.Contains("exclusive session", w.Check(new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
             Assert.Contains("inline limit", w.Check(new("T3", [Long("nnnnnnnn")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
         }

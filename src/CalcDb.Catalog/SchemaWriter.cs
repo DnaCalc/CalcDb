@@ -63,7 +63,8 @@ public sealed record NewField(
     byte Scale = 0,
     bool Required = false,
     bool UnicodeCompression = false,
-    bool ImplicitDecimalPrecision = false);
+    bool ImplicitDecimalPrecision = false,
+    bool AllowZeroLength = false);
 
 /// <summary>
 /// An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, its option flags
@@ -101,16 +102,20 @@ public enum FieldNameClash : byte
 }
 
 /// <summary>
-/// A named FOREIGN KEY constraint (II-11 §28; evidence/r-q34-ddl-sweep/fk-*, alt-fk-*): its constraint name,
-/// child column name(s), referenced parent table and parent column name(s), and whether <c>ON DELETE CASCADE</c>
-/// (ADO <c>CREATE TABLE</c> only; <c>grbit = 0x00001000</c> and logical-index byte 22 = <c>0x01</c>) is requested.
+/// A named FOREIGN KEY / DAO Relation descriptor (II-11 §28; evidence/r-q34-ddl-sweep/fk-*, alt-fk-*;
+/// evidence/r-q46-dao-ddl-multi/rel-*; evidence/r-q47-bigint-expr-edges/rel-*): its name, child column name(s),
+/// referenced parent table and parent column name(s), and attributes (<see cref="OnDeleteCascade"/>,
+/// <see cref="OnUpdateCascade"/>, <see cref="Unique"/>, <see cref="DontEnforce"/>).
 /// </summary>
 public sealed record NewForeignKey(
     string Name,
     IReadOnlyList<string> Fields,
     string ReferencedTable,
     IReadOnlyList<string> ReferencedFields,
-    bool OnDeleteCascade = false);
+    bool OnDeleteCascade = false,
+    bool OnUpdateCascade = false,
+    bool Unique = false,
+    bool DontEnforce = false);
 
 /// <summary>A typed CREATE TABLE request over the catalog mutation service (II-11 §28, F-114; II-06 catalog mutation).</summary>
 public sealed record CreateTableRequest(
@@ -130,6 +135,12 @@ public sealed record CreateIndexRequest(string Table, NewIndex Index, SchemaRout
 public sealed record DropTableRequest(string Table, SchemaRoute Route);
 
 /// <summary>
+/// A typed attached <c>TableDef.CreateField</c> + <c>Fields.Append</c> request
+/// (W-07 / R-CAT-1, R-DAO-1; evidence/r-q46-dao-ddl-multi/cf-attached-scalar-*, cf-attached-decimal-*).
+/// </summary>
+public sealed record AddFieldRequest(string Table, NewField Field, SchemaRoute Route);
+
+/// <summary>
 /// A typed <c>ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)</c> request (II-11 §28;
 /// evidence/r-q34-ddl-sweep/alt-check-*, r-q30-sql-check, r-q31-sql-check-2).
 /// </summary>
@@ -141,13 +152,20 @@ public sealed record AddCheckConstraintRequest(
     SchemaRoute Route);
 
 /// <summary>
-/// A typed <c>ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (...) REFERENCES ... (...)</c> request (II-11 §28;
-/// evidence/r-q34-ddl-sweep/alt-fk-empty-accdb-dao, alt-fk-empty-mdb-dao, alt-fk-rows-accdb-dao).
+/// A typed <c>ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (...) REFERENCES ... (...)</c> or DAO
+/// <c>Relations.Append</c> request (II-11 §28; evidence/r-q34-ddl-sweep/alt-fk-*; evidence/r-q46-dao-ddl-multi/rel-*;
+/// evidence/r-q47-bigint-expr-edges/rel-*).
 /// </summary>
 public sealed record AddForeignKeyRequest(
     string Table,
     NewForeignKey ForeignKey,
     SchemaRoute Route);
+
+/// <summary>
+/// A typed DAO <c>Relations.Delete(Name)</c> request (W-07 / R-CAT-1, R-DAO-1;
+/// evidence/r-q47-bigint-expr-edges/reldel-*, rel-multi-parent-*).
+/// </summary>
+public sealed record DeleteRelationRequest(string Name, SchemaRoute Route);
 
 /// <summary>A field-level validation property written by DAO <c>Field.ValidationRule</c>, <c>Field.ValidationText</c>, or <c>Field.AllowZeroLength</c> puts (W-08; evidence/r-q37-valrule-put, evidence/r-q42-field-rule-and).</summary>
 public enum FieldValidationProperty : byte
@@ -202,13 +220,17 @@ public sealed class SchemaWriter
     /// </summary>
     private const short RelationshipObjectType = 8;
     private const int RelationshipsContainerId = 0x0F000003;
+    private const int UniqueRelationGrbit = 0x00000001;
+    private const int DontEnforceRelationGrbit = 0x00000002;
+    private const int UpdateCascadeGrbit = 0x00000100;
     private const int DeleteCascadeGrbit = 0x00001000;
     private const byte ParentRelatedTableType = 0x01;
     private const byte ChildRelatedTableType = 0x02;
     private const byte ForeignKeyUpdateActionNone = 0x00;
+    private const byte ForeignKeyUpdateActionCascade = 0x01;
     private const byte ForeignKeyDeleteActionNone = 0x00;
     private const byte ForeignKeyDeleteActionCascade = 0x01;
-    private const string FirstParentRelationshipIndexName = ".rB";
+    private static string ParentRelationshipIndexName(uint logicalId) => $".r{(char)('A' + logicalId)}";
 
     /// <summary>
     /// The flags of the column blocks ACE writes: fixed 03, variable 02, AutoNumber (COUNTER/AUTOINCREMENT) 07
@@ -248,10 +270,16 @@ public sealed class SchemaWriter
     private const uint InlineMapPageLimit = 512;
 
     /// <summary>
-    /// The one property a DAO-appended field stores: <c>Required</c> False, with the DDL flag 01, in the field's column
-    /// map (evidence/r-q11-ddl-closure/append-dao: the 51-byte MR2 blob in LvProp).
+    /// DAO field properties written to <c>MSysObjects.LvProp</c> on <c>TableDefs.Append</c> and attached
+    /// <c>Fields.Append</c> (evidence/r-q11-ddl-closure/append-dao, evidence/r-q46-dao-ddl-multi/cf-*):
+    /// <c>AllowZeroLength</c> (Text and Memo only, written FIRST) and <c>Required</c> (all non-Counter fields, written
+    /// SECOND for Text/Memo). DAO encodes Boolean True as <c>0xFF</c> and False as <c>0x00</c>
+    /// (evidence/r-q46-dao-ddl-multi/cf-attached-scalar-* page 46).
     /// </summary>
     private static readonly StoredProperty DaoFieldRequired = new("Required", 0x01, NativeTypes.Boolean, [0x00]);
+    private static readonly StoredProperty DaoFieldRequiredTrue = new("Required", 0x01, NativeTypes.Boolean, [0xFF]);
+    private static readonly StoredProperty DaoFieldAllowZeroLengthFalse = new("AllowZeroLength", 0x01, NativeTypes.Boolean, [0x00]);
+    private static readonly StoredProperty DaoFieldAllowZeroLengthTrue = new("AllowZeroLength", 0x01, NativeTypes.Boolean, [0xFF]);
 
     /// <summary>
     /// The one property a SQL/ADO <c>NOT NULL</c> column stores: <c>Required</c> True, with the DDL flag 01, in the
@@ -342,9 +370,7 @@ public sealed class SchemaWriter
     private SchemaRefusal? CheckCore(CreateTableRequest request, out PreparedForeignKey? preparedFk, bool exclusiveSession = false)
     {
         preparedFk = null;
-        bool allowJet4Mdb = request.Route is SchemaRoute.Sql or SchemaRoute.Ado
-            || (request.Route == SchemaRoute.Dao && exclusiveSession);
-        if (FileRefusal(allowJet4Mdb: allowJet4Mdb, out bool isJet4Mdb) is { } file)
+        if (FileRefusal(allowJet4Mdb: true, out bool isJet4Mdb) is { } file)
         {
             return file;
         }
@@ -360,9 +386,10 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "a table without fields (ACE's refusal through SQL is not recorded)");
         }
-        if (exclusiveSession && request.Route == SchemaRoute.Dao && request.Fields.Count != 1)
+        if (exclusiveSession && request.Route == SchemaRoute.Dao
+            && (request.Fields.Count != 1 || request.Fields[0].Type != NewFieldType.Long))
         {
-            return new SchemaRefusal(null, $"DAO TableDefs.Append with {request.Fields.Count} fields in an exclusive session is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records 1 Long field)");
+            return new SchemaRefusal(null, $"DAO TableDefs.Append with {request.Fields.Count} field(s) (first {request.Fields[0].Type}) in an exclusive session is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* records 1 Long field)");
         }
         for (int i = 1; i < request.Fields.Count; i++)
         {
@@ -395,17 +422,26 @@ public sealed class SchemaWriter
         for (int i = 0; i < request.Fields.Count; i++)
         {
             NewField f = request.Fields[i];
-            if (request.Route == SchemaRoute.Dao && f.Type != NewFieldType.Long)
+            if (request.Route == SchemaRoute.Dao)
             {
-                return new SchemaRefusal(null, f.Type == NewFieldType.Text
-                    ? $"DAO-appended Text field {f.Name}: recorded (r-q26 dao-ba-text, dao-bca-mixed, dao-fixed-var-ba, dao-var-fixed-ba: TypeInfo 09 04 00 00, two properties per Text column), not yet implemented"
-                    : $"DAO-appended {f.Type} field {f.Name}: the DAO route writes only Long fields (r-q11 append-dao, r-q15 lv-dao-*, r-q26 dao-*-long)");
+                if (f.Type is NewFieldType.Binary or NewFieldType.Decimal or NewFieldType.BigInt or NewFieldType.DateTime2)
+                {
+                    return new SchemaRefusal(null, $"DAO-appended draft {f.Type} field {f.Name}: not recorded on draft TableDefs.Append (evidence/r-q46-dao-ddl-multi/cf-* records the 13 non-Decimal types; attached Decimal is recorded on AddField only)");
+                }
+                if (f.Type == NewFieldType.Counter && (f.Seed is not null || f.Increment is not null))
+                {
+                    return new SchemaRefusal(null, $"DAO-appended Counter field {f.Name} with explicit Seed/Increment is not recorded (evidence/r-q46-dao-ddl-multi/cf-autoincr-* records default AutoNumber=0, Increment=1)");
+                }
+            }
+            if (f.AllowZeroLength)
+            {
+                return new SchemaRefusal(null, $"CREATE TABLE / draft TableDefs.Append field {f.Name} with AllowZeroLength=True is not recorded (evidence/r-q46-dao-ddl-multi/cf-attached-scalar-* records AllowZeroLength=True on attached Fields.Append only)");
             }
             if (f.Required)
             {
                 if (request.Route == SchemaRoute.Dao)
                 {
-                    return new SchemaRefusal(null, $"DAO-appended field {f.Name} with Required=True is not recorded (DAO route records Required=False)");
+                    return new SchemaRefusal(null, $"DAO-appended field {f.Name} with Required=True is not recorded (DAO draft route records Required=False; attached Fields.Append records Required=True in cf-attached-scalar-*)");
                 }
                 if (f.Type is not (NewFieldType.Long or NewFieldType.Text or NewFieldType.Memo))
                 {
@@ -427,9 +463,9 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Binary:
                 case NewFieldType.VarBinary:
-                    if (isJet4Mdb && f.Type == NewFieldType.VarBinary)
+                    if (isJet4Mdb && f.Type == NewFieldType.VarBinary && request.Route != SchemaRoute.Dao)
                     {
-                        return new SchemaRefusal(null, $"VarBinary field {f.Name} in a Jet 4 MDB is not recorded (evidence/r-q34-ddl-sweep/lval-pk-ole-memo-mdb-dao records fixed Binary only)");
+                        return new SchemaRefusal(null, $"VarBinary field {f.Name} in a Jet 4 MDB on {request.Route} route is not recorded (evidence/r-q34-ddl-sweep/lval-pk-ole-memo-mdb-dao records fixed Binary on SQL; evidence/r-q46-dao-ddl-multi/cf-binary16-mdb records variable Binary on DAO)");
                     }
                     if (f.Size is < 1 or > 510)
                     {
@@ -492,7 +528,13 @@ public sealed class SchemaWriter
                     lvalCount++;
                     break;
                 case NewFieldType.YesNo:
+                    break;
                 case NewFieldType.Guid:
+                    if (request.Route == SchemaRoute.Dao)
+                    {
+                        // evidence/r-q46-dao-ddl-multi/cf-guid-accdb, cf-guid-mdb, cf-multi-mixed-*: DAO dbGUID is fixed (Flags=0x03, 16B).
+                        fixedBytes += 16;
+                    }
                     break;
                 case NewFieldType.Byte:
                     fixedBytes += 1;
@@ -719,10 +761,13 @@ public sealed class SchemaWriter
                 return fkRefusal;
             }
         }
-        if (request.Route == SchemaRoute.Dao
-            && CheckLvPropPlan(request, request.Fields, DaoFieldRequired, allowMultiLvalWrite: true) is { } daoLvRefusal)
+        if (request.Route == SchemaRoute.Dao)
         {
-            return daoLvRefusal;
+            List<DaoPropertyStep> daoSteps = BuildDaoPropertySteps(request.Fields);
+            if (daoSteps.Count > 0 && CheckLvPropSteps(request, daoSteps, allowMultiLvalWrite: true) is { } daoLvRefusal)
+            {
+                return daoLvRefusal;
+            }
         }
         if (exclusiveSession && request.Route == SchemaRoute.Dao)
         {
@@ -732,11 +777,13 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, $"DAO TableDefs.Append in an exclusive session whose LvProp ({firstBlob.Length} bytes) exceeds the {LongValuePlan.InlinePayloadMax}-byte inline limit is not recorded (evidence/r-q41-create-session-counter/ddl-tabledefs-append-* keeps LvProp inline)");
             }
         }
-        if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado
-            && requiredFields.Count > 0
-            && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalWrite: false) is { } sqlLvRefusal)
+        if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado && requiredFields.Count > 0)
         {
-            return sqlLvRefusal;
+            List<DaoPropertyStep> sqlSteps = BuildSinglePropertySteps(requiredFields, SqlFieldRequired);
+            if (CheckLvPropSteps(request, sqlSteps, allowMultiLvalWrite: false) is { } sqlLvRefusal)
+            {
+                return sqlLvRefusal;
+            }
         }
         if (isJet4Mdb && (bigIntCount > 0 || dateTime2Count > 0))
         {
@@ -747,8 +794,70 @@ public sealed class SchemaWriter
         return null;
     }
 
+    private readonly record struct DaoPropertyStep(string[] Names, PropertyMap[] Maps, string FieldName);
+
+    private static StoredProperty[] DaoPropertiesFor(NewField f) => f.Type switch
+    {
+        // evidence/r-q46-dao-ddl-multi/cf-autoincr-accdb, cf-autoincr-mdb, cf-multi-mixed-*: AutoNumber writes 0 properties.
+        NewFieldType.Counter => [],
+        // evidence/r-q46-dao-ddl-multi/cf-text20-*, cf-text-default-accdb, cf-memo-*, cf-multi-mixed-*, cf-attached-scalar-*:
+        // Text and Memo write AllowZeroLength FIRST, then Required SECOND, each in its own commit.
+        NewFieldType.Text or NewFieldType.Memo =>
+        [
+            f.AllowZeroLength ? DaoFieldAllowZeroLengthTrue : DaoFieldAllowZeroLengthFalse,
+            f.Required ? DaoFieldRequiredTrue : DaoFieldRequired,
+        ],
+        // All other non-Decimal types + attached Decimal write Required alone (1 step).
+        _ => [f.Required ? DaoFieldRequiredTrue : DaoFieldRequired],
+    };
+
+    private static List<DaoPropertyStep> BuildDaoPropertySteps(
+        IReadOnlyList<NewField> fields,
+        IReadOnlyList<string>? baseNames = null,
+        IReadOnlyList<PropertyMap>? baseMaps = null)
+    {
+        List<string> names = baseNames is null ? [] : [.. baseNames];
+        List<PropertyMap> maps = baseMaps is null ? [] : [.. baseMaps];
+        List<DaoPropertyStep> steps = [];
+        foreach (NewField f in fields)
+        {
+            StoredProperty[] props = DaoPropertiesFor(f);
+            if (props.Length == 0)
+            {
+                continue;
+            }
+            int mapIdx = maps.Count;
+            List<StoredProperty> colProps = [];
+            maps.Add(new PropertyMap(PropertySectionKind.ColumnValues, f.Name, []));
+            foreach (StoredProperty prop in props)
+            {
+                if (!names.Contains(prop.Name, StringComparer.Ordinal))
+                {
+                    names.Add(prop.Name);
+                }
+                colProps.Add(prop);
+                maps[mapIdx] = new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [.. colProps]);
+                steps.Add(new DaoPropertyStep([.. names], [.. maps], f.Name));
+            }
+        }
+        return steps;
+    }
+
+    private static List<DaoPropertyStep> BuildSinglePropertySteps(IReadOnlyList<NewField> propFields, StoredProperty property)
+    {
+        List<DaoPropertyStep> steps = new(propFields.Count);
+        string[] names = [property.Name];
+        List<PropertyMap> maps = new(propFields.Count);
+        foreach (NewField f in propFields)
+        {
+            maps.Add(new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [property]));
+            steps.Add(new DaoPropertyStep(names, [.. maps], f.Name));
+        }
+        return steps;
+    }
+
     /// <summary>
-    /// Pre-commit validation for per-field <c>LvProp</c> updates (DAO <c>TableDefs.Append</c> commits <c>1..N</c>, and
+    /// Pre-commit validation for per-property <c>LvProp</c> updates (DAO <c>TableDefs.Append</c> commits <c>1..P</c>, and
     /// SQL/ADO <c>CREATE TABLE ... NOT NULL</c> steps <c>1..R</c> inside its single commit) so no write is ever
     /// published and then refused: simulates every step <c>1..M</c> before writing and refuses by name:
     /// <list type="bullet">
@@ -763,13 +872,11 @@ public sealed class SchemaWriter
     /// <item>a worst-case allocation reaching page <see cref="InlineMapPageLimit"/> (512, inline usage-map limit).</item>
     /// </list>
     /// </summary>
-    private SchemaRefusal? CheckLvPropPlan(
+    private SchemaRefusal? CheckLvPropSteps(
         CreateTableRequest request,
-        IReadOnlyList<NewField> propFields,
-        StoredProperty property,
+        IReadOnlyList<DaoPropertyStep> steps,
         bool allowMultiLvalWrite)
     {
-        PropertyMap[] allMaps = [.. propFields.Select(f => new PropertyMap(PropertySectionKind.ColumnValues, f.Name, [property]))];
         int pageDataCapacity = _d.PageSize - _d.DataPage.SlotBase;
         bool hasLval = false;
         int lvalFree = 0;
@@ -777,9 +884,10 @@ public sealed class SchemaWriter
         int lvalPagesNeeded = 0;
         string routeLabel = request.Route == SchemaRoute.Dao ? "DAO TableDefs.Append" : $"{request.Route} CREATE TABLE NOT NULL";
 
-        for (int k = 1; k <= allMaps.Length; k++)
+        for (int k = 0; k < steps.Count; k++)
         {
-            int blobBytes = PropertyBlob.Encode(allMaps[..k]).Length;
+            DaoPropertyStep step = steps[k];
+            int blobBytes = PropertyBlob.Encode(step.Names, step.Maps).Length;
             if (blobBytes > LongValuePlan.SingleRowPayloadMax)
             {
                 return new SchemaRefusal(null, $"{routeLabel} property blob ({blobBytes} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded");
@@ -811,17 +919,17 @@ public sealed class SchemaWriter
                 lvalSlots++;
                 if (!allowMultiLvalWrite && lvalSlots > 1)
                 {
-                    return new SchemaRefusal(null, $"{routeLabel} after field {k} ({propFields[k - 1].Name}) would write a second MSysObjects.LvProp LVAL slot inside one commit (in-page LVAL compaction inside one SQL/ADO commit is not recorded)");
+                    return new SchemaRefusal(null, $"{routeLabel} after step {k + 1} ({step.FieldName}) would write a second MSysObjects.LvProp LVAL slot inside one commit (in-page LVAL compaction inside one SQL/ADO commit is not recorded)");
                 }
                 lvalFree = pageDataCapacity - (lvalSlots * _d.DataPage.SlotEntryBytes) - blobBytes;
             }
             if (lvalFree <= LvalFreeMapLeavesAtOrBelow)
             {
-                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({propFields[k - 1].Name}) would keep {lvalFree} free bytes (<= {LvalFreeMapLeavesAtOrBelow}): leaving MSysObjects.LvProp's free map is not recorded");
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after step {k + 1} ({step.FieldName}) would keep {lvalFree} free bytes (<= {LvalFreeMapLeavesAtOrBelow}): leaving MSysObjects.LvProp's free map is not recorded");
             }
             if (lvalFree < LvalFreeMapStaysAtOrAbove)
             {
-                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after field {k} ({propFields[k - 1].Name}) would keep {lvalFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection Open)");
+                return new SchemaRefusal(null, $"MSysObjects.LvProp LVAL page after step {k + 1} ({step.FieldName}) would keep {lvalFree} free bytes (between {LvalFreeMapLeavesAtOrBelow + 1} and {LvalFreeMapStaysAtOrAbove - 1}): whether it leaves the long-value free map is not recorded (R-FMT-2 LV form selection Open)");
             }
         }
 
@@ -1054,13 +1162,14 @@ public sealed class SchemaWriter
                 default,
                 _pageCount);
         }
+        List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         ulong extent = _pageCount;
         uint tdefPage = 0;
         RowId objectRow = default;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved),
+            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, firstDaoStep: daoSteps.Count > 0 ? daoSteps[0] : null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved),
             allowPendingDeferredKind: absorbedDeferred is not null ? DeferredCatalogCommitKind.TableDefAppend : null);
         if (!accepted.Accepted)
         {
@@ -1075,14 +1184,24 @@ public sealed class SchemaWriter
         {
             workspace.ClearDeferredCatalogCommit(_cache);
         }
-        for (int k = 2; k <= request.Fields.Count; k++)
+        if (daoSteps.Count == 0)
         {
-            int fieldCount = k;
+            // evidence/r-q46-dao-ddl-multi/cf-autoincr-accdb, cf-autoincr-mdb: AutoNumber-only table writes 0 LvProp
+            // properties (no Commit 2 to force Commit 1 synchronously, so ACE's write-behind writes Commit 1 at ~500ms:
+            // 0 B at after-append-return, +1 at after-append-1500ms, +1 at after-close = +2 total). Per
+            // TransactionCoordinator's write-behind choice (W-05/resolution-live-rollback), CalcDb publishes Commit 1
+            // synchronously at return (+1) and queues no trailing deferred TableDef commit, then writes +1 at Close,
+            // matching ACE's after-append-1500ms and after-close images byte-for-byte.
+            return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
+        }
+        for (int s = 1; s < daoSteps.Count; s++)
+        {
+            DaoPropertyStep propStep = daoSteps[s];
             ulong published = extent;
             AcceptOutcome step = workspace.AcceptSchemaChange(
                 _cache,
                 ObjectSemantics,
-                p => CompileDaoFieldProperties(p, objectRow, request.Fields, fieldCount, dateUpdateBits, published, out extent));
+                p => CompileDaoPropertyStep(p, objectRow, propStep, dateUpdateBits, published, sessionReserved: [], useSessionExtentReservation: false, allowSharedLvalPage: false, out extent));
             if (!Published(step))
             {
                 // The table row and the commits before this one are published: the table exists, and the outcome names
@@ -1094,7 +1213,7 @@ public sealed class SchemaWriter
                     {
                         Error = step.Error,
                         Open = step.Open == MutationOpen.None && step.Error is null ? MutationOpen.Publication : step.Open,
-                        Detail = $"DAO TableDefs.Append of {request.Name}: commit {k} of {request.Fields.Count} (LvProp through field {request.Fields[k - 1].Name}) failed after the table row was published: {why}",
+                        Detail = $"DAO TableDefs.Append of {request.Name}: commit {s + 1} of {daoSteps.Count} (LvProp step for field {propStep.FieldName}) failed after the table row was published: {why}",
                     },
                     Math.Max(published, _cache.KnownExtentPages),
                     PublishedAny: true);
@@ -1186,7 +1305,7 @@ public sealed class SchemaWriter
         AcceptOutcome createStep = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, firstOnly, preparedFk: null, dateCreateBits, dateUpdateBits, firstLvProp, out tdefPage, out mapPage, out objectRow, out aceRows, out extent));
+            p => CompileCreateTable(p, firstOnly, preparedFk: null, dateCreateBits, dateUpdateBits, firstLvProp, firstDaoStep: null, out tdefPage, out mapPage, out objectRow, out aceRows, out extent));
         if (!Published(createStep))
         {
             return new SchemaOutcome(null, createStep, _pageCount);
@@ -1486,29 +1605,80 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// <c>ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (...) REFERENCES ... (...)</c> on an empty or populated
-    /// ACCDB or Jet 4 MDB table (evidence/r-q34-ddl-sweep/alt-fk-empty-accdb-dao, alt-fk-empty-mdb-dao,
-    /// alt-fk-rows-accdb-dao): inserts the Type 8 <c>MSysObjects</c> relationship row (under container
-    /// <c>0x0F000003</c>), its two <c>MSysACEs</c> rows (<see cref="DefaultAdminSecurity.NewRelationshipAces"/>), and
-    /// <c>MSysRelationships</c> row(s) (allocating <c>MSysRelationships</c>'s first data page when empty before the
-    /// child FK leaf page), then allocates and writes the child FK index leaf (bulk-populated over existing rows via
-    /// <see cref="BuildIndexLeaf"/> after verifying every child key exists in the parent PK), appends the child's map
-    /// row, rewrites both child and parent (<c>.rB</c>) TableDefs, and updates <c>DateUpdate</c> on both tables.
+    /// <c>ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (...) REFERENCES ... (...)</c> (SQL route;
+    /// evidence/r-q34-ddl-sweep/alt-fk-*) or DAO <c>Relations.Append</c> (DAO route;
+    /// evidence/r-q46-dao-ddl-multi/rel-*, evidence/r-q47-bigint-expr-edges/rel-*): inserts the Type 8
+    /// <c>MSysObjects</c> relationship row (under container <c>0x0F000003</c>), its two <c>MSysACEs</c> rows
+    /// (<see cref="DefaultAdminSecurity.NewRelationshipAces"/>), and <c>MSysRelationships</c> row(s), and for enforced
+    /// relationships attaches the parent <c>.r*</c> and child FK indexes (sharing an existing <c>0x81</c> unique index
+    /// when <see cref="NewForeignKey.Unique"/> matches it, supporting self-referencing tables, and using session extent
+    /// reservation on the DAO route). Refuses DAO errors 3366, 3012, 3011, 3368, and 3201 with ACE's exact side effects.
     /// </summary>
-    public SchemaOutcome AddForeignKey(TransactionCoordinator workspace, AddForeignKeyRequest request, ulong dateCreateBits, ulong dateUpdateBits)
+    public SchemaOutcome AddForeignKey(TransactionCoordinator workspace, AddForeignKeyRequest request, ulong dateCreateBits, ulong dateUpdateBits) =>
+        AddForeignKey(workspace, request, dateCreateBits, dateUpdateBits, out _);
+
+    public SchemaOutcome AddForeignKey(
+        TransactionCoordinator workspace,
+        AddForeignKeyRequest request,
+        ulong dateCreateBits,
+        ulong dateUpdateBits,
+        out string? missingTableName)
     {
+        missingTableName = null;
         if (FileRefusal(allowJet4Mdb: true) is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
         }
         if (workspace.Depth > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE ADD CONSTRAINT FOREIGN KEY inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "adding a FOREIGN KEY / Relation inside BeginTrans is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*, evidence/r-q46-dao-ddl-multi/rel-*)"), default, _pageCount);
         }
-        if (request.Route != SchemaRoute.Sql)
+        if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Dao))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {request.Route} route is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"AddForeignKey on {request.Route} route is not recorded (only DAO/SQL routes are recorded)"), default, _pageCount);
         }
+        NewForeignKey fk = request.ForeignKey;
+        bool isDao = request.Route == SchemaRoute.Dao;
+        if (isDao && workspace.IsExclusiveSession(_cache) && IsJet4Mdb(PinCopy(0) ?? []))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append in an exclusive Jet 4 MDB session is not recorded (r-q46/r-q47 record shared Jet 4 MDB; r-cat-1b/create-rel records exclusive ACCDB)"), default, _pageCount);
+        }
+        if (isDao && fk.Fields.Count == 0)
+        {
+            // evidence/r-q46-dao-ddl-multi/rel-errors-accdb, rel-errors-mdb (after-err-nofields),
+            // evidence/r-dao-1-err-1/draft-index-relation: 3366 with 0 bytes written.
+            return new SchemaOutcome(new SchemaRefusal(3366, null), default, _pageCount);
+        }
+        if (isDao)
+        {
+            // Check duplicate relation name (3012, 0 bytes written) and valid name before table existence (3011)
+            // (evidence/r-q46-dao-ddl-multi/rel-errors-accdb, rel-errors-mdb: after-err-dup -> 0 bytes).
+            if (CheckDuplicateRelationName(fk.Name, out bool isDuplicate, out string? dupFailure) && isDuplicate)
+            {
+                return new SchemaOutcome(new SchemaRefusal(3012, null), default, _pageCount);
+            }
+            if (dupFailure is not null)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, dupFailure), default, _pageCount);
+            }
+            if (!IsValidName(fk.Name))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relation name '{fk.Name}' is not a valid identifier"), default, _pageCount);
+            }
+            if (FindTable(fk.ReferencedTable) is null)
+            {
+                missingTableName = fk.ReferencedTable;
+                BufferRelationRollbackCounts(workspace);
+                return new SchemaOutcome(new SchemaRefusal(3011, null), default, _pageCount);
+            }
+            if (FindTable(request.Table) is null)
+            {
+                missingTableName = request.Table;
+                BufferRelationRollbackCounts(workspace);
+                return new SchemaOutcome(new SchemaRefusal(3011, null), default, _pageCount);
+            }
+        }
+
         if (FindTable(request.Table) is not { } childEntry)
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on {request.Table}, which the catalog does not list"), default, _pageCount);
@@ -1519,19 +1689,693 @@ public sealed class SchemaWriter
         }
         if (childTable.LongValueMaps.Count > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on table '{childEntry.Name}' with Memo/Ole columns is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"adding a FOREIGN KEY / Relation on child table '{childEntry.Name}' with Memo/Ole columns is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*, evidence/r-q46-dao-ddl-multi/rel-*)"), default, _pageCount);
         }
         (string Name, byte TypeCode, bool IsAutoNumber)[] childCols = [.. childTable.Columns.Select(c => (c.Name, c.TypeCode, c.IsAutoNumber))];
-        if (PrepareForeignKeyState(childEntry.Name, childTable, childCols, request.ForeignKey, isAlterTable: true, request.Route, out PreparedForeignKey? prepared) is { } fkRefusal)
+        if (PrepareForeignKeyState(childEntry.Name, childTable, childCols, fk, isAlterTable: true, request.Route, out PreparedForeignKey? prepared) is { } fkRefusal)
         {
+            if (isDao && fkRefusal.Error == 3368)
+            {
+                return EmitRelation3368Rollback(workspace, fkRefusal);
+            }
+            if (isDao && fkRefusal.Error == 3201)
+            {
+                return EmitRelation3201Rollback(workspace, fkRefusal);
+            }
             return new SchemaOutcome(fkRefusal, default, _pageCount);
         }
+
+        bool publishedAny = false;
+        if (isDao)
+        {
+            // evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-accdb, rel-mismatch-3368-mdb (after-l2t-ne-live):
+            // a succeeding Relations.Append after earlier 3368 failure(s) first frees the prior 2 rolled-back pages in
+            // page 1 (+1 commit) before publishing the new relation (+1 commit, +2 total).
+            IReadOnlyList<uint> pendingRolledBack = workspace.PendingRolledBackPages(_cache);
+            if (pendingRolledBack.Count > 0)
+            {
+                AcceptOutcome freeOutcome = workspace.AcceptSchemaChange(
+                    _cache,
+                    ObjectSemantics,
+                    p => CompileFreePagesOnGlobalMap(p, pendingRolledBack));
+                if (!Published(freeOutcome))
+                {
+                    return new SchemaOutcome(null, freeOutcome, _pageCount);
+                }
+                workspace.RemoveReleasedAtClose(_cache, pendingRolledBack);
+                workspace.SetPendingRolledBackPages(_cache, []);
+                publishedAny = true;
+            }
+        }
+
+        IReadOnlyList<uint> sessionReserved = isDao ? workspace.SessionReservedPages(_cache) : [];
+        bool useExtentReservation = isDao && !workspace.HasGlobalMapActivity(_cache);
+        IReadOnlyList<PageEdit> deferredCloseEdits = isDao ? workspace.PeekDeferredCloseEdits(_cache) : [];
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileAddForeignKey(p, childEntry, childTable, request.ForeignKey, prepared!, dateCreateBits, dateUpdateBits, out extent));
-        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
+            p => CompileAddForeignKey(
+                p,
+                childEntry,
+                childTable,
+                fk,
+                prepared!,
+                dateCreateBits,
+                dateUpdateBits,
+                sessionReserved,
+                useExtentReservation,
+                deferredCloseEdits,
+                out extent));
+        bool publishedMain = Published(accepted);
+        if (publishedMain && isDao && deferredCloseEdits.Count > 0)
+        {
+            workspace.ClearDeferredCloseEdits(_cache);
+        }
+        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: publishedMain || publishedAny);
+    }
+
+    /// <summary>
+    /// DAO <c>Relations.Delete(Name)</c> on an ACCDB or Jet 4 MDB database (W-07 / R-CAT-1, R-DAO-1;
+    /// <c>evidence/r-q47-bigint-expr-edges/reldel-plain-*</c>, <c>reldel-cascades-*</c>, <c>reldel-noenforce-*</c>,
+    /// <c>rel-multi-parent-*</c>): deletes the Type 8 <c>MSysObjects</c> row, its two <c>MSysACEs</c> rows, and all
+    /// <c>MSysRelationships</c> rows (decrementing <c>RowCount</c>, leaving <c>UniqueEntryCount</c> untouched). For
+    /// enforced relationships, removes the parent <c>.r*</c> logical index without renumbering sibling logical IDs,
+    /// removes the child FK logical index (and, when unshared, its physical index, map row, and queues its root page in
+    /// <see cref="PhysicalChange.ReleasedAtClose"/>), and updates parent/child <c>DateUpdate</c>. For
+    /// <c>dbRelationDontEnforce</c>, leaves TDEFs untouched and marks a closing counter commit (+1 at Close).
+    /// </summary>
+    public SchemaOutcome DeleteRelation(TransactionCoordinator workspace, DeleteRelationRequest request, ulong dateUpdateBits)
+    {
+        if (FileRefusal(allowJet4Mdb: true) is { } file)
+        {
+            return new SchemaOutcome(file, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Delete inside BeginTrans is not recorded (evidence/r-q47-bigint-expr-edges/reldel-*)"), default, _pageCount);
+        }
+        if (workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Delete in an exclusive session is not recorded (evidence/r-q47-bigint-expr-edges/reldel-* and evidence/r-cat-1b/rel-delete-relation record shared sessions only)"), default, _pageCount);
+        }
+        if (request.Route != SchemaRoute.Dao)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DeleteRelation on {request.Route} route is not recorded (only DAO Relations.Delete is recorded)"), default, _pageCount);
+        }
+        if (RelationshipCatalog.Read(_cache, _d, _catalog, _pageCount, out string? relReadFailure) is not { } existingRelationships)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"MSysRelationships could not be read: {relReadFailure}"), default, _pageCount);
+        }
+        Relationship? targetRel = null;
+        foreach (Relationship rel in existingRelationships)
+        {
+            switch (FieldNameLookupClashOf(rel.Name, request.Name, _sortOrder, out string? nameUndecided))
+            {
+                case FieldNameClash.Duplicate:
+                    targetRel = rel;
+                    break;
+                case FieldNameClash.Undecided:
+                    return new SchemaOutcome(new SchemaRefusal(null, nameUndecided), default, _pageCount);
+            }
+            if (targetRel is not null)
+            {
+                break;
+            }
+        }
+        if (targetRel is null)
+        {
+            return new SchemaOutcome(new SchemaRefusal(3265, null), default, _pageCount);
+        }
+
+        if (SystemTable("MSysRelationships", out string? relTableFailure) is not { } relationshipsTable
+            || SystemTable("MSysACEs", out string? acesFailure) is not { } acesTable)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "system tables MSysRelationships/MSysACEs could not be read"), default, _pageCount);
+        }
+
+        // Locate Type 8 MSysObjects row, MSysACEs rows, and MSysRelationships rows.
+        TableDefinition objects = _catalog.ObjectTable;
+        IReadOnlyList<SystemRow>? objRows = SystemTables.Read(_cache, _d, _catalog, _pageCount, "MSysObjects",
+            [("Id", NativeTypes.Long), ("ParentId", NativeTypes.Long), ("Name", NativeTypes.Text), ("Type", NativeTypes.Integer)], out string? objReadFail);
+        if (objRows is null)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "MSysObjects: " + objReadFail), default, _pageCount);
+        }
+        SystemRow? relObjRow = objRows.FirstOrDefault(r =>
+            r[1].Kind == NativeKind.Long && (int)r[1].Integer == RelationshipsContainerId
+            && r[3].Kind == NativeKind.Integer && r[3].Integer == RelationshipObjectType
+            && r[2].Kind == NativeKind.Text && r[2].Text is { } n
+            && FieldNameLookupClashOf(n, targetRel.Name, _sortOrder, out _) == FieldNameClash.Duplicate);
+        if (relObjRow is null || relObjRow[0].Kind != NativeKind.Long)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"MSysObjects Type 8 row for relationship '{targetRel.Name}' was not found"), default, _pageCount);
+        }
+        int relObjId = (int)relObjRow[0].Integer;
+
+        IReadOnlyList<SystemRow>? aceRows = SystemTables.Read(_cache, _d, _catalog, _pageCount, "MSysACEs",
+            [("ObjectId", NativeTypes.Long)], out string? aceReadFail);
+        if (aceRows is null)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "MSysACEs: " + aceReadFail), default, _pageCount);
+        }
+        List<RowId> aceRowIds = [.. aceRows.Where(r => r[0].Kind == NativeKind.Long && (int)r[0].Integer == relObjId).Select(r => r.Root)];
+
+        IReadOnlyList<SystemRow>? relRows = SystemTables.Read(_cache, _d, _catalog, _pageCount, "MSysRelationships",
+            [("szRelationship", NativeTypes.Text)], out string? relRowsFail);
+        if (relRows is null)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "MSysRelationships: " + relRowsFail), default, _pageCount);
+        }
+        List<RowId> relRowIds = [.. relRows.Where(r =>
+            r[0].Kind == NativeKind.Text && r[0].Text is { } rn
+            && FieldNameLookupClashOf(rn, targetRel.Name, _sortOrder, out _) == FieldNameClash.Duplicate).Select(r => r.Root)];
+        if (relRowIds.Count == 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"MSysRelationships rows for '{targetRel.Name}' were not found"), default, _pageCount);
+        }
+
+        bool isDontEnforce = (targetRel.Attributes & DontEnforceRelationGrbit) != 0;
+        bool isJet4Mdb = IsJet4Mdb(PinCopy(0) ?? []);
+        if (targetRel.Columns.Count > 2 || (targetRel.Columns.Count > 1 && (isJet4Mdb || isDontEnforce)))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of {targetRel.Columns.Count}-column{(isDontEnforce ? " DontEnforce" : "")} relation '{targetRel.Name}' on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} is not recorded (evidence/r-q47-bigint-expr-edges/reldel-* records 1-col ACCDB/MDB; evidence/r-cat-1b/rel-delete-relation records 2-col enforced ACCDB)"), default, _pageCount);
+        }
+        CatalogEntry? parentEntry = null;
+        CatalogEntry? childEntry = null;
+        byte[]? updatedParentTdef = null;
+        byte[]? updatedChildTdef = null;
+        RowLocator? mapRowToDelete = null;
+        uint? freedLeafPage = null;
+
+        if (!isDontEnforce)
+        {
+            if (FindTable(targetRel.Table) is not { } pEntry || Table(pEntry, out string? pFail) is not { } parentTable)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"parent table '{targetRel.Table}' for relation '{targetRel.Name}' could not be read"), default, _pageCount);
+            }
+            if (FindTable(targetRel.ForeignTable) is not { } cEntry || Table(cEntry, out string? cFail) is not { } childTable)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"child table '{targetRel.ForeignTable}' for relation '{targetRel.Name}' could not be read"), default, _pageCount);
+            }
+            parentEntry = pEntry;
+            childEntry = cEntry;
+            bool isSelfRef = parentTable.FirstPage == childTable.FirstPage;
+            if (isSelfRef)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of self-referencing relation '{targetRel.Name}' is not recorded (evidence/r-q47-bigint-expr-edges/reldel-*)"), default, _pageCount);
+            }
+            if (childTable.RowCount > 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of enforced relation '{targetRel.Name}' on populated child table '{childEntry.Name}' ({childTable.RowCount} rows) is not recorded (evidence/r-q47-bigint-expr-edges/reldel-*)"), default, _pageCount);
+            }
+
+            if (TableDefEncoder.SpecOf(parentTable, out string? pSpecFail) is not { } parentSpec)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef: {pSpecFail}"), default, _pageCount);
+            }
+            if (PinCopy(parentTable.FirstPage) is not { } pStored || !LiveTableDefMatchesStored(pStored, parentSpec))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef page {parentTable.FirstPage} holds bytes its re-encoding does not reproduce (R-PRESERVE-1)"), default, _pageCount);
+            }
+
+            TableDefSpec childSpec;
+            byte[] cStored;
+            if (isSelfRef)
+            {
+                childSpec = parentSpec;
+                cStored = pStored;
+            }
+            else
+            {
+                if (TableDefEncoder.SpecOf(childTable, out string? cSpecFail) is not { } decodedChildSpec)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"child table '{childEntry.Name}' TableDef: {cSpecFail}"), default, _pageCount);
+                }
+                if (PinCopy(childTable.FirstPage) is not { } readChildStored || !LiveTableDefMatchesStored(readChildStored, decodedChildSpec))
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"child table '{childEntry.Name}' TableDef page {childTable.FirstPage} holds bytes its re-encoding does not reproduce (R-PRESERVE-1)"), default, _pageCount);
+                }
+                childSpec = decodedChildSpec;
+                cStored = readChildStored;
+            }
+
+            int childFkIdx = -1;
+            for (int i = 0; i < childSpec.LogicalIndexes.Count; i++)
+            {
+                LogicalIndexSpec li = childSpec.LogicalIndexes[i];
+                if (li.IndexType == _d.IndexDescriptor.ForeignKeyType
+                    && li.RelatedTableType == ChildRelatedTableType
+                    && FieldNameLookupClashOf(li.Name, targetRel.Name, _sortOrder, out _) == FieldNameClash.Duplicate)
+                {
+                    childFkIdx = i;
+                    break;
+                }
+            }
+            if (childFkIdx < 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"child table '{childEntry.Name}' has no FK logical index matching '{targetRel.Name}'"), default, _pageCount);
+            }
+            LogicalIndexSpec childFkLogical = childSpec.LogicalIndexes[childFkIdx];
+
+            int parentRelIdx = -1;
+            for (int i = 0; i < parentSpec.LogicalIndexes.Count; i++)
+            {
+                LogicalIndexSpec li = parentSpec.LogicalIndexes[i];
+                if (li.IndexType == _d.IndexDescriptor.ForeignKeyType
+                    && li.RelatedTableType == ParentRelatedTableType
+                    && li.RelatedTable == childTable.FirstPage
+                    && li.RelatedIndex == childFkLogical.LogicalNumber)
+                {
+                    parentRelIdx = i;
+                    break;
+                }
+            }
+            if (parentRelIdx < 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"parent table '{parentEntry.Name}' has no hidden relationship logical index referencing '{childEntry.Name}' logical index {childFkLogical.LogicalNumber}"), default, _pageCount);
+            }
+
+            List<LogicalIndexSpec> remainingChildLogicals = [.. childSpec.LogicalIndexes];
+            remainingChildLogicals.RemoveAt(childFkIdx);
+            if (isSelfRef)
+            {
+                // Remove parent hidden logical index from the same list (re-find by RelatedIndex after removal).
+                int selfParentIdx = remainingChildLogicals.FindIndex(li =>
+                    li.IndexType == _d.IndexDescriptor.ForeignKeyType
+                    && li.RelatedTableType == ParentRelatedTableType
+                    && li.RelatedTable == childTable.FirstPage
+                    && li.RelatedIndex == childFkLogical.LogicalNumber);
+                if (selfParentIdx >= 0)
+                {
+                    remainingChildLogicals.RemoveAt(selfParentIdx);
+                }
+            }
+
+            uint removedPhysNum = childFkLogical.PhysicalNumber;
+            bool physStillShared = remainingChildLogicals.Any(li => li.PhysicalNumber == removedPhysNum);
+            if (physStillShared)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of shared-physical relation '{targetRel.Name}' (physical index {removedPhysNum} shared with another index) is not recorded (evidence/r-q47-bigint-expr-edges/reldel-*)"), default, _pageCount);
+            }
+            List<PhysicalIndexSpec> remainingChildPhysicals = [.. childSpec.PhysicalIndexes];
+            if (removedPhysNum != remainingChildPhysicals.Count - 1)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of relation '{targetRel.Name}' whose physical index {removedPhysNum} is not the last physical index on '{childEntry.Name}' (count {remainingChildPhysicals.Count}) is not recorded (evidence/r-q47-bigint-expr-edges/reldel-*)"), default, _pageCount);
+            }
+            PhysicalIndexSpec removedPhys = remainingChildPhysicals[(int)removedPhysNum];
+            if (PinCopy(removedPhys.OwnedMap.Page) is not { } idxMapPage
+                || MapPages.InlinePages(idxMapPage, removedPhys.OwnedMap.Row, _d, out string? idxOwnedFail) is not { } idxOwnedPages)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of '{targetRel.Name}': FK index OwnedMap could not be read"), default, _pageCount);
+            }
+            if (idxOwnedPages.Count != 1 || idxOwnedPages[0] != removedPhys.RootPage)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of multi-page FK index on '{targetRel.Name}' ({idxOwnedPages.Count} owned pages) is not recorded (only single-page empty FK index leaf release is recorded)"), default, _pageCount);
+            }
+            mapRowToDelete = removedPhys.OwnedMap;
+            freedLeafPage = removedPhys.RootPage;
+            remainingChildPhysicals.RemoveAt((int)removedPhysNum);
+
+            TableDefSpec newChildSpec = childSpec with
+            {
+                PhysicalIndexes = remainingChildPhysicals,
+                LogicalIndexes = remainingChildLogicals,
+            };
+            updatedChildTdef = EncodeTableDefPreservingTail(newChildSpec, cStored);
+
+            if (!isSelfRef)
+            {
+                List<LogicalIndexSpec> remainingParentLogicals = [.. parentSpec.LogicalIndexes];
+                remainingParentLogicals.RemoveAt(parentRelIdx);
+                TableDefSpec newParentSpec = parentSpec with { LogicalIndexes = remainingParentLogicals };
+                updatedParentTdef = EncodeTableDefPreservingTail(newParentSpec, pStored);
+            }
+        }
+
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileDeleteRelation(
+                p,
+                relObjRow.Root,
+                acesTable,
+                aceRowIds,
+                relationshipsTable,
+                relRowIds,
+                parentEntry,
+                childEntry,
+                updatedParentTdef,
+                updatedChildTdef,
+                mapRowToDelete,
+                freedLeafPage,
+                dateUpdateBits));
+        bool published = Published(accepted);
+        if (published && freedLeafPage is null)
+        {
+            // evidence/r-q47-bigint-expr-edges/reldel-noenforce-accdb, reldel-noenforce-mdb:
+            // deleting a DontEnforce (or shared-physical) relation touches no page 1 bits, yet ACE still writes +1 on
+            // page 0 at Database.Close (+1 at return, 0 at 1500ms, +1 at Close).
+            workspace.MarkCloseCommitRequired(_cache);
+        }
+        return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: published);
+    }
+
+    private bool CheckDuplicateRelationName(string name, out bool isDuplicate, out string? failure)
+    {
+        isDuplicate = false;
+        failure = null;
+        if (RelationshipCatalog.Read(_cache, _d, _catalog, _pageCount, out string? relReadFailure) is not { } existingRelationships)
+        {
+            failure = $"MSysRelationships could not be read: {relReadFailure}";
+            return false;
+        }
+        foreach (Relationship rel in existingRelationships)
+        {
+            switch (FieldNameLookupClashOf(rel.Name, name, _sortOrder, out string? undecided))
+            {
+                case FieldNameClash.Duplicate:
+                    isDuplicate = true;
+                    return true;
+                case FieldNameClash.Undecided:
+                    failure = undecided;
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private List<PageEdit>? RelationRollbackCountEdits(out string? failure)
+    {
+        failure = null;
+        TableDefinition objects = _catalog.ObjectTable;
+        if (SystemTable("MSysACEs", out failure) is not { } aces)
+        {
+            return null;
+        }
+        int[] objectIndexes = [.. objects.PhysicalIndexes.Select(i => i.Number)];
+        int[] aceIndexes = [.. aces.PhysicalIndexes.Select(i => i.Number)];
+        // evidence/r-q46-dao-ddl-multi/rel-errors-*, evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*:
+        // each failed Relations.Append (3011, 3201, 3368) buffers MSysObjects (+1 RowCount, +1 UEC on both indexes)
+        // and MSysACEs (+2 RowCount, +1 UEC on index 0), flushed on the next catalog commit or at Database.Close.
+        return
+        [
+            new PageEdit(objects.FirstPage, new TableDefUniqueCountsDelta(objectIndexes, _d, rowCountDelta: 1), PageRole.Catalog),
+            new PageEdit(aces.FirstPage, new TableDefUniqueCountsDelta(aceIndexes, _d, rowCountDelta: 2), PageRole.Catalog),
+        ];
+    }
+
+    private void BufferRelationRollbackCounts(TransactionCoordinator workspace)
+    {
+        if (RelationRollbackCountEdits(out _) is { } edits)
+        {
+            workspace.AppendDeferredCloseEdits(_cache, edits);
+        }
+    }
+
+    private SchemaOutcome EmitRelation3201Rollback(TransactionCoordinator workspace, SchemaRefusal refused)
+    {
+        if (RelationRollbackCountEdits(out string? countFail) is not { } countEdits)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, countFail), default, _pageCount);
+        }
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        bool reserveExtent = !workspace.HasGlobalMapActivity(_cache) && sessionReserved.Count == 0;
+        AcceptOutcome step = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileRelationOrphan3201Rollback(p, reserveExtent));
+        if (!Published(step))
+        {
+            return new SchemaOutcome(null, step, _pageCount);
+        }
+        workspace.AppendDeferredCloseEdits(_cache, countEdits);
+        return new SchemaOutcome(refused, step, _pageCount, PublishedAny: true);
+    }
+
+    private SchemaOutcome EmitRelation3368Rollback(TransactionCoordinator workspace, SchemaRefusal refused)
+    {
+        if (RelationRollbackCountEdits(out string? countFail) is not { } countEdits)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, countFail), default, _pageCount);
+        }
+        if (SystemTable("MSysRelationships", out string? relFail) is not { } relTable)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, relFail), default, _pageCount);
+        }
+        int pagesRolledBack = relTable.RowCount == 0 ? 2 : 1;
+        IReadOnlyList<uint> priorRolledBack = workspace.PendingRolledBackPages(_cache);
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        bool reserveExtent = !workspace.HasGlobalMapActivity(_cache) && sessionReserved.Count == 0;
+        List<uint> newlyRolledBack = [];
+        AcceptOutcome step = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileRelationMismatch3368Rollback(p, priorRolledBack, sessionReserved, reserveExtent, pagesRolledBack, newlyRolledBack));
+        if (!Published(step))
+        {
+            return new SchemaOutcome(null, step, _pageCount);
+        }
+        if (priorRolledBack.Count > 0)
+        {
+            workspace.RemoveReleasedAtClose(_cache, priorRolledBack);
+        }
+        workspace.SetPendingRolledBackPages(_cache, newlyRolledBack);
+        workspace.AppendDeferredCloseEdits(_cache, countEdits);
+        return new SchemaOutcome(refused, step, _pageCount, PublishedAny: true);
+    }
+
+    private CompiledChange CompileRelationOrphan3201Rollback(FileParticipant p, bool reserveExtent)
+    {
+        var work = new Work(p);
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        if (reserveExtent)
+        {
+            var allocator = new PageAllocator(_cache, _d, _pageCount);
+            if (!allocator.TryCaptureGlobalFreeMap(p.Overlay, out uint firstFreeBefore, out byte[] globalMapBefore, out string? captureFailure))
+            {
+                return NotWritten(captureFailure);
+            }
+            // Reserve the 32-page block starting at firstFreeBefore (clears all free pages in [firstFreeBefore..blockEnd))
+            // so page 1 matches rel-errors-accdb/mdb after-err-orphan (00 00 00 00) and Close returns them all.
+            uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+            SortedDictionary<int, byte> clearByOffset = [];
+            for (uint page = firstFreeBefore; page < blockEnd; page++)
+            {
+                if (!MapPages.TryInlineBit(globalMapBefore, _d.Map.GlobalFreeSlot, page, _d, out int offset, out byte mask, out string? bitFail))
+                {
+                    return NotWritten("the global map reservation: " + bitFail);
+                }
+                if ((globalMapBefore[offset] & mask) != 0)
+                {
+                    reservedExtentPages.Add(page);
+                    releasedAtClose.Add(page);
+                    clearByOffset[offset] = (byte)(clearByOffset.GetValueOrDefault(offset) | mask);
+                }
+            }
+            foreach ((int offset, byte clearMask) in clearByOffset)
+            {
+                if (!work.Apply(new PageEdit(_d.Map.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map)))
+                {
+                    return work.NotWritten();
+                }
+            }
+        }
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages);
+    }
+
+    private CompiledChange CompileRelationMismatch3368Rollback(
+        FileParticipant p,
+        IReadOnlyList<uint> priorRolledBack,
+        IReadOnlyList<uint> sessionReserved,
+        bool reserveExtent,
+        int pagesToRollBack,
+        List<uint> newlyRolledBack)
+    {
+        var work = new Work(p);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        List<uint> consumedReserved = [];
+
+        foreach (uint freed in priorRolledBack)
+        {
+            if (allocator.Free(p.Overlay, freed, out string? freeFail) is not { } freeEdit)
+            {
+                return NotWritten(freeFail);
+            }
+            if (!work.Apply(freeEdit))
+            {
+                return work.NotWritten();
+            }
+        }
+
+        if (reserveExtent)
+        {
+            if (!allocator.TryCaptureGlobalFreeMap(p.Overlay, out uint firstFreeBefore, out byte[] globalMapBefore, out string? captureFailure))
+            {
+                return NotWritten(captureFailure);
+            }
+            uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+            SortedDictionary<int, byte> clearByOffset = [];
+            List<uint> allBlockPages = [];
+            for (uint page = firstFreeBefore; page < blockEnd; page++)
+            {
+                if (!MapPages.TryInlineBit(globalMapBefore, _d.Map.GlobalFreeSlot, page, _d, out int offset, out byte mask, out string? bitFail))
+                {
+                    return NotWritten("the global map reservation: " + bitFail);
+                }
+                if ((globalMapBefore[offset] & mask) != 0)
+                {
+                    allBlockPages.Add(page);
+                    clearByOffset[offset] = (byte)(clearByOffset.GetValueOrDefault(offset) | mask);
+                }
+            }
+            if (allBlockPages.Count < pagesToRollBack)
+            {
+                return NotWritten($"fewer than {pagesToRollBack} free pages in page-1 reservation block for 3368 rollback");
+            }
+            foreach ((int offset, byte clearMask) in clearByOffset)
+            {
+                if (!work.Apply(new PageEdit(_d.Map.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map)))
+                {
+                    return work.NotWritten();
+                }
+            }
+            for (int i = 0; i < allBlockPages.Count; i++)
+            {
+                releasedAtClose.Add(allBlockPages[i]);
+                if (i < pagesToRollBack)
+                {
+                    newlyRolledBack.Add(allBlockPages[i]);
+                }
+                else
+                {
+                    reservedExtentPages.Add(allBlockPages[i]);
+                }
+            }
+        }
+        else if (sessionReserved.Count >= pagesToRollBack)
+        {
+            for (int i = 0; i < pagesToRollBack; i++)
+            {
+                uint pg = sessionReserved[i];
+                consumedReserved.Add(pg);
+                newlyRolledBack.Add(pg);
+                releasedAtClose.Add(pg);
+            }
+        }
+        else
+        {
+            return NotWritten($"active session extent has fewer than {pagesToRollBack} remaining pages for 3368 rollback");
+        }
+
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: consumedReserved);
+    }
+
+    private CompiledChange CompileFreePagesOnGlobalMap(FileParticipant p, IReadOnlyList<uint> pages)
+    {
+        var work = new Work(p);
+        var allocator = new PageAllocator(_cache, _d, _pageCount);
+        foreach (uint page in pages)
+        {
+            if (allocator.Free(p.Overlay, page, out string? freeFail) is not { } freeEdit)
+            {
+                return NotWritten(freeFail);
+            }
+            if (!work.Apply(freeEdit))
+            {
+                return work.NotWritten();
+            }
+        }
+        return work.Change(_cache);
+    }
+
+    private CompiledChange CompileDeleteRelation(
+        FileParticipant p,
+        RowId relObjRow,
+        TableDefinition acesTable,
+        IReadOnlyList<RowId> aceRowIds,
+        TableDefinition relationshipsTable,
+        IReadOnlyList<RowId> relRowIds,
+        CatalogEntry? parentEntry,
+        CatalogEntry? childEntry,
+        byte[]? updatedParentTdef,
+        byte[]? updatedChildTdef,
+        RowLocator? mapRowToDelete,
+        uint? freedLeafPage,
+        ulong dateUpdateBits)
+    {
+        var work = new Work(p);
+        List<uint> releasedAtClose = [];
+        if (!work.Delete(this, _catalog.ObjectTable, relObjRow, catalogDelete: true, releasedAtClose: releasedAtClose))
+        {
+            return work.NotWritten();
+        }
+        foreach (RowId aceRow in aceRowIds)
+        {
+            if (!work.Delete(this, acesTable, aceRow, catalogDelete: true, releasedAtClose: releasedAtClose))
+            {
+                return work.NotWritten();
+            }
+        }
+        foreach (RowId relRow in relRowIds)
+        {
+            if (!work.Delete(this, relationshipsTable, relRow, catalogDelete: true, releasedAtClose: releasedAtClose))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (mapRowToDelete is { } mapLoc && freedLeafPage is uint leaf)
+        {
+            var allocator = new PageAllocator(_cache, _d, _pageCount);
+            if (allocator.Free(p.Overlay, leaf, out string? freeFail) is null)
+            {
+                return NotWritten(freeFail);
+            }
+            // evidence/r-q47-bigint-expr-edges/reldel-plain-accdb (page 46): clear the freed leaf bit in the map row
+            // BEFORE deleting the map row slot so vacated bytes match ACE byte-for-byte.
+            if (!ApplyMapBit(work, p.Overlay, mapLoc, leaf, member: false, out _)
+                || !work.Apply(new PageEdit(mapLoc.Page, new DataPageDeleteDelta(mapLoc.Row, _d), PageRole.Map)))
+            {
+                return work.NotWritten();
+            }
+            releasedAtClose.Add(leaf);
+        }
+        if (updatedParentTdef is not null && parentEntry is not null)
+        {
+            if (!work.Apply(new PageEdit((uint)parentEntry.Id, new WholePage(updatedParentTdef), PageRole.Catalog)))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (updatedChildTdef is not null && childEntry is not null)
+        {
+            if (!work.Apply(new PageEdit((uint)childEntry.Id, new WholePage(updatedChildTdef), PageRole.Catalog)))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (parentEntry is not null && !work.SetDateUpdate(this, parentEntry, dateUpdateBits))
+        {
+            return work.NotWritten();
+        }
+        if (childEntry is not null && (parentEntry is null || childEntry.Id != parentEntry.Id)
+            && !work.SetDateUpdate(this, childEntry, dateUpdateBits))
+        {
+            return work.NotWritten();
+        }
+        return work.Change(_cache, releasedAtClose);
     }
 
     /// <summary>
@@ -1564,6 +2408,484 @@ public sealed class SchemaWriter
         }
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileDropTable(p, entry, table));
         return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: Published(accepted));
+    }
+
+    /// <summary>
+    /// Attached DAO <c>TableDef.CreateField</c> + <c>Fields.Append</c> on an empty or populated ACCDB or Jet 4 MDB
+    /// table (W-07 / R-CAT-1, R-DAO-1; <c>evidence/r-q46-dao-ddl-multi/cf-attached-scalar-accdb</c>,
+    /// <c>cf-attached-scalar-mdb</c>, <c>cf-attached-decimal-accdb</c>, <c>cf-attached-decimal-mdb</c>):
+    /// <list type="bullet">
+    /// <item>Validates ACCDB or Jet 4 MDB, depth 0, valid field name (3125), and case-insensitive uniqueness against
+    /// existing columns (3191 from <c>DAO.TableDef</c>, 0 bytes written).</item>
+    /// <item>Admits the 12 non-Counter scalar/Text/Memo/OLE/GUID DAO types plus attached <c>Decimal(38, 0)</c>
+    /// (<c>TypeCode 0x10, TypeInfo 0x00000026, Flags 0x03, Length 17</c>); refuses Counter, fixed Binary, BigInt,
+    /// DateTime2, and non-(38,0) Decimal by name.</item>
+    /// <item>Commit 1 rewrites the TableDef page (appending two empty inline map rows to the table's map page for
+    /// Memo/OLE) and writes Step 1 of the field's DAO <c>LvProp</c> (<c>AllowZeroLength</c> for Text/Memo,
+    /// <c>Required</c> for all others; Boolean True = <c>0xFF</c>), absorbing a pending
+    /// <see cref="DeferredCatalogCommitKind.TableDefAppend"/> on the same TableDef within 0.50 s or flushing it after
+    /// 1.0 s. For Text/Memo, Commit 2 writes <c>Required</c>. Queues a deferred TableDef commit on
+    /// <c>table.FirstPage</c> (+1 about 0.5 s later or at Close).</item>
+    /// </list>
+    /// </summary>
+    public SchemaOutcome AddField(TransactionCoordinator workspace, AddFieldRequest request, ulong dateUpdateBits)
+    {
+        if (FileRefusal(allowJet4Mdb: true) is { } file)
+        {
+            return new SchemaOutcome(file, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "attached DAO TableDef.Fields.Append inside BeginTrans is not recorded (evidence/r-q46-dao-ddl-multi/cf-attached-*)"), default, _pageCount);
+        }
+        if (workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "attached DAO TableDef.Fields.Append in an exclusive session is not recorded (evidence/r-q46-dao-ddl-multi/cf-attached-* records shared sessions only)"), default, _pageCount);
+        }
+        if (request.Route != SchemaRoute.Dao)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"AddField on {request.Route} route is not recorded (only DAO attached TableDef.Fields.Append is recorded in cf-attached-*)"), default, _pageCount);
+        }
+        if (FindTable(request.Table) is not { } entry)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached TableDef.Fields.Append on '{request.Table}', which the catalog does not list"), default, _pageCount);
+        }
+        if (Table(entry, out string? tableFailure) is not { } table)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, tableFailure), default, _pageCount);
+        }
+        NewField f = request.Field;
+        if (!IsValidName(f.Name))
+        {
+            return new SchemaOutcome(new SchemaRefusal(3125, null), default, _pageCount);
+        }
+        switch (FieldNameClashOf(table.Columns.Select(c => c.Name), f.Name, _sortOrder, out string? dupUndecided))
+        {
+            case FieldNameClash.Duplicate:
+                // evidence/r-q46-dao-ddl-multi/cf-attached-scalar-accdb, cf-attached-scalar-mdb (after-dup-err):
+                // case-insensitive duplicate field fails 3191 from DAO.TableDef with 0 bytes written.
+                return new SchemaOutcome(new SchemaRefusal(3191, null), default, _pageCount);
+            case FieldNameClash.Undecided:
+                return new SchemaOutcome(new SchemaRefusal(null, dupUndecided), default, _pageCount);
+        }
+        if (workspace.HasDeferredDeleteCounts(_cache))
+        {
+            return new SchemaOutcome(
+                null,
+                new AcceptOutcome(
+                    false,
+                    null,
+                    MutationOpen.Publication,
+                    "attached DAO TableDef.Fields.Append while an open Recordset holds deferred Delete TableDef counts awaiting rs.Close is not recorded"),
+                _pageCount);
+        }
+        if (f.UnicodeCompression)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append with UnicodeCompression on '{f.Name}' is not recorded"), default, _pageCount);
+        }
+        if (f.Type is not (NewFieldType.Long or NewFieldType.Text or NewFieldType.Memo or NewFieldType.Decimal))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append of {f.Type} field '{f.Name}' is not recorded (only Long, Text, Memo, and Decimal(38,0) are recorded in evidence/r-q46-dao-ddl-multi/cf-attached-* and r-dao-1b/coll-append-field-existing-rows)"), default, _pageCount);
+        }
+        if (f.Required && f.Type != NewFieldType.Long)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append with Required=True on {f.Type} field '{f.Name}' is not recorded (only Long Required=True is recorded in evidence/r-q46-dao-ddl-multi/cf-attached-scalar-*)"), default, _pageCount);
+        }
+        if (f.AllowZeroLength && f.Type != NewFieldType.Text)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append with AllowZeroLength=True on {f.Type} field '{f.Name}' is not recorded (only Text AllowZeroLength=True is recorded in evidence/r-q46-dao-ddl-multi/cf-attached-scalar-*)"), default, _pageCount);
+        }
+        if (f.Type == NewFieldType.Decimal && (f.Precision != 38 || f.Scale != 0))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append of Decimal({f.Precision}, {f.Scale}) field '{f.Name}': only Decimal(38, 0) from CreateField(..., 20) is recorded (evidence/r-q46-dao-ddl-multi/cf-attached-decimal-*)"), default, _pageCount);
+        }
+        if (f.Type == NewFieldType.Text && f.Size is < 1 or > 255)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Text field '{f.Name}' of size {f.Size}"), default, _pageCount);
+        }
+
+        if (TableDefEncoder.SpecOf(table, out string? specFailure) is not { } spec)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s TableDef: {specFailure}"), default, _pageCount);
+        }
+        byte[] reencoded = new byte[_d.PageSize];
+        TableDefEncoder.Encode(reencoded, spec, _d);
+        if (PinCopy(table.FirstPage) is not { } storedTdef || !storedTdef.AsSpan().SequenceEqual(reencoded))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s TableDef page {table.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)"), default, _pageCount);
+        }
+        if (table.MaxColumns != table.Columns.Count)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append on '{entry.Name}' with MaxColumns ({table.MaxColumns}) != Columns.Count ({table.Columns.Count}) (e.g. after DROP COLUMN) is not recorded"), default, _pageCount);
+        }
+        for (int i = 0; i < table.Columns.Count; i++)
+        {
+            if (table.Columns[i].ColumnId != i || table.Columns[i].PhysicalNumber != i)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append on '{entry.Name}' with non-contiguous column numbering (column {i}: col={table.Columns[i].ColumnId}, phys={table.Columns[i].PhysicalNumber}) is not recorded"), default, _pageCount);
+            }
+        }
+
+        int fixedEnd = 0;
+        foreach (ColumnDescriptor existingCol in table.Columns)
+        {
+            if (existingCol.IsFixed && existingCol.TypeCode != NativeTypes.Boolean)
+            {
+                fixedEnd = Math.Max(fixedEnd, existingCol.FixedOffset + existingCol.Length);
+            }
+        }
+        ushort nextColNum = (ushort)table.Columns.Count;
+        ushort variables = spec.VariableColumns;
+        uint sortInfo = (uint)_sortOrder.Identifier | ((uint)_sortOrder.Reserved << 16) | ((uint)(byte)_sortOrder.Version << 24);
+        uint typeInfo = f.Type switch
+        {
+            NewFieldType.Text => sortInfo,
+            NewFieldType.Decimal => f.Precision | ((uint)f.Scale << 8),
+            _ => 0u,
+        };
+        ColumnSpec newCol;
+        int addedFixedBytes = 0;
+        bool isLval = f.Type is NewFieldType.Memo or NewFieldType.Ole;
+        switch (f.Type)
+        {
+            case NewFieldType.YesNo:
+                newCol = new ColumnSpec(f.Name, NativeTypes.Boolean, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, 0, 1);
+                break;
+            case NewFieldType.Byte:
+                addedFixedBytes = 1;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Byte, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 1);
+                break;
+            case NewFieldType.Short:
+                addedFixedBytes = 2;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Integer, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 2);
+                break;
+            case NewFieldType.Long:
+                addedFixedBytes = 4;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Long, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 4);
+                break;
+            case NewFieldType.Currency:
+                addedFixedBytes = 8;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Currency, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 8);
+                break;
+            case NewFieldType.Single:
+                addedFixedBytes = 4;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Single, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 4);
+                break;
+            case NewFieldType.Double:
+                addedFixedBytes = 8;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Double, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 8);
+                break;
+            case NewFieldType.DateTime:
+                addedFixedBytes = 8;
+                newCol = new ColumnSpec(f.Name, NativeTypes.DateTime, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 8);
+                break;
+            case NewFieldType.Guid:
+                addedFixedBytes = 16;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Guid, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 16);
+                break;
+            case NewFieldType.Decimal:
+                addedFixedBytes = 17;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Numeric, nextColNum, variables, nextColNum, typeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 17);
+                break;
+            case NewFieldType.VarBinary:
+                newCol = new ColumnSpec(f.Name, NativeTypes.Binary, nextColNum, variables, nextColNum, typeInfo, VariableColumnFlags, 0x00, 0, (ushort)f.Size);
+                variables++;
+                break;
+            case NewFieldType.Text:
+                newCol = new ColumnSpec(f.Name, NativeTypes.Text, nextColNum, variables, nextColNum, typeInfo, VariableColumnFlags, 0x00, 0, (ushort)(f.Size * 2));
+                variables++;
+                break;
+            case NewFieldType.Ole:
+            case NewFieldType.Memo:
+                newCol = new ColumnSpec(f.Name, f.Type == NewFieldType.Memo ? NativeTypes.Memo : NativeTypes.Ole, nextColNum, variables, nextColNum, typeInfo, VariableColumnFlags, 0x00, 0, 0);
+                variables++;
+                break;
+            default:
+                return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append of unrecorded field type {f.Type}"), default, _pageCount);
+        }
+        if (fixedEnd + addedFixedBytes > ushort.MaxValue)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"fixed column bytes ({fixedEnd + addedFixedBytes}) exceed 16-bit FixedOffset range"), default, _pageCount);
+        }
+
+        byte lvalOwnedSlot = 0;
+        byte lvalFreeSlot = 0;
+        List<LvalColumnMapSpec> newLvalMaps = [.. spec.LvalColumnMaps];
+        if (isLval)
+        {
+            if (table.FreeMap.Page != table.OwnedMap.Page || PinCopy(table.OwnedMap.Page) is not { } mapPage)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s maps are not on one readable map page"), default, _pageCount);
+            }
+            if (_d.DataPage.Owner.Read(mapPage) != 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s map page {table.OwnedMap.Page} has owner {_d.DataPage.Owner.Read(mapPage)}, expected 0"), default, _pageCount);
+            }
+            ulong mapRowCount = _d.DataPage.RowCount.Read(mapPage);
+            if (mapRowCount + 2 > MaxSinglePageMaps)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s map page holds {mapRowCount} maps: appending 2 LVAL maps exceeds single-page capacity ({MaxSinglePageMaps})"), default, _pageCount);
+            }
+            byte[] mapDryRun = mapPage.ToArray();
+            byte[] emptyInlineMap = MapDeclaration.EncodeInline(0, [], _d);
+            string? mapFail2 = null;
+            if (!DataPages.TryAppendRow(mapDryRun, emptyInlineMap, _d, out lvalOwnedSlot, out string? mapFail1)
+                || !DataPages.TryAppendRow(mapDryRun, emptyInlineMap, _d, out lvalFreeSlot, out mapFail2)
+                || lvalOwnedSlot != (byte)mapRowCount
+                || lvalFreeSlot != (byte)(mapRowCount + 1))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s map page {table.OwnedMap.Page} cannot append 2 LVAL maps: {mapFail1 ?? mapFail2 ?? "unexpected slot"}"), default, _pageCount);
+            }
+            newLvalMaps.Add(new LvalColumnMapSpec(nextColNum, new RowLocator(table.OwnedMap.Page, lvalOwnedSlot), new RowLocator(table.OwnedMap.Page, lvalFreeSlot)));
+        }
+
+        TableDefSpec newSpec = spec with
+        {
+            MaxColumns = (ushort)(spec.Columns.Count + 1),
+            VariableColumns = variables,
+            Columns = [.. spec.Columns, newCol],
+            LvalColumnMaps = newLvalMaps,
+        };
+        int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
+        int encodedLen = EncodedTableDefLength(newSpec);
+        if (encodedLen > maxSinglePage)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s TableDef with field '{f.Name}' needs {encodedLen} bytes, exceeding one single-page TableDef ({maxSinglePage} bytes; multi-page TableDef is not recorded)"), default, _pageCount);
+        }
+        byte[] newTdefBytes = new byte[_d.PageSize];
+        TableDefEncoder.Encode(newTdefBytes, newSpec, _d);
+
+        // Read and decode existing MSysObjects.LvProp so we append this field's ColumnValues map preserving existing Names & Maps.
+        TableDefinition objects = _catalog.ObjectTable;
+        ColumnDescriptor lvPropCol = objects.Columns[Ordinal(objects, "LvProp")];
+        List<string> baseNames = [];
+        List<PropertyMap> baseMaps = [];
+        using (RowView? objResolved = RowResolver.Resolve(_cache, _d, entry.Root, out TraversalFailure? objFailure))
+        {
+            if (objResolved is not { } objRow)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects row {entry.Root} cannot be read: {objFailure?.Predicate ?? "deleted"}"), default, _pageCount);
+            }
+            if (objRow.Data != objRow.Root)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects row {entry.Root} is an overflow row: rewriting it is not recorded"), default, _pageCount);
+            }
+            if (!RowEnvelope.TryOpen(objRow.Body, _d, out RowEnvelope env, out string? envFail))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects row {entry.Root}: {envFail}"), default, _pageCount);
+            }
+            FieldRead lvRead = env.ReadField(lvPropCol, objects.KnownFixedEnd(env.ColumnCount, _d));
+            if (lvRead.Outcome == FieldOutcome.Malformed)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp: {lvRead.Failure}"), default, _pageCount);
+            }
+            if (lvRead.Outcome == FieldOutcome.Bytes)
+            {
+                if (LongValuePlan.Inspect(objRow.Body[lvRead.Start..lvRead.End], out string? planFail) is not { } oldPlan)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp: {planFail}"), default, _pageCount);
+                }
+                if (oldPlan.Form is not (LongValueForm.Inline or LongValueForm.SingleRow))
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append on '{entry.Name}' whose MSysObjects.LvProp has form {oldPlan.Form} is not recorded"), default, _pageCount);
+                }
+                NativeValue lvVal = FieldDecoder.Read(objRow, objects, lvPropCol, _cache, _d);
+                if (lvVal.Kind != NativeKind.LongBinary || lvVal.Bytes is not { } rawBlob)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp could not be decoded ({lvVal.Kind}: {lvVal.Failure})"), default, _pageCount);
+                }
+                if (PropertyBlob.Read(rawBlob, out string? blobFail) is not { } existingBlob)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp: {blobFail}"), default, _pageCount);
+                }
+                if (existingBlob.OpaqueSections != 0 || existingBlob.NamesSections != 1)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append on '{entry.Name}' whose MSysObjects.LvProp holds {existingBlob.OpaqueSections} opaque and {existingBlob.NamesSections} Names section(s) is not recorded"), default, _pageCount);
+                }
+                foreach (PropertyMap m in existingBlob.Maps)
+                {
+                    if (m.Kind == PropertySectionKind.ColumnValues && string.Equals(m.MapName, f.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp already holds a ColumnValues section for '{m.MapName}'"), default, _pageCount);
+                    }
+                }
+                baseNames.AddRange(existingBlob.Names);
+                baseMaps.AddRange(existingBlob.Maps);
+            }
+        }
+
+        List<DaoPropertyStep> steps = BuildDaoPropertySteps([f], baseNames, baseMaps);
+        foreach (DaoPropertyStep step in steps)
+        {
+            int blobLen = PropertyBlob.Encode(step.Names, step.Maps).Length;
+            if (blobLen > LongValuePlan.SingleRowPayloadMax)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append property blob ({blobLen} bytes) exceeds single-row LVAL limit ({LongValuePlan.SingleRowPayloadMax}): chained MSysObjects.LvProp is not recorded"), default, _pageCount);
+            }
+        }
+
+        DeferredCatalogCommit? absorbedDeferred = null;
+        bool flushedPriorDeferred = false;
+        if (workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred))
+        {
+            if (priorDeferred!.Kind != DeferredCatalogCommitKind.TableDefAppend || priorDeferred.PendingTableDefPage != table.FirstPage)
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.Publication,
+                        $"attached DAO Fields.Append on '{entry.Name}' (page {table.FirstPage}) while a deferred catalog commit of kind {priorDeferred.Kind} on page {priorDeferred.PendingTableDefPage} is pending is not recorded"),
+                    _pageCount);
+            }
+            TimeSpan elapsed = workspace.Clock() - priorDeferred.QueuedAt!.Value;
+            if (elapsed < TransactionCoordinator.ObservedSameBurstMax)
+            {
+                absorbedDeferred = priorDeferred;
+            }
+            else if (elapsed >= TransactionCoordinator.ObservedNewBurstMin)
+            {
+                (MutationOpen flushOpen, string? flushDetail) = workspace.FlushDeferredCatalogCommit(_cache);
+                if (flushOpen != MutationOpen.None)
+                {
+                    return new SchemaOutcome(null, new AcceptOutcome(false, null, flushOpen, flushDetail), _pageCount);
+                }
+                flushedPriorDeferred = true;
+            }
+            else
+            {
+                return new SchemaOutcome(
+                    null,
+                    new AcceptOutcome(
+                        false,
+                        null,
+                        MutationOpen.CommitBurstGap,
+                        $"elapsed {elapsed.TotalSeconds:F3} s since the previous DAO TableDef write falls in the unobserved [{TransactionCoordinator.ObservedSameBurstMax.TotalSeconds:F2} s, {TransactionCoordinator.ObservedNewBurstMin.TotalSeconds:F1} s) deferred-TableDef window"),
+                    _pageCount);
+            }
+        }
+
+        IReadOnlyList<uint> sessionReserved1 = workspace.SessionReservedPages(_cache);
+        bool useExtent1 = !workspace.HasGlobalMapActivity(_cache);
+        ulong extent = _pageCount;
+        AcceptOutcome commit1 = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileAddFieldCommit1(
+                p,
+                entry,
+                table,
+                newTdefBytes,
+                isLval,
+                lvalOwnedSlot,
+                lvalFreeSlot,
+                steps[0],
+                dateUpdateBits,
+                sessionReserved1,
+                useExtent1,
+                out extent),
+            allowPendingDeferredKind: absorbedDeferred is not null ? DeferredCatalogCommitKind.TableDefAppend : null);
+        if (!Published(commit1))
+        {
+            return new SchemaOutcome(null, commit1, _pageCount, PublishedAny: flushedPriorDeferred);
+        }
+        if (absorbedDeferred is not null)
+        {
+            workspace.ClearDeferredCatalogCommit(_cache);
+        }
+
+        for (int s = 1; s < steps.Count; s++)
+        {
+            DaoPropertyStep propStep = steps[s];
+            ulong published = extent;
+            IReadOnlyList<uint> sessionReservedNext = workspace.SessionReservedPages(_cache);
+            bool useExtentNext = !workspace.HasGlobalMapActivity(_cache);
+            AcceptOutcome stepOutcome = workspace.AcceptSchemaChange(
+                _cache,
+                ObjectSemantics,
+                p => CompileDaoPropertyStep(p, entry.Root, propStep, dateUpdateBits, published, sessionReservedNext, useExtentNext, allowSharedLvalPage: true, out extent));
+            if (!Published(stepOutcome))
+            {
+                string why = stepOutcome.Detail ?? stepOutcome.Error?.Describe() ?? stepOutcome.Open.ToString();
+                return new SchemaOutcome(
+                    null,
+                    commit1 with
+                    {
+                        Error = stepOutcome.Error,
+                        Open = stepOutcome.Open == MutationOpen.None && stepOutcome.Error is null ? MutationOpen.Publication : stepOutcome.Open,
+                        Detail = $"attached DAO Fields.Append of {entry.Name}.{f.Name}: commit {s + 1} of {steps.Count} failed after TableDef was updated: {why}",
+                    },
+                    Math.Max(published, _cache.KnownExtentPages),
+                    PublishedAny: true);
+            }
+        }
+
+        workspace.SetDeferredCatalogCommit(
+            _cache,
+            new DeferredCatalogCommit(
+                [new PageEdit(table.FirstPage, NoOpPageDelta.Instance, PageRole.Catalog)],
+                [new LockResource(table.FirstPage, LockPurpose.TableDef)],
+                Kind: DeferredCatalogCommitKind.TableDefAppend,
+                QueuedAt: workspace.Clock(),
+                PendingTableDefPage: table.FirstPage));
+        return new SchemaOutcome(null, commit1, extent, PublishedAny: true);
+    }
+
+    private CompiledChange CompileAddFieldCommit1(
+        FileParticipant p,
+        CatalogEntry entry,
+        TableDefinition table,
+        byte[] newTdefBytes,
+        bool addLvalMaps,
+        byte lvalOwnedSlot,
+        byte lvalFreeSlot,
+        DaoPropertyStep firstStep,
+        ulong dateUpdateBits,
+        IReadOnlyList<uint> sessionReserved,
+        bool useSessionExtentReservation,
+        out ulong extent)
+    {
+        extent = _pageCount;
+        var work = new Work(p);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        if (addLvalMaps)
+        {
+            byte[] emptyInlineMap = MapDeclaration.EncodeInline(0, [], _d);
+            if (!work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageAppendDelta(emptyInlineMap, lvalOwnedSlot, _d), PageRole.Map))
+                || !work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageAppendDelta(emptyInlineMap, lvalFreeSlot, _d), PageRole.Map)))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (!work.Apply(new PageEdit(table.FirstPage, new WholePage(newTdefBytes), PageRole.Catalog)))
+        {
+            return work.NotWritten();
+        }
+        if (!ApplyObjectProperties(
+            work,
+            p.Overlay,
+            allocator,
+            entry.Root,
+            firstStep.Maps,
+            dateUpdateBits,
+            releasedAtClose,
+            explicitNames: firstStep.Names,
+            useSessionExtentReservation: useSessionExtentReservation,
+            reservedExtentPages: reservedExtentPages,
+            allowSharedLvalPage: true))
+        {
+            return work.NotWritten();
+        }
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
     /// <summary>
@@ -2731,6 +4053,7 @@ public sealed class SchemaWriter
         ulong dateCreateBits,
         ulong dateUpdateBits,
         byte[]? initialLvProp,
+        DaoPropertyStep? firstDaoStep,
         out uint tdefPage,
         out uint mapPage,
         out RowId objectRow,
@@ -2841,9 +4164,9 @@ public sealed class SchemaWriter
             aceRows.Add(aceRow);
         }
         List<uint> releasedAtClose = [];
-        if (request.Route == SchemaRoute.Dao && initialLvProp is null)
+        if (request.Route == SchemaRoute.Dao && initialLvProp is null && firstDaoStep is { } daoStep)
         {
-            if (!ApplyFieldProperties(work, p.Overlay, allocator, objectRow, request.Fields, 1, DaoFieldRequired, dateUpdateBits, releasedAtClose))
+            if (!ApplyObjectProperties(work, p.Overlay, allocator, objectRow, daoStep.Maps, dateUpdateBits, releasedAtClose, explicitNames: daoStep.Names))
             {
                 return work.NotWritten();
             }
@@ -3001,25 +4324,44 @@ public sealed class SchemaWriter
     /// in <see cref="PhysicalChange.ReleasedAtClose"/> so page 1 frees it at Close without reusing it earlier in the session.</item>
     /// </list>
     /// </summary>
-    private CompiledChange CompileDaoFieldProperties(
+    private CompiledChange CompileDaoPropertyStep(
         FileParticipant p,
         RowId objectRow,
-        IReadOnlyList<NewField> fields,
-        int fieldCount,
+        DaoPropertyStep propStep,
         ulong dateUpdateBits,
         ulong currentExtent,
+        IReadOnlyList<uint> sessionReserved,
+        bool useSessionExtentReservation,
+        bool allowSharedLvalPage,
         out ulong extent)
     {
         extent = currentExtent;
         var work = new Work(p);
-        var allocator = new PageAllocator(_cache, _d, currentExtent);
+        var allocator = new PageAllocator(_cache, _d, currentExtent, sessionReserved);
         List<uint> releasedAtClose = [];
-        if (!ApplyFieldProperties(work, p.Overlay, allocator, objectRow, fields, fieldCount, DaoFieldRequired, dateUpdateBits, releasedAtClose))
+        List<uint> reservedExtentPages = [];
+        if (!ApplyObjectProperties(
+            work,
+            p.Overlay,
+            allocator,
+            objectRow,
+            propStep.Maps,
+            dateUpdateBits,
+            releasedAtClose,
+            explicitNames: propStep.Names,
+            useSessionExtentReservation: useSessionExtentReservation,
+            reservedExtentPages: reservedExtentPages,
+            allowSharedLvalPage: allowSharedLvalPage))
         {
             return work.NotWritten();
         }
         extent = PageAllocator.ExtentOf(_cache, Math.Max(currentExtent, allocator.ExtentPages), p.Overlay);
-        return work.Change(_cache, releasedAtClose);
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
     /// <summary>
@@ -4211,8 +5553,8 @@ public sealed class SchemaWriter
     private sealed record PreparedForeignKey(
         CatalogEntry ParentEntry,
         TableDefinition ParentTable,
-        TableDefSpec ParentSpec,
-        LogicalIndex ParentPkLogical,
+        TableDefSpec? ParentSpec,
+        LogicalIndex? ParentTargetLogical,
         IReadOnlyList<string> ChildFieldNames,
         IReadOnlyList<string> ParentFieldNames,
         int NextRelationshipObjectId,
@@ -4221,14 +5563,67 @@ public sealed class SchemaWriter
         byte ChildMapSlot,
         byte[]? PopulatedChildLeafBytes,
         uint EntryCount,
-        uint UniqueEntryCount);
+        uint UniqueEntryCount,
+        uint? SharedChildPhysicalNumber = null,
+        bool IsSelfRef = false);
 
     /// <summary>
-    /// Pre-commit validation for attaching a single FOREIGN KEY relationship (shared by <see cref="CreateTable"/> and
-    /// <see cref="AddForeignKey"/>; evidence/r-q34-ddl-sweep/fk-*, alt-fk-*). Refuses every unrecorded case by name
-    /// before any page edit is compiled: non-ADO ON DELETE CASCADE, ALTER TABLE ON DELETE CASCADE, self-reference,
-    /// parent already participating in a relationship, non-Long columns, non-PK referenced target, orphan child rows
-    /// on populated ALTER TABLE, duplicate constraint name, or TableDef/map-page overflow.
+    /// Re-encode a single-page TableDef and preserve any trailing bytes beyond the new stream terminator
+    /// (<c>FF FF</c>) from <paramref name="priorPage"/>, matching ACE's in-place overwrite when a TableDef
+    /// shrinks or rewrites over previously vacated tail bytes
+    /// (<c>evidence/r-q47-bigint-expr-edges/reldel-plain-*</c>, <c>reldel-cascades-*</c>, <c>rel-multi-parent-*</c>).
+    /// </summary>
+    private byte[] EncodeTableDefPreservingTail(TableDefSpec spec, ReadOnlySpan<byte> priorPage)
+    {
+        byte[] page = new byte[_d.PageSize];
+        int end = TableDefEncoder.Encode(page, spec, _d);
+        // ACE writes a 10-byte LVAL-map terminator (FF FF + 8 zero bytes) at the end of the TableDef stream
+        // and leaves prior bytes from (end + 8) onward untouched when a TableDef shrinks in place
+        // (evidence/r-q47-bigint-expr-edges/reldel-plain-*, reldel-cascades-*, rel-multi-parent-*).
+        int tailStart = end + 8;
+        if (tailStart < priorPage.Length)
+        {
+            priorPage[tailStart..].CopyTo(page.AsSpan(tailStart));
+        }
+        return page;
+    }
+
+    private bool LiveTableDefMatchesStored(ReadOnlySpan<byte> stored, TableDefSpec spec)
+    {
+        byte[] reenc = new byte[_d.PageSize];
+        int end = TableDefEncoder.Encode(reenc, spec, _d);
+        return stored.Length == _d.PageSize && stored[..end].SequenceEqual(reenc.AsSpan(0, end));
+    }
+
+    private static uint LowestUnusedLogicalIndexId(IReadOnlyList<LogicalIndexSpec> logicals, uint? alsoUsed = null)
+    {
+        for (uint candidate = 0; candidate < 32; candidate++)
+        {
+            if (candidate == alsoUsed)
+            {
+                continue;
+            }
+            bool taken = false;
+            for (int i = 0; i < logicals.Count; i++)
+            {
+                if (logicals[i].LogicalNumber == candidate)
+                {
+                    taken = true;
+                    break;
+                }
+            }
+            if (!taken)
+            {
+                return candidate;
+            }
+        }
+        throw new InvalidOperationException("Logical index count exceeds ACE limit 32.");
+    }
+
+    /// <summary>
+    /// Pre-commit validation for attaching a FOREIGN KEY / DAO Relation (shared by <see cref="CreateTable"/> and
+    /// <see cref="AddForeignKey"/>; evidence/r-q34-ddl-sweep/fk-*, alt-fk-*; evidence/r-q46-dao-ddl-multi/rel-*;
+    /// evidence/r-q47-bigint-expr-edges/rel-*).
     /// </summary>
     private SchemaRefusal? PrepareForeignKeyState(
         string childTableName,
@@ -4240,7 +5635,20 @@ public sealed class SchemaWriter
         out PreparedForeignKey? prepared)
     {
         prepared = null;
-        if (fk.OnDeleteCascade)
+        bool isDao = route == SchemaRoute.Dao;
+        if (!isDao && (fk.OnUpdateCascade || fk.Unique || fk.DontEnforce))
+        {
+            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' with UpdateCascade/Unique/DontEnforce on {route} route is not recorded (recorded on DAO route only)");
+        }
+        if (fk.DontEnforce && (fk.Unique || fk.OnUpdateCascade || fk.OnDeleteCascade))
+        {
+            return new SchemaRefusal(null, $"DAO Relation '{fk.Name}' combining dbRelationDontEnforce with Unique or Cascade attributes is not recorded");
+        }
+        if (fk.Unique && (fk.OnUpdateCascade || fk.OnDeleteCascade))
+        {
+            return new SchemaRefusal(null, $"DAO Relation '{fk.Name}' combining dbRelationUnique with Cascade attributes is not recorded");
+        }
+        if (fk.OnDeleteCascade && !isDao)
         {
             if (isAlterTable)
             {
@@ -4260,29 +5668,31 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' under sort order {_sortOrder}: logical index name sort order is recorded only for General Legacy (1033/0) (FMT1-INDEX-ENUM)");
         }
-        if (!IsAsciiIndexSortName(fk.Name))
+        if (!fk.DontEnforce && !IsAsciiIndexSortName(fk.Name))
         {
             return new SchemaRefusal(null, $"FOREIGN KEY name '{fk.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0) (FMT1-INDEX-ENUM Open)");
         }
-        if (isAlterTable && fk.Fields.Count != 1)
+        if (isAlterTable && !isDao && fk.Fields.Count != 1)
         {
             return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' with {fk.Fields.Count} column(s) is not recorded (evidence/r-q34-ddl-sweep/alt-fk-* records 1-column Long FOREIGN KEY only)");
         }
         if (fk.Fields.Count is < 1 or > 2)
         {
-            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' with {fk.Fields.Count} column(s) is not recorded (evidence/r-q34-ddl-sweep/fk-* records 1-2 Long columns)");
+            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' with {fk.Fields.Count} column(s) is not recorded (1-2 columns are recorded)");
         }
         if (fk.ReferencedFields.Count != fk.Fields.Count)
         {
             return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' column count ({fk.Fields.Count}) does not match referenced column count ({fk.ReferencedFields.Count})");
         }
-        if (CatalogRelationshipContext.NamesEqual(childTableName, fk.ReferencedTable))
+        bool isSelfRef = CatalogRelationshipContext.NamesEqual(childTableName, fk.ReferencedTable);
+        if (isSelfRef && !isDao)
         {
-            return new SchemaRefusal(null, $"self-referencing FOREIGN KEY '{fk.Name}' on table '{childTableName}' is not recorded (evidence/r-q34-ddl-sweep/fk-* records distinct parent and child tables)");
+            return new SchemaRefusal(null, $"self-referencing FOREIGN KEY '{fk.Name}' on table '{childTableName}' is not recorded on {route} route (evidence/r-q47-bigint-expr-edges/rel-selfref-unique-* records DAO route only)");
         }
 
         string[] childColNames = [.. childColumns.Select(c => c.Name)];
         List<string> canonicalChildCols = new(fk.Fields.Count);
+        List<(string Name, byte TypeCode, bool IsAutoNumber)> matchedChildCols = new(fk.Fields.Count);
         foreach (string childCol in fk.Fields)
         {
             if (!TryMatchFieldName(childCol, canonicalChildCols, out int seenIdx, out string? dupUndecided))
@@ -4297,12 +5707,16 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, lookupUndecided ?? $"FOREIGN KEY '{fk.Name}' names child column '{childCol}', which table '{childTableName}' does not have");
             }
-            byte tc = childColumns[matchedIdx].TypeCode;
-            if (tc != NativeTypes.Long || childColumns[matchedIdx].IsAutoNumber)
+            if (!isDao)
             {
-                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on {(childColumns[matchedIdx].IsAutoNumber ? "Counter" : $"native type 0x{tc:X2}")} column '{childColumns[matchedIdx].Name}' is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record Long columns only)");
+                byte tc = childColumns[matchedIdx].TypeCode;
+                if (tc != NativeTypes.Long || childColumns[matchedIdx].IsAutoNumber)
+                {
+                    return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on {(childColumns[matchedIdx].IsAutoNumber ? "Counter" : $"native type 0x{tc:X2}")} column '{childColumns[matchedIdx].Name}' is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record Long columns only)");
+                }
             }
             canonicalChildCols.Add(childColumns[matchedIdx].Name);
+            matchedChildCols.Add(childColumns[matchedIdx]);
         }
 
         if (FindTable(fk.ReferencedTable) is not { } parentEntry)
@@ -4312,105 +5726,6 @@ public sealed class SchemaWriter
         if (Table(parentEntry, out string? parentFailure) is not { } parentTable)
         {
             return new SchemaRefusal(null, parentFailure);
-        }
-        if (TableDefEncoder.SpecOf(parentTable, out string? parentSpecFailure) is not { } parentSpec)
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef: {parentSpecFailure}");
-        }
-        byte[] parentReencoded = new byte[_d.PageSize];
-        TableDefEncoder.Encode(parentReencoded, parentSpec, _d);
-        if (PinCopy(parentTable.FirstPage) is not { } parentStored || !parentStored.AsSpan().SequenceEqual(parentReencoded))
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef page {parentTable.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
-        }
-        if (parentTable.LogicalIndexes.Count != parentTable.PhysicalIndexes.Count)
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has relationship or aliased logical indexes: adding a second relationship to a parent (.rB naming/index rules) is not recorded");
-        }
-        if (parentTable.LogicalIndexes.Count >= 32)
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has {parentTable.LogicalIndexes.Count} logical indexes (ACE limit 32)");
-        }
-        int parentIdxCount = parentTable.LogicalIndexes.Count;
-        bool[] seenParentLogical = new bool[parentIdxCount];
-        bool[] seenParentPhysical = new bool[parentIdxCount];
-        LogicalIndex? parentPkLogical = null;
-        for (int i = 0; i < parentIdxCount; i++)
-        {
-            LogicalIndex li = parentTable.LogicalIndexes[i];
-            if ((li.IndexType != 0 && li.IndexType != _d.IndexDescriptor.PrimaryKeyType)
-                || li.RelatedTable != 0 || li.RelatedTableType != 0 || li.RelatedIndex != 0xFFFFFFFFu)
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already participates in a relationship ('{li.Name}'): adding another FOREIGN KEY to the same parent is not recorded");
-            }
-            if (li.Number < 0 || li.Number >= parentIdxCount || seenParentLogical[li.Number]
-                || li.PhysicalNumber < 0 || li.PhysicalNumber >= parentIdxCount || seenParentPhysical[li.PhysicalNumber])
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' has non-contiguous logical/physical index numbering");
-            }
-            seenParentLogical[li.Number] = true;
-            seenParentPhysical[li.PhysicalNumber] = true;
-            if (!IsAsciiIndexSortName(li.Name))
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical index '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0)");
-            }
-            if (i > 0 && TextOrder.Compare(sort, parentTable.LogicalIndexes[i - 1].Name, li.Name) >= 0)
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical indexes '{parentTable.LogicalIndexes[i - 1].Name}' and '{li.Name}' are not in General Legacy (1033/0) name order");
-            }
-            if (li.IndexType == _d.IndexDescriptor.PrimaryKeyType)
-            {
-                parentPkLogical = li;
-            }
-        }
-        if (parentPkLogical is null || parentTable.PhysicalOf(parentPkLogical) is not { } parentPkPhys)
-        {
-            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' references parent table '{parentEntry.Name}', which has no PRIMARY KEY index (referencing a non-PK UNIQUE index is not recorded)");
-        }
-        if (parentPkPhys.Columns.Count != fk.ReferencedFields.Count)
-        {
-            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' references {fk.ReferencedFields.Count} column(s) on '{parentEntry.Name}', whose PRIMARY KEY has {parentPkPhys.Columns.Count} column(s) (referencing a non-PK UNIQUE index is not recorded)");
-        }
-        List<string> canonicalParentCols = new(fk.ReferencedFields.Count);
-        for (int i = 0; i < fk.ReferencedFields.Count; i++)
-        {
-            IndexColumn pkColSpec = parentPkPhys.Columns[i];
-            if (!pkColSpec.Ascending)
-            {
-                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' references descending PRIMARY KEY column on '{parentEntry.Name}' (not recorded)");
-            }
-            ColumnDescriptor? pkCol = parentTable.Columns.FirstOrDefault(c => c.PhysicalNumber == pkColSpec.PhysicalNumber);
-            if (pkCol is null)
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' PRIMARY KEY physical column {pkColSpec.PhysicalNumber} not found");
-            }
-            if (pkCol.TypeCode != NativeTypes.Long)
-            {
-                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' references parent column '{pkCol.Name}' of native type 0x{pkCol.TypeCode:X2} (evidence/r-q34-ddl-sweep/fk-* records Long columns only)");
-            }
-            switch (FieldNameLookupClashOf(pkCol.Name, fk.ReferencedFields[i], _sortOrder, out string? refUndecided))
-            {
-                case FieldNameClash.Undecided:
-                    return new SchemaRefusal(null, refUndecided);
-                case FieldNameClash.None:
-                    return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' referenced column '{fk.ReferencedFields[i]}' does not match parent '{parentEntry.Name}' PRIMARY KEY column '{pkCol.Name}' at position {i}");
-            }
-            canonicalParentCols.Add(pkCol.Name);
-        }
-
-        int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
-        TableDefSpec sizedParentSpec = WithParentRelationshipIndex(
-            parentSpec,
-            FirstParentRelationshipIndexName,
-            (uint)parentPkLogical.PhysicalNumber,
-            childFkLogicalNumber: 0,
-            childTdefPage: 0,
-            ForeignKeyUpdateActionNone,
-            fk.OnDeleteCascade ? ForeignKeyDeleteActionCascade : ForeignKeyDeleteActionNone);
-        int parentEncodedLen = EncodedTableDefLength(sizedParentSpec);
-        if (parentEncodedLen > maxSinglePage)
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef with '.rB' needs {parentEncodedLen} bytes, exceeding one single-page TableDef ({maxSinglePage} bytes)");
         }
 
         if (SystemTable("MSysRelationships", out string? relTableFailure) is not { } relationshipsTable)
@@ -4430,13 +5745,15 @@ public sealed class SchemaWriter
             switch (FieldNameLookupClashOf(rel.Name, fk.Name, _sortOrder, out string? relNameUndecided))
             {
                 case FieldNameClash.Duplicate:
-                    return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' clashes with existing relationship '{rel.Name}' in MSysRelationships");
+                    return isDao
+                        ? new SchemaRefusal(3012, null)
+                        : new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' clashes with existing relationship '{rel.Name}' in MSysRelationships");
                 case FieldNameClash.Undecided:
                     return new SchemaRefusal(null, relNameUndecided);
             }
-            if (CatalogRelationshipContext.NamesEqual(rel.Table, parentEntry.Name))
+            if (!isDao && CatalogRelationshipContext.NamesEqual(rel.Table, parentEntry.Name))
             {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already participates as primary table in relationship '{rel.Name}': a parent with several FOREIGN KEYs is not recorded");
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has relationship '{rel.Name}' as primary table: a parent with several SQL/ADO FOREIGN KEYs is not recorded");
             }
         }
 
@@ -4490,7 +5807,9 @@ public sealed class SchemaWriter
                         switch (FieldNameLookupClashOf(existingName, fk.Name, _sortOrder, out string? nameUndecided))
                         {
                             case FieldNameClash.Duplicate:
-                                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' clashes with existing object '{existingName}' in MSysObjects under Relationships container");
+                                return isDao
+                                    ? new SchemaRefusal(3012, null)
+                                    : new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' clashes with existing object '{existingName}' in MSysObjects under Relationships container");
                             case FieldNameClash.Undecided:
                                 return new SchemaRefusal(null, nameUndecided);
                         }
@@ -4506,129 +5825,455 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "MSysObjects has no Relationships container (Id 0x0F000003, Type 3)");
         }
-        if (maxNegativeId is not null)
+        if (!isDao && maxNegativeId is not null)
         {
-            return new SchemaRefusal(null, $"MSysObjects already has a negative-Id object (0x{(uint)maxNegativeId.Value:X8}): negative-Id allocation for a second relationship or relationship alongside a CHECK constraint is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record the first negative Id 0x80000000 only)");
+            return new SchemaRefusal(null, $"MSysObjects already has a negative-Id object (0x{(uint)maxNegativeId.Value:X8}): negative-Id allocation for a second SQL/ADO relationship is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record the first negative Id 0x80000000 only)");
         }
-        int nextId = int.MinValue;
+        if (maxNegativeId == -1)
+        {
+            return new SchemaRefusal(null, "MSysObjects negative Id range exhausted (0xFFFFFFFF)");
+        }
+        // evidence/r-q47-bigint-expr-edges/rel-multi-parent-accdb, rel-multi-parent-mdb:
+        // MSysObjects Type 8 negative IDs step from 0x80000000 by maxNegativeId + 1 without reusing deleted IDs.
+        // If no live negative-Id row exists but MSysRelationships already owns a data page (meaning a sole/highest
+        // relation was previously deleted), refuse because reuse of 0x80000000 is not recorded.
+        if (isDao && maxNegativeId is null
+            && PinCopy(relationshipsTable.OwnedMap.Page) is { } relOwnedMapPage
+            && MapPages.InlinePages(relOwnedMapPage, relationshipsTable.OwnedMap.Row, _d, out _) is { Count: > 0 })
+        {
+            return new SchemaRefusal(null, "DAO Relations.Append after deleting the sole/highest Relation (negative MSysObjects.Id reuse after deletion is not recorded; evidence/r-q47-bigint-expr-edges/rel-multi-parent-* deletes a middle relation only)");
+        }
+        int nextId = maxNegativeId is int maxNeg ? maxNeg + 1 : int.MinValue;
+
+        // dbRelationDontEnforce (2): writes only MSysObjects Type 8 + 2 MSysACEs + MSysRelationships (grbit=2),
+        // leaving parent & child TDEFs and DateUpdate 0 bytes changed and bypassing 3368/3201 (rel-noenforce-*, rel-mismatch-3368-*).
+        if (fk.DontEnforce)
+        {
+            if (fk.Fields.Count > 1)
+            {
+                return new SchemaRefusal(null, $"compound ({fk.Fields.Count}-column) DAO Relation '{fk.Name}' with dbRelationDontEnforce is not recorded");
+            }
+            if (IsJet4Mdb(PinCopy(0) ?? []) && relationshipsTable.RowCount > 0)
+            {
+                return new SchemaRefusal(null, $"Jet 4 MDB DAO Relation '{fk.Name}' with dbRelationDontEnforce when MSysRelationships is already non-empty is not recorded (evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-mdb records empty MSysRelationships; non-empty ACCDB is recorded in r-cat-1b/create-rel)");
+            }
+            string[] parentColNames = [.. parentTable.Columns.Select(c => c.Name)];
+            List<string> canonicalDontEnforceParentCols = new(fk.ReferencedFields.Count);
+            foreach (string refField in fk.ReferencedFields)
+            {
+                if (!TryMatchFieldName(refField, parentColNames, out int pIdx, out string? pUndecided) || pIdx < 0)
+                {
+                    return new SchemaRefusal(null, pUndecided ?? $"DAO Relation '{fk.Name}' names parent column '{refField}', which table '{parentEntry.Name}' does not have");
+                }
+                canonicalDontEnforceParentCols.Add(parentTable.Columns[pIdx].Name);
+            }
+            prepared = new PreparedForeignKey(
+                parentEntry,
+                parentTable,
+                ParentSpec: null,
+                ParentTargetLogical: null,
+                canonicalChildCols,
+                canonicalDontEnforceParentCols,
+                nextId,
+                relationshipsTable,
+                ChildSpec: null,
+                ChildMapSlot: 0,
+                PopulatedChildLeafBytes: null,
+                EntryCount: 0,
+                UniqueEntryCount: 0,
+                SharedChildPhysicalNumber: null,
+                IsSelfRef: isSelfRef);
+            return null;
+        }
+
+        if (TableDefEncoder.SpecOf(parentTable, out string? parentSpecFailure) is not { } parentSpec)
+        {
+            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef: {parentSpecFailure}");
+        }
+        if (PinCopy(parentTable.FirstPage) is not { } parentStored || !LiveTableDefMatchesStored(parentStored, parentSpec))
+        {
+            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef page {parentTable.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
+        }
+        if (!isDao && parentTable.LogicalIndexes.Count != parentTable.PhysicalIndexes.Count)
+        {
+            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has relationship or aliased logical indexes: adding a second SQL/ADO relationship to a parent is not recorded");
+        }
+        int parentExtraLogicals = isSelfRef ? 2 : 1;
+        if (parentTable.LogicalIndexes.Count + parentExtraLogicals > 32)
+        {
+            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has {parentTable.LogicalIndexes.Count} logical indexes (ACE limit 32)");
+        }
+        int parentIdxCount = parentTable.LogicalIndexes.Count;
+        for (int i = 0; i < parentIdxCount; i++)
+        {
+            LogicalIndex li = parentTable.LogicalIndexes[i];
+            if (!isDao)
+            {
+                if ((li.IndexType != 0 && li.IndexType != _d.IndexDescriptor.PrimaryKeyType)
+                    || li.RelatedTable != 0 || li.RelatedTableType != 0 || li.RelatedIndex != 0xFFFFFFFFu)
+                {
+                    return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already participates in a relationship ('{li.Name}'): adding another SQL/ADO FOREIGN KEY to the same parent is not recorded");
+                }
+            }
+            if (!IsAsciiIndexSortName(li.Name) && !li.Name.StartsWith(".r", StringComparison.Ordinal))
+            {
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical index '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0)");
+            }
+            if (i > 0 && TextOrder.Compare(sort, parentTable.LogicalIndexes[i - 1].Name, li.Name) >= 0)
+            {
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical indexes '{parentTable.LogicalIndexes[i - 1].Name}' and '{li.Name}' are not in General Legacy (1033/0) name order");
+            }
+        }
+
+        // Match parent target index: PRIMARY KEY on SQL/ADO, or PRIMARY KEY / UNIQUE index on DAO
+        // (evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*: UX_P_S on P.S TEXT(10)).
+        LogicalIndex? parentTargetLogical = null;
+        PhysicalIndex? parentTargetPhys = null;
+        List<ColumnDescriptor> matchedParentCols = [];
+        foreach (LogicalIndex li in parentTable.LogicalIndexes)
+        {
+            bool isPk = li.IndexType == _d.IndexDescriptor.PrimaryKeyType;
+            if (!isPk && (!isDao || li.IndexType != 0))
+            {
+                continue;
+            }
+            if (parentTable.PhysicalOf(li) is not { } phys)
+            {
+                continue;
+            }
+            if (!isPk && (phys.Flags & UniqueIndexFlag) == 0)
+            {
+                continue;
+            }
+            if (phys.Columns.Count != fk.ReferencedFields.Count)
+            {
+                continue;
+            }
+            bool allMatch = true;
+            List<ColumnDescriptor> cols = new(fk.ReferencedFields.Count);
+            for (int i = 0; i < fk.ReferencedFields.Count; i++)
+            {
+                IndexColumn ic = phys.Columns[i];
+                if (!ic.Ascending)
+                {
+                    allMatch = false;
+                    break;
+                }
+                ColumnDescriptor? pc = parentTable.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber);
+                if (pc is null)
+                {
+                    allMatch = false;
+                    break;
+                }
+                FieldNameClash clash = FieldNameLookupClashOf(pc.Name, fk.ReferencedFields[i], _sortOrder, out string? refUndecided);
+                if (clash == FieldNameClash.Undecided)
+                {
+                    return new SchemaRefusal(null, refUndecided);
+                }
+                if (clash != FieldNameClash.Duplicate)
+                {
+                    allMatch = false;
+                    break;
+                }
+                cols.Add(pc);
+            }
+            if (allMatch)
+            {
+                parentTargetLogical = li;
+                parentTargetPhys = phys;
+                matchedParentCols = cols;
+                if (isPk)
+                {
+                    break;
+                }
+            }
+        }
+        if (parentTargetLogical is null || parentTargetPhys is null)
+        {
+            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' references parent table '{parentEntry.Name}' ({string.Join(", ", fk.ReferencedFields)}), which has no matching {(isDao ? "PRIMARY KEY or UNIQUE" : "PRIMARY KEY")} index");
+        }
+
+        List<string> canonicalParentCols = new(matchedParentCols.Count);
+        for (int i = 0; i < matchedParentCols.Count; i++)
+        {
+            ColumnDescriptor pCol = matchedParentCols[i];
+            (string Name, byte TypeCode, bool IsAutoNumber) cCol = matchedChildCols[i];
+            if (pCol.TypeCode != cCol.TypeCode)
+            {
+                if (isDao)
+                {
+                    // evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-accdb, rel-mismatch-3368-mdb:
+                    // enforced cross-type mismatch (Long->Text/Short/Double/GUID) fails 3368.
+                    return new SchemaRefusal(3368, null);
+                }
+                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' parent column '{pCol.Name}' (0x{pCol.TypeCode:X2}) does not match child column '{cCol.Name}' (0x{cCol.TypeCode:X2})");
+            }
+            if (pCol.TypeCode != NativeTypes.Long && (!isDao || pCol.TypeCode != NativeTypes.Text))
+            {
+                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on column '{pCol.Name}' of native type 0x{pCol.TypeCode:X2} is not recorded (Long{(isDao ? " and Text" : "")} columns are recorded)");
+            }
+            if (cCol.IsAutoNumber)
+            {
+                return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' on Counter child column '{cCol.Name}' is not recorded");
+            }
+            if (isDao && fk.Fields.Count > 1)
+            {
+                if (fk.Fields.Count != 2 || IsJet4Mdb(PinCopy(0) ?? []) || fk.Unique || fk.OnUpdateCascade || fk.OnDeleteCascade || isSelfRef || pCol.TypeCode != NativeTypes.Long)
+                {
+                    return new SchemaRefusal(null, $"compound ({fk.Fields.Count}-column) DAO Relation '{fk.Name}' with non-plain options, non-Long column, self-ref, or on Jet 4 MDB is not recorded (only plain 2-column Long ACCDB is recorded in evidence/r-q46-dao-ddl-multi/rel-compound-accdb and r-cat-1b/create-rel)");
+                }
+            }
+            if (isDao && pCol.TypeCode == NativeTypes.Text)
+            {
+                if (fk.Fields.Count != 1 || fk.Unique || fk.OnUpdateCascade || fk.OnDeleteCascade || isSelfRef || (childTable is not null && childTable.RowCount > 0))
+                {
+                    return new SchemaRefusal(null, $"DAO Text Relation '{fk.Name}' on a populated child table or with cascades/Unique/self-ref/compound columns is not recorded (evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-* records empty plain 1-col Text only)");
+                }
+            }
+            canonicalParentCols.Add(pCol.Name);
+        }
+
+        int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
+        byte updateAction = fk.OnUpdateCascade ? ForeignKeyUpdateActionCascade : ForeignKeyUpdateActionNone;
+        byte deleteAction = fk.OnDeleteCascade ? ForeignKeyDeleteActionCascade : ForeignKeyDeleteActionNone;
+        if (!isSelfRef)
+        {
+            uint previewParentLogicalId = LowestUnusedLogicalIndexId(parentSpec.LogicalIndexes);
+            if (previewParentLogicalId >= 26)
+            {
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical index id {previewParentLogicalId} exceeds recorded '.rA'..'.rZ' parent relationship naming (evidence/r-q47-bigint-expr-edges/rel-multi-parent-*)");
+            }
+            TableDefSpec sizedParentSpec = WithParentRelationshipIndex(
+                parentSpec,
+                ParentRelationshipIndexName(previewParentLogicalId),
+                previewParentLogicalId,
+                (uint)parentTargetLogical.PhysicalNumber,
+                childFkLogicalNumber: 0,
+                childTdefPage: 0,
+                updateAction,
+                deleteAction);
+            int parentEncodedLen = EncodedTableDefLength(sizedParentSpec);
+            if (parentEncodedLen > maxSinglePage)
+            {
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef with '{ParentRelationshipIndexName(previewParentLogicalId)}' needs {parentEncodedLen} bytes, exceeding one single-page TableDef ({maxSinglePage} bytes)");
+            }
+        }
 
         TableDefSpec? childSpec = null;
         byte childMapSlot = 0;
         byte[]? populatedLeafBytes = null;
         uint entryCount = 0;
         uint uniqueEntryCount = 0;
+        uint? sharedChildPhysicalNumber = null;
         if (childTable is not null)
         {
-            foreach (LogicalIndex li in childTable.LogicalIndexes)
+            if (fk.Unique && childTable.RowCount > 0)
             {
-                if (childTable.PhysicalOf(li) is not { } pi)
+                return new SchemaRefusal(null, $"DAO Relation '{fk.Name}' with dbRelationUnique on populated child table '{childTableName}' is not recorded (qualified.md r-q47 Open)");
+            }
+            if (isSelfRef && childTable.RowCount > 0)
+            {
+                return new SchemaRefusal(null, $"self-referencing DAO Relation '{fk.Name}' on populated table '{childTableName}' is not recorded (evidence/r-q47-bigint-expr-edges/rel-selfref-unique-* records empty Node)");
+            }
+
+            if (!isDao)
+            {
+                foreach (LogicalIndex li in childTable.LogicalIndexes)
                 {
-                    continue;
-                }
-                bool isPkOrUnique = li.IndexType == _d.IndexDescriptor.PrimaryKeyType
-                    || (pi.Flags & _d.IndexDescriptor.UniqueFlag) != 0;
-                if (!isPkOrUnique)
-                {
-                    continue;
-                }
-                foreach (IndexColumn ic in pi.Columns)
-                {
-                    ColumnDescriptor? idxCol = childTable.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber);
-                    if (idxCol is null)
+                    if (childTable.PhysicalOf(li) is not { } pi)
                     {
                         continue;
                     }
-                    foreach (string fkCol in canonicalChildCols)
+                    bool isPkOrUnique = li.IndexType == _d.IndexDescriptor.PrimaryKeyType
+                        || (pi.Flags & _d.IndexDescriptor.UniqueFlag) != 0;
+                    if (!isPkOrUnique)
                     {
-                        switch (FieldNameLookupClashOf(idxCol.Name, fkCol, _sortOrder, out string? overlapUndecided))
+                        continue;
+                    }
+                    foreach (IndexColumn ic in pi.Columns)
+                    {
+                        ColumnDescriptor? idxCol = childTable.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber);
+                        if (idxCol is null)
                         {
-                            case FieldNameClash.Duplicate:
-                                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' overlaps existing PRIMARY KEY or UNIQUE index '{li.Name}' column '{idxCol.Name}' on '{childTableName}' (1-to-1 FK grbit/index sharing is not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
-                            case FieldNameClash.Undecided:
-                                return new SchemaRefusal(null, overlapUndecided);
+                            continue;
+                        }
+                        foreach (string fkCol in canonicalChildCols)
+                        {
+                            switch (FieldNameLookupClashOf(idxCol.Name, fkCol, _sortOrder, out string? overlapUndecided))
+                            {
+                                case FieldNameClash.Duplicate:
+                                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' overlaps existing PRIMARY KEY or UNIQUE index '{li.Name}' column '{idxCol.Name}' on '{childTableName}' (1-to-1 FK grbit/index sharing is not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                                case FieldNameClash.Undecided:
+                                    return new SchemaRefusal(null, overlapUndecided);
+                            }
+                        }
+                    }
+                }
+                if (childTable.LogicalIndexes.Count != 1
+                    || childTable.PhysicalIndexes.Count != 1
+                    || childTable.LogicalIndexes[0].IndexType != _d.IndexDescriptor.PrimaryKeyType
+                    || childTable.PhysicalIndexes[0].Columns.Count != 1)
+                {
+                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on '{childTableName}' requires one single-column PRIMARY KEY and no other indexes (0-PK, multi-index, or 2-col PK child tables are not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                }
+                var sqlFkIndexShape = new NewIndex(fk.Name, canonicalChildCols, PrimaryKey: false);
+                if (ExistingIndexesRefusal(childTable, sqlFkIndexShape) is { } existingRefusal)
+                {
+                    return existingRefusal;
+                }
+            }
+            else
+            {
+                // DAO child table may already hold PK, UNIQUE, non-unique, or prior FK/relationship logical indexes
+                // (evidence/r-q47-bigint-expr-edges/rel-selfref-unique-*: Node, C1, C2).
+                int childExtraLogicals = isSelfRef ? 2 : 1;
+                if (childTable.LogicalIndexes.Count + childExtraLogicals > 32)
+                {
+                    return new SchemaRefusal(null, $"child table '{childTableName}' already has {childTable.LogicalIndexes.Count} logical indexes (ACE limit 32)");
+                }
+                for (int i = 0; i < childTable.LogicalIndexes.Count; i++)
+                {
+                    LogicalIndex li = childTable.LogicalIndexes[i];
+                    if (!IsAsciiIndexSortName(li.Name) && !li.Name.StartsWith(".r", StringComparison.Ordinal))
+                    {
+                        return new SchemaRefusal(null, $"child table '{childTableName}' logical index '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0)");
+                    }
+                    if (i > 0 && TextOrder.Compare(sort, childTable.LogicalIndexes[i - 1].Name, li.Name) >= 0)
+                    {
+                        return new SchemaRefusal(null, $"child table '{childTableName}' logical indexes '{childTable.LogicalIndexes[i - 1].Name}' and '{li.Name}' are not in General Legacy (1033/0) name order");
+                    }
+                    switch (FieldNameLookupClashOf(li.Name, fk.Name, _sortOrder, out string? clashUndecided))
+                    {
+                        case FieldNameClash.Duplicate:
+                            return new SchemaRefusal(null, $"DAO Relation '{fk.Name}' clashes with existing logical index '{li.Name}' on '{childTableName}'");
+                        case FieldNameClash.Undecided:
+                            return new SchemaRefusal(null, clashUndecided);
+                    }
+                }
+                if (fk.Unique)
+                {
+                    // evidence/r-q47-bigint-expr-edges/rel-selfref-unique-accdb, rel-selfref-unique-mdb:
+                    // dbRelationUnique shares an existing physical index ONLY if its flags == 0x81 (UNIQUE, non-PK,
+                    // non-DisallowNull, non-IgnoreNull) and its columns match canonicalChildCols ascending (C2 UX_C2_PID).
+                    // PK (0x89 on C1) and non-unique (0x80 on Node) allocate a NEW 0x81 physical index.
+                    byte exactUniqueFlags = (byte)(PlainIndexFlags | UniqueIndexFlag);
+                    foreach (PhysicalIndex pi in childTable.PhysicalIndexes)
+                    {
+                        if (pi.Flags != exactUniqueFlags || pi.Columns.Count != canonicalChildCols.Count)
+                        {
+                            continue;
+                        }
+                        bool matches = true;
+                        for (int ci = 0; ci < pi.Columns.Count; ci++)
+                        {
+                            if (!pi.Columns[ci].Ascending)
+                            {
+                                matches = false;
+                                break;
+                            }
+                            ColumnDescriptor? col = childTable.Columns.FirstOrDefault(c => c.PhysicalNumber == pi.Columns[ci].PhysicalNumber);
+                            if (col is null || !string.Equals(col.Name, canonicalChildCols[ci], StringComparison.Ordinal))
+                            {
+                                matches = false;
+                                break;
+                            }
+                        }
+                        if (matches)
+                        {
+                            sharedChildPhysicalNumber = (uint)pi.Number;
+                            break;
                         }
                     }
                 }
             }
-            if (childTable.LogicalIndexes.Count != 1
-                || childTable.PhysicalIndexes.Count != 1
-                || childTable.LogicalIndexes[0].IndexType != _d.IndexDescriptor.PrimaryKeyType
-                || childTable.PhysicalIndexes[0].Columns.Count != 1)
+
+            TableDefSpec decodedChildSpec;
+            if (isSelfRef)
             {
-                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on '{childTableName}' requires one single-column PRIMARY KEY and no other indexes (0-PK, multi-index, or 2-col PK child tables are not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                decodedChildSpec = parentSpec;
             }
-            var fkIndexShape = new NewIndex(fk.Name, canonicalChildCols, PrimaryKey: false);
-            if (ExistingIndexesRefusal(childTable, fkIndexShape) is { } existingRefusal)
+            else
             {
-                return existingRefusal;
-            }
-            if (TableDefEncoder.SpecOf(childTable, out string? childSpecFailure) is not { } decodedChildSpec)
-            {
-                return new SchemaRefusal(null, $"{childTableName}'s TableDef: {childSpecFailure}");
-            }
-            byte[] childReencoded = new byte[_d.PageSize];
-            TableDefEncoder.Encode(childReencoded, decodedChildSpec, _d);
-            if (PinCopy(childTable.FirstPage) is not { } childStored || !childStored.AsSpan().SequenceEqual(childReencoded))
-            {
-                return new SchemaRefusal(null, $"{childTableName}'s TableDef page {childTable.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
-            }
-            if (childTable.FreeMap.Page != childTable.OwnedMap.Page || PinCopy(childTable.OwnedMap.Page) is not { } mapPage)
-            {
-                return new SchemaRefusal(null, $"{childTableName}'s maps are not on one readable map page");
-            }
-            int expectedMapRows = 2 + childTable.PhysicalIndexes.Count + (childTable.LongValueMaps.Count * 2);
-            ulong mapRowCount = _d.DataPage.RowCount.Read(mapPage);
-            bool mapsValid = childTable.OwnedMap.Row == 0 && childTable.FreeMap.Row == 1
-                && expectedMapRows < MaxSinglePageMaps
-                && mapRowCount == (ulong)expectedMapRows;
-            if (mapsValid && expectedMapRows > 2)
-            {
-                bool[] used = new bool[expectedMapRows];
-                used[0] = true;
-                used[1] = true;
-                static bool Claim(RowLocator loc, uint mapPageNum, bool[] usedSlots) =>
-                    loc.Page == mapPageNum && loc.Row < usedSlots.Length && !usedSlots[loc.Row] && (usedSlots[loc.Row] = true);
-                foreach (PhysicalIndex phys in childTable.PhysicalIndexes)
+                if (TableDefEncoder.SpecOf(childTable, out string? childSpecFailure) is not { } decoded)
                 {
-                    mapsValid &= Claim(phys.OwnedMap, childTable.OwnedMap.Page, used);
+                    return new SchemaRefusal(null, $"{childTableName}'s TableDef: {childSpecFailure}");
+                }
+                if (PinCopy(childTable.FirstPage) is not { } childStored || !LiveTableDefMatchesStored(childStored, decoded))
+                {
+                    return new SchemaRefusal(null, $"{childTableName}'s TableDef page {childTable.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
+                }
+                decodedChildSpec = decoded;
+            }
+
+            if (sharedChildPhysicalNumber is null)
+            {
+                if (childTable.FreeMap.Page != childTable.OwnedMap.Page || PinCopy(childTable.OwnedMap.Page) is not { } mapPage)
+                {
+                    return new SchemaRefusal(null, $"{childTableName}'s maps are not on one readable map page");
+                }
+                ulong mapRowCount = _d.DataPage.RowCount.Read(mapPage);
+                if (childTable.OwnedMap.Row != 0 || childTable.FreeMap.Row != 1 || mapRowCount >= MaxSinglePageMaps)
+                {
+                    return new SchemaRefusal(null, $"{childTableName}'s map page holds {mapRowCount} maps (must be below {MaxSinglePageMaps})");
+                }
+                if (_d.DataPage.Owner.Read(mapPage) != 0)
+                {
+                    return new SchemaRefusal(null, $"{childTableName}'s map page {childTable.OwnedMap.Page} has owner {_d.DataPage.Owner.Read(mapPage)}, expected 0");
+                }
+                byte[] mapDryRun = mapPage.ToArray();
+                if (!DataPages.TryAppendRow(mapDryRun, MapDeclaration.EncodeInline(0, [0], _d), _d, out byte drySlot, out string? mapAppendFailure))
+                {
+                    return new SchemaRefusal(null, $"{childTableName}'s map page {childTable.OwnedMap.Page} cannot append FK map slot: {mapAppendFailure}");
+                }
+                childMapSlot = drySlot;
+
+                var fkIndexShape = new NewIndex(fk.Name, canonicalChildCols, PrimaryKey: false, Unique: fk.Unique);
+                if (childTable.RowCount > 0
+                    && VerifyChildRowsExistInParent(childTable, canonicalChildCols, parentEntry.Name, parentTable, parentTargetLogical, fk.Name, route) is { } orphanRefusal)
+                {
+                    return orphanRefusal;
+                }
+                if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out _, out string? buildFailure))
+                {
+                    return new SchemaRefusal(null, buildFailure);
                 }
             }
-            if (!mapsValid)
+
+            uint previewChildLogicalId = LowestUnusedLogicalIndexId(decodedChildSpec.LogicalIndexes);
+            uint previewParentLogicalIdForChild = isSelfRef
+                ? LowestUnusedLogicalIndexId(decodedChildSpec.LogicalIndexes, alsoUsed: previewChildLogicalId)
+                : LowestUnusedLogicalIndexId(parentSpec.LogicalIndexes);
+            if (previewParentLogicalIdForChild >= 26)
             {
-                return new SchemaRefusal(null, $"{childTableName}'s map page holds {mapRowCount} maps (expected {expectedMapRows} covering table owned/free and {childTable.PhysicalIndexes.Count} index(es), below {MaxSinglePageMaps})");
-            }
-            childMapSlot = (byte)expectedMapRows;
-            if (_d.DataPage.Owner.Read(mapPage) != 0)
-            {
-                return new SchemaRefusal(null, $"{childTableName}'s map page {childTable.OwnedMap.Page} has owner {_d.DataPage.Owner.Read(mapPage)}, expected 0");
-            }
-            byte[] mapDryRun = mapPage.ToArray();
-            if (!DataPages.TryAppendRow(mapDryRun, MapDeclaration.EncodeInline(0, [0], _d), _d, out byte drySlot, out string? mapAppendFailure)
-                || drySlot != childMapSlot)
-            {
-                return new SchemaRefusal(null, $"{childTableName}'s map page {childTable.OwnedMap.Page} cannot append map slot {childMapSlot}: {mapAppendFailure ?? $"landed at slot {drySlot}"}");
-            }
-            if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out _, out string? buildFailure))
-            {
-                return new SchemaRefusal(null, buildFailure);
-            }
-            if (childTable.RowCount > 0
-                && VerifyChildRowsExistInParent(childTable, canonicalChildCols, parentEntry.Name, parentTable, parentPkLogical, fk.Name) is { } orphanRefusal)
-            {
-                return orphanRefusal;
+                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical index id {previewParentLogicalIdForChild} exceeds recorded '.rA'..'.rZ' parent relationship naming (evidence/r-q47-bigint-expr-edges/rel-multi-parent-*)");
             }
             TableDefSpec sizedChildSpec = WithForeignKeyIndex(
                 decodedChildSpec,
                 fk.Name,
+                previewChildLogicalId,
                 canonicalChildCols,
-                new RowLocator(childTable.OwnedMap.Page, childMapSlot),
+                sharedChildPhysicalNumber,
+                fk.Unique ? (byte)(PlainIndexFlags | UniqueIndexFlag) : PlainIndexFlags,
+                sharedChildPhysicalNumber is null ? new RowLocator(childTable.OwnedMap.Page, childMapSlot) : null,
                 leaf: 0,
-                parentLogicalNumber: (uint)parentSpec.LogicalIndexes.Count,
+                parentLogicalNumber: previewParentLogicalIdForChild,
                 parentTdefPage: parentTable.FirstPage,
-                ForeignKeyUpdateActionNone,
-                fk.OnDeleteCascade ? ForeignKeyDeleteActionCascade : ForeignKeyDeleteActionNone,
+                updateAction,
+                deleteAction,
                 entryCount,
                 uniqueEntryCount);
+            if (isSelfRef)
+            {
+                sizedChildSpec = WithParentRelationshipIndex(
+                    sizedChildSpec,
+                    ParentRelationshipIndexName(previewParentLogicalIdForChild),
+                    previewParentLogicalIdForChild,
+                    (uint)parentTargetLogical.PhysicalNumber,
+                    childFkLogicalNumber: previewChildLogicalId,
+                    childTdefPage: childTable.FirstPage,
+                    updateAction,
+                    deleteAction);
+            }
             int childEncodedLen = EncodedTableDefLength(sizedChildSpec);
             if (childEncodedLen > maxSinglePage)
             {
@@ -4641,7 +6286,7 @@ public sealed class SchemaWriter
             parentEntry,
             parentTable,
             parentSpec,
-            parentPkLogical,
+            parentTargetLogical,
             canonicalChildCols,
             canonicalParentCols,
             nextId,
@@ -4650,7 +6295,9 @@ public sealed class SchemaWriter
             childMapSlot,
             populatedLeafBytes,
             entryCount,
-            uniqueEntryCount);
+            uniqueEntryCount,
+            sharedChildPhysicalNumber,
+            isSelfRef);
         return null;
     }
 
@@ -4659,8 +6306,9 @@ public sealed class SchemaWriter
         IReadOnlyList<string> childFieldNames,
         string parentTableName,
         TableDefinition parentTable,
-        LogicalIndex parentPkLogical,
-        string fkName)
+        LogicalIndex parentTargetLogical,
+        string fkName,
+        SchemaRoute route)
     {
         var childCols = new ColumnDescriptor[childFieldNames.Count];
         for (int i = 0; i < childFieldNames.Count; i++)
@@ -4679,10 +6327,10 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"parent table '{parentTableName}' cursor could not be opened: {openFailure?.Predicate}");
         }
-        CalcDb.Isam.IndexRefusal setIdx = parentCursor.SetIndex(parentPkLogical.Name);
+        CalcDb.Isam.IndexRefusal setIdx = parentCursor.SetIndex(parentTargetLogical.Name);
         if (setIdx != CalcDb.Isam.IndexRefusal.None)
         {
-            return new SchemaRefusal(null, $"parent table '{parentTableName}' PRIMARY KEY '{parentPkLogical.Name}' could not be selected ({setIdx})");
+            return new SchemaRefusal(null, $"parent table '{parentTableName}' index '{parentTargetLogical.Name}' could not be selected ({setIdx})");
         }
 
         List<TraversalFailure> scanFailures = [];
@@ -4691,22 +6339,42 @@ public sealed class SchemaWriter
         {
             using (row)
             {
+                bool anyNull = false;
                 for (int i = 0; i < childCols.Length; i++)
                 {
                     NativeValue v = FieldDecoder.Read(row, childTable, childCols[i], _cache, _d);
-                    if (v.Kind != NativeKind.Long || EntryKeys.ValueOf(v) is not { } kv)
+                    if (v.Kind == NativeKind.Null)
+                    {
+                        anyNull = true;
+                        break;
+                    }
+                    if (v.Kind is not (NativeKind.Long or NativeKind.Text) || EntryKeys.ValueOf(v) is not { } kv)
                     {
                         return new SchemaRefusal(null, $"FOREIGN KEY '{fkName}' child row {row.Root} column '{childCols[i].Name}' has unexpected value kind {v.Kind}");
                     }
                     keys[i] = new SeekKey(kv);
                 }
+                if (anyNull)
+                {
+                    if (route == SchemaRoute.Dao)
+                    {
+                        return new SchemaRefusal(null, $"enforced DAO Relation '{fkName}' over a child table with NULL foreign-key values is not recorded");
+                    }
+                    continue;
+                }
                 CalcDb.Isam.IndexRefusal seek = parentCursor.Seek(SeekOperator.Equal, keys, out bool found);
                 if (seek != CalcDb.Isam.IndexRefusal.None)
                 {
-                    return new SchemaRefusal(null, $"parent table '{parentTableName}' PRIMARY KEY seek refused ({seek})");
+                    return new SchemaRefusal(null, $"parent table '{parentTableName}' index seek refused ({seek})");
                 }
                 if (!found)
                 {
+                    if (route == SchemaRoute.Dao)
+                    {
+                        // evidence/r-q46-dao-ddl-multi/rel-errors-accdb, rel-errors-mdb (after-err-orphan),
+                        // evidence/r-cat-1b/rel-append-over-existing-orphans: orphan child row fails 3201.
+                        return new SchemaRefusal(3201, null);
+                    }
                     return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fkName}': child row {row.Root} has no matching row in parent table '{parentTableName}' (orphan-row refusal bytes are not recorded)");
                 }
             }
@@ -4726,11 +6394,28 @@ public sealed class SchemaWriter
         PreparedForeignKey prepared,
         ulong dateCreateBits,
         ulong dateUpdateBits,
+        IReadOnlyList<uint> sessionReserved,
+        bool useSessionExtentReservation,
+        IReadOnlyList<PageEdit> deferredCloseEdits,
         out ulong extent)
     {
         extent = _pageCount;
         var work = new Work(p);
-        var allocator = new PageAllocator(_cache, _d, _pageCount);
+        foreach (PageEdit deferredEdit in deferredCloseEdits)
+        {
+            if (!work.Apply(deferredEdit))
+            {
+                return work.NotWritten();
+            }
+        }
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved, allowNonContiguousReserved: true);
+        uint firstFreeBefore = 0;
+        byte[] globalMapBefore = [];
+        bool captureForExtent = useSessionExtentReservation && !allocator.HasSessionReservedPages;
+        if (captureForExtent && !allocator.TryCaptureGlobalFreeMap(p.Overlay, out firstFreeBefore, out globalMapBefore, out string? captureFailure))
+        {
+            return NotWritten(captureFailure);
+        }
         if (PinCopy(0) is not { } page0)
         {
             return NotWritten("page 0 could not be read for the SID keystream");
@@ -4748,7 +6433,7 @@ public sealed class SchemaWriter
             childTable.FirstPage,
             childTable.OwnedMap.Page,
             prepared.ChildMapSlot,
-            prepared.ChildSpec!,
+            prepared.ChildSpec,
             fk,
             prepared,
             aces,
@@ -4759,17 +6444,53 @@ public sealed class SchemaWriter
         {
             return work.NotWritten();
         }
+        foreach (uint gapPage in allocator.ZeroGapPages)
+        {
+            if (!work.Apply(new PageEdit(gapPage, new WholePage(new byte[_d.PageSize]), PageRole.Data)))
+            {
+                return work.NotWritten();
+            }
+        }
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        if (captureForExtent && allocator.AllocatedCount > 0)
+        {
+            List<PageEdit> reserveEdits = [];
+            List<uint> reserved = [];
+            if (!allocator.TryReserveExtent(firstFreeBefore, globalMapBefore, reserveEdits, reserved, out string? reserveFailure, allowCrossByteWithinBlock: true))
+            {
+                work.Fail(reserveFailure!);
+                return work.NotWritten();
+            }
+            foreach (PageEdit edit in reserveEdits)
+            {
+                if (!work.Apply(edit))
+                {
+                    return work.NotWritten();
+                }
+            }
+            reservedExtentPages.AddRange(reserved);
+            releasedAtClose.AddRange(reserved);
+        }
         extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
-        return work.Change(_cache);
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
     /// <summary>
     /// Shared relationship attachment compiled by both <see cref="CompileCreateTable"/> and
-    /// <see cref="CompileAddForeignKey"/> (evidence/r-q34-ddl-sweep/fk-*, alt-fk-*): inserts the Type 8
-    /// <c>MSysObjects</c> row, its 2 <c>MSysACEs</c> rows (<see cref="DefaultAdminSecurity.NewRelationshipAces"/>),
-    /// and <c>MSysRelationships</c> row(s) BEFORE allocating the child FK index leaf page so page allocation order
-    /// matches ACE byte-for-byte (<c>MSysRelationships</c> data page first when empty, then child FK leaf), appends
-    /// the child's map row, rewrites child and parent (<c>.rB</c>) TableDefs, and updates <c>MSysObjects.DateUpdate</c>.
+    /// <see cref="CompileAddForeignKey"/> (evidence/r-q34-ddl-sweep/fk-*, alt-fk-*; evidence/r-q46-dao-ddl-multi/rel-*;
+    /// evidence/r-q47-bigint-expr-edges/rel-*): inserts the Type 8 <c>MSysObjects</c> row, its 2 <c>MSysACEs</c> rows
+    /// (<see cref="DefaultAdminSecurity.NewRelationshipAces"/>), and <c>MSysRelationships</c> row(s) BEFORE allocating
+    /// any child FK index leaf page. For <see cref="NewForeignKey.DontEnforce"/>, returns immediately leaving TDEFs and
+    /// <c>DateUpdate</c> untouched. For enforced relationships, attaches the child FK logical/physical index (sharing an
+    /// existing <c>0x81</c> physical index when <see cref="PreparedForeignKey.SharedChildPhysicalNumber"/> is set) and
+    /// the parent <c>.r*</c> hidden logical index (combining both on one TDEF rewrite for self-referencing relations),
+    /// and updates <c>MSysObjects.DateUpdate</c>.
     /// </summary>
     private bool CompileAttachForeignKey(
         Work work,
@@ -4779,7 +6500,7 @@ public sealed class SchemaWriter
         uint childTdefPage,
         uint childMapPage,
         byte childMapSlot,
-        TableDefSpec childSpecBeforeFk,
+        TableDefSpec? childSpecBeforeFk,
         NewForeignKey fk,
         PreparedForeignKey prepared,
         TableDefinition aces,
@@ -4799,7 +6520,7 @@ public sealed class SchemaWriter
         Set(objects, relObjRow, "DateCreate", new NativeValue(NativeKind.DateTime) { Bits = dateCreateBits });
         Set(objects, relObjRow, "DateUpdate", new NativeValue(NativeKind.DateTime) { Bits = dateCreateBits });
         Set(objects, relObjRow, "Owner", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(DefaultAdminSecurity.Admin, keystream) });
-        if (!work.Insert(this, objects, relObjRow, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay)))
+        if (!work.Insert(this, objects, relObjRow, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay), externalAllocator: allocator))
         {
             return false;
         }
@@ -4812,14 +6533,17 @@ public sealed class SchemaWriter
             Set(aces, ace, "SID", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(sid, keystream) });
             Set(aces, ace, "ACM", Long(acm));
             Set(aces, ace, "FInheritable", new NativeValue(NativeKind.Boolean) { Boolean = false });
-            if (!work.Insert(this, aces, ace, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay)))
+            if (!work.Insert(this, aces, ace, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay), externalAllocator: allocator))
             {
                 return false;
             }
         }
 
         TableDefinition relTable = prepared.RelationshipsTable;
-        int grbit = fk.OnDeleteCascade ? DeleteCascadeGrbit : 0;
+        int grbit = (fk.Unique ? UniqueRelationGrbit : 0)
+            | (fk.DontEnforce ? DontEnforceRelationGrbit : 0)
+            | (fk.OnUpdateCascade ? UpdateCascadeGrbit : 0)
+            | (fk.OnDeleteCascade ? DeleteCascadeGrbit : 0);
         int colCount = prepared.ChildFieldNames.Count;
         for (int icol = 0; icol < colCount; icol++)
         {
@@ -4833,38 +6557,70 @@ public sealed class SchemaWriter
             Set(relTable, relRow, "grbit", Long(grbit));
             Set(relTable, relRow, "icolumn", Long(icol));
             Set(relTable, relRow, "ccolumn", Long(colCount));
-            if (!work.Insert(this, relTable, relRow, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay)))
+            if (!work.Insert(this, relTable, relRow, out _, extent: PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay), externalAllocator: allocator))
             {
                 return false;
             }
         }
 
-        if (work.Allocate(allocator) is not { } fkLeaf)
+        if (fk.DontEnforce)
         {
-            return false;
-        }
-        if (fkLeaf >= InlineMapPageLimit)
-        {
-            work.Fail($"allocated FOREIGN KEY index leaf page {fkLeaf} exceeds single-page inline map range (< {InlineMapPageLimit})");
-            return false;
+            return true;
         }
 
-        uint childFkLogicalNumber = (uint)childSpecBeforeFk.LogicalIndexes.Count;
-        uint parentRbLogicalNumber = (uint)prepared.ParentSpec.LogicalIndexes.Count;
+        uint fkLeaf = 0;
+        if (prepared.SharedChildPhysicalNumber is null)
+        {
+            if (work.Allocate(allocator) is not { } allocatedLeaf)
+            {
+                return false;
+            }
+            if (allocatedLeaf >= InlineMapPageLimit)
+            {
+                work.Fail($"allocated FOREIGN KEY index leaf page {allocatedLeaf} exceeds single-page inline map range (< {InlineMapPageLimit})");
+                return false;
+            }
+            fkLeaf = allocatedLeaf;
+        }
+
+        uint childFkLogicalNumber = LowestUnusedLogicalIndexId(childSpecBeforeFk!.LogicalIndexes);
+        uint parentRelLogicalNumber = prepared.IsSelfRef
+            ? LowestUnusedLogicalIndexId(childSpecBeforeFk.LogicalIndexes, alsoUsed: childFkLogicalNumber)
+            : LowestUnusedLogicalIndexId(prepared.ParentSpec!.LogicalIndexes);
+        string parentRelIndexName = ParentRelationshipIndexName(parentRelLogicalNumber);
+        byte updateAction = fk.OnUpdateCascade ? ForeignKeyUpdateActionCascade : ForeignKeyUpdateActionNone;
         byte deleteAction = fk.OnDeleteCascade ? ForeignKeyDeleteActionCascade : ForeignKeyDeleteActionNone;
+        byte childPhysFlags = fk.Unique ? (byte)(PlainIndexFlags | UniqueIndexFlag) : PlainIndexFlags;
 
         TableDefSpec childSpecAfterFk = WithForeignKeyIndex(
             childSpecBeforeFk,
             fk.Name,
+            childFkLogicalNumber,
             prepared.ChildFieldNames,
-            new RowLocator(childMapPage, childMapSlot),
+            prepared.SharedChildPhysicalNumber,
+            childPhysFlags,
+            prepared.SharedChildPhysicalNumber is null ? new RowLocator(childMapPage, childMapSlot) : null,
             fkLeaf,
-            parentRbLogicalNumber,
+            parentRelLogicalNumber,
             prepared.ParentTable.FirstPage,
-            ForeignKeyUpdateActionNone,
+            updateAction,
             deleteAction,
             prepared.EntryCount,
             prepared.UniqueEntryCount);
+
+        if (prepared.IsSelfRef)
+        {
+            childSpecAfterFk = WithParentRelationshipIndex(
+                childSpecAfterFk,
+                parentRelIndexName,
+                parentRelLogicalNumber,
+                (uint)prepared.ParentTargetLogical!.PhysicalNumber,
+                childFkLogicalNumber,
+                childTdefPage,
+                updateAction,
+                deleteAction);
+        }
+
         int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
         int childEncodedLen = EncodedTableDefLength(childSpecAfterFk);
         if (childEncodedLen > maxSinglePage)
@@ -4873,27 +6629,42 @@ public sealed class SchemaWriter
             return false;
         }
 
-        TableDefSpec parentSpecAfterFk = WithParentRelationshipIndex(
-            prepared.ParentSpec,
-            FirstParentRelationshipIndexName,
-            (uint)prepared.ParentPkLogical.PhysicalNumber,
-            childFkLogicalNumber,
-            childTdefPage,
-            ForeignKeyUpdateActionNone,
-            deleteAction);
+        byte[] childTdefBytes = existingChildEntryForDateUpdate is not null && PinCopy(childTdefPage) is { } priorChildPage
+            ? EncodeTableDefPreservingTail(childSpecAfterFk, priorChildPage)
+            : EncodeTableDefPreservingTail(childSpecAfterFk, ReadOnlySpan<byte>.Empty);
 
-        byte[] childTdefBytes = new byte[_d.PageSize];
-        TableDefEncoder.Encode(childTdefBytes, childSpecAfterFk, _d);
-        byte[] parentTdefBytes = new byte[_d.PageSize];
-        TableDefEncoder.Encode(parentTdefBytes, parentSpecAfterFk, _d);
-        byte[] fkLeafBytes = prepared.PopulatedChildLeafBytes ?? EmptyLeaf(childTdefPage);
-
-        if (!work.Apply(new PageEdit(childMapPage, new DataPageAppendDelta(MapDeclaration.EncodeInline(0, [fkLeaf], _d), childMapSlot, _d), PageRole.Map))
-            || !work.Apply(new PageEdit(childTdefPage, new WholePage(childTdefBytes), PageRole.Catalog))
-            || !work.Apply(new PageEdit(fkLeaf, new WholePage(fkLeafBytes), PageRole.Index))
-            || !work.Apply(new PageEdit(prepared.ParentTable.FirstPage, new WholePage(parentTdefBytes), PageRole.Catalog)))
+        if (prepared.SharedChildPhysicalNumber is null)
+        {
+            byte[] fkLeafBytes = prepared.PopulatedChildLeafBytes ?? EmptyLeaf(childTdefPage);
+            if (!work.Apply(new PageEdit(childMapPage, new DataPageAppendDelta(MapDeclaration.EncodeInline(0, [fkLeaf], _d), childMapSlot, _d), PageRole.Map))
+                || !work.Apply(new PageEdit(fkLeaf, new WholePage(fkLeafBytes), PageRole.Index)))
+            {
+                return false;
+            }
+        }
+        if (!work.Apply(new PageEdit(childTdefPage, new WholePage(childTdefBytes), PageRole.Catalog)))
         {
             return false;
+        }
+
+        if (!prepared.IsSelfRef)
+        {
+            TableDefSpec parentSpecAfterFk = WithParentRelationshipIndex(
+                prepared.ParentSpec!,
+                parentRelIndexName,
+                parentRelLogicalNumber,
+                (uint)prepared.ParentTargetLogical!.PhysicalNumber,
+                childFkLogicalNumber,
+                childTdefPage,
+                updateAction,
+                deleteAction);
+            byte[] parentTdefBytes = PinCopy(prepared.ParentTable.FirstPage) is { } priorParentPage
+                ? EncodeTableDefPreservingTail(parentSpecAfterFk, priorParentPage)
+                : EncodeTableDefPreservingTail(parentSpecAfterFk, ReadOnlySpan<byte>.Empty);
+            if (!work.Apply(new PageEdit(prepared.ParentTable.FirstPage, new WholePage(parentTdefBytes), PageRole.Catalog)))
+            {
+                return false;
+            }
         }
 
         ulong currentExtent = PageAllocator.ExtentOf(_cache, allocator.ExtentPages, overlay);
@@ -4901,7 +6672,8 @@ public sealed class SchemaWriter
         {
             return false;
         }
-        if (existingChildEntryForDateUpdate is not null
+        if (!prepared.IsSelfRef
+            && existingChildEntryForDateUpdate is not null
             && !work.SetDateUpdate(this, existingChildEntryForDateUpdate, dateUpdateBits, currentExtent))
         {
             return false;
@@ -4912,8 +6684,11 @@ public sealed class SchemaWriter
     private TableDefSpec WithForeignKeyIndex(
         TableDefSpec spec,
         string name,
+        uint logicalNumber,
         IReadOnlyList<string> fieldNames,
-        RowLocator map,
+        uint? sharedPhysicalNumber,
+        byte physicalFlags,
+        RowLocator? map,
         uint leaf,
         uint parentLogicalNumber,
         uint parentTdefPage,
@@ -4922,21 +6697,33 @@ public sealed class SchemaWriter
         uint entryCount = 0,
         uint uniqueEntryCount = 0)
     {
-        string[] specNames = [.. spec.Columns.Select(c => c.Name)];
-        List<IndexColumn> keyCols = new(fieldNames.Count);
-        foreach (string field in fieldNames)
+        uint targetPhysicalNumber;
+        IReadOnlyList<PhysicalIndexSpec> physicals;
+        if (sharedPhysicalNumber is uint sharedPhys)
         {
-            if (!TryMatchFieldName(field, specNames, out int idx, out string? undecided) || idx < 0)
-            {
-                throw new InvalidOperationException(undecided ?? $"Unchecked FOREIGN KEY field {field}.");
-            }
-            keyCols.Add(new IndexColumn(spec.Columns[idx].PhysicalNumber, Ascending: true, AscendingColumnFlags));
+            targetPhysicalNumber = sharedPhys;
+            physicals = spec.PhysicalIndexes;
         }
-        var physical = new PhysicalIndexSpec(keyCols, map, leaf, PlainIndexFlags, entryCount, uniqueEntryCount);
+        else
+        {
+            string[] specNames = [.. spec.Columns.Select(c => c.Name)];
+            List<IndexColumn> keyCols = new(fieldNames.Count);
+            foreach (string field in fieldNames)
+            {
+                if (!TryMatchFieldName(field, specNames, out int idx, out string? undecided) || idx < 0)
+                {
+                    throw new InvalidOperationException(undecided ?? $"Unchecked FOREIGN KEY field {field}.");
+                }
+                keyCols.Add(new IndexColumn(spec.Columns[idx].PhysicalNumber, Ascending: true, AscendingColumnFlags));
+            }
+            targetPhysicalNumber = (uint)spec.PhysicalIndexes.Count;
+            var physical = new PhysicalIndexSpec(keyCols, map!.Value, leaf, physicalFlags, entryCount, uniqueEntryCount);
+            physicals = [.. spec.PhysicalIndexes, physical];
+        }
         var logical = new LogicalIndexSpec(
             name,
-            (uint)spec.LogicalIndexes.Count,
-            (uint)spec.PhysicalIndexes.Count,
+            logicalNumber,
+            targetPhysicalNumber,
             _d.IndexDescriptor.ForeignKeyType,
             ChildRelatedTableType,
             parentLogicalNumber,
@@ -4955,13 +6742,14 @@ public sealed class SchemaWriter
             int at = logicals.FindIndex(existing => TextOrder.Compare(sort, logical.Name, existing.Name) < 0);
             logicals.Insert(at < 0 ? logicals.Count : at, logical);
         }
-        return spec with { PhysicalIndexes = [.. spec.PhysicalIndexes, physical], LogicalIndexes = logicals };
+        return spec with { PhysicalIndexes = physicals, LogicalIndexes = logicals };
     }
 
     private TableDefSpec WithParentRelationshipIndex(
         TableDefSpec parentSpec,
         string name,
-        uint parentPkPhysicalNumber,
+        uint logicalNumber,
+        uint parentTargetPhysicalNumber,
         uint childFkLogicalNumber,
         uint childTdefPage,
         byte updateAction,
@@ -4969,8 +6757,8 @@ public sealed class SchemaWriter
     {
         var logical = new LogicalIndexSpec(
             name,
-            (uint)parentSpec.LogicalIndexes.Count,
-            parentPkPhysicalNumber,
+            logicalNumber,
+            parentTargetPhysicalNumber,
             _d.IndexDescriptor.ForeignKeyType,
             ParentRelatedTableType,
             childFkLogicalNumber,
@@ -5337,7 +7125,11 @@ public sealed class SchemaWriter
         for (int i = 0; i < request.Fields.Count; i++)
         {
             NewField f = request.Fields[i];
-            uint typeInfo = request.Route == SchemaRoute.Dao ? 0u : sortInfo;
+            // evidence/r-q46-dao-ddl-multi/cf-*: on the DAO route, ONLY Text writes sortInfo (09 04 00 00);
+            // every other non-Decimal type (including Memo!) writes 00 00 00 00.
+            uint typeInfo = request.Route == SchemaRoute.Dao
+                ? (f.Type == NewFieldType.Text ? sortInfo : 0u)
+                : sortInfo;
             switch (f.Type)
             {
                 case NewFieldType.YesNo:
@@ -5408,8 +7200,18 @@ public sealed class SchemaWriter
                     break;
                 }
                 case NewFieldType.Guid:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Guid, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 16));
-                    variables++;
+                    if (request.Route == SchemaRoute.Dao)
+                    {
+                        // evidence/r-q46-dao-ddl-multi/cf-guid-accdb, cf-guid-mdb, cf-multi-mixed-*:
+                        // DAO dbGUID is fixed (Flags=0x03, Length=16, advances FixedOffset by 16).
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Guid, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 16));
+                        fixedOffset += 16;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Guid, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 16));
+                        variables++;
+                    }
                     break;
                 case NewFieldType.Decimal:
                 {

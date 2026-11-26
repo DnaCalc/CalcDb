@@ -98,6 +98,15 @@ internal static class DaoErrors
     /// <summary>3246 (r-cat-1/create-accdb-in-transaction).</summary>
     public const string NotSupportedInTransactions = "Operation not supported in transactions.";
 
+    /// <summary>3366 (r-q46-dao-ddl-multi/rel-errors-*, r-dao-1-err-1/draft-index-relation: Relations.Append with 0 fields).</summary>
+    public const string RelationNoFields = "Cannot append a relation with no fields defined.";
+
+    /// <summary>3368 (r-q47-bigint-expr-edges/rel-mismatch-3368-*: enforced Relations.Append with mismatched field types).</summary>
+    public const string RelationTypeMismatch = "Relationship must be on the same number of fields with the same data types.";
+
+    /// <summary>3201 (r-q46-dao-ddl-multi/rel-errors-*, r-cat-1b/rel-append-over-existing-orphans: orphan child row).</summary>
+    public static string RelatedRecordRequired(string parentTable) => $"You cannot add or change a record because a related record is required in table '{parentTable}'.";
+
     /// <summary>3170 (r-sort-3/create-locale-spellings: locale without a leading semicolon).</summary>
     public const string CouldNotFindInstallableIsam = "Could not find installable ISAM.";
 

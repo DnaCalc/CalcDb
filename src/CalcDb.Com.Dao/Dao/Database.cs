@@ -38,6 +38,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Method("CreateQueryDef", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, sql = args.Length > 1 ? args[1] : 0; return Live(self, d => d.CreateQueryDef(name, sql)); })
         .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
         .Get("Relations", (self, args) => Live(self, d => d.RelationsCollection()))
+        .Method("CreateRelation", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint table = args.Length > 1 ? args[1] : 0;
+            nint foreignTable = args.Length > 2 ? args[2] : 0;
+            nint attributes = args.Length > 3 ? args[3] : 0;
+            return Live(self, d => d.CreateRelation(name, table, foreignTable, attributes));
+        })
         .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()))
         .Get("Updatable", (self, args) => Live(self, d => Bool(!d.ReadOnly)))
         .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
@@ -1082,6 +1090,84 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
+    /// Attached <c>TableDef.Fields.Append</c> (W-07 / R-CAT-1, R-DAO-1;
+    /// <c>evidence/r-q46-dao-ddl-multi/cf-attached-scalar-*</c>, <c>cf-attached-decimal-*</c>,
+    /// <c>evidence/r-dao-1b/coll-append-field-existing-rows</c>): lowers the draft Field to an
+    /// <see cref="AddFieldRequest"/> via <see cref="SchemaWriter.AddField"/>, reloads the catalog and TableDef,
+    /// binds the appended <see cref="NewFieldObject"/> in place (preserving COM identity), and relists
+    /// <paramref name="fields"/> immediately.
+    /// </summary>
+    internal CallResult AppendField(TableDefObject tableDef, DefinitionCollection fields, nint arg)
+    {
+        if (Args.ObjectOf<NewFieldObject>(arg) is not { } field)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append of an argument that is not a CalcDb Field"));
+        }
+        if (field.IsAttached || field.AppendedTo is not null)
+        {
+            return fields.Fail(3367, DaoErrors.AlreadyInCollection);
+        }
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        if (tableDef.IsSystem)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append on a system table (not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append inside a transaction is not recorded"));
+        }
+        if (SharedHold(tableDef.Name) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"TableDef.Fields.Append on '{tableDef.Name}' while a recordset of it is open is not recorded"));
+        }
+        if (field.ToNewField(forAttachedTable: true, out string? notWritten) is not { } newField)
+        {
+            return CallResult.Fail(Failure.NotImplemented(notWritten!));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Fields.Append: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.AddField(workspace, new AddFieldRequest(tableDef.Name, newField, SchemaRoute.Dao), SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3191 => CallResult.Fail(Failure.Dao(3191, "DAO.TableDef", "Cannot define field more than once.")),
+                3125 => CallResult.Fail(Failure.Dao(3125, "DAO.TableDef", DaoErrors.InvalidName(newField.Name))),
+                _ => CallResult.Fail(Failure.NotImplemented("Fields.Append: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            fields.Relist();
+            if (tableDef.Definition is { } updatedDef && updatedDef.Columns.Count > 0)
+            {
+                int ordinal = updatedDef.Columns.Count - 1;
+                ColumnDescriptor addedCol = updatedDef.Columns[ordinal];
+                field.Attach(tableDef, fields, addedCol, ordinal);
+                fields.RegisterHeld(addedCol.Name, field);
+            }
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
     /// DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> put on a stored table's field (W-08, tasks 9dvt
     /// and nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q42-field-rule-and/</c>): validates <c>ValidationRule</c>
     /// before touching the catalog, publishes the rewritten <c>LvProp</c> through
@@ -1691,9 +1777,170 @@ internal sealed unsafe class DatabaseObject : DaoObject
             _relations = new DefinitionCollection(DaoTypes.Relations, "DAO.Relations", this, names, make, holdsDatabase: false)
             {
                 Membership = RelationsMembership,
+                Appender = static (c, arg) => c.Database.AppendRelation(c, arg),
+                Deleter = static (c, arg) => c.Database.DeleteRelation(c, arg),
             };
         }
         return Object(_relations);
+    }
+
+    /// <summary>
+    /// CreateRelation(Name, Table, ForeignTable, Attributes): returns a draft <see cref="NewRelationObject"/>
+    /// (r-dao-1-err-1/draft-index-relation, r-q46-dao-ddl-multi/rel-*, r-q47-bigint-expr-edges/rel-*).
+    /// </summary>
+    private CallResult CreateRelation(nint nameArg, nint tableArg, nint foreignTableArg, nint attributesArg)
+    {
+        static string? OptionalText(nint arg, out bool isNull)
+        {
+            isNull = false;
+            if (IsOmittedVariant(arg))
+            {
+                return "";
+            }
+            if (Args.TypeOf(arg) == CalcDb.Foundation.VarType.Null)
+            {
+                isNull = true;
+                return null;
+            }
+            return Args.Text(arg) ?? "";
+        }
+        string? name = OptionalText(nameArg, out bool nameNull);
+        string? table = OptionalText(tableArg, out bool tableNull);
+        string? foreignTable = OptionalText(foreignTableArg, out bool foreignNull);
+        if (nameNull || tableNull || foreignNull)
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        int? attrs = IsOmittedVariant(attributesArg) ? 0 : Args.Int32(attributesArg, null);
+        if (attrs is not int attrVal)
+        {
+            return CallResult.Fail(Failure.NotImplemented("CreateRelation with an Attributes argument that does not convert to an integer"));
+        }
+        var draft = new NewRelationObject(this, name!, table!, foreignTable!, attrVal);
+        CallResult result = Object(draft);
+        draft.Release();
+        return result;
+    }
+
+    /// <summary>
+    /// DAO <c>Relations.Append</c> (W-07 / R-CAT-1, R-DAO-1; evidence/r-q46-dao-ddl-multi/rel-*,
+    /// evidence/r-q47-bigint-expr-edges/rel-*): lowers the draft <see cref="NewRelationObject"/> via
+    /// <see cref="SchemaWriter.AddForeignKey"/> on <see cref="SchemaRoute.Dao"/>, reloads the catalog and relists
+    /// <paramref name="relations"/>, and maps ACE's exact refusal errors (3012, 3011, 3366, 3201, 3368).
+    /// </summary>
+    internal CallResult AppendRelation(DefinitionCollection relations, nint arg)
+    {
+        if (Args.ObjectOf<NewRelationObject>(arg) is not { } draft)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Append of an argument that is not a CalcDb draft Relation"));
+        }
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Append on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Append inside a transaction is not recorded"));
+        }
+        if (draft.Request(out string? notWritten) is not { } request)
+        {
+            return CallResult.Fail(Failure.NotImplemented(notWritten!));
+        }
+        if (SharedHold(request.Table) != TableHold.None || SharedHold(request.ForeignKey.ReferencedTable) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Relations.Append while a recordset of '{request.ForeignKey.ReferencedTable}' or '{request.Table}' is open is not recorded"));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Append: " + writerFailure));
+        }
+        ulong createdBits = SchemaWriter.DateBits(draft.Created);
+        ulong updatedBits = SchemaWriter.DateBits(DateTime.Now);
+        SchemaOutcome outcome = writer.AddForeignKey(workspace, request, createdBits, updatedBits, out string? missingTable);
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3012 => relations.Fail(3012, DaoErrors.ObjectExists(draft.Name)),
+                3011 => relations.Fail(3011, DaoErrors.ObjectNotFound(missingTable ?? draft.ForeignTable)),
+                3366 => relations.Fail(3366, DaoErrors.RelationNoFields),
+                3201 => relations.Fail(3201, DaoErrors.RelatedRecordRequired(draft.PrimaryTable)),
+                3368 => relations.Fail(3368, DaoErrors.RelationTypeMismatch),
+                _ => CallResult.Fail(Failure.NotImplemented("Relations.Append: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            relations.Relist();
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// DAO <c>Relations.Delete(Name)</c> (W-07 / R-CAT-1, R-DAO-1; evidence/r-q47-bigint-expr-edges/reldel-*,
+    /// rel-multi-parent-*): deletes the named relationship through <see cref="SchemaWriter.DeleteRelation"/>, reloads
+    /// the catalog, and relists <paramref name="relations"/>.
+    /// </summary>
+    internal CallResult DeleteRelation(DefinitionCollection relations, nint arg)
+    {
+        if (Args.Text(arg) is not { } name)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Delete with a non-string Name"));
+        }
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Delete on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Delete inside a transaction is not recorded"));
+        }
+        if (RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out _) is { } existingRels)
+        {
+            Relationship? existing = existingRels.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null && (SharedHold(existing.Table) != TableHold.None || SharedHold(existing.ForeignTable) != TableHold.None))
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Relations.Delete of '{existing.Name}' while a recordset of '{existing.Table}' or '{existing.ForeignTable}' is open is not recorded"));
+            }
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Relations.Delete: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.DeleteRelation(workspace, new DeleteRelationRequest(name, SchemaRoute.Dao), SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.Refused is { } refused)
+        {
+            return refused.Error switch
+            {
+                3265 => relations.Fail(3265, DaoErrors.ItemNotFound),
+                _ => CallResult.Fail(Failure.NotImplemented("Relations.Delete: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            relations.Relist();
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
     }
 
     private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) RelationsMembership()

@@ -39,19 +39,22 @@ public sealed class PageAllocator
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
     private readonly bool _allowPendingRollbackExtent;
+    private readonly bool _allowNonContiguousReserved;
     private readonly bool _hadSessionReservedPages;
     private readonly HashSet<uint> _handedOut = [];
     private readonly List<uint> _sessionReservedPages = [];
     private readonly List<uint> _consumedReservedPages = [];
+    private readonly List<uint> _zeroGapPages = [];
 
     public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages)
         : this(cache, d, extentPages, allowPendingRollbackExtent: false)
     {
     }
 
-    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, IReadOnlyList<uint>? sessionReservedPages)
+    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, IReadOnlyList<uint>? sessionReservedPages, bool allowNonContiguousReserved = false)
         : this(cache, d, extentPages, allowPendingRollbackExtent: false)
     {
+        _allowNonContiguousReserved = allowNonContiguousReserved;
         if (sessionReservedPages is { Count: > 0 })
         {
             _hadSessionReservedPages = true;
@@ -76,10 +79,15 @@ public sealed class PageAllocator
     /// <summary>Pages consumed from the session's reserved page-1 extent by <see cref="TryAllocateFromReserved"/>.</summary>
     public IReadOnlyList<uint> ConsumedReservedPages => _consumedReservedPages;
 
+    /// <summary>Zero-filled gap pages skipped when a non-contiguous reserved allocation jumped past earlier rolled-back pages (evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*).</summary>
+    public IReadOnlyList<uint> ZeroGapPages => _zeroGapPages;
+
     /// <summary>
     /// Consume the next contiguous page from the session's previously reserved 32-page page-1 extent without editing
-    /// page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-accdb, long-rule-spill-lval-mdb). Refuses by name when
-    /// no reserved pages remain or the next reserved page does not equal <see cref="ExtentPages"/>.
+    /// page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-accdb, long-rule-spill-lval-mdb). When
+    /// <c>allowNonContiguousReserved</c> is enabled (after earlier failed <c>Relations.Append</c> 3368 rollbacks:
+    /// evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*), permits jumping past freed rolled-back pages and records
+    /// the intervening zero-filled pages in <see cref="ZeroGapPages"/>.
     /// </summary>
     public bool TryAllocateFromReserved(PrivateOverlay? seen, out uint page, out string? failure)
     {
@@ -98,8 +106,18 @@ public sealed class PageAllocator
         uint candidate = _sessionReservedPages[0];
         if (candidate != ExtentPages)
         {
-            failure = $"the next reserved page {candidate} is not contiguous with file extent {ExtentPages}: non-contiguous reuse of a session's reserved page-1 extent is not recorded (r-q37-valrule-put)";
-            return false;
+            if (_allowNonContiguousReserved && candidate > ExtentPages)
+            {
+                for (ulong gap = ExtentPages; gap < candidate; gap++)
+                {
+                    _zeroGapPages.Add((uint)gap);
+                }
+            }
+            else
+            {
+                failure = $"the next reserved page {candidate} is not contiguous with file extent {ExtentPages}: non-contiguous reuse of a session's reserved page-1 extent is not recorded (r-q37-valrule-put)";
+                return false;
+            }
         }
         _sessionReservedPages.RemoveAt(0);
         _consumedReservedPages.Add(candidate);
