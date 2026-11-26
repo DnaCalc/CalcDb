@@ -1,0 +1,1487 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q47-bigint-expr-edges/meta-dollar-fmt-date-mdb",
+  "bookRefs": [
+    "R-EXPR-1",
+    "EXPR-INVENTORY",
+    "EXPR-LOCALE",
+    "R-ADO-1",
+    "II-10",
+    "W-06",
+    "W-08",
+    "W-09"
+  ],
+  "description": "Jet 4 MDB (r-expr-1b-mdb): DAO and ADO metadata parity matrix for $, Format, FormatNumber, DateAdd, DateDiff, DatePart, Weekday, WeekdayName, Year, and StrConv (normal + Null).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-mdb.mdb",
+      "sha256": "6164ec0140e8cb62b2d036466e949f76fa8eb54ef8a841dd65dace0816948c54",
+      "length": 135168,
+      "provenance": "r-expr-1b.create-mdb.3a016432e6.a1 qk1-3a016432e694607119a448fd53cf10017f0137d66c70456df701adabd5ed8531 output:r-expr-1b-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbr1"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String$(3, 'a') AS c_str, Space$(3) AS c_spc, LTrim$(' a') AS c_lt, RTrim$('a ') AS c_rt, Right$('abc', 2) AS c_r, Mid$('abc', 2, 1) AS c_m, Left$('abc', 2) AS c_l, Chr$(65) AS c_chr FROM One"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "drs2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "drs2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "drs2mf"
+    },
+    {
+      "op": "invoke",
+      "target": "drs2mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "drs2mf",
+      "bind": "drs2mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs2mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs2mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs2mfx",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs2mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "drs2mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "drs2",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "drs2rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "drs2rf",
+          "bind": "drs2rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "drs2rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "drs2rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "eng",
+              "member": "Errors",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "errs"
+            },
+            {
+              "op": "forEachItem",
+              "target": "errs",
+              "bind": "e",
+              "maxItems": 16,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Number",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Description",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Source",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "errs"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "drs2rf"
+        },
+        {
+          "op": "invoke",
+          "target": "drs2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "drs2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "drs2"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbr1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbr3"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr3",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(1234.5, '#,##0.00') AS f_num, FormatNumber(1234.5, 2) AS fn_2, DateAdd('d', 1, #2024-03-05#) AS da, DateDiff('d', #2024-03-01#, #2024-03-05#) AS dd, DatePart('yyyy', #2024-03-05#) AS dp, Weekday(#2024-03-05#) AS wd, WeekdayName(1) AS wdn, Year(#2024-03-05#) AS yr, StrConv('ab cd', 3) AS sc FROM One"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "drs4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "drs4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "drs4mf"
+    },
+    {
+      "op": "invoke",
+      "target": "drs4mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "drs4mf",
+      "bind": "drs4mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs4mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs4mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs4mfx",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs4mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "drs4mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "drs4",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "drs4rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "drs4rf",
+          "bind": "drs4rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "drs4rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "drs4rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "eng",
+              "member": "Errors",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "errs"
+            },
+            {
+              "op": "forEachItem",
+              "target": "errs",
+              "bind": "e",
+              "maxItems": 16,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Number",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Description",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Source",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "errs"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "drs4rf"
+        },
+        {
+          "op": "invoke",
+          "target": "drs4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "drs4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "drs4"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbr3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbr5"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr5",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(Null, '0') AS f_n, FormatNumber(Null) AS fn_n, DateAdd('d', 1, Null) AS da_n, DateDiff('d', Null, #2024-03-05#) AS dd_n, DatePart('yyyy', Null) AS dp_n, Weekday(Null) AS wd_n, Year(Null) AS yr_n, StrConv(Null, 3) AS sc_n FROM One"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "drs6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "drs6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "drs6mf"
+    },
+    {
+      "op": "invoke",
+      "target": "drs6mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "drs6mf",
+      "bind": "drs6mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs6mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs6mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs6mfx",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "drs6mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "drs6mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "drs6",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "drs6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "drs6rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "drs6rf",
+          "bind": "drs6rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "drs6rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "drs6rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "eng",
+              "member": "Errors",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "errs"
+            },
+            {
+              "op": "forEachItem",
+              "target": "errs",
+              "bind": "e",
+              "maxItems": 16,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Number",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Description",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "e",
+                  "member": "Source",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "errs"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "drs6rf"
+        },
+        {
+          "op": "invoke",
+          "target": "drs6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "drs6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "drs6"
+    },
+    {
+      "op": "invoke",
+      "target": "dbr5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbr5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnds"
+    },
+    {
+      "op": "invoke",
+      "target": "cnds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-ado-open"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String$(3, 'a') AS c_str, Space$(3) AS c_spc, LTrim$(' a') AS c_lt, RTrim$('a ') AS c_rt, Right$('abc', 2) AS c_r, Mid$('abc', 2, 1) AS c_m, Left$('abc', 2) AS c_l, Chr$(65) AS c_chr FROM One"
+        }
+      ],
+      "bind": "ars7"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ars7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ars7mf"
+    },
+    {
+      "op": "invoke",
+      "target": "ars7mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ars7mf",
+      "bind": "ars7mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars7mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ars7mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "ars7",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ars7rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ars7rf",
+          "bind": "ars7rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ars7rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ars7rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ars7rf"
+        },
+        {
+          "op": "invoke",
+          "target": "ars7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ars7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(1234.5, '#,##0.00') AS f_num, FormatNumber(1234.5, 2) AS fn_2, DateAdd('d', 1, #2024-03-05#) AS da, DateDiff('d', #2024-03-01#, #2024-03-05#) AS dd, DatePart('yyyy', #2024-03-05#) AS dp, Weekday(#2024-03-05#) AS wd, WeekdayName(1) AS wdn, Year(#2024-03-05#) AS yr, StrConv('ab cd', 3) AS sc FROM One"
+        }
+      ],
+      "bind": "ars8"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ars8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ars8mf"
+    },
+    {
+      "op": "invoke",
+      "target": "ars8mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ars8mf",
+      "bind": "ars8mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars8mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ars8mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "ars8",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars8",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ars8rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ars8rf",
+          "bind": "ars8rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ars8rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ars8rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ars8rf"
+        },
+        {
+          "op": "invoke",
+          "target": "ars8",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ars8"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(Null, '0') AS f_n, FormatNumber(Null) AS fn_n, DateAdd('d', 1, Null) AS da_n, DateDiff('d', Null, #2024-03-05#) AS dd_n, DatePart('yyyy', Null) AS dp_n, Weekday(Null) AS wd_n, Year(Null) AS yr_n, StrConv(Null, 3) AS sc_n FROM One"
+        }
+      ],
+      "bind": "ars9"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ars9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ars9mf"
+    },
+    {
+      "op": "invoke",
+      "target": "ars9mf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ars9mf",
+      "bind": "ars9mfx",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ars9mfx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ars9mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "ars9",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ars9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ars9rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ars9rf",
+          "bind": "ars9rfx",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ars9rfx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ars9rfx",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ars9rf"
+        },
+        {
+          "op": "invoke",
+          "target": "ars9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ars9"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}
