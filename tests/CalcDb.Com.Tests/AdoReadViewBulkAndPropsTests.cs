@@ -198,7 +198,8 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Release(roCn);
         }
 
-        // Writable client batch-optimistic cursor keeps Field.Value(put) and edit methods refused by name (E_NOTIMPL).
+        // Writable client batch-optimistic cursor stages edits locally without modifying disk until UpdateBatch
+        // (W-09/wzq4, r-q48-ado-batch-edits/client-deferred-vs-immediate-accdb).
         nint rwCn = OpenAceConnection(ado1bPath);
         try
         {
@@ -209,14 +210,20 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
 
             nint flds = (nint)Get(kc, "Fields")!;
             nint fS = (nint)Get(flds, "Item", "S")!;
-            Assert.Equal(HResults.E_NOTIMPL, Put(fS, "Value", "batch").Failure!.Value.Scode);
+            object? origVal = Get(fS, "Value");
+            Assert.Null(Put(fS, "Value", "batch").Failure);
+            Assert.Equal(1, Get(kc, "EditMode"));
+            Assert.Equal(2, Get(kc, "Status"));
+            Assert.Null(Call(kc, "Update").Failure);
+            Assert.Equal(1, Get(kc, "EditMode"));
+            Assert.Equal(2, Get(kc, "Status"));
+            Assert.Equal("batch", Get(fS, "Value"));
+            Assert.Equal(origVal, Get(fS, "OriginalValue"));
+            Assert.Null(Call(kc, "CancelBatch", 3).Failure);
+            Assert.Equal(8, Get(kc, "Status"));
+            Assert.Equal(origVal, Get(fS, "Value"));
             Release(fS);
             Release(flds);
-
-            Assert.Equal(HResults.E_NOTIMPL, Call(kc, "AddNew").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(kc, "Update").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(kc, "Delete").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(kc, "UpdateBatch", 3).Failure!.Value.Scode);
 
             Assert.Null(Call(kc, "Close").Failure);
             Release(kc);
@@ -988,8 +995,9 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
         }
 
         // 2) Client Recordset Properties on r-ado-1b-main.accdb:
-        //    Only client BatchOptimistic (3, 4) exposes Update Criteria (0..3) and Update Resync (0, 1, 2, 4, 8, 15)
-        //    (evidence/r-ado-1b/batch-update-criteria, batch-update-resync); client ReadOnly (3, 1) refuses Properties by name.
+        //    Client BatchOptimistic (3, 4) exposes all 103 dynamic properties, Update Criteria (0..3) and Update Resync (0..15)
+        //    with 0x80040E21 out-of-range validation (evidence/r-q48-ado-batch-edits/client-props-inventory-accdb,
+        //    evidence/r-ado-1b/batch-update-criteria, batch-update-resync); client ReadOnly (3, 1) refuses Properties by name.
         nint aCn = OpenAceConnection(ado1bPath);
         try
         {
@@ -1004,8 +1012,10 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.Null(Put(cli, "CursorLocation", 3).Failure);
             Assert.Null(Call(cli, "Open", "SELECT ID FROM T", new Dispatch(aCn), 3, 4, 1).Failure);
             nint cliProps = (nint)Get(cli, "Properties")!;
-            Assert.Equal(HResults.E_NOTIMPL, TryGet(cliProps, "Count").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, TryGet(cliProps, "Item", "Bookmarkable").Failure!.Value.Scode);
+            Assert.Equal(103, Get(cliProps, "Count"));
+            nint pBm = (nint)Get(cliProps, "Item", "Bookmarkable")!;
+            Assert.Equal(true, Get(pBm, "Value"));
+            Release(pBm);
 
             nint pUc = (nint)Get(cliProps, "Item", "Update Criteria")!;
             Assert.Equal(2, Get(pUc, "Value"));
@@ -1014,19 +1024,17 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
                 Assert.Null(Put(pUc, "Value", v).Failure);
                 Assert.Equal(v, Get(pUc, "Value"));
             }
-            Assert.Equal(HResults.E_NOTIMPL, Put(pUc, "Value", 4).Failure!.Value.Scode);
+            Assert.Equal(unchecked((int)0x80040E21), Put(pUc, "Value", 4).Failure!.Value.Scode);
             Release(pUc);
 
             nint pUr = (nint)Get(cliProps, "Item", "Update Resync")!;
             Assert.Equal(1, Get(pUr, "Value"));
-            foreach (int v in new[] { 0, 1, 2, 4, 8, 15 })
+            foreach (int v in new[] { 0, 1, 2, 3, 4, 8, 15 })
             {
                 Assert.Null(Put(pUr, "Value", v).Failure);
                 Assert.Equal(v, Get(pUr, "Value"));
             }
-            // Unrecorded bitmasks (e.g. 3, 16) refused by name.
-            Assert.Equal(HResults.E_NOTIMPL, Put(pUr, "Value", 3).Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Put(pUr, "Value", 16).Failure!.Value.Scode);
+            Assert.Equal(unchecked((int)0x80040E21), Put(pUr, "Value", 16).Failure!.Value.Scode);
             Release(pUr);
 
             Release(cliProps);

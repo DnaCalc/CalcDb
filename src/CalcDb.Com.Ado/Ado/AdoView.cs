@@ -164,6 +164,32 @@ internal sealed unsafe class AdoFilterExpression
         return false;
     }
 
+    public bool MatchesClientRow(ClientRow row, out Failure? failure)
+    {
+        failure = null;
+        foreach (List<AdoFilterPredicate> andClause in _orBranches)
+        {
+            bool branchMatch = true;
+            foreach (AdoFilterPredicate pred in andClause)
+            {
+                if (!EvaluatePredicate(row.Current[pred.ColumnOrdinal], pred, out failure))
+                {
+                    if (failure is not null)
+                    {
+                        return false;
+                    }
+                    branchMatch = false;
+                    break;
+                }
+            }
+            if (branchMatch)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool EvaluatePredicate(OwnedVariant cell, in AdoFilterPredicate pred, out Failure? failure)
     {
         failure = null;
@@ -1047,6 +1073,57 @@ internal sealed unsafe class AdoSortSpec
             return false;
         }
         return true;
+    }
+
+    public bool SortClientRows(List<ClientRow> rows, out Failure? failure)
+    {
+        failure = null;
+        if (rows.Count == 0 || Keys.Length == 0)
+        {
+            return true;
+        }
+        foreach (ClientRow row in rows)
+        {
+            foreach (AdoSortKey key in Keys)
+            {
+                VarType vt = (VarType)row.Current[key.ColumnOrdinal].Pointer->Vt;
+                if (!IsSupportedSortVarType(vt))
+                {
+                    failure = Failure.NotImplemented($"Recordset.Sort comparison of VarType {vt} (not recorded)");
+                    return false;
+                }
+            }
+        }
+        var order = new Dictionary<ClientRow, int>(rows.Count);
+        for (int i = 0; i < rows.Count; i++)
+        {
+            order[rows[i]] = i;
+        }
+        Failure? sortFailure = null;
+        rows.Sort((a, b) => CompareClientRows(order[a], a, order[b], b, ref sortFailure));
+        if (sortFailure is not null)
+        {
+            failure = sortFailure;
+            return false;
+        }
+        return true;
+    }
+
+    private int CompareClientRows(int indexA, ClientRow rowA, int indexB, ClientRow rowB, ref Failure? failure)
+    {
+        foreach (AdoSortKey key in Keys)
+        {
+            int cmp = CompareCells(rowA.Current[key.ColumnOrdinal], rowB.Current[key.ColumnOrdinal], ref failure);
+            if (failure is not null)
+            {
+                return 0;
+            }
+            if (cmp != 0)
+            {
+                return key.Descending ? -cmp : cmp;
+            }
+        }
+        return Keys[^1].Descending ? indexB.CompareTo(indexA) : indexA.CompareTo(indexB);
     }
 
     private static bool IsSupportedSortVarType(VarType vt) => vt is

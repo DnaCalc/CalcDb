@@ -1001,18 +1001,21 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Null(Call(rsBatch, "Close").Failure);
             Release(rsBatch);
 
+            // Client Optimistic (3, 3, 3) now supports immediate client editing (W-09/wzq4,
+            // r-q48-ado-batch-edits/client-deferred-vs-immediate-accdb); Field.Status remains refused by name.
             nint rsClient = New(OwnRecordset);
             Assert.Null(Put(rsClient, "CursorLocation", 3).Failure);
             Assert.Null(Call(rsClient, "Open", "SELECT ID, S FROM W ORDER BY ID", new Dispatch(cn), 3, 3, 1).Failure);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rsClient, "AddNew").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rsClient, "Update").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rsClient, "Delete").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Call(rsClient, "Resync").Failure!.Value.Scode);
             nint fc = (nint)Get(rsClient, "Fields")!;
             nint fcS = (nint)Get(fc, "Item", "S")!;
-            Assert.Equal(HResults.E_NOTIMPL, Put(fcS, "Value", "x").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, TryGet(fcS, "OriginalValue").Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, TryGet(fcS, "UnderlyingValue").Failure!.Value.Scode);
+            object? origS = Get(fcS, "Value");
+            Assert.Equal(origS, Get(fcS, "OriginalValue"));
+            Assert.Equal(origS, Get(fcS, "UnderlyingValue"));
+            Assert.Null(Put(fcS, "Value", "x").Failure);
+            Assert.Equal(1, Get(rsClient, "EditMode"));
+            Assert.Null(Call(rsClient, "CancelUpdate").Failure);
+            Assert.Equal(0, Get(rsClient, "EditMode"));
+            Assert.Equal(origS, Get(fcS, "Value"));
             Assert.Equal(HResults.E_NOTIMPL, TryGet(fcS, "Status").Failure!.Value.Scode);
             Release(fcS);
             Release(fc);

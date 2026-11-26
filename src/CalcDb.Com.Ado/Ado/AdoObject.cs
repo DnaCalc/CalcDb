@@ -50,6 +50,9 @@ internal static class AdoErrors
     /// <summary>0x800A0CB3 (Field.UnderlyingValue on updatable server keyset, Recordset.Resync on recorded server cursors; r-fix-wire-ado/ado-edit-fresh #90/#102, r-ado-1b/values-keyset-conflict #30/#69, r-ado-1b/rs-cache-same-connection #469/#556).</summary>
     public static readonly AdoError RefreshingUnderlyingNotSupported = BookmarksNotSupported.WithText("Current provider does not support refreshing underlying values.");
 
+    /// <summary>0x800A0CB3 (Recordset.MarshalOptions put on a server cursor; r-q48-ado-batch-edits/client-marshal-options-accdb, r-q48-ado-batch-edits/client-marshal-options-mdb).</summary>
+    public static readonly AdoError MarshalOptionsClientOnly = BookmarksNotSupported.WithText("MarshalOptions are only available on a disconnected or client-side recordset.");
+
     /// <summary>0x800A0CAE (Connection.Close while inside an open transaction; r-oledb-odbc/txn-held-rows #248).</summary>
     public static readonly AdoError CannotCloseInTransaction = new(0x0CAE, 1240647, "Connection object cannot be explicitly closed while in a transaction.");
 
@@ -152,6 +155,9 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>DB_E_NOTABLE / 0x80040E37.</summary>
     public const int HResultNoTable = unchecked((int)0x80040E37);
 
+    /// <summary>0x80040E38 (Cursor Engine optimistic concurrency conflict on UpdateBatch; r-q48-ado-batch-edits/conflict-*, r-ado-1b/batch-conflict-*).</summary>
+    public const int HResultConcurrencyConflict = unchecked((int)0x80040E38);
+
     /// <summary>DB_SEC_E_AUTH_FAILED / 0x80040E4D.</summary>
     public const int HResultAuthFailed = unchecked((int)0x80040E4D);
 
@@ -181,7 +187,17 @@ internal abstract class AdoObject : DispatchObject
 
     public const string MultipleStepDescription = "Multiple-step OLE DB operation generated errors. Check each OLE DB status value, if available. No work was done.";
 
+    public const string CursorEngineMultipleStepDescription = "Multiple-step operation generated errors. Check each status value.";
+
     public const string ReadOnlyPropertyDescription = "Read-only property value was not set.";
+
+    public const string InvalidPropertyValueDescription = "Property value is invalid. Make sure the value is typed correctly.";
+
+    public const string ConcurrencyConflictDescription = "Row cannot be located for updating. Some values may have been changed since it was last read.";
+
+    public const string DeletedRowHandleDescription = "Row handle referred to a deleted row or a row marked for deletion.";
+
+    public const string ResyncDeletedRowDescription = "Key value for this row was changed or deleted at the data store. The local row is now deleted.";
 
     protected AdoObject(InterfaceDecl declaration, nint vtable, string source) : base(declaration, vtable)
     {
@@ -251,6 +267,14 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>0x80040E21 read-only property put while open (r-ado-1b/conn-set-while-open: Connection publishes IErrorInfo; Property does not).</summary>
     public static Failure ReadOnlyPropertyFailure(string source, in Guid iid, bool publishesErrorInfo) =>
         new(FailureKind.Ado, HResultErrorsOccurred, source, ReadOnlyPropertyDescription, null, ProviderHelpContext)
+        {
+            PublishesErrorInfo = publishesErrorInfo,
+            ErrorInfoIid = iid,
+        };
+
+    /// <summary>0x80040E21 invalid dynamic property value (r-q48-ado-batch-edits/client-props-inventory-accdb #26/#33/#78/#85: ADODB.Property, helpContext 1240640, IErrorInfo absent).</summary>
+    public static Failure InvalidPropertyValueFailure(string source, in Guid iid, bool publishesErrorInfo) =>
+        new(FailureKind.Ado, HResultErrorsOccurred, source, InvalidPropertyValueDescription, null, ProviderHelpContext)
         {
             PublishesErrorInfo = publishesErrorInfo,
             ErrorInfoIid = iid,
