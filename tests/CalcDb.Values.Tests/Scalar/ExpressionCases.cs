@@ -125,7 +125,14 @@ public static unsafe class ExpressionHarness
                 }
             case Node n:
                 {
-                    contract = n.Operation >= ScalarOperation.CBool ? OperandContract.FunctionResult : OperandContract.Expression;
+                    contract = n.Operation switch
+                    {
+                        ScalarOperation.CBool or ScalarOperation.IsNull or ScalarOperation.IsEmpty or ScalarOperation.IsError => OperandContract.BooleanFunctionResult,
+                        ScalarOperation.CInt => OperandContract.CIntFunctionResult,
+                        >= ScalarOperation.Equal and <= ScalarOperation.Imp => OperandContract.BooleanExpression,
+                        >= ScalarOperation.CBool => OperandContract.FunctionResult,
+                        _ => OperandContract.Expression,
+                    };
                     ScalarOutcome a = Evaluate(n.First, owned, out OperandContract ca);
                     if (!a.Succeeded)
                     {

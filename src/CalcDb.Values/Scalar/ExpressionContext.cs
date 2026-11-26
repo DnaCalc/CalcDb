@@ -117,6 +117,9 @@ public enum OperandOrigin : byte
 
     /// <summary>Another operator's result (<c>(1 + 1)</c>).</summary>
     Expression,
+
+    /// <summary>A derived-table or UNION column supplied through a slot.</summary>
+    Derived,
 }
 
 /// <summary>
@@ -134,9 +137,18 @@ public readonly record struct OperandContract(OperandOrigin Origin, VarType Decl
 
     public static OperandContract Parameter(VarType declared) => new(OperandOrigin.Parameter, declared);
 
+    public static OperandContract Derived(VarType declared) => new(OperandOrigin.Derived, declared);
+
     public static OperandContract FunctionResult => new(OperandOrigin.FunctionResult);
 
+    public static OperandContract BooleanFunctionResult => new(OperandOrigin.FunctionResult, VarType.Bool);
+
+    /// <summary>Result of <c>CInt(…)</c>, whose <c>-1</c>/<c>0</c> equality against text stringifies to <c>"-1"</c>/<c>"0"</c>.</summary>
+    public static OperandContract CIntFunctionResult => new(OperandOrigin.FunctionResult, VarType.I2);
+
     public static OperandContract Expression => new(OperandOrigin.Expression);
+
+    public static OperandContract BooleanExpression => new(OperandOrigin.Expression, VarType.Bool);
 
     /// <summary>Whether the operand is a stored or bound value rather than text of the expression or its computation.</summary>
     public bool IsTypedSource => Origin is OperandOrigin.Field or OperandOrigin.Parameter or OperandOrigin.FunctionResult;

@@ -85,8 +85,11 @@ public enum NotModelledCase : byte
     UnsupportedOperandType,
 
     /// <summary>
-    /// A Boolean (declared, as the literal True, or VT_BOOL) compared with a non-Boolean: <c>True = 1</c> and <c>True = -1</c>
-    /// are both -1, <c>True &lt; 1</c> is -1, <c>True = 'x'</c> is -1 and <c>True &lt; 'a'</c> fails 3464 (cmp-cross-types).
+    /// An unrecorded Boolean comparison neighbour (qualified.md R-EXPR-1 Branch B, <c>r-q43-schema-lval-index/bool-cmp-*</c>):
+    /// stored <c>YESNO</c> or computed Boolean against Date/Time, a Boolean parameter or derived/UNION Boolean column
+    /// against a non-Boolean, non-Database compare mode for Boolean-against-text, numeric-zero text spellings other than
+    /// <c>'0'</c> with <c>True</c>/<c>False</c> <c>=</c>/<c>&lt;&gt;</c>, or a <c>CInt</c> result against text outside
+    /// recorded <c>CInt(-1)</c>/<c>CInt(0)</c> equality.
     /// </summary>
     BooleanComparison,
 

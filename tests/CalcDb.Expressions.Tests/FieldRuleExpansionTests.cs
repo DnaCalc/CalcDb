@@ -255,14 +255,23 @@ public sealed class FieldRuleExpansionTests
             }
         }
 
-        // R19 (<> 'a' <> 'b') and R20 (And <> 'b') compare Boolean against Text: honest NotModelled until Values models BooleanComparison.
-        foreach (string boolTextRule in new[] { "<> 'a' <> 'b'", "And <> 'b'" })
+        // R19 (<> 'a' <> 'b') and R20 (And <> 'b') compare computed VT_I2 Boolean (-1/0 -> "-1"/"0") against Text 'b':
+        // both admit every tested value in r-q42-field-rule-and/disc-text-forms-accdb (calls 254-259) and edge-forms-{accdb,mdb} (calls 112-116).
+        (string Rule, (string? Value, RuleVerdict Expected)[] Cases)[] boolTextMatrix =
+        [
+            ("<> 'a' <> 'b'", [("a", RuleVerdict.Admit), ("b", RuleVerdict.Admit), ("z", RuleVerdict.Admit), ("0", RuleVerdict.Admit), ("-1", RuleVerdict.Admit), (null, RuleVerdict.Admit)]),
+            ("And <> 'b'", [("a", RuleVerdict.Admit), ("b", RuleVerdict.Admit), ("z", RuleVerdict.Admit), ("And", RuleVerdict.Admit), ("", RuleVerdict.Admit), (null, RuleVerdict.Admit)]),
+            ("<> 'a' = False", [("a", RuleVerdict.Admit), ("z", RuleVerdict.Reject), (null, RuleVerdict.Admit)]),
+        ];
+        foreach ((string ruleText, (string? Value, RuleVerdict Expected)[] cases) in boolTextMatrix)
         {
-            using IMutationRule? rule = binder.BindFieldRule(table, colW, boolTextRule, out string? notAdmitted);
-            Assert.True(rule is not null && notAdmitted is null, $"Rule \"{boolTextRule}\": {notAdmitted}");
-            RuleResult actual = rule!.Evaluate(new SingleValueCursor(table, colW, TextValue("a")));
-            Assert.Equal(RuleVerdict.NotModelled, actual.Verdict);
-            Assert.Contains("BooleanComparison", actual.Detail, StringComparison.Ordinal);
+            using IMutationRule? rule = binder.BindFieldRule(table, colW, ruleText, out string? notAdmitted);
+            Assert.True(rule is not null && notAdmitted is null, $"Rule \"{ruleText}\": {notAdmitted}");
+            foreach ((string? value, RuleVerdict expected) in cases)
+            {
+                RuleResult actual = rule!.Evaluate(new SingleValueCursor(table, colW, TextValue(value)));
+                Assert.True(actual.Verdict == expected, $"Rule \"{ruleText}\" with W={(value is null ? "Null" : $"'{value}'")}: expected {expected}, got {actual.Verdict} ({actual.Detail})");
+            }
         }
     }
 

@@ -1081,14 +1081,15 @@ public sealed class BoundSelect : IDisposable
                 if (TryDerivedColumn(name, out int colIndex, out ResultColumn? col))
                 {
                     sources[0].ReferencedColumns![colIndex] = true;
-                    return new SlotBinding(DerivedSlot0 + colIndex, DeclaredVarType(col!.FieldType), col.FieldType == 1 ? StaticType.Boolean : StaticType.Value);
+                    bool isBool = col!.FieldType == 1 || col.Program.Type == StaticType.Boolean;
+                    return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived);
                 }
                 bool bracketed = node.Offset >= 0 && node.Offset < source.Length && source[node.Offset] == '[';
                 parameters.Add(new QueryParameter(bracketed ? $"[{name}]" : name, 10, Declared: false));
                 index = parameters.Count - 1;
             }
             QueryParameter p = parameters[index];
-            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value);
+            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Parameter);
         }
 
         /// <summary>The slot of a field reference, or null; an ambiguous name sets <paramref name="ambiguous"/>.</summary>
