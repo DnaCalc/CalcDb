@@ -34,10 +34,10 @@ public sealed class SessionFile : IPositionedFile
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
 
-    /// <summary>Atomically create a new database file under single-writer admission (R-LOCK-1 EX-CREATE, II-09 §3 Step 1, gp86).</summary>
+    /// <summary>Atomically create a new database file under exclusive admission (R-LOCK-1 EX-CREATE, II-09 §3, W-07/new-database-image, r-oracle-1/create-fixture-t1).</summary>
     public static SessionFile? CreateNewExclusive(string path, out OpenResult opened)
     {
-        opened = WindowsFile.CreateFresh(path, Admission.SingleWriterShareRead);
+        opened = WindowsFile.CreateFresh(path, Admission.Exclusive);
         return opened.File is { } file ? new SessionFile(path, file) : null;
     }
 

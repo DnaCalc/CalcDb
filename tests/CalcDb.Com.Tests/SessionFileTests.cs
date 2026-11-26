@@ -197,6 +197,23 @@ public sealed class SessionFileTests : IDisposable
         Assert.True(otherWriter.SharingViolation);
     }
 
+    [Fact]
+    public void CreateNewExclusive_denies_external_read_observer()
+    {
+        string freshPath = Path.Combine(Path.GetTempPath(), $"calcdb-session-create-{Guid.NewGuid():N}.accdb");
+        try
+        {
+            using SessionFile file = SessionFile.CreateNewExclusive(freshPath, out OpenResult opened)!;
+            Assert.True(opened.Succeeded);
+            Assert.True(file.Writable);
+            Assert.Throws<IOException>(() => new FileStream(freshPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+        }
+        finally
+        {
+            File.Delete(freshPath);
+        }
+    }
+
     /// <summary>The file's bytes through a second reader handle, beside the session's reader handle.</summary>
     private byte[] ReadShared()
     {
