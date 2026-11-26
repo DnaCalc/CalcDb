@@ -520,7 +520,11 @@ public sealed class EditFrame : IDisposable
     /// stays); AcceptCell installs it only on success. Without an edit 3020, on a read-only recordset 3027, both from
     /// DAO.Field (r-def-cursor-dao/assign-without-edit-by-type). A scalar put allocates nothing (The Plan §3.2).
     /// </summary>
-    public EditOutcome Assign(ColumnDescriptor column, in NativeVariant value)
+    public EditOutcome Assign(
+        ColumnDescriptor column,
+        in NativeVariant value,
+        ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable,
+        bool allowEmptyBstrBinaryNull = false)
     {
         if (!Updatable)
         {
@@ -551,7 +555,7 @@ public sealed class EditFrame : IDisposable
                 MutationOpen.AutoNumberIncrement,
                 $"an explicit AutoNumber value under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
         }
-        ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid);
+        ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid, dt2Mode, allowEmptyBstrBinaryNull);
         if (converted.Error is { } error)
         {
             return new EditOutcome(error);
@@ -2896,10 +2900,10 @@ public sealed class StoredUniqueProbe(PageCache cache, FormatDescriptor d, Table
         return UniqueAnswer.Free;
     }
 
-    /// <summary>A Seek key of the candidate's value: Text up to the 255 units an entry keeps; Null and Decimal are not probed.</summary>
+    /// <summary>A Seek key of the candidate's value: Text up to the 255 units an entry keeps; Null is skipped by the caller.</summary>
     private static KeyValue? KeyOf(in NativeValue v) => v.Kind switch
     {
-        NativeKind.Null or NativeKind.Decimal or NativeKind.Binary or NativeKind.BigInt or NativeKind.ExtendedDateTime => null,
+        NativeKind.Null => null,
         NativeKind.Text when v.Text is not { Length: <= 255 } => null,
         _ => EntryKeys.ValueOf(v),
     };

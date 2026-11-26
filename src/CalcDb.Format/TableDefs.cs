@@ -613,14 +613,11 @@ public static class TableDefUpdater
         for (int i = 0; i < incrementUniqueEntryCounts.Count; i++)
         {
             int idx = incrementUniqueEntryCounts[i];
-            var w0Field = new FieldRule(ix.EntryCount.Id, ix.EntryCount.Structure, EntryCountOffset(idx, d), ix.EntryCount.Width, ix.EntryCount.Order, ix.EntryCount.Meaning, ix.EntryCount.Evidence);
             var w1Field = new FieldRule(ix.UniqueEntryCount.Id, ix.UniqueEntryCount.Structure, UniqueEntryCountOffset(idx, d), ix.UniqueEntryCount.Width, ix.UniqueEntryCount.Order, ix.UniqueEntryCount.Meaning, ix.UniqueEntryCount.Evidence);
-            ulong w0 = w0Field.Read(firstPage);
+            // R-FMT-2 II-05 (evidence/r-q10-statistics-words/insert-new: (8,7)->(8,8);
+            // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb page 42 0x4F/0x5B: (10,10)->(10,11)):
+            // inserting a new key raises word1 by 1 without clamping to word0 (word0 is clamped only on delete).
             ulong nextW1 = w1Field.Read(firstPage) + 1;
-            if (w0 > 0 && nextW1 > w0)
-            {
-                nextW1 = w0;
-            }
             w1Field.Write(firstPage, nextW1);
         }
         return true;

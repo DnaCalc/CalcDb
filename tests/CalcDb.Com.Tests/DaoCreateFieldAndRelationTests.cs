@@ -134,12 +134,29 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         NewTableDefObject td = Recover<NewTableDefObject>(Method(db, "CreateTableDef", "AllTypes"));
         NewFieldsObject tfs = Recover<NewFieldsObject>(Get(td, "Fields"));
 
-        // Refusals: 9999 -> 3259, complex 101 -> NotModelled, BigInt 16 -> NotModelled, draft Decimal 20 -> NotModelled
+        // Refusals: 9999 -> 3259, complex 101 -> NotModelled, draft Decimal 20 -> NotModelled;
+        // draft BigInt (16) and DateTime2 (26) succeed on ACCDB (r-q47/bi-dao-createfield-addnew-accdb,
+        // r-q49/dt2-dao-createfield-addnew-accdb) and stay refused by name on Jet 4 MDB.
         Failure? f9999 = Method(td, "CreateField", "Bad", 9999).Failure;
         Assert.Equal(3259, f9999?.Number);
         Assert.StartsWith("NotModelled.DaoCreateFieldComplexType", Method(td, "CreateField", "Cplx", 101).Failure?.Description);
-        Assert.StartsWith("NotModelled.DaoCreateFieldBigInt", Method(td, "CreateField", "BI", 16).Failure?.Description);
         Assert.StartsWith("NotModelled.DaoCreateFieldDraftDecimal", Method(td, "CreateField", "Dec", 20).Failure?.Description);
+        if (version == DbVersion120)
+        {
+            NewFieldObject fBiDraft = Recover<NewFieldObject>(Method(td, "CreateField", "BI", 16));
+            Assert.Equal(19, IntOf(Get(fBiDraft, "Type")));
+            Assert.Equal(8, IntOf(Get(fBiDraft, "Size")));
+            Assert.Equal(0, IntOf(Get(fBiDraft, "Attributes")));
+            NewFieldObject fDt2Draft = Recover<NewFieldObject>(Method(td, "CreateField", "DT2", 26));
+            Assert.Equal(20, IntOf(Get(fDt2Draft, "Type")));
+            Assert.Equal(42, IntOf(Get(fDt2Draft, "Size")));
+            Assert.Equal(0, IntOf(Get(fDt2Draft, "Attributes")));
+        }
+        else
+        {
+            Assert.StartsWith("NotModelled.DaoCreateFieldBigIntMdb", Method(td, "CreateField", "BI", 16).Failure?.Description);
+            Assert.StartsWith("NotModelled.DaoCreateFieldDateTime2Mdb", Method(td, "CreateField", "DT2", 26).Failure?.Description);
+        }
 
         // AutoNumber (dbLong + Attributes=16)
         NewFieldObject fId = Recover<NewFieldObject>(Method(td, "CreateField", "Id", 4));

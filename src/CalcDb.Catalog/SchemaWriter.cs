@@ -619,9 +619,9 @@ public sealed class SchemaWriter
             NewField f = request.Fields[i];
             if (request.Route == SchemaRoute.Dao)
             {
-                if (f.Type is NewFieldType.Binary or NewFieldType.Decimal or NewFieldType.BigInt or NewFieldType.DateTime2)
+                if (f.Type is NewFieldType.Binary or NewFieldType.Decimal)
                 {
-                    return new SchemaRefusal(null, $"DAO-appended draft {f.Type} field {f.Name}: not recorded on draft TableDefs.Append (evidence/r-q46-dao-ddl-multi/cf-* records the 13 non-Decimal types; attached Decimal is recorded on AddField only)");
+                    return new SchemaRefusal(null, $"DAO-appended draft {f.Type} field {f.Name}: not recorded on draft TableDefs.Append (evidence/r-q46-dao-ddl-multi/cf-* records the 13 non-Decimal types, r-q47/bi-dao-createfield-addnew-accdb records draft BigInt, r-q49/dt2-dao-createfield-addnew-accdb records draft DateTime2; attached Decimal is recorded on AddField only)");
                 }
                 if (f.Type == NewFieldType.Counter && (f.Seed is not null || f.Increment is not null))
                 {
@@ -677,9 +677,9 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Binary:
                 case NewFieldType.VarBinary:
-                    if (isJet4Mdb && f.Type == NewFieldType.VarBinary && request.Route != SchemaRoute.Dao)
+                    if (isJet4Mdb && f.Type == NewFieldType.VarBinary && request.Route == SchemaRoute.Ado)
                     {
-                        return new SchemaRefusal(null, $"VarBinary field {f.Name} in a Jet 4 MDB on {request.Route} route is not recorded (evidence/r-q34-ddl-sweep/lval-pk-ole-memo-mdb-dao records fixed Binary on SQL; evidence/r-q46-dao-ddl-multi/cf-binary16-mdb records variable Binary on DAO)");
+                        return new SchemaRefusal(null, $"VarBinary field {f.Name} in a Jet 4 MDB on {request.Route} route is not recorded (evidence/r-q51-codecs-props-compact/bin-desc-keys-mdb records VarBinary on SQL; evidence/r-q46-dao-ddl-multi/cf-binary16-mdb records variable Binary on DAO)");
                     }
                     if (f.Size is < 1 or > 510)
                     {
@@ -767,6 +767,10 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.BigInt:
                     bigIntCount++;
+                    if (request.Route == SchemaRoute.Dao)
+                    {
+                        fixedBytes += 8;
+                    }
                     if (dateTime2Count > 0)
                     {
                         sawDateTime2BeforeBigInt = true;
@@ -782,13 +786,28 @@ public sealed class SchemaWriter
         }
         if (bigIntCount > 0 || dateTime2Count > 0)
         {
-            if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
+            if (request.Route == SchemaRoute.Dao)
+            {
+                if (bigIntCount + dateTime2Count > 1)
+                {
+                    return new SchemaRefusal(null, $"DAO TableDefs.Append with {bigIntCount} BIGINT and {dateTime2Count} DATETIME2 column(s) is not recorded (recorded: single BIGINT in bi-dao-createfield-addnew-accdb or single DATETIME2 in dt2-dao-createfield-addnew-accdb)");
+                }
+                if (request.Fields[0].Type is NewFieldType.BigInt or NewFieldType.DateTime2)
+                {
+                    return new SchemaRefusal(null, "DAO TableDefs.Append with BIGINT/DATETIME2 as the first field is not recorded (recorded: following a non-extended field in bi-dao-createfield-addnew-accdb and dt2-dao-createfield-addnew-accdb)");
+                }
+                if (exclusiveSession)
+                {
+                    return new SchemaRefusal(null, "DAO TableDefs.Append with BIGINT/DATETIME2 in an exclusive session is not recorded");
+                }
+            }
+            else if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
             {
                 return new SchemaRefusal(null, $"BIGINT/DATETIME2 on {request.Route} route is not recorded");
             }
-            if (bigIntCount > 1 || dateTime2Count > 1 || sawDateTime2BeforeBigInt)
+            else if (bigIntCount > 1 || (dateTime2Count > 2) || (dateTime2Count == 2 && bigIntCount > 0) || sawDateTime2BeforeBigInt)
             {
-                return new SchemaRefusal(null, $"CREATE TABLE with {bigIntCount} BIGINT and {dateTime2Count} DATETIME2 column(s){(sawDateTime2BeforeBigInt ? " (DATETIME2 before BIGINT)" : "")} is not recorded (recorded: single BIGINT, single DATETIME2 in r-q44-ddl-alter-types/ext-*, or BIGINT then DATETIME2 in r-q36-publication-bytes/create-nullfix-ext-accdb)");
+                return new SchemaRefusal(null, $"CREATE TABLE with {bigIntCount} BIGINT and {dateTime2Count} DATETIME2 column(s){(sawDateTime2BeforeBigInt ? " (DATETIME2 before BIGINT)" : "")} is not recorded (recorded: single BIGINT, up to two DATETIME2 columns in r-q44/ext-* and r-q49/dt2-select-compare-accdb, or BIGINT then DATETIME2 in r-q36/create-nullfix-ext-accdb)");
             }
             if (requiredFields.Count > 0)
             {
@@ -1062,6 +1081,40 @@ public sealed class SchemaWriter
         List<DaoPropertyStep> steps = [];
         foreach (NewField f in fields)
         {
+            if (f.Type is NewFieldType.BigInt or NewFieldType.DateTime2)
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb,
+                // evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb:
+                // Before the extended field's own Required=False commit, ACE writes FCMinReadVer, FCMinWriteVer,
+                // and FCMinDesignVer incrementally as ObjectValues("") on MSysObjects.LvProp (3 separate commits).
+                string minVersion = f.Type == NewFieldType.DateTime2 ? DateTime2MinVersion : BigIntMinVersion;
+                int objIdx = maps.FindIndex(m => m.Kind == PropertySectionKind.ObjectValues && m.MapName.Length == 0);
+                List<StoredProperty> objProps = objIdx >= 0 ? [.. maps[objIdx].Properties] : [];
+                if (objIdx < 0)
+                {
+                    objIdx = maps.Count;
+                    maps.Add(new PropertyMap(PropertySectionKind.ObjectValues, "", []));
+                }
+                foreach (string propName in FeatureMinVersionNames)
+                {
+                    if (!names.Contains(propName, StringComparer.Ordinal))
+                    {
+                        names.Add(propName);
+                    }
+                    StoredProperty prop = FeatureVersionProperty(propName, minVersion);
+                    int existing = objProps.FindIndex(p => string.Equals(p.Name, propName, StringComparison.Ordinal));
+                    if (existing >= 0)
+                    {
+                        objProps[existing] = prop;
+                    }
+                    else
+                    {
+                        objProps.Add(prop);
+                    }
+                    maps[objIdx] = new PropertyMap(PropertySectionKind.ObjectValues, "", [.. objProps]);
+                    steps.Add(new DaoPropertyStep([.. names], [.. maps], f.Name));
+                }
+            }
             StoredProperty[] props = DaoPropertiesFor(f);
             if (props.Length == 0)
             {
@@ -1898,18 +1951,31 @@ public sealed class SchemaWriter
             return new SchemaOutcome(existingRefusal, default, _pageCount);
         }
         bool isExtendedKeyType = false;
+        bool isAccdbOnlyExtendedKeyType = false;
         string[] tableColNames = [.. table.Columns.Select(c => c.Name)];
         foreach (string fieldName in request.Index.Fields)
         {
-            if (TryMatchFieldName(fieldName, tableColNames, out int colIdx, out _) && colIdx >= 0
-                && table.Columns[colIdx].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            if (TryMatchFieldName(fieldName, tableColNames, out int colIdx, out _) && colIdx >= 0)
             {
-                isExtendedKeyType = true;
+                byte tc = table.Columns[colIdx].TypeCode;
+                if (tc is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo
+                    or NativeTypes.Numeric or NativeTypes.Binary or NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
+                {
+                    isExtendedKeyType = true;
+                    if (tc is NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
+                    {
+                        isAccdbOnlyExtendedKeyType = true;
+                    }
+                }
             }
         }
         if (isExtendedKeyType && request.Route != SchemaRoute.Sql)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX via {request.Route} on Double/DateTime/GUID/Memo is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records DAO/SQL only)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX via {request.Route} on extended key type is not recorded (evidence/r-q44, r-q47, r-q49, r-q51 record DAO/SQL only)"), default, _pageCount);
+        }
+        if (isAccdbOnlyExtendedKeyType && isJet4Mdb)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on BigInt or DateTime2 on Jet 4 MDB is not valid (ACCDB-only types)"), default, _pageCount);
         }
         if (table.LongValueMaps.Count > 0 && request.Route == SchemaRoute.Ado)
         {
@@ -2642,9 +2708,16 @@ public sealed class SchemaWriter
                 return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN DATETIME on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-accdb, ddl-default-alter-ado-mdb record ADO nullable DATETIME DEFAULT only)"), default, _pageCount);
             }
         }
+        else if (f.Type == NewFieldType.Decimal)
+        {
+            if (request.Route != SchemaRoute.Ado || table.RowCount > 0 || f.Required || f.DefaultValue is not null || f.ImplicitDecimalPrecision || f.Precision is < 1 or > 28 || f.Scale > f.Precision)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN DECIMAL({f.Precision},{f.Scale}) on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q51-codecs-props-compact/dec-desc-keys-*, seek-args-decimal-* record empty ADO nullable DECIMAL(p,s) without DEFAULT)"), default, _pageCount);
+            }
+        }
         else if (f.Type is not (NewFieldType.Long or NewFieldType.Text))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN of type {f.Type} is not recorded (recorded: Long, Text, Memo, DateTime, BigInt, DateTime2 in r-q44-ddl-alter-types/add-*, ext-*-alter-*, r-q49-dt2-draftprops/ddl-default-alter-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN of type {f.Type} is not recorded (recorded: Long, Text, Memo, DateTime, Decimal, BigInt, DateTime2 in r-q44, r-q49, r-q51)"), default, _pageCount);
         }
         if (f.Type == NewFieldType.Text && f.Size is < 1 or > 255)
         {
@@ -2736,6 +2809,12 @@ public sealed class SchemaWriter
             case NewFieldType.BigInt:
                 newCol = new ColumnSpec(f.Name, NativeTypes.BigInt, nextColNum, variables, nextColNum, sortInfo, VariableColumnFlags, 0x00, 0, 8);
                 variables++;
+                break;
+            case NewFieldType.Decimal:
+                // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb:
+                // fixed 17-byte Numeric column with TypeInfo = precision | (scale << 8).
+                addedFixedBytes = 17;
+                newCol = new ColumnSpec(f.Name, NativeTypes.Numeric, nextColNum, variables, nextColNum, f.Precision | ((uint)f.Scale << 8), FixedColumnFlags, 0x00, (ushort)fixedEnd, 17);
                 break;
             default:
                 return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN of unrecorded type {f.Type}"), default, _pageCount);
@@ -6304,6 +6383,23 @@ public sealed class SchemaWriter
             {
                 return work.NotWritten();
             }
+            bool daoHasBigInt = request.Fields.Any(f => f.Type == NewFieldType.BigInt);
+            bool daoHasDateTime2 = request.Fields.Any(f => f.Type == NewFieldType.DateTime2);
+            if (daoHasBigInt || daoHasDateTime2)
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb (p0+20 -> 0x05),
+                // evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb (p0+20 -> 0x06):
+                // upgrade page 0 offset 20 in Commit 1 alongside TDEF + MSysObjects + MSysACEs.
+                byte requiredVersion = daoHasDateTime2 ? Ace2019VersionCode : Ace2016VersionCode;
+                byte currentVersion = (byte)_d.Header.Version.Read(page0);
+                if (currentVersion < requiredVersion)
+                {
+                    if (!work.Apply(new PageEdit(0, new BytePatch(_d.Header.Version.Offset, [requiredVersion]), PageRole.NativeState)))
+                    {
+                        return work.NotWritten();
+                    }
+                }
+            }
         }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
         {
@@ -9169,13 +9265,19 @@ public sealed class SchemaWriter
                     // evidence/r-q44-ddl-alter-types/ixtype-double-rows-accdb-dao, ixtype-datetime-rows-accdb-dao, ixtype-guid-rows-accdb-dao, ixtype-memo-rows-accdb-dao (and -mdb-dao twins):
                     // a single Null key in a single-column Double/DateTime/GUID (ASC/DESC, non-unique or UNIQUE) or ascending Memo
                     // bulk-built index is indexed as [0x00] (ASC) / [0xFF] (DESC) and counted once in both EntryCount and UniqueEntryCount.
-                    bool recordedSingleNull = keyCols.Length == 1 && nullKeyRows == 0 && (
-                        (!index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)
-                        || keyCols[0].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid
-                        || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending));
-                    if (!recordedSingleNull)
+                    // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, bin-desc-keys-accdb, bin-desc-keys-mdb:
+                    // a single Null in non-unique NUMERIC (ASC/DESC) and one or more Nulls in non-unique Binary/VarBinary
+                    // (ASC/DESC, 3 Null rows in TB & TV -> UniqueEntryCount 7 and 9) collapse into one unique key count.
+                    bool recordedNull = keyCols.Length == 1 && (
+                        (nullKeyRows == 0 && (
+                            (!index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)
+                            || keyCols[0].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid
+                            || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
+                            || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Numeric)))
+                        || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Binary));
+                    if (!recordedNull)
                     {
-                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(nullKeyRows > 0 ? "multiple" : keyCols.Length != 1 ? "multi-column" : !keySpecs[0].Ascending ? $"DESC 0x{keyCols[0].TypeCode:X2}" : index.Unique ? $"UNIQUE 0x{keyCols[0].TypeCode:X2}" : $"0x{keyCols[0].TypeCode:X2}")} Null keys is not recorded (recorded: single Null on ascending non-unique Long in r-q43, Double/DateTime/GUID ASC/DESC and ascending Memo in r-q44-ddl-alter-types/ixtype-*-rows-*)";
+                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(nullKeyRows > 0 ? "multiple" : keyCols.Length != 1 ? "multi-column" : !keySpecs[0].Ascending ? $"DESC 0x{keyCols[0].TypeCode:X2}" : index.Unique ? $"UNIQUE 0x{keyCols[0].TypeCode:X2}" : $"0x{keyCols[0].TypeCode:X2}")} Null keys is not recorded (recorded: single Null on ascending non-unique Long in r-q43, Double/DateTime/GUID ASC/DESC and ascending Memo in r-q44, non-unique NUMERIC ASC/DESC and single/multiple Nulls on non-unique Binary ASC/DESC in r-q51)";
                         return false;
                     }
                     nullKeyRows++;
@@ -9427,17 +9529,31 @@ public sealed class SchemaWriter
                     break;
                 }
                 case NewFieldType.BigInt:
-                    // ACCDB BIGINT: TypeCode 0x13 (19), variable Flags 0x02, Length 8, TypeInfo = sortInfo
-                    // (evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-*, ext-both-accdb-dao, r-q36 create-nullfix-ext-accdb).
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.BigInt, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
-                    variables++;
+                    if (request.Route == SchemaRoute.Dao)
+                    {
+                        // evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb (page 42):
+                        // DAO CreateField(..., dbBigInt=16) writes TypeCode 0x13, fixed Flags 0x03, Length 8, TypeInfo 0.
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.BigInt, (ushort)i, variables, (ushort)i, 0u, FixedColumnFlags, 0x00, fixedOffset, 8));
+                        fixedOffset += 8;
+                    }
+                    else
+                    {
+                        // ACCDB BIGINT (SQL/ADO): TypeCode 0x13 (19), variable Flags 0x02, Length 8, TypeInfo = sortInfo
+                        // (evidence/r-q44-ddl-alter-types/ext-bigint-create-accdb-*, ext-both-accdb-dao, r-q36 create-nullfix-ext-accdb).
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.BigInt, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
+                        variables++;
+                    }
                     break;
                 case NewFieldType.DateTime2:
-                    // ACCDB DATETIME2: TypeCode 0x14 (20), fixed Flags 0x03, Length 42 (0x2A), TypeInfo 0x00000009
+                {
+                    // ACCDB DATETIME2: TypeCode 0x14 (20), fixed Flags 0x03, Length 42 (0x2A), TypeInfo 0x00000000 on DAO
+                    // (evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb page 42) and 0x00000009 on SQL/ADO
                     // (evidence/r-q44-ddl-alter-types/ext-datetime2-create-accdb-*, ext-both-accdb-dao, r-q36 create-nullfix-ext-accdb).
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, (ushort)i, variables, (ushort)i, DateTime2TypeInfo, FixedColumnFlags, 0x00, fixedOffset, 42));
+                    uint dt2TypeInfo = request.Route == SchemaRoute.Dao ? 0u : DateTime2TypeInfo;
+                    columns.Add(new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, (ushort)i, variables, (ushort)i, dt2TypeInfo, FixedColumnFlags, 0x00, fixedOffset, 42));
                     fixedOffset += 42;
                     break;
+                }
                 default:
                     throw new InvalidOperationException($"Unchecked field type {f.Type}.");
             }
@@ -9703,16 +9819,25 @@ public sealed class SchemaWriter
             {
                 continue;
             }
-            if (allowExtendedCreateIndexTypes && tc is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            if (allowExtendedCreateIndexTypes && tc is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo
+                or NativeTypes.Numeric or NativeTypes.Binary or NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
             {
                 if (index.Fields.Count != 1 || index.PrimaryKey || index.DisallowNull || index.IgnoreNull)
                 {
-                    return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} (0x{tc:X2}) with multi-column or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records single-column CREATE [UNIQUE] INDEX only)");
+                    return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} (0x{tc:X2}) with multi-column or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (r-q44/r-q47/r-q49/r-q51 record single-column CREATE [UNIQUE] INDEX only)");
                 }
                 bool desc = index.Descending is not null && index.Descending[i];
                 if (tc == NativeTypes.Memo && desc)
                 {
                     return new SchemaRefusal(null, $"descending index {index.Name} on Memo field {fieldName} is not recorded (evidence/r-q44-ddl-alter-types/ixtype-memo-* records ascending only)");
+                }
+                if (tc is NativeTypes.Numeric or NativeTypes.Binary or NativeTypes.BigInt && index.Unique)
+                {
+                    return new SchemaRefusal(null, $"UNIQUE index {index.Name} on field {fieldName} (0x{tc:X2}) is not recorded (r-q47/r-q51 record non-unique ASC/DESC only)");
+                }
+                if (tc == NativeTypes.ExtendedDateTime && index.Unique && desc)
+                {
+                    return new SchemaRefusal(null, $"descending UNIQUE index {index.Name} on DateTime2 field {fieldName} is not recorded (evidence/r-q49-dt2-draftprops/dt2-unique-index-accdb records ascending UNIQUE only)");
                 }
                 continue;
             }

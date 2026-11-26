@@ -267,12 +267,28 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         int missing = 0;
         for (int i = 0; i < plan.Parameters.Count; i++)
         {
-            missing += parameters is null || i >= parameters.Count || parameters[i] is null ? 1 : 0;
+            // evidence/r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb: a DateTime2 parameter (DaoType 20) set via
+            // VT_DATE coerces to VT_DECIMAL and still counts as missing (3061) at OpenRecordset.
+            bool absent = parameters is null || i >= parameters.Count || parameters[i] is null
+                || (plan.Parameters[i].DaoType == 20 && parameters[i]!.Value.Vt == (ushort)VarType.Decimal);
+            missing += absent ? 1 : 0;
         }
         if (missing > 0)
         {
-            failure = SqlFailure.Ace(SqlPhase.Open, 3061, SqlMessages.TooFewParameters(missing));
+            // r-oledb-odbc/param-order-binding, r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb:
+            // ACE reports the total declared/expected parameter count (e.g. 1 of 2 set -> "Expected 2.").
+            failure = SqlFailure.Ace(SqlPhase.Open, 3061, SqlMessages.TooFewParameters(plan.Parameters.Count));
             return null;
+        }
+        for (int i = 0; i < plan.Parameters.Count; i++)
+        {
+            if (plan.Parameters[i].DaoType == 19)
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb, bi-params-ado-cmd-accdb:
+                // ACE 16.0.20625.20044 evaluates non-Null BigInt parameters as 0 during query execution; refuse execution explicitly.
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.BigIntParameterExecution", $"executing a SELECT with bound BigInt parameter '{plan.Parameters[i].Name}' (ACE 16.0.20625.20044 evaluates non-Null BigInt parameters as 0)");
+                return null;
+            }
         }
         var values = new NativeVariant[plan.Parameters.Count];
         for (int i = 0; i < values.Length; i++)
@@ -513,6 +529,33 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         if (fieldType is not int ft || source.Vt is (ushort)VarType.Null or (ushort)VarType.Empty)
         {
             return false;
+        }
+        if (ft == 16)
+        {
+            if (source.Vt == (ushort)VarType.I8)
+            {
+                return false;
+            }
+            // evidence/r-def-expr-sql/expr-bigint-stored-arith, evidence/r-q47-bigint-expr-edges/bi-select-arith-*:
+            // Projected dbBigInt (16) converts inner expression values (e.g. VT_R8 from '/', overflowed '+', '-', '*', '-B')
+            // to VT_I8 via VariantChangeTypeEx; out-of-range fails 6 (Overflow), mismatch fails 3464.
+            unsafe
+            {
+                NativeVariant src = source;
+                if (OwnedVariant.TryChangeScalar(&src, VarType.I8, context.Lcid, out converted, out int hr))
+                {
+                    return true;
+                }
+                const int DispETypeMismatch = unchecked((int)0x80020005);
+                const int DispEOverflow = unchecked((int)0x8002000A);
+                failure = hr switch
+                {
+                    DispEOverflow => SqlFailure.Ace(phase, AceError.Overflow, AceError.Describe(AceError.Overflow)),
+                    DispETypeMismatch => SqlFailure.Ace(phase, AceError.TypeMismatch, AceError.Describe(AceError.TypeMismatch)),
+                    _ => SqlFailure.Open(phase, "NotModelled.BigIntProjection", $"projecting VarType {source.Type} into BigInt (hr 0x{hr:X8})"),
+                };
+                return false;
+            }
         }
         (VarType target, ScalarOperation op) = ft switch
         {
@@ -1807,15 +1850,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     return null;
                 }
                 if (wf.Number == AceError.TypeMismatch
-                    && where.LastFailureWasStoredBooleanComparison
                     && plan.Tree is null
                     && plan.Sources.Count == 1
                     && plan.Sources[0].Subquery is null
                     && !plan.Grouped
-                    && plan.Order.Count > 0)
+                    && ((where.LastFailureWasStoredBooleanComparison && plan.Order.Count > 0)
+                        || where.LastFailureWasExtendedDateTimeComparison))
                 {
-                    // r-q43-schema-lval-index/bool-cmp-origin-accdb calls 166, 170, 174, 182:
-                    // stored YESNO vs text (3464) in WHERE on a single-table ordered SELECT fails OpenRecordset with 3464.
+                    // r-q43-schema-lval-index/bool-cmp-origin-accdb (stored YESNO vs text on ordered SELECT) and
+                    // r-q49-dt2-draftprops/dt2-select-compare-accdb, dt2-params-dao-querydef-accdb (DATETIME2 WHERE 3464):
+                    // single-table non-grouped SELECT fails OpenRecordset with 3464.
                     failure = At(wf);
                     return null;
                 }
@@ -2881,7 +2925,29 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 failure = feedOpen;
                 return null;
             }
+            // evidence/r-q47-bigint-expr-edges/bi-select-aggregates-dao-ado-accdb,
+            // evidence/r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb, bi-agg-null-extremes-accdb:
+            // When SUM(B) co-occurs with MIN(B) or MAX(B) over a BIGINT column, ACE overflows (6) at OpenRecordset
+            // on 64-bit extreme rows (long.MinValue, long.MinValue + 1, long.MaxValue), succeeds for |v| <= 2147483648,
+            // and leaves intermediate magnitudes (2^31, 2^63-1) unprobed.
+            HashSet<ColumnDescriptor>? mixedBigIntSumColumns = null;
+            foreach (AggregateSpec a in aggregates)
+            {
+                if (a.Kind == AggregateKind.Sum && a.SourceColumn is { TypeCode: NativeTypes.BigInt } col)
+                {
+                    foreach (AggregateSpec other in aggregates)
+                    {
+                        if (other.Kind is AggregateKind.Min or AggregateKind.Max && ReferenceEquals(other.SourceColumn, col))
+                        {
+                            mixedBigIntSumColumns ??= [];
+                            mixedBigIntSumColumns.Add(col);
+                            break;
+                        }
+                    }
+                }
+            }
             NativeVariant[] probe = new NativeVariant[Math.Max(keys, 1)];
+            SqlFailure? unprobedMixedBigInt = null;
             foreach (ResultRow root in roots)
             {
                 Stand(root);
@@ -2964,11 +3030,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
                 for (int a = 0; a < aggregates.Count; a++)
                 {
-                    if (Step(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(group * aggregates.Count) + a], out failure) is false)
+                    if (Step(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(group * aggregates.Count) + a], mixedBigIntSumColumns, ref unprobedMixedBigInt, out failure) is false)
                     {
                         return null;
                     }
                 }
+            }
+            if (unprobedMixedBigInt is not null)
+            {
+                failure = unprobedMixedBigInt;
+                return null;
             }
             int groupCount = _slots.Count / _slotWidth;
             for (int g = 0; g < groupCount; g++)
@@ -3072,7 +3143,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             public bool Seen;
         }
 
-        private bool Step(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
+        private bool Step(AggregateSpec a, ref AggregateState s, HashSet<ColumnDescriptor>? mixedBigIntSumColumns, ref SqlFailure? unprobedMixedBigInt, out SqlFailure? failure)
         {
             failure = null;
             if (a.Kind == AggregateKind.CountRows)
@@ -3094,6 +3165,28 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     s.Count += isNull ? 0 : 1;
                     break;
                 case AggregateKind.Sum or AggregateKind.Avg when !isNull:
+                    if (a.Kind == AggregateKind.Sum && mixedBigIntSumColumns is not null && a.SourceColumn is { } col
+                        && mixedBigIntSumColumns.Contains(col) && v.Vt == (ushort)VarType.I8)
+                    {
+                        long raw = v.Int64;
+                        // evidence/r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb: G1 {0,1,2^31-1,Null} and G2 {2^31-1,2^31}
+                        // succeed; G5 {MinValue,MaxValue}, G6 {MinValue}, and G9 {MinValue+1,MaxValue} fail 6 (Overflow).
+                        // Negative values and isolated > 2^31 (including isolated MaxValue) were not probed in mixed
+                        // SUM+MIN/MAX; defer that refusal until after scanning so any recorded MinValue/MinValue+1 row
+                        // in the same query still raises 6 regardless of scan order.
+                        if (raw is long.MinValue or (long.MinValue + 1))
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                        if (raw is < 0 or > 2147483648L)
+                        {
+                            unprobedMixedBigInt ??= SqlFailure.Open(
+                                SqlPhase.Open,
+                                "NotModelled.BigIntMixedAggregateThreshold",
+                                $"SUM({col.Name}) co-occurring with MIN/MAX({col.Name}) over BIGINT value {raw} outside recorded passing range [0, 2147483648] (r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb)");
+                        }
+                    }
                     s.Seen = true;
                     s.Count++;
                     if (a.Result == VarType.Currency)

@@ -20,11 +20,12 @@ public sealed record ScalarPayloadRules
     public required int GuidBytes { get; init; }
 
     /// <summary>
-    /// The Extended Date/Time payload width. <b>ACE's digit layout is not the pinned reference's.</b> II-04 §5.5 gives
-    /// 19 day digits, a colon, 12 second digits, 7 fraction digits, then ":7" and one NUL; the values in
-    /// r-sort-3/create-nums-accdb (NU.DX) are 15 day digits, a colon at 15, 12 second and 7 fraction digits, ":7" at 35
-    /// and five NULs ("000000000693594:0000000432000000000:7" for 1899-12-30 12:00). The value's meaning is therefore
-    /// not modelled (reported to the book, W-04/private-codecs); the exact bytes are kept and keyed.
+    /// The Extended Date/Time (<c>DATETIME2</c>, type <c>0x14</c>) payload width (42 ASCII bytes; II-04 §5.5,
+    /// qualified.md R-FMT-2 / R-SORT-3, <c>evidence/r-q49-dt2-draftprops/dt2-*</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>).
+    /// ACE writes three fixed-width layouts decoded/encoded by <see cref="ExtendedDateTimeCodec"/>: 19 day digits
+    /// <c>%019:%019:7\0</c> on SQL INSERT, 15 day digits <c>%015:%019:7\0</c> + 4 trailing slack bytes on DAO table
+    /// puts (where byte 40 is non-deterministic in ACE; CalcDb writes <c>0x00</c>), and 19 day digits
+    /// <c>%019:%019:0\0</c> on SQL UPDATE / dynaset Edit.
     /// </summary>
     public required int ExtendedBytes { get; init; }
 
@@ -192,5 +193,486 @@ public static class ScalarCodecs
         BinaryPrimitives.WriteUInt16BigEndian(text[4..], BinaryPrimitives.ReadUInt16LittleEndian(row[4..]));
         BinaryPrimitives.WriteUInt16BigEndian(text[6..], BinaryPrimitives.ReadUInt16LittleEndian(row[6..]));
         row[8..16].CopyTo(text[8..]);
+    }
+}
+
+/// <summary>
+/// Which ACE write route formats a 42-byte <c>DATETIME2</c> (<c>0x14</c>) payload
+/// (<c>evidence/r-q49-dt2-draftprops/dt2-*</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>):
+/// <list type="bullet">
+/// <item><see cref="SqlInsert"/>: 19 day digits + <c>:</c> + 19 100-ns tick digits + <c>:7\0</c> (42 bytes exact).</item>
+/// <item><see cref="DaoTable"/>: 15 day digits + <c>:</c> + 19 100-ns tick digits + <c>:7\0</c> + 4 zero slack bytes
+/// (42 bytes; ACE's byte 40 is non-deterministic stack memory and is written as 0x00 here).</item>
+/// <item><see cref="SqlUpdateOrDynaset"/>: 19 day digits + <c>:</c> + 19 whole-second digits + <c>:0\0</c> (42 bytes exact,
+/// truncating fractional seconds; <c>dt2-update-invalid-accdb</c> page 46).</item>
+/// </list>
+/// </summary>
+public enum ExtendedDateTimeWriteMode : byte
+{
+    DaoTable,
+    SqlInsert,
+    SqlUpdateOrDynaset,
+}
+
+/// <summary>
+/// Decoded <c>DATETIME2</c> (<c>0x14</c>) value: days since <c>0001-01-01</c> (<c>0..3652058</c>) and 100-ns ticks since
+/// midnight (<c>0..864000000000</c>, where <c>864000000000</c> represents <c>9999-12-31 24:00:00.0000000</c> produced by
+/// half-up rounding at the 8th fractional digit; <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>).
+/// </summary>
+public readonly record struct ExtendedDateTimeValue(long Days, long Ticks100ns) : IComparable<ExtendedDateTimeValue>
+{
+    public const long MinDays = 0;
+    public const long MaxDays = 3_652_058;
+    public const long OleEpochDays = 693_593;
+    public const long MinOleDays = 36_159; // 0100-01-01
+    public const long TicksPerSecond = 10_000_000L;
+    public const long TicksPerDay = 86_400L * TicksPerSecond;
+
+    public int CompareTo(ExtendedDateTimeValue other)
+    {
+        int d = Days.CompareTo(other.Days);
+        return d != 0 ? d : Ticks100ns.CompareTo(other.Ticks100ns);
+    }
+
+    public static bool operator <(ExtendedDateTimeValue left, ExtendedDateTimeValue right) => left.CompareTo(right) < 0;
+    public static bool operator <=(ExtendedDateTimeValue left, ExtendedDateTimeValue right) => left.CompareTo(right) <= 0;
+    public static bool operator >(ExtendedDateTimeValue left, ExtendedDateTimeValue right) => left.CompareTo(right) > 0;
+    public static bool operator >=(ExtendedDateTimeValue left, ExtendedDateTimeValue right) => left.CompareTo(right) >= 0;
+
+    public void ToComponents(out int year, out int month, out int day, out int hour, out int minute, out int second, out int frac7)
+    {
+        DateTime date = new(Days * TicksPerDay);
+        year = date.Year;
+        month = date.Month;
+        day = date.Day;
+        if (Ticks100ns == TicksPerDay)
+        {
+            hour = 24;
+            minute = 0;
+            second = 0;
+            frac7 = 0;
+            return;
+        }
+        long totalSec = Ticks100ns / TicksPerSecond;
+        frac7 = (int)(Ticks100ns % TicksPerSecond);
+        hour = (int)(totalSec / 3600);
+        minute = (int)((totalSec % 3600) / 60);
+        second = (int)(totalSec % 60);
+    }
+
+    /// <summary>DAO <c>Field.Value</c> BSTR format: <c>"MM/DD/YYYY HH:MM:SS.fffffff"</c>.</summary>
+    public string FormatDao()
+    {
+        ToComponents(out int y, out int m, out int d, out int h, out int min, out int s, out int f7);
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{m:D2}/{d:D2}/{y:D4} {h:D2}:{min:D2}:{s:D2}.{f7:D7}");
+    }
+
+    /// <summary>
+    /// Convert to OLE Automation <c>DATE</c> (truncating sub-second ticks to whole seconds; <c>dt2-select-funcs-convert-dao-ado-accdb</c>
+    /// <c>DateAdd('d', 1, D)</c>). Fails outside OLE's <c>0100-01-01..9999-12-31</c> range or at <c>24:00:00</c>.
+    /// </summary>
+    public bool TryToOleDate(out double oaDate)
+    {
+        if (Days < MinOleDays || Days > MaxDays || Ticks100ns >= TicksPerDay)
+        {
+            oaDate = 0;
+            return false;
+        }
+        long wholeDays = Days - OleEpochDays;
+        double frac = (Ticks100ns / TicksPerSecond) / 86_400.0;
+        oaDate = wholeDays >= 0 ? wholeDays + frac : wholeDays - frac;
+        return true;
+    }
+}
+
+/// <summary>
+/// Parser, encoder, and decoder for ACE's 42-byte <c>DATETIME2</c> (<c>0x14</c>) ASCII payload
+/// (<c>evidence/r-q49-dt2-draftprops/dt2-*</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>).
+/// </summary>
+public static class ExtendedDateTimeCodec
+{
+    public const int PayloadBytes = 42;
+
+    private static readonly long[] ScaleMultipliers =
+    [
+        10_000_000L,
+        1_000_000L,
+        100_000L,
+        10_000L,
+        1_000L,
+        100L,
+        10L,
+        1L,
+    ];
+
+    /// <summary>Decode any valid 42-byte <c>DATETIME2</c> payload (15- or 19-digit days, scale 0..7).</summary>
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out ExtendedDateTimeValue value)
+    {
+        value = default;
+        if (bytes.Length != PayloadBytes)
+        {
+            return false;
+        }
+        int nul = bytes.IndexOf((byte)0);
+        ReadOnlySpan<byte> text = nul >= 0 ? bytes[..nul] : bytes;
+        int colon1 = text.IndexOf((byte)':');
+        if (colon1 <= 0)
+        {
+            return false;
+        }
+        ReadOnlySpan<byte> rest = text[(colon1 + 1)..];
+        int colon2 = rest.IndexOf((byte)':');
+        if (colon2 <= 0 || colon2 + 1 >= rest.Length)
+        {
+            return false;
+        }
+        if (!TryParseAsciiUInt64(text[..colon1], out ulong days)
+            || !TryParseAsciiUInt64(rest[..colon2], out ulong timeUnits)
+            || !TryParseAsciiUInt64(rest[(colon2 + 1)..], out ulong scale)
+            || scale > 7
+            || days > (ulong)ExtendedDateTimeValue.MaxDays)
+        {
+            return false;
+        }
+        long mult = ScaleMultipliers[(int)scale];
+        if (timeUnits > (ulong)(ExtendedDateTimeValue.TicksPerDay / mult))
+        {
+            return false;
+        }
+        long ticks = (long)timeUnits * mult;
+        value = new ExtendedDateTimeValue((long)days, ticks);
+        return true;
+    }
+
+    /// <summary>Encode <paramref name="value"/> into 42 row bytes for <paramref name="mode"/>.</summary>
+    public static void Encode(ExtendedDateTimeValue value, ExtendedDateTimeWriteMode mode, Span<byte> destination)
+    {
+        if (destination.Length < PayloadBytes)
+        {
+            throw new ArgumentException($"Destination must be at least {PayloadBytes} bytes.", nameof(destination));
+        }
+        destination[..PayloadBytes].Clear();
+        int dayDigits = mode == ExtendedDateTimeWriteMode.DaoTable ? 15 : 19;
+        long timeUnits = mode == ExtendedDateTimeWriteMode.SqlUpdateOrDynaset
+            ? value.Ticks100ns / ExtendedDateTimeValue.TicksPerSecond
+            : value.Ticks100ns;
+        byte scaleChar = mode == ExtendedDateTimeWriteMode.SqlUpdateOrDynaset ? (byte)'0' : (byte)'7';
+        WriteZeroPaddedAscii(value.Days, destination[..dayDigits]);
+        destination[dayDigits] = (byte)':';
+        WriteZeroPaddedAscii(timeUnits, destination.Slice(dayDigits + 1, 19));
+        destination[dayDigits + 20] = (byte)':';
+        destination[dayDigits + 21] = scaleChar;
+        destination[dayDigits + 22] = 0;
+    }
+
+    /// <summary>Encode <paramref name="value"/> into a fresh 42-byte array for <paramref name="mode"/>.</summary>
+    public static byte[] Encode(ExtendedDateTimeValue value, ExtendedDateTimeWriteMode mode)
+    {
+        byte[] bytes = new byte[PayloadBytes];
+        Encode(value, mode, bytes);
+        return bytes;
+    }
+
+    /// <summary>Convert an OLE Automation <c>DATE</c> (<c>VT_DATE</c>) to <see cref="ExtendedDateTimeValue"/>.</summary>
+    public static bool TryFromOleDate(double oaDate, out ExtendedDateTimeValue value)
+    {
+        value = default;
+        if (!double.IsFinite(oaDate) || oaDate < -657_434.99999999 || oaDate >= 2_958_466.0)
+        {
+            return false;
+        }
+        double wholeDays = Math.Truncate(oaDate);
+        long days = ExtendedDateTimeValue.OleEpochDays + (long)wholeDays;
+        double frac = Math.Abs(oaDate - wholeDays);
+        long totalSeconds = (long)Math.Round(frac * 86_400.0, MidpointRounding.AwayFromZero);
+        if (totalSeconds >= 86_400L)
+        {
+            days += 1;
+            totalSeconds -= 86_400L;
+        }
+        if (days < ExtendedDateTimeValue.MinDays || days > ExtendedDateTimeValue.MaxDays)
+        {
+            return false;
+        }
+        value = new ExtendedDateTimeValue(days, totalSeconds * ExtendedDateTimeValue.TicksPerSecond);
+        return true;
+    }
+
+    /// <summary>
+    /// Parse an ACE <c>DATETIME2</c> text value: ISO <c>YYYY-MM-DD[ HH:MM:SS[.f...]]</c>, time-only
+    /// <c>HH:MM:SS[.f...]</c> (defaulting to <c>1899-12-30</c>), or US date+time <c>MM/DD/YYYY HH:MM:SS[.f...]</c>
+    /// (ACE's readback format; US date-only <c>MM/DD/YYYY</c> is unprobed and refused).
+    /// Rounds half-up at the 8th fractional digit (carrying into the next second/day, or holding
+    /// <c>9999-12-31 24:00:00.0000000</c> at max day; <c>dt2-ticks-accdb</c>, <c>dt2-ddl-insert-bounds-accdb</c>,
+    /// <c>dt2-update-invalid-accdb</c>).
+    /// </summary>
+    public static bool TryParseText(ReadOnlySpan<char> input, out ExtendedDateTimeValue value)
+    {
+        value = default;
+        ReadOnlySpan<char> s = input.Trim();
+        if (s.Length == 0)
+        {
+            return false;
+        }
+        int sep = s.IndexOfAny(' ', 'T', 't');
+        if (sep < 0)
+        {
+            if (s.Contains('-'))
+            {
+                if (!TryParseIsoDate(s, out long days))
+                {
+                    return false;
+                }
+                value = new ExtendedDateTimeValue(days, 0);
+                return true;
+            }
+            if (s.Contains(':'))
+            {
+                if (!TryParseTime(s, out long ticks, out bool carry))
+                {
+                    return false;
+                }
+                long days = ExtendedDateTimeValue.OleEpochDays + (carry ? 1 : 0);
+                value = new ExtendedDateTimeValue(days, carry ? 0 : ticks);
+                return true;
+            }
+            return false;
+        }
+        ReadOnlySpan<char> datePart = s[..sep];
+        ReadOnlySpan<char> timePart = s[(sep + 1)..].TrimStart();
+        if (timePart.Length == 0)
+        {
+            return false;
+        }
+        long parsedDays;
+        if (datePart.Contains('-'))
+        {
+            if (!TryParseIsoDate(datePart, out parsedDays))
+            {
+                return false;
+            }
+        }
+        else if (datePart.Contains('/'))
+        {
+            if (!TryParseUsDate(datePart, out parsedDays))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+        if (!TryParseTime(timePart, out long parsedTicks, out bool dayCarry))
+        {
+            return false;
+        }
+        if (dayCarry)
+        {
+            if (parsedDays < ExtendedDateTimeValue.MaxDays)
+            {
+                parsedDays++;
+                parsedTicks = 0;
+            }
+            else
+            {
+                // 9999-12-31 23:59:59.99999995..99999999 -> 9999-12-31 24:00:00.0000000 (dt2-ticks-accdb).
+                parsedTicks = ExtendedDateTimeValue.TicksPerDay;
+            }
+        }
+        value = new ExtendedDateTimeValue(parsedDays, parsedTicks);
+        return true;
+    }
+
+    private static bool TryParseIsoDate(ReadOnlySpan<char> s, out long days)
+    {
+        days = 0;
+        int d1 = s.IndexOf('-');
+        if (d1 != 4)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> rest = s[(d1 + 1)..];
+        int d2 = rest.IndexOf('-');
+        if (d2 is < 1 or > 2)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> daySpan = rest[(d2 + 1)..];
+        if (daySpan.Length is < 1 or > 2)
+        {
+            return false;
+        }
+        if (!TryParseDigits(s[..d1], out int year)
+            || !TryParseDigits(rest[..d2], out int month)
+            || !TryParseDigits(daySpan, out int day))
+        {
+            return false;
+        }
+        return TryCalendarDays(year, month, day, out days);
+    }
+
+    private static bool TryParseUsDate(ReadOnlySpan<char> s, out long days)
+    {
+        days = 0;
+        int d1 = s.IndexOf('/');
+        if (d1 is < 1 or > 2)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> rest = s[(d1 + 1)..];
+        int d2 = rest.IndexOf('/');
+        if (d2 is < 1 or > 2)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> yearSpan = rest[(d2 + 1)..];
+        if (yearSpan.Length != 4)
+        {
+            return false;
+        }
+        if (!TryParseDigits(s[..d1], out int month)
+            || !TryParseDigits(rest[..d2], out int day)
+            || !TryParseDigits(yearSpan, out int year))
+        {
+            return false;
+        }
+        return TryCalendarDays(year, month, day, out days);
+    }
+
+    private static bool TryCalendarDays(int year, int month, int day, out long days)
+    {
+        days = 0;
+        if (year is < 1 or > 9999 || month is < 1 or > 12)
+        {
+            return false;
+        }
+        if (day < 1 || day > DateTime.DaysInMonth(year, month))
+        {
+            return false;
+        }
+        days = new DateTime(year, month, day).Ticks / ExtendedDateTimeValue.TicksPerDay;
+        return true;
+    }
+
+    private static bool TryParseTime(ReadOnlySpan<char> s, out long ticks, out bool carryDay)
+    {
+        ticks = 0;
+        carryDay = false;
+        int c1 = s.IndexOf(':');
+        if (c1 is < 1 or > 2)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> rest = s[(c1 + 1)..];
+        int c2 = rest.IndexOf(':');
+        if (c2 is < 1 or > 2)
+        {
+            return false;
+        }
+        ReadOnlySpan<char> secAndFrac = rest[(c2 + 1)..];
+        int dot = secAndFrac.IndexOf('.');
+        ReadOnlySpan<char> secSpan = dot >= 0 ? secAndFrac[..dot] : secAndFrac;
+        ReadOnlySpan<char> fracSpan = dot >= 0 ? secAndFrac[(dot + 1)..] : default;
+        if (secSpan.Length is < 1 or > 2 || (dot >= 0 && fracSpan.Length == 0))
+        {
+            return false;
+        }
+        if (!TryParseDigits(s[..c1], out int hour)
+            || !TryParseDigits(rest[..c2], out int minute)
+            || !TryParseDigits(secSpan, out int second))
+        {
+            return false;
+        }
+        if (hour is < 0 or > 23 || minute is < 0 or > 59 || second is < 0 or > 59)
+        {
+            return false;
+        }
+        long frac7 = 0;
+        bool roundUp = false;
+        for (int i = 0; i < fracSpan.Length; i++)
+        {
+            char ch = fracSpan[i];
+            if (!char.IsAsciiDigit(ch))
+            {
+                return false;
+            }
+            if (i < 7)
+            {
+                frac7 = (frac7 * 10) + (ch - '0');
+            }
+            else if (i == 7)
+            {
+                roundUp = ch >= '5';
+            }
+        }
+        for (int i = fracSpan.Length; i < 7; i++)
+        {
+            frac7 *= 10;
+        }
+        long total = (((hour * 3600L) + (minute * 60L) + second) * ExtendedDateTimeValue.TicksPerSecond) + frac7 + (roundUp ? 1 : 0);
+        if (total == ExtendedDateTimeValue.TicksPerDay)
+        {
+            carryDay = true;
+            ticks = 0;
+        }
+        else
+        {
+            ticks = total;
+        }
+        return true;
+    }
+
+    private static bool TryParseDigits(ReadOnlySpan<char> s, out int value)
+    {
+        value = 0;
+        if (s.Length == 0)
+        {
+            return false;
+        }
+        foreach (char c in s)
+        {
+            if (!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+            value = (value * 10) + (c - '0');
+        }
+        return true;
+    }
+
+    private static bool TryParseAsciiUInt64(ReadOnlySpan<byte> s, out ulong value)
+    {
+        value = 0;
+        if (s.Length == 0)
+        {
+            return false;
+        }
+        foreach (byte b in s)
+        {
+            if (b is < (byte)'0' or > (byte)'9')
+            {
+                return false;
+            }
+            ulong digit = (ulong)(b - (byte)'0');
+            if (value > (ulong.MaxValue - digit) / 10)
+            {
+                return false;
+            }
+            value = (value * 10) + digit;
+        }
+        return true;
+    }
+
+    private static void WriteZeroPaddedAscii(long value, Span<byte> dest)
+    {
+        ulong v = (ulong)value;
+        for (int i = dest.Length - 1; i >= 0; i--)
+        {
+            dest[i] = (byte)('0' + (v % 10));
+            v /= 10;
+        }
     }
 }

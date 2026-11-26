@@ -111,19 +111,23 @@ public sealed class RowReader : IRecordCursor, IRowPositioned
 /// </summary>
 public static class ColumnFacts
 {
-    /// <summary>Field.Type: the native code for Yes/No to Memo and GUID; Decimal (native 16) is 20; others are not known.</summary>
+    /// <summary>Field.Type: the native code for Yes/No to Memo and GUID; Decimal (native 16) is 20; BigInt (19) is 16; ExtendedDateTime (20) is 26.</summary>
     public static int? DaoType(ColumnDescriptor column) => column.TypeCode switch
     {
         >= 1 and <= 12 or 15 => column.TypeCode,
         NativeTypes.Numeric => 20,
+        NativeTypes.BigInt => 16,
+        NativeTypes.ExtendedDateTime => 26,
         _ => null,
     };
 
-    /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length.</summary>
+    /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length, BigInt 8, ExtendedDateTime 42.</summary>
     public static int? Size(ColumnDescriptor column) => column.TypeCode switch
     {
         NativeTypes.Text => column.Length / 2,
         NativeTypes.Ole or NativeTypes.Memo => 0,
+        NativeTypes.BigInt => 8,
+        NativeTypes.ExtendedDateTime => 42,
         >= 1 and <= 9 or 15 => column.Length,
         _ => null,
     };

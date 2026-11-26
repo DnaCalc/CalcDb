@@ -74,9 +74,12 @@ public enum KeyCodecRefusal
     SortOrderNotModelled,
 
     /// <summary>
-    /// A descending NUMERIC, Binary or Extended Date/Time column: no retained fixture has one, so neither the
-    /// book's complement rule (II-05 §§4.1, 4.4) nor the reference's Jet 4 "legacy" NUMERIC form is decided
-    /// (NotModelled.DescendingKey). Descending GUID is decided by <c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-*</c>.
+    /// Reserved for a descending column type whose key encoding is not decided by a retained fixture.
+    /// Descending GUID (<c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-*</c>), Extended Date/Time
+    /// (<c>evidence/r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb</c>), NUMERIC
+    /// (<c>evidence/r-q51-codecs-props-compact/dec-desc-keys-*</c>), Binary/VarBinary
+    /// (<c>evidence/r-q51-codecs-props-compact/bin-desc-keys-*</c>), and BigInt
+    /// (<c>evidence/r-q47-bigint-expr-edges/bi-index-keys-accdb</c>) are all decided.
     /// </summary>
     DescendingNotDecided,
 }
@@ -107,7 +110,7 @@ public static class IndexKeys
 {
     /// <summary>Whether this codec encodes scalar fields of the native type (Text and Memo need a sort descriptor).</summary>
     public static bool Encodes(byte type) => type is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
-        or NativeTypes.Currency or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime;
+        or NativeTypes.Currency or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime or NativeTypes.BigInt;
 
     /// <summary>Whether the type's key is the chunked byte framing (II-05 §4.4): Binary, GUID, Extended Date/Time.</summary>
     public static bool IsChunked(byte type) => type is NativeTypes.Binary or NativeTypes.Guid or NativeTypes.ExtendedDateTime;
@@ -145,11 +148,6 @@ public static class IndexKeys
         if (Encodes(column.TypeCode))
         {
             return new FieldKeyCodec(column.TypeCode, null);
-        }
-        if (!ascending && (column.TypeCode == NativeTypes.Numeric || (IsChunked(column.TypeCode) && column.TypeCode != NativeTypes.Guid)))
-        {
-            refusal = KeyCodecRefusal.DescendingNotDecided;
-            return null;
         }
         switch (column.TypeCode)
         {
@@ -241,6 +239,11 @@ public static class IndexKeys
                 BinaryPrimitives.WriteUInt32BigEndian(payload, (uint)(int)value.Integer ^ 0x8000_0000u);
                 width = 4;
                 break;
+            case NativeTypes.BigInt when value.Kind == KeyValueKind.Integer:
+                // evidence/r-q47-bigint-expr-edges/bi-index-keys-accdb: 8-byte BE sign-flipped (ASC 7F, DESC 80 + ~payload).
+                BinaryPrimitives.WriteUInt64BigEndian(payload, (ulong)value.Integer ^ 0x8000_0000_0000_0000ul);
+                width = 8;
+                break;
             case NativeTypes.Currency when value.Kind == KeyValueKind.ScaledCurrency:
                 BinaryPrimitives.WriteUInt64BigEndian(payload, (ulong)value.Integer ^ 0x8000_0000_0000_0000ul);
                 width = 8;
@@ -276,10 +279,11 @@ public static class IndexKeys
     }
 
     /// <summary>
-    /// An ascending NUMERIC field (II-05 §4.1, R-SORT-3): a nonnegative value is FF then the 16-byte big-endian magnitude
-    /// at the column's scale, a negative one 00 then the complemented magnitude. ACCDB and MDB agree
-    /// (r-fix-fmt-sort/sort3-nums-decimal-accdb and -mdb, ND (18,4) from -12345678901234.5678 to 12345678901234.5678;
-    /// r-sort-3/create-nums-accdb and -mdb, precision 38). Descending is <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
+    /// A NUMERIC field (II-05 §4.1, R-SORT-3): ascending nonnegative is <c>7F FF || M</c>, ascending negative is
+    /// <c>7F 00 || ~M</c>; descending nonnegative is <c>80 00 || ~M</c>, descending negative is <c>80 FF || M</c>;
+    /// Null is <c>00</c> ascending / <c>FF</c> descending. ACCDB and Jet 4 MDB agree identically
+    /// (<c>r-fix-fmt-sort/sort3-nums-decimal-*</c>, <c>r-sort-3/create-nums-*</c>,
+    /// <c>evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb</c> pages 46–47, <c>dec-desc-keys-mdb</c> pages 23–24).
     /// </summary>
     private static bool TryWriteNumeric(Span<byte> key, bool ascending, KeyValue value, out int written)
     {
@@ -290,29 +294,28 @@ public static class IndexKeys
             written = 1;
             return true;
         }
-        if (!ascending || value.Kind != KeyValueKind.Numeric || key.Length < 1 + NumericPayloadBytes)
+        if (value.Kind != KeyValueKind.Numeric || key.Length < 1 + NumericPayloadBytes)
         {
             return false;
         }
-        bool negative = value.Boolean;
-        key[0] = 0x7F;
-        key[1] = negative ? (byte)0x00 : (byte)0xFF;
-        BinaryPrimitives.WriteUInt128BigEndian(key[2..], negative ? ~value.Magnitude : value.Magnitude);
+        bool flip = ascending ? value.Boolean : !value.Boolean;
+        key[0] = ascending ? (byte)0x7F : (byte)0x80;
+        key[1] = flip ? (byte)0x00 : (byte)0xFF;
+        BinaryPrimitives.WriteUInt128BigEndian(key[2..], flip ? ~value.Magnitude : value.Magnitude);
         written = 1 + NumericPayloadBytes;
         return true;
     }
 
     /// <summary>
-    /// The chunked byte framing of Binary, GUID and Extended Date/Time (II-05 §4.4): eight data bytes then 09
-    /// while more follow; the last chunk padded with zeroes and ended by its count of data bytes (1 to 8). A GUID is
-    /// framed in its canonical text order, the first three components reversed from the row's (IX_GU and IX_KG of
-    /// r-sort-3/create-nums-* and create-keys-*, the complex-value tables of r-fix-cat-txn/create-cx-types-accdb,
-    /// evidence/r-q44-ddl-alter-types/ixtype-guid-rows-*); descending GUID writes marker <c>0x80</c>, complements each
-    /// data byte and the final count byte (<c>0x08 -> 0xF7</c>), and keeps continuation byte <c>0x09</c> uncomplemented
-    /// (<c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-accdb-dao</c> page 47, <c>ixtype-guid-rows-mdb-dao</c> page 24).
-    /// Extended Date/Time frames its 42 row bytes as they are (IX_DX); Binary its bytes (the MSysQueries
-    /// ObjectIdAttribute index of every retained database). An empty Binary value writes the marker alone (no fixture
-    /// has one). Descending NUMERIC, Binary and Extended Date/Time stay <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
+    /// The chunked byte framing of Binary, GUID and Extended Date/Time (II-05 §4.4): eight data bytes then <c>09</c>
+    /// while more follow; the last chunk padded with zeroes and ended by its count of data bytes (1 to 8). Descending
+    /// writes marker <c>0x80</c>, complements each data/pad byte (<c>0x00 -&gt; 0xFF</c>) and the final count byte
+    /// (<c>0x01..0x08 -&gt; 0xFE..0xF7</c>), and keeps continuation byte <c>0x09</c> uncomplemented; Null is <c>00</c>
+    /// ascending / <c>FF</c> descending. Confirmed identically across GUID
+    /// (<c>evidence/r-q44-ddl-alter-types/ixtype-guid-rows-accdb-dao</c> pages 46–47, <c>ixtype-guid-rows-mdb-dao</c>
+    /// pages 23–24), fixed/variable Binary (<c>evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb</c> pages 50–53,
+    /// <c>bin-desc-keys-mdb</c> pages 27–30), and Extended Date/Time
+    /// (<c>evidence/r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb</c> pages 46–47).
     /// </summary>
     private static bool TryWriteChunked(Span<byte> key, byte type, bool ascending, KeyValue value, out int written)
     {
@@ -323,7 +326,7 @@ public static class IndexKeys
             written = 1;
             return true;
         }
-        if ((!ascending && type != NativeTypes.Guid) || value.Kind != KeyValueKind.Bytes)
+        if (value.Kind != KeyValueKind.Bytes)
         {
             return false;
         }

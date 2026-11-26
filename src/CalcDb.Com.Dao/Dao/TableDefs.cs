@@ -507,7 +507,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     }
 
     private CallResult CreateField(nint name, nint type, nint size) =>
-        NewFieldObject.Create(Engine, forAttachedTable: true, name, type, size);
+        NewFieldObject.Create(Engine, forAttachedTable: true, isJet4: _owner.Database.Profile.Format == FileFormat.Jet4, name, type, size);
 
     private CallResult FieldsCollection()
     {
@@ -1017,6 +1017,8 @@ internal static class ColumnFacts
     public static int? DaoType(ColumnDescriptor column) => (column.CalculatedResultType ?? column.TypeCode) switch
     {
         NativeTypes.Numeric => 20,
+        NativeTypes.BigInt => 16,
+        NativeTypes.ExtendedDateTime => 26,
         var t and (>= 1 and <= 12 or 15) => t,
         _ => null,
     };
@@ -1071,6 +1073,8 @@ internal static class ColumnFacts
         // Decimal: 16 for the ADO DDL columns (FMT1-DECIMAL, precision 1 to 28), 20 for DAO CreateField's precision 38
         // (r-dec-read/*-daofield-*); other precisions are not observed.
         NativeTypes.Numeric when column.CalculatedResultType is null => column.NumericPrecision is >= 1 and <= 28 ? 16 : column.NumericPrecision == 38 ? 20 : null,
+        NativeTypes.BigInt => 8,
+        NativeTypes.ExtendedDateTime => 42,
         >= 1 and <= 9 or 15 => column.Length,
         _ => null,
     };

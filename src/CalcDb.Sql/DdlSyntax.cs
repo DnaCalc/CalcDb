@@ -994,10 +994,12 @@ public static class DdlParser
                 : Syntax(3290, SqlMessages.CreateTableSyntaxError);
 
             string? word = PeekWord();
-            if (word is not null && allowAdoCheck && !isAlter && string.Equals(word, "DECIMAL", StringComparison.OrdinalIgnoreCase))
+            if (word is not null && allowAdoCheck && string.Equals(word, "DECIMAL", StringComparison.OrdinalIgnoreCase))
             {
-                // evidence/r-q21-ddl-types/col-decimal-ado*, evidence/r-q36-publication-bytes/create-nullfix-*:
-                // ADO CREATE TABLE accepts DECIMAL and DECIMAL(precision, scale); DAO ANSI-89 keeps failing 3292.
+                // evidence/r-q21-ddl-types/col-decimal-ado*, evidence/r-q36-publication-bytes/create-nullfix-*,
+                // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, seek-args-decimal-accdb:
+                // ADO CREATE TABLE accepts DECIMAL and DECIMAL(precision, scale), and ADO ALTER TABLE ADD COLUMN
+                // accepts DECIMAL(precision, scale); DAO ANSI-89 keeps failing 3292.
                 _p += word.Length;
                 if (TakeSymbol('('))
                 {

@@ -1082,14 +1082,14 @@ public sealed class BoundSelect : IDisposable
                 {
                     sources[0].ReferencedColumns![colIndex] = true;
                     bool isBool = col!.FieldType == 1 || col.Program.Type == StaticType.Boolean;
-                    return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived);
+                    return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived, col.FieldType == 26);
                 }
                 bool bracketed = node.Offset >= 0 && node.Offset < source.Length && source[node.Offset] == '[';
                 parameters.Add(new QueryParameter(bracketed ? $"[{name}]" : name, 10, Declared: false));
                 index = parameters.Count - 1;
             }
             QueryParameter p = parameters[index];
-            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Parameter);
+            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Parameter, p.DaoType == 20);
         }
 
         /// <summary>The slot of a field reference, or null; an ambiguous name sets <paramref name="ambiguous"/>.</summary>
@@ -1274,7 +1274,7 @@ public sealed class BoundSelect : IDisposable
             {
                 if (ReferenceEquals(aggregates[i].Node, node))
                 {
-                    return new SlotBinding(keys.Count + i, aggregates[i].Result, StaticType.Value);
+                    return new SlotBinding(keys.Count + i, aggregates[i].Result, StaticType.Value, OperandOrigin.Field, aggregates[i].FieldType == 26);
                 }
             }
             if (node is { Kind: SyntaxKind.Name, Text: { } name } && input.TryDerivedColumn(name, out _, out _))
@@ -2309,7 +2309,8 @@ public sealed class BoundSelect : IDisposable
                 {
                     return pf;
                 }
-                if (Program(o.Expression, _scope, out BoundExpression? key) is { } f)
+                bool allowBareBinary = Field(o.Expression.Syntax.Root!) is { TypeCode: NativeTypes.Binary };
+                if (Program(o.Expression, _scope, out BoundExpression? key, allowBareBinary) is { } f)
                 {
                     return f;
                 }
@@ -2321,10 +2322,14 @@ public sealed class BoundSelect : IDisposable
                         // qualified.md R-SORT-3 Length510, r-sql-13b/memo-order-scope: ORDER BY Memo compares the first 255 UTF-16 units.
                         memoPrefix = true;
                     }
+                    else if (key.BareField is { Column.TypeCode: NativeTypes.Binary })
+                    {
+                        // evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb: ORDER BY BINARY/VARBINARY compares stored bytes.
+                    }
                     else
                     {
                         key.Dispose();
-                        return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression, OLE or Binary field (r-sql-13b/memo-order-scope; R-SORT-3 Length510)");
+                        return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression, OLE or Binary expression (r-sql-13b/memo-order-scope; R-SORT-3 Length510)");
                     }
                 }
                 bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix));
@@ -2488,6 +2493,8 @@ public sealed class BoundSelect : IDisposable
             11 => 4,  // LongBinary
             12 => 4,  // LongText
             15 => 16, // Guid
+            16 => 8,  // BigInt (r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb)
+            26 => 42, // DateTime2
             _ => null,
         };
 
@@ -2501,6 +2508,7 @@ public sealed class BoundSelect : IDisposable
             Integer,
             LongLiteral,
             Long,
+            BigInt,
             Currency,
             Single,
             Double,
@@ -3121,6 +3129,8 @@ public sealed class BoundSelect : IDisposable
                 OperandKind.Integer => new(OperandKind.Integer, 3, op.InnerMatchesDao),
                 // r-expr-1b/op-precedence: -(7 \ 2) is 4 (Long); r-expr-1b/arith-overflow-promotion (#200/#206): -CLng(-2147483648) is 4 (Long).
                 OperandKind.Long => new(OperandKind.Long, 4, op.InnerMatchesDao),
+                // r-q47-bigint-expr-edges/bi-select-arith-overflow-accdb: -B is 16 (BigInt, Size 8, Attr 2).
+                OperandKind.BigInt => new(OperandKind.BigInt, 16, op.InnerMatchesDao),
                 // r-sql-13b/agg-expression-composition: -Sum(v) is 7 (Double).
                 OperandKind.Double => new(OperandKind.Double, 7, op.InnerMatchesDao),
                 // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-plus-amp-precedence-and-types: -'3' is 7 (Double).
@@ -3196,6 +3206,9 @@ public sealed class BoundSelect : IDisposable
                 or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
             // r-expr-1b/arith-overflow-promotion: CSng(1) / CSng(3) is 7 (Double), inner is VT_R4.
             (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
+            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, r-def-expr-sql/expr-bigint-stored-arith (#364/#369):
+            // B / 2 is DAO Field.Type 16 (BigInt), while inner oleaut32 VarDiv returns VT_R8 (VarType 5).
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, false),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3222,6 +3235,8 @@ public sealed class BoundSelect : IDisposable
             // r-expr-1b/arith-intdiv-mod-types: CByte(7) \ CByte(2) and CInt(7) \ CInt(2) are 4 (Long); oleaut32 VarIdiv returns VT_I2.
             (OperandKind.CByte, OperandKind.CByte)
                 or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B \ 2 and B \ -1 are 16 (BigInt).
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3248,6 +3263,8 @@ public sealed class BoundSelect : IDisposable
             // r-expr-1b/arith-intdiv-mod-types: CByte(7) Mod CByte(2) and CInt(7) Mod CInt(2) are 4 (Long); oleaut32 VarMod returns VT_I2.
             (OperandKind.CByte, OperandKind.CByte)
                 or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
+            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B Mod 7 and B Mod -1 are 16 (BigInt).
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3290,6 +3307,11 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Long, OperandKind.LongLiteral)
                     or (OperandKind.LongLiteral, OperandKind.Long)
                     or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
+                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb,
+                // r-expr-1/b-integer-widening (#330 LL + CLng(1)): B + 1, B + B, and B + CLng(1) are 16 (BigInt).
+                (OperandKind.BigInt, OperandKind.BigInt)
+                    or (OperandKind.BigInt, OperandKind.LongLiteral)
+                    or (OperandKind.BigInt, OperandKind.Long) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity, r-expr-1b/meta-conversion-field-types, r-expr-1/b-mixed-precedence,
                 // r-fix-expr-sql/dec-mixed-precedence: Currency + Currency/Long is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)
@@ -3371,6 +3393,8 @@ public sealed class BoundSelect : IDisposable
                 (OperandKind.Long, OperandKind.CByte) => new(OperandKind.Long, 4, left.InnerMatchesDao),
                 // r-expr-1b/op-precedence: (10 - 3) - 2 is 4 (Long).
                 (OperandKind.Long, OperandKind.LongLiteral) => new(OperandKind.Long, 4, bothInner),
+                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B - 1 is 16 (BigInt).
+                (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity: Currency - Currency is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency) => new(OperandKind.Currency, 5, bothInner),
                 // r-expr-1/b-floating-fidelity: Double - Double and Single - Double are 7 (Double).
@@ -3420,6 +3444,10 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Integer, OperandKind.LongLiteral)
                     or (OperandKind.Long, OperandKind.LongLiteral)
                     or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
+                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb, r-def-expr-sql/expr-bigint-stored-arith:
+                // B * 2 and B * B are 16 (BigInt).
+                (OperandKind.BigInt, OperandKind.BigInt)
+                    or (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity, r-expr-1b/arith-overflow-promotion:
                 // Currency * Currency/LongLiteral is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)
@@ -3504,6 +3532,7 @@ public sealed class BoundSelect : IDisposable
             NativeTypes.Byte => new(OperandKind.Byte, null, true),
             NativeTypes.Integer => new(OperandKind.Integer, null, true),
             NativeTypes.Long => new(OperandKind.Long, null, true),
+            NativeTypes.BigInt => new(OperandKind.BigInt, null, true),
             NativeTypes.Currency => new(OperandKind.Currency, null, true),
             NativeTypes.Single => new(OperandKind.Single, null, true),
             NativeTypes.Double => new(OperandKind.Double, null, true),
@@ -3525,6 +3554,7 @@ public sealed class BoundSelect : IDisposable
             8 => new(OperandKind.Date, null, true),
             10 => new(OperandKind.Text, null, true),
             12 => new(OperandKind.Memo, null, true),
+            19 => new(OperandKind.BigInt, null, true),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3537,6 +3567,7 @@ public sealed class BoundSelect : IDisposable
             7 => new(OperandKind.Double, null, true),
             8 => new(OperandKind.Date, null, true),
             10 => new(OperandKind.Text, null, true),
+            16 => new(OperandKind.BigInt, null, true),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3867,6 +3898,8 @@ public sealed class BoundSelect : IDisposable
             8 => 8,
             10 => 0,
             12 => 0,
+            16 => 8,
+            26 => 42,
             _ => null,
         };
 
@@ -3876,10 +3909,12 @@ public sealed class BoundSelect : IDisposable
             NativeTypes.Byte => VarType.UI1,
             NativeTypes.Integer => VarType.I2,
             NativeTypes.Long => VarType.I4,
+            NativeTypes.BigInt => VarType.I8,
             NativeTypes.Currency => VarType.Currency,
             NativeTypes.Single => VarType.R4,
             NativeTypes.Double => VarType.R8,
             NativeTypes.DateTime => VarType.Date,
+            NativeTypes.ExtendedDateTime => VarType.Array | VarType.UI1,
             _ => VarType.Bstr,
         };
 
@@ -3931,9 +3966,15 @@ public sealed class BoundSelect : IDisposable
                 // qualified.md SQL-AGG: Min/Max/Sum(Memo) fail 3115 (r-sql-13b/agg-yesno-memo-guid).
                 return SqlFailure.Ace(SqlPhase.Bind, 3115, $"Cannot have Memo, OLE, or Hyperlink Object fields in aggregate argument ({node.Items[0].Text}).");
             }
+            if (t == NativeTypes.ExtendedDateTime && kind is AggregateKind.Sum or AggregateKind.Avg)
+            {
+                argument.Dispose();
+                // evidence/r-q49-dt2-draftprops/dt2-select-aggregates-dao-ado-accdb: SUM(D) and AVG(D) fail 3464.
+                return SqlFailure.Ace(SqlPhase.Bind, 3464, SqlMessages.DataTypeMismatch);
+            }
             (VarType result, int type)? rule = kind switch
             {
-                AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
+                AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.BigInt or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
                 AggregateKind.Sum when t is NativeTypes.Currency => (VarType.Currency, 5),
                 // qualified.md R-PAR-1 PAR-FOLD: Avg of a Currency field is Currency, Field.Type 5 and Size 8
                 // (r-par-1/fold-currency-avg-minmax calls 25, 65, 75, 85, 95: Type 5, Size 8, VT_CY values); its total
@@ -3941,6 +3982,8 @@ public sealed class BoundSelect : IDisposable
                 // agg-sum-boundary-per-group calls 134, 170). The quotient is SelectCursor's (Finish).
                 AggregateKind.Avg when t is NativeTypes.Currency => (VarType.Currency, 5),
                 AggregateKind.Min or AggregateKind.Max when t is NativeTypes.Byte => (VarType.I4, 4),
+                AggregateKind.Min or AggregateKind.Max when t is NativeTypes.BigInt => (VarType.I8, 16),
+                AggregateKind.Min or AggregateKind.Max when t is NativeTypes.ExtendedDateTime => (VarType.Array | VarType.UI1, 26),
                 AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when t is NativeTypes.Boolean => (VarType.I2, 3),
                 AggregateKind.First or AggregateKind.Last when t is NativeTypes.Memo => (VarType.Bstr, 12),
                 AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when t is NativeTypes.Integer or NativeTypes.Long or NativeTypes.Currency

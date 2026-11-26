@@ -42,6 +42,35 @@ public static unsafe class RelationalOrder
             order = a.Int64.CompareTo(b.Int64);
             return true;
         }
+        if (a.Vt == (ushort)VarType.Decimal && b.Vt == (ushort)VarType.Decimal)
+        {
+            // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb: ORDER BY DECIMAL(18,4) ASC/DESC.
+            order = OwnedVariant.ReadDecimal(a).ToDecimal().CompareTo(OwnedVariant.ReadDecimal(b).ToDecimal());
+            return true;
+        }
+        if (a.Vt == (ushort)(VarType.Array | VarType.UI1) && b.Vt == (ushort)(VarType.Array | VarType.UI1))
+        {
+            // evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb: ORDER BY BINARY/VARBINARY ASC/DESC
+            // compares stored bytes unsigned lexicographically (shorter prefix < longer even when trailing byte is 0x00).
+            if (a.Pointer == 0 || b.Pointer == 0)
+            {
+                return false;
+            }
+            (int Lower, int Count)[] shapeA = SafeArrays.Shape(a.Pointer);
+            (int Lower, int Count)[] shapeB = SafeArrays.Shape(b.Pointer);
+            if (shapeA.Length != 1 || shapeB.Length != 1)
+            {
+                return false;
+            }
+            ReadOnlySpan<byte> spanA = shapeA[0].Count == 0
+                ? default
+                : new ReadOnlySpan<byte>(SafeArrays.ElementPointer(a.Pointer, shapeA[0].Lower), shapeA[0].Count);
+            ReadOnlySpan<byte> spanB = shapeB[0].Count == 0
+                ? default
+                : new ReadOnlySpan<byte>(SafeArrays.ElementPointer(b.Pointer, shapeB[0].Lower), shapeB[0].Count);
+            order = Math.Sign(spanA.SequenceCompareTo(spanB));
+            return true;
+        }
         if (!Number(a, out double p) || !Number(b, out double q))
         {
             return false;

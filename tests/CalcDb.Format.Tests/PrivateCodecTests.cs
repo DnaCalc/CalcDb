@@ -64,14 +64,22 @@ public sealed class PrivateCodecTests
     }
 
     [Fact]
-    public void NUMERIC_keys_match_the_book_witness()
+    public void NUMERIC_keys_match_the_book_and_descending_witnesses()
     {
         // II-05 §4.2: 123.45 at scale 2 is M = 00 x14 30 39; ascending positive 7F FF M, negative 7F 00 ~M.
+        // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb (pages 46–47) & dec-desc-keys-mdb (pages 23–24):
+        // descending nonnegative is 80 00 ~M, descending negative is 80 FF M, Null is 00 ASC / FF DESC.
         ColumnDescriptor numeric = Column(NativeTypes.Numeric, 17);
         string m = new string('0', 28) + "3039";
-        Assert.Equal("7FFF" + m, Key(numeric, KeyValue.OfNumeric(new NativeDecimal(false, 12345, 2))));
-        Assert.Equal("7F00" + new string('F', 28) + "CFC6", Key(numeric, KeyValue.OfNumeric(new NativeDecimal(true, 12345, 2))));
-        Assert.Equal("00", Key(numeric, KeyValue.Null));
+        string invM = new string('F', 28) + "CFC6";
+        Assert.Equal("7FFF" + m, Key(numeric, KeyValue.OfNumeric(new NativeDecimal(false, 12345, 2)), ascending: true));
+        Assert.Equal("7F00" + invM, Key(numeric, KeyValue.OfNumeric(new NativeDecimal(true, 12345, 2)), ascending: true));
+        Assert.Equal("00", Key(numeric, KeyValue.Null, ascending: true));
+
+        Assert.Equal("8000" + invM, Key(numeric, KeyValue.OfNumeric(new NativeDecimal(false, 12345, 2)), ascending: false));
+        Assert.Equal("80FF" + m, Key(numeric, KeyValue.OfNumeric(new NativeDecimal(true, 12345, 2)), ascending: false));
+        Assert.Equal("8000" + new string('F', 32), Key(numeric, KeyValue.OfNumeric(new NativeDecimal(false, 0, 4)), ascending: false));
+        Assert.Equal("FF", Key(numeric, KeyValue.Null, ascending: false));
     }
 
     [Fact]
@@ -122,15 +130,62 @@ public sealed class PrivateCodecTests
     }
 
     [Theory]
-    [InlineData(NativeTypes.Numeric)]
-    [InlineData(NativeTypes.Binary)]
-    [InlineData(NativeTypes.ExtendedDateTime)]
-    public void A_descending_key_no_fixture_decides_is_a_named_refusal(byte type)
+    // evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb (pages 52–53) & bin-desc-keys-mdb (pages 29–30):
+    // descending Binary complements data bytes, 00 pad -> FF, and final count 01..08 -> FE..F7 while keeping 09 uncomplemented.
+    [InlineData("414243", "80BEBDBCFFFFFFFFFFFC")]
+    [InlineData("41424300", "80BEBDBCFFFFFFFFFFFB")]
+    [InlineData("0102030405060708", "80FEFDFCFBFAF9F8F7F7")]
+    [InlineData("010203040506070809", "80FEFDFCFBFAF9F8F709F6FFFFFFFFFFFFFFFE")]
+    public void Descending_Binary_keys_complement_payload_and_count_but_keep_continuation_09(string bytes, string expected)
+    {
+        ColumnDescriptor col = Column(NativeTypes.Binary, 16, 0x02);
+        Assert.Equal(expected, Key(col, KeyValue.OfBytes(Convert.FromHexString(bytes)), ascending: false));
+        Assert.Equal("FF", Key(col, KeyValue.Null, ascending: false));
+    }
+
+    [Fact]
+    public void BigInt_and_ExtendedDateTime_ascending_and_descending_keys_match_retained_pages()
+    {
+        // evidence/r-q47-bigint-expr-edges/bi-index-keys-accdb: BigInt 8-byte BE sign-flipped (ASC 7F, DESC 80 + ~payload).
+        ColumnDescriptor bi = Column(NativeTypes.BigInt, 8, 0x02);
+        Assert.Equal("7F0000000000000000", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: long.MinValue), ascending: true));
+        Assert.Equal("7F8000000000000000", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: 0), ascending: true));
+        Assert.Equal("7FFFFFFFFFFFFFFFFF", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: long.MaxValue), ascending: true));
+        Assert.Equal("00", Key(bi, KeyValue.Null, ascending: true));
+        Assert.Equal("80FFFFFFFFFFFFFFFF", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: long.MinValue), ascending: false));
+        Assert.Equal("807FFFFFFFFFFFFFFF", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: 0), ascending: false));
+        Assert.Equal("800000000000000000", Key(bi, new KeyValue(KeyValueKind.Integer, Integer: long.MaxValue), ascending: false));
+        Assert.Equal("FF", Key(bi, KeyValue.Null, ascending: false));
+
+        // evidence/r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb (pages 46–47): 55-byte chunked ASC & DESC over 42 row bytes.
+        ColumnDescriptor dt2 = Column(NativeTypes.ExtendedDateTime, 42, 0x03);
+        byte[] row = System.Text.Encoding.ASCII.GetBytes("0000000000000000000:0000000000000000000:7\0");
+        Assert.Equal(42, row.Length);
+        string asc = Key(dt2, KeyValue.OfBytes(row), ascending: true);
+        string desc = Key(dt2, KeyValue.OfBytes(row), ascending: false);
+        Assert.Equal(55 * 2, asc.Length);
+        Assert.Equal(55 * 2, desc.Length);
+        Assert.StartsWith("7F303030303030303009", asc, StringComparison.Ordinal);
+        Assert.EndsWith("370000000000000002", asc, StringComparison.Ordinal);
+        Assert.StartsWith("80CFCFCFCFCFCFCFCF09", desc, StringComparison.Ordinal);
+        Assert.EndsWith("C8FFFFFFFFFFFFFFFD", desc, StringComparison.Ordinal);
+        Assert.Equal("00", Key(dt2, KeyValue.Null, ascending: true));
+        Assert.Equal("FF", Key(dt2, KeyValue.Null, ascending: false));
+    }
+
+    [Theory]
+    [InlineData(NativeTypes.Ole)]
+    [InlineData((byte)0x12)]
+    public void A_key_type_with_no_codec_is_a_named_refusal(byte type)
     {
         Assert.Null(IndexKeys.CodecFor(Column(type, 17), out KeyCodecRefusal refusal, ascending: false));
-        Assert.Equal(KeyCodecRefusal.DescendingNotDecided, refusal);
+        Assert.Equal(KeyCodecRefusal.TypeNotEncoded, refusal);
         Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Long, 4), out _, ascending: false));
         Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Guid, 16), out _, ascending: false));
+        Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Numeric, 17), out _, ascending: false));
+        Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.Binary, 16), out _, ascending: false));
+        Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.BigInt, 8), out _, ascending: false));
+        Assert.NotNull(IndexKeys.CodecFor(Column(NativeTypes.ExtendedDateTime, 42), out _, ascending: false));
     }
 
     [Fact]

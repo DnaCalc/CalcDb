@@ -108,9 +108,13 @@ public static class FieldEncoder
             failure = "a calculated column";
             return false;
         }
-        int? expectedWidth = column.TypeCode == NativeTypes.Binary
-            ? (column.IsFixed && column.Length > 0 ? column.Length : null)
-            : NativeTypes.FixedWidth(column.TypeCode);
+        int? expectedWidth = column.TypeCode switch
+        {
+            NativeTypes.Binary => column.IsFixed && column.Length > 0 ? column.Length : null,
+            NativeTypes.BigInt => column.IsFixed ? 8 : null,
+            NativeTypes.ExtendedDateTime => column.IsFixed ? d.Payload.ExtendedBytes : null,
+            _ => NativeTypes.FixedWidth(column.TypeCode),
+        };
         if (expectedWidth != bytes.Length)
         {
             failure = $"native type {column.TypeCode} has no fixed width of {bytes.Length}";
@@ -143,6 +147,14 @@ public static class FieldEncoder
                 return true;
             case (NativeTypes.Guid, NativeKind.Guid) when value.Bytes is { Length: 16 } guid:
                 guid.CopyTo(bytes);
+                return true;
+            case (NativeTypes.BigInt, NativeKind.BigInt):
+                // DAO TableDef.CreateField("B", 16) stores fixed 8-byte LE BigInt (evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb).
+                BinaryPrimitives.WriteInt64LittleEndian(bytes, value.Integer);
+                return true;
+            case (NativeTypes.ExtendedDateTime, NativeKind.ExtendedDateTime) when value.Bytes is { Length: 42 } dt2:
+                // ACCDB DATETIME2: fixed 42-byte ASCII row payload (evidence/r-q49-dt2-draftprops/dt2-*).
+                dt2.CopyTo(bytes);
                 return true;
             case (NativeTypes.Numeric, NativeKind.Decimal) when value.Scale == column.NumericScale:
                 ScalarPayloadRules p = d.Payload;

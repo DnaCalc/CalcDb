@@ -532,6 +532,12 @@ public sealed unsafe partial class BoundExpression
         result = default;
         try
         {
+            if (slot.ExtendedDateTimeTag && slot.Value.Vt != (ushort)VarType.Null)
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb: VarType(D) fails 3071 on non-Null DATETIME2.
+                LastFailure = ExpressionFailure.Ace(ExpressionPhase.Evaluate, AceError.ExpressionTooComplex, AceError.Describe(AceError.ExpressionTooComplex));
+                return false;
+            }
             int tag = (VarType)slot.Value.Vt switch
             {
                 VarType.Null => 1,
@@ -574,6 +580,12 @@ public sealed unsafe partial class BoundExpression
         result = default;
         try
         {
+            if (slot.ExtendedDateTimeTag && slot.Value.Vt != (ushort)VarType.Null)
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb: TypeName(D) fails 3071 on non-Null DATETIME2.
+                LastFailure = ExpressionFailure.Ace(ExpressionPhase.Evaluate, AceError.ExpressionTooComplex, AceError.Describe(AceError.ExpressionTooComplex));
+                return false;
+            }
             ReadOnlySpan<char> name = (VarType)slot.Value.Vt switch
             {
                 VarType.Null => "Null",
@@ -1449,6 +1461,12 @@ public sealed unsafe partial class BoundExpression
         try
         {
             NativeVariant v = _stack[first].Value;
+            if (_stack[first].ExtendedDateTimeTag && v.Vt != (ushort)VarType.Null)
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb: IsDate(D) fails 3071 on non-Null DATETIME2.
+                LastFailure = ExpressionFailure.Ace(ExpressionPhase.Evaluate, AceError.ExpressionTooComplex, AceError.Describe(AceError.ExpressionTooComplex));
+                return false;
+            }
             bool ok;
             switch ((VarType)v.Vt)
             {

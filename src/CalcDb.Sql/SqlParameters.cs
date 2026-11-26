@@ -8,7 +8,7 @@ namespace CalcDb.Sql;
 /// Parameter values (II-11 §2 parameter frame; qualified.md R-SQL-3 SQL-META parameters) and the shared conversion of a
 /// value to a VARIANT type through the one scalar kernel (II-10: the conversion functions CLng, CStr, …).
 /// </summary>
-public static class SqlParameters
+public static unsafe class SqlParameters
 {
     /// <summary>3421, a parameter value its type refuses (r-fix-expr-sql/params-values-rounding-and-length).</summary>
     public const string ConversionError = "Data type conversion error.";
@@ -16,13 +16,15 @@ public static class SqlParameters
     /// <summary>
     /// The value a parameter holds after <c>Parameter.Value = value</c> (qualified.md SQL-META parameters;
     /// r-sql-13b/params-value-readback, params-values-integers, params-values-other; r-fix-expr-sql/
-    /// params-values-rounding-and-length): Null stays Null; a number, Yes/No, Empty or numeric text converts to the
-    /// declared type by the conversion functions, rounding half to even (Long "5" is 5, 2.5 is 2, True is -1, Empty is 0;
-    /// Byte 2.5 is 2, True, -2.5, 255.5 and 300 fail), as VT_UI1 for Byte; text that is no number fails; a failure is
-    /// 3421 and leaves the old value. Bit is VT_I2 -1 for a non-zero number. Currency, Single and Double keep a number.
-    /// DateTime takes a number as a date serial and refuses "abc" and "5" (3421). Text keeps text of any length. Other
-    /// inputs (Bit from text, Empty or 0; DateTime from text the conversion accepts; Text from a non-text value; binary,
-    /// GUID and BigInt parameters) are not recorded and named. The result is owned by the caller (<see cref="Release"/>).
+    /// params-values-rounding-and-length; r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb): Null stays Null; a
+    /// number, Yes/No, Empty or numeric text converts to the declared type by the conversion functions, rounding half
+    /// to even (Long "5" is 5, 2.5 is 2, True is -1, Empty is 0; Byte 2.5 is 2, True, -2.5, 255.5 and 300 fail), as
+    /// VT_UI1 for Byte; text that is no number fails; a failure is 3421 and leaves the old value. Bit is VT_I2 -1 for
+    /// a non-zero number. Currency, Single and Double keep a number. BigInt (DAO type 19) converts integral/numeric
+    /// values and numeric text into VT_I8 and fails 3421 on overflow or non-numeric text. DateTime takes a number as a
+    /// date serial and refuses "abc" and "5" (3421). Text keeps text of any length. Other inputs (Bit from text, Empty
+    /// or 0; DateTime from text the conversion accepts; Text from a non-text value; binary and GUID parameters) are not
+    /// recorded and named. The result is owned by the caller (<see cref="Release"/>).
     /// </summary>
     public static SqlFailure? Adapt(QueryParameter parameter, in NativeVariant value, ExpressionContext context, out NativeVariant adapted)
     {
@@ -33,7 +35,7 @@ public static class SqlParameters
             adapted = ScalarLiterals.Null;
             return null;
         }
-        bool number = vt is VarType.I2 or VarType.I4 or VarType.UI1 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date;
+        bool number = vt is VarType.I2 or VarType.I4 or VarType.I8 or VarType.UI1 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date;
         SqlFailure refused = SqlFailure.Ace(SqlPhase.Bind, 3421, ConversionError);
         SqlFailure open = SqlFailure.Open(SqlPhase.Bind, "NotModelled.ParameterValue", $"a {vt} value for a parameter of DAO type {parameter.DaoType}");
         if (!number && vt is not (VarType.Bstr or VarType.Empty))
@@ -71,6 +73,41 @@ public static class SqlParameters
                     _ => ScalarOperation.CDbl,
                 };
                 return Convert(input, op, context, out adapted) ? null : refused;
+            case 19:
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb: PARAMETERS p BigInt has Parameter.Type = 19,
+                // accepts integers and 64-bit numeric strings as VT_I8, and refuses out-of-range/non-numeric strings with 3421.
+                if (vt == VarType.Empty)
+                {
+                    return open;
+                }
+                NativeVariant src = value;
+                if (!OwnedVariant.TryChangeScalar(&src, VarType.I8, context.Lcid, out adapted, out _))
+                {
+                    return refused;
+                }
+                return null;
+            }
+            case 20:
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb: PARAMETERS p DateTime2 exposes Parameter.Type = 20,
+                // refuses BSTR puts with 3421 (leaving the prior value), and coerces VT_DATE into VT_DECIMAL (which then
+                // behaves as unbound 3061 at OpenRecordset, while VT_NULL stays bound and fails 3464 in WHERE D = p).
+                if (vt == VarType.Bstr)
+                {
+                    return refused;
+                }
+                if (vt == VarType.Date)
+                {
+                    NativeVariant src = value;
+                    if (!OwnedVariant.TryChangeScalar(&src, VarType.Decimal, context.Lcid, out adapted, out _))
+                    {
+                        return refused;
+                    }
+                    return null;
+                }
+                return open;
+            }
             case 8:
                 if (vt == VarType.Bstr)
                 {
