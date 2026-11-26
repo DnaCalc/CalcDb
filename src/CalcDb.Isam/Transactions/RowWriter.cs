@@ -943,7 +943,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             encoded[colIndex] = EncodedField.OfBytes(reference);
         }
-        if (!RowEncoder.TryEncode(_table, encoded, _d, out byte[]? rowBytes, out string? rowFailure))
+        if (!RowEncoder.TryEncode(_table, encoded, _d, out byte[]? rowBytes, out string? rowFailure, allowDroppedColumns: true))
         {
             return NotWritten($"row encoding: {rowFailure}");
         }
@@ -1717,6 +1717,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"row {row.Root} is an overflow row: rewriting its target is not written (W-05/growth-structural-closure)";
             return null;
         }
+        if (_table.Columns.Count != _table.MaxColumns)
+        {
+            failure = $"row {row.Root}: UPDATE on a table with dropped or altered columns (ColumnCount={_table.Columns.Count}, MaxColumns={_table.MaxColumns}) is not recorded";
+            return null;
+        }
         if (envelope.ColumnCount != _table.MaxColumns)
         {
             failure = $"row {row.Root} records {envelope.ColumnCount} of {_table.MaxColumns} columns: a row grown past C is not recorded";
@@ -2122,7 +2127,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     {
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
         int c = _table.MaxColumns;
-        if (columns.Count != c || fields.Length != columns.Count)
+        if (c <= 0 || columns.Count == 0 || columns.Count > c || fields.Length != columns.Count)
         {
             return null;
         }

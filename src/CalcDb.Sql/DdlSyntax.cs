@@ -71,7 +71,8 @@ public sealed record DdlColumnDef(
     DdlDataType DataType,
     DdlNullability Nullability,
     IReadOnlyList<DdlColumnConstraint> Constraints,
-    bool WithCompression = false);
+    bool WithCompression = false,
+    string? DefaultExpression = null);
 
 /// <summary>A table-level constraint in <c>CREATE TABLE</c> or <c>ALTER TABLE ADD</c>.</summary>
 public sealed record DdlTableConstraint(
@@ -148,8 +149,18 @@ public sealed record AddColumnsAlterAction(IReadOnlyList<DdlColumnDef> Columns) 
 /// <summary><c>ALTER TABLE t ADD [CONSTRAINT name] PRIMARY KEY | UNIQUE | FOREIGN KEY …</c>.</summary>
 public sealed record AddConstraintAlterAction(DdlTableConstraint Constraint) : DdlAlterAction;
 
-/// <summary><c>ALTER TABLE t ALTER [COLUMN] name type [NOT NULL | NULL]</c>.</summary>
-public sealed record AlterColumnAlterAction(string ColumnName, DdlDataType DataType, DdlNullability Nullability) : DdlAlterAction;
+/// <summary><c>ALTER TABLE t ALTER [COLUMN] name type [NOT NULL | NULL] [DEFAULT expr]</c>.</summary>
+public sealed record AlterColumnAlterAction(
+    string ColumnName,
+    DdlDataType DataType,
+    DdlNullability Nullability,
+    string? DefaultExpression = null) : DdlAlterAction;
+
+/// <summary>ADO <c>ALTER TABLE t ALTER [COLUMN] name SET DEFAULT expr</c> (evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*).</summary>
+public sealed record SetDefaultAlterAction(string ColumnName, string DefaultExpression) : DdlAlterAction;
+
+/// <summary>ADO <c>ALTER TABLE t ALTER [COLUMN] name DROP DEFAULT</c> (evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*).</summary>
+public sealed record DropDefaultAlterAction(string ColumnName) : DdlAlterAction;
 
 /// <summary><c>ALTER TABLE t DROP [COLUMN] name [, [COLUMN] name …]</c>.</summary>
 public sealed record DropColumnsAlterAction(IReadOnlyList<string> ColumnNames) : DdlAlterAction;
@@ -694,6 +705,7 @@ public static class DdlParser
             DdlNullability nullability = DdlNullability.Unspecified;
             var constraints = new List<DdlColumnConstraint>();
             bool withCompression = false;
+            string? defaultExpression = null;
 
             while (!AtEnd() && !IsSymbol(',') && !IsSymbol(')') && !IsSymbol(';'))
             {
@@ -702,6 +714,11 @@ public static class DdlParser
                     if (!TakeWord("NULL"))
                     {
                         failure = Open("NotModelled.DdlNotWithoutNull", "NOT without NULL in column definition");
+                        return null;
+                    }
+                    if (defaultExpression is not null)
+                    {
+                        failure = Open("NotModelled.DdlDefaultOrder", "NOT NULL after DEFAULT in column definition is not recorded (evidence/r-q49-dt2-draftprops records NOT NULL DEFAULT <expr>)");
                         return null;
                     }
                     if (nullability != DdlNullability.Unspecified)
@@ -715,6 +732,11 @@ public static class DdlParser
                 }
                 if (TakeWord("NULL"))
                 {
+                    if (defaultExpression is not null)
+                    {
+                        failure = Open("NotModelled.DdlDefaultOrder", "NULL after DEFAULT in column definition is not recorded");
+                        return null;
+                    }
                     if (nullability != DdlNullability.Unspecified)
                     {
                         failure = Syntax(3292, SqlMessages.FieldDefinitionSyntaxError);
@@ -749,6 +771,21 @@ public static class DdlParser
                     constraints.Add(cc);
                     continue;
                 }
+                if (allowAdoCheck && TakeWord("DEFAULT"))
+                {
+                    // evidence/r-q49-dt2-draftprops/ddl-default-create-ado-*, ddl-default-alter-ado-*, ddl-default-eval-edge-ado-*:
+                    // ADO CREATE TABLE and ALTER TABLE ADD COLUMN accept column DEFAULT <expr>; DAO ANSI-89 keeps failing 3290/3293.
+                    if (defaultExpression is not null)
+                    {
+                        failure = Syntax(isAlter ? 3293 : 3290, isAlter ? SqlMessages.AlterTableSyntaxError : SqlMessages.CreateTableSyntaxError);
+                        return null;
+                    }
+                    if (!ParseDefaultExpression(isAlter, out defaultExpression, out failure))
+                    {
+                        return null;
+                    }
+                    continue;
+                }
                 if (allowAdoCheck && !isAlter && TakeWord("WITH"))
                 {
                     // evidence/r-q36-publication-bytes/create-feff-accdb, create-feff-mdb:
@@ -778,15 +815,172 @@ public static class DdlParser
                     return null;
                 }
 
-                // Unsupported column modifiers (DEFAULT, WITH COMPRESSION on DAO, CHECK, COLLATE, COMMENT, AUTO_INCREMENT,
+                // Unsupported column modifiers (DEFAULT on DAO, WITH COMPRESSION on DAO, CHECK, COLLATE, COMMENT, AUTO_INCREMENT,
                 // IDENTITY, UNSIGNED, GENERATED, UNICODE, BINARY VARYING) or missing comma between columns:
-                // 3290 in CREATE TABLE (ddl-column-clauses, ddl-type-names-accdb), 3293 in ALTER TABLE (ddl-alter-column-forms).
+                // 3290 in CREATE TABLE (ddl-column-clauses, ddl-type-names-accdb, r-q49/ddl-default-create-dao-*),
+                // 3293 in ALTER TABLE (ddl-alter-column-forms, r-q49/ddl-default-create-dao-*).
                 failure = Syntax(isAlter ? 3293 : 3290, isAlter ? SqlMessages.AlterTableSyntaxError : SqlMessages.CreateTableSyntaxError);
                 return null;
             }
 
             failure = null;
-            return new DdlColumnDef(colName, dataType, nullability, constraints, withCompression);
+            return new DdlColumnDef(colName, dataType, nullability, constraints, withCompression, defaultExpression);
+        }
+
+        private bool ParseDefaultExpression(bool isAlter, out string? expression, out SqlFailure? failure)
+        {
+            expression = null;
+            failure = null;
+            SqlFailure BadDefaultSyntax() => Syntax(
+                isAlter ? 3293 : 3290,
+                isAlter ? SqlMessages.AlterTableSyntaxError : SqlMessages.CreateTableSyntaxError);
+
+            Skip();
+            if (_p >= s.Length || s[_p] is ',' or ')' or ';')
+            {
+                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*: CREATE TABLE TE_BadMiss (ID LONG, A LONG DEFAULT) -> 3290.
+                failure = BadDefaultSyntax();
+                return false;
+            }
+
+            int start = _p;
+            char ch = s[_p];
+            if (ch == '(')
+            {
+                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*: DEFAULT (1 + 2) -> 3290.
+                failure = BadDefaultSyntax();
+                return false;
+            }
+            if (ch is '\'' or '"')
+            {
+                char quote = ch;
+                _p++;
+                bool closed = false;
+                while (_p < s.Length)
+                {
+                    if (s[_p] == quote)
+                    {
+                        _p++;
+                        if (_p < s.Length && s[_p] == quote)
+                        {
+                            _p++;
+                            continue;
+                        }
+                        closed = true;
+                        break;
+                    }
+                    _p++;
+                }
+                if (!closed)
+                {
+                    failure = BadDefaultSyntax();
+                    return false;
+                }
+                expression = s[start.._p];
+                return true;
+            }
+            if (ch == '#')
+            {
+                int close = s.IndexOf('#', _p + 1);
+                if (close <= _p + 1)
+                {
+                    failure = BadDefaultSyntax();
+                    return false;
+                }
+                _p = close + 1;
+                expression = s[start.._p];
+                return true;
+            }
+            if (ch == '[')
+            {
+                // Bracketed field reference such as DEFAULT [ID]: parses verbatim so SchemaWriter emits ACE 3355 with rollback
+                // (evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-* TE_BadCol).
+                int close = s.IndexOf(']', _p + 1);
+                if (close <= _p + 1)
+                {
+                    failure = BadDefaultSyntax();
+                    return false;
+                }
+                _p = close + 1;
+                expression = s[start.._p];
+                return true;
+            }
+            if (ch is '+' or '-' || char.IsAsciiDigit(ch))
+            {
+                if (ch is '+' or '-')
+                {
+                    _p++;
+                }
+                int intStart = _p;
+                while (_p < s.Length && char.IsAsciiDigit(s[_p]))
+                {
+                    _p++;
+                }
+                if (_p == intStart)
+                {
+                    failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded signed DEFAULT expression starting at '{s[start..Math.Min(s.Length, start + 8)]}'");
+                    return false;
+                }
+                if (_p < s.Length && s[_p] == '.')
+                {
+                    _p++;
+                    int fracStart = _p;
+                    while (_p < s.Length && char.IsAsciiDigit(s[_p]))
+                    {
+                        _p++;
+                    }
+                    if (_p == fracStart)
+                    {
+                        failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded trailing-dot numeric DEFAULT literal starting at '{s[start..Math.Min(s.Length, _p + 4)]}'");
+                        return false;
+                    }
+                }
+                if (_p < s.Length && (char.IsLetter(s[_p]) || s[_p] is '_' or '.'))
+                {
+                    failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded numeric DEFAULT literal starting at '{s[start..Math.Min(s.Length, _p + 8)]}'");
+                    return false;
+                }
+                expression = s[start.._p];
+                return true;
+            }
+            if (ch == '.')
+            {
+                failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded leading-dot numeric DEFAULT literal starting at '{s[start..Math.Min(s.Length, start + 8)]}'");
+                return false;
+            }
+            if (char.IsLetter(ch) || ch == '_')
+            {
+                while (_p < s.Length && (char.IsLetterOrDigit(s[_p]) || s[_p] == '_'))
+                {
+                    _p++;
+                }
+                string word = s[start.._p];
+                if (word.Equals("True", StringComparison.OrdinalIgnoreCase)
+                    || word.Equals("False", StringComparison.OrdinalIgnoreCase)
+                    || word.Equals("Null", StringComparison.OrdinalIgnoreCase))
+                {
+                    expression = word;
+                    return true;
+                }
+                if (word.Equals("Date", StringComparison.OrdinalIgnoreCase) && _p < s.Length && s[_p] == '(')
+                {
+                    _p++;
+                    Skip();
+                    if (_p < s.Length && s[_p] == ')')
+                    {
+                        _p++;
+                        expression = s[start.._p];
+                        return true;
+                    }
+                    failure = BadDefaultSyntax();
+                    return false;
+                }
+                failure = Open("NotModelled.DdlDefaultExpr", $"unrecorded ADO SQL DEFAULT expression starting with '{word}' (evidence/r-q49-dt2-draftprops records literals, True/False/Null, Date(), and bracketed field [ID])");
+                return false;
+            }
+
+            failure = BadDefaultSyntax();
+            return false;
         }
 
         private DdlDataType? ParseDataType(bool isAlter, out SqlFailure? failure)
@@ -1454,32 +1648,74 @@ public static class DdlParser
                     failure = colNameFail ?? Syntax(3293, SqlMessages.AlterTableSyntaxError);
                     return null;
                 }
-                if (IsWord("DEFAULT") || IsWord("SET") || IsWord("DROP"))
+                if (allowAdoCheck && TakeWord("SET"))
                 {
-                    // r-def-expr-sql/ddl-alter-column-forms: ALTER COLUMN B DEFAULT 5 / SET DEFAULT 5 / DROP DEFAULT -> 3293.
-                    failure = Syntax(3293, SqlMessages.AlterTableSyntaxError);
-                    return null;
-                }
-                DdlDataType? dataType = ParseDataType(isAlter: true, out failure);
-                if (dataType is null)
-                {
-                    return null;
-                }
-                DdlNullability nullability = DdlNullability.Unspecified;
-                if (TakeWord("NOT"))
-                {
-                    if (!TakeWord("NULL"))
+                    // evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*: ALTER COLUMN A SET DEFAULT 55.
+                    if (!TakeWord("DEFAULT"))
                     {
-                        failure = Open("NotModelled.DdlNotWithoutNull", "NOT without NULL in ALTER COLUMN");
+                        failure = Syntax(3293, SqlMessages.AlterTableSyntaxError);
                         return null;
                     }
-                    nullability = DdlNullability.NotNull;
+                    if (!ParseDefaultExpression(isAlter: true, out string? setExpr, out failure))
+                    {
+                        return null;
+                    }
+                    action = new SetDefaultAlterAction(colName, setExpr!);
                 }
-                else if (TakeWord("NULL"))
+                else if (allowAdoCheck && TakeWord("DROP"))
                 {
-                    nullability = DdlNullability.Null;
+                    // evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*: ALTER COLUMN N DROP DEFAULT.
+                    if (!TakeWord("DEFAULT"))
+                    {
+                        failure = Syntax(3293, SqlMessages.AlterTableSyntaxError);
+                        return null;
+                    }
+                    action = new DropDefaultAlterAction(colName);
                 }
-                action = new AlterColumnAlterAction(colName, dataType, nullability);
+                else if (allowAdoCheck && IsWord("DEFAULT"))
+                {
+                    failure = Open("NotModelled.DdlAlterDefaultSyntax", "ADO ALTER COLUMN col DEFAULT expr (without SET or data type) is not recorded");
+                    return null;
+                }
+                else
+                {
+                    if (IsWord("DEFAULT") || IsWord("SET") || IsWord("DROP"))
+                    {
+                        // r-def-expr-sql/ddl-alter-column-forms, r-q49-dt2-draftprops/ddl-default-create-dao-*:
+                        // DAO ANSI-89 rejects ALTER COLUMN B DEFAULT 5 / SET DEFAULT 5 / DROP DEFAULT with 3293.
+                        failure = Syntax(3293, SqlMessages.AlterTableSyntaxError);
+                        return null;
+                    }
+                    DdlDataType? dataType = ParseDataType(isAlter: true, out failure);
+                    if (dataType is null)
+                    {
+                        return null;
+                    }
+                    DdlNullability nullability = DdlNullability.Unspecified;
+                    if (TakeWord("NOT"))
+                    {
+                        if (!TakeWord("NULL"))
+                        {
+                            failure = Open("NotModelled.DdlNotWithoutNull", "NOT without NULL in ALTER COLUMN");
+                            return null;
+                        }
+                        nullability = DdlNullability.NotNull;
+                    }
+                    else if (TakeWord("NULL"))
+                    {
+                        nullability = DdlNullability.Null;
+                    }
+                    string? alterDefault = null;
+                    if (allowAdoCheck && TakeWord("DEFAULT"))
+                    {
+                        // evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-*: ALTER COLUMN S TEXT(30) DEFAULT 'xyz'.
+                        if (!ParseDefaultExpression(isAlter: true, out alterDefault, out failure))
+                        {
+                            return null;
+                        }
+                    }
+                    action = new AlterColumnAlterAction(colName, dataType, nullability, alterDefault);
+                }
             }
             else if (TakeWord("DROP"))
             {

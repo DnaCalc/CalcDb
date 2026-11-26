@@ -228,13 +228,92 @@ public sealed class NativeRowAndDataPageTests
     [Fact]
     public void RowEncoder_TryEncode_follows_r_q36_zero_fixed_padding_and_preserved_null()
     {
-        // Dropped columns: ColumnCount != MaxColumns stays refused (Open in r-q36).
-        TableDefinition dropped = MakeTable(
+        // Dropped columns (r-q44/dropcol-unindexed-rows-*, alt-long-double-text-rows-*): C = MaxColumns,
+        // live fixed columns at their surviving offsets with interior dropped fixed gaps zeroed, empty slices
+        // [pos, pos) for abandoned variable slots, and null-mask bits set only for live non-null columns.
+        TableDefinition droppedFixed = MakeTable(
+            maxColumns: 4,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("C", 3, NativeTypes.Long, 4, 8),
+            ]);
+        Assert.False(RowEncoder.TryEncode(
+            droppedFixed,
+            [EncodedField.OfBytes([4, 0, 0, 0]), EncodedField.OfBytes([0x90, 0x01, 0, 0])],
+            D,
+            out _,
+            out string? defaultDroppedErr));
+        Assert.Contains("dropped or altered", defaultDroppedErr);
+        Assert.True(RowEncoder.TryEncode(
+            droppedFixed,
+            [EncodedField.OfBytes([4, 0, 0, 0]), EncodedField.OfBytes([0x90, 0x01, 0, 0])],
+            D,
+            out byte[]? droppedRow,
+            out string? droppedErr,
+            allowDroppedColumns: true), droppedErr);
+        // Matches evidence/r-q44-ddl-alter-types/dropcol-unindexed-rows-accdb-dao after-ddl-3 page 45 offset 4000.
+        Assert.Equal("04000400000000000000900100000e000e00010009", Convert.ToHexStringLower(droppedRow!));
+
+        // F9: TryRewriteAlteredColumn refuses oldColCount < oldTable.MaxColumns when a variable column was previously dropped/altered.
+        TableDefinition droppedVarOld = MakeTable(
+            maxColumns: 3,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 1, NativeTypes.Long, 4, 4),
+            ]);
+        TableDefinition droppedVarNew = MakeTable(
+            maxColumns: 4,
+            variableColumns: 1,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 3, NativeTypes.Double, 8, 8),
+            ]);
+        Assert.False(RowEncoder.TryRewriteAlteredColumn(
+            Convert.FromHexString("0200010000000a00000003"),
+            droppedVarOld,
+            droppedVarNew,
+            droppedVarNew.Columns[1],
+            EncodedField.OfBytes(BitConverter.GetBytes(10.0)),
+            D,
+            new byte[RowEncoder.MaxOrdinaryRowBytes],
+            out _,
+            out string? droppedVarErr));
+        Assert.Contains("dropped/altered variable", droppedVarErr);
+
+        // RowEncoder.TryRewriteAlteredColumn preserves ACE's reused 4096-byte scratch buffer bytes across rows
+        // (evidence/r-q44-ddl-alter-types/alt-long-double-text-rows-accdb-dao after-ddl-1 page 45 slots 0..2).
+        TableDefinition oldLong = MakeTable(
             maxColumns: 2,
             variableColumns: 0,
-            columns: [FixedCol("ID", 0, NativeTypes.Long, 4, 0)]);
-        Assert.False(RowEncoder.TryEncode(dropped, [EncodedField.OfBytes(new byte[4])], D, out _, out string? droppedErr));
-        Assert.Contains("dropped-column", droppedErr);
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 1, NativeTypes.Long, 4, 4),
+            ]);
+        TableDefinition newDouble = MakeTable(
+            maxColumns: 3,
+            variableColumns: 0,
+            columns:
+            [
+                FixedCol("ID", 0, NativeTypes.Long, 4, 0),
+                FixedCol("V", 2, NativeTypes.Double, 8, 8),
+            ]);
+        byte[] workBuffer = new byte[RowEncoder.MaxOrdinaryRowBytes];
+        byte[] oldRow1 = Convert.FromHexString("0200010000000a00000003"); // (1, 10)
+        byte[] oldRow2 = Convert.FromHexString("0200020000000000000001"); // (2, NULL)
+        byte[] oldRow3 = Convert.FromHexString("020003000000fbffffff03"); // (3, -5)
+        Assert.True(RowEncoder.TryRewriteAlteredColumn(oldRow1, oldLong, newDouble, newDouble.Columns[1], EncodedField.OfBytes(BitConverter.GetBytes(10.0)), D, workBuffer, out int len1, out string? rwErr1), rwErr1);
+        Assert.Equal("0300010000000a000000000000000000244007", Convert.ToHexStringLower(workBuffer.AsSpan(0, len1)));
+        // Slot 1 (NULL V) retains row 1's Double bytes (00 00 00 00 00 00 24 40) from the reused scratch buffer, with mask 0x01.
+        Assert.True(RowEncoder.TryRewriteAlteredColumn(oldRow2, oldLong, newDouble, newDouble.Columns[1], EncodedField.Null, D, workBuffer, out int len2, out string? rwErr2), rwErr2);
+        Assert.Equal("03000200000000000000010000000000244001", Convert.ToHexStringLower(workBuffer.AsSpan(0, len2)));
+        Assert.True(RowEncoder.TryRewriteAlteredColumn(oldRow3, oldLong, newDouble, newDouble.Columns[1], EncodedField.OfBytes(BitConverter.GetBytes(-5.0)), D, workBuffer, out int len3, out string? rwErr3), rwErr3);
+        Assert.Equal("030003000000fbffffff00000000000014c007", Convert.ToHexStringLower(workBuffer.AsSpan(0, len3)));
 
         // V == 0, fixedSize == 0 (Yes/No-only B1): 2 pad bytes before mask (zf-bool-cols-accdb-dao); Jet 3 stays refused.
         TableDefinition b1 = MakeTable(maxColumns: 1, variableColumns: 0, columns: [BoolCol("b1", 0)]);

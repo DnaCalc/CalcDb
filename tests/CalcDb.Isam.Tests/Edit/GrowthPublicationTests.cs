@@ -933,13 +933,12 @@ public sealed class GrowthPublicationTests
         CompiledChange compOut = compWriter.CompileInsert(compSem, [LongVal(10), TextVal("abc"), NativeValue.Null, NativeValue.Null], 10);
         Assert.NotNull(compOut.Change);
 
-        // 3. Dropped-column schema (ColumnCount != MaxColumns) on CompileInsert (still refused)
+        // 3. Dropped-column schema (ColumnCount != MaxColumns) on CompileInsert (lifted by R-CAT-1 r-q44: dropcol-unindexed-rows-*, alt-long-double-text-rows-*)
         TableDefinition droppedTable = g with { MaxColumns = g.MaxColumns + 1 };
         var droppedSem = MutationSemantics.Compile("G", droppedTable, null, binder, D.IndexDescriptor);
         var droppedWriter = new SameWidthWriter(new TableFootprints(cache, D, droppedTable, pageCount));
         CompiledChange droppedOut = droppedWriter.CompileInsert(droppedSem, [LongVal(10), TextVal("abc"), NativeValue.Null, NativeValue.Null], 10);
-        Assert.Null(droppedOut.Change);
-        Assert.Contains("dropped-column", droppedOut.NotWritten);
+        Assert.NotNull(droppedOut.Change);
 
         // 4. Zero-fixed-width table on CompileInsert (lifted by R-FMT-2 r-q36)
         ColumnDescriptor varOnly = Col(g, "T") with { PhysicalNumber = 0, Ordinal = 0, VariableIndex = 0 };
