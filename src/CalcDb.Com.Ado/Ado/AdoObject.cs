@@ -59,6 +59,9 @@ internal static class AdoErrors
     /// <summary>0x800A0CB3 (Recordset.MarshalOptions put on a server cursor; r-q48-ado-batch-edits/client-marshal-options-accdb, r-q48-ado-batch-edits/client-marshal-options-mdb).</summary>
     public static readonly AdoError MarshalOptionsClientOnly = BookmarksNotSupported.WithText("MarshalOptions are only available on a disconnected or client-side recordset.");
 
+    /// <summary>0x800A0CB3 (Connection.OpenSchema unsupported SchemaEnum or scalar/byte[] Restrictions; r-q54-excl-ddl-ix-cmd/ado-openschema-*, r-q-ado-misc/schema-ids-no-restrictions, r-oledb-odbc/schema-others).</summary>
+    public static readonly AdoError OperationNotSupported = BookmarksNotSupported.WithText("Object or provider is not capable of performing requested operation.");
+
     /// <summary>0x800A0CAE (Connection.Close while inside an open transaction; r-oledb-odbc/txn-held-rows #248).</summary>
     public static readonly AdoError CannotCloseInTransaction = new(0x0CAE, 1240647, "Connection object cannot be explicitly closed while in a transaction.");
 
@@ -124,6 +127,9 @@ internal abstract class AdoObject : DispatchObject
 
     /// <summary>OLE DB IColumnsInfo IID reported by ACE when reading Fields after a 3078 Open failure (r-str-ado-act/ado-rs-read-close #16, #18).</summary>
     public static readonly Guid IidColumnsInfo = new("0C733A11-2A1C-11CE-ADE5-00AA0044773D");
+
+    /// <summary>OLE DB IAccessor IID reported by ACE when Command.Execute fails binding Output/InputOutput/ReturnValue parameters (r-oledb-odbc/param-edge #55, #77, #99).</summary>
+    public static readonly Guid IidAccessor = new("0C733A8C-2A1C-11CE-ADE5-00AA0044773D");
 
     /// <summary>Source string reported by ACE engine failures (EXCEPINFO, IErrorInfo, and Error.Source).</summary>
     public const string AceEngineSource = "Microsoft Access Database Engine";

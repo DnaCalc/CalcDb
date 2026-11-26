@@ -45,6 +45,8 @@ internal sealed unsafe class CommandObject : AdoObject
     private ConnectionObject? _activeConnection;
     private PropertiesObject? _properties;
     private ParametersObject? _parameters;
+    /// <summary>Last scalar Parameters argument bound by Command.Execute(ra, scalar, options), reused on subsequent Execute(Missing, Missing, options) (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #110-#166, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #110-#166).</summary>
+    private OwnedVariant? _lastScalarParam;
 
     private CommandObject() : base(Decl, Vtable, "ADODB.Command")
     {
@@ -70,6 +72,11 @@ internal sealed unsafe class CommandObject : AdoObject
     private CallResult PutCommandType(nint arg)
     {
         int? type = AdoArgs.Int32(arg);
+        if (type == AdoSqlText.AdCmdTableDirect)
+        {
+            // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb #101, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb #101: adCmdTableDirect (512) is invalid on Command.CommandType -> 0x800A0BB9, previous value preserved.
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
         if (type is null || !AdoTypes.CommandTypeEnumDecl.Constants.Any(c => c.Value == type))
         {
             return NotImplemented("Command.CommandType outside CommandTypeEnum (not asked)");
@@ -84,6 +91,11 @@ internal sealed unsafe class CommandObject : AdoObject
         if (text is null)
         {
             return NotImplemented("Command.CommandText = a value that is not text");
+        }
+        if (!string.Equals(_commandText, text, StringComparison.Ordinal))
+        {
+            _lastScalarParam?.Dispose();
+            _lastScalarParam = null;
         }
         _commandText = text;
         return CallResult.Nothing;
@@ -172,6 +184,8 @@ internal sealed unsafe class CommandObject : AdoObject
     internal void OnConnectionClosed()
     {
         _parameters?.ClearAll();
+        _lastScalarParam?.Dispose();
+        _lastScalarParam = null;
         _properties?.Invalidate();
         _properties?.Release();
         _properties = null;
@@ -241,10 +255,15 @@ internal sealed unsafe class CommandObject : AdoObject
     }
 
     /// <summary>
-    /// Execute(RecordsAffected, Parameters, Options):
-    /// 0x800A0E7D with no open connection (cmd-before-connection, param-connection-change #52, #59);
-    /// open-connection execution refuses by name (parameterized execution belongs to a later stretch; non-parameterized
-    /// Command.Execute is not recorded).
+    /// Execute(RecordsAffected, Parameters, Options) (W-09; R-ADO-1, R-OLEDB-1 OLE-PARAM):
+    /// 0x800A0E7D with no open connection (cmd-before-connection, param-connection-change #52/#59, ado-cmd-exec-noparam-* #28);
+    /// 0x80040E0C when CommandText is empty (ado-cmd-exec-noparam-* #38);
+    /// supports non-parameterized and parameterized SELECT/INSERT/UPDATE/DELETE, adCmdTable, adCmdStoredProc,
+    /// ByRef RecordsAffected writeback, appended Parameters, and scalar Parameters arguments
+    /// (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb,
+    /// r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb,
+    /// r-oledb-odbc/param-order-binding, r-oledb-odbc/param-edge, r-q-ado-misc/param-markers-names).
+    /// Multi-element SAFEARRAY Parameters refuse by name.
     /// </summary>
     private CallResult Execute(ReadOnlySpan<nint> args)
     {
@@ -269,47 +288,117 @@ internal sealed unsafe class CommandObject : AdoObject
                 "NotModelled.AdoMsPersistCommand",
                 "Command.Execute on an MSPersist Connection is not recorded"));
         }
+
+        string text = _commandText ?? "";
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb #38, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb #38: empty CommandText -> 0x80040E0C.
+            MappedProviderError emptyErr = AdoSqlErrors.CommandTextNotSet();
+            _activeConnection.SetProviderError(emptyErr.ErrorEntry);
+            return CallResult.Fail(emptyErr.ComFailure);
+        }
+
+        nint recordsAffectedArg = args.Length > 0 ? args[0] : 0;
+        if (recordsAffectedArg != 0 && TypedCall.IsMissing(Args.Cell(recordsAffectedArg)))
+        {
+            recordsAffectedArg = 0;
+        }
         nint parametersArg = args.Length > 1 ? args[1] : 0;
-        if (parametersArg != 0 && Args.TypeOf(parametersArg) != VarType.Empty)
+        bool parametersOmitted = parametersArg == 0 || TypedCall.IsMissing(Args.Cell(parametersArg));
+        nint optionsArg = args.Length > 2 ? args[2] : 0;
+        if (optionsArg != 0 && TypedCall.IsMissing(Args.Cell(optionsArg)))
         {
-            return NotImplemented("Command.Execute with a Parameters argument (parameterized Command execution belongs to a later stretch)");
+            optionsArg = 0;
         }
-        if (HasParametersOrPlaceholders)
+
+        List<AdoCommandParam>? boundParams = null;
+        if (!parametersOmitted)
         {
-            return NotImplemented("Command.Execute with parameters (parameterized Command execution belongs to a later stretch)");
+            NativeVariant* pCell = Args.Cell(parametersArg);
+            VarType pVt = (VarType)pCell->Vt & ~VarType.ByRef;
+            if ((pVt & VarType.Array) != 0)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoCommandExecuteVariantArrayParameters",
+                    "Command.Execute with a SAFEARRAY Parameters argument is not recorded"));
+            }
+            if (AdoArgs.IsObject(parametersArg))
+            {
+                return NotImplemented("Command.Execute with an object Parameters argument (not recorded)");
+            }
+            if (pVt == VarType.Empty)
+            {
+                AdoSqlText.RewriteQuestionMarkParameters(text, out int qCount);
+                if (qCount > 0)
+                {
+                    // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #152, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #152: VT_EMPTY for ? -> 0x80040E10 "Parameter ?_1 has no default value." (3748).
+                    MappedProviderError noDef = AdoSqlErrors.ParameterNoDefaultValue(1);
+                    _activeConnection.SetProviderError(noDef.ErrorEntry);
+                    return CallResult.Fail(noDef.ComFailure);
+                }
+            }
+            else
+            {
+                // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #110, #124, #138; r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #110: scalar Parameters argument (I4 / Null) binds position 0 and persists for subsequent Missing Execute.
+                OwnedVariant? copied = pVt == VarType.Null
+                    ? OwnedVariant.Null()
+                    : OwnedVariant.ChangeType(pCell, pVt, SessionLocale.Lcid, out _);
+                if (copied is null)
+                {
+                    return NotImplemented($"Command.Execute with scalar Parameters argument of VarType {pVt} (not recorded)");
+                }
+                _lastScalarParam?.Dispose();
+                _lastScalarParam = copied;
+                boundParams = [new AdoCommandParam(copied, AdoType: null)];
+            }
         }
-        if (_commandType == AdoSqlText.AdCmdText)
+
+        if (boundParams is null)
         {
-            // Finding #19 (r-ado-1b/errors-lock-timeout #45, r-ado-1b/errors-by-route #34, r-ado-1b/txn-rollback-scope-objects #27):
-            // only non-parameterized UPDATE/INSERT action SQL with explicit Options=129 (adCmdText | adExecuteNoRecords)
-            // and omitted RecordsAffected is recorded on Command.Execute.
-            nint recordsAffectedArg = args.Length > 0 ? args[0] : 0;
-            if (recordsAffectedArg != 0 && !TypedCall.IsMissing(Args.Cell(recordsAffectedArg)))
+            if (_parameters is { Count: > 0 })
             {
-                return NotImplemented("Command.Execute with RecordsAffected argument (not recorded for non-parameterized Command.Execute)");
+                IReadOnlyList<ParameterObject> items = _parameters.Items;
+                boundParams = new List<AdoCommandParam>(items.Count);
+                foreach (ParameterObject p in items)
+                {
+                    if (p.Direction is 2 or 3 or 4)
+                    {
+                        // r-oledb-odbc/param-edge #55, #77, #99: Output/InputOutput/ReturnValue direction on ? command fails 0x80040E21 on IID_IAccessor.
+                        MappedProviderError dirErr = AdoSqlErrors.MultipleStepOnAccessor();
+                        _activeConnection.SetProviderError(dirErr.ErrorEntry);
+                        return CallResult.Fail(dirErr.ComFailure);
+                    }
+                    if (p.Type == 131 && p.ValueVariant.Type == VarType.Null)
+                    {
+                        // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #81, #96; r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #81: adNumeric (131) with VT_NULL fails 0x80040E07 (3464).
+                        MappedProviderError numNullErr = AdoSqlErrors.DataTypeMismatchOnCommand();
+                        _activeConnection.SetProviderError(numNullErr.ErrorEntry);
+                        return CallResult.Fail(numNullErr.ComFailure);
+                    }
+                    boundParams.Add(new AdoCommandParam(p.ValueVariant, p.Type));
+                }
             }
-            nint optionsArg = args.Length > 2 ? args[2] : 0;
-            int? options = optionsArg != 0 && !TypedCall.IsMissing(Args.Cell(optionsArg)) ? AdoArgs.Int32(optionsArg) : null;
-            if (options != (AdoSqlText.AdCmdText | AdoSqlText.AdExecuteNoRecords))
+            else if (_lastScalarParam is not null)
             {
-                return NotImplemented($"Command.Execute with Options={options?.ToString() ?? "omitted"} (only Options=129 is recorded)");
+                boundParams = [new AdoCommandParam(_lastScalarParam, AdoType: null)];
             }
-            string text = _commandText ?? "";
-            string trimmed = text.TrimStart();
-            if (!CalcDb.Sql.ActionParser.IsAction(text)
-                || (!trimmed.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase)
-                    && !trimmed.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)))
-            {
-                return NotImplemented("Command.Execute for non-UPDATE/INSERT command text (only UPDATE and INSERT are recorded)");
-            }
-            return _activeConnection.ExecuteCommandText(text, _commandType, 0, optionsArg, "Command.Execute", explicitCommand: this);
         }
-        return NotImplemented("Command.Execute of a non-parameterized Command (not recorded)");
+
+        return _activeConnection.ExecuteCommandText(
+            text,
+            _commandType,
+            recordsAffectedArg,
+            optionsArg,
+            "Command.Execute",
+            explicitCommand: this,
+            commandParameters: boundParams ?? (IReadOnlyList<AdoCommandParam>)Array.Empty<AdoCommandParam>());
     }
 
     protected override void OnFinalRelease()
     {
         _activeConnection?.OpenSession?.UnregisterCommand(this);
+        _lastScalarParam?.Dispose();
+        _lastScalarParam = null;
         _parameters?.Release();
         _properties?.Invalidate();
         _properties?.Release();
@@ -341,6 +430,8 @@ internal sealed class ParametersObject : AdoObject
 
     public int Count => _items.Count;
 
+    internal IReadOnlyList<ParameterObject> Items => _items;
+
     internal void ClearAll()
     {
         foreach (ParameterObject p in _items)
@@ -353,9 +444,18 @@ internal sealed class ParametersObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
-    private CallResult GetCount() => _items.Count == 0 && _owner.ActiveConnectionObject is { IsOpen: true } && _owner.CommandTextValue.Length > 0
-        ? NotImplemented("Parameters.Count triggers implicit Parameters.Refresh on a Command with an open ActiveConnection and CommandText (parameterized Command execution belongs to a later stretch)")
-        : Int32(_items.Count);
+    private CallResult GetCount()
+    {
+        if (_items.Count > 0
+            || _owner.ActiveConnectionObject is not { IsOpen: true }
+            || _owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
+        {
+            // r-q-ado-misc/param-saved-declared-order #17: empty Parameters.Count returns 0 on an open adCmdStoredProc Command.
+            return Int32(_items.Count);
+        }
+        // evidence/r-ado-1b/param-refresh-after-text-change: adCmdText with ? placeholders implicitly derives parameters on first Count access.
+        return NotImplemented("Parameters.Count on an open ActiveConnection with an empty Parameters collection outside adCmdStoredProc (implicit parameter derivation)");
+    }
 
     private CallResult Refresh()
     {
@@ -451,13 +551,17 @@ internal sealed unsafe class ParameterObject : AdoObject
         .Get("Type", (self, args) => Int32(((ParameterObject)self).Type))
         .Get("Direction", (self, args) => Int32(((ParameterObject)self)._direction))
         .Get("Size", (self, args) => Int32(((ParameterObject)self).Size))
-        .Get("Precision", (self, args) => CallResult.OfScalar(VarType.UI1, 0))
-        .Get("NumericScale", (self, args) => CallResult.OfScalar(VarType.UI1, 0))
+        .Get("Precision", (self, args) => CallResult.OfScalar(VarType.UI1, ((ParameterObject)self)._precision))
+        .Put("Precision", (self, args) => ((ParameterObject)self).PutByte(args[0], ref ((ParameterObject)self)._precision, "Precision"))
+        .Get("NumericScale", (self, args) => CallResult.OfScalar(VarType.UI1, ((ParameterObject)self)._numericScale))
+        .Put("NumericScale", (self, args) => ((ParameterObject)self).PutByte(args[0], ref ((ParameterObject)self)._numericScale, "NumericScale"))
         .Get("Attributes", (self, args) => Int32(0))
         .Get("Value", (self, args) => CallResult.Of(((ParameterObject)self)._value.CopyPreservingReference()))
         .Put("Value", (self, args) => ((ParameterObject)self).SetValue(args[0], (ParameterObject)self));
 
     private readonly int _direction;
+    private byte _precision;
+    private byte _numericScale;
     private OwnedVariant _value = OwnedVariant.Empty();
 
     public ParameterObject(string name, int type, int direction, int size) : base(Decl, Vtable, "ADODB.Parameter")
@@ -472,11 +576,26 @@ internal sealed unsafe class ParameterObject : AdoObject
 
     public int Type { get; }
 
+    public int Direction => _direction;
+
     public int Size { get; }
 
     public bool Appended { get; set; }
 
+    internal OwnedVariant ValueVariant => _value;
+
     protected override OperationTable Table => Operations;
+
+    private CallResult PutByte(nint arg, ref byte field, string member)
+    {
+        int? val = AdoArgs.Int32(arg);
+        if (val is null or < 0 or > 255)
+        {
+            return NotImplemented($"Parameter.{member} = {val?.ToString() ?? "non-numeric"} (not recorded)");
+        }
+        field = (byte)val.Value;
+        return CallResult.Nothing;
+    }
 
     private CallResult PutName(nint arg)
     {
@@ -512,13 +631,35 @@ internal sealed unsafe class ParameterObject : AdoObject
             Replace(copy);
             return CallResult.Nothing;
         }
+        if (given == VarType.Null)
+        {
+            // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #66-#80, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #66-#80, r-oledb-odbc/param-types-insert #78-#84:
+            // Null is accepted for any typed parameter and stored as VT_NULL.
+            Replace(OwnedVariant.Null());
+            return CallResult.Nothing;
+        }
+        if (Type is 204 or 205)
+        {
+            // r-oledb-odbc/param-types-insert #31-#33: adVarBinary (204) / adLongVarBinary (205) accept VT_ARRAY|VT_UI1.
+            if (given == (VarType.Array | VarType.UI1))
+            {
+                OwnedVariant? copy = OwnedVariant.ChangeType(cell, given, SessionLocale.Lcid, out _);
+                if (copy is null)
+                {
+                    return source.Fail(AdoErrors.WrongValueType);
+                }
+                Replace(copy);
+                return CallResult.Nothing;
+            }
+            return NotImplemented($"Parameter.Value of type {Type} with {given} (not asked)");
+        }
         if (AdoValues.VarTypeOf(Type) is not { } target)
         {
             return NotImplemented($"Parameter.Value of a type {Type} parameter (not asked)");
         }
-        if (given is VarType.Null or VarType.Empty)
+        if (given == VarType.Empty)
         {
-            return NotImplemented("Parameter.Value = Null or Empty (not asked)");
+            return NotImplemented("Parameter.Value = Empty (not asked)");
         }
         OwnedVariant? converted = OwnedVariant.ChangeType(cell, target, SessionLocale.Lcid, out int hr);
         if (converted is null)
@@ -526,6 +667,13 @@ internal sealed unsafe class ParameterObject : AdoObject
             return hr == unchecked((int)0x8002000A)
                 ? NotImplemented("Parameter.Value out of the type's range (its ADO error is not captured)")
                 : source.Fail(AdoErrors.WrongValueType);
+        }
+        if (Type == 17 && converted.Type == VarType.UI1)
+        {
+            // r-oledb-odbc/param-types-insert #166: adUnsignedTinyInt (17) parameter reads back Value as VT_I2.
+            byte b = *(byte*)&converted.Pointer->Int64;
+            converted.Dispose();
+            converted = OwnedVariant.FromInt16(b);
         }
         if (target == VarType.Bstr && Size > 0 && System.Runtime.InteropServices.Marshal.PtrToStringBSTR(converted.Pointer->Pointer).Length > Size)
         {
@@ -543,4 +691,113 @@ internal sealed unsafe class ParameterObject : AdoObject
     }
 
     protected override void OnFinalRelease() => _value.Dispose();
+}
+
+/// <summary>One positional parameter value bound by <see cref="CommandObject.Execute"/>.</summary>
+internal readonly record struct AdoCommandParam(OwnedVariant Value, int? AdoType);
+
+/// <summary>Shared positional parameter binder for <see cref="CommandObject.Execute"/> SELECT and action paths.</summary>
+internal static unsafe class AdoCommandParameters
+{
+    /// <summary>
+    /// Bind <paramref name="supplied"/> positionally against <paramref name="expected"/> (ignoring surplus values;
+    /// r-q-ado-misc/param-saved-wrong-names #60). Caller must release every non-null element of the returned array
+    /// via <see cref="Release"/>.
+    /// </summary>
+    public static NativeVariant?[]? BindPositional(
+        AdoOpenSession session,
+        IReadOnlyList<CalcDb.Sql.QueryParameter> expected,
+        IReadOnlyList<AdoCommandParam>? supplied,
+        bool isSavedQuery,
+        out MappedProviderError? providerError,
+        out Failure? refusal)
+    {
+        providerError = null;
+        refusal = null;
+        if (expected.Count == 0)
+        {
+            return null;
+        }
+        if (supplied is null || supplied.Count < expected.Count)
+        {
+            providerError = isSavedQuery
+                ? AdoSqlErrors.TooFewSavedParameters(expected.Count)
+                : AdoSqlErrors.MissingAdHocParameters();
+            return null;
+        }
+        var bound = new NativeVariant?[expected.Count];
+        CalcDb.Values.Scalar.ExpressionContext? exprCtx = null;
+        for (int i = 0; i < expected.Count; i++)
+        {
+            CalcDb.Sql.QueryParameter qp = expected[i];
+            NativeVariant incoming = *supplied[i].Value.Pointer;
+            if (qp.Declared)
+            {
+                exprCtx ??= session.CreateExpressionContext(CalcDb.Values.Scalar.ExpressionUse.Query);
+                if (qp.DaoType is 10 or 12 && (VarType)incoming.Vt == VarType.I4)
+                {
+                    // r-oledb-odbc/param-order-binding #141: positional I4 bound to declared Text(10) coerces to BSTR
+                    // before the subsequent Long parameter fails 0x80004005 on a non-numeric string.
+                    NativeVariant src = incoming;
+                    NativeVariant textVal = default;
+                    if (OleAut.VariantChangeTypeEx(&textVal, &src, exprCtx.Lcid, 0, (ushort)VarType.Bstr) < 0)
+                    {
+                        Release(bound);
+                        providerError = AdoSqlErrors.UnspecifiedCommandError();
+                        return null;
+                    }
+                    bound[i] = textVal;
+                    continue;
+                }
+                CalcDb.Sql.SqlFailure? adaptFail = CalcDb.Sql.SqlParameters.Adapt(qp, in incoming, exprCtx, out NativeVariant adapted);
+                if (adaptFail is not null)
+                {
+                    Release(bound);
+                    if (adaptFail.IsNotModelled)
+                    {
+                        refusal = Failure.NotModelled(adaptFail.NotModelled!, adaptFail.Message);
+                    }
+                    else
+                    {
+                        // r-oledb-odbc/param-order-binding #141: positional type mismatch on declared PARAMETERS fails 0x80004005 "Unspecified error".
+                        providerError = AdoSqlErrors.UnspecifiedCommandError();
+                    }
+                    return null;
+                }
+                bound[i] = adapted;
+            }
+            else
+            {
+                bound[i] = CopyVariant(in incoming);
+            }
+        }
+        return bound;
+    }
+
+    public static void Release(NativeVariant?[]? values)
+    {
+        if (values is null)
+        {
+            return;
+        }
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] is { } v)
+            {
+                CalcDb.Sql.SqlParameters.Release(ref v);
+                values[i] = null;
+            }
+        }
+    }
+
+    private static NativeVariant CopyVariant(in NativeVariant source)
+    {
+        NativeVariant copy = default;
+        NativeVariant src = source;
+        if (OleAut.VariantCopy(&copy, &src) == 0)
+        {
+            return copy;
+        }
+        return source;
+    }
 }

@@ -490,8 +490,14 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         nint cn = OpenAceConnection(dbPath);
         try
         {
-            // Connection.OpenSchema and async Execute refused by name.
-            Assert.Equal(HResults.E_NOTIMPL, Call(cn, "OpenSchema", 20).Failure!.Value.Scode);
+            // r-q54-excl-ddl-ix-cmd/ado-openschema-accdb, r-q54-excl-ddl-ix-cmd/ado-openschema-mdb: OpenSchema(20) opens adSchemaTables; unbuilt schema 5 and async Execute remain refused by name.
+            Outcome schemaTables = Call(cn, "OpenSchema", 20);
+            Assert.Null(schemaTables.Failure);
+            nint rsSchema = (nint)schemaTables.Value!;
+            Assert.Equal(1, Get(rsSchema, "State"));
+            Assert.Null(Call(rsSchema, "Close").Failure);
+            Release(rsSchema);
+            Assert.Equal(HResults.E_NOTIMPL, Call(cn, "OpenSchema", 5).Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(cn, "Execute", "SELECT 1", Missing, 17).Failure!.Value.Scode); // adCmdText | adAsyncExecute
 
             nint rs = New(OwnRecordset);

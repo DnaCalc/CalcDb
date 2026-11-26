@@ -1070,7 +1070,14 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             // Recordset.Open(cmd, cn, 1, 1) fails 0x800A0E7B (evidence/r-ado-1b/rs-source-kinds #254-273).
             Assert.Null(Put(cmd, "CommandText", "QAll").Failure);
             Assert.Null(Put(cmd, "CommandType", 4).Failure);
-            Assert.Equal(HResults.E_NOTIMPL, Call(cmd, "Execute").Failure!.Value.Scode); // Command.Execute on open connection refused by name.
+            // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb #116-125: Command.Execute adCmdStoredProc returns open Recordset.
+            Outcome spExec = Call(cmd, "Execute");
+            Assert.Null(spExec.Failure);
+            nint rsSp = (nint)spExec.Value!;
+            Assert.Equal(1, Get(rsSp, "State"));
+            Assert.Equal(false, Get(rsSp, "EOF"));
+            Assert.Null(Call(rsSp, "Close").Failure);
+            Release(rsSp);
 
             nint rc1 = New(OwnRecordset);
             Assert.Null(Call(rc1, "Open", new Dispatch(cmd), Missing, 1, 1).Failure);
@@ -1095,9 +1102,10 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Release(rc2Cn);
             Release(rc2);
 
-            // Empty Parameters on an open connection: Count (implicit refresh) and Refresh refuse by name.
+            // Empty Parameters on an open adCmdStoredProc Command: Count returns 0 (r-q-ado-misc/param-saved-declared-order #17);
+            // Parameters.Refresh still refuses by name (r-ado-1b/param-refresh-after-text-change).
             nint prs = (nint)Get(cmd, "Parameters")!;
-            Assert.Equal(HResults.E_NOTIMPL, TryGet(prs, "Count").Failure!.Value.Scode);
+            Assert.Equal(0, Get(prs, "Count"));
             Assert.Equal(HResults.E_NOTIMPL, Call(prs, "Refresh").Failure!.Value.Scode);
 
             // Append a Parameter on an open connection:

@@ -1110,14 +1110,21 @@ public sealed unsafe class AdoImmediateEditTests
             Assert.Null(Call(cn, "RollbackTrans").Failure);
             Assert.Null(Call(cn, "RollbackTrans").Failure);
 
-            // Finding #19: Command.Execute refuses SELECT and omitted Options.
+            // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb #77, #148-149; r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb #77, #148-149:
+            // Command.Execute SELECT with Options=129 returns null dispatch; UPDATE with omitted Options returns a closed Recordset (State=0).
             nint cmd = New(OwnCommand);
             Assert.Null(Put(cmd, "ActiveConnection", new Dispatch(cn)).Failure);
             Assert.Null(Put(cmd, "CommandType", 1).Failure);
             Assert.Null(Put(cmd, "CommandText", "SELECT ID FROM W").Failure);
-            Assert.Equal(HResults.E_NOTIMPL, Call(cmd, "Execute", Missing, Missing, 129).Failure!.Value.Scode);
-            Assert.Null(Put(cmd, "CommandText", "UPDATE W SET S = 'x' WHERE ID = 1").Failure);
-            Assert.Equal(HResults.E_NOTIMPL, Call(cmd, "Execute").Failure!.Value.Scode);
+            Outcome cmdSelNoRec = Call(cmd, "Execute", Missing, Missing, 129);
+            Assert.Null(cmdSelNoRec.Failure);
+            Assert.Equal((nint)0, (nint)cmdSelNoRec.Value!);
+            Assert.Null(Put(cmd, "CommandText", "UPDATE W SET S = S WHERE ID = 1").Failure);
+            Outcome cmdUpdOmitted = Call(cmd, "Execute");
+            Assert.Null(cmdUpdOmitted.Failure);
+            nint rsCmdUpd = (nint)cmdUpdOmitted.Value!;
+            Assert.Equal(0, Get(rsCmdUpd, "State"));
+            Release(rsCmdUpd);
             Release(cmd);
 
             // Finding #20: Recordset.Open refuses action SQL before executing (no side effects).
