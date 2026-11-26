@@ -64,20 +64,25 @@ cross-platform replacement: P1 is on every DAO call, P2 on common paths, P3 on r
 | `VarNeg`, `VarAbs`, `VarInt`, `VarFix` | P2 | The operand's type kept (text gives Double, Date stays Date, Decimal stays Decimal), Abs widening Integer → Long → Double at the minimum; Null propagation | scalar kernel: unary minus (ACE fails 6 where VarNeg widens), Abs, Int, Fix | not available |
 | `VarRound` | P2 | Half to even at any digit count (15 and 16 asked), the operand's type kept | scalar kernel: Round (negative digits are refused before the call) | not available |
 | `VarDecFromStr`, `VarBstrFromDec` | P3 | Exact 96-bit magnitude and scale | Decimal declaration checks, DECIMAL capture | not available |
+| `VarFormat` | P2 | Custom and named format strings under `LOCALE_USER_DEFAULT`, fdow/fwoy flags | `ScalarFormat.Format` (`Format`, `Format$`) | not available (`NotAvailableOnPlatform`) |
+| `VarFormatNumber`, `VarFormatCurrency`, `VarFormatPercent`, `VarFormatDateTime` | P2 | Numeric/datetime formatting with TriState defaults under `LOCALE_USER_DEFAULT` | `ScalarFormat` (`FormatNumber`/`Currency`/`Percent`/`DateTime`) | not available (`NotAvailableOnPlatform`) |
+| `VarWeekdayName`, `VarMonthName` | P3 | Locale weekday and month display names (`abbreviate`, `firstdayofweek`) | `BoundExpression.FunctionsPartC` (`WeekdayName`, `MonthName`) | not available (`NotAvailableOnPlatform`) |
+| `VarUdateFromDate`, `VarDateFromUdate`, `VarDateFromStr` | P2 | OA Date <-> `UDATE` decomposition and localized date string parsing (`CDate`/`DateValue`/`TimeValue`) | `BoundExpression.FunctionsPartC` (`DateAdd`, `DateDiff`, `DatePart`, `DateValue`, `TimeValue`) | not available (`NotAvailableOnPlatform`) |
 
-## COM platform services also in oleaut32 (not conversions)
+## COM & Windows platform services outside the oleaut32 conversion subset
 
-These belong to the portable COM services (W-02/portable-services), not to the conversion subset, but a cross-platform
-oleaut32 replacement must decide whether it carries them.
+These belong to the portable COM/OS services (`W-02/portable-services`), not to the conversion subset, so a cross-platform
+replacement must decide whether it carries them.
 
-| Function | What CalcDb relies on | Used by |
-| --- | --- | --- |
-| `CreateErrorInfo`, `SetErrorInfo` | The thread's IErrorInfo slot (R-ORACLE-1 OR-OBS) | error publication (`Outcome`); not available in the stand-ins |
-| `CreateTypeLib2`, `LoadTypeLibEx` | Saving and loading `CalcDb.DAO.tlb` and `CalcDb.ADODB.tlb` (R-ACT-1 ACT-META) | type information (`TypeLibrary`); not available in the stand-ins |
+| Function | Library / Role | Used by | Stand-in |
+| --- | --- | --- | --- |
+| `CreateErrorInfo`, `SetErrorInfo` | `oleaut32.dll` — thread `IErrorInfo` slot (`R-ORACLE-1 OR-OBS`) | error publication (`Outcome`) | not available |
+| `CreateTypeLib2`, `LoadTypeLibEx` | `oleaut32.dll` — saving/loading `CalcDb.DAO.tlb` and `CalcDb.ADODB.tlb` (`R-ACT-1 ACT-META`) | type information (`TypeLibrary`) | not available |
+| `GetUserDefaultLCID`, `GetLocaleInfoW`, `IsValidLocale`, `LCMapStringA`, `WideCharToMultiByte`, `MultiByteToWideChar` | `kernel32.dll` — session LCID, Turkish/Unicode casing & ANSI codepage round-trips | `SessionLocale`, `StrConv`, `AscB` (`BoundExpression.FunctionsPartC`) | returns `0` |
 
 ## Next additions
 
 The scalar kernel does not call `VarCat` (it formats under the thread's locale; the kernel converts each operand with
 `VariantChangeTypeEx` and joins the texts) nor `VarAnd`/`VarOr`/`VarXor`/`VarEqv`/`VarImp`/`VarNot` (bitwise; ACE's
-operators are logical, qualified.md "logical and bitwise operators"). Later functions (`VarParseNumFromStr`,
-`VarFormat*`, the date functions of W-06) get their row when CalcDb code first calls them.
+operators are logical, qualified.md "logical and bitwise operators"). Remaining unreached helpers (`VarParseNumFromStr`,
+etc.) get their rows when CalcDb code first calls them.
