@@ -60,7 +60,7 @@ public sealed class ActionExecutionTests
     [InlineData("CREATE TABLE X (ID LONG)", "NotModelled.DdlStatement")]
     [InlineData("ALTER TABLE T ADD COLUMN Z LONG", "NotModelled.DdlStatement")]
     [InlineData("DROP TABLE T", "NotModelled.DdlStatement")]
-    [InlineData("SELECT * INTO TB FROM T", "NotModelled.MakeTableAction")]
+    [InlineData("SELECT * INTO TB IN 'other.accdb' FROM T", "NotModelled.ExternalDatabase")]
     [InlineData("UPDATE T INNER JOIN T2 ON T.ID = T2.ID SET T.V = 1", "NotModelled.JoinedAction")]
     [InlineData("DELETE T.* FROM T INNER JOIN T2 ON T.ID = T2.ID", "NotModelled.JoinedAction")]
     [InlineData("INSERT INTO T IN 'other.accdb' (ID) VALUES (1)", "NotModelled.ExternalDatabaseAction")]

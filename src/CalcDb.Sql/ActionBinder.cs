@@ -1,3 +1,4 @@
+using CalcDb.Catalog;
 using CalcDb.Expressions;
 using CalcDb.Format;
 using CalcDb.Values.Scalar;
@@ -68,12 +69,19 @@ public sealed class BoundAction : IDisposable
     /// <summary>Bound WHERE predicate of <c>UPDATE</c> or <c>DELETE</c>, or null.</summary>
     public BoundExpression? Where { get; private set; }
 
+    /// <summary>Target table fields for <c>SELECT ... INTO</c> (R-SQL-2 SQL-ACT-MAKE; r-q52-ddl-make-domain/maketable-*).</summary>
+    public IReadOnlyList<NewField> MakeTableFields => _makeTableFields;
+
+    /// <summary>Whether <see cref="MakeTableFields"/> contains duplicate column names (fails 3191 via SchemaWriter rollback).</summary>
+    public bool HasDuplicateMakeTableField { get; private set; }
+
     internal Fragment? WhereSyntax => _syntax.Where;
 
     private readonly List<ColumnDescriptor> _insertColumns = [];
     private readonly List<BoundExpression> _insertValues = [];
     private readonly List<Fragment> _insertValueFragments = [];
     private readonly List<BoundAssignment> _assignments = [];
+    private readonly List<NewField> _makeTableFields = [];
 
     /// <summary>Parse and bind a single-table action statement.</summary>
     public static BoundAction? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
@@ -85,6 +93,10 @@ public sealed class BoundAction : IDisposable
     /// <summary>Bind a parsed action statement, taking ownership of <paramref name="syntax"/>.</summary>
     public static BoundAction? Bind(ActionSyntax syntax, ISqlDatabase database, out SqlFailure? failure)
     {
+        if (syntax.Kind == ActionKind.MakeTable)
+        {
+            return BindMakeTable(syntax, database, out failure);
+        }
         if (database.IsQuery(syntax.TargetName))
         {
             // Updatable saved-query targets (e.g., INSERT INTO QT15, act-ins-mapping) are outside single-table stretch 1.
@@ -129,6 +141,167 @@ public sealed class BoundAction : IDisposable
             bound.ParametersFailure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.ParameterCount", $"{bound.ParameterList.Count} parameters: Parameters.Count fails from 255 used parameters on, unexplained");
         }
         return bound;
+    }
+
+    private static BoundAction? BindMakeTable(ActionSyntax syntax, ISqlDatabase database, out SqlFailure? failure)
+    {
+        // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 27: invalid target name [Bad.Name] -> 3125.
+        if (!SchemaWriter.IsValidName(syntax.TargetName))
+        {
+            string bad = syntax.TargetName;
+            syntax.Dispose();
+            failure = SqlFailure.Ace(SqlPhase.Bind, 3125, SqlMessages.InvalidObjectName(bad));
+            return null;
+        }
+        // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} calls 7, 12; maketable-ado-{accdb,mdb} call 57:
+        // existing target table (exact or case-insensitive) -> 3010 with statement spelling.
+        if (database.Table(syntax.TargetName) is not null)
+        {
+            string existing = syntax.TargetName;
+            syntax.Dispose();
+            failure = SqlFailure.Ace(SqlPhase.Bind, 3010, SqlMessages.TableAlreadyExists(existing));
+            return null;
+        }
+        if (database.IsQuery(syntax.TargetName))
+        {
+            string qname = syntax.TargetName;
+            syntax.Dispose();
+            failure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.MakeTableTargetIsQuery", $"SELECT ... INTO target '{qname}' collides with a saved query name (not recorded)");
+            return null;
+        }
+
+        var parameters = new List<QueryParameter>();
+        SqlFailure? parametersFailure = null;
+        BoundSelect.DeclareParameters(syntax.Parameters, parameters, ref parametersFailure);
+
+        var bound = new BoundAction(syntax, targetTable: null!, database.Context, parameters, parametersFailure);
+        BoundSelect? boundSelect = BoundSelect.BindWithParameters(
+            syntax.SourceSelect!,
+            database,
+            parameters,
+            out SqlFailure? sf,
+            allowDuplicateOutputNames: true);
+        if (boundSelect is null)
+        {
+            bound.Dispose();
+            failure = sf;
+            return null;
+        }
+        bound.SourceSelect = boundSelect;
+        if (boundSelect.ParametersFailure is { } pf)
+        {
+            bound.ParametersFailure ??= pf;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (ResultColumn col in boundSelect.Columns)
+        {
+            if (!SchemaWriter.IsValidName(col.Name))
+            {
+                bound.Dispose();
+                failure = SqlFailure.Ace(SqlPhase.Bind, 3125, SqlMessages.InvalidObjectName(col.Name));
+                return null;
+            }
+            if (!seenNames.Add(col.Name))
+            {
+                bound.HasDuplicateMakeTableField = true;
+            }
+            if (MapMakeTableField(col, out SqlFailure? fieldFail) is not { } field)
+            {
+                bound.Dispose();
+                failure = fieldFail!;
+                return null;
+            }
+            bound._makeTableFields.Add(field);
+        }
+
+        if (bound.ParameterList.Count >= 255 && bound.ParametersFailure is null)
+        {
+            bound.ParametersFailure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.ParameterCount", $"{bound.ParameterList.Count} parameters: Parameters.Count fails from 255 used parameters on, unexplained");
+        }
+        failure = null;
+        return bound;
+    }
+
+    /// <summary>
+    /// Map a bound <see cref="ResultColumn"/> to a <see cref="NewField"/> for <c>SELECT ... INTO</c>:
+    /// direct base columns preserve source type/size/fixedness and <c>AutoIncr</c> (r-q52-ddl-make-domain/maketable-basic-dao-*,
+    /// maketable-ado-*, r-q47/bi-select-into-accdb, r-q49/dt2-select-into-accdb);
+    /// computed expressions and aggregates use fixed layout for 1–2 byte types (Boolean/Byte/Integer) and variable layout
+    /// (<c>Attributes=2</c>) for 4+ byte types (Long/Currency/Single/Double/DateTime/Decimal/BigInt/Text(255)/VarBinary(510)),
+    /// with bare <c>Null</c> becoming <c>VarBinary(510)</c> (r-q52-ddl-make-domain/maketable-expr-agg-dao-*,
+    /// r-q47/meta-select-into-funcs-accdb).
+    /// </summary>
+    private static NewField? MapMakeTableField(ResultColumn col, out SqlFailure? failure)
+    {
+        failure = null;
+        if (col.Origin is ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey
+            && !col.IsGroupExpressionKey
+            && col.SourceColumn is { Column: { } src })
+        {
+            if (src.IsAutoNumber && src.TypeCode == NativeTypes.Long)
+            {
+                return new NewField(col.Name, NewFieldType.Counter);
+            }
+            return src.TypeCode switch
+            {
+                NativeTypes.Boolean => new NewField(col.Name, NewFieldType.YesNo),
+                NativeTypes.Byte => new NewField(col.Name, NewFieldType.Byte),
+                NativeTypes.Integer => new NewField(col.Name, NewFieldType.Short),
+                NativeTypes.Long => new NewField(col.Name, NewFieldType.Long),
+                NativeTypes.Currency => new NewField(col.Name, NewFieldType.Currency),
+                NativeTypes.Single => new NewField(col.Name, NewFieldType.Single),
+                NativeTypes.Double => new NewField(col.Name, NewFieldType.Double),
+                NativeTypes.DateTime => new NewField(col.Name, NewFieldType.DateTime),
+                NativeTypes.Text => new NewField(col.Name, NewFieldType.Text, Size: Math.Clamp(src.Length / 2, 1, 255)),
+                NativeTypes.Memo => new NewField(col.Name, NewFieldType.Memo),
+                NativeTypes.Ole => new NewField(col.Name, NewFieldType.Ole),
+                NativeTypes.Binary => src.IsFixed
+                    ? new NewField(col.Name, NewFieldType.Binary, Size: src.Length)
+                    : new NewField(col.Name, NewFieldType.VarBinary, Size: src.Length),
+                NativeTypes.Guid => new NewField(col.Name, NewFieldType.Guid),
+                NativeTypes.Numeric => new NewField(col.Name, NewFieldType.Decimal, Precision: src.NumericPrecision, Scale: src.NumericScale),
+                NativeTypes.BigInt => new NewField(col.Name, NewFieldType.BigInt),
+                NativeTypes.ExtendedDateTime => new NewField(col.Name, NewFieldType.DateTime2),
+                _ => FailMakeTableField(col, $"source column native type 0x{src.TypeCode:X2}", out failure),
+            };
+        }
+
+        if (col.TypeRule == ColumnTypeRule.NullAtOpen && col.FieldType is null)
+        {
+            // r-q52-ddl-make-domain/maketable-expr-agg-dao-{accdb,mdb}: Null AS NullCol -> Type=9 (dbBinary), Size=510, Attributes=2.
+            return new NewField(col.Name, NewFieldType.VarBinary, Size: 510);
+        }
+
+        if (col.FieldType is not int daoType)
+        {
+            return FailMakeTableField(col, col.TypeOpen ?? "untyped expression", out failure);
+        }
+
+        return daoType switch
+        {
+            1 => new NewField(col.Name, NewFieldType.YesNo),
+            2 => new NewField(col.Name, NewFieldType.Byte),
+            3 => new NewField(col.Name, NewFieldType.Short),
+            4 => new NewField(col.Name, NewFieldType.Long, VariableLayout: true),
+            5 => new NewField(col.Name, NewFieldType.Currency, VariableLayout: true),
+            6 => new NewField(col.Name, NewFieldType.Single, VariableLayout: true),
+            7 => new NewField(col.Name, NewFieldType.Double, VariableLayout: true),
+            8 => new NewField(col.Name, NewFieldType.DateTime, VariableLayout: true),
+            9 => new NewField(col.Name, NewFieldType.VarBinary, Size: col.Size is > 0 and <= 510 ? col.Size.Value : 510),
+            10 => new NewField(col.Name, NewFieldType.Text, Size: col.Size is > 0 and <= 255 ? col.Size.Value : 255),
+            12 => new NewField(col.Name, NewFieldType.Memo),
+            16 => new NewField(col.Name, NewFieldType.BigInt),
+            20 => new NewField(col.Name, NewFieldType.Decimal, Precision: col.DecimalPrecision ?? 28, Scale: col.DecimalScale ?? 0, VariableLayout: true),
+            26 => new NewField(col.Name, NewFieldType.DateTime2),
+            _ => FailMakeTableField(col, $"DAO FieldType {daoType}", out failure),
+        };
+    }
+
+    private static NewField? FailMakeTableField(ResultColumn col, string detail, out SqlFailure? failure)
+    {
+        failure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.MakeTableColumnType", $"SELECT ... INTO column '{col.Name}' ({detail}) is not modelled");
+        return null;
     }
 
     private SqlFailure? BindInsertValues()

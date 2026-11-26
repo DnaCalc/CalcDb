@@ -185,6 +185,12 @@ public static class SqlMessages
     /// <summary>3190 when CREATE TABLE defines more than 255 fields (r-def-expr-sql/ddl-name-and-size-limits).</summary>
     public const string TooManyFields = "Too many fields defined.";
 
+    /// <summary>3191 when SELECT ... INTO or DAO TableDefs.Append defines a field more than once (r-q52-ddl-make-domain/maketable-errors-dao-*).</summary>
+    public const string CannotDefineFieldMoreThanOnce = "Cannot define field more than once.";
+
+    /// <summary>3027 when SELECT ... INTO runs on a read-only database (r-q52-ddl-make-domain/maketable-errors-dao-*).</summary>
+    public const string CannotUpdateReadOnly = "Cannot update. Database or object is read-only.";
+
     /// <summary>3211 when DDL targets a table with an open Recordset or table lock (r-def-cursor-dao/err-drop-missing-index-column).</summary>
     public static string TableInUse(string table) => $"The database engine could not lock table '{table}' because it is already in use by another person or process.";
 

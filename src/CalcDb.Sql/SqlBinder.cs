@@ -778,8 +778,9 @@ public sealed class BoundSelect : IDisposable
         ISqlDatabase database,
         List<QueryParameter> parameters,
         out SqlFailure? failure,
-        bool allowRepeatedSingleSourceColumn = false) =>
-        Bind(syntax, database, ownsSyntax: false, parameters, out failure, allowRepeatedSingleSourceColumn);
+        bool allowRepeatedSingleSourceColumn = false,
+        bool allowDuplicateOutputNames = false) =>
+        Bind(syntax, database, ownsSyntax: false, parameters, out failure, allowRepeatedSingleSourceColumn, allowDuplicateOutputNames: allowDuplicateOutputNames);
 
     internal static BoundSelect? BindSubquery(
         SelectSyntax syntax,
@@ -796,7 +797,8 @@ public sealed class BoundSelect : IDisposable
         List<QueryParameter> parameters,
         out SqlFailure? failure,
         bool allowRepeatedSingleSourceColumn = false,
-        OuterScopeChain? outerChain = null)
+        OuterScopeChain? outerChain = null,
+        bool allowDuplicateOutputNames = false)
     {
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
@@ -812,7 +814,7 @@ public sealed class BoundSelect : IDisposable
         }
         else if (failure is null)
         {
-            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain).Run();
+            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain, allowDuplicateOutputNames).Run();
         }
         if (failure is not null)
         {
@@ -1731,7 +1733,7 @@ public sealed class BoundSelect : IDisposable
         }
     }
 
-    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null)
+    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false)
     {
         private readonly ExpressionContext _context = database.Context;
         private SourceScope _scope = null!;
@@ -1841,7 +1843,8 @@ public sealed class BoundSelect : IDisposable
                 {
                     return SqlFailure.Ace(SqlPhase.Bind, 3062, $"Duplicate output alias '{alias}'.");
                 }
-                if (_scope.Slot(alias) is not null && AllExpressions().Any(f => !ReferenceEquals(f, item.Expression)
+                if (!allowDuplicateOutputNames
+                    && _scope.Slot(alias) is not null && AllExpressions().Any(f => !ReferenceEquals(f, item.Expression)
                     && Walk(f.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && string.Equals(n.Text, alias, StringComparison.OrdinalIgnoreCase))))
                 {
                     // r-sql-1/order-nulls-text: in SELECT id AS t, t AS x FROM S the second t is the alias (x is id), where
@@ -1868,6 +1871,10 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         private SqlFailure? Collisions()
         {
+            if (allowDuplicateOutputNames)
+            {
+                return null;
+            }
             foreach (IGrouping<string, ResultColumn> same in bound.ColumnList.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
             {
                 List<ResultColumn> group = [.. same];

@@ -66,7 +66,8 @@ public sealed record NewField(
     bool UnicodeCompression = false,
     bool ImplicitDecimalPrecision = false,
     bool AllowZeroLength = false,
-    string? DefaultValue = null);
+    string? DefaultValue = null,
+    bool VariableLayout = false);
 
 /// <summary>
 /// An index of a table (II-11 §28 constraint or CREATE INDEX): its name, its fields in key order, its option flags
@@ -125,7 +126,8 @@ public sealed record CreateTableRequest(
     IReadOnlyList<NewField> Fields,
     SchemaRoute Route,
     IReadOnlyList<NewIndex>? Indexes = null,
-    NewForeignKey? ForeignKey = null)
+    NewForeignKey? ForeignKey = null,
+    bool IsMakeTable = false)
 {
     public IReadOnlyList<NewIndex> AllIndexes => Indexes ?? [];
 }
@@ -590,6 +592,10 @@ public sealed class SchemaWriter
             string name = request.Fields[i].Name;
             switch (FieldNameClashOf(request.Fields.Take(i).Select(f => f.Name), name, _sortOrder, out string? undecided))
             {
+                case FieldNameClash.Duplicate when request.IsMakeTable && request.Route is SchemaRoute.Sql or SchemaRoute.Ado:
+                    // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 22 (SELECT ID, Qty AS ID INTO MT_DupCol):
+                    // fails 3191 after incrementing MSysObjects/MSysACEs UniqueEntryCount and writing 2 commits on page 0.
+                    return new SchemaRefusal(3191, null);
                 case FieldNameClash.Duplicate when request.Route is SchemaRoute.Sql or SchemaRoute.Ado:
                     // SQL CREATE TABLE (r-def-expr-sql/ddl-column-clauses Cc20/Cc21; r-q28-schema-write-open/pair-sql-*)
                     // and ADO CREATE TABLE (r-q28-schema-write-open/pair-ado-*) fail 3380 after incrementing
@@ -719,11 +725,11 @@ public sealed class SchemaWriter
                     fixedBytes += 4;
                     break;
                 case NewFieldType.Decimal:
-                    if (request.Route != SchemaRoute.Ado)
+                    if (request.Route != SchemaRoute.Ado && !(request.IsMakeTable && f.VariableLayout && request.Route == SchemaRoute.Sql))
                     {
-                        return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao, r-q36-publication-bytes/create-nullfix-mdb)");
+                        return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao, r-q36-publication-bytes/create-nullfix-mdb) and variable MakeTable expressions (r-q52-ddl-make-domain/maketable-expr-agg-dao-*)");
                     }
-                    if (isJet4Mdb && f.ImplicitDecimalPrecision)
+                    if (isJet4Mdb && f.ImplicitDecimalPrecision && !request.IsMakeTable)
                     {
                         return new SchemaRefusal(null, $"bare DECIMAL on field {f.Name} in a Jet 4 MDB is not recorded (r-q21-ddl-types/col-decimal-ado-bare records ACCDB only; r-q36-publication-bytes/create-nullfix-mdb records explicit DECIMAL(18, 2))");
                     }
@@ -731,7 +737,10 @@ public sealed class SchemaWriter
                     {
                         return new SchemaRefusal(null, $"Decimal field {f.Name}({f.Precision}, {f.Scale}): precision/scale outside 1..28 / 0..precision (ACE 3700/3701 in evidence/r-q-wire/dec-ddl-precision-limits) is not lowered");
                     }
-                    fixedBytes += 17;
+                    if (!f.VariableLayout)
+                    {
+                        fixedBytes += 17;
+                    }
                     break;
                 case NewFieldType.Memo:
                 case NewFieldType.Ole:
@@ -758,12 +767,18 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Long:
                 case NewFieldType.Single:
-                    fixedBytes += 4;
+                    if (!f.VariableLayout)
+                    {
+                        fixedBytes += 4;
+                    }
                     break;
                 case NewFieldType.Currency:
                 case NewFieldType.Double:
                 case NewFieldType.DateTime:
-                    fixedBytes += 8;
+                    if (!f.VariableLayout)
+                    {
+                        fixedBytes += 8;
+                    }
                     break;
                 case NewFieldType.BigInt:
                     bigIntCount++;
@@ -804,6 +819,14 @@ public sealed class SchemaWriter
             else if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
             {
                 return new SchemaRefusal(null, $"BIGINT/DATETIME2 on {request.Route} route is not recorded");
+            }
+            else if (request.IsMakeTable)
+            {
+                // r-q47-bigint-expr-edges/bi-select-into-accdb (4 BIGINT columns), r-q49-dt2-draftprops/dt2-select-into-accdb (1 DATETIME2 column).
+                if (bigIntCount > 0 && dateTime2Count > 0)
+                {
+                    return new SchemaRefusal(null, "SELECT ... INTO combining BIGINT and DATETIME2 in one table is not recorded");
+                }
             }
             else if (bigIntCount > 1 || (dateTime2Count > 2) || (dateTime2Count == 2 && bigIntCount > 0) || sawDateTime2BeforeBigInt)
             {
@@ -1480,9 +1503,14 @@ public sealed class SchemaWriter
             {
                 return CreateTableDaoDuplicateRollback(workspace, request, dateCreateBits, dateUpdateBits, refused);
             }
-            if (refused.Error == 3380 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+            if ((refused.Error == 3380 || (refused.Error == 3191 && request.IsMakeTable))
+                && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
             {
-                return CreateTableSqlAdoDuplicateRollback(workspace, refused, allowJet4Mdb: false);
+                if (acceptsError is not null && !acceptsError(refused.Error.Value))
+                {
+                    return new SchemaOutcome(refused, default, _pageCount, PublishedAny: false);
+                }
+                return CreateTableSqlAdoDuplicateRollback(workspace, refused, allowJet4Mdb: request.IsMakeTable);
             }
             if (refused.Error == 3001 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
             {
@@ -1608,7 +1636,8 @@ public sealed class SchemaWriter
 
         bool allowedWithReserved =
             (request.Route == SchemaRoute.Sql && preparedFk is null && !hasExtendedType && !request.Fields.Any(f => f.Required))
-            || (hasDefault && preparedFk is null && !hasExtendedType);
+            || (hasDefault && preparedFk is null && !hasExtendedType)
+            || (request.IsMakeTable && preparedFk is null && !request.Fields.Any(f => f.Required));
         if (sessionReserved.Count > 0 && !allowedWithReserved)
         {
             return new SchemaOutcome(
@@ -9452,8 +9481,16 @@ public sealed class SchemaWriter
                     fixedOffset += 2;
                     break;
                 case NewFieldType.Long:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
-                    fixedOffset += 4;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 4));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Long, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
+                        fixedOffset += 4;
+                    }
                     break;
                 case NewFieldType.Counter:
                 {
@@ -9466,20 +9503,52 @@ public sealed class SchemaWriter
                     break;
                 }
                 case NewFieldType.Currency:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Currency, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
-                    fixedOffset += 8;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Currency, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Currency, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                        fixedOffset += 8;
+                    }
                     break;
                 case NewFieldType.Single:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Single, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
-                    fixedOffset += 4;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Single, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 4));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Single, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 4));
+                        fixedOffset += 4;
+                    }
                     break;
                 case NewFieldType.Double:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Double, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
-                    fixedOffset += 8;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Double, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Double, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                        fixedOffset += 8;
+                    }
                     break;
                 case NewFieldType.DateTime:
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.DateTime, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
-                    fixedOffset += 8;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.DateTime, (ushort)i, variables, (ushort)i, typeInfo, VariableColumnFlags, 0x00, 0, 8));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.DateTime, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, 8));
+                        fixedOffset += 8;
+                    }
                     break;
                 case NewFieldType.Binary:
                     columns.Add(new ColumnSpec(f.Name, NativeTypes.Binary, (ushort)i, variables, (ushort)i, typeInfo, FixedColumnFlags, 0x00, fixedOffset, (ushort)f.Size));
@@ -9522,10 +9591,19 @@ public sealed class SchemaWriter
                     break;
                 case NewFieldType.Decimal:
                 {
-                    // ADO DECIMAL(p, s): TypeInfo = precision | (scale << 8), fixed 17 bytes (r-q21 col-decimal-ado*, r-q36 create-nullfix-mdb).
+                    // ADO DECIMAL(p, s): TypeInfo = precision | (scale << 8), fixed 17 bytes (r-q21 col-decimal-ado*, r-q36 create-nullfix-mdb);
+                    // SELECT ... INTO computed Decimal: variable Flags 0x02, Length 17 (r-q52-ddl-make-domain/maketable-expr-agg-dao-*).
                     uint decimalInfo = f.Precision | ((uint)f.Scale << 8);
-                    columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, FixedColumnFlags, 0x00, fixedOffset, 17));
-                    fixedOffset += 17;
+                    if (f.VariableLayout)
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, VariableColumnFlags, 0x00, 0, 17));
+                        variables++;
+                    }
+                    else
+                    {
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, FixedColumnFlags, 0x00, fixedOffset, 17));
+                        fixedOffset += 17;
+                    }
                     break;
                 }
                 case NewFieldType.BigInt:
