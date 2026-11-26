@@ -96,8 +96,12 @@ public sealed class SchemaWriterTests
             return image;
         }
 
-        /// <summary>Full kept file image after setup (<c>handle == "pg0"</c>) in a two-session <c>r-q34-ddl-sweep</c> record.</summary>
-        public static byte[] AfterSetupImage(string question, string card = "r-q34-ddl-sweep")
+        /// <summary>Full kept file image after setup (<c>handle == "pg0"</c>) in a two-session record.</summary>
+        public static byte[] AfterSetupImage(string question, string card = "r-q34-ddl-sweep") =>
+            ReadHandle(question, "pg0", card);
+
+        /// <summary>Full kept file image read via <paramref name="handle"/> from an <c>.a1.json</c> record.</summary>
+        public static byte[] ReadHandle(string question, string handle, string card)
         {
             string folder = Path.Combine(ReplayFixture.Root(), "evidence", card, question);
             string record = Directory.GetFiles(folder, "*.a1.json").Single();
@@ -105,13 +109,13 @@ public sealed class SchemaWriterTests
             foreach (JsonElement ev in doc.RootElement.GetProperty("capture").GetProperty("events").EnumerateArray())
             {
                 if (ev.TryGetProperty("op", out JsonElement op) && op.ValueKind == JsonValueKind.String && op.GetString() == "read"
-                    && ev.TryGetProperty("handle", out JsonElement handle) && handle.ValueKind == JsonValueKind.String && handle.GetString() == "pg0"
+                    && ev.TryGetProperty("handle", out JsonElement h) && h.ValueKind == JsonValueKind.String && h.GetString() == handle
                     && ev.TryGetProperty("bytes", out JsonElement bytes))
                 {
                     return Convert.FromHexString(bytes.GetString()!);
                 }
             }
-            throw new InvalidOperationException($"{card}/{question}: no pg0 after-setup read in record");
+            throw new InvalidOperationException($"{card}/{question}: no {handle} read in record");
         }
     }
 
@@ -1662,11 +1666,11 @@ public sealed class SchemaWriterTests
             session.Create(new("E", [Long("ID"), Long("K")], SchemaRoute.Sql), 1, 1);
             byte[] before = session.File.Snapshot();
 
-            // LVAL column + existing index is unrecorded (r-q21-ddl-types/ix-on-table-with-memo has 0 existing indexes).
-            SchemaOutcome memoWithPk = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql), 2);
-            Assert.False(memoWithPk.Succeeded);
-            Assert.False(memoWithPk.PublishedAny);
-            Assert.Contains("LVAL", memoWithPk.Refused?.NotWritten);
+            // Indexing an LVAL column (Memo) itself is unrecorded (r-q43-schema-lval-index/ix-lval-* index Long/Text columns only).
+            SchemaOutcome memoColIndex = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_M", ["M"], PrimaryKey: false), SchemaRoute.Sql), 2);
+            Assert.False(memoColIndex.Succeeded);
+            Assert.False(memoColIndex.PublishedAny);
+            Assert.Contains("0x0C", memoColIndex.Refused?.NotWritten);
             Assert.Equal(before, session.File.Snapshot());
 
             // ACCDB empty table (0-index SQL, 0-index ADO, and indexed SQL) inside BeginTrans refuses with 0 bytes written.
@@ -1753,12 +1757,13 @@ public sealed class SchemaWriterTests
             Assert.Contains("IGNORE NULL", uqIgn.Refused?.NotWritten);
             Assert.Equal(nullImage, session.File.Snapshot());
 
-            // Existing NULL on PRIMARY, DISALLOW NULL, plain non-IGNORE NULL, and UNIQUE non-IGNORE NULL refuses by name.
+            // Existing NULL on PRIMARY, DISALLOW NULL, UNIQUE non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name
+            // (a single Long Null row in a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*).
             NewIndex[] nullRefused =
             [
                 new("PK_C", ["C"], PrimaryKey: true, Unique: true),
                 new("IX_C_DIS", ["C"], PrimaryKey: false, DisallowNull: true),
-                new("IX_C_PLAIN", ["C"], PrimaryKey: false),
+                new("IX_BC_PLAIN", ["B", "C"], PrimaryKey: false),
                 new("UK_C", ["C"], PrimaryKey: false, Unique: true),
                 // Partial-NULL (10, NULL) on 2-col IGNORE NULL refuses by name.
                 new("IX_BC_IGN", ["B", "C"], PrimaryKey: false, IgnoreNull: true),
@@ -1898,12 +1903,6 @@ public sealed class SchemaWriterTests
             Assert.False(inTx.PublishedAny);
             Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
             Assert.Null(session.Workspace.Rollback().Error);
-
-            // Table whose LvProp already holds column properties (NOT NULL) refuses without writing.
-            SchemaOutcome existingColProp = session.Writer().AddCheckConstraint(session.Workspace, new("WithNn", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 2, 2);
-            Assert.False(existingColProp.Succeeded);
-            Assert.False(existingColProp.PublishedAny);
-            Assert.Contains("LvProp", existingColProp.Refused?.NotWritten);
 
             // Expressions outside the recorded single-column comparison subset refuse without writing.
             foreach ((string col, string expr) in new[]
@@ -2556,6 +2555,385 @@ public sealed class SchemaWriterTests
             Assert.Contains("exclusive session", w.Check(new("T2", [Long("a"), Long("b")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
             Assert.Contains("inline limit", w.Check(new("T3", [Long("nnnnnnnn")], SchemaRoute.Dao), exclusiveSession: true)?.NotWritten);
         }
+    }
+
+    /// <summary>Single-DDL LVAL-table CREATE INDEX records of evidence/r-q43-schema-lval-index (7 single-DDL + chained test below).</summary>
+    public static TheoryData<string, CreateIndexRequest> RQ43CreateIndexLvalCases() => new()
+    {
+        { "ix-lval-noix-rows-accdb", new("T", new("UQ_S", ["S"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "ix-lval-pk-empty-accdb", new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql) },
+        { "ix-lval-pk-empty-mdb", new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql) },
+        { "ix-lval-pk-rows-accdb", new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql) },
+        { "ix-lval-pk-rows-mdb", new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql) },
+        { "ix-lval-two-uq-empty-accdb", new("T", new("UQ_K", ["K"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+        { "ix-lval-two-uq-rows-mdb", new("T", new("UQ_U", ["U"], PrimaryKey: false, Unique: true), SchemaRoute.Sql) },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ43CreateIndexLvalCases))]
+    public void R_q43_create_index_on_lval_table_writes_ACE_pages(string question, CreateIndexRequest request)
+    {
+        byte[] startImage = Kept.ReadHandle(question, "pg0", "r-q43-schema-lval-index");
+        byte[] aceAfter = Kept.ReadHandle(question, "pg1", "r-q43-schema-lval-index");
+        (_, ulong updated) = AceDates(aceAfter, request.Table);
+
+        using var session = new Session(startImage);
+        session.CreateIndex(request, updated);
+        session.Close();
+        Assert.Equal(aceAfter, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void R_q43_create_index_chained_on_lval_table_writes_ACE_pages()
+    {
+        const string question = "ix-lval-second-uq-rows-accdb";
+        byte[] pg0 = Kept.ReadHandle(question, "pg0", "r-q43-schema-lval-index");
+        byte[] pg1 = Kept.ReadHandle(question, "pg1", "r-q43-schema-lval-index");
+        byte[] pg2 = Kept.ReadHandle(question, "pg2", "r-q43-schema-lval-index");
+
+        (_, ulong upd1) = AceDates(pg1, "T");
+        using var s1 = new Session(pg0);
+        s1.CreateIndex(new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql), upd1);
+        s1.Close();
+        byte[] after1 = s1.File.Snapshot();
+        Assert.Equal(pg1, after1);
+
+        (_, ulong upd2) = AceDates(pg2, "T");
+        using var s2 = new Session(after1);
+        s2.CreateIndex(new("T", new("UQ_S", ["S"], PrimaryKey: false, Unique: true), SchemaRoute.Sql), upd2);
+        s2.Close();
+        Assert.Equal(pg2, s2.File.Snapshot());
+    }
+
+    private sealed class NoTestRules : IMutationRuleBinder
+    {
+        public static NoTestRules Instance { get; } = new();
+
+        public IFieldDefault? BindDefault(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted) { notAdmitted = null; return null; }
+
+        public IMutationRule? BindFieldRule(TableDefinition table, ColumnDescriptor column, string text, out string? notAdmitted) { notAdmitted = null; return null; }
+
+        public IMutationRule? BindTableRule(TableDefinition table, string text, out string? notAdmitted) { notAdmitted = null; return null; }
+    }
+
+    private static TableDefinition OpenTableDef(Session session, string tableName)
+    {
+        ulong extent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, extent, out CatalogFailure? cf)!;
+        Assert.Null(cf);
+        CatalogEntry entry = cat.Entries.Single(e => e.Name == tableName && e.ParentId == cat.TablesContainer);
+        TableDefSegmentView? stream = TableDefSegmentView.Open((uint)entry.Id, page => session.Cache.Pin(page).Pin is { } p ? p.Bytes.ToArray() : null, D, 16, out string? sFail);
+        Assert.Null(sFail);
+        TableDefinition? def = TableDefDecoder.Decode(stream!, (uint)entry.Id, D, out string? dFail);
+        Assert.Null(dFail);
+        return def!;
+    }
+
+    [Fact]
+    public void R_q43_create_index_multiple_null_rows_refuses_without_writing()
+    {
+        byte[] startImage = Kept.ReadHandle("ix-lval-pk-rows-accdb", "pg0", "r-q43-schema-lval-index");
+        using var session = new Session(startImage);
+        TableDefinition table = OpenTableDef(session, "T");
+        using MutationSemantics sem = MutationSemantics.Compile("T", table, null, NoTestRules.Instance, D.IndexDescriptor);
+        var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, table, session.Pages));
+        // Add a second row with K = NULL (table already has ID=4, K=NULL).
+        NativeValue[] row =
+        [
+            new(NativeKind.Long) { Integer = 5 },
+            NativeValue.Null,
+            new(NativeKind.Long) { Integer = 50 },
+            new(NativeKind.Text) { Text = "delta" },
+            NativeValue.Null,
+            NativeValue.Null,
+        ];
+        CompiledChange compiled = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache));
+        Assert.NotNull(compiled.Change);
+        Assert.True(session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, compiled)).Accepted);
+        byte[] beforeIx = session.File.Snapshot();
+
+        SchemaOutcome refused = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_K", ["K"], PrimaryKey: false), SchemaRoute.Sql), 2);
+        Assert.False(refused.Succeeded);
+        Assert.False(refused.PublishedAny);
+        Assert.Contains("multiple", refused.Accepted.Detail);
+        Assert.Equal(beforeIx, session.File.Snapshot());
+    }
+
+    /// <summary>Single-DDL ADO ADD CONSTRAINT CHECK with existing LvProp records of evidence/r-q43-schema-lval-index.</summary>
+    public static TheoryData<string, AddCheckConstraintRequest, string> RQ43AlterCheckExistingLvPropCases() => new()
+    {
+        { "chk-lvprop-azl-accdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "AllowZeroLength" },
+        { "chk-lvprop-azl-mdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "AllowZeroLength" },
+        { "chk-lvprop-notnull-accdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "Required" },
+        { "chk-lvprop-notnull-mdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "Required" },
+        { "chk-lvprop-table-valrule-accdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "ValidationRule" },
+        { "chk-lvprop-valrule-accdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "ValidationRule" },
+        { "chk-lvprop-valrule-mdb", new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), "ValidationRule" },
+    };
+
+    [Theory]
+    [MemberData(nameof(RQ43AlterCheckExistingLvPropCases))]
+    public void R_q43_add_check_constraint_with_existing_lvprop_writes_ACE_pages(
+        string question,
+        AddCheckConstraintRequest request,
+        string preservedPropertyName)
+    {
+        byte[] startImage = Kept.ReadHandle(question, "pg0", "r-q43-schema-lval-index");
+        byte[] aceAfter = Kept.ReadHandle(question, "pg1", "r-q43-schema-lval-index");
+        (_, ulong updated) = AceDates(aceAfter, request.Table);
+
+        using var session = new Session(startImage);
+        session.AddCheckConstraint(request, updated, updated);
+        session.Close();
+        byte[] ours = session.File.Snapshot();
+        // Verify CheckConstraintCatalog and preserved existing LvProp properties round-trip cleanly.
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? cf, readProperties: true)!;
+        Assert.Null(cf);
+        CatalogEntry t = cat.Entries.Single(e => e.Name == request.Table && e.ParentId == cat.TablesContainer);
+        Assert.NotNull(t.Properties);
+        PropertyBlob blob = PropertyBlob.Read(t.Properties!, out string? blobFail)!;
+        Assert.Null(blobFail);
+        Assert.Contains(preservedPropertyName, blob.Names);
+        Assert.Contains("CheckConstraints", blob.Names);
+        IReadOnlyList<CheckConstraintCatalogEntry>? checks = CheckConstraintCatalog.Read(session.Cache, D, cat, session.Pages, out string? readFail);
+        Assert.Null(readFail);
+        CheckConstraintCatalogEntry added = Assert.Single(checks!, c => c.Name == request.ConstraintName);
+        Assert.Null(added.NotAdmitted);
+        Assert.Equal(request.Expression, added.Expression);
+
+        // If ACE's clock ticked between T.DateUpdate and the Type 9 row's DateCreate/DateUpdate (as in chk-lvprop-azl-accdb
+        // where CK_V.DateUpdate at page 17 +0x892 advanced by 1 tick), substitute only the Type 9 row's 16-byte date pair.
+        byte[] normalized = [.. ours];
+        CatalogEntry ckEntry = cat.Entries.Single(e => e.Name == request.ConstraintName && e.ParentId == CheckConstraintCatalog.RecordedParentId);
+        int dateCreateOff = cat.ObjectTable.Columns.Single(c => c.Name == "DateCreate").FixedOffset;
+        int ckRowStart = DataPages.CheckedSlot(
+            ours.AsSpan((int)(ckEntry.Root.Page * D.PageSize), D.PageSize),
+            ckEntry.Root.Row,
+            D,
+            out _)!.Value.Start;
+        int ckDateOffset = (int)(ckEntry.Root.Page * D.PageSize) + ckRowStart + D.Row.FixedBase + dateCreateOff;
+        aceAfter.AsSpan(ckDateOffset, 16).CopyTo(normalized.AsSpan(ckDateOffset, 16));
+        Assert.Equal(aceAfter, normalized);
+    }
+
+    [Fact]
+    public void R_q43_add_check_constraint_notnull_two_writes_ACE_pages()
+    {
+        const string question = "chk-lvprop-notnull-two-accdb";
+        byte[] pg0 = Kept.ReadHandle(question, "pg0", "r-q43-schema-lval-index");
+        byte[] pg1 = Kept.ReadHandle(question, "pg1", "r-q43-schema-lval-index");
+        byte[] pg2 = Kept.ReadHandle(question, "pg2", "r-q43-schema-lval-index");
+
+        (_, ulong upd1) = AceDates(pg1, "T");
+        using var s1 = new Session(pg0);
+        s1.AddCheckConstraint(new("T", "CK_V1", "V", "V >= 0", SchemaRoute.Ado), upd1, upd1);
+        s1.Close();
+        byte[] after1 = s1.File.Snapshot();
+        Assert.Equal(pg1, after1);
+
+        (_, ulong upd2) = AceDates(pg2, "T");
+        using var s2 = new Session(after1);
+        s2.AddCheckConstraint(new("T", "CK_V2", "V", "V <= 100", SchemaRoute.Ado), upd2, upd2);
+        s2.Close();
+        Assert.Equal(pg2, s2.File.Snapshot());
+
+        CatalogSnapshot cat = CatalogBootstrap.Open(s2.Cache, D, s2.Pages, out CatalogFailure? cf, readProperties: true)!;
+        Assert.Null(cf);
+        CatalogEntry t = cat.Entries.Single(e => e.Name == "T" && e.ParentId == cat.TablesContainer);
+        PropertyBlob blob = PropertyBlob.Read(t.Properties!, out _)!;
+        Assert.Contains("Required", blob.Names);
+        IReadOnlyList<CheckConstraintCatalogEntry>? checks = CheckConstraintCatalog.Read(s2.Cache, D, cat, s2.Pages, out string? readFail);
+        Assert.Null(readFail);
+        Assert.Equal(2, CheckConstraintCatalog.ForTable(checks!, "T").Count);
+    }
+
+    [Fact]
+    public void R_q43_add_check_constraint_chained_lvprop_refuses_without_writing()
+    {
+        byte[] chainedStart;
+        using (var setup = new Session(Fixture()))
+        {
+            setup.Create(new("T", [Long("ID"), Long("V"), Text("S", 20)], SchemaRoute.Sql), 1, 1);
+            SchemaOutcome put = setup.Writer().SetFieldValidationProperty(
+                setup.Workspace,
+                "T",
+                "S",
+                FieldValidationProperty.ValidationRule,
+                new string('x', 2040),
+                2,
+                longValueTicks: 1);
+            Assert.True(put.Succeeded, $"{put.Refused} {put.Accepted}");
+            setup.Close();
+            chainedStart = setup.File.Snapshot();
+        }
+        using var fresh = new Session(chainedStart);
+        SchemaOutcome refused = fresh.Writer().AddCheckConstraint(fresh.Workspace, new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 3, 3);
+        Assert.False(refused.Succeeded);
+        Assert.False(refused.PublishedAny);
+        Assert.Contains("Chain", refused.Refused?.NotWritten);
+        Assert.Equal(chainedStart, fresh.File.Snapshot());
+    }
+
+    private const string PlainRuleAccdb = "5bd002eaf9f69ab1719d0ebf7e263e6853327f1c42c82f906966dca4854cb0f1";
+    private const string PlainRuleMdb = "136bce0e84a9c979a0cb63ef86039e70ecb8114ad27a2ccc22279f2c45ea6645";
+
+    [Theory]
+    [InlineData("rule-num-and2-accdb", PlainRuleAccdb, false, null, "V", "> 0 And < 10", 3)]
+    [InlineData("rule-num-and2-mdb", PlainRuleMdb, false, null, "V", "> 0 And < 10", 3)]
+    [InlineData("rule-and2-range-accdb", PlainRuleAccdb, true, "W", "W", ">= 'a' And <= 'm'", null)]
+    public void R_q42_insert_after_property_put_consumes_session_reserved_extent_as_ACE(
+        string question,
+        string fixtureSha,
+        bool setAzlTrue,
+        string? azlColumn,
+        string ruleColumn,
+        string ruleText,
+        int? intVal)
+    {
+        byte[] startImage = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(fixtureSha);
+        byte[] aceAfterSetup = Kept.ReadHandle(question, "h_s0", "r-q42-field-rule-and");
+        (_, ulong updated) = AceDates(aceAfterSetup, "T");
+
+        using var session = new Session(startImage);
+        if (setAzlTrue)
+        {
+            SchemaOutcome azl = session.Writer().SetFieldAllowZeroLength(session.Workspace, "T", azlColumn!, true, updated);
+            Assert.True(azl.Succeeded, $"{azl.Refused} {azl.Accepted}");
+        }
+        SchemaOutcome rule = session.Writer().SetFieldValidationProperty(
+            session.Workspace,
+            "T",
+            ruleColumn,
+            FieldValidationProperty.ValidationRule,
+            ruleText,
+            updated);
+        Assert.True(rule.Succeeded, $"{rule.Refused} {rule.Accepted}");
+        Assert.NotEmpty(session.Workspace.SessionReservedPages(session.Cache));
+
+        // Insert seed row in the SAME session (must consume page 46 / 23 from _sessionReservedExtent without editing page 1).
+        TableDefinition tDef = OpenTableDef(session, "T");
+        using MutationSemantics sem = MutationSemantics.Compile("T", tDef, null, NoTestRules.Instance, D.IndexDescriptor);
+        ulong curExtent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+        var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, tDef, curExtent));
+        NativeValue[] values = new NativeValue[tDef.Columns.Count];
+        Array.Fill(values, NativeValue.Null);
+        values[tDef.Columns.ToList().FindIndex(c => c.Name == "ID")] = new NativeValue(NativeKind.Long) { Integer = 1 };
+        if (intVal is int v)
+        {
+            values[tDef.Columns.ToList().FindIndex(c => c.Name == "V")] = new NativeValue(NativeKind.Long) { Integer = v };
+        }
+        else
+        {
+            values[tDef.Columns.ToList().FindIndex(c => c.Name == "W")] = new NativeValue(NativeKind.Text) { Text = "c" };
+        }
+        CompiledChange ins = writer.CompileInsert(sem, values, null, session.Workspace.OverlayOf(session.Cache), sessionReservedPages: session.Workspace.SessionReservedPages(session.Cache));
+        Assert.NotNull(ins.Change);
+        Assert.Single(ins.Change!.ConsumedReservedPages);
+        using (StatementScope stmt = session.Workspace.BeginStatement())
+        {
+            AcceptOutcome accepted = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, ins));
+            Assert.True(accepted.Accepted, $"{accepted.Open} {accepted.Detail}");
+            ResolutionOutcome ended = stmt.Complete();
+            Assert.Equal(MutationOpen.None, ended.Open);
+            Assert.Null(ended.Error);
+        }
+
+        session.Close();
+        Assert.Equal(aceAfterSetup, session.File.Snapshot());
+    }
+
+    [Theory]
+    [InlineData("multirow-accdb", PlainRuleAccdb)]
+    [InlineData("multirow-mdb", PlainRuleMdb)]
+    public void R_q42_multirow_setup_create_table_and_inserts_consume_session_reserved_extent_as_ACE(string question, string fixtureSha)
+    {
+        byte[] startImage = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(fixtureSha);
+        byte[] aceAfterSetup = Kept.ReadHandle(question, "h0", "r-q42-field-rule-and");
+        (_, ulong tUpdated) = AceDates(aceAfterSetup, "T");
+        (ulong srcCreated, ulong srcUpdated) = AceDates(aceAfterSetup, "Src");
+
+        using var session = new Session(startImage);
+        SchemaOutcome azl = session.Writer().SetFieldAllowZeroLength(session.Workspace, "T", "W", true, tUpdated);
+        Assert.True(azl.Succeeded, $"{azl.Refused} {azl.Accepted}");
+        SchemaOutcome rule = session.Writer().SetFieldValidationProperty(
+            session.Workspace,
+            "T",
+            "W",
+            FieldValidationProperty.ValidationRule,
+            "<> 'a' And <> 'b'",
+            tUpdated);
+        Assert.True(rule.Succeeded, $"{rule.Refused} {rule.Accepted}");
+        session.Create(
+            new("Src", [Long("ID"), Text("W", 50)], SchemaRoute.Sql, [new("PKS", ["ID"], PrimaryKey: true)]),
+            srcCreated,
+            srcUpdated);
+
+        TableDefinition srcDef = OpenTableDef(session, "Src");
+        using MutationSemantics sem = MutationSemantics.Compile("Src", srcDef, null, NoTestRules.Instance, D.IndexDescriptor);
+        foreach ((int id, string w) in new[] { (1, "z"), (2, "a"), (3, "y"), (4, "b") })
+        {
+            ulong curExtent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+            var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, srcDef, curExtent));
+            NativeValue[] row = [new(NativeKind.Long) { Integer = id }, new(NativeKind.Text) { Text = w }];
+            CompiledChange ins = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache), sessionReservedPages: session.Workspace.SessionReservedPages(session.Cache));
+            Assert.NotNull(ins.Change);
+            using StatementScope stmt = session.Workspace.BeginStatement();
+            AcceptOutcome acc = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, ins));
+            Assert.True(acc.Accepted, $"{acc.Open} {acc.Detail}");
+            ResolutionOutcome end = stmt.Complete();
+            Assert.Equal(MutationOpen.None, end.Open);
+            Assert.Null(end.Error);
+        }
+
+        session.Close();
+        Assert.Equal(aceAfterSetup, session.File.Snapshot());
+    }
+
+    [Fact]
+    public void Session_reserved_extent_unrecorded_neighbours_refuse_without_writing()
+    {
+        byte[] startImage = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(PlainRuleAccdb);
+        using var session = new Session(startImage);
+        SchemaOutcome rule = session.Writer().SetFieldValidationProperty(
+            session.Workspace,
+            "T",
+            "V",
+            FieldValidationProperty.ValidationRule,
+            "> 0 And < 10",
+            2);
+        Assert.True(rule.Succeeded, $"{rule.Refused} {rule.Accepted}");
+        IReadOnlyList<uint> reserved = session.Workspace.SessionReservedPages(session.Cache);
+        // r-q37-plain-accdb has 45 pages (0..44); page 45 takes slot 5 of the 32-page aligned extent [40..71], leaving 26 pages [46..71].
+        Assert.Equal(26, reserved.Count);
+
+        ulong extent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+        TableDefinition tDef = OpenTableDef(session, "T");
+        using MutationSemantics sem = MutationSemantics.Compile("T", tDef, null, NoTestRules.Instance, D.IndexDescriptor);
+        var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, tDef, extent));
+        NativeValue[] row = new NativeValue[tDef.Columns.Count];
+        Array.Fill(row, NativeValue.Null);
+        row[tDef.Columns.ToList().FindIndex(c => c.Name == "ID")] = new NativeValue(NativeKind.Long) { Integer = 1 };
+        row[tDef.Columns.ToList().FindIndex(c => c.Name == "V")] = new NativeValue(NativeKind.Long) { Integer = 3 };
+
+        // 1. Consuming from the session's reserved extent inside BeginTrans refuses by name without writing.
+        byte[] beforeTx = session.File.Snapshot();
+        Assert.Null(session.Workspace.BeginTrans());
+        CompiledChange inTxCompiled = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache), sessionReservedPages: reserved);
+        Assert.NotNull(inTxCompiled.Change);
+        AcceptOutcome inTxAccept = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, inTxCompiled));
+        Assert.False(inTxAccept.Accepted);
+        Assert.Equal(MutationOpen.Publication, inTxAccept.Open);
+        Assert.Contains("BeginTrans", inTxAccept.Detail);
+        Assert.Null(session.Workspace.Rollback().Error);
+        Assert.Equal(beforeTx, session.File.Snapshot());
+
+        // 2. Exhausting the reserved extent refuses by name when a further page is needed.
+        var allocator = new PageAllocator(session.Cache, D, extent, [reserved[0]]);
+        Assert.True(allocator.TryAllocateFromReserved(null, out uint taken, out string? fail));
+        Assert.Equal(reserved[0], taken);
+        Assert.Null(fail);
+        Assert.Null(allocator.Allocate(null, out _, out string? exhaustedFail));
+        Assert.Contains("no pages left", exhaustedFail);
     }
 }
 

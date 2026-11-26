@@ -1251,7 +1251,13 @@ public sealed class EditFrame : IDisposable
                     && values[autoCol.Ordinal].Integer < ac.Last;
                 acceptedAutoFloor = AutoNumberFloor(values[autoCol.Ordinal].Integer, reseed: reseedAcceptedAuto);
             }
-            physical = insertWriter.CompileInsert(s, values, acceptedAutoFloor, _workspace.OverlayOf(insertWriter.File), reseedAutoNumber: reseedAcceptedAuto);
+            physical = insertWriter.CompileInsert(
+                s,
+                values,
+                acceptedAutoFloor,
+                _workspace.OverlayOf(insertWriter.File),
+                reseedAutoNumber: reseedAcceptedAuto,
+                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File));
         }
         else
         {
@@ -1266,7 +1272,7 @@ public sealed class EditFrame : IDisposable
         }
         if (allowDownwardReseedStmtLevel
             && (reseedAcceptedAuto || _workspace.HasStatementDownwardReseed)
-            && physical.Change is { AllocatedGlobalMapPages.Count: > 0 })
+            && physical.Change is { AllocatedGlobalMapPages.Count: > 0 } or { ConsumedReservedPages.Count: > 0 })
         {
             if (_workspace.InStatementOwnLevel && s.AutoNumber is { } autoNewPage && assigned[autoNewPage.Ordinal] && _table.Counter is { } cNewPage)
             {
