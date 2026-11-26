@@ -230,9 +230,17 @@ internal static class AdoSqlErrors
             "",
             32));
 
-    /// <summary>Client cursor Field read on a row deleted or marked for deletion (0x80040E23; Microsoft Cursor Engine, helpContext 0, IErrorInfo guid = Guid.Empty; r-ado-1b/view-filter-constants #31, r-q48-ado-batch-edits/batch-delete-scopes-accdb).</summary>
-    public static Failure ClientDeletedRowHandle() =>
-        AdoObject.CursorEngineFailure(AdoObject.HResultDeletedRecord, AdoObject.DeletedRowHandleDescription);
+    /// <summary>Client cursor Field read/write on a row deleted or marked for deletion (0x80040E23; Microsoft Cursor Engine, NativeError 28, SQLState "", helpContext 0, IErrorInfo guid = Guid.Empty; r-ado-1b/edit-pending-ops #335-350, r-ado-1b/view-filter-constants #31, r-q48-ado-batch-edits/batch-delete-scopes-accdb).</summary>
+    public static MappedProviderError ClientDeletedRowHandle() => new(
+        AdoObject.CursorEngineFailure(AdoObject.HResultDeletedRecord, AdoObject.DeletedRowHandleDescription),
+        new AdoErrorEntry(
+            AdoObject.HResultDeletedRecord,
+            AdoObject.CursorEngineSource,
+            AdoObject.DeletedRowHandleDescription,
+            "",
+            0,
+            "",
+            28));
 
     /// <summary>Client cursor Resync(adResyncAllValues) on a row deleted at the data store (0x80040E23; Microsoft Cursor Engine, NativeError 1029, SQLState "", helpContext 0, IErrorInfo guid = Guid.Empty; r-q48-ado-batch-edits/resync-all-vs-underlying-mdb, txn-updatebatch-rollback-accdb).</summary>
     public static MappedProviderError ClientResyncDeletedRow() => new(
@@ -280,24 +288,6 @@ internal static class AdoSqlErrors
         5003000,
         "3201",
         -535037517,
-        AdoObject.IidCommand);
-
-    /// <summary>Required field violation during client UpdateBatch (3314 on ICommand; r-oledb-odbc/error-record-channels).</summary>
-    public static MappedProviderError RequiredOnCommand(string description) => Make(
-        AdoObject.HResultFail,
-        description,
-        5003000,
-        "3314",
-        -541331061,
-        AdoObject.IidCommand);
-
-    /// <summary>Validation rule violation during client UpdateBatch (3316 on ICommand; r-oledb-odbc/error-record-channels).</summary>
-    public static MappedProviderError ValidationRuleOnCommand(string description) => Make(
-        AdoObject.HResultFail,
-        description,
-        5003000,
-        "3316",
-        -541462135,
         AdoObject.IidCommand);
 
     /// <summary>Provider Type mismatch on Field.Value put or Recordset.Update/AddNew argument conversion (r-ado-1b/fields-assign-conversion #199, edit-update-args #130-149).</summary>
@@ -562,10 +552,6 @@ internal static unsafe class AdoEditErrors
             CalcDb.Isam.Edit.MutationError.NullInIndex => AdoSqlErrors.NullInIndexOnCommand(),
             CalcDb.Isam.Edit.MutationError.RelatedRecordsExist => AdoSqlErrors.RelatedRecordsExistOnCommand(error.Describe()),
             CalcDb.Isam.Edit.MutationError.RelatedRecordRequired => AdoSqlErrors.RelatedRecordRequiredOnCommand(error.Describe()),
-            CalcDb.Isam.Edit.MutationError.Required => AdoSqlErrors.RequiredOnCommand(error.Describe()),
-            CalcDb.Isam.Edit.MutationError.RuleWithText or CalcDb.Isam.Edit.MutationError.RuleWithoutText =>
-                AdoSqlErrors.ValidationRuleOnCommand(error.Describe()),
-            CalcDb.Isam.Edit.MutationError.LockedBySession => AdoSqlErrors.CurrentlyLockedOnCommand(),
             CalcDb.Isam.Edit.MutationError.RecordDeleted => AdoSqlErrors.ConcurrencyConflict(),
             _ => FailUnmodelled(error, "client batch update", out unmodelled),
         };

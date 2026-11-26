@@ -50,6 +50,9 @@ public sealed unsafe class AdoClientBatchEditTests
                 TransactionsWrappingUpdateBatch(CopyFixture(store, AccdbFixture, tempDir, "txn.accdb"), isMdb: false);
                 TransactionsWrappingUpdateBatch(CopyFixture(store, MdbFixture, tempDir, "txn.mdb"), isMdb: true);
                 DisconnectActiveConnectionAndReadOnlyMode(CopyFixture(store, AccdbFixture, tempDir, "disc.accdb"));
+                ReviewRegressionChecks(
+                    CopyFixture(store, AccdbFixture, tempDir, "rev.accdb"),
+                    CopyFixture(store, MdbFixture, tempDir, "rev.mdb"));
 
                 Assert.False(IsLoaded("msado15.dll"));
                 Assert.False(IsLoaded("ACEOLEDB.DLL"));
@@ -376,11 +379,19 @@ public sealed unsafe class AdoClientBatchEditTests
             Assert.Null(Call(rs, "Close").Failure);
             Release(rs);
 
-            // Read-only (3,3,1) refuses UpdateBatch with 0x800A0CB3.
+            // Read-only (3,3,1) refuses UpdateBatch with 0x800A0CB3 on ACCDB (r-q48-ado-batch-edits/batch-update-scopes-args-accdb #122);
+            // MDB (3,3,1) is unrecorded and refuses with E_NOTIMPL.
             nint rro = New(OwnRecordset);
             Assert.Null(Put(rro, "CursorLocation", 3).Failure);
             Assert.Null(Call(rro, "Open", "SELECT ID, S FROM W ORDER BY ID", new Dispatch(cn), 3, 1, 1).Failure);
-            AssertError(Call(rro, "UpdateBatch"), unchecked((int)0x800A0CB3), "ADODB.Recordset");
+            if (!isMdb)
+            {
+                AssertError(Call(rro, "UpdateBatch"), unchecked((int)0x800A0CB3), "ADODB.Recordset");
+            }
+            else
+            {
+                Assert.Equal(HResults.E_NOTIMPL, Call(rro, "UpdateBatch").Failure!.Value.Scode);
+            }
             Assert.Null(Call(rro, "Close").Failure);
             Release(rro);
         }
@@ -389,7 +400,6 @@ public sealed unsafe class AdoClientBatchEditTests
             Assert.Null(Call(cn, "Close").Failure);
             Release(cn);
         }
-        _ = isMdb;
     }
 
     private static void FilterGroupsSortFindCloneRequery(string dbPath)
@@ -723,6 +733,109 @@ public sealed unsafe class AdoClientBatchEditTests
             Assert.Null(Call(cn, "Close").Failure);
             Release(cnRo);
             Release(cn);
+        }
+    }
+
+    private static void ReviewRegressionChecks(string accdbPath, string mdbPath)
+    {
+        nint cn = OpenAceConnection(accdbPath);
+        try
+        {
+            // Finding #1 & #5: (3,3,3) MoveFirst flushes pending edit (r-ado-1b/edit-pending-ops #259-275);
+            // bare AddNew blocks Requery/Close with 0x800A0C93 (#294-322);
+            // deleted-row Field.Value fails 0x80040E23 and populates Connection.Errors[0] NativeError=28 (#335-350).
+            nint rs3 = New(OwnRecordset);
+            Assert.Null(Put(rs3, "CursorLocation", 3).Failure);
+            Assert.Null(Call(rs3, "Open", "SELECT ID, S FROM W ORDER BY ID", new Dispatch(cn), 3, 3, 1).Failure);
+            SetField(rs3, "S", "p-movefirst");
+            Assert.Null(Call(rs3, "MoveFirst").Failure);
+            Assert.Equal(0, Get(rs3, "EditMode"));
+            Assert.Equal(0, Get(rs3, "Status"));
+            Assert.Equal("p-movefirst", QuerySingleString(cn, "SELECT S FROM W WHERE ID = 1"));
+
+            Assert.Null(Call(rs3, "AddNew").Failure);
+            AssertError(Call(rs3, "Requery"), unchecked((int)0x800A0C93), "ADODB.Recordset");
+            AssertError(Call(rs3, "Close"), unchecked((int)0x800A0C93), "ADODB.Recordset");
+            Assert.Null(Call(rs3, "CancelUpdate").Failure);
+
+            Assert.Null(Call(rs3, "MoveFirst").Failure);
+            Assert.Null(Call(rs3, "Delete").Failure);
+            nint f3 = (nint)Get(rs3, "Fields")!;
+            nint fS3 = (nint)Get(f3, "Item", "S")!;
+            AssertError(TryGet(fS3, "Value"), unchecked((int)0x80040E23), "Microsoft Cursor Engine");
+            nint errs = (nint)Get(cn, "Errors")!;
+            Assert.Equal(1, Get(errs, "Count"));
+            nint e0 = (nint)Get(errs, "Item", 0)!;
+            Assert.Equal(28, Get(e0, "NativeError"));
+            Assert.Equal("Microsoft Cursor Engine", Get(e0, "Source"));
+            Release(e0);
+            Release(errs);
+            Release(fS3);
+            Release(f3);
+
+            // Finding #7 (ACCDB 3,3,3): Count=103 + read-only Update Criteria/Resync; puts and unrecorded names refuse E_NOTIMPL.
+            nint p3 = (nint)Get(rs3, "Properties")!;
+            Assert.Equal(103, Get(p3, "Count"));
+            nint pUc3 = (nint)Get(p3, "Item", "Update Criteria")!;
+            Assert.Equal(2, Get(pUc3, "Value"));
+            Assert.Equal(HResults.E_NOTIMPL, Put(pUc3, "Value", 1).Failure!.Value.Scode);
+            Release(pUc3);
+            Assert.Equal(HResults.E_NOTIMPL, TryGet(p3, "Item", "Bookmarkable").Failure!.Value.Scode);
+            Release(p3);
+            Assert.Null(Call(rs3, "Close").Failure);
+            Release(rs3);
+
+            // Finding #3, #4, #10: VT_R8 bookmark in Find vs BookmarkEnum; Clone(1) refusal; non-empty ActiveConnection refusal.
+            nint rs4 = New(OwnRecordset);
+            Assert.Null(Put(rs4, "CursorLocation", 3).Failure);
+            Assert.Null(Call(rs4, "Open", "SELECT ID, S FROM W ORDER BY ID", new Dispatch(cn), 3, 4, 1).Failure);
+            Assert.Null(Put(rs4, "Sort", "ID DESC").Failure);
+            Assert.Null(Call(rs4, "MoveFirst").Failure);
+            // Row with BookmarkId=1 (ID=2 now, since ID=1 was deleted above) is the LAST row under ID DESC.
+            // Searching forward from VT_R8 1.0 (last row) for ID=3 must reach EOF, proving 1.0 is NOT adBookmarkFirst!
+            Assert.Null(Call(rs4, "Find", "ID = 3", 0, 1, 1.0).Failure);
+            Assert.Equal(true, Get(rs4, "EOF"));
+            // Searching forward from VT_I4 1 (adBookmarkFirst, index 0) for ID=3 finds it cleanly.
+            Assert.Null(Call(rs4, "Find", "ID = 3", 0, 1, 1).Failure);
+            Assert.Equal(false, Get(rs4, "EOF"));
+            // Finding #4: Clone(1) refuses with E_NOTIMPL.
+            Assert.Equal(HResults.E_NOTIMPL, Call(rs4, "Clone", 1).Failure!.Value.Scode);
+            // Finding #10: non-empty connection string on open client cursor refuses E_NOTIMPL with non-MSDASQL reason.
+            Outcome nonEmptyCn = Put(rs4, "ActiveConnection", "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=x.accdb;");
+            Assert.Equal(HResults.E_NOTIMPL, nonEmptyCn.Failure!.Value.Scode);
+            Assert.Contains("non-empty", nonEmptyCn.Failure.Value.Description, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(Call(rs4, "Close").Failure);
+            Release(rs4);
+        }
+        finally
+        {
+            Assert.Null(Call(cn, "Close").Failure);
+            Release(cn);
+        }
+
+        // Finding #7 (MDB 3,3,4): Update Criteria works; Count and Update Resync refuse E_NOTIMPL.
+        nint cnMdb = OpenAceConnection(mdbPath);
+        try
+        {
+            nint rsMdb = New(OwnRecordset);
+            Assert.Null(Put(rsMdb, "CursorLocation", 3).Failure);
+            Assert.Null(Call(rsMdb, "Open", "SELECT ID, S FROM W ORDER BY ID", new Dispatch(cnMdb), 3, 4, 1).Failure);
+            nint pMdb = (nint)Get(rsMdb, "Properties")!;
+            Assert.Equal(HResults.E_NOTIMPL, TryGet(pMdb, "Count").Failure!.Value.Scode);
+            Assert.Equal(HResults.E_NOTIMPL, TryGet(pMdb, "Item", "Update Resync").Failure!.Value.Scode);
+            nint pUcMdb = (nint)Get(pMdb, "Item", "Update Criteria")!;
+            Assert.Equal(2, Get(pUcMdb, "Value"));
+            Assert.Null(Put(pUcMdb, "Value", 1).Failure);
+            Assert.Equal(1, Get(pUcMdb, "Value"));
+            Release(pUcMdb);
+            Release(pMdb);
+            Assert.Null(Call(rsMdb, "Close").Failure);
+            Release(rsMdb);
+        }
+        finally
+        {
+            Assert.Null(Call(cnMdb, "Close").Failure);
+            Release(cnMdb);
         }
     }
 

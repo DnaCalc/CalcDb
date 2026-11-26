@@ -293,6 +293,14 @@ internal sealed unsafe class ClientRowBuffer
         }
 
         AdoFieldDescriptor[] columns = [.. table.Columns.Select(c => AdoFieldDescriptor.FromTableColumn(c))];
+        if (columns.Any(static c => c.AdoType is 204 or 205))
+        {
+            // Keep Binary (204) / OLE (205) guard symmetric with TryOpenSelect.
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoClientBatchTableBinary",
+                $"Client batch table open on '{tableName}' with Binary/OLE column is not recorded");
+            return null;
+        }
         ColumnDescriptor[] columnMap = [.. table.Columns];
         int[] pkOrdinals = ResolvePrimaryKeyOrdinals(table, session.Format, columnMap);
 
@@ -503,7 +511,7 @@ internal sealed unsafe class ClientRowBuffer
         refusal = null;
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
-            refusal = AdoSqlErrors.ClientDeletedRowHandle();
+            providerError = AdoSqlErrors.ClientDeletedRowHandle();
             return false;
         }
 
@@ -739,7 +747,15 @@ internal sealed unsafe class ClientRowBuffer
                 {
                     return false;
                 }
-                // Row deleted externally during adResyncUnderlyingValues: leave Underlying unchanged.
+                else
+                {
+                    // r-ado-1b/batch-conflict-delete #52 and r-fix-wire-ado/batch-conflict-delete-readback #52 both fail 3167
+                    // (ACE stale-cache race); no retained record shows S_OK on Resync(..., adResyncUnderlyingValues) for a deleted row.
+                    refusal = Failure.NotModelled(
+                        "NotModelled.AdoResyncUnderlyingDeletedRow",
+                        "Client Recordset.Resync(adResyncUnderlyingValues) on an externally deleted row is not recorded cleanly outside ACE stale-cache 3167");
+                    return false;
+                }
                 continue;
             }
 
@@ -824,7 +840,7 @@ internal sealed unsafe class ClientRowBuffer
 
     private BatchRowOutcome ApplyInsert(ClientRow row, int updateResync, bool isImmediate)
     {
-        var cursor = new SingleRowBatchCursor(_session, _table, currentRow: null);
+        using var cursor = new SingleRowBatchCursor(_session, _table, currentRow: null);
         using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
@@ -943,7 +959,7 @@ internal sealed unsafe class ClientRowBuffer
         }
 
         row.StoredRowId = liveId;
-        var cursor = new SingleRowBatchCursor(_session, _table, liveId);
+        using var cursor = new SingleRowBatchCursor(_session, _table, liveId);
         using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
@@ -1030,7 +1046,7 @@ internal sealed unsafe class ClientRowBuffer
         }
 
         row.StoredRowId = liveId;
-        var cursor = new SingleRowBatchCursor(_session, _table, liveId);
+        using var cursor = new SingleRowBatchCursor(_session, _table, liveId);
         using var frame = new EditFrame(_editContext, cursor, _session.Transactions, updatable: true)
         {
             ConflictSource = MutationErrorSource.Database,
@@ -1295,11 +1311,10 @@ internal sealed unsafe class ClientRowBuffer
         }
         if (incoming.Type == VarType.Empty)
         {
-            if (col.TypeCode == NativeTypes.Long)
-            {
-                return OwnedVariant.Null();
-            }
-            return OwnedVariant.Null();
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoAssignEmpty",
+                $"Client Field.Value assignment of VT_EMPTY into column '{col.Name}' is not recorded");
+            return null;
         }
 
         switch (col.TypeCode)
@@ -1321,17 +1336,24 @@ internal sealed unsafe class ClientRowBuffer
             case NativeTypes.DateTime:
                 return CoerceScalar(in incoming, VarType.Date, col, errorIid, out providerError, out refusal);
             case NativeTypes.Text or NativeTypes.Memo:
-                if (incoming.Type == VarType.Bstr)
+                OwnedVariant? coercedText = incoming.Type == VarType.Bstr
+                    ? OwnedVariant.FromText(Args.Text((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in incoming))) ?? "")
+                    : CoerceScalar(in incoming, VarType.Bstr, col, errorIid, out providerError, out refusal);
+                if (coercedText is null)
                 {
-                    string text = Args.Text((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in incoming))) ?? "";
-                    if (col.TypeCode == NativeTypes.Text && col.Length > 0 && text.Length > col.Length / 2)
+                    return null;
+                }
+                if (col.TypeCode == NativeTypes.Text && col.Length > 0)
+                {
+                    string text = Args.Text((nint)coercedText.Pointer) ?? "";
+                    if (text.Length > col.Length / 2)
                     {
+                        coercedText.Dispose();
                         providerError = AdoSqlErrors.MultipleStepOn(errorIid);
                         return null;
                     }
-                    return OwnedVariant.FromText(text);
                 }
-                return CoerceScalar(in incoming, VarType.Bstr, col, errorIid, out providerError, out refusal);
+                return coercedText;
             case NativeTypes.Binary or NativeTypes.Ole:
                 if (incoming.Type == (VarType.Array | VarType.UI1))
                 {
@@ -1418,6 +1440,7 @@ internal sealed unsafe class ClientRowBuffer
         }
         if (ta == VarType.Bstr && tb == VarType.Bstr)
         {
+            // Note: uses Ordinal comparison; whether ACE Update Criteria WHERE compares Text case-insensitively is unrecorded.
             string sa = Args.Text((nint)a.Pointer) ?? "";
             string sb = Args.Text((nint)b.Pointer) ?? "";
             return string.Equals(sa, sb, StringComparison.Ordinal);
@@ -1745,7 +1768,7 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         }
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
-            failure = AdoSqlErrors.ClientDeletedRowHandle();
+            failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
         return row.Current[ordinal].CopyPreservingReference();
@@ -1762,7 +1785,7 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         }
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
-            failure = AdoSqlErrors.ClientDeletedRowHandle();
+            failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
         return row.Original[ordinal].CopyPreservingReference();
@@ -1779,7 +1802,7 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         }
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
-            failure = AdoSqlErrors.ClientDeletedRowHandle();
+            failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
         return row.Underlying[ordinal].CopyPreservingReference();

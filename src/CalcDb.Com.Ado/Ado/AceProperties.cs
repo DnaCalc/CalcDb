@@ -508,11 +508,24 @@ internal enum PropertiesMode : byte
     ServerRecordsetOrCommand,
 
     /// <summary>
-    /// Updatable client Recordset ((3,3,4) / (3,3,3)): full 103-property inventory from
+    /// ACCDB client batch-optimistic (3,3,4) Recordset: full 103-property inventory from
     /// evidence/r-q48-ado-batch-edits/client-props-inventory-accdb, with writable "Update Criteria" (0..3)
     /// and "Update Resync" (0..15).
     /// </summary>
     ClientRecordset,
+
+    /// <summary>
+    /// ACCDB client optimistic (3,3,3) Recordset: only Count (103) and reads of "Update Criteria" (2) and
+    /// "Update Resync" (1) are recorded (evidence/r-q48-ado-batch-edits/client-props-inventory-accdb #121-131);
+    /// all other names, ordinals, and puts refuse by name.
+    /// </summary>
+    ClientOptimisticAccdb,
+
+    /// <summary>
+    /// Jet 4 MDB client batch-optimistic (3,3,4) Recordset: only "Update Criteria" (0..3 read/write) is recorded
+    /// (evidence/r-q48-ado-batch-edits/conflict-update-criteria-mdb); Count, "Update Resync", and other names refuse by name.
+    /// </summary>
+    ClientBatchMdb,
 }
 
 /// <summary>
@@ -647,6 +660,10 @@ internal sealed class PropertiesObject : AdoObject
         {
             return NotImplemented(refusal);
         }
+        if (_mode == PropertiesMode.ClientBatchMdb)
+        {
+            return NotImplemented("Client Recordset.Properties.Count on Jet 4 MDB (not recorded)");
+        }
         EnsureFresh();
         return Int32(_slots.Length);
     }
@@ -680,6 +697,49 @@ internal sealed class PropertiesObject : AdoObject
             return NotImplemented(refusal);
         }
         EnsureFresh();
+        if (_mode == PropertiesMode.ClientOptimisticAccdb)
+        {
+            // r-q48-ado-batch-edits/client-props-inventory-accdb #121-131: only read of "Update Criteria" and "Update Resync" is recorded on (3,3,3).
+            if (Args.Text(index) is { } optName
+                && (string.Equals(optName, "Update Criteria", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(optName, "Update Resync", StringComparison.OrdinalIgnoreCase)))
+            {
+                for (int i = 0; i < _names.Length; i++)
+                {
+                    if (string.Equals(_names[i], optName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        PropertySlot readOnlySlot = new(_slots[i].Descriptor, _slots[i].Value.CopyPreservingReference(), PropertySlotKind.ClientRecordsetRecordedRead);
+                        if (_wrappers[i] is null)
+                        {
+                            _slots[i].Value.Dispose();
+                            _slots[i] = readOnlySlot;
+                            _wrappers[i] = new PropertyObject(_slots[i], _onReadOnlyPropertyPut);
+                        }
+                        else
+                        {
+                            readOnlySlot.Value.Dispose();
+                        }
+                        return Object(_wrappers[i]!);
+                    }
+                }
+            }
+            return NotImplemented("Client optimistic (3,3,3) Recordset.Properties.Item outside 'Update Criteria'/'Update Resync' (not recorded)");
+        }
+        if (_mode == PropertiesMode.ClientBatchMdb)
+        {
+            // r-q48-ado-batch-edits/conflict-update-criteria-mdb: only "Update Criteria" is recorded on Jet 4 MDB (3,3,4).
+            if (Args.Text(index) is { } mdbName && string.Equals(mdbName, "Update Criteria", StringComparison.OrdinalIgnoreCase))
+            {
+                for (int i = 0; i < _names.Length; i++)
+                {
+                    if (string.Equals(_names[i], mdbName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Object(_wrappers[i] ??= new PropertyObject(_slots[i], _onReadOnlyPropertyPut));
+                    }
+                }
+            }
+            return NotImplemented("Jet 4 MDB client Recordset.Properties.Item outside 'Update Criteria' (not recorded)");
+        }
         if (_mode == PropertiesMode.ClientRecordset)
         {
             if (AdoArgs.Int32(index) is int clientOrd && clientOrd >= 0 && clientOrd < _slots.Length)

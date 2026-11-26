@@ -1131,6 +1131,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private Failure? _recordCountRefusal;
     private bool _openedFromExecute;
     private bool _openedFromSavedQuery;
+    private bool _openedFromCommand;
+    private AdoRecordCountSource _recordCountSource = AdoRecordCountSource.Select;
+    private AdoSelectShape _selectShape = AdoSelectShape.PlainSingleTable;
     private bool _hasBookmarks;
     private int _supportedOptions;
     private bool _bof;
@@ -1219,7 +1222,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         && !_bof && !_eof && !_suspendedAfterForwardMoveLast;
 
     private bool IsEditing => _rows is KeysetRowSource { EditModeValue: not 0 }
-        || (_rows is ClientBatchRowSource { IsBatchOptimistic: false } cb && cb.ActiveRow is { HasUnpostedPut: true });
+        || (_rows is ClientBatchRowSource { IsBatchOptimistic: false } cb
+            && cb.ActiveRow is { HasUnpostedPut: true } or { State: ClientRowState.New });
 
     private bool IsEditingNew => _rows is KeysetRowSource { EditModeValue: 2 };
 
@@ -1751,7 +1755,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         providerFailed = false;
         if (_rows is ClientBatchRowSource cb)
         {
-            if (cb.ActiveRow is not { } row || !row.HasUnpostedPut)
+            if (cb.ActiveRow is not { } row || (!row.HasUnpostedPut && (cb.IsBatchOptimistic || row.State != ClientRowState.New)))
             {
                 return null;
             }
@@ -2360,13 +2364,19 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return FailAdo(AdoErrors.NoCurrentRecord);
         }
 
+        if (_events.HasSinks)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoClientDeleteEvents",
+                "Client Recordset.Delete with RecordsetEvents sink is not recorded"));
+        }
+
         cb.HasMutated = true;
         int slotIndex = _position;
         if (cb.IsBatchOptimistic)
         {
             cb.Buffer.StageDelete(row);
             cb.SetDeletedCurrent(row, slotIndex);
-            AdoEvents.RecordChangeComplete(_events, AdoEventReason.Delete, 1, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
 
@@ -2376,7 +2386,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
             cb.Buffer.StageDelete(row);
             cb.SetDeletedCurrent(row, slotIndex);
             ClearConnectionErrors();
-            AdoEvents.RecordChangeComplete(_events, AdoEventReason.Delete, 1, null, AdoEventStatus.Ok, this);
             return CallResult.Nothing;
         }
 
@@ -2395,7 +2404,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         cb.SetDeletedCurrent(row, slotIndex);
         ClearConnectionErrors();
-        AdoEvents.RecordChangeComplete(_events, AdoEventReason.Delete, 1, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
 
@@ -2405,8 +2413,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectClosed);
         }
+        bool affectOmitted = args.Length == 0 || args[0] == 0 || TypedCall.IsMissing(Args.Cell(args[0]));
         int affect = 3; // adAffectAll default (r-q48-ado-batch-edits/batch-update-scopes-args-accdb)
-        if (args.Length > 0 && args[0] != 0 && !TypedCall.IsMissing(Args.Cell(args[0])))
+        if (!affectOmitted)
         {
             if (AdoArgs.Int32(args[0]) is not int parsed)
             {
@@ -2414,27 +2423,34 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             affect = parsed;
         }
-        if (affect is not (1 or 2 or 3))
-        {
-            return FailAdo(AdoErrors.ArgumentsWrongType);
-        }
         if (_effectiveLockType == 1)
         {
-            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb: read-only (3,3,1) and (2,3,1) fail 0x800A0CB3.
-            return FailAdo(AdoErrors.UpdatingNotSupported);
+            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb #122, #155: read-only ACCDB (3,3,1) and (2,3,1)
+            // with omitted/AffectAll fail 0x800A0CB3; other read-only cursors or non-default AffectRecords are unrecorded.
+            if (!_isMdb && affect == 3 && ((_effectiveCursorLocation == 3 && _effectiveCursorType == 3) || (_effectiveCursorLocation == 2 && _effectiveCursorType == 3)))
+            {
+                return FailAdo(AdoErrors.UpdatingNotSupported);
+            }
+            return NotImplemented($"Recordset.UpdateBatch({affect}) on read-only cursor (mdb={_isMdb}, {_effectiveCursorLocation}, {_effectiveCursorType}, 1) (not recorded)");
         }
         if (_effectiveLockType == 3)
         {
-            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb: optimistic (3,3,3) and (2,1,3) UpdateBatch(3) succeed as no-op.
-            if (affect == 3)
+            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb #133, #144: ACCDB optimistic (3,3,3) and (2,1,3)
+            // UpdateBatch(omitted/3) succeed as no-op.
+            if (!_isMdb && affect == 3 && ((_effectiveCursorLocation == 3 && _effectiveCursorType == 3) || (_effectiveCursorLocation == 2 && _effectiveCursorType == 1)))
             {
                 return CallResult.Nothing;
             }
-            return NotImplemented($"Recordset.UpdateBatch({affect}) on adLockOptimistic cursor (only AffectRecords=3 is recorded)");
+            return NotImplemented($"Recordset.UpdateBatch({affect}) on optimistic cursor (mdb={_isMdb}, {_effectiveCursorLocation}, {_effectiveCursorType}, 3) (not recorded)");
         }
         if (_rows is not ClientBatchRowSource cb || !cb.IsBatchOptimistic)
         {
             return NotImplemented("Recordset.UpdateBatch on a non-batch cursor");
+        }
+        if (affect is not (1 or 2 or 3))
+        {
+            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb #33, #39: UpdateBatch(0|99) on (3,3,4) fails 0x800A0BB9.
+            return FailAdo(AdoErrors.ArgumentsWrongType);
         }
         if (_activeConnection is null || !_activeConnection.IsOpen)
         {
@@ -2585,6 +2601,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                     _position = newIdx;
                 }
             }
+            ClearConnectionErrors();
             return CallResult.Nothing;
         }
 
@@ -2600,6 +2617,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 cb.Buffer.CancelRow(row);
             }
             cb.EnsureViewSynced();
+            ClearConnectionErrors();
             return CallResult.Nothing;
         }
 
@@ -2617,6 +2635,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             // r-q48-ado-batch-edits/client-batch-pending-ops-accdb #576: CancelBatch(3) while on a pending AddNew
             // purges the row and leaves the cursor on that deleted slot (EditMode=0, Status=262144).
             cb.SetDeletedCurrent(activeBeforeCancel, slotBeforeCancel);
+            ClearConnectionErrors();
             return CallResult.Nothing;
         }
         cb.ClearTransientRowState();
@@ -2638,6 +2657,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             cb.TrySeek(_position, out _);
         }
+        ClearConnectionErrors();
         return CallResult.Nothing;
     }
 
@@ -2713,13 +2733,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
             bool ok = cb.Buffer.TryResync(targets, clientAffect, clientResync, out List<MappedProviderError> errors, out Failure? resyncRefusal);
             cb.EnsureViewSynced();
-            if (_events.HasSinks)
-            {
-                foreach (ClientRow _ in targets)
-                {
-                    AdoEvents.RecordChangeComplete(_events, AdoEventReason.Resynch, 1, null, AdoEventStatus.Ok, this);
-                }
-            }
             if (resyncRefusal is not null)
             {
                 return CallResult.Fail(resyncRefusal);
@@ -2727,7 +2740,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
             if (!ok)
             {
                 _activeConnection.ReplaceProviderErrors([.. errors.Select(e => e.ErrorEntry)]);
+                if (_events.HasSinks)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoResyncFailedWithEvents",
+                        "Failed client Recordset.Resync with RecordsetEvents sink is not recorded"));
+                }
                 return CallResult.Fail(errors[0].ComFailure);
+            }
+            if (_events.HasSinks)
+            {
+                foreach (ClientRow _ in targets)
+                {
+                    AdoEvents.RecordChangeComplete(_events, AdoEventReason.Resynch, 1, null, AdoEventStatus.Ok, this);
+                }
             }
             ClearConnectionErrors();
             return CallResult.Nothing;
@@ -2781,14 +2807,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             reqLock = parsed;
         }
-        if (reqLock is not (-1 or 1))
+        if (reqLock != -1)
         {
-            return NotImplemented($"Recordset.Clone(LockType={reqLock}) (only adLockUnspecified=-1 and adLockReadOnly=1 are recorded)");
+            return NotImplemented($"Recordset.Clone(LockType={reqLock}) (only omitted/adLockUnspecified=-1 is recorded)");
         }
         if (_rows is MemoryRowSource mem && IsClientCursor)
         {
             // r-q2-ado-misc/ado-events-clone-propagation #16: client static read-only Clone().
-            int memCloneLock = reqLock == 1 ? 1 : _effectiveLockType;
             var memClone = new RecordsetObject
             {
                 _isClone = true,
@@ -2801,7 +2826,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             memClone.InstallOpenRows(
                 mem.CreateClone(),
                 _effectiveCursorType,
-                memCloneLock,
+                _effectiveLockType,
                 _effectiveCursorLocation,
                 _hasBookmarks,
                 _supportedOptions,
@@ -2810,9 +2835,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 _openedSelectContext,
                 openedFromExecute: _openedFromExecute,
                 openedFromSavedQuery: _openedFromSavedQuery,
-                openedFromCommand: false,
-                recordCountSource: AdoRecordCountSource.Select,
-                selectShape: AdoSelectShape.PlainSingleTable);
+                openedFromCommand: _openedFromCommand,
+                recordCountSource: _recordCountSource,
+                selectShape: _selectShape);
             CallResult memRes = Object(memClone);
             memClone.Release();
             return memRes;
@@ -2822,7 +2847,6 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return NotImplemented("Recordset.Clone on a non-client-batch cursor (belongs to a later stretch)");
         }
 
-        int cloneLock = reqLock == 1 ? 1 : _effectiveLockType;
         var clone = new RecordsetObject
         {
             _isClone = true,
@@ -2836,7 +2860,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         clone.InstallOpenRows(
             cloneRows,
             _effectiveCursorType,
-            cloneLock,
+            _effectiveLockType,
             _effectiveCursorLocation,
             _hasBookmarks,
             _supportedOptions,
@@ -2845,9 +2869,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _openedSelectContext,
             openedFromExecute: _openedFromExecute,
             openedFromSavedQuery: _openedFromSavedQuery,
-            openedFromCommand: false,
-            recordCountSource: cb.IsTableSource ? AdoRecordCountSource.ClientBatchTable : AdoRecordCountSource.ClientBatchSelect,
-            selectShape: AdoSelectShape.PlainSingleTable);
+            openedFromCommand: _openedFromCommand,
+            recordCountSource: _recordCountSource,
+            selectShape: _selectShape);
         CallResult result = Object(clone);
         clone.Release();
         return result;
@@ -2974,9 +2998,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
     /// <summary>
     /// Recordset.Properties:
     /// - Open server Keyset (1, 3) cursor: 88-name OLE DB rowset inventory (evidence/r-q-ado-misc/props-lookup-refresh #34-38).
-    /// - Open client batch-optimistic (3, 4) cursor: "Update Criteria" (default 2, 0..3) and "Update Resync"
-    ///   (default 1, recorded values 0, 1, 2, 4, 8, 15) (evidence/r-ado-1b/batch-update-criteria, batch-update-resync).
-    /// - All other cursor/lock combinations refuse by name.
+    /// - Open ACCDB client batch-optimistic (3, 4) cursor: full 103-property inventory incl. "Update Criteria" (0..3) and
+    ///   "Update Resync" (0..15) (evidence/r-q48-ado-batch-edits/client-props-inventory-accdb, r-ado-1b/batch-update-criteria, batch-update-resync).
+    /// - Open ACCDB client optimistic (3, 3) cursor: Count=103 + read-only "Update Criteria" and "Update Resync"
+    ///   (evidence/r-q48-ado-batch-edits/client-props-inventory-accdb #121-131).
+    /// - Open Jet 4 MDB client batch-optimistic (3, 4) cursor: read/write "Update Criteria" (0..3)
+    ///   (evidence/r-q48-ado-batch-edits/conflict-update-criteria-mdb).
+    /// - All other cursor/lock/format combinations refuse by name.
     /// </summary>
     private CallResult GetProperties()
     {
@@ -2986,6 +3014,19 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (IsClientCursor)
         {
+            if (_isMdb)
+            {
+                if (_effectiveLockType != 4)
+                {
+                    return NotImplemented($"Recordset.Properties on Jet 4 MDB client cursor with LockType={_effectiveLockType} (only LockType 4 'Update Criteria' is recorded)");
+                }
+                _properties ??= new PropertiesObject(
+                    AceProperties.CreateClientRecordsetSlots(),
+                    ClearConnectionErrors,
+                    entries => _activeConnection?.ReplaceProviderErrors(entries),
+                    PropertiesMode.ClientBatchMdb);
+                return Object(_properties);
+            }
             if (_effectiveLockType is not (3 or 4))
             {
                 return NotImplemented($"Recordset.Properties on client cursor with LockType={_effectiveLockType} (only LockType 3 and 4 are recorded)");
@@ -2994,7 +3035,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 AceProperties.CreateClientRecordsetSlots(),
                 ClearConnectionErrors,
                 entries => _activeConnection?.ReplaceProviderErrors(entries),
-                PropertiesMode.ClientRecordset);
+                _effectiveLockType == 4 ? PropertiesMode.ClientRecordset : PropertiesMode.ClientOptimisticAccdb);
             return Object(_properties);
         }
         if (_effectiveCursorType != 1 || _effectiveLockType != 3)
@@ -3354,11 +3395,29 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         int count = ViewKnownCount;
         int baseIdx;
-        if (startArg == 0 || Args.TypeOf(startArg) == VarType.Empty)
+        VarType startVt = startArg == 0 ? VarType.Empty : Args.TypeOf(startArg);
+        if (startVt == VarType.Empty)
         {
             baseIdx = _bof ? -1 : _eof ? count : _position;
         }
-        else if (AdoArgs.Int32(startArg) is int bm && bm is 0 or 1 or 2)
+        else if (startVt == VarType.R8 && _rows is ClientBatchRowSource cbStart)
+        {
+            // r-q48-ado-batch-edits/batch-filter-sort-find-edits-accdb #82:
+            // client bookmark VT_R8 resolves via the shared buffer's 1-based BookmarkId into the current view.
+            double rawBm = BitConverter.Int64BitsToDouble(Args.Cell(startArg)->Int64);
+            if (!double.IsFinite(rawBm) || Math.Truncate(rawBm) != rawBm || rawBm < 1 || rawBm > long.MaxValue)
+            {
+                return FailAdo(AdoErrors.ArgumentsWrongType);
+            }
+            ClientRow? bmRow = cbStart.Buffer.FindByBookmark((long)rawBm);
+            int bmIdx = bmRow is not null ? cbStart.IndexOfRow(bmRow) : -1;
+            if (bmIdx < 0)
+            {
+                return FailAdo(AdoErrors.ArgumentsWrongType);
+            }
+            baseIdx = bmIdx;
+        }
+        else if (startVt is VarType.I2 or VarType.I4 && AdoArgs.Int32(startArg) is int bm && bm is 0 or 1 or 2)
         {
             baseIdx = bm switch
             {
@@ -3802,9 +3861,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 }
                 if (Args.Text(arg) is { } text)
                 {
-                    // r-q48-ado-batch-edits/disconnect-put-empty-reconnect-accdb #22: Put(ActiveConnection, "") routes to MSDASQL (non-ACE provider).
-                    EffectiveProvider ep = EffectiveProvider.Classify(EffectiveProvider.Default, $"Recordset.ActiveConnection = \"{text}\" has no ACE Provider key");
-                    return CallResult.Fail(ep.Refusal("Recordset.ActiveConnection"));
+                    if (text.Length == 0)
+                    {
+                        // r-q48-ado-batch-edits/disconnect-put-empty-reconnect-accdb #22: Put(ActiveConnection, "") routes to MSDASQL (non-ACE provider).
+                        EffectiveProvider ep = EffectiveProvider.Classify(EffectiveProvider.Default, "Recordset.ActiveConnection = \"\" has no ACE Provider key");
+                        return CallResult.Fail(ep.Refusal("Recordset.ActiveConnection"));
+                    }
+                    return NotImplemented("Recordset.ActiveConnection = non-empty connection string on an open client cursor (not recorded)");
                 }
             }
             return FailAdo(AdoErrors.ObjectOpen);
@@ -5045,6 +5108,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             openedFromCommand);
         _openedFromExecute = openedFromExecute;
         _openedFromSavedQuery = openedFromSavedQuery;
+        _openedFromCommand = openedFromCommand;
+        _recordCountSource = recordCountSource;
+        _selectShape = selectShape;
         _hasBookmarks = hasBookmarks;
         _supportedOptions = supportedOptions;
         _initialPositionPending = effectiveCursorLocation == 2;
@@ -5110,6 +5176,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _recordCountRefusal = null;
         _openedFromExecute = false;
         _openedFromSavedQuery = false;
+        _openedFromCommand = false;
+        _recordCountSource = AdoRecordCountSource.Select;
+        _selectShape = AdoSelectShape.PlainSingleTable;
         _initialPositionPending = false;
         ResetChunkState();
         _viewMap = null;
@@ -5161,13 +5230,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailChunkNavigation("MoveFirst");
         }
-        if (IsEditing)
-        {
-            return NotImplemented("Recordset.MoveFirst while editing (implicit Update on MoveFirst is not recorded)");
-        }
         if (_rows is ClientBatchRowSource && FlushPendingEdit(out _) is { } firstFlushErr)
         {
             return firstFlushErr;
+        }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MoveFirst while editing (implicit Update on MoveFirst is not recorded)");
         }
         _initialPositionPending = false;
         ConsumeDeletedCurrent();
@@ -5200,13 +5269,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailChunkNavigation("MoveLast");
         }
-        if (IsEditing)
-        {
-            return NotImplemented("Recordset.MoveLast while editing (implicit Update on MoveLast is not recorded)");
-        }
         if (_rows is ClientBatchRowSource && FlushPendingEdit(out _) is { } lastFlushErr)
         {
             return lastFlushErr;
+        }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MoveLast while editing (implicit Update on MoveLast is not recorded)");
         }
         _initialPositionPending = false;
         ConsumeDeletedCurrent();
@@ -5419,13 +5488,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailChunkNavigation("MovePrevious");
         }
-        if (IsEditing)
-        {
-            return NotImplemented("Recordset.MovePrevious while editing (implicit Update on MovePrevious is not recorded)");
-        }
         if (_rows is ClientBatchRowSource && FlushPendingEdit(out _) is { } prevFlushErr)
         {
             return prevFlushErr;
+        }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.MovePrevious while editing (implicit Update on MovePrevious is not recorded)");
         }
         if (_effectiveCursorType == 0)
         {
@@ -5493,13 +5562,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailChunkNavigation("Move");
         }
-        if (IsEditing)
-        {
-            return NotImplemented("Recordset.Move while editing (implicit Update on Move is not recorded)");
-        }
         if (_rows is ClientBatchRowSource && FlushPendingEdit(out _) is { } moveFlushErr)
         {
             return moveFlushErr;
+        }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.Move while editing (implicit Update on Move is not recorded)");
         }
         if (startArg != 0 && Args.TypeOf(startArg) != VarType.Empty)
         {
@@ -5715,7 +5784,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 return field.Fail(AdoErrors.NoCurrentRecord);
             }
             OwnedVariant? clientVal = cb.ReadValue(ordinal, isClientCursor: true, out Failure? clientFail);
-            return clientVal is null ? CallResult.Fail(clientFail!) : CallResult.Of(clientVal);
+            if (clientVal is null)
+            {
+                if (clientFail is { Scode: HResultDeletedRecord })
+                {
+                    ReportProviderError(AdoSqlErrors.ClientDeletedRowHandle());
+                }
+                return CallResult.Fail(clientFail!);
+            }
+            return CallResult.Of(clientVal);
         }
         if (!IsEditingNew && (_bof || _eof || _suspendedAfterForwardMoveLast))
         {
@@ -5925,7 +6002,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 return field.Fail(AdoErrors.NoCurrentRecord);
             }
             OwnedVariant? origVal = cb.ReadOriginalValue(ordinal, out Failure? origFail);
-            return origVal is null ? CallResult.Fail(origFail!) : CallResult.Of(origVal);
+            if (origVal is null)
+            {
+                if (origFail is { Scode: HResultDeletedRecord })
+                {
+                    ReportProviderError(AdoSqlErrors.ClientDeletedRowHandle());
+                }
+                return CallResult.Fail(origFail!);
+            }
+            return CallResult.Of(origVal);
         }
         if (!IsLiveUpdatableKeysetRow)
         {
@@ -5959,7 +6044,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 return field.Fail(AdoErrors.NoCurrentRecord);
             }
             OwnedVariant? undVal = cb.ReadUnderlyingValue(ordinal, out Failure? undFail);
-            return undVal is null ? CallResult.Fail(undFail!) : CallResult.Of(undVal);
+            if (undVal is null)
+            {
+                if (undFail is { Scode: HResultDeletedRecord })
+                {
+                    ReportProviderError(AdoSqlErrors.ClientDeletedRowHandle());
+                }
+                return CallResult.Fail(undFail!);
+            }
+            return CallResult.Of(undVal);
         }
         if (!IsLiveUpdatableKeysetRow)
         {
@@ -6004,7 +6097,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             ClientRow targetRow = cb.ActiveRow!;
             if (targetRow.State is ClientRowState.Deleted or ClientRowState.Purged)
             {
-                return CallResult.Fail(AdoSqlErrors.ClientDeletedRowHandle());
+                MappedProviderError delErr = AdoSqlErrors.ClientDeletedRowHandle();
+                ReportProviderError(delErr);
+                return CallResult.Fail(delErr.ComFailure);
             }
             bool clientFirstChange = targetRow.State == ClientRowState.Clean;
             if (clientFirstChange)
